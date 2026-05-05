@@ -119,6 +119,36 @@ export async function setUserAdminStatus(userId, isAdmin) {
   return result;
 }
 
+/**
+ * 设置用户的启用/禁用状态（管理员功能）
+ */
+export async function setUserActiveStatus(userId, isActive) {
+  const response = await fetchWithAuth('/api/admin/user/active-status', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ user_id: userId, is_active: isActive }),
+  });
+  const result = await response.json();
+  if (!response.ok || result.success === false) {
+    throw new Error(result.message || result.detail || '设置用户状态失败');
+  }
+  return result;
+}
+
+/**
+ * 删除用户（管理员功能）
+ */
+export async function deleteUser(userId) {
+  const response = await fetchWithAuth(`/api/admin/user/${userId}`, {
+    method: 'DELETE',
+  });
+  const result = await response.json();
+  if (!response.ok || result.success === false) {
+    throw new Error(result.message || result.detail || '删除用户失败');
+  }
+  return result;
+}
+
 // ==================== 用户配额管理（管理员功能） ====================
 
 /**

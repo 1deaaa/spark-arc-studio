@@ -172,14 +172,17 @@
                     <template #header>
                         <div class="platform-row">
                             <!-- 管理员拖拽手柄 -->
-                            <n-icon 
-                                v-if="isAdmin"
-                                class="drag-handle"
-                                :title="t('components.aiManager.tooltips.dragSort')"
-                                @mousedown.stop
-                            >
-                                <Menu />
-                            </n-icon>
+                            <n-tooltip v-if="isAdmin" trigger="hover">
+                                <template #trigger>
+                                    <n-icon
+                                        class="drag-handle"
+                                        @mousedown.stop
+                                    >
+                                        <Menu />
+                                    </n-icon>
+                                </template>
+                                {{ t('components.aiManager.tooltips.dragSort') }}
+                            </n-tooltip>
                             <div class="platform-left">
                                 <n-tooltip v-if="plat.is_sys" trigger="hover">
                                     <template #trigger>
@@ -193,21 +196,28 @@
                                     </div>
                                 </n-tooltip>
                                 <SparkTag v-else-if="!plat.is_sys" size="small" type="default">{{ t('components.aiManager.tags.custom') }}</SparkTag>
-                                <SparkTag
-                                    v-if="plat.is_sys"
-                                    size="small"
-                                    :type="platformCreditTagType(plat)"
-                                    :title="platformCreditTagTitle(plat)"
-                                >
-                                    {{ platformCreditText(plat) }}<SparkIcon />
-                                </SparkTag>
-                                <span
+                                <n-tooltip v-if="plat.is_sys" trigger="hover">
+                                    <template #trigger>
+                                        <SparkTag size="small" :type="platformCreditTagType(plat)">
+                                            {{ platformCreditText(plat) }}<SparkIcon />
+                                        </SparkTag>
+                                    </template>
+                                    {{ platformCreditTagTitle(plat) }}
+                                </n-tooltip>
+                                <n-tooltip
                                     v-if="editingPlatformId !== plat.platform_id"
-                                    class="platform-name"
-                                    :class="{ 'can-edit': !plat.is_sys || isAdmin }"
-                                    @click="(!plat.is_sys || isAdmin) && startEditPlatformName(plat)"
-                                    :title="(!plat.is_sys || isAdmin) ? t('components.aiManager.tooltips.clickToEditDisplayName') : ''"
-                                >{{ plat.name }}</span>
+                                    trigger="hover"
+                                    :disabled="!(!plat.is_sys || isAdmin)"
+                                >
+                                    <template #trigger>
+                                        <span
+                                            class="platform-name"
+                                            :class="{ 'can-edit': !plat.is_sys || isAdmin }"
+                                            @click="(!plat.is_sys || isAdmin) && startEditPlatformName(plat)"
+                                        >{{ plat.name }}</span>
+                                    </template>
+                                    {{ t('components.aiManager.tooltips.clickToEditDisplayName') }}
+                                </n-tooltip>
                                 <n-input
                                     v-else
                                     v-model:value="editingPlatformNameValue"
@@ -267,22 +277,32 @@
                             <div class="model-row" v-for="(model, modelIdx) in plat.models" :key="model.model_id" :data-id="model.model_id">
                                 <div class="model-info">
                                     <!-- 管理员模型拖拽手柄 -->
-                                    <n-icon 
-                                        v-if="isAdmin && plat.is_sys"
-                                        class="drag-handle drag-handle-sm"
-                                        :title="t('components.aiManager.tooltips.dragSort')"
-                                        @mousedown.stop
-                                    >
-                                        <Menu />
-                                    </n-icon>
+                                    <n-tooltip v-if="isAdmin && plat.is_sys" trigger="hover">
+                                        <template #trigger>
+                                            <n-icon
+                                                class="drag-handle drag-handle-sm"
+                                                @mousedown.stop
+                                            >
+                                                <Menu />
+                                            </n-icon>
+                                        </template>
+                                        {{ t('components.aiManager.tooltips.dragSort') }}
+                                    </n-tooltip>
                                     <!-- 可编辑的模型显示名称 -->
-                                    <span 
+                                    <n-tooltip
                                         v-if="editingDisplayNameModelId !== model.model_id"
-                                        class="model-display-name editable-name"
-                                        :class="{ 'can-edit': !plat.is_sys || isAdmin }"
-                                        @click="(!plat.is_sys || isAdmin) && startEditDisplayName(plat, model)"
-                                        :title="(!plat.is_sys || isAdmin) ? t('components.aiManager.tooltips.clickToEditDisplayName') : ''"
-                                    >{{ model.display_name }}</span>
+                                        trigger="hover"
+                                        :disabled="!(!plat.is_sys || isAdmin)"
+                                    >
+                                        <template #trigger>
+                                            <span
+                                                class="model-display-name editable-name"
+                                                :class="{ 'can-edit': !plat.is_sys || isAdmin }"
+                                                @click="(!plat.is_sys || isAdmin) && startEditDisplayName(plat, model)"
+                                            >{{ model.display_name }}</span>
+                                        </template>
+                                        {{ t('components.aiManager.tooltips.clickToEditDisplayName') }}
+                                    </n-tooltip>
                                     <n-input
                                         v-else
                                         v-model:value="editingDisplayNameValue"
@@ -300,13 +320,16 @@
                                         </template>
                                         {{ t('components.aiManager.badges.extraBodyTooltip') }}
                                     </n-tooltip>
-                                    <SparkTag
-                                        v-if="plat.is_sys"
-                                        class="model-credit-tag"
-                                        size="small"
-                                        :type="modelCreditTagMeta(plat, model).type"
-                                        :title="modelCreditTagMeta(plat, model).title"
-                                    >{{ modelCreditTagMeta(plat, model).text }}<SparkIcon /></SparkTag>
+                                    <n-tooltip v-if="plat.is_sys" trigger="hover">
+                                        <template #trigger>
+                                            <SparkTag
+                                                class="model-credit-tag"
+                                                size="small"
+                                                :type="modelCreditTagMeta(plat, model).type"
+                                            >{{ modelCreditTagMeta(plat, model).text }}<SparkIcon /></SparkTag>
+                                        </template>
+                                        {{ modelCreditTagMeta(plat, model).title }}
+                                    </n-tooltip>
                                 </div>
                                 <div class="model-actions" @click.stop>
                                     <n-tooltip v-if="model.extra_body" trigger="hover">
@@ -315,13 +338,16 @@
                                         </template>
                                         {{ t('components.aiManager.badges.extraBodyTooltip') }}
                                     </n-tooltip>
-                                    <SparkTag
-                                        v-if="plat.is_sys"
-                                        class="model-credit-tag-mobile"
-                                        size="small"
-                                        :type="modelCreditTagMeta(plat, model).type"
-                                        :title="modelCreditTagMeta(plat, model).title"
-                                    >{{ modelCreditTagMeta(plat, model).text }}<SparkIcon /></SparkTag>
+                                    <n-tooltip v-if="plat.is_sys" trigger="hover">
+                                        <template #trigger>
+                                            <SparkTag
+                                                class="model-credit-tag-mobile"
+                                                size="small"
+                                                :type="modelCreditTagMeta(plat, model).type"
+                                            >{{ modelCreditTagMeta(plat, model).text }}<SparkIcon /></SparkTag>
+                                        </template>
+                                        {{ modelCreditTagMeta(plat, model).title }}
+                                    </n-tooltip>
                                     <!-- 测速结果标签 - 正在测速时显示等待状态 -->
                                     <n-tag
                                         v-if="speedTestingModelIds.has(model.model_id) && !speedResults[model.model_id]?.speed"
@@ -656,9 +682,14 @@
         <n-modal v-model:show="showAddModelModal">
             <n-card style="width: 600px" :title="newModel.isEmbedding ? t('components.aiManager.modal.addEmbeddingFor', { platform: currentPlatform?.name || '' }) : t('components.aiManager.modal.addModelFor', { platform: currentPlatform?.name || '' })" :bordered="false" size="huge" header-style="padding-bottom: 8px;" content-style="padding-top: 0;">
                 <template #header-extra>
-                    <n-button quaternary circle size="small" :title="t('common.close')" @click="showAddModelModal = false">
-                        <template #icon><n-icon><X /></n-icon></template>
-                    </n-button>
+                    <n-tooltip trigger="hover">
+                        <template #trigger>
+                            <n-button quaternary circle size="small" @click="showAddModelModal = false">
+                                <template #icon><n-icon><X /></n-icon></template>
+                            </n-button>
+                        </template>
+                        {{ t('common.close') }}
+                    </n-tooltip>
                 </template>
                 <n-form style="display: flex; flex-direction: column;">
                     <!-- 嵌入模型勾选 -->

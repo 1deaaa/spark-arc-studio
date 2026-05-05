@@ -8,13 +8,23 @@
           <!-- 未读角标 -->
           <span v-if="unreadCount > 0" class="unread-badge">{{ unreadCount }}</span>
           <!-- 普通用户：提交反馈 -->
-          <n-button v-if="!isAdmin" quaternary circle size="tiny" @click="openModal('submit')" :title="t('components.feedbackCard.submitFeedback')">
-            <template #icon><n-icon size="16" :component="Plus" /></template>
-          </n-button>
+          <n-tooltip v-if="!isAdmin" trigger="hover">
+            <template #trigger>
+              <n-button quaternary circle size="tiny" @click="openModal('submit')">
+                <template #icon><n-icon size="16" :component="Plus" /></template>
+              </n-button>
+            </template>
+            {{ t('components.feedbackCard.submitFeedback') }}
+          </n-tooltip>
           <!-- 查看详情 -->
-          <n-button quaternary circle size="tiny" @click="openModal('view')" :title="isAdmin ? t('components.feedbackCard.viewAll') : t('components.feedbackCard.viewDetails')">
-            <template #icon><n-icon size="16" :component="ExternalLink" /></template>
-          </n-button>
+          <n-tooltip trigger="hover">
+            <template #trigger>
+              <n-button quaternary circle size="tiny" @click="openModal('view')">
+                <template #icon><n-icon size="16" :component="ExternalLink" /></template>
+              </n-button>
+            </template>
+            {{ isAdmin ? t('components.feedbackCard.viewAll') : t('components.feedbackCard.viewDetails') }}
+          </n-tooltip>
           <!-- 折叠箭头 -->
           <n-icon size="20" :component="ChevronDown" class="fold-icon" :class="{ folded: isFolded }" />
         </div>
@@ -52,7 +62,7 @@
 <script setup lang="ts">
 import { ref, computed, onMounted } from 'vue';
 import { useI18n } from 'vue-i18n';
-import { NCard, NIcon, NButton, useMessage } from 'naive-ui';
+import { NCard, NIcon, NButton, NTooltip, useMessage } from 'naive-ui';
 import SparkCollapseTransition from '../share/SparkCollapseTransition.vue';
 import SparkTag from '../share/SparkTag.vue';
 import { ChevronDown, ExternalLink, MessagesSquare, Plus } from 'lucide-vue-next';

@@ -56,18 +56,26 @@
         @mousedown="startDrag($event, node)"
         @contextmenu.stop.prevent="onNodeContextMenu($event, node)"
       >
-        <span
-          class="port port-in"
-          :class="{ selected: isPortSelected(node.id, 'in') }"
-          title="输入端口"
-          @mousedown.stop="onPortMouseDown($event, node, 'in')"
-        ></span>
-        <span
-          class="port port-out"
-          :class="{ selected: isPortSelected(node.id, 'out') }"
-          title="输出端口"
-          @mousedown.stop="onPortMouseDown($event, node, 'out')"
-        ></span>
+        <n-tooltip trigger="hover">
+          <template #trigger>
+            <span
+              class="port port-in"
+              :class="{ selected: isPortSelected(node.id, 'in') }"
+              @mousedown.stop="onPortMouseDown($event, node, 'in')"
+            ></span>
+          </template>
+          {{ t('components.agentFlowBlueprint.portInput') }}
+        </n-tooltip>
+        <n-tooltip trigger="hover">
+          <template #trigger>
+            <span
+              class="port port-out"
+              :class="{ selected: isPortSelected(node.id, 'out') }"
+              @mousedown.stop="onPortMouseDown($event, node, 'out')"
+            ></span>
+          </template>
+          {{ t('components.agentFlowBlueprint.portOutput') }}
+        </n-tooltip>
         <div class="node-header">
           <span class="node-title">{{ node.name }}</span>
         </div>
@@ -100,7 +108,8 @@
 
 <script setup lang="ts">
 import { ref, onMounted, onBeforeUnmount, watch, h, onActivated, computed, nextTick } from 'vue';
-import { NButton, NDropdown, NIcon, type DropdownOption } from 'naive-ui';
+import { useI18n } from 'vue-i18n';
+import { NButton, NDropdown, NIcon, NTooltip, type DropdownOption } from 'naive-ui';
 import { Pencil, Plus, Sparkles, Trash2 } from 'lucide-vue-next';
 import { useRoute } from 'vue-router';
 import { useSceneStore } from '../stores/sceneStore';
@@ -167,6 +176,7 @@ type ConnectState = {
 
 const sceneStore = useSceneStore();
 const fileStore = useFileStore();
+const { t } = useI18n();
 const blueprintStore = useBlueprintStore();
 const route = useRoute();
 

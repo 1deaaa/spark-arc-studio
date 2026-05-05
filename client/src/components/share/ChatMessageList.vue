@@ -63,18 +63,22 @@
         <template v-else-if="m.role === 'assistant'">
           <template v-for="(seg, segIdx) in getMessageSegments(m)" :key="`seg-${idx}-${segIdx}`">
             <div v-if="seg.type === 'reasoning' && getReasoningSegmentText(seg)" class="chat-bubble" :class="{ 'has-agent-avatar': !!seg.source_agent }">
-              <div
-                v-if="seg.source_agent"
-                class="agent-avatar"
-                :class="{ 'is-active': isAgentSegmentActive(m, idx, segIdx) }"
-                :title="`${getAgentName(seg.source_agent)} (${t('components.chatMessageList.thinking')})`"
-                :style="getAgentAvatarStyle(seg.source_agent)"
-              >
-                <svg v-if="isSparkAgent(seg.source_agent)" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg" class="agent-avatar-spark">
-                  <path d="M12 2L14.5 9.5L22 12L14.5 14.5L12 22L9.5 14.5L2 12L9.5 9.5L12 2Z" fill="currentColor" />
-                </svg>
-                <n-icon v-else class="agent-avatar-icon" :component="getAgentIcon(seg.source_agent)" />
-              </div>
+              <n-tooltip v-if="seg.source_agent" trigger="hover">
+                <template #trigger>
+                  <div
+                    class="agent-avatar"
+                    :class="{ 'is-active': isAgentSegmentActive(m, idx, segIdx) }"
+                    :aria-label="`${getAgentName(seg.source_agent)} (${t('components.chatMessageList.thinking')})`"
+                    :style="getAgentAvatarStyle(seg.source_agent)"
+                  >
+                    <svg v-if="isSparkAgent(seg.source_agent)" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg" class="agent-avatar-spark">
+                      <path d="M12 2L14.5 9.5L22 12L14.5 14.5L12 22L9.5 14.5L2 12L9.5 9.5L12 2Z" fill="currentColor" />
+                    </svg>
+                    <n-icon v-else class="agent-avatar-icon" :component="getAgentIcon(seg.source_agent)" />
+                  </div>
+                </template>
+                {{ `${getAgentName(seg.source_agent)} (${t('components.chatMessageList.thinking')})` }}
+              </n-tooltip>
               <div class="reasoning-block">
                 <div class="reasoning-toggle" :class="{ 'is-thinking': isReasoningSegmentThinking(m, idx, segIdx) }" @click="toggleReasoning(getReasoningSegmentKey(m, idx, segIdx))">
                   <svg v-if="isReasoningSegmentThinking(m, idx, segIdx)" class="reasoning-thinking-icon" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
@@ -146,18 +150,22 @@
               </SparkCollapseTransition>
             </div>
             <div v-else-if="seg.type === 'text' && seg.text && seg.text.trim()" class="chat-bubble" :class="{ 'has-agent-avatar': !!seg.source_agent }">
-              <div
-                v-if="seg.source_agent"
-                class="agent-avatar"
-                :class="{ 'is-active': isAgentSegmentActive(m, idx, segIdx) }"
-                :title="getAgentName(seg.source_agent)"
-                :style="getAgentAvatarStyle(seg.source_agent)"
-              >
-                <svg v-if="isSparkAgent(seg.source_agent)" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg" class="agent-avatar-spark">
-                  <path d="M12 2L14.5 9.5L22 12L14.5 14.5L12 22L9.5 14.5L2 12L9.5 9.5L12 2Z" fill="currentColor" />
-                </svg>
-                <n-icon v-else class="agent-avatar-icon" :component="getAgentIcon(seg.source_agent)" />
-              </div>
+              <n-tooltip v-if="seg.source_agent" trigger="hover">
+                <template #trigger>
+                  <div
+                    class="agent-avatar"
+                    :class="{ 'is-active': isAgentSegmentActive(m, idx, segIdx) }"
+                    :aria-label="getAgentName(seg.source_agent)"
+                    :style="getAgentAvatarStyle(seg.source_agent)"
+                  >
+                    <svg v-if="isSparkAgent(seg.source_agent)" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg" class="agent-avatar-spark">
+                      <path d="M12 2L14.5 9.5L22 12L14.5 14.5L12 22L9.5 14.5L2 12L9.5 9.5L12 2Z" fill="currentColor" />
+                    </svg>
+                    <n-icon v-else class="agent-avatar-icon" :component="getAgentIcon(seg.source_agent)" />
+                  </div>
+                </template>
+                {{ getAgentName(seg.source_agent) }}
+              </n-tooltip>
               <MarkdownRenderer :content="seg.text" />
             </div>
             <div v-else-if="seg.type === 'json'" class="chat-bubble">
@@ -166,86 +174,109 @@
           </template>
           <!-- 助手操作按钮（始终在最后，发送时隐藏） -->
           <div v-if="!sending" class="bubble-actions bubble-actions-assistant">
-            <n-button
-              quaternary
-              circle
-              size="tiny"
-              @click="retryMessage(idx)"
-              :disabled="!canRetry(idx)"
-              :title="t('components.chatMessageList.retry')"
-            >
-              <template #icon>
-                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M1 4v6h6"/><path d="M3.51 15a9 9 0 1 0 2.13-9.36L1 10"/></svg>
+            <n-tooltip trigger="hover">
+              <template #trigger>
+                <n-button
+                  quaternary
+                  circle
+                  size="tiny"
+                  @click="retryMessage(idx)"
+                  :disabled="!canRetry(idx)"
+                >
+                  <template #icon>
+                    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M1 4v6h6"/><path d="M3.51 15a9 9 0 1 0 2.13-9.36L1 10"/></svg>
+                  </template>
+                </n-button>
               </template>
-            </n-button>
-            <n-button
-              quaternary
-              circle
-              size="tiny"
-              @click="copyMessageContent(m)"
-              :title="t('components.chatMessageList.copy')"
-            >
-              <template #icon>
-                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="9" y="9" width="13" height="13" rx="2" ry="2"></rect><path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"></path></svg>
+              {{ t('components.chatMessageList.retry') }}
+            </n-tooltip>
+            <n-tooltip trigger="hover">
+              <template #trigger>
+                <n-button
+                  quaternary
+                  circle
+                  size="tiny"
+                  @click="copyMessageContent(m)"
+                >
+                  <template #icon>
+                    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="9" y="9" width="13" height="13" rx="2" ry="2"></rect><path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"></path></svg>
+                  </template>
+                </n-button>
               </template>
-            </n-button>
-            <n-button
-              quaternary
-              circle
-              size="tiny"
-              :disabled="!canMutateMessage(m)"
-              @click="$emit('delete-msg', getMutableMessageId(m))"
-              :title="canMutateMessage(m) ? t('common.delete') : t('components.chatMessageList.syncWaitDelete')"
-            >
-              <template #icon>
-                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="3 6 5 6 21 6"></polyline><path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"></path><line x1="10" y1="11" x2="10" y2="17"></line><line x1="14" y1="11" x2="14" y2="17"></line></svg>
+              {{ t('components.chatMessageList.copy') }}
+            </n-tooltip>
+            <n-tooltip trigger="hover">
+              <template #trigger>
+                <n-button
+                  quaternary
+                  circle
+                  size="tiny"
+                  :disabled="!canMutateMessage(m)"
+                  @click="$emit('delete-msg', getMutableMessageId(m))"
+                >
+                  <template #icon>
+                    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="3 6 5 6 21 6"></polyline><path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"></path><line x1="10" y1="11" x2="10" y2="17"></line><line x1="14" y1="11" x2="14" y2="17"></line></svg>
+                  </template>
+                </n-button>
               </template>
-            </n-button>
-            <span
-              v-if="idx === history.length - 1 && getLlmUsageTokenLabel(m)"
-              class="token-count-label"
-              :title="t('components.chatMessageList.contextTokenCount')"
-            >{{ getLlmUsageTokenLabel(m) }}</span>
+              {{ canMutateMessage(m) ? t('common.delete') : t('components.chatMessageList.syncWaitDelete') }}
+            </n-tooltip>
+            <n-tooltip v-if="idx === history.length - 1 && getLlmUsageTokenLabel(m)" trigger="hover">
+              <template #trigger>
+                <span class="token-count-label">{{ getLlmUsageTokenLabel(m) }}</span>
+              </template>
+              {{ t('components.chatMessageList.contextTokenCount') }}
+            </n-tooltip>
           </div>
         </template>
         <div class="message-actions" v-if="!editingMessageId && m.role === 'user'">
-          <n-button
-            v-if="m.role === 'user'"
-            quaternary
-            circle
-            size="tiny"
-            @click="copyMessageContent(m)"
-            :title="t('components.chatMessageList.copy')"
-          >
-            <template #icon>
-              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="9" y="9" width="13" height="13" rx="2" ry="2"></rect><path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"></path></svg>
+          <n-tooltip v-if="m.role === 'user'" trigger="hover">
+            <template #trigger>
+              <n-button
+                quaternary
+                circle
+                size="tiny"
+                @click="copyMessageContent(m)"
+              >
+                <template #icon>
+                  <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="9" y="9" width="13" height="13" rx="2" ry="2"></rect><path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"></path></svg>
+                </template>
+              </n-button>
             </template>
-          </n-button>
-          <n-button
-            v-if="m.role === 'user'"
-            quaternary
-            circle
-            size="tiny"
-            :disabled="!canMutateMessage(m)"
-            @click="startEdit(m)"
-            :title="canMutateMessage(m) ? t('common.edit') : t('components.chatMessageList.syncWaitEdit')"
-          >
-            <template #icon>
-              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7"></path><path d="M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z"></path></svg>
+            {{ t('components.chatMessageList.copy') }}
+          </n-tooltip>
+          <n-tooltip v-if="m.role === 'user'" trigger="hover">
+            <template #trigger>
+              <n-button
+                quaternary
+                circle
+                size="tiny"
+                :disabled="!canMutateMessage(m)"
+                @click="startEdit(m)"
+              >
+                <template #icon>
+                  <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7"></path><path d="M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z"></path></svg>
+                </template>
+              </n-button>
             </template>
-          </n-button>
-          <n-button
-            quaternary
-            circle
-            size="tiny"
-            :disabled="!canMutateMessage(m)"
-            @click="$emit('delete-msg', getMutableMessageId(m))"
-            :title="canMutateMessage(m) ? t('common.delete') : t('components.chatMessageList.syncWaitDelete')"
-          >
-            <template #icon>
-              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="3 6 5 6 21 6"></polyline><path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"></path><line x1="10" y1="11" x2="10" y2="17"></line><line x1="14" y1="11" x2="14" y2="17"></line></svg>
+            {{ canMutateMessage(m) ? t('common.edit') : t('components.chatMessageList.syncWaitEdit') }}
+          </n-tooltip>
+          <n-tooltip trigger="hover">
+            <template #trigger>
+              <n-button
+                quaternary
+                circle
+                size="tiny"
+                :disabled="!canMutateMessage(m)"
+                @click="$emit('delete-msg', getMutableMessageId(m))"
+              >
+                <template #icon>
+                  <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="3 6 5 6 21 6"></polyline><path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"></path><line x1="10" y1="11" x2="10" y2="17"></line><line x1="14" y1="11" x2="14" y2="17"></line></svg>
+                </template>
+              </n-button>
             </template>
-          </n-button>
+            {{ canMutateMessage(m) ? t('common.delete') : t('components.chatMessageList.syncWaitDelete') }}
+          </n-tooltip>
         </div>
         </div>
       </div>
@@ -357,7 +388,7 @@
  */
 import { ref, computed, nextTick, watch, type PropType } from 'vue';
 import { useI18n } from 'vue-i18n';
-import { NButton, NIcon, NInput, NPopover, useMessage } from 'naive-ui';
+import { NButton, NIcon, NInput, NPopover, NTooltip, useMessage } from 'naive-ui';
 import { CircleCheck, Globe, Library, Lightbulb, List, SquarePen } from 'lucide-vue-next';
 import MarkdownRenderer from '@/components/share/MarkdownRenderer.vue';
 import SparkAlert from '@/components/share/SparkAlert.vue';

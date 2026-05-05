@@ -68,9 +68,9 @@ describe('ChatMessageList agent avatar rendering', () => {
 
     const avatars = wrapper.findAll('.agent-avatar');
     expect(avatars).toHaveLength(2);
-    expect(avatars[0].attributes('title')).toBe('世界观管理');
+    expect(avatars[0].attributes('aria-label')).toBe('世界观管理');
     expect(avatars[0].find('.agent-avatar-icon').exists()).toBe(true);
-    expect(avatars[1].attributes('title')).toBe('导演');
+    expect(avatars[1].attributes('aria-label')).toBe('导演');
     expect(avatars[1].find('.agent-avatar-spark').exists()).toBe(true);
   });
 
@@ -93,7 +93,7 @@ describe('ChatMessageList agent avatar rendering', () => {
 
     const activeAvatar = wrapper.find('.agent-avatar.is-active');
     expect(activeAvatar.exists()).toBe(true);
-    expect(activeAvatar.attributes('title')).toBe('执笔编剧');
+    expect(activeAvatar.attributes('aria-label')).toBe('执笔编剧');
   });
 
   it('renders compact input and output token usage with text arrows', () => {

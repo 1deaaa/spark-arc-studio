@@ -76,18 +76,29 @@
                 <div v-if="filteredProjects.length > 0" class="project-list">
                     <div v-for="proj in filteredProjects" :key="proj.projectName" class="project-card">
                         <div class="project-card-main">
-                            <span class="project-name" :title="proj.projectName">{{ proj.projectName }}</span>
+                            <n-tooltip trigger="hover">
+                                <template #trigger>
+                                    <span class="project-name">{{ proj.projectName }}</span>
+                                </template>
+                                {{ proj.projectName }}
+                            </n-tooltip>
                         </div>
                         <div class="project-card-tags">
-                            <span
+                            <n-tooltip
                                 v-for="tag in getProjectStatusTags(proj)"
                                 :key="`${proj.projectName}-${tag.key}`"
-                                class="semantic-status-pill"
-                                :class="`semantic-status-pill-${tag.tone}`"
-                                :title="tag.title || tag.label"
+                                trigger="hover"
                             >
-                                {{ tag.label }}
-                            </span>
+                                <template #trigger>
+                                    <span
+                                        class="semantic-status-pill"
+                                        :class="`semantic-status-pill-${tag.tone}`"
+                                    >
+                                        {{ tag.label }}
+                                    </span>
+                                </template>
+                                {{ tag.title || tag.label }}
+                            </n-tooltip>
                         </div>
                         <n-switch
                             :value="proj.enabled"
@@ -122,7 +133,7 @@
 <script setup lang="ts">
 import { computed, ref, onBeforeUnmount, onMounted } from 'vue';
 import { useI18n } from 'vue-i18n';
-import { NSpin, NButton, NSwitch, NEmpty, useMessage, useDialog } from 'naive-ui';
+import { NSpin, NButton, NSwitch, NEmpty, NTooltip, useMessage, useDialog } from 'naive-ui';
 import {
     fetchSemanticSearchStatus,
     enableSemanticSearch,

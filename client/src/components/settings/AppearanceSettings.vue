@@ -24,15 +24,17 @@
                         </n-popover>
                     </div>
                     <div class="color-presets-inline">
-                        <div
-                            v-for="color in darkPresets"
-                            :key="color"
-                            class="preset-dot-small"
-                            :class="{ active: themePrimaryColorDark === color }"
-                            :style="{ backgroundColor: color }"
-                            @click="themePrimaryColorDark = color"
-                            :title="color"
-                        ></div>
+                        <n-tooltip v-for="color in darkPresets" :key="color" trigger="hover">
+                            <template #trigger>
+                                <div
+                                    class="preset-dot-small"
+                                    :class="{ active: themePrimaryColorDark === color }"
+                                    :style="{ backgroundColor: color }"
+                                    @click="themePrimaryColorDark = color"
+                                ></div>
+                            </template>
+                            {{ color }}
+                        </n-tooltip>
                     </div>
                 </div>
                 <!-- 亮色主色：自定义布局，色块网格占满整行 -->
@@ -54,15 +56,17 @@
                         </n-popover>
                     </div>
                     <div class="color-presets-inline">
-                        <div
-                            v-for="color in lightPresets"
-                            :key="color"
-                            class="preset-dot-small"
-                            :class="{ active: themePrimaryColorLight === color }"
-                            :style="{ backgroundColor: color }"
-                            @click="themePrimaryColorLight = color"
-                            :title="color"
-                        ></div>
+                        <n-tooltip v-for="color in lightPresets" :key="color" trigger="hover">
+                            <template #trigger>
+                                <div
+                                    class="preset-dot-small"
+                                    :class="{ active: themePrimaryColorLight === color }"
+                                    :style="{ backgroundColor: color }"
+                                    @click="themePrimaryColorLight = color"
+                                ></div>
+                            </template>
+                            {{ color }}
+                        </n-tooltip>
                     </div>
                 </div>
                 <!-- 全局字体：自定义布局，与颜色块样式一致 -->

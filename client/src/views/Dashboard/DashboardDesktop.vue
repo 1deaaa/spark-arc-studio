@@ -35,9 +35,14 @@
                     size="tiny"
                     @update:model-value="handleUsageRangeChange"
                   />
-                  <n-button circle quaternary size="tiny" @click="fetchMyUsageOnly()" :title="t('views.dashboard.desktop.refreshStats')">
-                    <template #icon><n-icon><RefreshCw /></n-icon></template>
-                  </n-button>
+                  <n-tooltip trigger="hover">
+                    <template #trigger>
+                      <n-button circle quaternary size="tiny" @click="fetchMyUsageOnly()">
+                        <template #icon><n-icon><RefreshCw /></n-icon></template>
+                      </n-button>
+                    </template>
+                    {{ t('views.dashboard.desktop.refreshStats') }}
+                  </n-tooltip>
                 </n-space>
               </template>
 
@@ -303,6 +308,8 @@ const {
   userCreditColumns,
   allUsageColumns,
   submitCreditAdjust,
+  toggleUserActive,
+  deleteUser,
 } = useAdminLogic();
 
 const modelColumnsForTable = modelColumns;

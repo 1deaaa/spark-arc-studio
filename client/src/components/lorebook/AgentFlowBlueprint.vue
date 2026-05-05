@@ -40,8 +40,18 @@
         @mousedown="startDrag($event, node)"
       >
         <!-- 端口更明显，且始终在最上层 -->
-        <span class="port port-in" :title="t('components.agentFlowBlueprint.portInput')"></span>
-        <span class="port port-out" :title="t('components.agentFlowBlueprint.portOutput')"></span>
+        <n-tooltip trigger="hover">
+          <template #trigger>
+            <span class="port port-in"></span>
+          </template>
+          {{ t('components.agentFlowBlueprint.portInput') }}
+        </n-tooltip>
+        <n-tooltip trigger="hover">
+          <template #trigger>
+            <span class="port port-out"></span>
+          </template>
+          {{ t('components.agentFlowBlueprint.portOutput') }}
+        </n-tooltip>
 
         <!-- 允许自由拖拽卡片 -->
         <div class="agent-node-header" style="cursor: grab;">
@@ -126,7 +136,7 @@
 <script setup lang="ts">
 import { ref, computed, onMounted, onBeforeUnmount, nextTick, watch } from 'vue';
 import { useI18n } from 'vue-i18n';
-import { NIcon, NTabs, NTabPane, NFormItem, NSelect } from 'naive-ui';
+import { NIcon, NTabs, NTabPane, NFormItem, NSelect, NTooltip } from 'naive-ui';
 import { Link } from 'lucide-vue-next';
 import { fetchAgentUsageBindings, saveAgentBinding } from '@/services/agentUsage';
 import { useAgentRegistry } from '@/composables/useAgentRegistry';

@@ -12,21 +12,45 @@
       
       <div class="header-right">
         <n-dropdown trigger="click" :options="projectSwitchOptions" @select="handleProjectSwitch">
-          <n-button quaternary circle size="small" :title="t('mobileFlow.header.switchProject')">
-            <template #icon><n-icon :component="FolderOpen" /></template>
-          </n-button>
+          <span class="tooltip-dropdown-trigger">
+            <n-tooltip trigger="hover">
+              <template #trigger>
+                <n-button quaternary circle size="small">
+                  <template #icon><n-icon :component="FolderOpen" /></template>
+                </n-button>
+              </template>
+              {{ t('mobileFlow.header.switchProject') }}
+            </n-tooltip>
+          </span>
         </n-dropdown>
         <n-dropdown trigger="click" :options="projectIOOptions" @select="handleProjectIO">
-          <n-button quaternary circle size="small" :title="t('mobileFlow.header.projectIO')">
-            <template #icon><n-icon :component="Archive" /></template>
-          </n-button>
+          <span class="tooltip-dropdown-trigger">
+            <n-tooltip trigger="hover">
+              <template #trigger>
+                <n-button quaternary circle size="small">
+                  <template #icon><n-icon :component="Archive" /></template>
+                </n-button>
+              </template>
+              {{ t('mobileFlow.header.projectIO') }}
+            </n-tooltip>
+          </span>
         </n-dropdown>
-        <n-button quaternary circle size="small" @click="openPublishDrawer" :title="t('components.headerToolbar.publishTitle')">
-          <template #icon><n-icon :component="Share2" /></template>
-        </n-button>
-        <n-button quaternary circle size="small" @click="quickPreview" :loading="previewing" :title="t('components.headerToolbar.quickPreviewTitle')">
-          <template #icon><n-icon :component="Play" /></template>
-        </n-button>
+        <n-tooltip trigger="hover">
+          <template #trigger>
+            <n-button quaternary circle size="small" @click="openPublishDrawer">
+              <template #icon><n-icon :component="Share2" /></template>
+            </n-button>
+          </template>
+          {{ t('components.headerToolbar.publishTitle') }}
+        </n-tooltip>
+        <n-tooltip trigger="hover">
+          <template #trigger>
+            <n-button quaternary circle size="small" @click="quickPreview" :loading="previewing">
+              <template #icon><n-icon :component="Play" /></template>
+            </n-button>
+          </template>
+          {{ t('components.headerToolbar.quickPreviewTitle') }}
+        </n-tooltip>
         <n-button quaternary circle size="small" @click="openSettings">
           <template #icon><n-icon :component="Settings" /></template>
         </n-button>
@@ -154,7 +178,7 @@
 
 <script setup lang="ts">
 import { ref, computed, onMounted, onUnmounted, provide, watch, h, nextTick } from 'vue';
-import { NButton, NIcon, NDrawer, NDrawerContent, NTabs, NTabPane, NDropdown, NModal, NCard, type DropdownOption, useDialog } from 'naive-ui';
+import { NButton, NIcon, NDrawer, NDrawerContent, NTabs, NTabPane, NDropdown, NModal, NCard, NTooltip, type DropdownOption, useDialog } from 'naive-ui';
 import { Archive, CircleCheckBig, CirclePlus, FolderOpen, PaintBucket, Play, Settings, Share2, SquarePen, Trash } from 'lucide-vue-next';
 import { useI18n } from 'vue-i18n';
 
@@ -535,6 +559,10 @@ onUnmounted(() => {
   display: flex;
   align-items: center;
   line-height: 0;
+}
+
+.tooltip-dropdown-trigger {
+  display: inline-flex;
 }
 
 

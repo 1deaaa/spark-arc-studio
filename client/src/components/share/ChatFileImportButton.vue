@@ -7,25 +7,29 @@
       :accept="accept"
       @change="handleFileChange"
     />
-    <n-button
-      quaternary
-      circle
-      size="small"
-      class="chat-file-import-button__trigger"
-      :title="t('components.chatPanel.attachFile')"
-      :loading="importing"
-      @click="triggerFileInput"
-    >
-      <template #icon>
-        <n-icon :size="16"><Paperclip /></n-icon>
+    <n-tooltip trigger="hover">
+      <template #trigger>
+        <n-button
+          quaternary
+          circle
+          size="small"
+          class="chat-file-import-button__trigger"
+          :loading="importing"
+          @click="triggerFileInput"
+        >
+          <template #icon>
+            <n-icon :size="16"><Paperclip /></n-icon>
+          </template>
+        </n-button>
       </template>
-    </n-button>
+      {{ t('components.chatPanel.attachFile') }}
+    </n-tooltip>
   </div>
 </template>
 
 <script setup lang="ts">
 import { useI18n } from 'vue-i18n';
-import { NButton, NIcon } from 'naive-ui';
+import { NButton, NIcon, NTooltip } from 'naive-ui';
 import { Paperclip } from 'lucide-vue-next';
 import { useChatFileImport } from '@/composables/useChatFileImport';
 

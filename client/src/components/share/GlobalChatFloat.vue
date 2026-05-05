@@ -2,53 +2,64 @@
   <div v-show="!isChatWorkspaceActive" ref="rootEl" class="chat-float-root" :class="{ expanded: chat.expanded && !isMobile, 'is-dragging': drag.isDragging, 'is-long-pressing': isLongPressing }" :style="rootStyle">
     <!-- Collapsed button -->
     <transition name="chat-float-btn">
-      <button
-        v-if="!chat.expanded"
-        class="chat-float-launch"
-        type="button"
-        :title="t('components.chatPanel.launchHint')"
-        @mousedown="startDrag"
-        @touchstart.passive="startDrag"
-        @click="onLaunchClick"
-      >
-        <div class="chat-float-icon">
-          <svg viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
-            <path class="spark-main" d="M12 2L14.5 9.5L22 12L14.5 14.5L12 22L9.5 14.5L2 12L9.5 9.5L12 2Z" fill="currentColor" />
-            <path class="spark-sub-1" d="M19 2L20 5L23 6L20 7L19 10L18 7L15 6L18 5L19 2Z" fill="currentColor" />
-            <path class="spark-sub-2" d="M5 17L6 19L8 20L6 21L5 23L4 21L2 20L4 19L5 17Z" fill="currentColor" />
-          </svg>
-        </div>
-        <div class="chat-float-glow"></div>
-      </button>
+      <n-tooltip v-if="!chat.expanded" trigger="hover">
+        <template #trigger>
+          <button
+            class="chat-float-launch"
+            type="button"
+            @mousedown="startDrag"
+            @touchstart.passive="startDrag"
+            @click="onLaunchClick"
+          >
+            <div class="chat-float-icon">
+              <svg viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
+                <path class="spark-main" d="M12 2L14.5 9.5L22 12L14.5 14.5L12 22L9.5 14.5L2 12L9.5 9.5L12 2Z" fill="currentColor" />
+                <path class="spark-sub-1" d="M19 2L20 5L23 6L20 7L19 10L18 7L15 6L18 5L19 2Z" fill="currentColor" />
+                <path class="spark-sub-2" d="M5 17L6 19L8 20L6 21L5 23L4 21L2 20L4 19L5 17Z" fill="currentColor" />
+              </svg>
+            </div>
+            <div class="chat-float-glow"></div>
+          </button>
+        </template>
+        {{ t('components.chatPanel.launchHint') }}
+      </n-tooltip>
     </transition>
 
     <!-- 桌面端: Expanded panel -->
     <transition name="chat-float-panel">
       <n-card v-if="chat.expanded && !isMobile" size="small" :bordered="true" class="chat-float-panel" :style="panelStyle">
         <!-- 左上角调整尺寸手柄 -->
-        <div 
-          class="resize-handle resize-handle--nw"
-          @mousedown="startResize($event, 'nw')"
-          :title="t('components.chatPanel.dragResize')"
-        >
-          <svg viewBox="0 0 10 10" fill="currentColor">
-            <path d="M0 10L10 0L10 3L3 10z" opacity="0.4"/>
-            <path d="M0 10L6 4L6 6L2 10z" opacity="0.6"/>
-            <path d="M0 10L3 7L3 10z" opacity="0.8"/>
-          </svg>
-        </div>
+        <n-tooltip trigger="hover">
+          <template #trigger>
+            <div
+              class="resize-handle resize-handle--nw"
+              @mousedown="startResize($event, 'nw')"
+            >
+              <svg viewBox="0 0 10 10" fill="currentColor">
+                <path d="M0 10L10 0L10 3L3 10z" opacity="0.4"/>
+                <path d="M0 10L6 4L6 6L2 10z" opacity="0.6"/>
+                <path d="M0 10L3 7L3 10z" opacity="0.8"/>
+              </svg>
+            </div>
+          </template>
+          {{ t('components.chatPanel.dragResize') }}
+        </n-tooltip>
         <!-- 左下角调整尺寸手柄 -->
-        <div 
-          class="resize-handle resize-handle--sw"
-          @mousedown="startResize($event, 'sw')"
-          :title="t('components.chatPanel.dragResize')"
-        >
-          <svg viewBox="0 0 10 10" fill="currentColor">
-            <path d="M0 0L10 10L10 7L3 0z" opacity="0.4"/>
-            <path d="M0 0L6 6L6 4L2 0z" opacity="0.6"/>
-            <path d="M0 0L3 3L3 0z" opacity="0.8"/>
-          </svg>
-        </div>
+        <n-tooltip trigger="hover">
+          <template #trigger>
+            <div
+              class="resize-handle resize-handle--sw"
+              @mousedown="startResize($event, 'sw')"
+            >
+              <svg viewBox="0 0 10 10" fill="currentColor">
+                <path d="M0 0L10 10L10 7L3 0z" opacity="0.4"/>
+                <path d="M0 0L6 6L6 4L2 0z" opacity="0.6"/>
+                <path d="M0 0L3 3L3 0z" opacity="0.8"/>
+              </svg>
+            </div>
+          </template>
+          {{ t('components.chatPanel.dragResize') }}
+        </n-tooltip>
         <ChatPanel
           ref="desktopListRef"
           :agent-id="chat.currentAgentId"
@@ -93,28 +104,43 @@
           </template>
           <!-- 新建窗口按钮 -->
           <template #header-actions>
-            <n-button v-if="!isMobile" size="tiny" @click="openInWorkspace" :title="t('components.chatPanel.openInWorkspace')" class="btn-action-clear" circle quaternary style="margin-left: 2px;">
-              <template #icon>
-                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
-                  <path d="M15 3h6v6M9 21H3v-6M21 3l-7 7M3 21l7-7"/>
-                </svg>
+            <n-tooltip v-if="!isMobile" trigger="hover">
+              <template #trigger>
+                <n-button size="tiny" @click="openInWorkspace" class="btn-action-clear" circle quaternary style="margin-left: 2px;">
+                  <template #icon>
+                    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                      <path d="M15 3h6v6M9 21H3v-6M21 3l-7 7M3 21l7-7"/>
+                    </svg>
+                  </template>
+                </n-button>
               </template>
-            </n-button>
-            <n-button size="tiny" @click="openExtraWindow" :title="t('components.chatPanel.newWindow')" class="btn-action-clear" circle quaternary style="margin-left: 2px;" :disabled="!canOpenExtraWindow">
-              <template #icon>
-                <n-icon size="14"><CircleUser /></n-icon>
+              {{ t('components.chatPanel.openInWorkspace') }}
+            </n-tooltip>
+            <n-tooltip trigger="hover">
+              <template #trigger>
+                <n-button size="tiny" @click="openExtraWindow" class="btn-action-clear" circle quaternary style="margin-left: 2px;" :disabled="!canOpenExtraWindow">
+                  <template #icon>
+                    <n-icon size="14"><CircleUser /></n-icon>
+                  </template>
+                </n-button>
               </template>
-            </n-button>
+              {{ t('components.chatPanel.newWindow') }}
+            </n-tooltip>
           </template>
           <!-- 关闭按钮 -->
           <template #header-right>
-            <n-button quaternary circle size="small" @click="close" :title="t('components.chatPanel.collapse')">
-              <template #icon>
-                <svg viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
-                  <path d="M18 6L6 18M6 6l12 12" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>
-                </svg>
+            <n-tooltip trigger="hover">
+              <template #trigger>
+                <n-button quaternary circle size="small" @click="close">
+                  <template #icon>
+                    <svg viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
+                      <path d="M18 6L6 18M6 6l12 12" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>
+                    </svg>
+                  </template>
+                </n-button>
               </template>
-            </n-button>
+              {{ t('components.chatPanel.collapse') }}
+            </n-tooltip>
           </template>
         </ChatPanel>
       </n-card>
@@ -188,13 +214,18 @@
           <ChatImportedContextBar :session-id="primarySessionId" />
         </template>
         <template #header-right>
-          <n-button quaternary circle size="small" @click="close" :title="t('components.chatPanel.collapse')">
-            <template #icon>
-              <svg viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
-                <path d="M18 6L6 18M6 6l12 12" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>
-              </svg>
+          <n-tooltip trigger="hover">
+            <template #trigger>
+              <n-button quaternary circle size="small" @click="close">
+                <template #icon>
+                  <svg viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
+                    <path d="M18 6L6 18M6 6l12 12" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>
+                  </svg>
+                </template>
+              </n-button>
             </template>
-          </n-button>
+            {{ t('components.chatPanel.collapse') }}
+          </n-tooltip>
         </template>
       </ChatPanel>
     </n-drawer-content>
@@ -213,7 +244,7 @@
  */
 import { computed, nextTick, onMounted, onUnmounted, reactive, ref, watch } from 'vue';
 import { useI18n } from 'vue-i18n';
-import { NButton, NCard, NInput, NSpace, NSelect, NDrawer, NDrawerContent, NIcon } from 'naive-ui';
+import { NButton, NCard, NInput, NSpace, NSelect, NDrawer, NDrawerContent, NIcon, NTooltip } from 'naive-ui';
 import { CircleUser } from 'lucide-vue-next';
 
 import ChatPanel from '@/components/share/ChatPanel.vue';

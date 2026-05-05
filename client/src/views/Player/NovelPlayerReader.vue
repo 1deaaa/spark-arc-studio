@@ -35,7 +35,12 @@
             <button class="topbar-icon-btn" :disabled="currentPage >= totalPages - 1 && activeChapterIndex >= chapters.length - 1" @click.stop="goNextPage"><n-icon :component="ChevronRight" :size="18" /></button>
           </div>
           <div class="topbar-right">
-            <button class="topbar-icon-btn" :title="t('views.player.novelReader.readingSettings')" @click.stop="showSettings = !showSettings"><n-icon :component="Settings" :size="18" /></button>
+            <n-tooltip trigger="hover">
+              <template #trigger>
+                <button class="topbar-icon-btn" @click.stop="showSettings = !showSettings"><n-icon :component="Settings" :size="18" /></button>
+              </template>
+              {{ t('views.player.novelReader.readingSettings') }}
+            </n-tooltip>
           </div>
         </div>
       </header>
@@ -122,7 +127,7 @@ import { useRoute, useRouter } from 'vue-router';
 import { useI18n } from 'vue-i18n';
 import ZhOnlyTag from '@/components/share/ZhOnlyTag.vue';
 import BookNavButton from '@/components/share/BookNavButton.vue';
-import { NIcon } from 'naive-ui';
+import { NIcon, NTooltip } from 'naive-ui';
 import { ChevronLeft, ChevronRight, Settings, X } from 'lucide-vue-next';
 import type { NavItem } from '@/components/share/SceneNavPanel.vue';
 import { fetchWithAuth } from '@/services/apiClient';

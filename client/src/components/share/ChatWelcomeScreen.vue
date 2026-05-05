@@ -126,12 +126,17 @@
           <li v-for="(tip, i) in proTips" :key="i" class="tip-item">
             <span class="tip-num">{{ i + 1 }}</span>
             <span class="tip-text">{{ tip.text }}</span>
-            <button class="tip-goto" @click.stop="goToView(tip.view)" :title="t('components.chatWelcome.goToPage')">
-              <svg viewBox="0 0 18 18" fill="none" class="tip-goto-svg">
-                <circle cx="9" cy="9" r="7.5" stroke="currentColor" stroke-width="0.8"/>
-                <path d="M7.5 5.5L11.5 9L7.5 12.5" stroke="currentColor" stroke-width="1.3" stroke-linecap="round" stroke-linejoin="round"/>
-              </svg>
-            </button>
+            <n-tooltip trigger="hover">
+              <template #trigger>
+                <button class="tip-goto" @click.stop="goToView(tip.view)">
+                  <svg viewBox="0 0 18 18" fill="none" class="tip-goto-svg">
+                    <circle cx="9" cy="9" r="7.5" stroke="currentColor" stroke-width="0.8"/>
+                    <path d="M7.5 5.5L11.5 9L7.5 12.5" stroke="currentColor" stroke-width="1.3" stroke-linecap="round" stroke-linejoin="round"/>
+                  </svg>
+                </button>
+              </template>
+              {{ t('components.chatWelcome.goToPage') }}
+            </n-tooltip>
           </li>
         </ul>
       </div>
@@ -146,6 +151,7 @@
 
 <script setup lang="ts">
 import { computed } from 'vue';
+import { NTooltip } from 'naive-ui';
 import { useI18n } from 'vue-i18n';
 import { useViewStore, type AppViewKey } from '@/components/stores/viewStore';
 

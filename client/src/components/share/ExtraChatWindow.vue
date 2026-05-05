@@ -9,17 +9,21 @@
         :style="windowStyle"
       >
         <!-- 左上角调整尺寸手柄 -->
-        <div
-          class="resize-handle resize-handle--nw"
-          @mousedown="startResize($event, 'nw')"
-          :title="t('components.chatPanel.dragResize')"
-        >
-          <svg viewBox="0 0 10 10" fill="currentColor">
-            <path d="M0 10L10 0L10 3L3 10z" opacity="0.4"/>
-            <path d="M0 10L6 4L6 6L2 10z" opacity="0.6"/>
-            <path d="M0 10L3 7L3 10z" opacity="0.8"/>
-          </svg>
-        </div>
+        <n-tooltip trigger="hover">
+          <template #trigger>
+            <div
+              class="resize-handle resize-handle--nw"
+              @mousedown="startResize($event, 'nw')"
+            >
+              <svg viewBox="0 0 10 10" fill="currentColor">
+                <path d="M0 10L10 0L10 3L3 10z" opacity="0.4"/>
+                <path d="M0 10L6 4L6 6L2 10z" opacity="0.6"/>
+                <path d="M0 10L3 7L3 10z" opacity="0.8"/>
+              </svg>
+            </div>
+          </template>
+          {{ t('components.chatPanel.dragResize') }}
+        </n-tooltip>
 
         <ChatPanel
           ref="panelRef"
@@ -64,13 +68,18 @@
           </template>
           <!-- 关闭按钮 -->
           <template #header-right>
-            <n-button quaternary circle size="small" @click="$emit('close')" :title="t('components.chatPanel.closeWindow')">
-              <template #icon>
-                <svg viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
-                  <path d="M18 6L6 18M6 6l12 12" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>
-                </svg>
+            <n-tooltip trigger="hover">
+              <template #trigger>
+                <n-button quaternary circle size="small" @click="$emit('close')">
+                  <template #icon>
+                    <svg viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
+                      <path d="M18 6L6 18M6 6l12 12" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>
+                    </svg>
+                  </template>
+                </n-button>
               </template>
-            </n-button>
+              {{ t('components.chatPanel.closeWindow') }}
+            </n-tooltip>
           </template>
         </ChatPanel>
       </n-card>
@@ -89,7 +98,7 @@
  */
 import { computed, onMounted, onUnmounted, reactive, ref, watch, type PropType } from 'vue';
 import { useI18n } from 'vue-i18n';
-import { NButton, NCard } from 'naive-ui';
+import { NButton, NCard, NTooltip } from 'naive-ui';
 import ChatPanel from '@/components/share/ChatPanel.vue';
 import ChatFileImportButton from '@/components/share/ChatFileImportButton.vue';
 import ChatImportedContextBar from '@/components/share/ChatImportedContextBar.vue';

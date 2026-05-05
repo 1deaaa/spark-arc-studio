@@ -92,16 +92,19 @@
                       <span class="checkbox-custom"></span>
                       <span class="checkbox-text">{{ t('login.rememberMe') }}</span>
                     </label>
-                    <button
-                      v-if="canChangeServerAddress"
-                      type="button"
-                      class="server-switch-btn"
-                      :title="t('login.actions.changeServerTitle')"
-                      :aria-label="t('login.actions.changeServerTitle')"
-                      @click="openLauncherForServerChange"
-                    >
-                      <NIcon :size="18"><Server /></NIcon>
-                    </button>
+                    <n-tooltip v-if="canChangeServerAddress" trigger="hover">
+                      <template #trigger>
+                        <button
+                          type="button"
+                          class="server-switch-btn"
+                          :aria-label="t('login.actions.changeServerTitle')"
+                          @click="openLauncherForServerChange"
+                        >
+                          <NIcon :size="18"><Server /></NIcon>
+                        </button>
+                      </template>
+                      {{ t('login.actions.changeServerTitle') }}
+                    </n-tooltip>
                   </div>
                 </div>
 
@@ -260,7 +263,7 @@ import { buildLauncherReturnUrl, readLauncherOriginFromUrl } from '@/utils/launc
 import { SPARKARC_GITHUB_URL } from '@/config';
 
 import TermsModal from '@/components/user/TermsModal.vue';
-import { NIcon } from 'naive-ui';
+import { NIcon, NTooltip } from 'naive-ui';
 import { Server } from 'lucide-vue-next';
 
 type LoginMode = 'login' | 'register';

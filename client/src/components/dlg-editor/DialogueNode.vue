@@ -20,9 +20,14 @@
           <n-tag v-if="node.opt?.length" type="success" size="small" :bordered="false">
             选项: {{ node.opt.length }}
           </n-tag>
-          <n-tag v-for="(val, key) in node.act" :key="key" type="warning" size="small" :bordered="false" :title="Array.isArray(val) ? val.join(', ') : val">
-            {{ key }}
-          </n-tag>
+          <n-tooltip v-for="(val, key) in node.act" :key="key" trigger="hover">
+            <template #trigger>
+              <n-tag type="warning" size="small" :bordered="false">
+                {{ key }}
+              </n-tag>
+            </template>
+            {{ Array.isArray(val) ? val.join(', ') : val }}
+          </n-tooltip>
           <n-button 
             v-if="isSelected"
             size="tiny" 
@@ -98,7 +103,7 @@
 
 <script setup lang="ts">
 import { computed } from 'vue';
-import { NCard, NText, NTag, NSpace, NEllipsis, NButton, NIcon } from 'naive-ui';
+import { NCard, NText, NTag, NSpace, NEllipsis, NButton, NIcon, NTooltip } from 'naive-ui';
 import { GitBranch } from 'lucide-vue-next';
 import Draggable from 'vuedraggable';
 

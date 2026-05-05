@@ -22,7 +22,12 @@
           :class="{ selected: scene === sceneStore.currentScene }"
           @click="onSelectScene(scene)"
         >
-          <span class="drag-handle" title="拖动排序">≡</span>
+          <n-tooltip trigger="hover">
+            <template #trigger>
+              <span class="drag-handle">≡</span>
+            </template>
+            {{ t('components.aiManager.tooltips.dragSort') }}
+          </n-tooltip>
           <span class="scene-title">{{ scene.scene }}</span>
         </div>
       </template>
@@ -33,13 +38,15 @@
 
 <script setup lang="ts">
 import { computed } from 'vue';
-import { NButton, NIcon } from 'naive-ui';
+import { useI18n } from 'vue-i18n';
+import { NButton, NIcon, NTooltip } from 'naive-ui';
 import { Plus } from 'lucide-vue-next';
 import bus from '@/eventBus';
 import { useSceneStore, type SceneWithClientId } from '@/components/stores/sceneStore';
 import Draggable from 'vuedraggable';
 
 const sceneStore = useSceneStore();
+const { t } = useI18n();
 
 const sceneListModel = computed<SceneWithClientId[]>({
   get: () => Array.isArray(sceneStore.scriptData) ? sceneStore.scriptData : [],

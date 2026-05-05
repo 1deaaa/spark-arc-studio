@@ -139,6 +139,40 @@ class UserDatabase:
         except Exception:
             return False
 
+    def set_user_active(self, user_id: int, is_active: bool) -> bool:
+        """设置用户的启用/禁用状态，禁用时会同时注销该用户所有活跃会话"""
+        try:
+            with self._session() as s:
+                user = s.execute(select(User).where(User.id == user_id)).scalar_one_or_none()
+                if not user:
+                    return False
+                user.is_active = is_active
+                s.add(user)
+                # 禁用时注销所有活跃会话
+                if not is_active:
+                    s.execute(
+                        update(UserSession)
+                        .where(UserSession.user_id == user_id, UserSession.is_active == True)  # noqa: E712
+                        .values(is_active=False)
+                    )
+                s.commit()
+                return True
+        except Exception:
+            return False
+
+    def delete_user(self, user_id: int) -> bool:
+        """删除用户及其所有会话"""
+        try:
+            with self._session() as s:
+                user = s.execute(select(User).where(User.id == user_id)).scalar_one_or_none()
+                if not user:
+                    return False
+                s.delete(user)
+                s.commit()
+                return True
+        except Exception:
+            return False
+
     def get_all_users(self) -> List[Dict[str, Any]]:
         """获取所有用户（管理员功能）"""
         try:
@@ -182,6 +216,7 @@ class UserDatabase:
                     .where(
                         UserSession.session_token == session_token,
                         UserSession.is_active == True,  # noqa: E712
+                        User.is_active == True,  # noqa: E712
                         UserSession.expires_at > now,
                     )
                 ).first()

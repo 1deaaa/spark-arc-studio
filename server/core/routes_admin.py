@@ -29,6 +29,11 @@ class UserAdminUpdateRequest(BaseModel):
     is_admin: bool
 
 
+class UserActiveUpdateRequest(BaseModel):
+    user_id: int
+    is_active: bool
+
+
 class UserQuotaPolicyUpdateRequest(BaseModel):
     sys_paid_window_hours: Optional[int] = None
     sys_paid_window_token_limit: Optional[int] = None
@@ -225,6 +230,13 @@ async def update_user_admin_status(
             status_code=400,
             content={"success": False, "message": "不能取消自己的管理员权限"}
         )
+
+    # 不能取消初始用户（user_id=1）的管理员权限
+    if data.user_id == 1 and not data.is_admin:
+        return JSONResponse(
+            status_code=400,
+            content={"success": False, "message": "不能取消初始用户的管理员权限"}
+        )
     
     try:
         success = user_db.set_user_admin(data.user_id, data.is_admin)
@@ -234,6 +246,80 @@ async def update_user_admin_status(
             return JSONResponse(
                 status_code=400,
                 content={"success": False, "message": "用户不存在"}
+            )
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+@admin_router.post('/user/active-status')
+async def update_user_active_status(
+    data: UserActiveUpdateRequest,
+    admin_user: dict = Depends(require_admin)
+):
+    """设置用户的启用/禁用状态（管理员功能），禁用时会同时注销该用户所有活跃会话"""
+    # 不能禁用自己
+    if data.user_id == admin_user['user_id'] and not data.is_active:
+        return JSONResponse(
+            status_code=400,
+            content={"success": False, "message": "不能禁用自己"}
+        )
+
+    # 不能禁用初始用户（user_id=1）
+    if data.user_id == 1 and not data.is_active:
+        return JSONResponse(
+            status_code=400,
+            content={"success": False, "message": "不能禁用初始用户"}
+        )
+
+    try:
+        success = user_db.set_user_active(data.user_id, data.is_active)
+        if success:
+            action = "解封" if data.is_active else "封禁"
+            return {"success": True, "message": f"用户已{action}"}
+        else:
+            return JSONResponse(
+                status_code=400,
+                content={"success": False, "message": "用户不存在"}
+            )
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+@admin_router.delete('/user/{user_id}')
+async def delete_user(
+    user_id: int,
+    admin_user: dict = Depends(require_admin)
+):
+    """删除用户（管理员功能）"""
+    # 不能删除自己
+    if user_id == admin_user['user_id']:
+        return JSONResponse(
+            status_code=400,
+            content={"success": False, "message": "不能删除自己"}
+        )
+
+    # 不能删除初始用户（user_id=1）
+    if user_id == 1:
+        return JSONResponse(
+            status_code=400,
+            content={"success": False, "message": "不能删除初始用户"}
+        )
+
+    user_info = user_db.get_user_info(user_id)
+    if not user_info:
+        return JSONResponse(
+            status_code=404,
+            content={"success": False, "message": "用户不存在"}
+        )
+
+    try:
+        success = user_db.delete_user(user_id)
+        if success:
+            return {"success": True, "message": "用户已删除"}
+        else:
+            return JSONResponse(
+                status_code=400,
+                content={"success": False, "message": "删除用户失败"}
             )
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))

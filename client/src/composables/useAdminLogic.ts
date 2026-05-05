@@ -1,7 +1,7 @@
 
 import { ref, computed, onMounted, h } from 'vue';
-import { useMessage, NTag, NButton, NIcon, NPopconfirm } from 'naive-ui';
-import { Trash } from 'lucide-vue-next';
+import { useMessage, NTag, NButton, NIcon, NPopconfirm, NSpace, NTooltip } from 'naive-ui';
+import { Trash, Ban, Unlock } from 'lucide-vue-next';
 import {
     getMyUsage,
     getMyQuotaStatus,
@@ -12,6 +12,8 @@ import {
     setQuota,
     deleteQuota,
     setUserAdminStatus,
+    setUserActiveStatus,
+    deleteUser as deleteUserService,
     formatTokens,
     formatPrice,
     getAllUserCreditAccounts,
@@ -176,6 +178,7 @@ export function useAdminLogic() {
 
     const loading = ref(false);
     const isAdmin = ref(false);
+    const currentUserId = ref<number | null>(null);
     const myUsage = ref<MyUsageData | null>(null);
     const myQuotaStatus = ref<QuotaStatusData | null>(null);
     const myCreditStatus = ref<CreditStatusData | null>(null);
@@ -220,6 +223,8 @@ export function useAdminLogic() {
         try {
             const userInfo = await getUserInfo();
             isAdmin.value = userInfo.is_admin || false;
+            const uid = userInfo.user_id;
+            currentUserId.value = typeof uid === 'number' ? uid : (uid != null ? Number(uid) : null);
 
             const [usageData, quotaStatus, creditStatus] = await Promise.all([
                 getMyUsage(usageRange.value),
@@ -293,38 +298,108 @@ export function useAdminLogic() {
         { title: '调用', key: 'requests', width: 60 },
     ];
 
-    const userColumns = computed(() => [
-        { title: 'ID', key: 'user_id', width: 50 },
-        { title: '用户名', key: 'username', ellipsis: true },
-        {
-            title: '管理员',
-            key: 'is_admin',
-            width: 80,
-            render: (row: UserItem) => h(NTag, {
-                type: row.is_admin ? 'success' : 'default',
-                size: 'small',
-            }, () => row.is_admin ? '是' : '否')
-        },
-        {
-            title: '状态',
-            key: 'is_active',
-            width: 70,
-            render: (row: UserItem) => h(NTag, {
-                type: row.is_active ? 'success' : 'error',
-                size: 'small',
-            }, () => row.is_active ? '正常' : '禁用')
-        },
-        {
-            title: '操作',
-            key: 'actions',
-            width: 100,
-            render: (row: UserItem) => h(NButton, {
-                size: 'tiny',
-                type: row.is_admin ? 'warning' : 'primary',
-                onClick: () => toggleAdmin(row),
-            }, () => row.is_admin ? '取消管理员' : '设为管理员')
-        },
-    ]);
+    const userColumns = computed(() => {
+        const myId = currentUserId.value;
+        return [
+            { title: 'ID', key: 'user_id', width: 56, align: 'center' as const },
+            { title: '用户名', key: 'username', ellipsis: { tooltip: true } },
+            {
+                title: '管理员',
+                key: 'is_admin',
+                width: 80,
+                align: 'center' as const,
+                render: (row: UserItem) => h(NTag, {
+                    type: row.is_admin ? 'success' : 'default',
+                    size: 'small',
+                    bordered: false,
+                    round: true,
+                }, () => row.is_admin ? '是' : '否')
+            },
+            {
+                title: '状态',
+                key: 'is_active',
+                width: 90,
+                align: 'center' as const,
+                render: (row: UserItem) => h(NTag, {
+                    type: row.is_active ? 'success' : 'error',
+                    size: 'small',
+                    bordered: false,
+                    round: true,
+                }, () => row.is_active ? '正常' : '已封禁')
+            },
+            {
+                title: '操作',
+                key: 'actions',
+                width: 280,
+                align: 'center' as const,
+                render: (row: UserItem) => {
+                    const isSelf = myId !== null && row.user_id === myId;
+                    const isInitialAdmin = row.user_id === 1;
+                    const protectedFromBan = isSelf || isInitialAdmin;
+                    const protectedFromDelete = isSelf || isInitialAdmin;
+                    const protectReason = isInitialAdmin ? '初始管理员受保护' : '不能对自己执行此操作';
+
+                    const adminBtn = h(NButton, {
+                        size: 'tiny',
+                        type: row.is_admin ? 'warning' : 'primary',
+                        secondary: true,
+                        disabled: isInitialAdmin && row.is_admin,
+                        onClick: () => toggleAdmin(row),
+                    }, () => row.is_admin ? '取消管理员' : '设为管理员');
+
+                    const banBtnRaw = h(NButton, {
+                        size: 'tiny',
+                        type: row.is_active ? 'error' : 'success',
+                        secondary: true,
+                        disabled: protectedFromBan,
+                    }, {
+                        icon: () => h(NIcon, null, () => h(row.is_active ? Ban : Unlock)),
+                        default: () => row.is_active ? '封禁' : '解封',
+                    });
+                    const banBtn = protectedFromBan
+                        ? h(NTooltip, null, {
+                            trigger: () => h('span', { style: 'display:inline-flex' }, [banBtnRaw]),
+                            default: () => protectReason,
+                        })
+                        : h(NPopconfirm, {
+                            onPositiveClick: () => toggleUserActive(row),
+                        }, {
+                            trigger: () => banBtnRaw,
+                            default: () => row.is_active
+                                ? `确定封禁用户「${row.username}」？封禁后该用户将无法登录`
+                                : `确定解封用户「${row.username}」？`,
+                        });
+
+                    const delBtnRaw = h(NButton, {
+                        size: 'tiny',
+                        type: 'error',
+                        tertiary: true,
+                        disabled: protectedFromDelete,
+                    }, {
+                        icon: () => h(NIcon, null, () => h(Trash)),
+                        default: () => '删除',
+                    });
+                    const delBtn = protectedFromDelete
+                        ? h(NTooltip, null, {
+                            trigger: () => h('span', { style: 'display:inline-flex' }, [delBtnRaw]),
+                            default: () => protectReason,
+                        })
+                        : h(NPopconfirm, {
+                            onPositiveClick: () => deleteUser(row),
+                        }, {
+                            trigger: () => delBtnRaw,
+                            default: () => `确定删除用户「${row.username}」？此操作不可恢复`,
+                        });
+
+                    return h(NSpace, { size: 6, align: 'center', justify: 'center', wrap: false }, () => [
+                        adminBtn,
+                        banBtn,
+                        delBtn,
+                    ]);
+                }
+            },
+        ];
+    });
 
     const userCreditColumns = computed(() => [
         {
@@ -604,6 +679,26 @@ export function useAdminLogic() {
         }
     }
 
+    async function toggleUserActive(user: UserItem) {
+        try {
+            await setUserActiveStatus(user.user_id, !user.is_active);
+            message.success(user.is_active ? '用户已封禁' : '用户已解封');
+            await refreshData();
+        } catch (error: unknown) {
+            message.error(getErrorMessage(error));
+        }
+    }
+
+    async function deleteUser(user: UserItem) {
+        try {
+            await deleteUserService(user.user_id);
+            message.success('用户已删除');
+            await refreshData();
+        } catch (error: unknown) {
+            message.error(getErrorMessage(error));
+        }
+    }
+
     async function saveQuota() {
         if (!quotaForm.value.platformId) {
             message.warning('请选择平台');
@@ -703,6 +798,8 @@ export function useAdminLogic() {
         openCreditAdjustModal,
         openPricingModal,
         toggleAdmin,
+        toggleUserActive,
+        deleteUser,
         saveQuota,
         removeQuota,
         submitCreditAdjust,

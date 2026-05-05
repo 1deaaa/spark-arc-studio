@@ -1,27 +1,29 @@
 <template>
   <div class="activity-bar">
     <transition-group name="list" tag="div" class="activity-list">
-      <div 
-        v-for="item in sortedItems"
-        :key="item.id"
-        class="activity-item" 
-        :class="{ 
-          active: viewStore.currentView === item.view,
-          dragging: draggingId === item.id
-        }"
-        :data-view="item.view"
-        @click="viewStore.setView(item.view)"
-        :title="item.title"
-        draggable="true"
-        @dragstart="onDragStart($event, item)"
-        @dragenter.prevent="onDragEnter(item)"
-        @dragover.prevent
-        @dragend="onDragEnd"
-      >
-        <n-icon size="24">
-          <component :is="item.icon" />
-        </n-icon>
-      </div>
+      <n-tooltip v-for="item in sortedItems" :key="item.id" trigger="hover" placement="right">
+        <template #trigger>
+          <div
+            class="activity-item"
+            :class="{
+              active: viewStore.currentView === item.view,
+              dragging: draggingId === item.id
+            }"
+            :data-view="item.view"
+            @click="viewStore.setView(item.view)"
+            draggable="true"
+            @dragstart="onDragStart($event, item)"
+            @dragenter.prevent="onDragEnter(item)"
+            @dragover.prevent
+            @dragend="onDragEnd"
+          >
+            <n-icon size="24">
+              <component :is="item.icon" />
+            </n-icon>
+          </div>
+        </template>
+        {{ item.title }}
+      </n-tooltip>
     </transition-group>
 
     <div style="flex: 1"></div>
@@ -29,35 +31,43 @@
     <!-- 创作工具与系统功能的视觉分隔 -->
     <div class="activity-separator"></div>
 
-    <div
-      class="activity-item"
-      :class="{ active: viewStore.currentView === 'dashboard' }"
-      data-view="dashboard"
-      @click="viewStore.setView('dashboard')"
-      :title="t('activityBar.dashboard')"
-    >
-      <n-icon size="24">
-        <Gauge />
-      </n-icon>
-    </div>
+    <n-tooltip trigger="hover" placement="right">
+      <template #trigger>
+        <div
+          class="activity-item"
+          :class="{ active: viewStore.currentView === 'dashboard' }"
+          data-view="dashboard"
+          @click="viewStore.setView('dashboard')"
+        >
+          <n-icon size="24">
+            <Gauge />
+          </n-icon>
+        </div>
+      </template>
+      {{ t('activityBar.dashboard') }}
+    </n-tooltip>
 
-    <div
-      class="activity-item"
-      :class="{ active: viewStore.currentView === 'settings' }"
-      data-view="settings"
-      @click="viewStore.setView('settings')"
-      :title="t('activityBar.settings')"
-    >
-      <n-icon size="24">
-        <Settings />
-      </n-icon>
-    </div>
+    <n-tooltip trigger="hover" placement="right">
+      <template #trigger>
+        <div
+          class="activity-item"
+          :class="{ active: viewStore.currentView === 'settings' }"
+          data-view="settings"
+          @click="viewStore.setView('settings')"
+        >
+          <n-icon size="24">
+            <Settings />
+          </n-icon>
+        </div>
+      </template>
+      {{ t('activityBar.settings') }}
+    </n-tooltip>
   </div>
 </template>
 
 <script setup lang="ts">
 import { ref, computed, markRaw, watch } from 'vue';
-import { NIcon } from 'naive-ui';
+import { NIcon, NTooltip } from 'naive-ui';
 import { useI18n } from 'vue-i18n';
 import { Activity, Code, Gauge, Library, Lightbulb, List, Map as MapIcon, MessagesSquare, Settings, SquarePen } from 'lucide-vue-next';
 import { useViewStore, type AppViewKey } from '../../stores/viewStore';

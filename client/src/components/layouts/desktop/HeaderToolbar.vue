@@ -1,91 +1,146 @@
 <template>
   <header class="app-header no-select" @mousedown="onHeaderMousedown">
     <div class="header-left">
-      <a class="logo" :title="t('components.headerToolbar.backHome')" :href="SPARKARC_GITHUB_URL" target="_blank" rel="noopener">
-        <AppBrand :size="28" :alt="t('components.headerToolbar.backHome')" />
-      </a>
+      <n-tooltip trigger="hover">
+        <template #trigger>
+          <a class="logo" :href="SPARKARC_GITHUB_URL" target="_blank" rel="noopener">
+            <AppBrand :size="28" :alt="t('components.headerToolbar.backHome')" />
+          </a>
+        </template>
+        {{ t('components.headerToolbar.backHome') }}
+      </n-tooltip>
       <ProjectSelector />
     </div>
     <div class="header-center header-buttons">
       <div class="dock-bar" ref="dockBarRef"
         @mouseenter="onDockEnter" @mousemove="onDockMove" @mouseleave="onDockLeave">
         <n-dropdown trigger="click" :options="projectOptions" @select="handleProjectAction">
-          <n-button class="header-action-btn" :title="t('components.headerToolbar.projectActionTitle')" type="primary" strong>
-            <template #icon>
-              <n-icon :component="FolderOpen" />
-            </template>
-            {{ t('components.headerToolbar.project') }}
-          </n-button>
+          <span class="tooltip-dropdown-trigger">
+            <n-tooltip trigger="hover">
+              <template #trigger>
+                <n-button class="header-action-btn" type="primary" strong>
+                  <template #icon>
+                    <n-icon :component="FolderOpen" />
+                  </template>
+                  {{ t('components.headerToolbar.project') }}
+                </n-button>
+              </template>
+              {{ t('components.headerToolbar.projectActionTitle') }}
+            </n-tooltip>
+          </span>
         </n-dropdown>
 
-        <n-button class="header-action-btn" @click="$emit('open-version-manager')" :title="t('components.headerToolbar.publishTitle')" type="primary" strong>
-          <template #icon>
-            <n-icon :component="Share2" />
+        <n-tooltip trigger="hover">
+          <template #trigger>
+            <n-button class="header-action-btn" @click="$emit('open-version-manager')" type="primary" strong>
+              <template #icon>
+                <n-icon :component="Share2" />
+              </template>
+              {{ t('components.headerToolbar.publish') }}
+            </n-button>
           </template>
-          {{ t('components.headerToolbar.publish') }}
-        </n-button>
+          {{ t('components.headerToolbar.publishTitle') }}
+        </n-tooltip>
 
-        <n-button class="header-action-btn" @click="quickPreview" :loading="previewing" :title="t('components.headerToolbar.quickPreviewTitle')" type="primary" strong>
-          <template #icon>
-            <n-icon :component="Play" />
+        <n-tooltip trigger="hover">
+          <template #trigger>
+            <n-button class="header-action-btn" @click="quickPreview" :loading="previewing" type="primary" strong>
+              <template #icon>
+                <n-icon :component="Play" />
+              </template>
+              {{ t('components.headerToolbar.quickPreview') }}
+            </n-button>
           </template>
-          {{ t('components.headerToolbar.quickPreview') }}
-        </n-button>
+          {{ t('components.headerToolbar.quickPreviewTitle') }}
+        </n-tooltip>
 
         <n-dropdown trigger="click" :options="fileOptions" @select="handleFileAction">
-          <n-button class="header-action-btn" :title="t('components.headerToolbar.fileActionTitle')" type="primary" strong>
-            <template #icon>
-              <n-icon :component="FolderOpen" />
-            </template>
-            {{ t('components.headerToolbar.file') }}
-          </n-button>
+          <span class="tooltip-dropdown-trigger">
+            <n-tooltip trigger="hover">
+              <template #trigger>
+                <n-button class="header-action-btn" type="primary" strong>
+                  <template #icon>
+                    <n-icon :component="FolderOpen" />
+                  </template>
+                  {{ t('components.headerToolbar.file') }}
+                </n-button>
+              </template>
+              {{ t('components.headerToolbar.fileActionTitle') }}
+            </n-tooltip>
+          </span>
         </n-dropdown>
 
-        <n-button class="header-action-btn" @click="saveCurrentFile" type="primary" :title="t('components.headerToolbar.saveShortcut')" strong>
-          <template #icon>
-            <n-icon :component="saveSucceeded ? CircleCheck : Save" />
+        <n-tooltip trigger="hover">
+          <template #trigger>
+            <n-button class="header-action-btn" @click="saveCurrentFile" type="primary" strong>
+              <template #icon>
+                <n-icon :component="saveSucceeded ? CircleCheck : Save" />
+              </template>
+              {{ saveButtonText }}
+            </n-button>
           </template>
-          {{ saveButtonText }}
-        </n-button>
+          {{ t('components.headerToolbar.saveShortcut') }}
+        </n-tooltip>
       </div>
       <input type="file" ref="importFileInput" @change="onFileChange" accept=".arc" style="display:none;">
       <input type="file" ref="importSparkInput" @change="onSparkFileChange" accept=".spark" style="display:none;">
     </div>
     <div class="header-right">
-      <n-button 
-        text 
-        style="font-size: var(--spark-fs-h1); margin-right: 8px;" 
-        :title="autoSaveEnabled ? t('components.headerToolbar.autoSaveDisable') : t('components.headerToolbar.autoSaveEnable')" 
-        @click="toggleAutoSave(!autoSaveEnabled)"
-      >
-        <template #icon>
-          <n-icon 
-            :component="RefreshCw" 
-            :color="autoSaveEnabled ? 'var(--n-primary-color)' : '#e88080'" 
-            :style="{ 
-              opacity: autoSaveEnabled ? 1 : 1, 
-              transition: 'all 0.3s ease',
-              transform: autoSaveEnabled ? 'rotate(0deg)' : 'rotate(-45deg)'
-            }"
-          />
+      <n-tooltip trigger="hover">
+        <template #trigger>
+          <n-button
+            text
+            style="font-size: var(--spark-fs-h1); margin-right: 8px;"
+            @click="toggleAutoSave(!autoSaveEnabled)"
+          >
+            <template #icon>
+              <n-icon
+                :component="RefreshCw"
+                :color="autoSaveEnabled ? 'var(--n-primary-color)' : '#e88080'"
+                :style="{
+                  opacity: autoSaveEnabled ? 1 : 1,
+                  transition: 'all 0.3s ease',
+                  transform: autoSaveEnabled ? 'rotate(0deg)' : 'rotate(-45deg)'
+                }"
+              />
+            </template>
+          </n-button>
         </template>
-      </n-button>
-      <n-button text style="font-size: var(--spark-fs-h2); margin-left: 8px;" :title="isFullscreen ? t('components.headerToolbar.exitFullscreen') : t('components.headerToolbar.fullscreen')" @click="handleToggleFullscreen">
-        <n-icon :component="isFullscreen ? Minimize2 : Maximize2" />
-      </n-button>
+        {{ autoSaveEnabled ? t('components.headerToolbar.autoSaveDisable') : t('components.headerToolbar.autoSaveEnable') }}
+      </n-tooltip>
+      <n-tooltip trigger="hover">
+        <template #trigger>
+          <n-button text style="font-size: var(--spark-fs-h2); margin-left: 8px;" @click="handleToggleFullscreen">
+            <n-icon :component="isFullscreen ? Minimize2 : Maximize2" />
+          </n-button>
+        </template>
+        {{ isFullscreen ? t('components.headerToolbar.exitFullscreen') : t('components.headerToolbar.fullscreen') }}
+      </n-tooltip>
       <n-dropdown trigger="hover" :options="themeOptions" @select="handleThemeChange">
-        <n-button text style="font-size: var(--spark-fs-h1); margin-left: 8px;" :title="t('components.headerToolbar.themeSwitch')">
-          <n-icon :component="currentThemeIcon" />
-        </n-button>
+        <span class="tooltip-dropdown-trigger">
+          <n-tooltip trigger="hover">
+            <template #trigger>
+              <n-button text style="font-size: var(--spark-fs-h1); margin-left: 8px;">
+                <n-icon :component="currentThemeIcon" />
+              </n-button>
+            </template>
+            {{ t('components.headerToolbar.themeSwitch') }}
+          </n-tooltip>
+        </span>
       </n-dropdown>
       <div class="user-info">
         <n-text>{{ username || t('components.headerToolbar.loading') }}</n-text>
-        <n-button @click="handleLogout" text :title="t('components.headerToolbar.logoutTitle')">
-          <template #icon>
-            <n-icon :component="LogOut" />
+        <n-tooltip trigger="hover">
+          <template #trigger>
+            <n-button @click="handleLogout" text>
+              <template #icon>
+                <n-icon :component="LogOut" />
+              </template>
+              {{ t('components.headerToolbar.logout') }}
+            </n-button>
           </template>
-          {{ t('components.headerToolbar.logout') }}
-        </n-button>
+          {{ t('components.headerToolbar.logoutTitle') }}
+        </n-tooltip>
       </div>
       <!-- Tauri 桌面端窗口控制按钮 -->
       <WindowControls variant="header" />
@@ -96,7 +151,7 @@
 <script setup lang="ts">
 import { onBeforeUnmount, onMounted, ref, computed, h } from 'vue';
 import { useI18n } from 'vue-i18n';
-import { NButton, NIcon, NText, NDropdown } from 'naive-ui';
+import { NButton, NIcon, NText, NDropdown, NTooltip } from 'naive-ui';
 import { Archive, CircleCheck, CloudDownload, CloudUpload, FolderOpen, Laptop, LogOut, Maximize2, Minimize2, Moon, PaintBucket, Play, RefreshCw, Save, Share2, Sun } from 'lucide-vue-next';
 import bus from '@/eventBus';
 import ProjectSelector from '../../user/ProjectSelector.vue';
@@ -472,6 +527,10 @@ async function exportToSQLite() {
   display: inline-flex;
   align-items: center;
   gap: 6px;
+}
+
+.tooltip-dropdown-trigger {
+  display: inline-flex;
 }
 
 /* ── 点击动画：按下缩放 + 弹性回弹 ── */

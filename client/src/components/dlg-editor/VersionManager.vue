@@ -107,22 +107,26 @@
                   </n-button>
                 </n-space>
 
-                <div
-                  class="share-toggle"
-                  :title="globalShareDisabled
-                    ? t('components.versionManager.publicShareDisabledTooltip')
-                    : ver.is_shared
-                      ? t('components.versionManager.shareEnabledTooltip')
-                      : t('components.versionManager.shareDisabledTooltip')"
-                >
-                  <n-text depth="3" class="share-state-label">{{ ver.is_shared ? t('components.versionManager.public') : t('components.versionManager.private') }}</n-text>
-                  <n-switch
-                    size="small"
-                    :value="ver.is_shared"
-                    :disabled="globalShareDisabled"
-                    @update:value="toggleShare(ver, $event)"
-                  />
-                </div>
+                <n-tooltip trigger="hover">
+                  <template #trigger>
+                    <div class="share-toggle">
+                      <n-text depth="3" class="share-state-label">{{ ver.is_shared ? t('components.versionManager.public') : t('components.versionManager.private') }}</n-text>
+                      <n-switch
+                        size="small"
+                        :value="ver.is_shared"
+                        :disabled="globalShareDisabled"
+                        @update:value="toggleShare(ver, $event)"
+                      />
+                    </div>
+                  </template>
+                  {{
+                    globalShareDisabled
+                      ? t('components.versionManager.publicShareDisabledTooltip')
+                      : ver.is_shared
+                        ? t('components.versionManager.shareEnabledTooltip')
+                        : t('components.versionManager.shareDisabledTooltip')
+                  }}
+                </n-tooltip>
               </div>
             </div>
           </template>
@@ -163,8 +167,8 @@ import { ref, onMounted, onBeforeUnmount, computed, watch } from 'vue';
 import { useI18n } from 'vue-i18n';
 import { 
   NButton, NIcon, NCard, NEmpty, NTag, NSpace, NPopconfirm, NModal, NAlert,
-  NForm, NFormItem, NSelect, NInput, NSwitch, NSpin, 
-  NText, useMessage, useDialog
+  NForm, NFormItem, NSelect, NInput, NSwitch, NSpin,
+  NText, NTooltip, useMessage, useDialog
 } from 'naive-ui';
 import { CloudDownload, Copy, Play, RefreshCw, Save, SquarePen, Trash } from 'lucide-vue-next';
 import { fetchWithAuth } from '@/services/api';

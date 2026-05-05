@@ -14,37 +14,49 @@
       </template>
     </n-select>
     <n-space :size="6">
-      <n-button 
-        circle 
-        @click="projectStore.createProject" 
-        :title="t('components.projectSelector.newProject')"
-        size="small"
-      >
-        <template #icon>
-          <n-icon :component="CirclePlus" />
+      <n-tooltip trigger="hover">
+        <template #trigger>
+          <n-button
+            circle
+            @click="projectStore.createProject"
+            size="small"
+          >
+            <template #icon>
+              <n-icon :component="CirclePlus" />
+            </template>
+          </n-button>
         </template>
-      </n-button>
-      <n-button 
-        circle 
-        @click="handleRenameProject"
-        :title="t('components.projectSelector.renameCurrentProject')"
-        size="small"
-      >
-        <template #icon>
-          <n-icon :component="SquarePen" />
+        {{ t('components.projectSelector.newProject') }}
+      </n-tooltip>
+      <n-tooltip trigger="hover">
+        <template #trigger>
+          <n-button
+            circle
+            @click="handleRenameProject"
+            size="small"
+          >
+            <template #icon>
+              <n-icon :component="SquarePen" />
+            </template>
+          </n-button>
         </template>
-      </n-button>
-      <n-button 
-        circle 
-        type="error"
-        @click="handleDeleteProject"
-        :title="t('components.projectSelector.deleteCurrentProject')"
-        size="small"
-      >
-        <template #icon>
-          <n-icon :component="Trash" />
+        {{ t('components.projectSelector.renameCurrentProject') }}
+      </n-tooltip>
+      <n-tooltip trigger="hover">
+        <template #trigger>
+          <n-button
+            circle
+            type="error"
+            @click="handleDeleteProject"
+            size="small"
+          >
+            <template #icon>
+              <n-icon :component="Trash" />
+            </template>
+          </n-button>
         </template>
-      </n-button>
+        {{ t('components.projectSelector.deleteCurrentProject') }}
+      </n-tooltip>
     </n-space>
   </n-space>
 </template>
@@ -53,7 +65,7 @@
 import { onMounted, computed } from 'vue';
 import { useI18n } from 'vue-i18n';
 import { useRouter } from 'vue-router';
-import { NSpace, NText, NSelect, NButton, NIcon, useDialog } from 'naive-ui';
+import { NSpace, NText, NSelect, NButton, NIcon, NTooltip, useDialog } from 'naive-ui';
 import { CirclePlus, FolderOpen, SquarePen, Trash } from 'lucide-vue-next';
 import { useProjectStore } from '../stores/projectStore';
 import { useFileStore } from '../stores/fileStore';

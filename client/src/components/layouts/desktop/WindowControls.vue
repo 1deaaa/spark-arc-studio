@@ -1,62 +1,76 @@
 <template>
   <div v-if="isTauriDesktop" class="win-controls" :class="variant">
-    <button 
-      class="win-btn win-btn--minimize" 
-      @click="minimize" 
-      title="最小化"
-    >
-      <svg class="win-icon" viewBox="0 0 24 24" fill="none">
-        <rect 
-          class="icon-shape" 
-          x="5" y="11" width="14" height="2" rx="1" 
-          fill="currentColor"
-        />
-      </svg>
-    </button>
-    <button 
-      class="win-btn win-btn--maximize" 
-      @click="toggleMaximize" 
-      :title="isMaximized ? '还原' : '最大化'"
-    >
-      <svg v-if="!isMaximized" class="win-icon" viewBox="0 0 24 24" fill="none">
-        <rect 
-          class="icon-shape" 
-          x="5" y="5" width="14" height="14" rx="2" 
-          stroke="currentColor" stroke-width="2" fill="none"
-        />
-      </svg>
-      <svg v-else class="win-icon" viewBox="0 0 24 24" fill="none">
-        <rect 
-          class="icon-shape icon-back" 
-          x="8" y="4" width="12" height="12" rx="1.5" 
-          stroke="currentColor" stroke-width="1.5" fill="none"
-        />
-        <rect 
-          class="icon-shape icon-front" 
-          x="4" y="8" width="12" height="12" rx="1.5" 
-          stroke="currentColor" stroke-width="1.5" 
-          :fill="fillBg"
-        />
-      </svg>
-    </button>
-    <button 
-      class="win-btn win-btn--close" 
-      @click="close" 
-      title="关闭"
-    >
-      <svg class="win-icon" viewBox="0 0 24 24" fill="none">
-        <path 
-          class="icon-shape" 
-          d="M6 6L18 18M18 6L6 18" 
-          stroke="currentColor" stroke-width="2" stroke-linecap="round"
-        />
-      </svg>
-    </button>
+    <n-tooltip trigger="hover">
+      <template #trigger>
+        <button
+          class="win-btn win-btn--minimize"
+          @click="minimize"
+        >
+          <svg class="win-icon" viewBox="0 0 24 24" fill="none">
+            <rect
+              class="icon-shape"
+              x="5" y="11" width="14" height="2" rx="1"
+              fill="currentColor"
+            />
+          </svg>
+        </button>
+      </template>
+      {{ t('common.minimize') }}
+    </n-tooltip>
+    <n-tooltip trigger="hover">
+      <template #trigger>
+        <button
+          class="win-btn win-btn--maximize"
+          @click="toggleMaximize"
+        >
+          <svg v-if="!isMaximized" class="win-icon" viewBox="0 0 24 24" fill="none">
+            <rect
+              class="icon-shape"
+              x="5" y="5" width="14" height="14" rx="2"
+              stroke="currentColor" stroke-width="2" fill="none"
+            />
+          </svg>
+          <svg v-else class="win-icon" viewBox="0 0 24 24" fill="none">
+            <rect
+              class="icon-shape icon-back"
+              x="8" y="4" width="12" height="12" rx="1.5"
+              stroke="currentColor" stroke-width="1.5" fill="none"
+            />
+            <rect
+              class="icon-shape icon-front"
+              x="4" y="8" width="12" height="12" rx="1.5"
+              stroke="currentColor" stroke-width="1.5"
+              :fill="fillBg"
+            />
+          </svg>
+        </button>
+      </template>
+      {{ isMaximized ? t('common.restore') : t('common.maximize') }}
+    </n-tooltip>
+    <n-tooltip trigger="hover">
+      <template #trigger>
+        <button
+          class="win-btn win-btn--close"
+          @click="close"
+        >
+          <svg class="win-icon" viewBox="0 0 24 24" fill="none">
+            <path
+              class="icon-shape"
+              d="M6 6L18 18M18 6L6 18"
+              stroke="currentColor" stroke-width="2" stroke-linecap="round"
+            />
+          </svg>
+        </button>
+      </template>
+      {{ t('common.close') }}
+    </n-tooltip>
   </div>
 </template>
 
 <script setup lang="ts">
 import { computed } from 'vue';
+import { NTooltip } from 'naive-ui';
+import { useI18n } from 'vue-i18n';
 import { useWindowControls } from '@/composables/useWindowControls';
 
 const props = defineProps({
@@ -65,6 +79,7 @@ const props = defineProps({
 });
 
 const { isMaximized, minimize, toggleMaximize, close, isTauriDesktop } = useWindowControls();
+const { t } = useI18n();
 
 // 还原按钮的填充色随变体自适应
 const fillBg = computed(() =>
