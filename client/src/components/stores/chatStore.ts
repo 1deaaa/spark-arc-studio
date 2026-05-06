@@ -49,9 +49,10 @@ type ResolvedMessageContext = {
 type ChatSessionKind = 'primary' | 'extra';
 
 type ChatImportedContext = {
+  /** 后端落盘后的附件 id（必填）；前端只持有引用，全文由后端按 id 从磁盘加载。 */
+  attachmentId: string;
   filename: string;
   sourceFormat: string;
-  text: string;
   totalTokens: number;
   chunkTokens: number;
   isPartial: boolean;
@@ -271,14 +272,16 @@ function _resolveActiveContext(
     }
   }
 
-  if (importedContext?.text) {
-    activeContext = [activeContext, _buildImportedContextBlock(importedContext)].filter(Boolean).join('\n\n');
+  // 引用制：activeContext 不带全文，仅在 activeMeta.importedFile 上传 attachmentId 引用。
+  // 后端在调 LLM 前按 id 从磁盘加载全文动态注入。
+  const attachmentId = String(importedContext?.attachmentId || '').trim();
+  if (attachmentId && importedContext?.filename) {
     activeMeta = {
       ...(activeMeta || {}),
       importedFile: {
+        attachmentId,
         filename: importedContext.filename,
         sourceFormat: importedContext.sourceFormat,
-        text: importedContext.text,
         totalTokens: importedContext.totalTokens,
         chunkTokens: importedContext.chunkTokens,
         isPartial: importedContext.isPartial,
@@ -291,39 +294,18 @@ function _resolveActiveContext(
   return { activeContext, activeMeta };
 }
 
-function _buildImportedContextLabel(importedFile: AnyRecord | ChatImportedContext | null | undefined) {
-  if (!importedFile?.filename) return '';
-  return importedFile.isPartial
-    ? `【已上传文件首个分片：${importedFile.filename}】`
-    : `【已上传文件：${importedFile.filename}】`;
-}
-
-function _buildImportedContextBlock(importedFile: AnyRecord | ChatImportedContext | null | undefined) {
-  const text = String(importedFile?.text || '').trim();
-  const label = _buildImportedContextLabel(importedFile);
-  if (!label || !text) return '';
-  return `${label}\n${text}`;
-}
-
-function _stripImportedContextFromActiveContext(activeContext: string, importedFile: AnyRecord | null | undefined) {
-  const normalizedContext = String(activeContext || '').trim();
-  if (!normalizedContext) return '';
-  const importedBlock = _buildImportedContextBlock(importedFile);
-  if (!importedBlock) return normalizedContext;
-  return normalizedContext
-    .replace(importedBlock, '')
-    .replace(/\n{3,}/g, '\n\n')
-    .trim();
-}
 
 function _extractImportedFileMeta(activeMeta: AnyRecord | null = null) {
   const importedFile = activeMeta?.importedFile;
   if (!importedFile || typeof importedFile !== 'object' || Array.isArray(importedFile)) return null;
   if (importedFile.deleted) return null;
+  const attachmentId = String(importedFile.attachmentId || '').trim();
+  const filename = String(importedFile.filename || '').trim();
+  if (!attachmentId || !filename) return null;
   return {
-    filename: String(importedFile.filename || '').trim(),
+    attachmentId,
+    filename,
     sourceFormat: String(importedFile.sourceFormat || '').trim(),
-    text: String(importedFile.text || '').trim(),
     totalTokens: Number(importedFile.totalTokens || 0) || 0,
     chunkTokens: Number(importedFile.chunkTokens || 0) || 0,
     isPartial: Boolean(importedFile.isPartial),
@@ -391,11 +373,11 @@ function _findLatestImportedContext(history: AnyRecord[] = []): ChatImportedCont
     const message = history[i];
     if (message?.role !== 'user') continue;
     const importedFile = _extractImportedFileMeta(message?.metadata || null);
-    if (!importedFile?.filename || !importedFile.text) continue;
+    if (!importedFile) continue;
     return {
+      attachmentId: importedFile.attachmentId,
       filename: importedFile.filename,
       sourceFormat: importedFile.sourceFormat,
-      text: importedFile.text,
       totalTokens: importedFile.totalTokens,
       chunkTokens: importedFile.chunkTokens,
       isPartial: importedFile.isPartial,
@@ -410,13 +392,10 @@ function _buildUserMessageMetadata(activeContext: unknown, activeMeta: AnyRecord
   const metadata: AnyRecord = {};
   const normalizedContext = typeof activeContext === 'string' ? activeContext.trim() : String(activeContext || '').trim();
   const importedFile = _extractImportedFileMeta(activeMeta);
-  const contextForStorage = importedFile?.filename
-    ? _stripImportedContextFromActiveContext(normalizedContext, importedFile)
-    : normalizedContext;
-  if (contextForStorage) {
-    metadata.active_context = contextForStorage;
+  if (normalizedContext) {
+    metadata.active_context = normalizedContext;
   }
-  if (importedFile?.filename) {
+  if (importedFile) {
     metadata.importedFile = importedFile;
   }
   return Object.keys(metadata).length ? metadata : null;
@@ -431,15 +410,11 @@ function _resolveMessageContextForEdit(
   const storedRawContext = typeof messageMetadata?.active_context === 'string' ? messageMetadata.active_context.trim() : '';
   const storedContext = _isDeletedAttachmentContext(storedRawContext) ? '' : storedRawContext;
   const importedFile = _extractImportedFileMeta(messageMetadata);
-  const baseContext = storedContext || providerContext;
-  const activeContext = importedFile?.filename
-    ? [baseContext, _buildImportedContextBlock(importedFile)].filter(Boolean).join('\n\n')
-    : baseContext;
-  const activeMeta = importedFile?.filename
-    ? {
-        ...(providerMeta || {}),
-        importedFile,
-      }
+  // 引用制：编辑流的 activeContext 不再包含全文（后端按 attachmentId 动态注入），
+  // 仅在 activeMeta.importedFile 上透传引用。
+  const activeContext = storedContext || providerContext;
+  const activeMeta = importedFile
+    ? { ...(providerMeta || {}), importedFile }
     : (providerMeta || null);
 
   return {

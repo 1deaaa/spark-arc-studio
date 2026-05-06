@@ -2,6 +2,7 @@ import { computed, onMounted, ref } from 'vue';
 import { useI18n } from 'vue-i18n';
 import bus from '@/eventBus';
 import { useChatStore } from '@/components/stores/chatStore';
+import { useProjectStore } from '@/components/stores/projectStore';
 import { parseImportFile } from '@/services/fileImportService';
 import { useDocumentImport } from '@/composables/useDocumentImport';
 
@@ -18,6 +19,7 @@ function formatTokenCount(value: number) {
 export function useChatFileImport(getSessionId: () => number | null | undefined) {
   const { t } = useI18n();
   const chatStore = useChatStore();
+  const projectStore = useProjectStore();
   const importing = ref(false);
   const importAbortController = ref<AbortController | null>(null);
 
@@ -54,6 +56,19 @@ export function useChatFileImport(getSessionId: () => number | null | undefined)
     return name === 'AbortError' || name === 'CanceledError';
   }
 
+  function openImportPicker() {
+    if (importing.value) {
+      cancelImport();
+      return;
+    }
+    const projectName = projectStore.currentProject || '';
+    if (!projectName) {
+      bus.emit('toast', { type: 'warning', message: t('components.chatPanel.fileImportRequiresProject') });
+      return;
+    }
+    triggerFileInput();
+  }
+
   async function importChatFile(file: File) {
     const sessionId = getSessionId();
     if (sessionId == null) {
@@ -67,19 +82,22 @@ export function useChatFileImport(getSessionId: () => number | null | undefined)
     importAbortController.value = controller;
     importing.value = true;
     try {
-      const parsed = await parseImportFile(file, CHAT_PARTIAL_CHUNK_TOKENS, controller.signal);
+      const projectName = projectStore.currentProject || '';
+      if (!projectName) {
+        throw new Error(t('components.chatPanel.fileImportRequiresProject'));
+      }
+      const parsed = await parseImportFile(file, CHAT_PARTIAL_CHUNK_TOKENS, controller.signal, projectName);
       const totalTokens = Number((parsed.chunk_info as { total_tokens_estimated?: unknown } | null)?.total_tokens_estimated || 0);
       const shouldUsePartialChunk = totalTokens > CHAT_DIRECT_UPLOAD_MAX_TOKENS;
-      const firstChunk = parsed.chunks?.[0] || null;
-      const selectedText = shouldUsePartialChunk ? String(firstChunk?.text || '').trim() : String(parsed.full_text || '').trim();
-      if (!selectedText) {
-        throw new Error(t('components.chatPanel.fileImportEmpty'));
+      const attachmentId = String(parsed.attachment_id || '').trim();
+      if (!attachmentId) {
+        throw new Error(t('components.chatPanel.fileImportPersistFailed'));
       }
 
       chatStore.setSessionImportedContext(sessionId, {
+        attachmentId,
         filename: parsed.filename || file.name,
         sourceFormat: parsed.source_format,
-        text: selectedText,
         totalTokens,
         chunkTokens: shouldUsePartialChunk ? CHAT_PARTIAL_CHUNK_TOKENS : Math.max(totalTokens, 1),
         isPartial: shouldUsePartialChunk,
@@ -125,6 +143,13 @@ export function useChatFileImport(getSessionId: () => number | null | undefined)
     chatStore.clearSessionImportedContext(sessionId);
   }
 
+  /** 用户主动从附件面板里删除：同步后端 + 标记历史消息 deleted。 */
+  async function removeImportedContext() {
+    const sessionId = getSessionId();
+    if (sessionId == null) return;
+    await chatStore.removeSessionImportedContext(sessionId);
+  }
+
   const {
     fileInput,
     accept,
@@ -151,7 +176,9 @@ export function useChatFileImport(getSessionId: () => number | null | undefined)
     importedContextDescription,
     handleFileChange,
     triggerFileInput,
+    openImportPicker,
     clearImportedContext,
+    removeImportedContext,
     cancelImport,
   };
 }

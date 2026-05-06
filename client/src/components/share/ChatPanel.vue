@@ -61,18 +61,12 @@
       @save-edit="$emit('save-edit', $event)"
       @edit-keydown="(e, id) => $emit('edit-keydown', e, id)"
       @delete-msg="$emit('delete-msg', $event)"
-      @remove-attachment="(id) => $emit('remove-attachment', id)"
       @retry="(id, content) => $emit('retry', id, content)"
     >
       <template #empty-state>
         <slot name="empty-state"></slot>
       </template>
     </ChatMessageList>
-
-    <!-- 输入区 -->
-    <div v-if="slots['input-meta']" class="chat-input-meta">
-      <slot name="input-meta"></slot>
-    </div>
     <div class="chat-input-wrapper" :class="inputWrapperClass">
       <div v-if="slots['input-prefix']" class="chat-input-prefix">
         <slot name="input-prefix"></slot>
@@ -197,7 +191,6 @@ const emit = defineEmits([
   'save-edit',
   'edit-keydown',
   'delete-msg',
-  'remove-attachment',
   'retry',
   'header-mousedown',
   'header-touchstart',
@@ -312,10 +305,6 @@ defineExpose({ listRef: chatListRef });
 }
 
 /* 输入区 */
-.chat-input-meta {
-  padding: 8px 12px 0;
-}
-
 .chat-input-wrapper {
   position: relative;
   display: flex;

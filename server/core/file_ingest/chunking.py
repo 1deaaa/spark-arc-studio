@@ -30,10 +30,28 @@ class TokenTextSplitter:
     )
     TAIL_CHARS = 100
 
-    def __init__(self, chunk_tokens: int = 30000, min_tokens: int = 1000, max_tokens: int = 120000):
+    def __init__(
+        self,
+        chunk_tokens: int = 30000,
+        min_tokens: int = 1000,
+        max_tokens: int = 120000,
+        tail_merge_threshold_ratio: float = 0.2,
+        tail_merge_cap_ratio: float = 1.15,
+    ):
+        """Token 驱动的文本分块器。
+
+        尾部合并策略：当切出的最后一片 < ``chunk_tokens * tail_merge_threshold_ratio``
+        且与倍数第二片合并后仍 <= ``chunk_tokens * tail_merge_cap_ratio`` 时，
+        合并二者，避免产生“小尾巴”分片。
+
+        默认 0.2 / 1.15 保持保守，适用于风格分析以及 low-context 模型。
+        聊天附件场景可传 0.5 / 1.5，避免“64.1K 切成 64K + 0.1K” 这类尴尬。
+        """
         self.chunk_tokens = max(min_tokens, min(chunk_tokens, max_tokens))
         self.min_tokens = min_tokens
         self.max_tokens = max_tokens
+        self.tail_merge_threshold_ratio = max(0.0, min(float(tail_merge_threshold_ratio), 0.95))
+        self.tail_merge_cap_ratio = max(1.0, float(tail_merge_cap_ratio))
 
     def estimate(self, text: str) -> int:
         return estimate_tokens(text, model=None)
@@ -137,13 +155,15 @@ class TokenTextSplitter:
         if current_parts:
             chunks.append(("\n\n".join(current_parts).strip(), current_tokens))
 
-        # 尾部合并：若最后一块 < 20% 目标 tokens，尝试合回倒数第二块
+        # 尾部合并：若最后一块 < threshold_ratio 目标 tokens，且合并后不超过 cap_ratio，合回倒数第二块
         if len(chunks) > 1:
             tail_text, tail_tokens = chunks[-1]
-            if tail_tokens < max(1, int(self.chunk_tokens * 0.2)):
+            threshold = max(1, int(self.chunk_tokens * self.tail_merge_threshold_ratio))
+            cap = int(self.chunk_tokens * self.tail_merge_cap_ratio)
+            if tail_tokens < threshold:
                 prev_text, prev_tokens = chunks[-2]
                 merged_tokens = prev_tokens + self._JOIN_TOKENS + tail_tokens
-                if merged_tokens <= int(self.chunk_tokens * 1.15):
+                if merged_tokens <= cap:
                     chunks[-2] = (f"{prev_text}\n\n{tail_text}".strip(), merged_tokens)
                     chunks.pop()
 
@@ -255,5 +275,14 @@ class TokenTextSplitter:
         return parts
 
 
-def split_text_by_tokens(text: str, chunk_tokens: int = 30000) -> list[TokenChunk]:
-    return TokenTextSplitter(chunk_tokens=chunk_tokens).split(text)
+def split_text_by_tokens(
+    text: str,
+    chunk_tokens: int = 30000,
+    tail_merge_threshold_ratio: float = 0.2,
+    tail_merge_cap_ratio: float = 1.15,
+) -> list[TokenChunk]:
+    return TokenTextSplitter(
+        chunk_tokens=chunk_tokens,
+        tail_merge_threshold_ratio=tail_merge_threshold_ratio,
+        tail_merge_cap_ratio=tail_merge_cap_ratio,
+    ).split(text)

@@ -44,6 +44,7 @@ from agents.tools.muse import (
 from agents.tools.registry import (
     ALL_TOOLS,
     DIRECTOR_TOOLS,
+    EXTERNAL_SEARCH_TOOLS,
     LOREBOOK_TOOLS,
     MCP_ONLY_TOOLS,
     MUSE_TOOLS,
@@ -99,6 +100,7 @@ from agents.tools.showrunner import (
     rewrite_outline,
     rewrite_synopsis,
 )
+from agents.tools.web_search import WebSearchInput, web_search
 
 __all__ = [
     "ALL_TOOLS",
@@ -108,6 +110,7 @@ __all__ = [
     "CreateOrRewriteScriptInput",
     "DIRECTOR_TOOLS",
     "DelegateTaskInput",
+    "EXTERNAL_SEARCH_TOOLS",
     "GraphRagToolInput",
     "LOREBOOK_TOOLS",
     "MCP_ONLY_TOOLS",
@@ -138,6 +141,7 @@ __all__ = [
     "TriggerAutoWriteInput",
     "UpdateCharacterInput",
     "WorkTrackerInput",
+    "WebSearchInput",
     "_apply_patch",
     "_get_search_results",
     "_store_search_results",
@@ -173,4 +177,5 @@ __all__ = [
     "trigger_auto_write",
     "update_character",
     "work_tracker",
+    "web_search",
 ]

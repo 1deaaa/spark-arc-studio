@@ -28,7 +28,6 @@
         @save-edit="saveEdit"
         @edit-keydown="onEditKeydown"
         @delete-msg="deleteMsg"
-        @remove-attachment="(id) => chat.removeSessionAttachment(primarySessionId, id)"
         class="desktop-chat-panel"
       >
         <template #empty-state>

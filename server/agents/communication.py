@@ -133,7 +133,7 @@ def get_tool_ui_binding(tool_name: str) -> Dict[str, Any]:
             "refresh_events": ["synopsis-refresh"],
         }
 
-    if normalized in {"search_project", "semantic_search"}:
+    if normalized in {"search_project", "semantic_search", "web_search"}:
         return {
             "scope": "",
             "target": "",
@@ -1204,6 +1204,7 @@ class SparkBaseAgent:
             "read_chapter_scene": "正在读取章节内容...",
             "read_chapter_outline_raw": "正在读取章节大纲原文...",
             "delegate_task": "正在委派任务...",
+            "web_search": "正在联网搜索外部资料...",
         }
         return mapping.get(tool_name, f"正在执行工具 {tool_name} ...")
 

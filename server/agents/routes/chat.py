@@ -74,6 +74,12 @@ from .schemas import (
     ChatMessageAttachmentRemoveRequest,
     _resolve_effective_active_context,
 )
+from .chat_attachment import (
+    build_imported_file_context_label as _build_imported_file_context_label,
+    build_user_message_metadata as _build_user_message_metadata,
+    expand_active_context_with_attachment as _expand_active_context_with_attachment,
+    extract_imported_file_meta as _extract_imported_file_meta,
+)
 from .streaming_utils import iterate_sync_iterable_in_thread
 from .chat_task import (
     ChatTaskEntry,
@@ -97,75 +103,6 @@ def _apply_request_runtime_meta(active_meta: Dict[str, Any] | None) -> None:
         export_format = active_meta.get('exportFormat') or active_meta.get('export_format')
     set_current_inspiration_context(str(inspiration_id) if inspiration_id else None)
     set_current_export_format(export_format)
-
-
-def _extract_imported_file_meta(active_meta: Dict[str, Any] | None) -> Dict[str, Any] | None:
-    if not isinstance(active_meta, dict):
-        return None
-    imported_file = active_meta.get('importedFile')
-    if not isinstance(imported_file, dict):
-        return None
-    filename = str(imported_file.get('filename') or '').strip()
-    if not filename:
-        return None
-    warnings = imported_file.get('warnings')
-    normalized_warnings = []
-    if isinstance(warnings, list):
-        for item in warnings:
-            if not isinstance(item, dict):
-                continue
-            code = str(item.get('code') or '').strip()
-            message = str(item.get('message') or '').strip()
-            if code or message:
-                normalized_warnings.append({
-                    'code': code,
-                    'message': message,
-                })
-    return {
-        'filename': filename,
-        'sourceFormat': str(imported_file.get('sourceFormat') or '').strip(),
-        'text': str(imported_file.get('text') or '').strip(),
-        'totalTokens': int(imported_file.get('totalTokens') or 0),
-        'chunkTokens': int(imported_file.get('chunkTokens') or 0),
-        'isPartial': bool(imported_file.get('isPartial')),
-        'warnings': normalized_warnings,
-        'uploadedAt': int(imported_file.get('uploadedAt') or 0),
-    }
-
-
-def _build_imported_file_context_label(imported_file: Dict[str, Any] | None) -> str:
-    if not isinstance(imported_file, dict):
-        return ''
-    filename = str(imported_file.get('filename') or '').strip()
-    if not filename:
-        return ''
-    if imported_file.get('isPartial'):
-        return f'【已上传文件首个分片：{filename}】'
-    return f'【已上传文件：{filename}】'
-
-
-def _strip_imported_file_context(active_context: Any, imported_file: Dict[str, Any] | None) -> str:
-    if not isinstance(active_context, str) or not active_context.strip():
-        return ''
-    context = active_context.strip()
-    if not isinstance(imported_file, dict):
-        return context
-    text = str(imported_file.get('text') or '').strip()
-    label = _build_imported_file_context_label(imported_file)
-    if not label or not text:
-        return context
-    block = f'{label}\n{text}'
-    return context.replace(block, '').strip()
-
-
-def _build_user_message_metadata(channel: str, active_context: Any, imported_file_meta: Dict[str, Any] | None) -> Dict[str, Any]:
-    metadata: Dict[str, Any] = {'channel': channel}
-    stored_context = _strip_imported_file_context(active_context, imported_file_meta)
-    if stored_context:
-        metadata['active_context'] = stored_context
-    if imported_file_meta:
-        metadata['importedFile'] = imported_file_meta
-    return metadata
 
 
 def _as_stream_event(delta) -> dict:
@@ -486,7 +423,12 @@ async def edit_chat_message(data: ChatMessageEditRequest, user: dict = Depends(g
     if role == 'user':
         effective_active_context = _resolve_effective_active_context(user_id, project_name, data.agentId, data.activeContext)
         _apply_request_runtime_meta(data.activeMeta)
-        
+        # 引用制：附件全文不在请求体里传输，按 attachmentId 从磁盘动态注入
+        imported_file_meta = _extract_imported_file_meta(data.activeMeta)
+        effective_active_context = _expand_active_context_with_attachment(
+            user_id, project_name, effective_active_context, imported_file_meta,
+        )
+
         # 统一实例化 Agent（包括导演）并获取回复
         # get_history 返回的历史已含编辑后的用户消息，需移除以避免与 data.content 双喂
         history = cm.get_history(agent_id=data.agentId, context_key=data.contextKey, limit=10)
@@ -553,6 +495,11 @@ async def edit_chat_message_stream(request: Request, data: ChatMessageEditReques
 
     effective_active_context = _resolve_effective_active_context(user_id, project_name, data.agentId, data.activeContext)
     _apply_request_runtime_meta(data.activeMeta)
+    # 引用制：附件全文不在请求体里传输，按 attachmentId 从磁盘动态注入
+    imported_file_meta = _extract_imported_file_meta(data.activeMeta)
+    effective_active_context = _expand_active_context_with_attachment(
+        user_id, project_name, effective_active_context, imported_file_meta,
+    )
 
     task_key = _make_task_key(user_id, project_name, data.agentId, data.contextKey)
 
@@ -710,6 +657,10 @@ async def send_chat_message(data: ChatSendRequest, user: dict = Depends(get_curr
     effective_active_context = _resolve_effective_active_context(user_id, project_name, agent_id, data.activeContext)
     _apply_request_runtime_meta(data.activeMeta)
     imported_file_meta = _extract_imported_file_meta(data.activeMeta)
+    # 引用制：附件全文不在请求体里传输，按 attachmentId 从磁盘动态注入
+    effective_active_context = _expand_active_context_with_attachment(
+        user_id, project_name, effective_active_context, imported_file_meta,
+    )
 
     # 统一处理所有 Agent（包括导演）
     cm = ChatManager(user_id=user_id, project_name=project_name)
@@ -771,6 +722,10 @@ async def send_chat_message_stream(request: Request, data: ChatSendRequest, user
     effective_active_context = _resolve_effective_active_context(user_id, project_name, agent_id, data.activeContext)
     _apply_request_runtime_meta(data.activeMeta)
     imported_file_meta = _extract_imported_file_meta(data.activeMeta)
+    # 引用制：附件全文不在请求体里传输，按 attachmentId 从磁盘动态注入
+    effective_active_context = _expand_active_context_with_attachment(
+        user_id, project_name, effective_active_context, imported_file_meta,
+    )
 
     task_key = _make_task_key(user_id, project_name, agent_id, context_key)
 

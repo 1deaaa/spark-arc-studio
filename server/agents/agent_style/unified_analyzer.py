@@ -5,6 +5,11 @@
 1. 每块输出七个维度的分析结果
 2. 每块结尾附带简要上下文摘要传递给下一块
 3. 最后一块输出完整的风格档案
+
+重构说明（PR2）：
+- analyze_full_text 内部改为委托给 core.long_text.ChunkedLongTextPipeline
+- analyze_chunk 保留旧的"直连 LLM"实现，供 stream_save_style_profile 逐块调用
+- 外部 API（ChunkAnalysisResult 字段、两个方法签名）零变化
 """
 
 import json
@@ -12,6 +17,9 @@ import yaml
 from pathlib import Path
 from typing import Dict, List, Optional, Tuple, Any
 from dataclasses import dataclass
+
+from core.file_ingest.chunking import TokenChunk
+from core.long_text import ChunkedLongTextPipeline
 
 from .text_splitter import TextChunk
 from .utils import get_style_llm, extract_json_from_response
@@ -215,7 +223,10 @@ class UnifiedStyleAnalyzer:
     ) -> Tuple[Dict, List[ChunkAnalysisResult]]:
         """
         分析完整文本（所有块）
-        
+
+        内部委托给 ``core.long_text.ChunkedLongTextPipeline``，但外部返回的
+        ``(final_profile, all_results)`` 签名与字段完全保持不变。
+
         Args:
             chunks: 切分后的文本块列表
             
@@ -224,37 +235,77 @@ class UnifiedStyleAnalyzer:
         """
         if not chunks:
             return {}, []
-        
-        all_results: List[ChunkAnalysisResult] = []
-        accumulated_analyses: List[Dict] = []
-        previous_context = ""
-        
+
         print(f"\n=== 开始串行风格分析 ===")
         print(f"共 {len(chunks)} 个文本块\n")
-        
-        for chunk in chunks:
-            result = self.analyze_chunk(
-                chunk,
-                previous_context=previous_context,
-                accumulated_analyses=accumulated_analyses
+
+        # TextChunk -> TokenChunk（二者字段一致）
+        token_chunks: List[TokenChunk] = [
+            TokenChunk(
+                text=c.text,
+                index=c.index,
+                total=c.total,
+                char_count=c.char_count,
+                estimated_tokens=c.estimated_tokens,
+                previous_tail=c.previous_tail,
             )
-            
-            all_results.append(result)
-            
+            for c in chunks
+        ]
+
+        def _on_chunk_start(chunk: TokenChunk) -> None:
+            print(f"  📝 分析第 {chunk.index + 1}/{chunk.total} 块 ({chunk.estimated_tokens} tokens)...")
+
+        def _on_chunk_finish(result) -> None:
             if result.success:
-                accumulated_analyses.append(result.analysis)
-                # 累积剧情概括
-                if result.context_summary:
-                    previous_context = (previous_context + "\n" + result.context_summary).strip()
-                    # 控制长度，保留最近的概括
-                    if len(previous_context) > 3000:
-                        previous_context = previous_context[-3000:]
-        
-        # 获取最终档案（来自最后一块的分析）
-        final_profile = {}
-        if all_results and all_results[-1].success:
-            final_profile = all_results[-1].analysis
-        
+                print(f"  ✓ 第 {result.chunk_index + 1}/{result.total_chunks} 块分析完成")
+            else:
+                print(f"  ✗ 第 {result.chunk_index + 1}/{result.total_chunks} 块分析失败: {result.error}")
+
+        pipeline = ChunkedLongTextPipeline(
+            llm=self.llm,
+            build_chunk_prompt=lambda ck, ctx, cur, total: self._build_chunk_prompt(ck.text, ctx, cur, total),
+            parse_chunk_output=self._parse_chunk_llm_output,
+            build_final_prompt=lambda ck, ctx, prev_outputs: self._build_final_prompt(ck.text, ctx, prev_outputs),
+            parse_final_output=self._parse_final_llm_output,
+            context_max_chars=3000,
+            on_chunk_start=_on_chunk_start,
+            on_chunk_finish=_on_chunk_finish,
+        )
+        pipeline_result = pipeline.run(token_chunks)
+
+        # 将 pipeline 结果映射回外部老字段
+        all_results: List[ChunkAnalysisResult] = [
+            ChunkAnalysisResult(
+                chunk_index=r.chunk_index,
+                total_chunks=r.total_chunks,
+                analysis=r.output,
+                context_summary=r.context_hint,
+                success=r.success,
+                error=r.error,
+            )
+            for r in pipeline_result.chunk_results
+        ]
+
+        final_profile: Dict = pipeline_result.final_output or {}
+
         print(f"\n=== 风格分析完成 ===\n")
-        
         return final_profile, all_results
+
+    # ---------- 供 pipeline 回调使用的解析器 ----------
+
+    def _parse_chunk_llm_output(self, response_text: str) -> Tuple[Dict, str]:
+        """解析非末尾块的 LLM 输出：返回 (analysis, context_summary)"""
+        content = extract_json_from_response(response_text)
+        parsed = json.loads(content)
+        analysis = parsed.get("style_analysis", parsed) if isinstance(parsed, dict) else parsed
+        context_summary = parsed.get("context_summary", "") if isinstance(parsed, dict) else ""
+        return (analysis if isinstance(analysis, dict) else {}), str(context_summary or "")
+
+    def _parse_final_llm_output(self, response_text: str) -> Dict:
+        """解析末尾汇总块的 LLM 输出：返回最终 profile（不含 context_summary）"""
+        content = extract_json_from_response(response_text)
+        parsed = json.loads(content)
+        # 最终块输出可能已经是完整 profile，也可能包在 style_analysis 键下
+        if isinstance(parsed, dict) and "style_analysis" in parsed and isinstance(parsed["style_analysis"], dict):
+            return parsed["style_analysis"]
+        return parsed if isinstance(parsed, dict) else {}

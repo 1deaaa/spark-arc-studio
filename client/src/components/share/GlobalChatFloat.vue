@@ -91,16 +91,12 @@
           @save-edit="saveEdit"
           @edit-keydown="onEditKeydown"
           @delete-msg="deleteMsg"
-          @remove-attachment="(id) => chat.removeSessionAttachment(primarySessionId, id)"
           @retry="retryMsg"
           @header-mousedown="startDrag"
           @header-touchstart="startDrag"
         >
           <template #input-prefix>
             <ChatFileImportButton :session-id="primarySessionId" />
-          </template>
-          <template #input-meta>
-            <ChatImportedContextBar :session-id="primarySessionId" />
           </template>
           <!-- 新建窗口按钮 -->
           <template #header-actions>
@@ -204,14 +200,10 @@
         @save-edit="saveEdit"
         @edit-keydown="onEditKeydown"
         @delete-msg="deleteMsg"
-        @remove-attachment="(id) => chat.removeSessionAttachment(primarySessionId, id)"
         @retry="retryMsg"
       >
         <template #input-prefix>
           <ChatFileImportButton :session-id="primarySessionId" />
-        </template>
-        <template #input-meta>
-          <ChatImportedContextBar :session-id="primarySessionId" />
         </template>
         <template #header-right>
           <n-tooltip trigger="hover">
@@ -249,7 +241,6 @@ import { CircleUser } from 'lucide-vue-next';
 
 import ChatPanel from '@/components/share/ChatPanel.vue';
 import ChatFileImportButton from '@/components/share/ChatFileImportButton.vue';
-import ChatImportedContextBar from '@/components/share/ChatImportedContextBar.vue';
 import ChatMessageList from '@/components/share/ChatMessageList.vue';
 import ExtraChatWindow from '@/components/share/ExtraChatWindow.vue';
 import { useAgentRegistry } from '@/composables/useAgentRegistry';

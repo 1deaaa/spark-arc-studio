@@ -24,9 +24,11 @@ from agents.tools.showrunner import (
     rewrite_outline,
     rewrite_synopsis,
 )
+from agents.tools.web_search import web_search
 
 MCP_ONLY_TOOLS = [capture_inspiration]
-MUSE_TOOLS = [rewrite_inspiration]
+EXTERNAL_SEARCH_TOOLS = [web_search]
+MUSE_TOOLS = [rewrite_inspiration, web_search]
 LOREBOOK_TOOLS = [
     rewrite_worldview,
     rewrite_all_characters,
@@ -61,6 +63,7 @@ DIRECTOR_TOOLS = SHARED_READ_TOOLS + [
     search_project,
     semantic_search,
     replace_from_search,
+    web_search,
 ]
 OPTIONAL_RESEARCH_TOOLS = [graph_rag_tool]
 ALL_TOOLS = (
@@ -70,9 +73,12 @@ ALL_TOOLS = (
     + SCRIPTWRITER_TOOLS
     + SHARED_READ_TOOLS
     + [delegate_task, trigger_auto_write, check_scriptwriter_status, search_project, semantic_search, replace_from_search]
+    + EXTERNAL_SEARCH_TOOLS
     + OPTIONAL_RESEARCH_TOOLS
 )
-TOOLS_BY_NAME = {tool.name: tool for tool in ALL_TOOLS}
+TOOLS_BY_NAME = {}
+for tool in ALL_TOOLS:
+    TOOLS_BY_NAME.setdefault(tool.name, tool)
 
 
 def get_tools_for_agent(agent_id: str) -> list:

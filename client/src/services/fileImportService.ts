@@ -25,6 +25,8 @@ export type ParsedImportChunk = {
 
 export type ParsedImportResponse = {
   success: boolean;
+  /** 后端落盘后的附件 id（基于内容 sha256 前 16 位）。成功响应下必有值。 */
+  attachment_id: string;
   filename: string;
   source_format: string;
   full_text: string;
@@ -71,10 +73,14 @@ export async function parseImportFile(
   file: Blob | File,
   chunkTokens = 30000,
   signal?: AbortSignal,
+  projectName?: string | null,
 ): Promise<ParsedImportResponse> {
   const formData = new FormData();
   formData.append('file', file);
   formData.append('chunkTokens', String(chunkTokens));
+  if (projectName) {
+    formData.append('projectName', projectName);
+  }
 
   const response = await fetchWithAuth('/api/import/parse', {
     method: 'POST',

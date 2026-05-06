@@ -362,16 +362,16 @@ describe('chatStore tool-first stream handling', () => {
     expect(store.sessions[0].history.map(item => item.role)).toEqual(['user', 'assistant', 'user', 'assistant']);
   });
 
-  it('keeps uploaded file context across multiple sends until removed', async () => {
+  it('keeps uploaded attachment reference across multiple sends until removed', async () => {
     mockedSendChatMessageStream.mockResolvedValue(createNdjsonReader([
       JSON.stringify({ event: 'assistant_delta', text: '收到。' }),
     ]));
 
     const store = useChatStore();
     store.setSessionImportedContext(0, {
+      attachmentId: 'abc1234567890def',
       filename: '资料.md',
       sourceFormat: 'md',
-      text: '长期上下文资料',
       totalTokens: 12,
       chunkTokens: 12,
       isPartial: false,
@@ -382,23 +382,31 @@ describe('chatStore tool-first stream handling', () => {
     await store.sendSessionMessage(0, '第一问');
     await store.sendSessionMessage(0, '第二问');
 
-    expect(store.sessions[0].importedContext?.filename).toBe('资料.md');
+    expect(store.sessions[0].importedContext?.attachmentId).toBe('abc1234567890def');
     expect(mockedSendChatMessageStream).toHaveBeenCalledTimes(2);
-    expect(mockedSendChatMessageStream.mock.calls[0][5]).toContain('长期上下文资料');
-    expect(mockedSendChatMessageStream.mock.calls[1][5]).toContain('长期上下文资料');
+
+    // 引用制：每次发送都传 attachmentId 引用，activeContext 不再包含全文
+    for (const call of mockedSendChatMessageStream.mock.calls) {
+      const activeContextArg = call[5];
+      const activeMetaArg = call[6] as { importedFile?: Record<string, unknown> } | null;
+      expect(activeContextArg).not.toContain('资料.md');
+      expect(activeMetaArg?.importedFile?.attachmentId).toBe('abc1234567890def');
+      expect(activeMetaArg?.importedFile).not.toHaveProperty('text');
+    }
+
     const userMessages = store.sessions[0].history.filter((item) => item.role === 'user');
     expect(userMessages).toHaveLength(2);
+    expect(userMessages.every((item) => item.metadata?.importedFile?.attachmentId === 'abc1234567890def')).toBe(true);
     expect(userMessages.every((item) => item.metadata?.importedFile?.filename === '资料.md')).toBe(true);
-    expect(userMessages.every((item) => item.metadata?.importedFile?.text === '长期上下文资料')).toBe(true);
-    expect(userMessages.every((item) => !String(item.metadata?.active_context || '').includes('长期上下文资料'))).toBe(true);
+    expect(userMessages.every((item) => !item.metadata?.importedFile || !('text' in item.metadata.importedFile))).toBe(true);
   });
 
   it('removes the uploaded file from the whole session context', async () => {
     const store = useChatStore();
     store.setSessionImportedContext(0, {
+      attachmentId: 'abc1234567890def',
       filename: '资料.md',
       sourceFormat: 'md',
-      text: '长期上下文资料',
       totalTokens: 12,
       chunkTokens: 12,
       isPartial: false,
@@ -411,8 +419,8 @@ describe('chatStore tool-first stream handling', () => {
         role: 'user',
         content: '第一问',
         metadata: {
-          active_context: '长期上下文资料',
-          importedFile: { filename: '资料.md', sourceFormat: 'md', uploadedAt: 12345 },
+          active_context: '上下文摘要',
+          importedFile: { attachmentId: 'abc1234567890def', filename: '资料.md', sourceFormat: 'md', uploadedAt: 12345 },
         },
       },
       {
@@ -420,8 +428,8 @@ describe('chatStore tool-first stream handling', () => {
         role: 'user',
         content: '第二问',
         metadata: {
-          active_context: '长期上下文资料',
-          importedFile: { filename: '资料.md', sourceFormat: 'md', uploadedAt: 12345 },
+          active_context: '上下文摘要',
+          importedFile: { attachmentId: 'abc1234567890def', filename: '资料.md', sourceFormat: 'md', uploadedAt: 12345 },
         },
       },
     ];

@@ -28,36 +28,6 @@
         <div v-else-if="m.role === 'user'" class="chat-bubble">
           <MarkdownRenderer v-if="typeof getDisplayContent(m) === 'string' && getDisplayContent(m)" :content="getDisplayContent(m)" />
           <pre v-else-if="m.content && typeof m.content === 'object'" class="chat-json">{{ formatObject(m.content) }}</pre>
-          <div v-if="getImportedFileMeta(m)" class="chat-user-attachment" :class="{ 'chat-user-attachment--deleted': getImportedFileMeta(m)?.deleted }">
-            <div class="chat-user-attachment__icon" aria-hidden="true">
-              <svg v-if="!getImportedFileMeta(m)?.deleted" viewBox="0 0 20 20" fill="none" xmlns="http://www.w3.org/2000/svg">
-                <path d="M7.5 10.8333L10 13.3333L15.4167 7.91667" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round" />
-                <path d="M6.66667 3.33333H11.6667L15.8333 7.5V15C15.8333 15.9205 15.0871 16.6667 14.1667 16.6667H6.66667C5.74619 16.6667 5 15.9205 5 15V5C5 4.07953 5.74619 3.33333 6.66667 3.33333Z" stroke="currentColor" stroke-width="1.3" stroke-linejoin="round" />
-                <path d="M11.6667 3.33333V7.5H15.8333" stroke="currentColor" stroke-width="1.3" stroke-linejoin="round" />
-              </svg>
-              <svg v-else viewBox="0 0 20 20" fill="none" xmlns="http://www.w3.org/2000/svg">
-                <path d="M6.66667 3.33333H11.6667L15.8333 7.5V15C15.8333 15.9205 15.0871 16.6667 14.1667 16.6667H6.66667C5.74619 16.6667 5 15.9205 5 15V5C5 4.07953 5.74619 3.33333 6.66667 3.33333Z" stroke="currentColor" stroke-width="1.3" stroke-linejoin="round" />
-                <path d="M8.33333 10.8333L11.6667 14.1667M11.6667 10.8333L8.33333 14.1667" stroke="currentColor" stroke-width="1.4" stroke-linecap="round" />
-              </svg>
-            </div>
-            <div class="chat-user-attachment__content">
-              <div class="chat-user-attachment__top">
-                <div class="chat-user-attachment__name">{{ getImportedFileMeta(m)?.filename }}</div>
-                <n-button
-                  v-if="!getImportedFileMeta(m)?.deleted"
-                  text
-                  size="tiny"
-                  class="chat-user-attachment__delete"
-                  :disabled="!canMutateMessage(m)"
-                  @click.stop="$emit('remove-attachment', getMutableMessageId(m))"
-                >
-                  {{ t('components.chatMessageList.deleteAttachment') }}
-                </n-button>
-              </div>
-              <div v-if="getImportedFileMeta(m)?.deleted" class="chat-user-attachment__desc chat-user-attachment__desc--deleted">{{ t('components.chatMessageList.attachmentDeleted') }}</div>
-              <div v-else class="chat-user-attachment__desc">{{ getImportedFileDescription(m) }}</div>
-            </div>
-          </div>
         </div>
         <!-- 助手消息：按 segments 顺序渲染 -->
         <template v-else-if="m.role === 'assistant'">
@@ -415,22 +385,12 @@ type MessageSegment = {
   type?: string;
   text?: string;
   tool_name?: string;
+  tool_result?: unknown;
   status?: string;
   duration?: number;
   source_agent?: string;
   content?: unknown;
   reasoning?: unknown;
-  [key: string]: unknown;
-};
-
-type ImportedFileMeta = {
-  filename?: string;
-  sourceFormat?: string;
-  totalTokens?: number;
-  chunkTokens?: number;
-  isPartial?: boolean;
-  uploadedAt?: number;
-  warnings?: Array<{ code?: string; message?: string }>;
   [key: string]: unknown;
 };
 
@@ -507,7 +467,6 @@ const emit = defineEmits([
   'save-edit',
   'edit-keydown',
   'delete-msg',
-  'remove-attachment',
   'retry',
 ]);
 
@@ -547,25 +506,38 @@ const thinkingDisplayText = computed(() => {
 const thinkingNoticeText = '部分模型不会显示推理链或工具调用标识，但只要发送键没解冻就说明连接并未中断，请耐心等待。';
 const thinkingNoticeVisible = ref(false);
 
-const toolNameLabelMap = {
-  rewrite_inspiration: '重写当前灵感',
-  rewrite_worldview: '重写世界观',
-  rewrite_all_characters: '重写角色设定',
-  update_character: '更新角色设定',
-  patch_worldview: '局部更新世界观',
-  rewrite_synopsis: '重写梗概',
-  patch_synopsis: '局部更新梗概',
-  rewrite_beat_sheet: '重写节拍表',
-  patch_beat_sheet: '局部更新节拍表',
-  rewrite_outline: '重写大纲',
-  create_or_rewrite_script: '重写正文',
-  patch_script: '局部更新正文',
-  list_chapters: '查阅章节结构',
-  read_chapter_scene: '读取章节内容',
-  read_chapter_outline_raw: '读取章节大纲原文',
-  delegate_task: '委派任务',
-  capture_inspiration: '捕获灵感',
+const toolNameLabelKeyMap: Record<string, string> = {
+  rewrite_inspiration: 'components.chatMessageList.tools.rewriteInspiration',
+  rewrite_worldview: 'components.chatMessageList.tools.rewriteWorldview',
+  rewrite_all_characters: 'components.chatMessageList.tools.rewriteAllCharacters',
+  update_character: 'components.chatMessageList.tools.updateCharacter',
+  patch_worldview: 'components.chatMessageList.tools.patchWorldview',
+  rewrite_synopsis: 'components.chatMessageList.tools.rewriteSynopsis',
+  patch_synopsis: 'components.chatMessageList.tools.patchSynopsis',
+  rewrite_beat_sheet: 'components.chatMessageList.tools.rewriteBeatSheet',
+  patch_beat_sheet: 'components.chatMessageList.tools.patchBeatSheet',
+  rewrite_outline: 'components.chatMessageList.tools.rewriteOutline',
+  patch_outline: 'components.chatMessageList.tools.patchOutline',
+  create_chapter: 'components.chatMessageList.tools.createChapter',
+  create_or_rewrite_script: 'components.chatMessageList.tools.createOrRewriteScript',
+  patch_script: 'components.chatMessageList.tools.patchScript',
+  list_chapters: 'components.chatMessageList.tools.listChapters',
+  read_chapter_scene: 'components.chatMessageList.tools.readChapterScene',
+  read_chapter_outline_raw: 'components.chatMessageList.tools.readChapterOutlineRaw',
+  delegate_task: 'components.chatMessageList.tools.delegateTask',
+  capture_inspiration: 'components.chatMessageList.tools.captureInspiration',
+  trigger_auto_write: 'components.chatMessageList.tools.triggerAutoWrite',
+  check_scriptwriter_status: 'components.chatMessageList.tools.checkScriptwriterStatus',
+  search_project: 'components.chatMessageList.tools.searchProject',
+  semantic_search: 'components.chatMessageList.tools.semanticSearch',
+  replace_from_search: 'components.chatMessageList.tools.replaceFromSearch',
+  web_search: 'components.chatMessageList.tools.webSearch',
 };
+
+function getToolNameLabel(toolName: string) {
+  const key = toolNameLabelKeyMap[toolName];
+  return key ? t(key) : toolName || t('components.chatMessageList.toolFallback');
+}
 
 function formatObject(v) {
   try {
@@ -735,24 +707,6 @@ function hasDisplayContent(message) {
   return !!getDisplayContent(message).trim();
 }
 
-function getImportedFileMeta(message): ImportedFileMeta | null {
-  const importedFile = message?.metadata?.importedFile;
-  if (!importedFile || typeof importedFile !== 'object' || Array.isArray(importedFile)) return null;
-  const filename = String(importedFile.filename || '').trim();
-  if (!filename) return null;
-  return importedFile as ImportedFileMeta;
-}
-
-function getImportedFileDescription(message): string {
-  const importedFile = getImportedFileMeta(message);
-  if (!importedFile) return '';
-  const tokenText = t('components.chatPanel.tokenCount', { count: formatTokenCount(Number(importedFile.totalTokens || 0) || 0) });
-  if (importedFile.isPartial) {
-    return `${importedFile.sourceFormat || ''} · ${tokenText} · ${t('components.chatPanel.importedFilePartial')}`;
-  }
-  return `${importedFile.sourceFormat || ''} · ${tokenText}`;
-}
-
 function normalizeToolTraceList(value) {
   if (!Array.isArray(value)) return [];
   return value
@@ -881,9 +835,9 @@ function getAgentAvatarStyle(agentId) {
 
 /** 工具 action 中文标签（work_tracker 专用） */
 const workTrackerActionLabelMap: Record<string, string> = {
-  read: '检查进度',
-  update: '更新进度',
-  clear: '清除进度',
+  read: 'components.chatMessageList.workTrackerActions.read',
+  update: 'components.chatMessageList.workTrackerActions.update',
+  clear: 'components.chatMessageList.workTrackerActions.clear',
 };
 
 /**
@@ -911,16 +865,19 @@ function formatToolTraceLabel(trace: any, resolvedStatus?: string) {
   const status = resolvedStatus ?? String(trace?.status || 'finished').trim();
   const isRunning = status === 'running' || status === 'started';
   const isFailed = status === 'failed';
-  const prefix = isRunning ? '正在调用' : (isFailed ? (trace?.message || '调用失败') : '已调用');
+  const prefix = isRunning
+    ? t('components.chatMessageList.toolStatus.running')
+    : (isFailed ? (trace?.message || t('components.chatMessageList.toolStatus.failed')) : t('components.chatMessageList.toolStatus.finished'));
 
   let label: string;
   if (toolName === 'work_tracker' && trace?.tool_action) {
-    label = workTrackerActionLabelMap[trace.tool_action] || `进度·${trace.tool_action}`;
+    const actionLabelKey = workTrackerActionLabelMap[trace.tool_action];
+    label = actionLabelKey ? t(actionLabelKey) : t('components.chatMessageList.workTrackerActions.fallback', { action: trace.tool_action });
   } else if (toolName === 'delegate_task' && trace?.target_agent) {
     const targetName = getAgentName(trace.target_agent);
-    label = `委派 ${targetName}`;
+    label = t('components.chatMessageList.delegateTarget', { target: targetName });
   } else {
-    label = toolNameLabelMap[toolName] || toolName || '工具';
+    label = getToolNameLabel(toolName);
   }
 
   const sourceAgent = trace?.source_agent ? getAgentName(trace.source_agent) : '';
@@ -1394,82 +1351,6 @@ defineExpose({ listRef });
 
 .chat-msg.user .chat-bubble {
   max-width: 90%; /* 用户消息保持气泡感 */
-}
-
-.chat-user-attachment {
-  margin-top: 10px;
-  display: flex;
-  align-items: flex-start;
-  gap: 10px;
-  padding: 9px 10px;
-  border-radius: 10px;
-  background: rgba(var(--spark-primary-rgb), 0.05);
-  border: 1px solid rgba(var(--spark-primary-rgb), 0.14);
-}
-
-.chat-user-attachment--deleted {
-  background: rgba(var(--spark-text-secondary-rgb, 128, 128, 128), 0.04);
-  border-color: rgba(var(--spark-text-secondary-rgb, 128, 128, 128), 0.12);
-  opacity: 0.65;
-}
-
-.chat-user-attachment--deleted .chat-user-attachment__icon {
-  color: var(--spark-text-secondary);
-}
-
-.chat-user-attachment__icon {
-  width: 24px;
-  height: 24px;
-  flex: 0 0 24px;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  color: var(--spark-primary);
-}
-
-.chat-user-attachment__icon svg {
-  width: 18px;
-  height: 18px;
-}
-
-.chat-user-attachment__content {
-  min-width: 0;
-  display: flex;
-  flex-direction: column;
-  gap: 2px;
-}
-
-.chat-user-attachment__top {
-  display: flex;
-  align-items: flex-start;
-  justify-content: space-between;
-  gap: 10px;
-}
-
-.chat-user-attachment__name {
-  min-width: 0;
-  font-size: var(--spark-fs-xs);
-  font-weight: 600;
-  color: var(--spark-text);
-  line-height: 1.35;
-  word-break: break-word;
-}
-
-.chat-user-attachment__delete {
-  flex: 0 0 auto;
-  white-space: nowrap;
-}
-
-.chat-user-attachment__desc {
-  font-size: var(--spark-fs-2xs);
-  color: var(--spark-text-secondary);
-  line-height: 1.35;
-  word-break: break-word;
-}
-
-.chat-user-attachment__desc--deleted {
-  font-style: italic;
-  opacity: 0.7;
 }
 
 .chat-msg.assistant .chat-bubble {

@@ -8,10 +8,12 @@ from pathlib import Path
 from typing import List, Dict, Any, Optional
 from dataclasses import dataclass
 
+import warnings
+
 from langchain_core.documents import Document
 import ebooklib
 from ebooklib import epub
-from bs4 import BeautifulSoup
+from bs4 import BeautifulSoup, XMLParsedAsHTMLWarning
 
 # 优先使用 lxml（C 扩展，比默认 html.parser 快 3~5 倍）。若环境里未安装 lxml，
 # 自动降级回内置 html.parser，保持兼容。
@@ -20,6 +22,10 @@ try:
     _EPUB_PARSER = "lxml"
 except Exception:
     _EPUB_PARSER = "html.parser"
+
+# epub 章节正文实际是 XHTML，但用 HTML parser 解析也能正确取出 get_text()，
+# 性能上不必切换为 xml parser；这里只静音 BeautifulSoup 4.13+ 抛出的一次性提示。
+warnings.filterwarnings("ignore", category=XMLParsedAsHTMLWarning)
 
 # 添加父目录到 Python 路径以支持导入 matchbox
 # 假设当前文件在 server/agents/agent_style/utils.py
