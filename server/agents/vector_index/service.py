@@ -63,6 +63,10 @@ class SearchHit:
     narrative_ref: str       # 叙事定位
     match_text: str          # 命中文本片段
     score: float             # 相似度分数
+    source_type: str = "project"   # 'project' | 'attachment'，用于上层区分项目正文和附件
+    attachment_id: str = ""        # source_type=attachment 时携带
+    attachment_filename: str = ""  # source_type=attachment 时携带
+    attachment_chunk_index: int = 0  # source_type=attachment 时携带
 
 
 class IndexBuildNotReadyError(RuntimeError):
@@ -222,6 +226,24 @@ class VectorIndexService:
                 str(rel_path): str(file_hash or "")
                 for rel_path, file_hash in dict(chunk_state.get("file_hashes") or {}).items()
             }
+
+            # 合并附件 chunks（受 per-project 开关控制，默认开）
+            try:
+                from core.project_settings import is_attachment_index_enabled
+
+                if is_attachment_index_enabled(self.user_id, self.project_name):
+                    att_chunks_by_file, att_hashes = self._collect_attachment_chunks()
+                    if att_chunks_by_file:
+                        chunks_by_file.update(att_chunks_by_file)
+                        for rel_path, file_chunks in att_chunks_by_file.items():
+                            all_chunks.extend(file_chunks)
+                        current_hashes.update(att_hashes)
+            except Exception as exc:  # 附件扫描失败不应阻断项目正文索引
+                import logging
+                logging.getLogger("vector_index").warning(
+                    "[vector_index] 收集附件 chunks 失败：%s", exc
+                )
+
             total_files = len(current_hashes)
             delta = self._compute_index_delta(metadata, current_hashes)
             metadata_supported = self._supports_incremental_meta(metadata)
@@ -488,6 +510,7 @@ class VectorIndexService:
                 continue
             source = doc.metadata.get("source", "")
             abs_path = os.path.join(self._project_path, source) if source else ""
+            source_type = str(doc.metadata.get("source_type") or "project")
             hits.append(SearchHit(
                 index=idx,
                 file_path=abs_path,
@@ -498,6 +521,10 @@ class VectorIndexService:
                 narrative_ref=doc.metadata.get("narrative_ref", ""),
                 match_text=doc.page_content,
                 score=float(score),
+                source_type=source_type,
+                attachment_id=str(doc.metadata.get("attachment_id") or ""),
+                attachment_filename=str(doc.metadata.get("attachment_filename") or ""),
+                attachment_chunk_index=int(doc.metadata.get("attachment_chunk_index") or 0),
             ))
 
         return hits
@@ -552,6 +579,90 @@ class VectorIndexService:
         }
 
     # ==================== 内部方法 ====================
+
+    def _collect_attachment_chunks(self) -> tuple[dict[str, list[SemanticChunk]], dict[str, str]]:
+        """扫描项目 .attachments/ 下所有附件，转换为 SemanticChunk。
+
+        返回：
+        - chunks_by_file: ``{rel_path: [SemanticChunk, ...]}``，rel_path 形如
+          ``.attachments/{attachment_id}/full.txt``。
+        - file_hashes: ``{rel_path: hash}``，hash 直接复用 attachment_id（已是
+          sha256 前 16 位，足够稳定 + 可比较）。
+
+        附件分片 → SemanticChunk 映射：
+        - text = chunk 正文
+        - metadata.source_type = 'attachment'
+        - metadata.format_key = 'attachment'
+        - metadata.source = rel_path
+        - metadata.attachment_id / attachment_filename / attachment_chunk_index
+        - narrative_ref = '附件 > {filename} > 第 K 部分（共 N）'
+        """
+        try:
+            from agents.attachment.storage import (
+                ATTACHMENTS_DIR_NAME,
+                get_attachment_meta,
+                load_chunks,
+            )
+        except Exception:
+            return {}, {}
+
+        attachments_root = os.path.join(self._project_path, ATTACHMENTS_DIR_NAME)
+        if not os.path.isdir(attachments_root):
+            return {}, {}
+
+        chunks_by_file: dict[str, list[SemanticChunk]] = {}
+        file_hashes: dict[str, str] = {}
+
+        for entry in sorted(os.listdir(attachments_root)):
+            attachment_dir = os.path.join(attachments_root, entry)
+            if not os.path.isdir(attachment_dir):
+                continue
+            attachment_id = entry
+
+            meta = get_attachment_meta(self.user_id, self.project_name, attachment_id)
+            if meta is None:
+                continue
+
+            try:
+                raw_chunks = load_chunks(self.user_id, self.project_name, attachment_id)
+            except Exception:
+                continue
+
+            if not raw_chunks:
+                continue
+
+            rel_path = f"{ATTACHMENTS_DIR_NAME}/{attachment_id}/full.txt".replace("\\", "/")
+            total = len(raw_chunks)
+            semantic_chunks: list[SemanticChunk] = []
+            for chunk_index, chunk_text in enumerate(raw_chunks):
+                text = (chunk_text or "").strip()
+                if not text:
+                    continue
+                narrative_ref = f"附件 > {meta.filename} > 第 {chunk_index + 1} 部分（共 {total}）"
+                semantic_chunks.append(SemanticChunk(
+                    text=text,
+                    metadata={
+                        "source": rel_path,
+                        "source_type": "attachment",
+                        "format_key": "attachment",
+                        "attachment_id": attachment_id,
+                        "attachment_filename": meta.filename,
+                        "attachment_chunk_index": chunk_index,
+                        "narrative_ref": narrative_ref,
+                    },
+                    start_line=0,
+                    end_line=0,
+                    narrative_ref=narrative_ref,
+                ))
+
+            if not semantic_chunks:
+                continue
+
+            chunks_by_file[rel_path] = semantic_chunks
+            # attachment_id 本身已是 sha256[:16]，作为内容指纹完全够用
+            file_hashes[rel_path] = attachment_id
+
+        return chunks_by_file, file_hashes
 
     def _chunks_to_documents(self, chunks: list[SemanticChunk]) -> list[Document]:
         """将 SemanticChunk 列表转换为 LangChain Document"""

@@ -1,5 +1,5 @@
 <template>
-  <div class="chat-file-import-button">
+  <div v-if="isDirector" class="chat-file-import-button">
     <input
       type="file"
       ref="fileInput"
@@ -24,7 +24,7 @@
           class="chat-file-import-button__trigger chat-file-import-button__trigger--active"
         >
           <template #icon>
-            <n-icon :size="16"><Paperclip /></n-icon>
+            <n-icon :size="16"><FileText /></n-icon>
           </template>
         </n-button>
       </template>
@@ -70,12 +70,15 @@
 import { computed, ref } from 'vue';
 import { useI18n } from 'vue-i18n';
 import { NButton, NIcon, NPopover, NTooltip } from 'naive-ui';
-import { Paperclip } from 'lucide-vue-next';
+import { FileText, Paperclip } from 'lucide-vue-next';
 import { useChatFileImport } from '@/composables/useChatFileImport';
 
 const props = defineProps<{
   sessionId: number | null | undefined;
+  agentId?: string | null;
 }>();
+
+const isDirector = computed(() => props.agentId === 'agent_director');
 
 const { t } = useI18n();
 const {

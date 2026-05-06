@@ -21,7 +21,7 @@ from core.file_ingest.service import (
 from core.request_context import get_current_project_name, normalize_project_name, resolve_project_name
 from core.utils import get_user_projects_root
 
-from agents.agent_style.workflow import save_style_profile, stream_save_style_profile
+from agents.agent_style.workflow import stream_save_style_profile
 from agents.agent_style.utils import (
     load_style_profile_from_file,
     load_project_style_profile,

@@ -1,4 +1,3 @@
-from .workflow import save_style_profile
 from .utils import (
     load_style_profile_from_file,
     load_project_style_profile,
@@ -11,7 +10,6 @@ from .utils import (
 )
 
 __all__ = [
-    "save_style_profile",
     "load_style_profile_from_file",
     "load_project_style_profile",
     "resolve_project_style_author_id",

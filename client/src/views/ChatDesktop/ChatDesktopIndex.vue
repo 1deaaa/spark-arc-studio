@@ -34,7 +34,7 @@
           <ChatWelcomeScreen v-if="chat.currentAgentId === 'agent_director'" />
         </template>
         <template #input-prefix>
-          <ChatFileImportButton :session-id="primarySessionId" />
+          <ChatFileImportButton :session-id="primarySessionId" :agent-id="chat.currentAgentId" />
         </template>
       </ChatPanel>
     </div>

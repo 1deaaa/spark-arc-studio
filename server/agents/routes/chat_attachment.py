@@ -112,15 +112,19 @@ def expand_active_context_with_attachment(
 
     label = build_imported_file_context_label(imported_file_meta)
     is_partial = bool(imported_file_meta.get('isPartial'))
+    chunk_count = 0
     try:
         from agents.attachment import (
             AttachmentNotFoundError,
+            get_attachment_meta,
             load_attachment_text,
             load_chunks,
             touch_last_referenced,
         )
 
         if is_partial:
+            meta = get_attachment_meta(user_id, project_name, attachment_id)
+            chunk_count = int(meta.chunk_count) if meta else 0
             chunks = load_chunks(user_id, project_name, attachment_id)
             text = chunks[0] if chunks else ''
         else:
@@ -140,7 +144,26 @@ def expand_active_context_with_attachment(
     text = (text or '').strip()
     if not text:
         return base
-    block = f'{label}\n{text}' if label else text
+
+    block_parts: list[str] = []
+    if label:
+        block_parts.append(label)
+    block_parts.append(text)
+
+    if is_partial and chunk_count > 1:
+        remaining = chunk_count - 1
+        hint = (
+            f'\n[分片说明] 以上是该附件的第 1 部分（共 {chunk_count} 部分），'
+            f'剩余 {remaining} 部分未直接附带在上下文中。'
+            f'\n如需阅读后续内容，请调用工具 '
+            f'`read_attachment_chunk(attachment_id="{attachment_id}", chunk_index=1)` 读取第 2 部分；'
+            f'读完后再依次递增 chunk_index 直至 {chunk_count - 1}。'
+            f'\n每次调用后请先在回复中提炼该分片的关键信息（角色 / 关键事件 / 设定要点等），'
+            f'再决定是否继续读取下一片。'
+        )
+        block_parts.append(hint)
+
+    block = '\n'.join(block_parts)
     return '\n\n'.join(seg for seg in [base, block] if seg)
 
 

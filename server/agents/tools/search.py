@@ -342,6 +342,10 @@ def semantic_search(query: str, scope: list[str] | None = None, k: int = 8) -> s
                 "score": hit.score,
                 "chunk_text": hit.match_text,
                 "pattern": None,
+                "source_type": getattr(hit, "source_type", "project"),
+                "attachment_id": getattr(hit, "attachment_id", "") or "",
+                "attachment_filename": getattr(hit, "attachment_filename", "") or "",
+                "attachment_chunk_index": int(getattr(hit, "attachment_chunk_index", 0) or 0),
             }
         )
 
@@ -352,9 +356,21 @@ def semantic_search(query: str, scope: list[str] | None = None, k: int = 8) -> s
 
     lines = [f"语义搜索 \"{query}\" 找到 {len(results)} 处相关内容：\n"]
     for r in results:
-        loc = f"{r['rel_path']}:{r['start_line']}"
         score_str = f"相似度: {r['score']:.2f}" if r['score'] > 0 else ""
-        lines.append(f"[{r['index']}] {r['narrative_ref']} ({loc}) {score_str}")
+        if r.get("source_type") == "attachment":
+            tag = "[附件]"
+            chunk_no = int(r.get("attachment_chunk_index") or 0)
+            loc = f"chunk_index={chunk_no}"
+            attachment_id = r.get("attachment_id") or ""
+            lines.append(f"[{r['index']}] {tag} {r['narrative_ref']} ({loc}) {score_str}")
+            if attachment_id:
+                lines.append(
+                    f"  → 如需读取完整分片正文：read_attachment_chunk(attachment_id=\"{attachment_id}\", chunk_index={chunk_no})"
+                )
+        else:
+            tag = "[项目]"
+            loc = f"{r['rel_path']}:{r['start_line']}"
+            lines.append(f"[{r['index']}] {tag} {r['narrative_ref']} ({loc}) {score_str}")
         preview = r['context'][:150]
         if len(r['context']) > 150:
             preview += "..."

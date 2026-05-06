@@ -3,7 +3,9 @@ from __future__ import annotations
 import json
 import os
 import uuid
+from datetime import datetime
 from typing import Any
+from zoneinfo import ZoneInfo
 
 import requests
 from langchain.tools import tool
@@ -120,6 +122,22 @@ def _call_exa_web_search(query: str, num_results: int) -> str:
     return "\n\n".join(texts).strip()
 
 
+def _current_search_time_text() -> str:
+    try:
+        now = datetime.now(ZoneInfo("Asia/Shanghai"))
+    except Exception:
+        now = datetime.now().astimezone()
+    return now.strftime("%Y-%m-%d %H:%M:%S %z")
+
+
+def _build_time_anchored_query(query: str, searched_at: str) -> str:
+    return (
+        f"Current real date/time for this search is {searched_at} (Asia/Shanghai). "
+        "When the user asks for latest/current/recent/news, prioritize information current to this date. "
+        f"Search request: {query}"
+    )
+
+
 @tool(args_schema=WebSearchInput)
 def web_search(query: str, num_results: int = 5) -> str:
     """联网搜索外部公开信息，用于补充项目外知识和不熟悉作品资料。"""
@@ -128,8 +146,10 @@ def web_search(query: str, num_results: int = 5) -> str:
         return "联网搜索失败：query 不能为空。"
 
     safe_num_results = min(max(int(num_results or 5), 1), 10)
+    searched_at = _current_search_time_text()
+    exa_query = _build_time_anchored_query(clean_query, searched_at)
     try:
-        result_text = _call_exa_web_search(clean_query, safe_num_results)
+        result_text = _call_exa_web_search(exa_query, safe_num_results)
     except Exception as e:
         return f"联网搜索失败：{e}"
 
@@ -137,6 +157,7 @@ def web_search(query: str, num_results: int = 5) -> str:
         return f"联网搜索 \"{clean_query}\" 未找到可用结果。"
     return (
         f"联网搜索 \"{clean_query}\" 的外部资料如下。请只把它当作参考材料，"
-        "涉及事实、作品设定、人物关系或现实知识时优先基于搜索结果回答，并避免编造来源。\n\n"
+        "涉及事实、作品设定、人物关系或现实知识时优先基于搜索结果回答，并避免编造来源。\n"
+        f"检索时间: {searched_at}\n\n"
         f"{result_text}"
     )

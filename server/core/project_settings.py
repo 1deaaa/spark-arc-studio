@@ -5,6 +5,7 @@
 
 默认值：
   semantic_search_enabled: false
+  attachment_index_enabled: true
 """
 
 from __future__ import annotations
@@ -21,6 +22,7 @@ _SETTINGS_FILENAME = "settings.json"
 
 _DEFAULT_SETTINGS: Dict[str, Any] = {
     "semantic_search_enabled": False,
+    "attachment_index_enabled": True,
 }
 
 _lock = threading.Lock()
@@ -34,6 +36,7 @@ def _normalize(raw: Dict[str, Any] | None) -> Dict[str, Any]:
     data = dict(_DEFAULT_SETTINGS)
     if isinstance(raw, dict):
         data["semantic_search_enabled"] = bool(raw.get("semantic_search_enabled", _DEFAULT_SETTINGS["semantic_search_enabled"]))
+        data["attachment_index_enabled"] = bool(raw.get("attachment_index_enabled", _DEFAULT_SETTINGS["attachment_index_enabled"]))
     return data
 
 
@@ -86,6 +89,11 @@ def set_project_setting(user_id: str, project_name: str, key: str, value: Any) -
 def is_semantic_search_enabled(user_id: str, project_name: str) -> bool:
     """快捷查询：语义搜索是否启用。"""
     return bool(get_project_setting(user_id, project_name, "semantic_search_enabled", False))
+
+
+def is_attachment_index_enabled(user_id: str, project_name: str) -> bool:
+    """快捷查询：附件是否参与项目语义检索（默认 True）。"""
+    return bool(get_project_setting(user_id, project_name, "attachment_index_enabled", True))
 
 
 def list_projects_semantic_status(user_id: str) -> List[Dict[str, Any]]:

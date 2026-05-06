@@ -11,6 +11,10 @@ from __future__ import annotations
 # 真相源：agents/tools/registry.py（注册表）、agents/tools/common.py（公共工具）、
 #         agents/tools/search.py（搜索工具）、agents/tools/<域>.py（各域工具）
 
+from agents.tools.attachment import (
+    ReadAttachmentChunkInput,
+    read_attachment_chunk,
+)
 from agents.tools.automation import (
     CheckScriptwriterStatusInput,
     TriggerAutoWriteInput,
@@ -121,6 +125,7 @@ __all__ = [
     "PatchScriptInput",
     "PatchSynopsisInput",
     "PatchWorldviewInput",
+    "ReadAttachmentChunkInput",
     "ReadChapterOutlineRawInput",
     "ReadChapterSceneInput",
     "ReadCharacterInput",
@@ -140,8 +145,8 @@ __all__ = [
     "ToolExecutionContext",
     "TriggerAutoWriteInput",
     "UpdateCharacterInput",
-    "WorkTrackerInput",
     "WebSearchInput",
+    "WorkTrackerInput",
     "_apply_patch",
     "_get_search_results",
     "_store_search_results",
@@ -159,6 +164,7 @@ __all__ = [
     "patch_script",
     "patch_synopsis",
     "patch_worldview",
+    "read_attachment_chunk",
     "read_beat_sheet",
     "read_character",
     "read_chapter_outline_raw",

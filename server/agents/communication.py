@@ -68,6 +68,47 @@ def is_stop_event_set(stop_event: Any = None) -> bool:
         return False
 
 
+# ── 附件分片滑动窗口（read_attachment_chunk 历史折叠）───────────────────
+ATTACHMENT_CHUNK_TOOL_NAME = "read_attachment_chunk"
+ATTACHMENT_CHUNK_COLLAPSED_PLACEHOLDER = (
+    "[附件分片原文已折叠 - AI 已在后续回复中提炼相关要点；如需重新阅读请再次调用 read_attachment_chunk]"
+)
+
+
+def collapse_attachment_chunk_history(messages: list, *, fresh_call_ids: set[str] | None = None) -> int:
+    """对 messages 中的 ``read_attachment_chunk`` ``ToolMessage`` 做"只保留最新一片"滑窗折叠。
+
+    LangChain 的 ToolMessage 必须与上游 AIMessage 的 tool_call_id 一一对应，
+    所以不能删除消息——只能把内容替换成短占位文本，保留 ``tool_call_id`` 与 ``name``。
+
+    - ``fresh_call_ids`` 中的 ToolMessage（本轮新追加的）保留完整正文。
+    - 其余 read_attachment_chunk 的 ToolMessage 内容替换为占位。
+    - 已折叠的不重复折叠；非 read_attachment_chunk 的工具结果一律不动。
+
+    返回本次折叠掉的条数（仅供测试和日志使用）。
+    """
+    from langchain_core.messages import ToolMessage as _ToolMessage
+
+    fresh = fresh_call_ids or set()
+    collapsed = 0
+    for i, m in enumerate(messages):
+        if not isinstance(m, _ToolMessage):
+            continue
+        if (getattr(m, "name", "") or "") != ATTACHMENT_CHUNK_TOOL_NAME:
+            continue
+        if getattr(m, "tool_call_id", None) in fresh:
+            continue
+        if str(m.content or "") == ATTACHMENT_CHUNK_COLLAPSED_PLACEHOLDER:
+            continue
+        messages[i] = _ToolMessage(
+            content=ATTACHMENT_CHUNK_COLLAPSED_PLACEHOLDER,
+            tool_call_id=m.tool_call_id,
+            name=m.name,
+        )
+        collapsed += 1
+    return collapsed
+
+
 def normalize_tool_name(raw_tool_name: str = "") -> str:
     normalized = str(raw_tool_name or "").strip().lower()
     if not normalized:
@@ -517,6 +558,21 @@ class SparkBaseAgent:
             tool_instruction = "\n\n### 工具使用规范\n你可以调用以下工具来帮助用户修改内容：\n"
             for i, t in enumerate(tools):
                 tool_instruction += f"{i+1}. **{t.name}**: {t.description}\n"
+
+            if any(getattr(t, "name", "") == "web_search" for t in tools):
+                try:
+                    from datetime import datetime
+                    from zoneinfo import ZoneInfo
+
+                    _search_now = datetime.now(ZoneInfo("Asia/Shanghai")).strftime("%Y-%m-%d %H:%M:%S %z")
+                except Exception:
+                    _search_now = time.strftime("%Y-%m-%d %H:%M:%S %z")
+                tool_instruction += f"""
+### 联网搜索时间锚点（仅用于 web_search）
+当前真实时间（UTC+8）：{_search_now}
+- 当用户要求“最新、当前、现在、最近、新闻、实时”等时间敏感信息时，调用 `web_search` 前必须以这个真实时间作为判断基准。
+- 为 `web_search.query` 编写查询词时，应显式包含当前年份/日期或等价时间范围，避免按模型记忆中的旧年份搜索。
+"""
             
             if skip_tool_confirmation:
                 tool_instruction += """
@@ -1203,6 +1259,7 @@ class SparkBaseAgent:
             "list_chapters": "正在查阅章节结构...",
             "read_chapter_scene": "正在读取章节内容...",
             "read_chapter_outline_raw": "正在读取章节大纲原文...",
+            "read_attachment_chunk": "正在读取附件分片...",
             "delegate_task": "正在委派任务...",
             "web_search": "正在联网搜索外部资料...",
         }
@@ -1334,8 +1391,11 @@ class SparkBaseAgent:
                 if isinstance(response.content, str) and response.content:
                     response.content = extract_visible_text_from_plain_text(response.content)
                 messages.append(response)
+                fresh_call_ids = {cid for cid, _, _ in tool_results}
                 for call_id, t_name, t_result in tool_results:
                     messages.append(_ToolMessage(content=t_result or "", tool_call_id=call_id, name=t_name))
+                # 附件分片滑动窗口：只保留本轮新 read_attachment_chunk 的完整正文，其余折叠
+                collapse_attachment_chunk_history(messages, fresh_call_ids=fresh_call_ids)
 
         except Exception as e:
             import traceback
@@ -1598,8 +1658,11 @@ class SparkBaseAgent:
                     if isinstance(aggregated_chunk.content, str) and aggregated_chunk.content:
                         aggregated_chunk.content = extract_visible_text_from_plain_text(aggregated_chunk.content)
                     messages.append(aggregated_chunk)
+                fresh_call_ids = {cid for cid, _, _ in tool_results}
                 for call_id, t_name, t_result in tool_results:
                     messages.append(_ToolMessage(content=t_result or "", tool_call_id=call_id, name=t_name))
+                # 附件分片滑动窗口：只保留本轮新 read_attachment_chunk 的完整正文，其余折叠
+                collapse_attachment_chunk_history(messages, fresh_call_ids=fresh_call_ids)
 
         except Exception as e:
             import traceback

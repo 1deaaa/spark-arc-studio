@@ -60,7 +60,7 @@
           @header-touchstart="onHeaderDrag"
         >
           <template #input-prefix>
-            <ChatFileImportButton :session-id="session.id" />
+            <ChatFileImportButton :session-id="session.id" :agent-id="session.agentId" />
           </template>
           <!-- 关闭按钮 -->
           <template #header-right>

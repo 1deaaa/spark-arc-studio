@@ -96,7 +96,7 @@
           @header-touchstart="startDrag"
         >
           <template #input-prefix>
-            <ChatFileImportButton :session-id="primarySessionId" />
+            <ChatFileImportButton :session-id="primarySessionId" :agent-id="chat.currentAgentId" />
           </template>
           <!-- 新建窗口按钮 -->
           <template #header-actions>
@@ -203,7 +203,7 @@
         @retry="retryMsg"
       >
         <template #input-prefix>
-          <ChatFileImportButton :session-id="primarySessionId" />
+          <ChatFileImportButton :session-id="primarySessionId" :agent-id="chat.currentAgentId" />
         </template>
         <template #header-right>
           <n-tooltip trigger="hover">
