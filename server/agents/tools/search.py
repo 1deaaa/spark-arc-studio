@@ -20,8 +20,8 @@ class SearchProjectInput(BaseModel):
 
 
 class SemanticSearchInput(BaseModel):
-    query: str = Field(description="自然语言查询，用于语义搜索全项目文本。例如 '女主角哭的地方' 或 '主角与反派的对峙'")
-    scope: list[str] | None = Field(default=None, description="搜索范围过滤，限定格式类型。可选值：outline, synopsis, beats, worldview, character, arc, novel, chrbind。例如 ['arc', 'outline'] 只搜剧本和大纲")
+    query: str = Field(description="自然语言查询，用于语义搜索当前项目文本与已上传附件。例如 '女主角哭的地方'、'主角与反派的对峙'，或 '附件里关于工厂安全规范的段落'")
+    scope: list[str] | None = Field(default=None, description="搜索范围过滤，限定格式类型。可选值：outline, synopsis, beats, worldview, character, arc, novel, chrbind, attachment。例如 ['arc', 'outline'] 只搜剧本和大纲，['attachment'] 只搜已上传附件")
     k: int = Field(default=8, description="返回结果数量上限")
 
 
@@ -252,7 +252,7 @@ def search_project(pattern: str, case_sensitive: bool = False) -> str:
 
 @tool(args_schema=SemanticSearchInput)
 def semantic_search(query: str, scope: list[str] | None = None, k: int = 8) -> str:
-    """按语义搜索项目文本。"""
+    """按语义搜索当前项目文本与已上传附件。"""
     user_id = current_user_id.get()
     project_name = get_current_project_name()
     if not user_id or not project_name:
@@ -286,10 +286,6 @@ def semantic_search(query: str, scope: list[str] | None = None, k: int = 8) -> s
     from agents.vector_index.service import IndexBuildNotReadyError
 
     service = VectorIndexService(user_id, project_name)
-    service_status = service.get_status()
-    build_state = service_status.get("build_state", {})
-    if service_status.get("needs_rebuild") and build_state.get("status") not in {"queued", "building"}:
-        service.start_background_build(force_rebuild=False)
 
     chroma_filter = None
     if scope:
@@ -309,8 +305,16 @@ def semantic_search(query: str, scope: list[str] | None = None, k: int = 8) -> s
         embedded_chunks = int(progress.get("embedded_chunks", 0) or 0)
         if total_chunks > 0:
             progress_text = f"当前进度：{embedded_chunks}/{total_chunks} 个分块。"
+        if build_state.get("status") in {"queued", "building"}:
+            prefix = "语义索引正在后台更新，当前还未就绪。"
+        else:
+            prefix = (
+                "语义索引尚未就绪。"
+                "请引导用户前往「设置 → 语义检索」中手动刷新，"
+                "或告知用户下次进入工作台时会自动检查并后台增量更新。"
+            )
         return (
-            "语义索引尚未就绪，已在后台启动首次构建。"
+            f"{prefix}"
             f"{progress_text}"
             "先返回基于关键词的降级搜索结果：\n\n"
             f"{fallback}"
@@ -352,7 +356,11 @@ def semantic_search(query: str, scope: list[str] | None = None, k: int = 8) -> s
     _store_search_results(results)
 
     if not results:
-        return f"语义搜索 \"{query}\" 未找到相关内容。"
+        return (
+            f"语义搜索 \"{query}\" 未在当前项目或已上传附件中找到相关内容。"
+            "如果项目内容刚有新增或改写，请引导用户前往「设置 → 语义检索」手动刷新，"
+            "或告知用户下次进入工作台时系统会自动检查差异并后台增量更新。"
+        )
 
     lines = [f"语义搜索 \"{query}\" 找到 {len(results)} 处相关内容：\n"]
     for r in results:

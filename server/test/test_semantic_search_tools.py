@@ -119,46 +119,42 @@ def test_replace_from_search_uses_selected_regex_hit_span():
         shutil.rmtree(project_path, ignore_errors=True)
 
 
-def test_vector_query_starts_background_build_when_index_missing(monkeypatch):
+def test_vector_query_is_read_only_when_index_missing(monkeypatch):
+    """query() 必须只读：索引不存在时只抛错，不能擅自启动后台构建。"""
     pytest.importorskip("langchain_chroma")
     from agents.vector_index.service import IndexBuildNotReadyError, VectorIndexService
 
     service = VectorIndexService(user_id="user_1", project_name="project_1")
-    original_isdir = Path
-    calls: list[bool] = []
+    trigger_calls: list[bool] = []
 
-    monkeypatch.setattr(
-        "agents.vector_index.service.os.path.isdir",
-        lambda path: False if path == service._persist_dir else True,
-    )
-    monkeypatch.setattr(
-        VectorIndexService,
-        "start_background_build",
-        lambda self, force_rebuild=False: calls.append(force_rebuild) or {
-            "status": "queued",
-            "stage": "queued",
-            "error": "",
-            "progress": {},
-        },
-    )
     monkeypatch.setattr(
         VectorIndexService,
         "get_status",
-        lambda self: {
+        lambda self, check_freshness=True: {
             "exists": False,
             "metadata": {},
             "needs_rebuild": False,
             "build_state": {
-                "status": "queued",
-                "stage": "queued",
+                "status": "not_built",
+                "stage": "idle",
                 "error": "",
                 "progress": {},
             },
         },
     )
 
+    def _forbid_trigger(self, check_freshness=True):
+        trigger_calls.append(check_freshness)
+        raise AssertionError("query 不应触发 ensure_background_build_started")
+
+    monkeypatch.setattr(
+        VectorIndexService,
+        "ensure_background_build_started",
+        _forbid_trigger,
+    )
+
     with pytest.raises(IndexBuildNotReadyError) as exc_info:
         service.query("测试查询")
 
-    assert calls == [False]
-    assert exc_info.value.status_payload["build_state"]["status"] == "queued"
+    assert trigger_calls == []
+    assert exc_info.value.status_payload["build_state"]["status"] == "not_built"

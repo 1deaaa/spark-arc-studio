@@ -38,6 +38,9 @@ def isolated_project(tmp_path, monkeypatch):
     monkeypatch.setattr(
         'agents.vector_index.service.get_project_path', _fake_get_project_path
     )
+    monkeypatch.setattr(
+        'core.project_settings.get_project_path', _fake_get_project_path
+    )
 
     return project_path
 
@@ -126,6 +129,26 @@ def test_collect_attachment_chunks_skips_attachments_with_empty_chunks(isolated_
     assert chunks_by_file == {}
 
 
+def test_collect_attachment_chunks_splits_oversized_for_embedding(isolated_project):
+    """回归：超长附件分片必须被二次切分，避免触发 embedding API 的 8K token 上限。"""
+    from agents.vector_index.service import VectorIndexService
+
+    huge = '青春的迷茫与远方的呼唤交织在一起。' * 200  # ~5800 chars
+    meta = _save_test_attachment('huge.epub', full_text=huge, chunks=[huge])
+
+    service = VectorIndexService('user1', 'demo')
+    chunks_by_file, _ = service._collect_attachment_chunks()
+
+    rel_path = f'.attachments/{meta.attachment_id}/full.txt'
+    sub_chunks = chunks_by_file[rel_path]
+    assert len(sub_chunks) >= 2, f'必须二次切分，实际 sub-chunks={len(sub_chunks)}'
+    for sub in sub_chunks:
+        assert len(sub.text) < len(huge)
+        assert sub.metadata['source_type'] == 'attachment'
+        assert sub.metadata['attachment_id'] == meta.attachment_id
+        assert sub.metadata['attachment_chunk_index'] == 0
+
+
 def test_collect_attachment_chunks_handles_multiple_attachments(isolated_project):
     """两个不同附件应生成两个独立的 rel_path。"""
     from agents.vector_index.service import VectorIndexService
@@ -142,6 +165,24 @@ def test_collect_attachment_chunks_handles_multiple_attachments(isolated_project
     assert {rel1, rel2}.issubset(chunks_by_file.keys())
     assert file_hashes[rel1] == meta1.attachment_id
     assert file_hashes[rel2] == meta2.attachment_id
+
+
+def test_needs_rebuild_detects_new_attachment_after_index_built(isolated_project):
+    """索引初次构建后新增附件，freshness 检测必须触发重建。"""
+    from agents.vector_index.service import VectorIndexService
+
+    service = VectorIndexService('user1', 'demo')
+    metadata = {'file_hashes': {}, 'file_doc_ids': {}}
+
+    assert service._needs_rebuild(metadata) is False
+
+    meta = _save_test_attachment('later.epub', '附件正文', ['附件正文'])
+
+    assert service._needs_rebuild(metadata) is True
+    current_hashes = service._compute_file_hashes()
+    rel_path = f'.attachments/{meta.attachment_id}/full.txt'
+    assert rel_path in current_hashes
+    assert current_hashes[rel_path] == meta.attachment_id
 
 
 # ==================== semantic_search 输出文本 source 标注测试 ====================
@@ -200,11 +241,8 @@ def test_semantic_search_output_distinguishes_project_and_attachment(mock_search
         def __init__(self, *args, **kwargs):
             pass
 
-        def get_status(self, check_freshness=True):  # noqa: ARG002
-            return {'needs_rebuild': False, 'build_state': {'status': 'ready'}}
-
-        def start_background_build(self, force_rebuild=False):  # noqa: ARG002
-            return {}
+        def ensure_background_build_started(self, check_freshness=True):  # noqa: ARG002
+            return {'needs_rebuild': False, 'build_state': {'status': 'ready'}, 'exists': True}
 
         def query(self, query_text, k=8, filter=None, score_threshold=0.0):  # noqa: ARG002
             return [project_hit, attachment_hit]
@@ -252,11 +290,8 @@ def test_semantic_search_attachment_only_still_marks_as_attachment(mock_search_c
         def __init__(self, *args, **kwargs):
             pass
 
-        def get_status(self, check_freshness=True):  # noqa: ARG002
-            return {'needs_rebuild': False, 'build_state': {'status': 'ready'}}
-
-        def start_background_build(self, force_rebuild=False):  # noqa: ARG002
-            return {}
+        def ensure_background_build_started(self, check_freshness=True):  # noqa: ARG002
+            return {'needs_rebuild': False, 'build_state': {'status': 'ready'}, 'exists': True}
 
         def query(self, query_text, k=8, filter=None, score_threshold=0.0):  # noqa: ARG002
             return [only_hit]
@@ -267,3 +302,47 @@ def test_semantic_search_attachment_only_still_marks_as_attachment(mock_search_c
     assert '[附件]' in result
     assert '[项目]' not in result
     assert 'chunk_index=0' in result
+
+
+def test_semantic_search_scope_attachment_forwards_filter(mock_search_context, monkeypatch):
+    """scope=['attachment'] 时必须把 format_key 过滤正确传给 VectorIndexService.query。"""
+    search_module, SearchHit = mock_search_context
+    captured: dict[str, object] = {}
+
+    only_hit = SearchHit(
+        index=0,
+        file_path='',
+        rel_path='.attachments/xyz/full.txt',
+        format_key='attachment',
+        start_line=0,
+        end_line=0,
+        narrative_ref='附件 > test.epub > 第 1 部分（共 1）',
+        match_text='只有附件',
+        score=0.91,
+        source_type='attachment',
+        attachment_id='xyz',
+        attachment_filename='test.epub',
+        attachment_chunk_index=0,
+    )
+
+    class _StubService:
+        def __init__(self, *args, **kwargs):
+            pass
+
+        def ensure_background_build_started(self, check_freshness=True):  # noqa: ARG002
+            return {'needs_rebuild': False, 'build_state': {'status': 'ready'}, 'exists': True}
+
+        def query(self, query_text, k=8, filter=None, score_threshold=0.0):  # noqa: ARG002
+            captured['query_text'] = query_text
+            captured['k'] = k
+            captured['filter'] = filter
+            return [only_hit]
+
+    monkeypatch.setattr('agents.vector_index.VectorIndexService', _StubService)
+
+    result = search_module.semantic_search.invoke({'query': '附件关键词', 'scope': ['attachment'], 'k': 3})
+
+    assert isinstance(result, str)
+    assert captured['filter'] == {'format_key': 'attachment'}
+    assert captured['query_text'] == '附件关键词'
+    assert captured['k'] == 3

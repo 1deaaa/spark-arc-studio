@@ -147,7 +147,7 @@ class SemanticChunker:
             chunks = self._fallback_chunk(project_file, outline_data)
 
         # 二次切分超长块
-        return self._split_oversized(chunks)
+        return self.split_oversized(chunks)
 
     # ==================== 内部方法 ====================
 
@@ -161,8 +161,12 @@ class SemanticChunker:
             all_chunks.extend(chunks)
         return all_chunks
 
-    def _split_oversized(self, chunks: list[SemanticChunk]) -> list[SemanticChunk]:
-        """超过 max_tokens 的块用 RecursiveCharacterTextSplitter 拆分"""
+    def split_oversized(self, chunks: list[SemanticChunk]) -> list[SemanticChunk]:
+        """超过 ``max_tokens`` 的块用 ``RecursiveCharacterTextSplitter`` 拆分。
+
+        对项目文件分块、附件入索都是同一个“超长块二次切分”入口，避免多处重写。
+        外部调用者（如 ``VectorIndexService._collect_attachment_chunks``）可直接复用。
+        """
         # 粗略估算：1 token ≈ 1.5 中文字符
         max_chars = self._max_tokens * 2
         result: list[SemanticChunk] = []

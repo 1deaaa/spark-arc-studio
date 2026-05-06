@@ -1,12 +1,33 @@
 import bus from '@/eventBus';
 import { defineStore } from 'pinia';
-import { fetchProjects, createProject, deleteProject, renameProject } from '@/services/api';
+import { fetchProjects, createProject, deleteProject, renameProject, refreshSemanticSearchProject } from '@/services/api';
 import { getUserId } from '@/services/apiClient';
 import { useFileStore } from './fileStore';
 import { useCharacterStore } from './characterStore';
 import { useChatStore } from './chatStore';
 import { useSceneStore } from './sceneStore';
 import { useBlueprintStore } from './blueprintStore';
+
+/**
+ * 当前会话已经触发过语义索引刷新检查的项目集合。
+ *
+ * 进入工作台/切换项目时，每个项目只主动触发一次 /api/semantic-search/refresh，
+ * 让后端按 freshness 检测决定是否真的启动后台增量构建。
+ * 这样既不会在每次写入时打断流式生成，也避免了反复轮询触发。
+ */
+const semanticRefreshTriggeredProjects = new Set<string>();
+
+function triggerSemanticRefreshOnce(projectName: string): void {
+  if (!projectName) return;
+  if (semanticRefreshTriggeredProjects.has(projectName)) return;
+  semanticRefreshTriggeredProjects.add(projectName);
+  // 异步发起，不 await，不阻塞 UI；失败也不影响项目切换
+  void refreshSemanticSearchProject(projectName).catch((err) => {
+    console.warn('[semantic] 自动刷新触发失败：', err);
+    // 失败时允许下次重试
+    semanticRefreshTriggeredProjects.delete(projectName);
+  });
+}
 
 const LAST_PROJECT_KEY_PREFIX = 'sparkarc_last_project';
 
@@ -127,6 +148,8 @@ export const useProjectStore = defineStore('project', {
         fileStore.loadFileTree(this._currentProject, fileStore.activeFormatFilter);
         chrStore.load(this._currentProject);
         blueprintStore.loadBlueprint(this._currentProject);
+        // 进入工作台/切换项目时统一触发一次语义索引差异检查（仅一次/每会话/每项目）
+        triggerSemanticRefreshOnce(this._currentProject);
       } else {
         // 没有项目时清空文件树和蓝图
         fileStore.fileTree = [];
@@ -209,6 +232,8 @@ export const useProjectStore = defineStore('project', {
       this.currentInspirationId = null;
       this.pendingSynopsisAdoption = null;
       localStorage.removeItem(getLastProjectKey());
+      // 登出后清空“已触发刷新”的项目集合，下个用户重新进入再触发
+      semanticRefreshTriggeredProjects.clear();
 
       // 同步清空关联 store，避免残留项目名被 watch immediate 捕获
       const chatStore = useChatStore();

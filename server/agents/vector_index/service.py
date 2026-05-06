@@ -95,19 +95,33 @@ class VectorIndexService:
         """通过 matchbox 获取用户配置的云端 embedding 模型"""
         return matchbox().get_user_embedding(self.user_id)
 
+    def _public_build_state(self, payload: dict | None) -> dict:
+        state = {
+            key: value
+            for key, value in dict(payload or {}).items()
+            if not str(key).startswith("_")
+        }
+        state["progress"] = dict(state.get("progress") or {})
+        return state
+
     def start_background_build(self, force_rebuild: bool = False) -> dict:
         task_key = _build_task_key(self.user_id, self.project_name)
         now = datetime.now(timezone.utc).isoformat()
         with _build_state_lock:
             current = dict(_build_state_registry.get(task_key) or {})
             if current.get("status") in {"queued", "building"}:
-                return current
+                current["_pending_refresh"] = True
+                current["_pending_force_rebuild"] = bool(current.get("_pending_force_rebuild")) or bool(force_rebuild)
+                _build_state_registry[task_key] = current
+                return self._public_build_state(current)
             current.update({
                 "status": "queued",
                 "stage": "queued",
                 "error": "",
                 "started_at": now,
                 "finished_at": "",
+                "_pending_refresh": False,
+                "_pending_force_rebuild": False,
                 "progress": {
                     "total_files": 0,
                     "done_files": 0,
@@ -121,10 +135,21 @@ class VectorIndexService:
             _build_state_registry[task_key] = current
 
         def _run() -> None:
-            try:
-                self.build_index(force_rebuild=force_rebuild)
-            except Exception:
-                pass
+            next_force_rebuild = force_rebuild
+            while True:
+                try:
+                    self.build_index(force_rebuild=next_force_rebuild)
+                except Exception:
+                    pass
+                with _build_state_lock:
+                    latest = dict(_build_state_registry.get(task_key) or {})
+                    rerun = bool(latest.get("_pending_refresh"))
+                    next_force_rebuild = bool(latest.get("_pending_force_rebuild"))
+                    latest["_pending_refresh"] = False
+                    latest["_pending_force_rebuild"] = False
+                    _build_state_registry[task_key] = latest
+                if not rerun:
+                    break
 
         thread = threading.Thread(
             target=_run,
@@ -134,13 +159,25 @@ class VectorIndexService:
         thread.start()
         return self.get_build_state()
 
+    def ensure_background_build_started(self, check_freshness: bool = True) -> dict:
+        status = self.get_status(check_freshness=check_freshness)
+        build_state = dict(status.get("build_state") or {})
+        if build_state.get("status") in {"queued", "building"}:
+            return status
+        if not status.get("exists") or status.get("needs_rebuild"):
+            build_state = self.start_background_build(force_rebuild=False)
+            return {
+                **status,
+                "build_state": build_state,
+            }
+        return status
+
     def get_build_state(self) -> dict:
         task_key = _build_task_key(self.user_id, self.project_name)
         with _build_state_lock:
             stored = dict(_build_state_registry.get(task_key) or {})
         if stored:
-            stored["progress"] = dict(stored.get("progress") or {})
-            return stored
+            return self._public_build_state(stored)
         metadata = self._load_meta() if os.path.isdir(self._persist_dir) else {}
         if os.path.isdir(self._persist_dir):
             return {
@@ -485,9 +522,9 @@ class VectorIndexService:
             filter: Chroma 元数据过滤条件，如 {"format_key": "arc"}
             score_threshold: 最低相似度分数阈值（0.0 = 不过滤）
         """
-        if not os.path.isdir(self._persist_dir):
-            self.start_background_build(force_rebuild=False)
-            raise IndexBuildNotReadyError(self.get_status())
+        status = self.get_status(check_freshness=True)
+        if not status.get("exists"):
+            raise IndexBuildNotReadyError(status)
 
         embeddings = self._get_embeddings()
         vector_store = Chroma(
@@ -658,6 +695,11 @@ class VectorIndexService:
             if not semantic_chunks:
                 continue
 
+            # 二次切分：附件 chunk 单片可达 64K token，远超 embedding API 上限（如阿里通义 8K）。
+            # 复用项目分块器的"超长块二次切分"统一入口，确保单个 sub-chunk 不会撑爆 embedding API。
+            attachment_chunker = SemanticChunker()
+            semantic_chunks = attachment_chunker.split_oversized(semantic_chunks)
+
             chunks_by_file[rel_path] = semantic_chunks
             # attachment_id 本身已是 sha256[:16]，作为内容指纹完全够用
             file_hashes[rel_path] = attachment_id
@@ -737,7 +779,12 @@ class VectorIndexService:
         )
 
     def _compute_file_hashes(self) -> dict[str, str]:
-        """计算项目所有文本文件的 MD5 哈希"""
+        """计算当前索引输入源的内容哈希。
+
+        除项目正文文件外，若项目开启了附件入索，也必须把附件哈希纳入，
+        否则上传/删除附件后 ``_needs_rebuild`` 无法感知变更，
+        会导致 ``semantic_search(scope=["attachment"])`` 命中旧索引甚至查不到附件。
+        """
         hashes: dict[str, str] = {}
         files = collect_project_files(self.user_id, self.project_name)
         for pf in files:
@@ -745,6 +792,15 @@ class VectorIndexService:
                 hashes[pf.rel_path] = hashlib.md5(pf.content.encode("utf-8")).hexdigest()
             except Exception:
                 hashes[pf.rel_path] = ""
+
+        try:
+            from core.project_settings import is_attachment_index_enabled
+
+            if is_attachment_index_enabled(self.user_id, self.project_name):
+                _, attachment_hashes = self._collect_attachment_chunks()
+                hashes.update({str(rel_path): str(file_hash or "") for rel_path, file_hash in attachment_hashes.items()})
+        except Exception:
+            pass
         return hashes
 
     def _compute_index_delta(self, metadata: dict, current_hashes: dict[str, str]) -> dict[str, list[str]]:

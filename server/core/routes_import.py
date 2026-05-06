@@ -85,6 +85,34 @@ async def parse_import_file(
         if not attachment_id:
             return JSONResponse(status_code=500, content={"error": "聊天附件保存失败：attachment_id 为空"})
 
+        # 附件落盘成功后，按统一策略后台异步补一轮语义增量更新。
+        # 仅在“项目语义检索开关 + 附件入索开关”同时开启时触发；
+        # 触发本身是非阻塞的：内部会创建 daemon 线程，构建中再来一次会自动排队补刷。
+        try:
+            from core.project_settings import (
+                is_attachment_index_enabled,
+                is_semantic_search_enabled,
+            )
+
+            if (
+                is_semantic_search_enabled(user_id, project_name)
+                and is_attachment_index_enabled(user_id, project_name)
+            ):
+                from agents.vector_index import VectorIndexService
+
+                def _kick_off_attachment_refresh() -> None:
+                    try:
+                        VectorIndexService(user_id, project_name).ensure_background_build_started(
+                            check_freshness=True
+                        )
+                    except Exception as exc:
+                        print(f"[import] 附件后台索引触发失败: {exc}")
+
+                await run_in_threadpool(_kick_off_attachment_refresh)
+        except Exception as exc:
+            # 任何意外都不影响附件上传成功的响应。
+            print(f"[import] 触发附件语义索引时异常: {exc}")
+
         return {
             "success": True,
             "attachment_id": attachment_id,

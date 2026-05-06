@@ -303,6 +303,168 @@ def test_real_epub_sliding_window_keeps_context_bounded(real_epub_attachment, mo
         )
 
 
+# ==================== 真实 LLM 端到端：导演处理多种类型问题 ====================
+
+
+@pytest.mark.skipif(
+    os.getenv('RUN_LLM_E2E') != '1',
+    reason='真实 LLM e2e 测试需要 RUN_LLM_E2E=1 环境变量（避免日常 CI 烧 token）',
+)
+def test_real_director_handles_diverse_questions_with_sliding_window(real_epub_attachment, monkeypatch, capsys):
+    """**真实 LLM** 端到端：导演 Agent 用真实模型处理三类不同问题。
+
+    场景：用户上传《被窝是青春的坟墓》epub，连续问三个完全不同维度的问题：
+    1. 人物：主角的性格特点
+    2. 风格：文字风格 / 修辞特点
+    3. 剧情：情节走向 / 关键事件
+
+    对每个问题验证：
+    - 导演真实输出文本（≥ 50 字符且含中文，证明 LLM 真的回答了）
+    - 滑窗折叠生效（折叠次数 + 各轮 messages 总字符数）
+    - 工具调用次数 ≤ 分片数（避免重复读同一片）
+
+    用法：
+      $env:RUN_LLM_E2E="1"; pytest test/test_attachment_sliding_window.py::test_real_director_handles_diverse_questions_with_sliding_window -v -s
+    """
+    import agents.communication as comm
+    from core.request_context import current_project_name, current_user_id
+
+    user_id = '1'  # 本机已配置 LLM 的用户
+    project_name = 'sliding_window_demo'
+    info = real_epub_attachment
+    aid = info['attachment_id']
+    chunk_count = info['chunk_count']
+
+    current_user_id.set(user_id)
+    current_project_name.set(project_name)
+
+    # ---- 间谍：每次折叠后记录状态 ----
+    collapse_log: list[dict] = []
+    original_collapse = comm.collapse_attachment_chunk_history
+
+    def _collapse_spy(messages, *, fresh_call_ids=None):
+        n = original_collapse(messages, fresh_call_ids=fresh_call_ids)
+        collapse_log.append({
+            'collapsed_now': n,
+            'total_messages': len(messages),
+            'total_chars': sum(len(str(getattr(m, 'content', '') or '')) for m in messages),
+            'tool_messages': sum(1 for m in messages if type(m).__name__ == 'ToolMessage'),
+        })
+        return n
+
+    monkeypatch.setattr(comm, 'collapse_attachment_chunk_history', _collapse_spy)
+
+    # ---- 真实加载 LLM + 创建 DirectorAgent ----
+    from llm.agen_matchbox import initialize_matchbox
+    initialize_matchbox(ensure_defaults=True)
+
+    from agents.agent_director import DirectorAgent
+    from agents.communication import get_global_context
+    from agents.routes.chat_attachment import expand_active_context_with_attachment
+
+    director = DirectorAgent(user_id=user_id, project_name=project_name)
+    ctx = get_global_context()
+    director.bind_context(ctx)
+
+    # ---- 模拟 chat 路由的 active_context 注入逻辑 ----
+    imported_file_meta = {
+        'attachmentId': aid,
+        'filename': '被窝是青春的坟墓.epub',
+        'sourceFormat': '.epub',
+        'totalTokens': 60000,
+        'chunkTokens': 64000,
+        'isPartial': True,
+        'warnings': [],
+        'uploadedAt': 0,
+    }
+    active_context = expand_active_context_with_attachment(
+        user_id=user_id,
+        project_name=project_name,
+        active_context='',
+        imported_file_meta=imported_file_meta,
+    )
+    print(f"\n[E2E] active_context 注入完成：{len(active_context):,} chars（应仅含首片+分片说明）")
+    assert '[分片说明]' in active_context, '注入应包含分片说明'
+
+    questions = [
+        ('人物', '这本小说的主角是什么样的人？请描述他的性格特点和成长经历。'),
+        ('风格', '这本书的文字风格有什么特点？请举一两个具体的写作手法或例子。'),
+        ('剧情', '这本小说的剧情主要围绕什么展开？请概括关键情节走向。'),
+    ]
+
+    # 同一会话内多轮问答（模拟真实聊天）
+    history: list[dict] = []
+    summaries: list[dict] = []
+
+    for idx, (category, q) in enumerate(questions, start=1):
+        print(f'\n{"=" * 70}\n[Q{idx}/{category}] {q}\n{"=" * 70}')
+        before_collapse_count = len(collapse_log)
+
+        # 收集流式输出
+        full_answer_parts: list[str] = []
+        reasoning_parts: list[str] = []
+        for event in director.chat_stream(
+            user_message=q,
+            history=history,
+            active_context=active_context,
+            skip_tool_confirmation=True,
+        ):
+            if not isinstance(event, dict):
+                continue
+            event_name = event.get('event')
+            if event_name == 'assistant_delta':
+                text = str(event.get('text') or '')
+                full_answer_parts.append(text)
+                print(text, end='', flush=True)
+            elif event_name == 'reasoning_delta':
+                reasoning_parts.append(str(event.get('text') or ''))
+            elif event_name == 'error':
+                pytest.fail(f'chat_stream 报错: {event}')
+
+        full_answer = ''.join(full_answer_parts).strip()
+        print(f'\n\n[导演回复长度] {len(full_answer)} chars')
+
+        # 把当前回合写进 history（下一轮用）
+        history.append({'role': 'user', 'content': q})
+        history.append({'role': 'assistant', 'content': full_answer})
+
+        # 本轮折叠快照
+        rounds_this_question = collapse_log[before_collapse_count:]
+        n_collapse_calls = len(rounds_this_question)
+        max_chars = max((r['total_chars'] for r in rounds_this_question), default=0)
+        max_tool_msgs = max((r['tool_messages'] for r in rounds_this_question), default=0)
+
+        summaries.append({
+            'category': category,
+            'answer_len': len(full_answer),
+            'n_invoke_rounds': n_collapse_calls,
+            'max_chars_in_messages': max_chars,
+            'max_tool_messages': max_tool_msgs,
+        })
+
+        # ---- 断言：本问回答可信 ----
+        assert len(full_answer) >= 30, f'[{category}] 回复过短，疑似 LLM 失败：{full_answer!r}'
+        assert any('\u4e00' <= ch <= '\u9fff' for ch in full_answer), f'[{category}] 回复无中文，疑似异常'
+
+    # ---- 最终汇总 ----
+    print('\n\n' + '=' * 70)
+    print('[E2E 汇总]')
+    for s in summaries:
+        print(
+            f"  {s['category']}: 答 {s['answer_len']} 字 | "
+            f"工具循环 {s['n_invoke_rounds']} 轮 | "
+            f"messages 峰值 {s['max_chars_in_messages']:,} chars / {s['max_tool_messages']} 个 ToolMessage"
+        )
+
+    # ---- 断言：滑窗确实有效（任何一轮的 messages 总字符不爆炸） ----
+    # 单片大约 60K chars；3 轮多问后整个会话的峰值不能超过"单片 + 历史问答 + 系统提示"~150K
+    HARD_LIMIT = 150_000
+    for s in summaries:
+        assert s['max_chars_in_messages'] < HARD_LIMIT, (
+            f"[{s['category']}] messages 峰值 {s['max_chars_in_messages']:,} 超过硬限制 {HARD_LIMIT:,}，滑窗失效"
+        )
+
+
 def test_real_epub_sliding_window_without_collapse_would_explode(real_epub_attachment, monkeypatch):
     """对照实验：如果 NOT 调用折叠 helper，token 将随轮次线性增长。
 

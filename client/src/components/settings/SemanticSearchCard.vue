@@ -100,6 +100,27 @@
                                 {{ tag.title || tag.label }}
                             </n-tooltip>
                         </div>
+                        <n-tooltip trigger="hover" placement="top">
+                            <template #trigger>
+                                <n-button
+                                    text
+                                    :loading="Boolean(proj._refreshing)"
+                                    :disabled="!proj.enabled || isProjectBuilding(proj) || Boolean(proj._refreshing)"
+                                    class="refresh-icon-btn"
+                                    @click="handleRefresh(proj)"
+                                    :aria-label="t('components.semanticSearchCard.refreshTooltip')"
+                                >
+                                    <template #icon>
+                                        <n-icon :size="16">
+                                            <RefreshCw />
+                                        </n-icon>
+                                    </template>
+                                </n-button>
+                            </template>
+                            {{ proj.enabled
+                                ? t('components.semanticSearchCard.refreshTooltip')
+                                : t('components.semanticSearchCard.refreshDisabledTooltip') }}
+                        </n-tooltip>
                         <n-switch
                             :value="proj.enabled"
                             :loading="proj._loading"
@@ -133,11 +154,13 @@
 <script setup lang="ts">
 import { computed, ref, onBeforeUnmount, onMounted } from 'vue';
 import { useI18n } from 'vue-i18n';
-import { NSpin, NButton, NSwitch, NEmpty, NTooltip, useMessage, useDialog } from 'naive-ui';
+import { NSpin, NButton, NSwitch, NEmpty, NTooltip, NIcon, useMessage, useDialog } from 'naive-ui';
+import { RefreshCw } from 'lucide-vue-next';
 import {
     fetchSemanticSearchStatus,
     enableSemanticSearch,
     disableSemanticSearch,
+    refreshSemanticSearchProject,
     testSemanticEmbedding,
     setSemanticSearchDefaults,
     type SemanticSearchProjectStatus,
@@ -147,7 +170,7 @@ const { t } = useI18n();
 const message = useMessage();
 const dialog = useDialog();
 
-type ProjectRow = SemanticSearchProjectStatus & { _loading?: boolean };
+type ProjectRow = SemanticSearchProjectStatus & { _loading?: boolean; _refreshing?: boolean };
 type ProjectStatusTag = { key: string; label: string; tone: 'info' | 'success' | 'warning' | 'error'; title?: string };
 
 const BUILDING_STATUSES = new Set(['queued', 'building']);
@@ -325,6 +348,40 @@ async function handleToggle(proj: ProjectRow, enabled: boolean) {
             target._loading = false;
         } else {
             proj._loading = false;
+        }
+        syncStatusPolling();
+    }
+}
+
+async function handleRefresh(proj: ProjectRow) {
+    if (!proj.enabled) {
+        message.warning(t('components.semanticSearchCard.refreshDisabledTooltip'));
+        return;
+    }
+    if (proj._refreshing || isProjectBuilding(proj)) {
+        return;
+    }
+    proj._refreshing = true;
+    try {
+        const result = await refreshSemanticSearchProject(proj.projectName);
+        proj.buildState = result.buildState;
+        proj.indexExists = result.indexExists;
+        proj.needsRebuild = result.needsRebuild;
+        if (result.triggered) {
+            message.success(t('components.semanticSearchCard.refreshTriggered', { name: proj.projectName }));
+        } else {
+            message.info(t('components.semanticSearchCard.refreshUpToDate', { name: proj.projectName }));
+        }
+        await loadData({ silent: true });
+    } catch (e: unknown) {
+        const msg = e instanceof Error ? e.message : String(e);
+        message.error(t('components.semanticSearchCard.refreshFailed', { reason: msg }));
+    } finally {
+        const target = projects.value.find(project => project.projectName === proj.projectName);
+        if (target) {
+            target._refreshing = false;
+        } else {
+            proj._refreshing = false;
         }
         syncStatusPolling();
     }
@@ -687,5 +744,21 @@ onBeforeUnmount(() => {
     color: var(--spark-text-muted);
     margin: 8px 0 0;
     padding-left: 0;
+    white-space: pre-line;
+}
+
+.refresh-icon-btn {
+    color: var(--spark-text-muted);
+    transition: color 0.15s ease;
+    padding: 0 4px;
+}
+
+.refresh-icon-btn:hover:not(:disabled) {
+    color: var(--spark-primary);
+}
+
+.refresh-icon-btn[disabled] {
+    opacity: 0.4;
+    cursor: not-allowed;
 }
 </style>

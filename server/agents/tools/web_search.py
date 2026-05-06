@@ -30,11 +30,14 @@ def _exa_mcp_url() -> str:
 
 
 def _parse_mcp_response(response: requests.Response) -> dict[str, Any]:
-    text = response.text or ""
     content_type = (response.headers.get("content-type") or "").lower()
     if "text/event-stream" not in content_type:
         return response.json()
 
+    # MCP Streamable HTTP uses SSE. Some hosted servers omit charset, and
+    # requests then falls back to ISO-8859-1; with Chinese UTF-8 bytes this can
+    # produce C1 control characters that split JSON strings mid-line.
+    text = response.content.decode("utf-8", errors="replace")
     data_lines: list[str] = []
     for line in text.splitlines():
         if line.startswith("data:"):

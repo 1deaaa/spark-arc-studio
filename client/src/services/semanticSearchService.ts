@@ -164,6 +164,29 @@ export async function enableSemanticSearch(projectName: string): Promise<Semanti
   };
 }
 
+export interface SemanticSearchRefreshResponse extends SemanticSearchToggleResponse {
+  triggered: boolean;
+}
+
+type RawSemanticSearchRefreshResponse = RawSemanticSearchToggleResponse & {
+  triggered?: boolean;
+};
+
+export async function refreshSemanticSearchProject(projectName: string): Promise<SemanticSearchRefreshResponse> {
+  const response = await fetchWithAuth('/api/semantic-search/refresh', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ projectName }),
+  });
+  const result = await response.json() as RawSemanticSearchRefreshResponse;
+  if (!response.ok) throw new Error(result.detail || '刷新语义检索失败');
+  return {
+    ...result,
+    ...normalizeProjectStatus(result),
+    triggered: Boolean(result.triggered),
+  };
+}
+
 export async function disableSemanticSearch(projectName: string): Promise<SemanticSearchToggleResponse> {
   const response = await fetchWithAuth('/api/semantic-search/disable', {
     method: 'POST',

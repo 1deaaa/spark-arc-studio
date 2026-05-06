@@ -53,18 +53,10 @@ def _resolve_project_semantic_status(user_id: str, project_name: str, enabled: b
         from agents.vector_index import VectorIndexService
 
         service = VectorIndexService(user_id, project_name)
-        status = service.get_status(check_freshness=False)
+        status = service.get_status(check_freshness=enabled)
         index_exists = bool(status.get("exists", False))
         needs_rebuild = bool(status.get("needs_rebuild", False))
         build_state = status.get("build_state", build_state)
-
-        if enabled and build_state.get("status") not in {"queued", "building"}:
-            fresh_status = service.get_status(check_freshness=True)
-            index_exists = bool(fresh_status.get("exists", index_exists))
-            needs_rebuild = bool(fresh_status.get("needs_rebuild", needs_rebuild))
-            build_state = fresh_status.get("build_state", build_state)
-            if not index_exists or needs_rebuild:
-                build_state = service.start_background_build(force_rebuild=False)
     except Exception as e:
         build_state = {
             **_empty_build_state(),
@@ -77,6 +69,54 @@ def _resolve_project_semantic_status(user_id: str, project_name: str, enabled: b
         "index_exists": index_exists,
         "needs_rebuild": needs_rebuild,
         "build_state": build_state,
+    }
+
+
+def _trigger_project_semantic_refresh(user_id: str, project_name: str) -> dict:
+    index_status = _resolve_project_semantic_status(user_id, project_name, True)
+    triggered = False
+    settings = get_project_settings(user_id, project_name)
+    enabled = bool(settings.get("semantic_search_enabled", False))
+    if not enabled:
+        return {
+            "enabled": False,
+            "triggered": False,
+            **index_status,
+        }
+
+    try:
+        from agents.vector_index import VectorIndexService
+
+        service = VectorIndexService(user_id, project_name)
+        has_indexable_content = bool(service._compute_file_hashes())
+        if index_status["needs_rebuild"] or (not index_status["index_exists"] and has_indexable_content):
+            triggered = True
+            status = service.ensure_background_build_started(check_freshness=True)
+            return {
+                "enabled": True,
+                "triggered": triggered,
+                "index_exists": bool(status.get("exists", False)),
+                "needs_rebuild": bool(status.get("needs_rebuild", False)),
+                "build_state": status.get("build_state", _empty_build_state()),
+            }
+    except Exception as e:
+        return {
+            "enabled": True,
+            "triggered": False,
+            "index_exists": False,
+            "needs_rebuild": False,
+            "build_state": {
+                **_empty_build_state(),
+                "status": "error",
+                "stage": "error",
+                "error": str(e),
+            },
+        }
+
+    return {
+        "enabled": True,
+        "triggered": triggered,
+        **index_status,
     }
 
 
@@ -215,13 +255,34 @@ async def enable_semantic_search(data: ProjectNameRequest, user: dict = Depends(
 
     # 测试通过，持久化开关
     settings = set_project_setting(user_id, project_name, "semantic_search_enabled", True)
-    index_status = _resolve_project_semantic_status(user_id, project_name, True)
+    index_status = _trigger_project_semantic_refresh(user_id, project_name)
 
     return {
         "success": True,
         "projectName": project_name,
         "enabled": True,
         "settings": settings,
+        "index_exists": index_status["index_exists"],
+        "needs_rebuild": index_status["needs_rebuild"],
+        "build_state": index_status["build_state"],
+    }
+
+
+@semantic_search_router.post('/refresh')
+async def refresh_semantic_search(data: ProjectNameRequest, user: dict = Depends(get_current_user)):
+    """显式触发单项目语义索引差异检查，并在必要时后台启动增量更新。"""
+    user_id = str(user['user_id'])
+    project_name = data.project_name.strip()
+
+    if not project_name:
+        raise HTTPException(status_code=400, detail="缺少项目名称")
+
+    index_status = _trigger_project_semantic_refresh(user_id, project_name)
+    return {
+        "success": True,
+        "projectName": project_name,
+        "enabled": bool(index_status["enabled"]),
+        "triggered": bool(index_status["triggered"]),
         "index_exists": index_status["index_exists"],
         "needs_rebuild": index_status["needs_rebuild"],
         "build_state": index_status["build_state"],

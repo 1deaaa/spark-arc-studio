@@ -11,11 +11,12 @@ from agents.tools import web_search as web_search_module
 
 
 class _Response:
-    def __init__(self, text="", status_code=200, headers=None, json_payload=None):
+    def __init__(self, text="", status_code=200, headers=None, json_payload=None, content=None):
         self.text = text
         self.status_code = status_code
         self.headers = headers or {}
         self._json_payload = json_payload
+        self.content = content if content is not None else text.encode("utf-8")
 
     def raise_for_status(self):
         if self.status_code >= 400:
@@ -62,3 +63,17 @@ def test_web_search_calls_exa_mcp_streamable_http(monkeypatch):
     assert "2026-05-06 16:10:00 +0800" in calls[2]["json"]["params"]["arguments"]["query"]
     assert "example topic" in calls[2]["json"]["params"]["arguments"]["query"]
     assert calls[2]["headers"]["mcp-session-id"] == "sid-1"
+
+
+def test_parse_mcp_response_decodes_chinese_sse_as_utf8_without_charset():
+    response = _Response(
+        headers={"content-type": "text/event-stream"},
+        content=(
+            'event: message\n'
+            'data: {"result":{"content":[{"type":"text","text":"今日AI新闻：斩获融资"}]},"jsonrpc":"2.0","id":2}\n\n'
+        ).encode("utf-8"),
+    )
+
+    payload = web_search_module._parse_mcp_response(response)
+
+    assert payload["result"]["content"][0]["text"] == "今日AI新闻：斩获融资"
