@@ -1,11 +1,12 @@
 """聊天附件引用制纯函数测试
 
-覆盖 ``server/agents/routes/chat_attachment.py`` 的四个对外纯函数：
+覆盖 ``server/agents/routes/chat_attachment.py`` 的对外纯函数：
 
-- extract_imported_file_meta
+- extract_imported_file_meta / extract_imported_files_meta
 - build_imported_file_context_label
-- build_user_message_metadata
-- expand_active_context_with_attachment（含 partial 分片说明 + 工具调用提示）
+- build_user_message_metadata（单数 + 多数双写）
+- expand_active_context_with_attachment（单附件：partial 分片说明 + 工具调用提示）
+- expand_active_context_with_attachments（多附件：仅注入清单 + 工具提示）
 """
 
 from __future__ import annotations
@@ -25,7 +26,9 @@ from agents.routes.chat_attachment import (
     build_imported_file_context_label,
     build_user_message_metadata,
     expand_active_context_with_attachment,
+    expand_active_context_with_attachments,
     extract_imported_file_meta,
+    extract_imported_files_meta,
 )
 
 
@@ -301,3 +304,202 @@ def test_expand_appends_to_existing_active_context(attachment_storage):
     assert result.startswith('已有上下文')
     assert '\n\n' in result
     assert '正文' in result
+
+
+# ==================== 多附件：extract_imported_files_meta ====================
+
+
+def test_extract_imported_files_meta_returns_empty_for_missing():
+    assert extract_imported_files_meta(None) == []
+    assert extract_imported_files_meta({}) == []
+
+
+def test_extract_imported_files_meta_falls_back_to_legacy_single_field():
+    """activeMeta.importedFile（旧字段）→ 自动转为 [importedFile]。"""
+    metas = extract_imported_files_meta({
+        'importedFile': {'attachmentId': 'a', 'filename': 'a.txt'},
+    })
+    assert len(metas) == 1
+    assert metas[0]['attachmentId'] == 'a'
+
+
+def test_extract_imported_files_meta_handles_list_with_dedupe_and_invalid():
+    """importedFiles 列表 → 校验 / 去重 / 保留顺序。"""
+    metas = extract_imported_files_meta({
+        'importedFiles': [
+            {'attachmentId': 'a', 'filename': 'a.txt'},
+            {'attachmentId': 'b', 'filename': 'b.txt'},
+            {'attachmentId': 'a', 'filename': 'a.txt'},  # 重复 id 应去重
+            {'attachmentId': '', 'filename': 'invalid.txt'},  # 缺失 id 应丢弃
+            'not a dict',  # 非 dict 应丢弃
+        ],
+    })
+    assert [m['attachmentId'] for m in metas] == ['a', 'b']
+
+
+def test_extract_imported_file_meta_legacy_returns_first():
+    """老接口（单数）应返回多附件列表的第一个。"""
+    result = extract_imported_file_meta({
+        'importedFiles': [
+            {'attachmentId': 'a', 'filename': 'a.txt'},
+            {'attachmentId': 'b', 'filename': 'b.txt'},
+        ],
+    })
+    assert result is not None
+    assert result['attachmentId'] == 'a'
+
+
+# ==================== 多附件：build_user_message_metadata ====================
+
+
+def test_build_user_message_metadata_supports_list_payload():
+    """多附件入参时同时写 importedFiles 列表 + importedFile 单数（向后兼容）。"""
+    metadata = build_user_message_metadata(
+        channel='global',
+        active_context='ctx',
+        imported_file_meta=[
+            {'attachmentId': 'a', 'filename': 'a.txt'},
+            {'attachmentId': 'b', 'filename': 'b.txt'},
+        ],
+    )
+    assert metadata['active_context'] == 'ctx'
+    assert metadata['importedFiles'] == [
+        {'attachmentId': 'a', 'filename': 'a.txt'},
+        {'attachmentId': 'b', 'filename': 'b.txt'},
+    ]
+    # 老 reader 仍能拿到首个
+    assert metadata['importedFile'] == {'attachmentId': 'a', 'filename': 'a.txt'}
+
+
+def test_build_user_message_metadata_dict_payload_still_writes_list():
+    """单 dict 入参也会落到 importedFiles[0]，保证 reader 路径统一。"""
+    metadata = build_user_message_metadata(
+        channel='c',
+        active_context='',
+        imported_file_meta={'attachmentId': 'x', 'filename': 'x.txt'},
+    )
+    assert metadata['importedFiles'] == [{'attachmentId': 'x', 'filename': 'x.txt'}]
+    assert metadata['importedFile'] == {'attachmentId': 'x', 'filename': 'x.txt'}
+
+
+# ==================== 多附件：expand_active_context_with_attachments ====================
+
+
+def test_expand_attachments_single_uses_single_attachment_branch(attachment_storage):
+    """1 附件场景：行为应与单附件 expand 完全一致（partial=False 灌全文）。"""
+    meta = _save_test_attachment(
+        'user1', 'demo', full_text='完整正文', chunks=['完整正文'],
+    )
+    files = [{
+        'attachmentId': meta.attachment_id,
+        'filename': 'novel.txt',
+        'isPartial': False,
+    }]
+    result = expand_active_context_with_attachments('user1', 'demo', '', files)
+    assert '完整正文' in result
+    assert '【已上传文件：novel.txt】' in result
+    # 多附件清单文案不应出现
+    assert '【已上传 1 个附件】' not in result
+
+
+def test_expand_attachments_multi_only_emits_manifest_no_full_text(attachment_storage):
+    """≥ 2 附件场景：只注入文件清单 + 工具提示，绝不预注入任何附件正文。"""
+    meta_a = _save_test_attachment(
+        'user1', 'demo', full_text='AAA1AAA2AAA3',
+        chunks=['AAA1', 'AAA2', 'AAA3'], filename='A.txt',
+    )
+    meta_b = _save_test_attachment(
+        'user1', 'demo', full_text='BBB1BBB2',
+        chunks=['BBB1', 'BBB2'], filename='B.txt',
+    )
+    files = [
+        {'attachmentId': meta_a.attachment_id, 'filename': 'A.txt', 'isPartial': True},
+        {'attachmentId': meta_b.attachment_id, 'filename': 'B.txt', 'isPartial': False},
+    ]
+    result = expand_active_context_with_attachments('user1', 'demo', '前置', files)
+
+    # 每个附件文件名 + chunk 数都应出现在清单
+    assert '【已上传 2 个附件】' in result
+    assert 'A.txt' in result
+    assert 'B.txt' in result
+    assert '共 3 个分片' in result
+    assert '共 2 个分片' in result
+    # 工具调用提示出现
+    assert 'read_attachment_chunk' in result
+    # 关键：任何附件正文都不应被预注入
+    assert 'AAA1' not in result
+    assert 'AAA2' not in result
+    assert 'AAA3' not in result
+    assert 'BBB1' not in result
+    assert 'BBB2' not in result
+    # 前置 active_context 仍保留并通过 \n\n 分隔
+    assert result.startswith('前置')
+
+
+def test_expand_attachments_multi_marks_cache_missing_in_manifest(attachment_storage):
+    """多附件清单中混合"缓存已失效"项应明示标记，不影响其余项。"""
+    meta_a = _save_test_attachment(
+        'user1', 'demo', full_text='ok', chunks=['ok'], filename='A.txt',
+    )
+    files = [
+        {'attachmentId': meta_a.attachment_id, 'filename': 'A.txt'},
+        {'attachmentId': 'gone_id', 'filename': 'B.txt'},
+    ]
+    result = expand_active_context_with_attachments('user1', 'demo', '', files)
+
+    assert 'A.txt' in result
+    assert 'B.txt' in result
+    assert '缓存已失效' in result
+    # 提醒用户重新上传的引导出现
+    assert '重新上传' in result
+
+
+def test_expand_attachments_filters_deleted_entries(attachment_storage):
+    """deleted=True 的附件不应进入清单/正文。"""
+    meta_a = _save_test_attachment(
+        'user1', 'demo', full_text='活跃', chunks=['活跃'], filename='Live.txt',
+    )
+    meta_b = _save_test_attachment(
+        'user1', 'demo', full_text='已删', chunks=['已删'], filename='Del.txt',
+    )
+    files = [
+        {'attachmentId': meta_a.attachment_id, 'filename': 'Live.txt', 'isPartial': False},
+        {'attachmentId': meta_b.attachment_id, 'filename': 'Del.txt', 'isPartial': False, 'deleted': True},
+    ]
+    result = expand_active_context_with_attachments('user1', 'demo', '', files)
+    # 只剩 1 个有效附件 → 走单附件分支注入全文
+    assert '活跃' in result
+    # 已删除项的正文 / 文件名都不应出现
+    assert '已删' not in result
+    assert 'Del.txt' not in result
+
+
+def test_expand_attachments_returns_base_when_all_deleted(attachment_storage):
+    """全部 deleted → 返回 base，不注入任何块。"""
+    meta = _save_test_attachment(
+        'user1', 'demo', full_text='X', chunks=['X'], filename='X.txt',
+    )
+    files = [
+        {'attachmentId': meta.attachment_id, 'filename': 'X.txt', 'deleted': True},
+    ]
+    result = expand_active_context_with_attachments('user1', 'demo', 'BASE', files)
+    assert result == 'BASE'
+
+
+def test_expand_legacy_wrapper_routes_list_to_multi_branch(attachment_storage):
+    """老入口接到 list → 自动走多附件分支，不再当作 dict。"""
+    meta_a = _save_test_attachment(
+        'user1', 'demo', full_text='aa', chunks=['aa'], filename='A.txt',
+    )
+    meta_b = _save_test_attachment(
+        'user1', 'demo', full_text='bb', chunks=['bb'], filename='B.txt',
+    )
+    files = [
+        {'attachmentId': meta_a.attachment_id, 'filename': 'A.txt'},
+        {'attachmentId': meta_b.attachment_id, 'filename': 'B.txt'},
+    ]
+    result = expand_active_context_with_attachment('u', 'demo', '', files)  # type: ignore[arg-type]
+    assert '【已上传 2 个附件】' in result
+    # 多附件分支：正文不预注入
+    assert 'aa' not in result
+    assert 'bb' not in result

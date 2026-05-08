@@ -162,7 +162,7 @@ python matchbox_cfg_gui.py
 ## Operational Notes
 
 - Initialize Matchbox in app startup lifecycle
-- Call `reset_matchbox()` on shutdown when needed
+- Call `reset_matchbo()` on shutdown when needed
 - Use `AGENT_MATCHBOX_HOME` to control runtime files (DB/.env/YAML/state) location
 - Rebuild containers after updates to avoid stale mounted runtime artifacts
 

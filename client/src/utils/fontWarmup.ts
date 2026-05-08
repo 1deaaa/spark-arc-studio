@@ -1,7 +1,8 @@
-const DEFAULT_FONT_FAMILY = 'LXGW WenKai Screen';
+const DEFAULT_FONT_FAMILY = 'LXGW WenKai Lite';
 const DEFAULT_FONT_SIZE = '16px';
 const DEFAULT_TIMEOUT_MS = 1200;
-const DEFAULT_UI_SAMPLE = 'abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789-_#@!$%^&*()+=·';
+// 登录界面预热字符：大小写字母 + 阿拉伯数字 + 密码遮盖符(•●·) + 登录页常用中文
+const DEFAULT_UI_SAMPLE = 'abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789•●·登录注册密码用户名记住忘记邮箱确认提交';
 
 const pendingLoads = new Map<string, Promise<boolean>>();
 

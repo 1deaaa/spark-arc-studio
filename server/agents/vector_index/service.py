@@ -399,18 +399,66 @@ class VectorIndexService:
                     embedding_function=embeddings,
                     persist_directory=self._persist_dir,
                 )
+                # ---- chunk 级增量：基于 chunk_id 做 diff ----
+                # _build_chunk_id 已把 chunk 文本的 MD5 编码进 id，
+                # 所以「id 相同」就等价于「分块文本完全一致」，可以原样复用旧向量。
                 delete_ids: list[str] = []
-                for rel_path in [*removed_files, *delta["changed_files"]]:
+                # 1) 文件被删除：该文件下所有旧 chunk 全删
+                for rel_path in removed_files:
                     delete_ids.extend(file_doc_ids.get(rel_path, []))
+
+                # 2) added_files：旧里没有这个文件，所有 chunk 都需新 embed
+                # 3) changed_files：按 chunk_id 取差集，仅 embed 真正变化或新增的分块
+                embed_pairs_by_file: dict[str, list[tuple[str, Document]]] = {}
+                final_doc_ids_by_file: dict[str, list[str]] = {}
+                reused_chunk_count = 0
+
+                for rel_path in delta["added_files"]:
+                    new_ids, new_documents = self._file_chunks_to_documents(
+                        rel_path, chunks_by_file.get(rel_path, [])
+                    )
+                    final_doc_ids_by_file[rel_path] = list(new_ids)
+                    embed_pairs_by_file[rel_path] = list(zip(new_ids, new_documents))
+
+                for rel_path in delta["changed_files"]:
+                    new_ids, new_documents = self._file_chunks_to_documents(
+                        rel_path, chunks_by_file.get(rel_path, [])
+                    )
+                    old_ids = list(file_doc_ids.get(rel_path, []))
+                    old_id_set = set(old_ids)
+                    new_id_set = set(new_ids)
+
+                    # 仅删除：旧里有、新里没有
+                    obsolete_ids = [cid for cid in old_ids if cid not in new_id_set]
+                    delete_ids.extend(obsolete_ids)
+
+                    # 仅 embed：新里有、旧里没有
+                    pairs_to_embed = [
+                        (cid, doc)
+                        for cid, doc in zip(new_ids, new_documents)
+                        if cid not in old_id_set
+                    ]
+                    final_doc_ids_by_file[rel_path] = list(new_ids)
+                    embed_pairs_by_file[rel_path] = pairs_to_embed
+                    reused_chunk_count += len(old_id_set & new_id_set)
+
                 if delete_ids:
                     vector_store.delete(ids=delete_ids)
 
+                # 同步元数据中的 file_doc_ids：删除文件清掉条目，其他覆盖为最新完整 id 列表
                 for rel_path in removed_files:
                     file_doc_ids.pop(rel_path, None)
+                for rel_path, ids in final_doc_ids_by_file.items():
+                    file_doc_ids[rel_path] = ids
+
+                # 重新计算待 embed 的 chunk 总数（区别于"target_files 全部 chunk 总数"）
+                target_chunk_total = sum(
+                    len(pairs) for pairs in embed_pairs_by_file.values()
+                )
 
                 processed_files = len(removed_files)
                 embedded_chunks = 0
-                if removed_files:
+                if removed_files or reused_chunk_count:
                     self._set_build_state(
                         status="building",
                         stage="embedding",
@@ -426,26 +474,28 @@ class VectorIndexService:
                     )
 
                 for rel_path in target_files:
-                    ids, documents = self._file_chunks_to_documents(rel_path, chunks_by_file.get(rel_path, []))
-                    for i in range(0, len(documents), batch_size):
-                        batch_documents = documents[i:i + batch_size]
-                        batch_ids = ids[i:i + batch_size]
-                        vector_store.add_documents(batch_documents, ids=batch_ids)
-                        embedded_chunks += len(batch_documents)
-                        self._set_build_state(
-                            status="building",
-                            stage="embedding",
-                            progress={
-                                "total_files": len(target_files) + len(removed_files),
-                                "done_files": processed_files,
-                                "total_chunks": target_chunk_total,
-                                "embedded_chunks": embedded_chunks,
-                                "changed_files": len(target_files),
-                                "removed_files": len(removed_files),
-                                "reused_files": max(0, total_files - len(target_files)),
-                            },
-                        )
-                    file_doc_ids[rel_path] = ids
+                    pairs = embed_pairs_by_file.get(rel_path, [])
+                    if pairs:
+                        chunk_ids = [cid for cid, _ in pairs]
+                        documents = [doc for _, doc in pairs]
+                        for i in range(0, len(documents), batch_size):
+                            batch_documents = documents[i:i + batch_size]
+                            batch_ids = chunk_ids[i:i + batch_size]
+                            vector_store.add_documents(batch_documents, ids=batch_ids)
+                            embedded_chunks += len(batch_documents)
+                            self._set_build_state(
+                                status="building",
+                                stage="embedding",
+                                progress={
+                                    "total_files": len(target_files) + len(removed_files),
+                                    "done_files": processed_files,
+                                    "total_chunks": target_chunk_total,
+                                    "embedded_chunks": embedded_chunks,
+                                    "changed_files": len(target_files),
+                                    "removed_files": len(removed_files),
+                                    "reused_files": max(0, total_files - len(target_files)),
+                                },
+                            )
                     processed_files += 1
                     self._set_build_state(
                         status="building",

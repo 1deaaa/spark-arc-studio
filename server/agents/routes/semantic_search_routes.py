@@ -5,6 +5,7 @@
 
 from fastapi import APIRouter, Depends, HTTPException
 from pydantic import BaseModel, ConfigDict, Field
+from starlette.concurrency import run_in_threadpool
 from typing import Annotated
 
 from core.auth import get_current_user
@@ -38,7 +39,8 @@ def _empty_build_state() -> dict:
     }
 
 
-def _resolve_project_semantic_status(user_id: str, project_name: str, enabled: bool) -> dict:
+def _resolve_project_semantic_status_sync(user_id: str, project_name: str, enabled: bool) -> dict:
+    """同步实现：扫文件、算 hash、读 build_state（阻塞 IO 集中在这里）。"""
     index_exists = False
     build_state = _empty_build_state()
     needs_rebuild = False
@@ -72,8 +74,16 @@ def _resolve_project_semantic_status(user_id: str, project_name: str, enabled: b
     }
 
 
-def _trigger_project_semantic_refresh(user_id: str, project_name: str) -> dict:
-    index_status = _resolve_project_semantic_status(user_id, project_name, True)
+async def _resolve_project_semantic_status(user_id: str, project_name: str, enabled: bool) -> dict:
+    """统一只读状态查询入口：异步外壳，阻塞 IO 走线程池，避免阻塞 event loop。"""
+    return await run_in_threadpool(
+        _resolve_project_semantic_status_sync, user_id, project_name, enabled
+    )
+
+
+def _trigger_project_semantic_refresh_sync(user_id: str, project_name: str) -> dict:
+    """同步实现：freshness 检查 + 必要时启动后台增量更新（启动本身仍走 daemon 线程）。"""
+    index_status = _resolve_project_semantic_status_sync(user_id, project_name, True)
     triggered = False
     settings = get_project_settings(user_id, project_name)
     enabled = bool(settings.get("semantic_search_enabled", False))
@@ -120,6 +130,19 @@ def _trigger_project_semantic_refresh(user_id: str, project_name: str) -> dict:
     }
 
 
+async def _trigger_project_semantic_refresh(user_id: str, project_name: str) -> dict:
+    """统一显式刷新入口（async 主函数）。
+
+    - freshness 检查、文件哈希计算、ensure_background_build_started 全部在线程池里执行；
+    - 不阻塞 event loop；
+    - 后台真正的索引构建仍然由 ensure_background_build_started 创建 daemon 线程，
+      构建中再次触发会自动排队补一轮（参见 VectorIndexService.start_background_build）。
+    """
+    return await run_in_threadpool(
+        _trigger_project_semantic_refresh_sync, user_id, project_name
+    )
+
+
 # ==================== 请求模型 ====================
 
 class ProjectNameRequest(BaseModel):
@@ -153,7 +176,7 @@ async def get_semantic_search_status(
         except Exception:
             pass
 
-        index_status = _resolve_project_semantic_status(user_id, projectName, enabled)
+        index_status = await _resolve_project_semantic_status(user_id, projectName, enabled)
 
         return {
             "projectName": projectName,
@@ -183,7 +206,7 @@ async def get_semantic_search_status(
         for item in projects:
             project_name = str(item.get("project_name", "") or item.get("projectName", "") or "")
             enabled = bool(item.get("enabled", False))
-            index_status = _resolve_project_semantic_status(user_id, project_name, enabled)
+            index_status = await _resolve_project_semantic_status(user_id, project_name, enabled)
             project_items.append({
                 **item,
                 "index_exists": index_status["index_exists"],
@@ -255,7 +278,7 @@ async def enable_semantic_search(data: ProjectNameRequest, user: dict = Depends(
 
     # 测试通过，持久化开关
     settings = set_project_setting(user_id, project_name, "semantic_search_enabled", True)
-    index_status = _trigger_project_semantic_refresh(user_id, project_name)
+    index_status = await _trigger_project_semantic_refresh(user_id, project_name)
 
     return {
         "success": True,
@@ -277,7 +300,7 @@ async def refresh_semantic_search(data: ProjectNameRequest, user: dict = Depends
     if not project_name:
         raise HTTPException(status_code=400, detail="缺少项目名称")
 
-    index_status = _trigger_project_semantic_refresh(user_id, project_name)
+    index_status = await _trigger_project_semantic_refresh(user_id, project_name)
     return {
         "success": True,
         "projectName": project_name,
@@ -299,7 +322,7 @@ async def disable_semantic_search(data: ProjectNameRequest, user: dict = Depends
         raise HTTPException(status_code=400, detail="缺少项目名称")
 
     settings = set_project_setting(user_id, project_name, "semantic_search_enabled", False)
-    index_status = _resolve_project_semantic_status(user_id, project_name, False)
+    index_status = await _resolve_project_semantic_status(user_id, project_name, False)
 
     return {
         "success": True,

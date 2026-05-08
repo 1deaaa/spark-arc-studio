@@ -4,6 +4,7 @@ import tempfile
 
 from fastapi import APIRouter, Depends, File, Form, UploadFile
 from fastapi.responses import JSONResponse
+from pydantic import BaseModel
 from starlette.concurrency import run_in_threadpool
 
 from core.auth import get_current_user
@@ -13,6 +14,13 @@ from core.file_ingest.service import (
     UnsupportedImportFormatError,
     get_capabilities_payload,
     parse_uploaded_file,
+)
+from core.project_settings import (
+    ATTACHMENT_CHUNK_TOKENS_DEFAULT,
+    ATTACHMENT_CHUNK_TOKENS_MAX,
+    ATTACHMENT_CHUNK_TOKENS_MIN,
+    get_attachment_chunk_tokens,
+    set_attachment_chunk_tokens,
 )
 from core.request_context import get_current_project_name, resolve_project_name
 
@@ -25,10 +33,70 @@ async def get_import_capabilities(user: dict = Depends(get_current_user)):
     return get_capabilities_payload()
 
 
+# ==================== 附件分片大小（滑动窗口）配置 ====================
+
+class _AttachmentChunkTokensUpdate(BaseModel):
+    projectName: str | None = None
+    chunkTokens: int
+
+
+@import_router.get("/api/import/chunk-tokens")
+async def get_chunk_tokens_setting(
+    projectName: str | None = None,
+    user: dict = Depends(get_current_user),
+):
+    """读取项目级"附件分片 token 上限"。
+
+    前端在打开附件面板时调用，用于在滑动窗口大小输入框中回填当前值。
+    无项目上下文时返回默认值（不视为错误，避免新建项目卡住 UI）。
+    """
+    user_id = str(user['user_id'])
+    project_name = resolve_project_name(get_current_project_name(), projectName)
+    if not project_name:
+        return {
+            "success": True,
+            "chunkTokens": ATTACHMENT_CHUNK_TOKENS_DEFAULT,
+            "min": ATTACHMENT_CHUNK_TOKENS_MIN,
+            "max": ATTACHMENT_CHUNK_TOKENS_MAX,
+            "default": ATTACHMENT_CHUNK_TOKENS_DEFAULT,
+        }
+    return {
+        "success": True,
+        "chunkTokens": get_attachment_chunk_tokens(user_id, project_name),
+        "min": ATTACHMENT_CHUNK_TOKENS_MIN,
+        "max": ATTACHMENT_CHUNK_TOKENS_MAX,
+        "default": ATTACHMENT_CHUNK_TOKENS_DEFAULT,
+    }
+
+
+@import_router.post("/api/import/chunk-tokens")
+async def update_chunk_tokens_setting(
+    data: _AttachmentChunkTokensUpdate,
+    user: dict = Depends(get_current_user),
+):
+    """更新项目级"附件分片 token 上限"。
+
+    入参超出 [MIN, MAX] 区间会被自动 clamp 到边界，返回的 chunkTokens
+    永远是最终落盘的合法值。
+    """
+    user_id = str(user['user_id'])
+    project_name = resolve_project_name(get_current_project_name(), data.projectName)
+    if not project_name:
+        return JSONResponse(status_code=400, content={"error": "缺少项目名称"})
+    persisted = set_attachment_chunk_tokens(user_id, project_name, data.chunkTokens)
+    return {
+        "success": True,
+        "chunkTokens": persisted,
+        "min": ATTACHMENT_CHUNK_TOKENS_MIN,
+        "max": ATTACHMENT_CHUNK_TOKENS_MAX,
+        "default": ATTACHMENT_CHUNK_TOKENS_DEFAULT,
+    }
+
+
 @import_router.post("/api/import/parse")
 async def parse_import_file(
     file: UploadFile = File(...),
-    chunkTokens: int = Form(30000),
+    chunkTokens: int | None = Form(None),
     projectName: str | None = Form(None),
     user: dict = Depends(get_current_user),
 ):
@@ -46,7 +114,14 @@ async def parse_import_file(
             shutil.copyfileobj(file.file, f)
 
         parsed = await run_in_threadpool(parse_uploaded_file, tmp_path, file.filename or "")
-        chunk_tokens = max(1000, min(int(chunkTokens or 30000), 120000))
+
+        # chunk_tokens 优先级：前端显式传值 > 项目级配置 > 默认值。
+        # 不再硬编码 30000——项目可在附件面板里调整滑动窗口大小并持久化。
+        from core.project_settings import _coerce_attachment_chunk_tokens
+        if chunkTokens is None:
+            chunk_tokens = get_attachment_chunk_tokens(user_id, project_name)
+        else:
+            chunk_tokens = _coerce_attachment_chunk_tokens(chunkTokens)
 
         def _split_text():
             # 聊天附件场景：合并阈值 0.5、cap 1.5，避免"64.1K 切成 64K + 0.1K"这类小尾巴

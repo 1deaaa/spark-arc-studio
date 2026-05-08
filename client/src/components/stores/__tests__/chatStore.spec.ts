@@ -437,7 +437,8 @@ describe('chatStore tool-first stream handling', () => {
     await store.removeSessionImportedContext(0);
 
     expect(store.sessions[0].importedContext).toBeNull();
-    expect(mockedRemoveChatMessageAttachment).toHaveBeenCalledWith('测试项目', 1);
+    // 多附件升级后：移除时会同时把 attachmentId 透传给后端做精确删除。
+    expect(mockedRemoveChatMessageAttachment).toHaveBeenCalledWith('测试项目', 1, 'abc1234567890def');
     const userMessages = store.sessions[0].history.filter((item) => item.role === 'user');
     expect(userMessages.every((item) => item.metadata?.importedFile?.deleted === true)).toBe(true);
     expect(userMessages.every((item) => String(item.metadata?.active_context || '').includes('已被删除'))).toBe(true);

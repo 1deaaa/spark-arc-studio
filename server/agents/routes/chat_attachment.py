@@ -5,10 +5,20 @@
 把附件全文从 DB 与请求体里完全剥离：
 - 上传时由 ``server/core/routes_import.py`` 落盘到
   ``{project}/.attachments/{attachment_id}/`` 并返回 attachment_id；
-- 前端 chatStore 把 attachmentId 写进 ``activeMeta.importedFile``，
+- 前端 chatStore 把 attachmentId 写进 ``activeMeta.importedFiles`` 列表，
   请求体与 DB 都不存全文；
-- 本模块的 ``expand_active_context_with_attachment`` 在调用 LLM 前按
-  attachmentId 从磁盘动态注入全文，缓存缺失时注入失效占位。
+- 本模块的 ``expand_active_context_with_attachments`` 在调用 LLM 前按
+  attachmentId 从磁盘动态注入正文，缓存缺失时注入失效占位。
+
+多附件统一策略
+-------------
+- 0 附件：原样返回 active_context。
+- 1 附件：注入正文（partial=True 灌首片+分片说明，partial=False 灌全文），
+  保留单附件场景下的轻量交互。
+- ≥ 2 附件：仅注入「文件清单 + 引导提示」让 LLM 用 ``read_attachment_chunk``
+  按需读取，避免每个附件都堆叠一份首片导致 token 爆炸；
+  该工具的滑动窗口（``collapse_attachment_chunk_history``）同样会保证
+  历史中对所有附件总共只保留最近一次新调用的完整正文。
 
 为什么单独成模块？
 - 让 chat.py 路由层维持瘦身，避免"全文注入"、"DB 写入"、"占位生成"散开；
@@ -17,22 +27,22 @@
 
 from __future__ import annotations
 
-from typing import Any, Dict
+from typing import Any, Dict, List
 
 
 # ==================== 元信息抽取 / 标签 ====================
 
-def extract_imported_file_meta(active_meta: Dict[str, Any] | None) -> Dict[str, Any] | None:
-    """把 ``activeMeta.importedFile`` 归一化成内部 dict。
+def _normalize_single_imported_file(imported_file: Any) -> Dict[str, Any] | None:
+    """把单条 ``importedFile`` dict 归一化为内部规范结构。
 
-    必须同时携带 ``attachmentId`` 与 ``filename``，缺一返回 None。"""
-    if not isinstance(active_meta, dict):
-        return None
-    imported_file = active_meta.get('importedFile')
+    必须同时携带 ``attachmentId`` 与 ``filename``，缺一返回 None。
+    """
     if not isinstance(imported_file, dict):
         return None
     filename = str(imported_file.get('filename') or '').strip()
-    attachment_id = str(imported_file.get('attachmentId') or imported_file.get('attachment_id') or '').strip()
+    attachment_id = str(
+        imported_file.get('attachmentId') or imported_file.get('attachment_id') or ''
+    ).strip()
     if not filename or not attachment_id:
         return None
     warnings = imported_file.get('warnings')
@@ -45,7 +55,7 @@ def extract_imported_file_meta(active_meta: Dict[str, Any] | None) -> Dict[str, 
             message = str(item.get('message') or '').strip()
             if code or message:
                 normalized_warnings.append({'code': code, 'message': message})
-    return {
+    payload: Dict[str, Any] = {
         'attachmentId': attachment_id,
         'filename': filename,
         'sourceFormat': str(imported_file.get('sourceFormat') or '').strip(),
@@ -55,6 +65,57 @@ def extract_imported_file_meta(active_meta: Dict[str, Any] | None) -> Dict[str, 
         'warnings': normalized_warnings,
         'uploadedAt': int(imported_file.get('uploadedAt') or 0),
     }
+    if imported_file.get('deleted'):
+        payload['deleted'] = True
+        deleted_at = imported_file.get('deletedAt')
+        if deleted_at is not None:
+            try:
+                payload['deletedAt'] = int(deleted_at)
+            except (TypeError, ValueError):
+                pass
+    return payload
+
+
+def extract_imported_files_meta(active_meta: Dict[str, Any] | None) -> List[Dict[str, Any]]:
+    """从 ``activeMeta`` 取出所有附件元信息，统一归一化为列表。
+
+    支持三种入参形态，按优先级处理：
+    1. ``activeMeta.importedFiles`` 存在且为列表 → 按列表展开。
+    2. ``activeMeta.importedFile`` 存在（单数旧字段）→ 视为单元素列表。
+    3. 其他情况 → 返回空列表。
+
+    返回的列表保持入参顺序；未通过 ``_normalize_single_imported_file``
+    校验的元素被静默丢弃，调用方拿到的永远是合法 dict。
+    """
+    if not isinstance(active_meta, dict):
+        return []
+
+    imported_files = active_meta.get('importedFiles')
+    if isinstance(imported_files, list):
+        result: List[Dict[str, Any]] = []
+        seen_ids: set[str] = set()
+        for item in imported_files:
+            normalized = _normalize_single_imported_file(item)
+            if not normalized:
+                continue
+            attachment_id = normalized['attachmentId']
+            if attachment_id in seen_ids:
+                continue  # 防止上游误传入重复 id
+            seen_ids.add(attachment_id)
+            result.append(normalized)
+        return result
+
+    legacy = _normalize_single_imported_file(active_meta.get('importedFile'))
+    return [legacy] if legacy else []
+
+
+def extract_imported_file_meta(active_meta: Dict[str, Any] | None) -> Dict[str, Any] | None:
+    """向后兼容包装：仅返回首个附件 meta，老调用方仍可继续工作。
+
+    新代码请改用 ``extract_imported_files_meta`` 拿全量列表。
+    """
+    metas = extract_imported_files_meta(active_meta)
+    return metas[0] if metas else None
 
 
 def build_imported_file_context_label(imported_file: Dict[str, Any] | None) -> str:
@@ -73,46 +134,55 @@ def build_imported_file_context_label(imported_file: Dict[str, Any] | None) -> s
 def build_user_message_metadata(
     channel: str,
     active_context: Any,
-    imported_file_meta: Dict[str, Any] | None,
+    imported_file_meta: Dict[str, Any] | List[Dict[str, Any]] | None,
 ) -> Dict[str, Any]:
-    """构造 user 消息的 metadata。仅存 attachmentId 引用 + 元信息。"""
+    """构造 user 消息的 metadata。仅存 attachmentId 引用 + 元信息。
+
+    上游可传 dict（单附件，向后兼容）或 list（多附件）。最终写盘的
+    metadata 会同时携带：
+      - ``importedFiles`` 列表：新版多附件唯一真相源；
+      - ``importedFile`` 单 dict：老前端 / 老读取路径仍可读出首个附件。
+    只写代表“附件存在”的字段；空列表 / None 不写任何附件字段。
+    """
     metadata: Dict[str, Any] = {'channel': channel}
     if isinstance(active_context, str):
         stored_context = active_context.strip()
         if stored_context:
             metadata['active_context'] = stored_context
-    if imported_file_meta:
-        metadata['importedFile'] = dict(imported_file_meta)
+
+    files: List[Dict[str, Any]]
+    if isinstance(imported_file_meta, list):
+        files = [dict(item) for item in imported_file_meta if isinstance(item, dict)]
+    elif isinstance(imported_file_meta, dict):
+        files = [dict(imported_file_meta)]
+    else:
+        files = []
+
+    if files:
+        metadata['importedFiles'] = files
+        metadata['importedFile'] = dict(files[0])  # 向后兼容老 reader
     return metadata
 
 
 # ==================== 调用 LLM 前的动态全文拼接 ====================
 
-def expand_active_context_with_attachment(
+def _load_attachment_payload(
     user_id: str,
     project_name: str,
-    active_context: str,
-    imported_file_meta: Dict[str, Any] | None,
-) -> str:
-    """按 attachmentId 从磁盘加载附件正文并拼接到 active_context。
+    imported_file_meta: Dict[str, Any],
+) -> tuple[str, int, str | None]:
+    """按 imported_file_meta 从磁盘拉单个附件正文：
 
-    - ``isPartial=True``：仅加载首个 chunk（与前端约定的 64K token 上限保持一致），
-      避免大文件直接灌满 LLM context。
-    - ``isPartial=False``：加载 full_text（小文件场景）。
-    - 缓存缺失 → 注入失效占位；deleted / 无 attachmentId / 无 project → 原样返回。
+    返回 ``(text, chunk_count, error_kind)``：
+      - ``error_kind = None`` 成功拿到正文。
+      - ``error_kind = 'cache_missing'`` 附件在 importedFiles 中但磁盘已清理。
+      - ``error_kind = 'load_failed'`` 加载过程其它意外。
     """
-    base = str(active_context or '').strip()
-    if not isinstance(imported_file_meta, dict):
-        return base
-    if imported_file_meta.get('deleted'):
-        return base
     attachment_id = str(imported_file_meta.get('attachmentId') or '').strip()
-    if not attachment_id or not project_name:
-        return base
-
-    label = build_imported_file_context_label(imported_file_meta)
+    if not attachment_id:
+        return '', 0, 'load_failed'
     is_partial = bool(imported_file_meta.get('isPartial'))
-    chunk_count = 0
+
     try:
         from agents.attachment import (
             AttachmentNotFoundError,
@@ -129,21 +199,38 @@ def expand_active_context_with_attachment(
             text = chunks[0] if chunks else ''
         else:
             text = load_attachment_text(user_id, project_name, attachment_id)
+            meta = get_attachment_meta(user_id, project_name, attachment_id)
+            chunk_count = int(meta.chunk_count) if meta else 0
         try:
             touch_last_referenced(user_id, project_name, attachment_id)
         except Exception:
             pass
+        return (text or '').strip(), chunk_count, None
     except AttachmentNotFoundError:
-        filename = str(imported_file_meta.get('filename') or '').strip() or '未知文件'
-        placeholder = f'{label}\n[附件 "{filename}" 缓存已失效，无法读取原文]' if label else f'[附件 "{filename}" 缓存已失效]'
-        return '\n\n'.join(seg for seg in [base, placeholder] if seg)
+        return '', 0, 'cache_missing'
     except Exception as exc:
         print(f"[chat] 加载附件 {attachment_id} 失败: {exc}")
-        return base
+        return '', 0, 'load_failed'
 
-    text = (text or '').strip()
-    if not text:
-        return base
+
+def _build_single_attachment_block(
+    user_id: str,
+    project_name: str,
+    imported_file_meta: Dict[str, Any],
+) -> str:
+    """单附件场景：维持现有体验（full 灌全文、partial 灌首片 + 分片说明）。"""
+    label = build_imported_file_context_label(imported_file_meta)
+    is_partial = bool(imported_file_meta.get('isPartial'))
+    text, chunk_count, err = _load_attachment_payload(user_id, project_name, imported_file_meta)
+    if err == 'cache_missing':
+        filename = str(imported_file_meta.get('filename') or '').strip() or '未知文件'
+        return (
+            f'{label}\n[附件 "{filename}" 缓存已失效，无法读取原文]'
+            if label
+            else f'[附件 "{filename}" 缓存已失效]'
+        )
+    if err == 'load_failed' or not text:
+        return ''
 
     block_parts: list[str] = []
     if label:
@@ -152,6 +239,7 @@ def expand_active_context_with_attachment(
 
     if is_partial and chunk_count > 1:
         remaining = chunk_count - 1
+        attachment_id = str(imported_file_meta.get('attachmentId') or '').strip()
         hint = (
             f'\n[分片说明] 以上是该附件的第 1 部分（共 {chunk_count} 部分），'
             f'剩余 {remaining} 部分未直接附带在上下文中。'
@@ -163,13 +251,148 @@ def expand_active_context_with_attachment(
         )
         block_parts.append(hint)
 
-    block = '\n'.join(block_parts)
+    return '\n'.join(block_parts)
+
+
+def _build_multi_attachment_manifest(
+    user_id: str,
+    project_name: str,
+    imported_files: List[Dict[str, Any]],
+) -> str:
+    """多附件场景：只注入「文件清单 + 按需读取提示」，不预注入正文。
+
+    文件清单包含：filename、chunk_count、状态（如缓存已失效会明示标记），
+    让 LLM 能判断何时调 ``read_attachment_chunk(attachment_id=..., chunk_index=...)``。
+    """
+    rows: List[str] = []
+    valid_attachment_ids: List[str] = []
+    cache_missing: List[str] = []
+
+    for imported_file_meta in imported_files:
+        filename = str(imported_file_meta.get('filename') or '').strip() or '未知文件'
+        attachment_id = str(imported_file_meta.get('attachmentId') or '').strip()
+        if not attachment_id:
+            continue
+
+        # touch 索引不依赖于读取正文；只需 meta。
+        # 注意：get_attachment_meta 在缓存缺失时返回 None（而不是抛异常）——
+        # 多附件清单专用兜底：meta 为 None 视为缓存已失效。
+        try:
+            from agents.attachment import (
+                get_attachment_meta,
+                touch_last_referenced,
+            )
+            meta = get_attachment_meta(user_id, project_name, attachment_id)
+        except Exception as exc:
+            print(f"[chat] 读取附件 meta {attachment_id} 失败: {exc}")
+            continue
+
+        if meta is None:
+            cache_missing.append(filename)
+            rows.append(f'- "{filename}" （attachment_id={attachment_id}）⚠️ 缓存已失效')
+            continue
+
+        try:
+            touch_last_referenced(user_id, project_name, attachment_id)
+        except Exception:
+            pass
+
+        chunk_count = int(meta.chunk_count) if meta else 0
+        valid_attachment_ids.append(attachment_id)
+        if chunk_count > 0:
+            rows.append(
+                f'- "{filename}" （attachment_id={attachment_id}，共 {chunk_count} 个分片）'
+            )
+        else:
+            rows.append(f'- "{filename}" （attachment_id={attachment_id}）')
+
+    if not rows:
+        return ''
+
+    header = f'【已上传 {len(imported_files)} 个附件】'
+    instructions: List[str] = []
+    if valid_attachment_ids:
+        instructions.append(
+            '上述附件未预载正文；需要阅读某个附件时请调用 '
+            '`read_attachment_chunk(attachment_id="...", chunk_index=0)` 从第 0 个分片开始。\n'
+            '读完后请先在回复中提炼该分片的关键信息（角色 / 关键事件 / 设定要点等），'
+            '再决定是否继续读取下一片。\n'
+            '滑动窗口机制会只保留你本轮最新一次打开的分片原文，旧分片会被折叠为占位。'
+        )
+    if cache_missing:
+        instructions.append(
+            '⚠️ 以下附件缓存已失效，调工具读取时会报错，请提醒用户重新上传：'
+            + '、'.join(f'《{name}》' for name in cache_missing)
+        )
+
+    return '\n'.join([header, *rows, *instructions]) if instructions else '\n'.join([header, *rows])
+
+
+def expand_active_context_with_attachments(
+    user_id: str,
+    project_name: str,
+    active_context: str,
+    imported_files: List[Dict[str, Any]] | None,
+) -> str:
+    """多附件感知的上下文拼接入口。
+
+    策略：
+    - 0 附件：原样返回 base。
+    - 1 附件：走单附件分支（保留现有体验）。
+    - ≥ 2 附件：走多附件分支，仅注入文件清单。
+    """
+    base = str(active_context or '').strip()
+    if not isinstance(imported_files, list) or not imported_files:
+        return base
+    if not project_name:
+        return base
+
+    # 过滤已删除项，但保留 cache_missing 提示 —— 这个区别在单附件里也存在。
+    active_files = [
+        item for item in imported_files
+        if isinstance(item, dict) and not item.get('deleted')
+        and str(item.get('attachmentId') or '').strip()
+    ]
+    if not active_files:
+        return base
+
+    if len(active_files) == 1:
+        block = _build_single_attachment_block(user_id, project_name, active_files[0])
+    else:
+        block = _build_multi_attachment_manifest(user_id, project_name, active_files)
+
+    if not block:
+        return base
     return '\n\n'.join(seg for seg in [base, block] if seg)
+
+
+def expand_active_context_with_attachment(
+    user_id: str,
+    project_name: str,
+    active_context: str,
+    imported_file_meta: Dict[str, Any] | List[Dict[str, Any]] | None,
+) -> str:
+    """向后兼容包装。
+
+    上游传 dict 时当单附件处理，传 list 时走多附件分支。新代码请直接调
+    ``expand_active_context_with_attachments``；本函数仅为老调用点过渡。
+    """
+    if isinstance(imported_file_meta, list):
+        return expand_active_context_with_attachments(
+            user_id, project_name, active_context, imported_file_meta
+        )
+    if isinstance(imported_file_meta, dict):
+        return expand_active_context_with_attachments(
+            user_id, project_name, active_context, [imported_file_meta]
+        )
+    return str(active_context or '').strip()
 
 
 __all__ = [
     'extract_imported_file_meta',
+    'extract_imported_files_meta',
     'build_imported_file_context_label',
     'build_user_message_metadata',
     'expand_active_context_with_attachment',
+    'expand_active_context_with_attachments',
 ]

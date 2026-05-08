@@ -163,7 +163,7 @@ python matchbox_cfg_gui.py
 ## 運用メモ
 
 - アプリ起動時に Matchbox を初期化
-- 必要に応じて終了時に `reset_matchbox()` を呼ぶ
+- 必要に応じて終了時に `reset_matchbo()` を呼ぶ
 - `AGENT_MATCHBOX_HOME` で DB/.env/YAML/state の実行位置を統一
 - 更新後はコンテナ再ビルドで古いマウント状態を排除
 

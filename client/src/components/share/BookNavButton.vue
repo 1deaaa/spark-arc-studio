@@ -44,8 +44,9 @@ const panelVisible = ref(false);
 const hostRef = ref<HTMLElement | null>(null);
 
 function warmupPanelFont() {
-  const sample = [props.panelTitle, props.emptyHint, ...props.items.map(item => item.title)].join('');
-  warmupAppFontInBackground(sample, { maxChars: 140 });
+  // 场景预热已注释：LXGW WenKai Lite CDN + font-display:swap 保证非阻塞
+  // const sample = [props.panelTitle, props.emptyHint, ...props.items.map(item => item.title)].join('');
+  // warmupAppFontInBackground(sample, { maxChars: 140 });
 }
 
 function togglePanel() {

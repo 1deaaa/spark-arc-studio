@@ -77,8 +77,8 @@ from .schemas import (
 from .chat_attachment import (
     build_imported_file_context_label as _build_imported_file_context_label,
     build_user_message_metadata as _build_user_message_metadata,
-    expand_active_context_with_attachment as _expand_active_context_with_attachment,
-    extract_imported_file_meta as _extract_imported_file_meta,
+    expand_active_context_with_attachments as _expand_active_context_with_attachments,
+    extract_imported_files_meta as _extract_imported_files_meta,
 )
 from .streaming_utils import iterate_sync_iterable_in_thread
 from .chat_task import (
@@ -303,15 +303,31 @@ async def remove_chat_message_attachment(data: ChatMessageAttachmentRemoveReques
     """移除会话中的附件上下文（不删除消息本身）。
 
     语义：
-    - 以 messageId 对应的附件作为锚点。
-    - 将同一 agent/contextKey 下同一上传文件的 importedFile 标记为 deleted，
-      并将 active_context 中对应文件内容替换为占位文本。
+    - 以 ``messageId`` 对应的附件作为锚点；同一 agent / contextKey 下所有引用
+      同一附件的用户消息都会被同步标记为 deleted。
+    - 多附件场景：``data.attachmentId`` 用于精确指定要移除的那一个附件；
+      不传时回落到按首个附件匹配（兼容老前端）。
+    - importedFiles 列表里的对应项被打上 deleted 标记；如果列表中只剩这一个
+      附件，importedFile 单数字段同步标记 deleted；否则把单数字段更新为剩下的
+      第一个附件，避免老 reader 拿到已删除附件作为入口。
     - 不删除消息，不删除后续回复。
     """
     user_id = str(user['user_id'])
     project_name = resolve_project_name(get_current_project_name(), data.projectName)
     if not project_name:
         return JSONResponse(status_code=400, content={'error': '缺少项目名称'})
+
+    requested_attachment_id = (data.attachmentId or '').strip()
+
+    def _collect_files(meta: dict) -> list[dict]:
+        """从 metadata 抽取 importedFiles 列表，兼容老 importedFile 单数。"""
+        files = meta.get('importedFiles')
+        if isinstance(files, list):
+            return [dict(item) for item in files if isinstance(item, dict)]
+        legacy = meta.get('importedFile')
+        if isinstance(legacy, dict):
+            return [dict(legacy)]
+        return []
 
     with UserInfoSession() as session:
         msg = session.get(ChatMessage, data.messageId)
@@ -324,19 +340,36 @@ async def remove_chat_message_attachment(data: ChatMessageAttachmentRemoveReques
         agent_id = msg.agent_id
         context_key = msg.context_key
         target_meta = dict(msg.metadata_json or {})
-        target_imported_file = target_meta.get('importedFile')
-        if not isinstance(target_imported_file, dict) or not str(target_imported_file.get('filename') or '').strip():
+        target_files = _collect_files(target_meta)
+        if not target_files:
             return JSONResponse(status_code=400, content={'error': '该消息没有可移除的附件'})
-        target_filename = str(target_imported_file.get('filename') or '').strip()
-        target_uploaded_at = target_imported_file.get('uploadedAt') or 0
 
-    def _same_imported_file(imported_file: Any) -> bool:
-        if not isinstance(imported_file, dict):
+        target_entry: dict | None = None
+        if requested_attachment_id:
+            for entry in target_files:
+                if str(entry.get('attachmentId') or entry.get('attachment_id') or '').strip() == requested_attachment_id:
+                    target_entry = entry
+                    break
+            if target_entry is None:
+                return JSONResponse(status_code=404, content={'error': '消息中未找到指定 attachmentId'})
+        else:
+            target_entry = target_files[0]
+
+        target_filename = str(target_entry.get('filename') or '').strip()
+        target_attachment_id = str(target_entry.get('attachmentId') or target_entry.get('attachment_id') or '').strip()
+        target_uploaded_at = target_entry.get('uploadedAt') or 0
+
+    def _same_attachment(entry: Any) -> bool:
+        """优先用 attachmentId 精确匹配；缺失时回落到 filename + uploadedAt。"""
+        if not isinstance(entry, dict):
             return False
-        filename = str(imported_file.get('filename') or '').strip()
+        entry_id = str(entry.get('attachmentId') or entry.get('attachment_id') or '').strip()
+        if target_attachment_id and entry_id:
+            return entry_id == target_attachment_id
+        filename = str(entry.get('filename') or '').strip()
         if not filename or filename != target_filename:
             return False
-        uploaded_at = imported_file.get('uploadedAt') or 0
+        uploaded_at = entry.get('uploadedAt') or 0
         if target_uploaded_at and uploaded_at:
             return str(uploaded_at) == str(target_uploaded_at)
         return True
@@ -358,18 +391,36 @@ async def remove_chat_message_attachment(data: ChatMessageAttachmentRemoveReques
         )
         for item in messages:
             meta = dict(item.metadata_json or {})
-            imported_file = meta.get('importedFile')
-            if not _same_imported_file(imported_file):
+            entries = _collect_files(meta)
+            if not any(_same_attachment(e) for e in entries):
                 continue
 
-            next_imported_file = dict(imported_file)
-            next_imported_file['deleted'] = True
-            next_imported_file['deletedAt'] = deleted_at
-            meta['importedFile'] = next_imported_file
+            # 标记列表中匹配到的项；同一消息可能历史上挂多份，全部一并 deleted。
+            updated_entries: list[dict] = []
+            for entry in entries:
+                if _same_attachment(entry):
+                    new_entry = dict(entry)
+                    new_entry['deleted'] = True
+                    new_entry['deletedAt'] = deleted_at
+                    updated_entries.append(new_entry)
+                else:
+                    updated_entries.append(dict(entry))
+            meta['importedFiles'] = updated_entries
+
+            # 老 reader 入口：单数字段——如果还有未删除的附件，指向第一个未删除项；
+            # 否则保留指向被删除附件，连同 deleted 标记一起暴露给老 reader。
+            still_active = next((e for e in updated_entries if not e.get('deleted')), None)
+            if still_active is not None:
+                meta['importedFile'] = dict(still_active)
+            else:
+                # 全部 deleted：单数字段同步 deleted，让老 reader 也能识别
+                deleted_first = updated_entries[0]
+                meta['importedFile'] = dict(deleted_first)
 
             active_ctx = meta.get('active_context')
             if isinstance(active_ctx, str) and active_ctx.strip():
-                meta['active_context'] = f'[附件 "{target_filename}" 已被删除]'
+                fallback_label = target_filename or target_attachment_id or '未知附件'
+                meta['active_context'] = f'[附件 "{fallback_label}" 已被删除]'
 
             item.metadata_json = meta
             updated_count += 1
@@ -423,10 +474,9 @@ async def edit_chat_message(data: ChatMessageEditRequest, user: dict = Depends(g
     if role == 'user':
         effective_active_context = _resolve_effective_active_context(user_id, project_name, data.agentId, data.activeContext)
         _apply_request_runtime_meta(data.activeMeta)
-        # 引用制：附件全文不在请求体里传输，按 attachmentId 从磁盘动态注入
-        imported_file_meta = _extract_imported_file_meta(data.activeMeta)
-        effective_active_context = _expand_active_context_with_attachment(
-            user_id, project_name, effective_active_context, imported_file_meta,
+        imported_files_meta = _extract_imported_files_meta(data.activeMeta)
+        effective_active_context = _expand_active_context_with_attachments(
+            user_id, project_name, effective_active_context, imported_files_meta,
         )
 
         # 统一实例化 Agent（包括导演）并获取回复
@@ -495,10 +545,9 @@ async def edit_chat_message_stream(request: Request, data: ChatMessageEditReques
 
     effective_active_context = _resolve_effective_active_context(user_id, project_name, data.agentId, data.activeContext)
     _apply_request_runtime_meta(data.activeMeta)
-    # 引用制：附件全文不在请求体里传输，按 attachmentId 从磁盘动态注入
-    imported_file_meta = _extract_imported_file_meta(data.activeMeta)
-    effective_active_context = _expand_active_context_with_attachment(
-        user_id, project_name, effective_active_context, imported_file_meta,
+    imported_files_meta = _extract_imported_files_meta(data.activeMeta)
+    effective_active_context = _expand_active_context_with_attachments(
+        user_id, project_name, effective_active_context, imported_files_meta,
     )
 
     task_key = _make_task_key(user_id, project_name, data.agentId, data.contextKey)
@@ -656,10 +705,9 @@ async def send_chat_message(data: ChatSendRequest, user: dict = Depends(get_curr
 
     effective_active_context = _resolve_effective_active_context(user_id, project_name, agent_id, data.activeContext)
     _apply_request_runtime_meta(data.activeMeta)
-    imported_file_meta = _extract_imported_file_meta(data.activeMeta)
-    # 引用制：附件全文不在请求体里传输，按 attachmentId 从磁盘动态注入
-    effective_active_context = _expand_active_context_with_attachment(
-        user_id, project_name, effective_active_context, imported_file_meta,
+    imported_files_meta = _extract_imported_files_meta(data.activeMeta)
+    effective_active_context = _expand_active_context_with_attachments(
+        user_id, project_name, effective_active_context, imported_files_meta,
     )
 
     # 统一处理所有 Agent（包括导演）
@@ -674,7 +722,7 @@ async def send_chat_message(data: ChatSendRequest, user: dict = Depends(get_curr
         context_key=context_key,
         role='user',
         content=message,
-        metadata=_build_user_message_metadata('direct', data.activeContext, imported_file_meta),
+        metadata=_build_user_message_metadata('direct', data.activeContext, imported_files_meta),
     )
 
     try:
@@ -721,10 +769,9 @@ async def send_chat_message_stream(request: Request, data: ChatSendRequest, user
 
     effective_active_context = _resolve_effective_active_context(user_id, project_name, agent_id, data.activeContext)
     _apply_request_runtime_meta(data.activeMeta)
-    imported_file_meta = _extract_imported_file_meta(data.activeMeta)
-    # 引用制：附件全文不在请求体里传输，按 attachmentId 从磁盘动态注入
-    effective_active_context = _expand_active_context_with_attachment(
-        user_id, project_name, effective_active_context, imported_file_meta,
+    imported_files_meta = _extract_imported_files_meta(data.activeMeta)
+    effective_active_context = _expand_active_context_with_attachments(
+        user_id, project_name, effective_active_context, imported_files_meta,
     )
 
     task_key = _make_task_key(user_id, project_name, agent_id, context_key)
@@ -760,7 +807,7 @@ async def send_chat_message_stream(request: Request, data: ChatSendRequest, user
         context_key=context_key,
         role='user',
         content=message,
-        metadata=_build_user_message_metadata('direct', data.activeContext, imported_file_meta),
+        metadata=_build_user_message_metadata('direct', data.activeContext, imported_files_meta),
     )
 
     assistant_msg = cm.append_message(

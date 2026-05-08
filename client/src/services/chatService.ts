@@ -98,11 +98,20 @@ export async function deleteChatMessage(projectName: string, messageId: string):
   return result;
 }
 
-export async function removeChatMessageAttachment(projectName: string, messageId: string | number): Promise<ChatApiResult> {
+export async function removeChatMessageAttachment(
+  projectName: string,
+  messageId: string | number,
+  attachmentId?: string | null,
+): Promise<ChatApiResult> {
+  // 多附件场景下传入 attachmentId，让后端在 importedFiles 列表中精确删除单个附件；
+  // 老前端不传 attachmentId 时后端按消息中首个附件匹配（兼容老语义）。
+  const payload: Record<string, unknown> = { projectName, messageId };
+  const trimmedId = String(attachmentId || '').trim();
+  if (trimmedId) payload.attachmentId = trimmedId;
   const response = await fetchWithAuth('/api/chat/message/attachment', {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({ projectName, messageId }),
+    body: JSON.stringify(payload),
   });
   const result = await response.json() as ChatApiResult;
   if (!response.ok || result.success === false) throw new Error(buildErrorMessage(result, '移除附件失败'));

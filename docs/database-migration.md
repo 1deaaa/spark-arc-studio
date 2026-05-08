@@ -126,3 +126,79 @@ python clear_migration.py --yes
 3. 使用空数据库生成新的基线迁移
 4. 将真实数据库 stamp 到新 head
 5. 再用临时库隔离模式验证新迁移链能从零升级到当前 Models
+
+---
+
+## 5. PostgreSQL 迁移路径
+
+### 5.1 为什么现在不需要迁移
+
+SparkArc 当前使用 SQLite，对项目定位而言并非瓶颈：
+
+- **非大规模运营场景**：SQLite 单机并发足以覆盖目标用户规模，无需分布式 DB
+- **零运维部署**：单文件 `users.db` + 每项目 `stories.db`，无需安装/配置/备份外部数据库
+- **快速迭代**：改模型 → `gen_migration.py` → 启动自动升级，全链路无外部依赖
+
+**结论：除非出现明确的 SQLite 性能天花板（如并发写入 > 50 QPS 或单库 > 10GB），否则不建议迁移。**
+
+### 5.2 如果将来需要迁移，调查结论
+
+#### 现状：`SqliteJSONB` 自定义类型
+
+`core/models.py` 中的 `SqliteJSONB` 是一个 `TypeDecorator`，底层 `impl = BLOB`，实际存储方式为：
+
+```
+Python dict → json.dumps → UTF-8 bytes → BLOB 列
+```
+
+这不是 SQLite 3.45+ 的原生 JSONB 格式，只是在 BLOB 里存了 UTF-8 编码的 JSON 文本。
+
+#### 迁移路径
+
+**第一步：替换 `SqliteJSONB` 为 dialect-aware 的 `PortableJSON`**
+
+```python
+# core/models.py
+from sqlalchemy.types import TypeDecorator, JSON
+from sqlalchemy.dialects.postgresql import JSONB as PG_JSONB
+
+class PortableJSON(TypeDecorator):
+    """跨 dialect JSON 类型：SQLite → JSON(TEXT)，PostgreSQL → JSONB"""
+    impl = JSON
+    cache_ok = True
+
+    def load_dialect_impl(self, dialect):
+        if dialect.name == 'postgresql':
+            return dialect.type_descriptor(PG_JSONB)
+        return dialect.type_descriptor(JSON)
+```
+
+Python 侧读写代码**完全不变**——仍然是 `dict` 进 `dict` 出。
+
+**第二步：SQLite 端数据迁移（BLOB → TEXT）**
+
+写一次 Alembic migration，把现有 `BLOB` 列中的 UTF-8 JSON 字节串转为 `TEXT`，让 SQLAlchemy `JSON` 类型接管。此步在 SQLite 内完成，PG 尚未介入。
+
+**第三步：引擎连接配置化**
+
+将 `core/models.py` 中硬编码的 `sqlite:///data/users.db` 改为从环境变量/配置文件读取，支持 `postgresql://` 连接串。
+
+**第四步：PG 端建表**
+
+`PortableJSON` 在 PG 下自动映射为 `jsonb`，Alembic 会生成正确的 `CREATE TABLE` 语句。`stories.db`（每项目独立）的迁移策略相同，需逐项目处理。
+
+#### 受影响范围
+
+| 数据库 | 表 | 需改字段 |
+|---|---|---|
+| users.db | `chat_messages` | `content`, `metadata_json` |
+| stories.db | `stories` | `conditions`, `effects`, `dlg_json` |
+| stories.db | `binding_act` | `act_args` |
+| stories.db | `registry` | `value` |
+
+其余 8 张表（`users`、`user_sessions`、`shares`、`project_versions`、`system_platform_quotas`、`user_feedbacks`、`binding_chr`、`characters`）均为纯标量字段，无需任何改动。
+
+#### 额外注意
+
+- `chat_manager.py` 中的 `datetime.utcfromtimestamp()` 在 Python 3.12+ 已弃用，迁移时应同步改为 `datetime.fromtimestamp(..., tz=timezone.utc)`
+- SQLite 的 `BOOLEAN` 实际存储为 `INTEGER`，PG 有原生 `BOOLEAN`，SQLAlchemy 会自动处理差异

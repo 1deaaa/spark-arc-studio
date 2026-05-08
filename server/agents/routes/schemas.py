@@ -91,6 +91,9 @@ class ChatMessageDeleteRequest(BaseModel):
 class ChatMessageAttachmentRemoveRequest(BaseModel):
     projectName: Optional[str] = None
     messageId: int
+    # 多附件场景下用于精确定位要移除的那个附件；老前端可不传，
+    # 此时按消息 metadata 中首个 importedFile 的 filename + uploadedAt 匹配。
+    attachmentId: Optional[str] = None
 
 
 class ChatMessageEditRequest(BaseModel):

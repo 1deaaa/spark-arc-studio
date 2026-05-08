@@ -1,6 +1,8 @@
 import asyncio
+import inspect
 import sys
 import types
+import threading
 from pathlib import Path
 
 SERVER_ROOT = Path(__file__).resolve().parents[1]
@@ -48,6 +50,61 @@ def _ready_build_state() -> dict:
     }
 
 
+def test_unified_entry_helpers_are_async():
+    """两个统一入口必须是 async：保证不会在 async 路由里同步阻塞 event loop。"""
+    assert inspect.iscoroutinefunction(routes._resolve_project_semantic_status)
+    assert inspect.iscoroutinefunction(routes._trigger_project_semantic_refresh)
+
+
+def test_trigger_project_semantic_refresh_runs_blocking_io_off_event_loop(monkeypatch):
+    """统一入口必须把阻塞 IO 委派到线程池：调用线程 != 主 event loop 线程。"""
+    seen_threads: list[int] = []
+    main_thread_id = threading.get_ident()
+
+    class FakeService:
+        def __init__(self, user_id: str, project_name: str):
+            assert user_id == "user_1"
+            assert project_name == "project_1"
+
+        def get_status(self, check_freshness: bool = True):
+            seen_threads.append(threading.get_ident())
+            return {
+                "exists": True,
+                "needs_rebuild": True,
+                "build_state": {**_ready_build_state(), "status": "stale", "stage": "stale"},
+            }
+
+        def _compute_file_hashes(self):
+            seen_threads.append(threading.get_ident())
+            return {"世界观.txt": "abc"}
+
+        def ensure_background_build_started(self, check_freshness: bool = True):
+            seen_threads.append(threading.get_ident())
+            return {
+                "exists": True,
+                "needs_rebuild": False,
+                "build_state": _queued_build_state(),
+            }
+
+    monkeypatch.setitem(
+        sys.modules,
+        "agents.vector_index",
+        types.SimpleNamespace(VectorIndexService=FakeService),
+    )
+    monkeypatch.setattr(
+        routes,
+        "get_project_settings",
+        lambda user_id, project_name: {"semantic_search_enabled": True},
+    )
+
+    asyncio.run(routes._trigger_project_semantic_refresh("user_1", "project_1"))
+
+    assert seen_threads, "service stub 应该至少被调用一次"
+    assert all(tid != main_thread_id for tid in seen_threads), (
+        "阻塞 IO 必须在 run_in_threadpool 里执行，不能跑在事件循环主线程上"
+    )
+
+
 def test_resolve_project_semantic_status_is_read_only(monkeypatch):
     """状态查询只读：不能触发后台构建。"""
     calls: list[tuple[str, object]] = []
@@ -75,7 +132,7 @@ def test_resolve_project_semantic_status_is_read_only(monkeypatch):
         types.SimpleNamespace(VectorIndexService=FakeService),
     )
 
-    result = routes._resolve_project_semantic_status("user_1", "project_1", True)
+    result = asyncio.run(routes._resolve_project_semantic_status("user_1", "project_1", True))
 
     assert result["index_exists"] is True
     assert result["needs_rebuild"] is False
@@ -122,7 +179,7 @@ def test_trigger_project_semantic_refresh_starts_build_when_stale(monkeypatch):
         lambda user_id, project_name: {"semantic_search_enabled": True},
     )
 
-    result = routes._trigger_project_semantic_refresh("user_1", "project_1")
+    result = asyncio.run(routes._trigger_project_semantic_refresh("user_1", "project_1"))
 
     assert result["enabled"] is True
     assert result["triggered"] is True
@@ -162,7 +219,7 @@ def test_trigger_project_semantic_refresh_skips_when_disabled(monkeypatch):
         lambda user_id, project_name: {"semantic_search_enabled": False},
     )
 
-    result = routes._trigger_project_semantic_refresh("user_1", "project_1")
+    result = asyncio.run(routes._trigger_project_semantic_refresh("user_1", "project_1"))
 
     assert result["enabled"] is False
     assert result["triggered"] is False
@@ -176,14 +233,17 @@ def test_disable_semantic_search_returns_existing_build_state(monkeypatch):
         "set_project_setting",
         lambda user_id, project_name, key, value: {"semantic_search_enabled": value},
     )
-    monkeypatch.setattr(
-        routes,
-        "_resolve_project_semantic_status",
-        lambda user_id, project_name, enabled: {
+    async def _fake_resolve(user_id, project_name, enabled):
+        return {
             "index_exists": True,
             "needs_rebuild": False,
             "build_state": _ready_build_state(),
-        },
+        }
+
+    monkeypatch.setattr(
+        routes,
+        "_resolve_project_semantic_status",
+        _fake_resolve,
     )
 
     result = asyncio.run(

@@ -23,6 +23,11 @@ Director Agent 基于 **LangGraph SupervisorGraph** 实现多轮工具调用自�
 | `trigger_auto_write` | 触发无人值守自动撰写 | 启动 Auto-Write 管道 |
 | `check_scriptwriter_status` | 查询自动撰写进度 | 检查 Auto-Write 状态 |
 | `work_tracker` | 工作进度追踪 | 记录任务完成情况 |
+| `search_project` | 正则搜索全项目文本 | 快速定位关键词/模式 |
+| `semantic_search` | 语义搜索项目文本与附件 | 按语义相关性检索内容 |
+| `replace_from_search` | 基于搜索结果替换文本 | 批量修改命中片段 |
+| `web_search` | 联网搜索外部公开信息 | 查询不熟悉的现实知识 |
+| `read_attachment_chunk` | 按需读取聊天附件分片 | 滑窗读取大附件避免上下文溢出 |
 
 #### LangGraph 调度流程
 
@@ -219,9 +224,9 @@ flowchart LR
 | :--- | :--- | :--- |
 | **Director** | ❌ 无（纯对话入口） | `delegate_task` + 读取工具 + 自动化工具 + 团队概览 |
 | **Showrunner** | `generate_synopsis` / `generate_beat_sheet` / `generate_outline` | `rewrite_synopsis` / `rewrite_beat_sheet` / `rewrite_outline` + patch 系列 |
-| **Scriptwriter** | `write_script`(arc/novel) / `bridge_scenes` / `feedback` | `create_or_rewrite_script` / `patch_script` / 读取工具 |
+| **Scriptwriter** | `write_script`(arc/novel) / `bridge_scenes` / `feedback` | `create_chapter` / `create_or_rewrite_script` / `patch_script` / `work_tracker` / 读取工具 |
 | **Critic** | `evaluate` | `SHARED_READ_TOOLS`（仅读取，无落盘工具） |
-| **Muse** | `expand_inspiration` | `rewrite_inspiration` |
+| **Muse** | `expand_inspiration` | `rewrite_inspiration` / `web_search` |
 | **Lorebook** | `build_worldview` / `generate_character` | `rewrite_worldview` / `rewrite_all_characters` / `update_character` / `patch_worldview` |
 
 ### 2.7 新增 Agent 自检清单
@@ -245,7 +250,7 @@ flowchart LR
 SparkArc 的工具层采用“统一门面 + 内部按域拆分”的结构：
 
 - `server/agents/agent_tools.py`：唯一公共入口。外部调用、测试兼容导出、`get_tools_for_agent` / `TOOLS_BY_NAME` 访问都继续经这里完成。
-- `server/agents/tools/*`：按业务域承载具体 schema 与实现，例如 `muse.py`、`lorebook.py`、`showrunner.py`、`scriptwriter.py`、`shared_read.py`、`delegation.py`、`automation.py`、`search.py`、`research.py`。
+- `server/agents/tools/*`：按业务域承载具体 schema 与实现，例如 `muse.py`、`lorebook.py`、`showrunner.py`、`scriptwriter.py`、`shared_read.py`、`delegation.py`、`automation.py`、`search.py`、`research.py`、`attachment.py`、`web_search.py`。
 - `server/agents/tools/registry.py`：内部唯一注册真相源，负责工具分组、`ALL_TOOLS`、`TOOLS_BY_NAME` 与 `get_tools_for_agent` 聚合。
 
 强约束：
@@ -265,8 +270,8 @@ SparkArc 的工具层采用“统一门面 + 内部按域拆分”的结构：
 
 | Agent | 工具列表 |
 | :--- | :--- |
-| **Director** | `list_chapters`, `read_chapter_scene`, `read_chapter_outline_raw`, `delegate_task`, `work_tracker`, `trigger_auto_write`, `check_scriptwriter_status` |
-| **Muse** | `rewrite_inspiration` |
+| **Director** | `list_chapters`, `read_chapter_scene`, `read_chapter_outline_raw`, `delegate_task`, `work_tracker`, `trigger_auto_write`, `check_scriptwriter_status`, `search_project`, `semantic_search`, `replace_from_search`, `web_search`, `read_attachment_chunk` |
+| **Muse** | `rewrite_inspiration`, `web_search` |
 | **Lorebook** | `rewrite_worldview`, `rewrite_all_characters`, `update_character`, `patch_worldview` |
 | **Showrunner** | `rewrite_synopsis`, `rewrite_beat_sheet`, `rewrite_outline`, `patch_synopsis`, `patch_beat_sheet`, `patch_outline`, `read_chapter_outline_raw` |
 | **Scriptwriter** | `create_chapter`, `create_or_rewrite_script`, `patch_script`, `read_worldview`, `read_character`, `read_synopsis`, `read_beat_sheet`, `work_tracker` + `list_chapters`, `read_chapter_scene`, `read_chapter_outline_raw` |

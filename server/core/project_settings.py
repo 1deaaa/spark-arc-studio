@@ -6,6 +6,7 @@
 默认值：
   semantic_search_enabled: false
   attachment_index_enabled: true
+  attachment_chunk_tokens: 64000  (附件分片 token 上限，等价于"按需读取"滑动窗口的窗口大小)
 """
 
 from __future__ import annotations
@@ -23,7 +24,29 @@ _SETTINGS_FILENAME = "settings.json"
 _DEFAULT_SETTINGS: Dict[str, Any] = {
     "semantic_search_enabled": False,
     "attachment_index_enabled": True,
+    # 聊天附件单分片 token 上限。也是滑动窗口的窗口大小：
+    # 大文件按此 token 上限切片；调用 read_attachment_chunk 一次只展开一片，
+    # 所以增大此值会让单次注入更长，减小则把 LLM context 让给更多其他内容。
+    "attachment_chunk_tokens": 64000,
 }
+
+# 与 routes_import.py 的 chunk_tokens 校验保持一致，避免极端值。
+ATTACHMENT_CHUNK_TOKENS_MIN = 1000
+ATTACHMENT_CHUNK_TOKENS_MAX = 120000
+ATTACHMENT_CHUNK_TOKENS_DEFAULT = 64000
+
+
+def _coerce_attachment_chunk_tokens(value: Any) -> int:
+    """把外部传入的 chunk_tokens 收敛到合法整数区间内。"""
+    try:
+        ivalue = int(value)
+    except (TypeError, ValueError):
+        return ATTACHMENT_CHUNK_TOKENS_DEFAULT
+    if ivalue < ATTACHMENT_CHUNK_TOKENS_MIN:
+        return ATTACHMENT_CHUNK_TOKENS_MIN
+    if ivalue > ATTACHMENT_CHUNK_TOKENS_MAX:
+        return ATTACHMENT_CHUNK_TOKENS_MAX
+    return ivalue
 
 _lock = threading.Lock()
 
@@ -37,6 +60,9 @@ def _normalize(raw: Dict[str, Any] | None) -> Dict[str, Any]:
     if isinstance(raw, dict):
         data["semantic_search_enabled"] = bool(raw.get("semantic_search_enabled", _DEFAULT_SETTINGS["semantic_search_enabled"]))
         data["attachment_index_enabled"] = bool(raw.get("attachment_index_enabled", _DEFAULT_SETTINGS["attachment_index_enabled"]))
+        data["attachment_chunk_tokens"] = _coerce_attachment_chunk_tokens(
+            raw.get("attachment_chunk_tokens", _DEFAULT_SETTINGS["attachment_chunk_tokens"])
+        )
     return data
 
 
@@ -94,6 +120,24 @@ def is_semantic_search_enabled(user_id: str, project_name: str) -> bool:
 def is_attachment_index_enabled(user_id: str, project_name: str) -> bool:
     """快捷查询：附件是否参与项目语义检索（默认 True）。"""
     return bool(get_project_setting(user_id, project_name, "attachment_index_enabled", True))
+
+
+def get_attachment_chunk_tokens(user_id: str, project_name: str) -> int:
+    """快捷查询：附件分片 token 上限（即按需读取的滑动窗口大小）。
+
+    永远返回合法范围内的整数；缺省 / 异常一律回到默认值。
+    """
+    raw = get_project_setting(
+        user_id, project_name, "attachment_chunk_tokens", ATTACHMENT_CHUNK_TOKENS_DEFAULT
+    )
+    return _coerce_attachment_chunk_tokens(raw)
+
+
+def set_attachment_chunk_tokens(user_id: str, project_name: str, value: Any) -> int:
+    """设置附件分片 token 上限并持久化，返回最终生效的整数值。"""
+    coerced = _coerce_attachment_chunk_tokens(value)
+    set_project_setting(user_id, project_name, "attachment_chunk_tokens", coerced)
+    return coerced
 
 
 def list_projects_semantic_status(user_id: str) -> List[Dict[str, Any]]:

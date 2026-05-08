@@ -25,9 +25,9 @@
     --spark-danger: var(--seed-danger);
 
     /* --- 字体族 --- */
-    --spark-font: 'LXGW WenKai Screen', 'LXGW WenKai', '霞鹜文楷', sans-serif;
+    --spark-font: 'LXGW WenKai Lite', 'LXGW WenKai', '霞鹜文楷', sans-serif;
     --spark-mono: 'JetBrains Mono', 'Fira Code', 'Consolas', 'Monaco', ui-monospace, SFMono-Regular, Menlo, monospace;
-    --spark-font-logo: 'LXGW WenKai Screen', 'LXGW WenKai', '霞鹜文楷', sans-serif;
+    --spark-font-logo: 'LXGW WenKai Lite', 'LXGW WenKai', '霞鹜文楷', sans-serif;
 
     /* --- 排版字号 (Type Scale) --- */
     /* 基准：修改 --spark-fs-base 的 px 值即可全局等比缩放 */

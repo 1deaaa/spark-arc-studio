@@ -88,6 +88,13 @@ type ChatSession = {
   retryMaxRetries: number;
   /** 最近一次重试的错误摘要 */
   retryErrorSummary: string;
+  /** 多附件场景的真相源；对所有附件维持一个滑动窗口。 */
+  attachments: ChatImportedContext[];
+  /**
+   * 兼容字段：永远 = ``attachments[0] ?? null``。
+   * 老代码 / 老测试仍可读 ``session.importedContext``，但写入应走
+   * ``setSessionAttachments`` / ``addSessionAttachment`` 等多附件 actions。
+   */
   importedContext: ChatImportedContext | null;
   /** 最近一次聊天任务真实 LLM token 总数（后端 usage log 聚合，null 表示未统计） */
   contextTokenCount: number | null;
@@ -154,6 +161,7 @@ function _createSession(id: number, agentId = 'agent_director', kind: ChatSessio
     retryAttempt: null,
     retryMaxRetries: 3,
     retryErrorSummary: '',
+    attachments: [],
     importedContext: null,
     contextTokenCount: null,
   };
@@ -250,9 +258,22 @@ function _latestHistoryLlmUsageTotal(history: AnyRecord[] = []): number | null {
   return null;
 }
 
+function _serializeImportedContext(payload: ChatImportedContext): AnyRecord {
+  return {
+    attachmentId: payload.attachmentId,
+    filename: payload.filename,
+    sourceFormat: payload.sourceFormat,
+    totalTokens: payload.totalTokens,
+    chunkTokens: payload.chunkTokens,
+    isPartial: payload.isPartial,
+    warnings: (payload.warnings || []).map((item) => ({ ...item })),
+    uploadedAt: payload.uploadedAt,
+  };
+}
+
 function _resolveActiveContext(
   provider: (() => string | { text?: unknown; meta?: unknown } | null | undefined) | null,
-  importedContext: ChatImportedContext | null,
+  attachments: ChatImportedContext[] | null = null,
 ) {
   let activeContext = '';
   let activeMeta: AnyRecord | null = null;
@@ -272,22 +293,17 @@ function _resolveActiveContext(
     }
   }
 
-  // 引用制：activeContext 不带全文，仅在 activeMeta.importedFile 上传 attachmentId 引用。
-  // 后端在调 LLM 前按 id 从磁盘加载全文动态注入。
-  const attachmentId = String(importedContext?.attachmentId || '').trim();
-  if (attachmentId && importedContext?.filename) {
+  // 引用制：activeContext 不带全文，仅在 activeMeta.importedFiles 列表上传 attachmentId 引用。
+  // 后端在调 LLM 前按 id 从磁盘加载正文动态注入；同时双写 importedFile=[0] 兼容老 reader。
+  const validAttachments = (attachments || []).filter(
+    (item) => item && String(item.attachmentId || '').trim() && String(item.filename || '').trim(),
+  );
+  if (validAttachments.length > 0) {
+    const importedFiles = validAttachments.map(_serializeImportedContext);
     activeMeta = {
       ...(activeMeta || {}),
-      importedFile: {
-        attachmentId,
-        filename: importedContext.filename,
-        sourceFormat: importedContext.sourceFormat,
-        totalTokens: importedContext.totalTokens,
-        chunkTokens: importedContext.chunkTokens,
-        isPartial: importedContext.isPartial,
-        warnings: (importedContext.warnings || []).map((item) => ({ ...item })),
-        uploadedAt: importedContext.uploadedAt,
-      },
+      importedFiles,
+      importedFile: { ...importedFiles[0] },
     };
   }
 
@@ -296,10 +312,16 @@ function _resolveActiveContext(
 
 
 function _extractImportedFileMeta(activeMeta: AnyRecord | null = null) {
-  const importedFile = activeMeta?.importedFile;
-  if (!importedFile || typeof importedFile !== 'object' || Array.isArray(importedFile)) return null;
+  // 优先读多附件列表中的第一个；缺失再回落到老的 importedFile 单数。
+  const list = _extractImportedFilesMeta(activeMeta);
+  return list[0] || null;
+}
+
+function _normalizeRawImportedFile(raw: unknown): AnyRecord | null {
+  if (!raw || typeof raw !== 'object' || Array.isArray(raw)) return null;
+  const importedFile = raw as AnyRecord;
   if (importedFile.deleted) return null;
-  const attachmentId = String(importedFile.attachmentId || '').trim();
+  const attachmentId = String(importedFile.attachmentId || importedFile.attachment_id || '').trim();
   const filename = String(importedFile.filename || '').trim();
   if (!attachmentId || !filename) return null;
   return {
@@ -317,6 +339,26 @@ function _extractImportedFileMeta(activeMeta: AnyRecord | null = null) {
       : [],
     uploadedAt: Number(importedFile.uploadedAt || 0) || 0,
   };
+}
+
+function _extractImportedFilesMeta(activeMeta: AnyRecord | null = null): AnyRecord[] {
+  if (!activeMeta || typeof activeMeta !== 'object') return [];
+  const importedFiles = (activeMeta as AnyRecord).importedFiles;
+  if (Array.isArray(importedFiles)) {
+    const seen = new Set<string>();
+    const result: AnyRecord[] = [];
+    for (const item of importedFiles) {
+      const normalized = _normalizeRawImportedFile(item);
+      if (!normalized) continue;
+      if (seen.has(normalized.attachmentId)) continue;
+      seen.add(normalized.attachmentId);
+      result.push(normalized);
+    }
+    return result;
+  }
+  // 老字段兜底
+  const single = _normalizeRawImportedFile((activeMeta as AnyRecord).importedFile);
+  return single ? [single] : [];
 }
 
 function _isDeletedAttachmentContext(value: unknown) {
@@ -343,19 +385,48 @@ function _getMessageImportedFile(message: AnyRecord | null | undefined) {
 
 function _markMessageImportedFileDeleted(message: AnyRecord | null | undefined, reference: AnyRecord | null | undefined, deletedAt = Math.floor(Date.now() / 1000)) {
   if (!message) return false;
-  const importedFile = _getMessageImportedFile(message);
-  if (!importedFile || (reference && !_sameImportedFile(importedFile, reference))) return false;
-  if (!message.metadata || typeof message.metadata !== 'object') {
-    message.metadata = {};
+  const metadata = message.metadata && typeof message.metadata === 'object' ? message.metadata as AnyRecord : null;
+  if (!metadata) return false;
+
+  // 多附件：同步标记 importedFiles 列表中匹配项；老 importedFile 单数字段也跟进。
+  const importedFiles = Array.isArray(metadata.importedFiles) ? metadata.importedFiles as AnyRecord[] : null;
+  let touched = false;
+  let matchedFilename = '';
+
+  if (importedFiles && importedFiles.length > 0) {
+    const nextList = importedFiles.map((entry) => {
+      if (!entry || typeof entry !== 'object') return entry;
+      const sameByRef = !reference || _sameImportedFile(entry as AnyRecord, reference);
+      if (!sameByRef) return entry;
+      touched = true;
+      matchedFilename = String((entry as AnyRecord).filename || '').trim() || matchedFilename;
+      return { ...(entry as AnyRecord), deleted: true, deletedAt };
+    });
+    if (touched) {
+      metadata.importedFiles = nextList;
+      const stillActive = nextList.find((entry) => entry && typeof entry === 'object' && !(entry as AnyRecord).deleted) as AnyRecord | undefined;
+      if (stillActive) {
+        metadata.importedFile = { ...stillActive };
+      } else if (nextList[0] && typeof nextList[0] === 'object') {
+        metadata.importedFile = { ...(nextList[0] as AnyRecord) };
+      }
+    }
   }
-  message.metadata.importedFile = {
-    ...importedFile,
-    deleted: true,
-    deletedAt,
-  };
-  const filename = String(importedFile.filename || '').trim() || '未知文件';
-  if (typeof message.metadata.active_context === 'string') {
-    message.metadata.active_context = `[附件 "${filename}" 已被删除]`;
+
+  // 兜底：若旧消息只有 importedFile 单数字段，单独处理。
+  if (!touched) {
+    const importedFile = _getMessageImportedFile(message);
+    if (!importedFile) return false;
+    if (reference && !_sameImportedFile(importedFile, reference)) return false;
+    metadata.importedFile = { ...importedFile, deleted: true, deletedAt };
+    matchedFilename = String(importedFile.filename || '').trim() || matchedFilename;
+    touched = true;
+  }
+
+  if (!touched) return false;
+  const filename = matchedFilename || '未知文件';
+  if (typeof metadata.active_context === 'string') {
+    metadata.active_context = `[附件 "${filename}" 已被删除]`;
   }
   return true;
 }
@@ -368,35 +439,52 @@ function _markSessionImportedFileDeleted(session: ChatSession, reference: AnyRec
   });
 }
 
-function _findLatestImportedContext(history: AnyRecord[] = []): ChatImportedContext | null {
+function _toChatImportedContext(payload: AnyRecord): ChatImportedContext {
+  return {
+    attachmentId: String(payload.attachmentId || '').trim(),
+    filename: String(payload.filename || '').trim(),
+    sourceFormat: String(payload.sourceFormat || '').trim(),
+    totalTokens: Number(payload.totalTokens || 0) || 0,
+    chunkTokens: Number(payload.chunkTokens || 0) || 0,
+    isPartial: Boolean(payload.isPartial),
+    warnings: Array.isArray(payload.warnings)
+      ? (payload.warnings as AnyRecord[]).map((item) => ({
+          code: String((item as AnyRecord)?.code || ''),
+          message: String((item as AnyRecord)?.message || ''),
+        }))
+      : [],
+    uploadedAt: Number(payload.uploadedAt || 0) || 0,
+  };
+}
+
+function _findLatestImportedContexts(history: AnyRecord[] = []): ChatImportedContext[] {
+  // 找最近一条 user 消息上挂的附件元数据：优先取 importedFiles 多列表，回落到老 importedFile。
   for (let i = history.length - 1; i >= 0; i -= 1) {
     const message = history[i];
     if (message?.role !== 'user') continue;
-    const importedFile = _extractImportedFileMeta(message?.metadata || null);
-    if (!importedFile) continue;
-    return {
-      attachmentId: importedFile.attachmentId,
-      filename: importedFile.filename,
-      sourceFormat: importedFile.sourceFormat,
-      totalTokens: importedFile.totalTokens,
-      chunkTokens: importedFile.chunkTokens,
-      isPartial: importedFile.isPartial,
-      warnings: importedFile.warnings,
-      uploadedAt: importedFile.uploadedAt,
-    };
+    const list = _extractImportedFilesMeta(message?.metadata || null);
+    if (list.length > 0) {
+      return list.map(_toChatImportedContext);
+    }
   }
-  return null;
+  return [];
+}
+
+function _findLatestImportedContext(history: AnyRecord[] = []): ChatImportedContext | null {
+  return _findLatestImportedContexts(history)[0] || null;
 }
 
 function _buildUserMessageMetadata(activeContext: unknown, activeMeta: AnyRecord | null = null) {
   const metadata: AnyRecord = {};
   const normalizedContext = typeof activeContext === 'string' ? activeContext.trim() : String(activeContext || '').trim();
-  const importedFile = _extractImportedFileMeta(activeMeta);
+  const importedFiles = _extractImportedFilesMeta(activeMeta);
   if (normalizedContext) {
     metadata.active_context = normalizedContext;
   }
-  if (importedFile) {
-    metadata.importedFile = importedFile;
+  if (importedFiles.length > 0) {
+    // 多附件：列表为真相源；importedFile 双写以兼容老 reader / 老测试断言。
+    metadata.importedFiles = importedFiles.map((item) => ({ ...item }));
+    metadata.importedFile = { ...importedFiles[0] };
   }
   return Object.keys(metadata).length ? metadata : null;
 }
@@ -405,16 +493,15 @@ function _resolveMessageContextForEdit(
   provider: (() => string | { text?: unknown; meta?: unknown } | null | undefined) | null,
   message: AnyRecord | null | undefined,
 ): ResolvedMessageContext {
-  const { activeContext: providerContext, activeMeta: providerMeta } = _resolveActiveContext(provider, null);
+  const { activeContext: providerContext, activeMeta: providerMeta } = _resolveActiveContext(provider, []);
   const messageMetadata = message?.metadata && typeof message.metadata === 'object' ? message.metadata as AnyRecord : null;
   const storedRawContext = typeof messageMetadata?.active_context === 'string' ? messageMetadata.active_context.trim() : '';
   const storedContext = _isDeletedAttachmentContext(storedRawContext) ? '' : storedRawContext;
-  const importedFile = _extractImportedFileMeta(messageMetadata);
-  // 引用制：编辑流的 activeContext 不再包含全文（后端按 attachmentId 动态注入），
-  // 仅在 activeMeta.importedFile 上透传引用。
+  // 编辑场景：尊重该消息当时挂的附件列表（多附件也要恢复），后端按 attachmentId 动态注入。
+  const importedFiles = _extractImportedFilesMeta(messageMetadata);
   const activeContext = storedContext || providerContext;
-  const activeMeta = importedFile
-    ? { ...(providerMeta || {}), importedFile }
+  const activeMeta = importedFiles.length > 0
+    ? { ...(providerMeta || {}), importedFiles, importedFile: { ...importedFiles[0] } }
     : (providerMeta || null);
 
   return {
@@ -692,44 +779,102 @@ export const useChatStore = defineStore('chat', {
       this._contextProvider = fn;
     },
 
-    setSessionImportedContext(sessionId: number, payload: ChatImportedContext | null) {
+    /**
+     * 多附件真相源写入：替换 session.attachments 的全部内容并同步老 importedContext 镜像。
+     *
+     * 所有写入路径都最终落到这里，避免 attachments / importedContext 不一致。
+     */
+    setSessionAttachments(sessionId: number, payloads: ChatImportedContext[] | null) {
       const session = this.sessions[sessionId];
       if (!session) return;
-      session.importedContext = payload
-        ? {
-            ...payload,
-            warnings: Array.isArray(payload.warnings) ? payload.warnings.map((item) => ({ ...item })) : [],
-          }
-        : null;
+      const list = Array.isArray(payloads) ? payloads : [];
+      const next = list
+        .filter((item) => item && String(item.attachmentId || '').trim() && String(item.filename || '').trim())
+        .map((payload) => ({
+          ...payload,
+          warnings: Array.isArray(payload.warnings) ? payload.warnings.map((item) => ({ ...item })) : [],
+        }));
+      session.attachments = next;
+      session.importedContext = next[0] || null;
+    },
+
+    /** 追加单个附件到 session.attachments；按 attachmentId 去重，重复的覆盖 meta。 */
+    addSessionAttachment(sessionId: number, payload: ChatImportedContext) {
+      const session = this.sessions[sessionId];
+      if (!session || !payload) return;
+      const attachmentId = String(payload.attachmentId || '').trim();
+      const filename = String(payload.filename || '').trim();
+      if (!attachmentId || !filename) return;
+      const cloned: ChatImportedContext = {
+        ...payload,
+        warnings: Array.isArray(payload.warnings) ? payload.warnings.map((item) => ({ ...item })) : [],
+      };
+      const existing = session.attachments || [];
+      const idx = existing.findIndex((item) => item.attachmentId === attachmentId);
+      const next = idx >= 0
+        ? existing.map((item, i) => (i === idx ? cloned : item))
+        : [...existing, cloned];
+      session.attachments = next;
+      session.importedContext = next[0] || null;
+    },
+
+    /** 按 attachmentId 精确移除一个附件（仅本地 session 状态；不调后端）。 */
+    removeSessionAttachmentById(sessionId: number, attachmentId: string) {
+      const session = this.sessions[sessionId];
+      if (!session) return;
+      const trimmed = String(attachmentId || '').trim();
+      if (!trimmed) return;
+      const existing = session.attachments || [];
+      const next = existing.filter((item) => item.attachmentId !== trimmed);
+      session.attachments = next;
+      session.importedContext = next[0] || null;
+    },
+
+    // ──────────────────────────────────────────────────────
+    // 兼容糖：老调用方仍可单数操作；内部委托到多附件 actions。
+    // ──────────────────────────────────────────────────────
+    setSessionImportedContext(sessionId: number, payload: ChatImportedContext | null) {
+      this.setSessionAttachments(sessionId, payload ? [payload] : []);
     },
 
     clearSessionImportedContext(sessionId: number) {
-      const session = this.sessions[sessionId];
-      if (!session) return;
-      session.importedContext = null;
+      this.setSessionAttachments(sessionId, []);
     },
 
-    async removeSessionImportedContext(sessionId: number) {
+    async removeSessionImportedContext(sessionId: number, attachmentId?: string | null) {
       const session = this.sessions[sessionId];
       if (!session) return;
-      const reference = session.importedContext ? { ...session.importedContext } : null;
-      session.importedContext = null;
+
+      // 1. 找到要删的附件：优先用传入的 attachmentId，否则取第一个。
+      const targetId = String(attachmentId || '').trim() || (session.attachments?.[0]?.attachmentId || '');
+      if (!targetId) return;
+      const reference = (session.attachments || []).find((item) => item.attachmentId === targetId)
+        || (session.importedContext && session.importedContext.attachmentId === targetId
+          ? session.importedContext
+          : null);
+
+      // 2. 本地立刻把它从 attachments 列表里去掉。
+      this.removeSessionAttachmentById(sessionId, targetId);
+
       if (!reference?.filename) return;
 
+      // 3. 找后端持久化的锚点消息以便落库标记 deleted。
       const persistedMessage = (session.history || []).find((message) => {
-        const importedFile = _getMessageImportedFile(message);
-        return message?.id != null
-          && String(message.id).trim() !== ''
-          && importedFile
-          && !importedFile.deleted
-          && _sameImportedFile(importedFile, reference);
+        if (message?.id == null || String(message.id).trim() === '') return false;
+        const list = _extractImportedFilesMeta(message?.metadata || null);
+        if (list.length > 0) {
+          return list.some((entry) => entry.attachmentId === targetId);
+        }
+        const legacy = _getMessageImportedFile(message);
+        return legacy && !legacy.deleted && _sameImportedFile(legacy, reference);
       });
 
       if (persistedMessage?.id != null) {
-        await this.removeSessionAttachment(sessionId, persistedMessage.id);
+        await this.removeSessionAttachment(sessionId, persistedMessage.id, targetId);
         return;
       }
 
+      // 没有持久化的锚点消息（用户上传后立刻删除）→ 仅本地标记历史消息 deleted。
       _markSessionImportedFileDeleted(session, reference);
     },
 
@@ -1006,8 +1151,13 @@ export const useChatStore = defineStore('chat', {
         // 历史刷新、后台恢复与本地 optimistic 消息统一走同一套 reconciliation 规则。
         session.history = reconcileSessionHistory(rawHistory || [], preserveLocalTail, session.history);
         session.contextTokenCount = _latestHistoryLlmUsageTotal(session.history);
-        if (!session.importedContext) {
-          session.importedContext = _findLatestImportedContext(session.history);
+        // 历史中存在附件且 session.attachments 为空时，恢复完整列表（多附件场景下也能正确还原）。
+        if ((session.attachments?.length || 0) === 0) {
+          const restored = _findLatestImportedContexts(session.history);
+          if (restored.length > 0) {
+            session.attachments = restored;
+            session.importedContext = restored[0] || null;
+          }
         }
       } catch (e: unknown) {
         if (session.agentId !== agentIdAtStart || session.contextKey !== contextKeyAtStart || session.historyRequestSeq !== requestSeq) {
@@ -1058,7 +1208,7 @@ export const useChatStore = defineStore('chat', {
 
       try {
         const resolvedContext = contextOverride || (() => {
-          const { activeContext, activeMeta } = _resolveActiveContext(this._contextProvider, session.importedContext);
+          const { activeContext, activeMeta } = _resolveActiveContext(this._contextProvider, session.attachments);
           return {
             activeContext,
             activeMeta,
@@ -1476,8 +1626,12 @@ export const useChatStore = defineStore('chat', {
       }
     },
 
-    /** 移除消息的附件上下文（不删除消息本身） */
-    async removeSessionAttachment(sessionId, messageId) {
+    /** 移除消息的附件上下文（不删除消息本身）。
+     *
+     * 多附件场景下可选传入 ``attachmentId`` 精确指定要删除的附件；不传时
+     * 沿用旧语义——按消息 metadata 中首个未删除附件做匹配。
+     */
+    async removeSessionAttachment(sessionId, messageId, attachmentId?: string | null) {
       const session = this.sessions[sessionId];
       if (!session || messageId == null || String(messageId).trim() === '') return;
 
@@ -1486,9 +1640,27 @@ export const useChatStore = defineStore('chat', {
       );
       if (!targetMessage) return;
 
-      const reference = _getMessageImportedFile(targetMessage);
-      if (reference && _sameImportedFile(session.importedContext as AnyRecord | null, reference)) {
-        session.importedContext = null;
+      const trimmedAttachmentId = String(attachmentId || '').trim();
+      // 解析 reference：传 attachmentId 时按 id 在 importedFiles 列表中找；否则取首个 importedFile（老语义）。
+      let reference: AnyRecord | null = null;
+      if (trimmedAttachmentId) {
+        const list = _extractImportedFilesMeta(targetMessage?.metadata || null);
+        reference = list.find((entry) => entry.attachmentId === trimmedAttachmentId) || null;
+      } else {
+        reference = _getMessageImportedFile(targetMessage);
+      }
+
+      // 本地：从 session.attachments 中移除对应项（按 id 优先），并同步 importedContext。
+      if (reference) {
+        const refId = String(reference.attachmentId || '').trim();
+        if (refId) {
+          this.removeSessionAttachmentById(sessionId, refId);
+        } else if (_sameImportedFile(session.importedContext as AnyRecord | null, reference)) {
+          session.importedContext = null;
+          session.attachments = (session.attachments || []).filter(
+            (item) => !_sameImportedFile(item as AnyRecord, reference as AnyRecord),
+          );
+        }
       }
 
       const hasPersistedId = targetMessage.id != null && String(targetMessage.id).trim() !== '';
@@ -1503,7 +1675,7 @@ export const useChatStore = defineStore('chat', {
       if (!projectName) return;
 
       try {
-        await removeChatMessageAttachment(projectName, targetMessage.id);
+        await removeChatMessageAttachment(projectName, targetMessage.id, trimmedAttachmentId || undefined);
         // 后端会按同一会话/同一文件批量失效；前端立即同步本地状态。
         _markSessionImportedFileDeleted(session, reference);
       } catch (e: unknown) {

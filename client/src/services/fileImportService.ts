@@ -71,13 +71,16 @@ export async function getImportCapabilities(): Promise<ImportCapabilitiesRespons
 
 export async function parseImportFile(
   file: Blob | File,
-  chunkTokens = 30000,
+  chunkTokens?: number | null,
   signal?: AbortSignal,
   projectName?: string | null,
 ): Promise<ParsedImportResponse> {
   const formData = new FormData();
   formData.append('file', file);
-  formData.append('chunkTokens', String(chunkTokens));
+  // 不传 chunkTokens 时，后端会按项目级配置 attachment_chunk_tokens 取值。
+  if (chunkTokens != null && Number.isFinite(chunkTokens)) {
+    formData.append('chunkTokens', String(chunkTokens));
+  }
   if (projectName) {
     formData.append('projectName', projectName);
   }
@@ -92,4 +95,46 @@ export async function parseImportFile(
     throw new Error(getFriendlyErrorMessage(result?.error || '解析导入文件失败', response.status));
   }
   return result as ParsedImportResponse;
+}
+
+
+// ==================== 附件分片大小（滑动窗口）配置 ====================
+
+export type AttachmentChunkTokensSetting = {
+  success: boolean;
+  /** 当前生效的分片 token 上限（已 clamp 到合法范围）。 */
+  chunkTokens: number;
+  min: number;
+  max: number;
+  default: number;
+};
+
+export async function getAttachmentChunkTokensSetting(
+  projectName?: string | null,
+): Promise<AttachmentChunkTokensSetting> {
+  const params = new URLSearchParams();
+  if (projectName) params.set('projectName', projectName);
+  const url = `/api/import/chunk-tokens${params.toString() ? `?${params.toString()}` : ''}`;
+  const response = await fetchWithAuth(url);
+  const result = await response.json().catch(() => null);
+  if (!response.ok || !result?.success) {
+    throw new Error(getFriendlyErrorMessage(result?.error || '读取附件分片配置失败', response.status));
+  }
+  return result as AttachmentChunkTokensSetting;
+}
+
+export async function setAttachmentChunkTokensSetting(
+  chunkTokens: number,
+  projectName?: string | null,
+): Promise<AttachmentChunkTokensSetting> {
+  const response = await fetchWithAuth('/api/import/chunk-tokens', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ projectName, chunkTokens }),
+  });
+  const result = await response.json().catch(() => null);
+  if (!response.ok || !result?.success) {
+    throw new Error(getFriendlyErrorMessage(result?.error || '保存附件分片配置失败', response.status));
+  }
+  return result as AttachmentChunkTokensSetting;
 }

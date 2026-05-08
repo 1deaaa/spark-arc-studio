@@ -7,7 +7,7 @@ import './styles/theme.css'
 import './styles/components.css'
 import './styles/studio.css'
 import 'katex/dist/katex.min.css'
-import 'cn-fontsource-lxgw-wen-kai-screen/font.css'
+// 字体已改为 CDN 加载 LXGW WenKai Lite，见 index.html <link>
 import App from './App.vue'
 import router from './router'
 import { useThemeStore } from './components/stores/themeStore'

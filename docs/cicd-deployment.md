@@ -10,15 +10,15 @@
 | :--- | :--- | :--- | :--- |
 | **Gitea** | `.gitea/workflows/deploy.yml` | 自建 `act_runner`（Docker 模式） | push 到 `main` 分支 |
 | **GitLab** | `.gitlab/gitlab-ci.yml` | 自建 GitLab Runner（Docker 模式） | push 到任意分支 |
+| **GitHub** | `.github/workflows/pr-checks.yml` / `release-desktop.yml` / `release-android-apk.yml` | GitHub 托管 Runner | PR / push 到 `main`（检查）；手动触发（发布） |
 
 > ⚠️ **GitLab 配置文件路径**：本项目的 CI 配置文件位于 `.gitlab/gitlab-ci.yml`（非默认的根目录 `.gitlab-ci.yml`）。使用 GitLab CI 时，必须在项目 **Settings → CI/CD → General pipelines → CI/CD configuration file** 中填入 `.gitlab/gitlab-ci.yml`，否则 GitLab 找不到配置文件，流水线不会触发。
 
-> 💡 **关于 GitHub Actions**：Gitea Actions 的语法设计与 GitHub Actions 高度相似（`on`/`jobs`/`steps`/`secrets` 等关键字完全一致），但**并非直接兼容**，移植时需注意以下差异：
+> 💡 **关于 GitHub Actions**：本项目已在 GitHub 上配置了完整的工作流——`pr-checks.yml` 负责 PR 质量门禁（前端构建/类型检查/单元测试 + 后端回归测试 + Docker 构建），`release-desktop.yml` 和 `release-android-apk.yml` 负责桌面端与 Android 端的发布构建。Gitea Actions 的语法设计与 GitHub Actions 高度相似，但**并非直接兼容**，移植时需注意以下差异：
 >
 > - **Token 变量名**：Gitea 使用 `${{ gitea.token }}`，GitHub 使用 `${{ github.token }}`。本项目的工作流已同时读取两者并以非空者优先，因此迁移到 GitHub 后无需修改 Token 部分。
 > - **托管 Runner**：GitHub 提供开箱即用的托管 Runner（`ubuntu-latest` 直接可用）；Gitea 需要在服务器上**自行部署 `act_runner`** 并以 Docker 模式运行。
 > - **代码检出 Action**：标准的 `actions/checkout` 在 Gitea 上存在兼容问题。本项目绕过了这一点——检出步骤直接使用裸 `git` 命令实现，同时兼容两个平台。
-> - **结论**：如果已有可用的 GitHub Actions Runner，将 `.gitea/workflows/deploy.yml` 复制到 `.github/workflows/deploy.yml` 后仅需极少量改动即可直接使用。
 
 ---
 
@@ -31,7 +31,7 @@
 ```
 
 1. **构建**：执行 `docker build`，利用 BuildKit 的 `--mount=type=cache` 缓存 npm/pip 包，非首次构建可大幅提速
-2. **测试**：当前为预留阶段，后续将集成 `pytest` 单元测试
+2. **测试**：Gitea / GitLab 当前为预留阶段；GitHub Actions 已集成前端类型检查 + 单元测试 + 后端 `pytest` 回归测试 + Docker 构建验证
 3. **部署**：
     - 自动创建四个持久化 Docker Volume（`sparkarc_data`、`sparkarc_userdata`、`sparkarc_shares`、`sparkarc_llm_config`），已存在则跳过
     - 若在 CI Secret 中配置了 `LLM_KEY`，自动写入容器的 `.env` 文件；未配置则启动后可通过前端设置

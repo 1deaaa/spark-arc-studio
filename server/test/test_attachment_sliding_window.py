@@ -117,6 +117,123 @@ def test_collapse_idempotent_does_not_repeat():
     assert messages[1].content == '当前最新片正文'
 
 
+def test_collapse_unifies_window_across_multiple_attachments(tmp_path, monkeypatch):
+    """**多附件统一滑窗**：交错读 A、B、A 三轮，每轮折叠后只保留最新一次的完整正文。
+
+    断言关键点：
+    1. 不论是 A 还是 B，最新一次 read_attachment_chunk 都未被折叠；
+    2. 所有更早的工具消息（不论属于 A 还是 B）都折叠为占位；
+    3. 总 token 估算每一轮都收敛在「单片大小 + 占位开销」量级，不随轮次线性累积。
+    """
+    from langchain_core.messages import AIMessage, HumanMessage, ToolMessage
+
+    from agents.communication import (
+        ATTACHMENT_CHUNK_COLLAPSED_PLACEHOLDER,
+        collapse_attachment_chunk_history,
+    )
+    from agents.tools.attachment import read_attachment_chunk
+
+    # ── 项目隔离 ──
+    project_path = tmp_path / 'projects' / 'multi_attach'
+    project_path.mkdir(parents=True, exist_ok=True)
+
+    def _fake_get_project_path(user_id, project_name):  # noqa: ARG001
+        return str(project_path)
+
+    monkeypatch.setattr('agents.attachment.storage.get_project_path', _fake_get_project_path)
+
+    # ── 准备两个附件，每片都足够长以展示折叠效果 ──
+    from agents.attachment import save_attachment
+
+    big_chunk_a1 = '附件A第一片正文 ' * 800   # ~6400 chars
+    big_chunk_a2 = '附件A第二片正文 ' * 800
+    big_chunk_b1 = '附件B第一片正文 ' * 800
+    big_chunk_b2 = '附件B第二片正文 ' * 800
+
+    meta_a = save_attachment(
+        user_id='u', project_name='multi_attach',
+        filename='A.txt', source_format='txt',
+        full_text=big_chunk_a1 + big_chunk_a2,
+        chunks=[big_chunk_a1, big_chunk_a2],
+        total_tokens=len(big_chunk_a1 + big_chunk_a2),
+    )
+    meta_b = save_attachment(
+        user_id='u', project_name='multi_attach',
+        filename='B.txt', source_format='txt',
+        full_text=big_chunk_b1 + big_chunk_b2,
+        chunks=[big_chunk_b1, big_chunk_b2],
+        total_tokens=len(big_chunk_b1 + big_chunk_b2),
+    )
+
+    # ── 把工具拿到 ToolExecutionContext 需要的 ContextVar 设上 ──
+    from core.request_context import current_project_name, current_user_id
+    user_token = current_user_id.set('u')
+    project_token = current_project_name.set('multi_attach')
+
+    try:
+        messages = [HumanMessage(content='请阅读 A 和 B 两份附件并对比关键差异')]
+        token_history: list[int] = []
+
+        # 三轮交错调用：A-0 / B-0 / A-1
+        rounds: list[tuple[str, int, str]] = [
+            (meta_a.attachment_id, 0, 'callA0'),
+            (meta_b.attachment_id, 0, 'callB0'),
+            (meta_a.attachment_id, 1, 'callA1'),
+        ]
+
+        for round_idx, (aid, chunk_index, call_id) in enumerate(rounds):
+            messages.append(AIMessage(
+                content=f'第 {round_idx + 1} 轮：开始读取分片',
+                tool_calls=[{
+                    'name': 'read_attachment_chunk',
+                    'args': {'attachment_id': aid, 'chunk_index': chunk_index},
+                    'id': call_id,
+                }],
+            ))
+
+            tool_result = read_attachment_chunk.invoke({
+                'attachment_id': aid,
+                'chunk_index': chunk_index,
+            })
+            assert isinstance(tool_result, str) and len(tool_result) > 1000
+
+            messages.append(ToolMessage(
+                content=tool_result,
+                tool_call_id=call_id,
+                name='read_attachment_chunk',
+            ))
+
+            # 折叠：fresh 集合只含本轮的 call_id
+            collapse_attachment_chunk_history(messages, fresh_call_ids={call_id})
+
+            tool_msgs = [m for m in messages if isinstance(m, ToolMessage)]
+            latest = tool_msgs[-1]
+            assert latest.tool_call_id == call_id, '最新 ToolMessage 应是本轮的'
+            assert latest.content == tool_result, '最新 ToolMessage 必须保留完整正文'
+
+            # 历史 ToolMessage（无论 A 还是 B）必须全部折叠为占位
+            for old in tool_msgs[:-1]:
+                assert old.content == ATTACHMENT_CHUNK_COLLAPSED_PLACEHOLDER, (
+                    f'历史 ToolMessage {old.tool_call_id} 未被折叠 '
+                    f'（仍有 {len(str(old.content))} 字符正文）'
+                )
+
+            total_tokens = _estimate_tokens(' '.join(str(m.content) for m in messages))
+            token_history.append(total_tokens)
+
+        # 总 token 在三轮间应当几乎稳定（仅占位 + AIMessage 增长），不线性累积
+        first_round = token_history[0]
+        last_round = token_history[-1]
+        single_chunk_tokens = _estimate_tokens(big_chunk_a1)
+        growth = last_round - first_round
+        assert growth < single_chunk_tokens, (
+            f'多附件滑窗失效！token 增量 {growth} 应远小于单片大小 {single_chunk_tokens}'
+        )
+    finally:
+        current_user_id.reset(user_token)
+        current_project_name.reset(project_token)
+
+
 def test_collapse_with_empty_fresh_collapses_all_old_chunks():
     """fresh_call_ids 为空时，所有 read_attachment_chunk 的 ToolMessage 都被折叠（极端场景）。"""
     from langchain_core.messages import ToolMessage
