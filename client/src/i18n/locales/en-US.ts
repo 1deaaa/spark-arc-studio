@@ -278,6 +278,16 @@ const enUS = {
       exportNovelDone: 'Novel snapshot exported',
       exportScriptDone: 'Script snapshot exported',
       linkCopied: 'Share link copied',
+      shareToggleLoading: 'Updating share visibility, please wait…',
+      shareReviewLoading: 'Running the publishing review, please wait…',
+      shareReviewRejectedDialog: {
+        title: 'Publishing review did not pass',
+        intro: 'This content is not ready for public sharing yet. Please revise it based on the items below and try again.',
+        reasonLabel: 'Reason',
+        riskTagsLabel: 'Risk Tags',
+        evidenceLabel: 'Matched Excerpts',
+        footer: 'After editing the content, switch it to public again to trigger another review.',
+      },
       publicShareEnableWarning: {
         title: 'Make this version public?',
         content:
@@ -356,6 +366,10 @@ const enUS = {
       disablePublicShare: {
         label: 'Allow public sharing',
         help: 'When enabled, users can create public share links. When disabled, public links are blocked globally, while owners can still preview their own versions.',
+      },
+      forcePublicShareReview: {
+        label: 'Require review before publishing',
+        help: 'When enabled, switching content to public sharing will first trigger a moderation review under the site policy for mainland China. Only explicit PASS results can be published.',
       },
       publicShareEnableWarning: {
         title: 'Enable public sharing site-wide?',

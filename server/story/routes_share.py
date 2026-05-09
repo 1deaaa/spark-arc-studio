@@ -7,10 +7,15 @@ import os
 import shutil
 
 from core.auth import get_current_user, user_db
+from core.compliance_features import is_force_public_share_review_effective
 from core.request_context import normalize_project_name
 from core.models import UserInfoSession, Share, ProjectVersion, Story, BindChr, Registry
 from core.utils import get_project_path
 from core.system_settings import get_disable_public_share
+from story.public_share_review import (
+    PublicShareReviewRejectedError,
+    ensure_public_share_allowed,
+)
 from story.importer import import_project_stories_to_db
 from story.routes_version import _decode_version_description
 from sqlalchemy import create_engine
@@ -99,6 +104,30 @@ async def create_share(data: ShareCreate, user: dict = Depends(get_current_user)
     if not project_name:
         return JSONResponse(status_code=400, content={'error': '缺少项目名'})
 
+    if data.is_shared and get_disable_public_share():
+        return JSONResponse(status_code=403, content={'error': '管理员已禁用公开分享'})
+
+    if data.is_shared and is_force_public_share_review_effective():
+        try:
+            ensure_public_share_allowed(user_id, project_name, 'script')
+        except PublicShareReviewRejectedError as exc:
+            return JSONResponse(
+                status_code=403,
+                content={
+                    'error': f'公开前审核未通过：{exc.result.reason}',
+                    'review': {
+                        'decision': exc.result.decision,
+                        'reason': exc.result.reason,
+                        'risk_tags': exc.result.risk_tags,
+                        'evidence': exc.result.evidence,
+                        'rejected_chunk_index': exc.result.rejected_chunk_index,
+                        'total_chunks': exc.result.total_chunks,
+                    },
+                },
+            )
+        except Exception as exc:
+            return JSONResponse(status_code=503, content={'error': f'公开前审核失败：{exc}'})
+
     try:
         import_project_stories_to_db(user_id, project_name, reset=True)
     except Exception as exc:
@@ -108,9 +137,6 @@ async def create_share(data: ShareCreate, user: dict = Depends(get_current_user)
     db_path = os.path.join(project_path, 'stories.db')
     if not os.path.exists(db_path):
         return JSONResponse(status_code=404, content={'error': 'stories.db 不存在'})
-
-    if data.is_shared and get_disable_public_share():
-        return JSONResponse(status_code=403, content={'error': '管理员已禁用公开分享'})
 
     share_id = str(uuid.uuid4())
     snapshot_path = os.path.join(_get_shares_dir(), f'{share_id}.db')
@@ -156,6 +182,26 @@ async def update_share(share_id: str, data: ShareUpdate, user: dict = Depends(ge
         if data.is_shared is not None:
             if data.is_shared and get_disable_public_share():
                 return JSONResponse(status_code=403, content={'error': '管理员已禁用公开分享'})
+            if data.is_shared and not share.is_shared and is_force_public_share_review_effective():
+                try:
+                    ensure_public_share_allowed(user_id, share.project_name, 'script')
+                except PublicShareReviewRejectedError as exc:
+                    return JSONResponse(
+                        status_code=403,
+                        content={
+                            'error': f'公开前审核未通过：{exc.result.reason}',
+                            'review': {
+                                'decision': exc.result.decision,
+                                'reason': exc.result.reason,
+                                'risk_tags': exc.result.risk_tags,
+                                'evidence': exc.result.evidence,
+                                'rejected_chunk_index': exc.result.rejected_chunk_index,
+                                'total_chunks': exc.result.total_chunks,
+                            },
+                        },
+                    )
+                except Exception as exc:
+                    return JSONResponse(status_code=503, content={'error': f'公开前审核失败：{exc}'})
             share.is_shared = data.is_shared
         session.commit()
         return {'success': True}

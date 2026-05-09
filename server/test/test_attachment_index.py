@@ -346,3 +346,55 @@ def test_semantic_search_scope_attachment_forwards_filter(mock_search_context, m
     assert captured['filter'] == {'format_key': 'attachment'}
     assert captured['query_text'] == '附件关键词'
     assert captured['k'] == 3
+
+
+def test_semantic_search_scope_string_coerce(mock_search_context, monkeypatch):
+    """LLM 传 scope 为字符串时必须自动 coerce 为列表，不再报 ValidationError。"""
+    search_module, SearchHit = mock_search_context
+    captured: dict[str, object] = {}
+
+    only_hit = SearchHit(
+        index=0,
+        file_path='',
+        rel_path='.attachments/xyz/full.txt',
+        format_key='attachment',
+        start_line=0,
+        end_line=0,
+        narrative_ref='附件 > test.epub > 第 1 部分（共 1）',
+        match_text='附件内容',
+        score=0.88,
+        source_type='attachment',
+        attachment_id='xyz',
+        attachment_filename='test.epub',
+        attachment_chunk_index=0,
+    )
+
+    class _StubService:
+        def __init__(self, *args, **kwargs):
+            pass
+
+        def ensure_background_build_started(self, check_freshness=True):  # noqa: ARG002
+            return {'needs_rebuild': False, 'build_state': {'status': 'ready'}, 'exists': True}
+
+        def query(self, query_text, k=8, filter=None, score_threshold=0.0):  # noqa: ARG002
+            captured['filter'] = filter
+            return [only_hit]
+
+    monkeypatch.setattr('agents.vector_index.VectorIndexService', _StubService)
+
+    # 单值字符串
+    result = search_module.semantic_search.invoke({'query': '附件', 'scope': 'attachment'})
+    assert isinstance(result, str)
+    assert captured['filter'] == {'format_key': 'attachment'}
+
+    # 逗号分隔字符串
+    result = search_module.semantic_search.invoke({'query': '混合', 'scope': 'arc, outline'})
+    assert isinstance(result, str)
+    assert captured['filter'] == {'format_key': {'$in': ['arc', 'outline']}}
+
+
+def test_semantic_search_scope_invalid_value_rejected():
+    """scope 包含无效值时 SemanticSearchInput 应抛出清晰的校验错误。"""
+    from agents.tools.search import SemanticSearchInput
+    with pytest.raises(Exception, match="无效值"):
+        SemanticSearchInput(query='test', scope=['not_a_real_key'])

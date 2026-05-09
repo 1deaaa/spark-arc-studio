@@ -278,6 +278,16 @@ const jaJP = {
       exportNovelDone: '小説スナップショットをエクスポートしました',
       exportScriptDone: '脚本スナップショットをエクスポートしました',
       linkCopied: '共有リンクをコピーしました',
+      shareToggleLoading: '公開状態を更新しています。しばらくお待ちください…',
+      shareReviewLoading: '公開前レビューを実行しています。しばらくお待ちください…',
+      shareReviewRejectedDialog: {
+        title: '公開前レビューを通過しませんでした',
+        intro: 'この内容はまだ公開共有に適していません。以下の内容を調整してから再度お試しください。',
+        reasonLabel: '理由',
+        riskTagsLabel: 'リスク種別',
+        evidenceLabel: '該当箇所',
+        footer: '内容を修正した後、再度公開へ切り替えるとレビューをやり直せます。',
+      },
       publicShareEnableWarning: {
         title: 'このバージョンを公開しますか？',
         content:
@@ -356,6 +366,10 @@ const jaJP = {
       disablePublicShare: {
         label: '公開共有を許可',
         help: '有効時、ユーザーは公開共有リンクを作成できます。無効時は公開リンクが全体でブロックされ、所有者のみ試遊入口から自分のバージョンを確認できます。',
+      },
+      forcePublicShareReview: {
+        label: '公開前審査を強制',
+        help: '有効時、公開共有へ切り替える前に中国本土向け運用基準に沿った審査を行い、明確に PASS の場合のみ公開を許可します。',
       },
       publicShareEnableWarning: {
         title: 'サイト全体の公開共有を有効にしますか？',

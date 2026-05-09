@@ -33,7 +33,7 @@
       />
     </div>
 
-    <n-spin :show="loading">
+    <n-spin :show="loading || !!shareToggleVersionId" :description="spinDescription">
       <div class="version-list">
         <n-empty v-if="versions.length === 0" :description="t('components.versionManager.empty')" />
         
@@ -114,7 +114,8 @@
                       <n-switch
                         size="small"
                         :value="ver.is_shared"
-                        :disabled="globalShareDisabled"
+                        :loading="shareToggleVersionId === ver.id"
+                        :disabled="globalShareDisabled || !!shareToggleVersionId"
                         @update:value="toggleShare(ver, $event)"
                       />
                     </div>
@@ -163,7 +164,7 @@
 </template>
 
 <script setup lang="ts">
-import { ref, onMounted, onBeforeUnmount, computed, watch } from 'vue';
+import { ref, onMounted, onBeforeUnmount, computed, watch, h } from 'vue';
 import { useI18n } from 'vue-i18n';
 import { 
   NButton, NIcon, NCard, NEmpty, NTag, NSpace, NPopconfirm, NModal, NAlert,
@@ -172,6 +173,7 @@ import {
 } from 'naive-ui';
 import { CloudDownload, Copy, Play, RefreshCw, Save, SquarePen, Trash } from 'lucide-vue-next';
 import { fetchWithAuth } from '@/services/api';
+import { useMainlandComplianceLocale } from '@/i18n/compliance';
 import { useProjectStore } from '@/components/stores/projectStore';
 import bus from '@/eventBus';
 
@@ -190,6 +192,20 @@ type VersionListItem = {
   share_url_public?: string | null;
 };
 
+type ShareReviewPayload = {
+  decision?: string;
+  reason?: string;
+  risk_tags?: string[];
+  evidence?: string[];
+  rejected_chunk_index?: number | null;
+  total_chunks?: number;
+};
+
+type ApiFailure = {
+  message: string;
+  review: ShareReviewPayload | null;
+};
+
 type VersionFormModel = {
   id: string | null;
   projectName: string | null;
@@ -206,15 +222,20 @@ const props = defineProps({
 const message = useMessage();
 const dialog = useDialog();
 const { t, locale } = useI18n();
+const showMainlandComplianceFeatures = useMainlandComplianceLocale();
 const projectStore = useProjectStore();
 
 const versions = ref<VersionListItem[]>([]);
 const loading = ref(false);
+const shareToggleVersionId = ref<string | null>(null);
 const showModal = ref(false);
 const submitting = ref(false);
 const isEditing = ref(false);
 const filterProject = ref<string | null>(null);
 const globalShareDisabled = ref(true);
+const publicShareReviewEffective = ref(false);
+
+const SHARE_UPDATE_HANDLED_ERROR = '__SHARE_UPDATE_HANDLED__';
 
 const formModel = ref<VersionFormModel>({
   id: null,
@@ -235,25 +256,65 @@ const projectOptions = computed(() => {
   return projectStore.projects.map(p => ({ label: p, value: p }));
 });
 
+const spinDescription = computed(() => {
+  if (shareToggleVersionId.value) {
+    return publicShareReviewEffective.value
+      ? t('components.versionManager.shareReviewLoading')
+      : t('components.versionManager.shareToggleLoading');
+  }
+  return '';
+});
+
 const canSubmit = computed(() => {
   if (isEditing.value) return !!formModel.value.versionName;
   return (props.projectId || formModel.value.projectName) && formModel.value.versionName;
 });
 
-async function parseApiError(response: Response, fallback: string): Promise<string> {
+async function parseApiFailure(response: Response, fallback: string): Promise<ApiFailure> {
+  let payload: Record<string, unknown> | null = null;
   try {
-    const payload = await response.json() as Record<string, unknown>;
+    payload = await response.json() as Record<string, unknown>;
+  } catch {
+    return { message: fallback, review: null };
+  }
+
+  let messageText = fallback;
+  try {
     const detail = payload.detail;
-    if (typeof payload.error === 'string' && payload.error) return payload.error;
-    if (typeof payload.message === 'string' && payload.message) return payload.message;
-    if (typeof detail === 'string' && detail) return detail;
+    if (typeof payload.error === 'string' && payload.error) messageText = payload.error;
+    else if (typeof payload.message === 'string' && payload.message) messageText = payload.message;
+    else if (typeof detail === 'string' && detail) messageText = detail;
     if (detail && typeof detail === 'object' && typeof (detail as { message?: unknown }).message === 'string') {
-      return (detail as { message: string }).message;
+      messageText = (detail as { message: string }).message;
     }
   } catch {
-    // ignore invalid response body
   }
-  return fallback;
+
+  const rawReview = payload.review;
+  if (!rawReview || typeof rawReview !== 'object' || Array.isArray(rawReview)) {
+    return { message: messageText, review: null };
+  }
+
+  const reviewRecord = rawReview as Record<string, unknown>;
+  return {
+    message: messageText,
+    review: {
+      decision: typeof reviewRecord.decision === 'string' ? reviewRecord.decision : undefined,
+      reason: typeof reviewRecord.reason === 'string' ? reviewRecord.reason : undefined,
+      risk_tags: Array.isArray(reviewRecord.risk_tags)
+        ? reviewRecord.risk_tags.filter((item): item is string => typeof item === 'string' && !!item.trim())
+        : [],
+      evidence: Array.isArray(reviewRecord.evidence)
+        ? reviewRecord.evidence.filter((item): item is string => typeof item === 'string' && !!item.trim())
+        : [],
+      rejected_chunk_index: typeof reviewRecord.rejected_chunk_index === 'number' ? reviewRecord.rejected_chunk_index : null,
+      total_chunks: typeof reviewRecord.total_chunks === 'number' ? reviewRecord.total_chunks : undefined,
+    },
+  };
+}
+
+async function parseApiError(response: Response, fallback: string): Promise<string> {
+  return (await parseApiFailure(response, fallback)).message;
 }
 
 async function loadPublicShareState() {
@@ -261,13 +322,60 @@ async function loadPublicShareState() {
     const res = await fetchWithAuth('/api/admin/config/public-share-state');
     if (!res.ok) {
       globalShareDisabled.value = true;
+      publicShareReviewEffective.value = false;
       return;
     }
-    const data = await res.json() as { success?: boolean; data?: { disable_public_share?: boolean } };
+    const data = await res.json() as {
+      success?: boolean;
+      data?: {
+        disable_public_share?: boolean;
+        force_public_share_review?: boolean;
+        force_public_share_review_effective?: boolean;
+      };
+    };
     globalShareDisabled.value = !!data.data?.disable_public_share;
+    publicShareReviewEffective.value = typeof data.data?.force_public_share_review_effective === 'boolean'
+      ? !!data.data?.force_public_share_review_effective
+      : (showMainlandComplianceFeatures.value && !!data.data?.force_public_share_review);
   } catch {
     globalShareDisabled.value = true;
+    publicShareReviewEffective.value = false;
   }
+}
+
+function showShareReviewRejectedDialog(review: ShareReviewPayload | null, fallbackMessage: string) {
+  const reason = review?.reason || fallbackMessage;
+  const riskTags = review?.risk_tags || [];
+  const evidence = review?.evidence || [];
+
+  dialog.warning({
+    title: t('components.versionManager.shareReviewRejectedDialog.title'),
+    positiveText: t('common.confirm'),
+    content: () => h('div', { class: 'share-review-dialog' }, [
+      h('p', { class: 'share-review-dialog-intro' }, t('components.versionManager.shareReviewRejectedDialog.intro')),
+      h('div', { class: 'share-review-dialog-block' }, [
+        h('div', { class: 'share-review-dialog-label' }, t('components.versionManager.shareReviewRejectedDialog.reasonLabel')),
+        h('div', { class: 'share-review-dialog-text' }, reason),
+      ]),
+      ...(riskTags.length > 0
+        ? [
+            h('div', { class: 'share-review-dialog-block' }, [
+              h('div', { class: 'share-review-dialog-label' }, t('components.versionManager.shareReviewRejectedDialog.riskTagsLabel')),
+              h('ul', { class: 'share-review-dialog-list' }, riskTags.map((item) => h('li', { class: 'share-review-dialog-item' }, item))),
+            ]),
+          ]
+        : []),
+      ...(evidence.length > 0
+        ? [
+            h('div', { class: 'share-review-dialog-block' }, [
+              h('div', { class: 'share-review-dialog-label' }, t('components.versionManager.shareReviewRejectedDialog.evidenceLabel')),
+              h('ul', { class: 'share-review-dialog-list' }, evidence.map((item) => h('li', { class: 'share-review-dialog-item' }, item))),
+            ]),
+          ]
+        : []),
+      h('div', { class: 'share-review-dialog-footer' }, t('components.versionManager.shareReviewRejectedDialog.footer')),
+    ]),
+  });
 }
 
 async function loadVersions() {
@@ -386,6 +494,7 @@ async function toggleShare(ver: VersionListItem, value: boolean) {
 
   const oldVal = ver.is_shared;
   ver.is_shared = value;
+  shareToggleVersionId.value = ver.id;
   try {
     const res = await fetchWithAuth(`/api/versions/${ver.id}`, {
       method: 'PUT',
@@ -393,7 +502,12 @@ async function toggleShare(ver: VersionListItem, value: boolean) {
       body: JSON.stringify({ is_shared: value })
     });
     if (!res.ok) {
-      throw new Error(await parseApiError(res, t('components.versionManager.shareUpdateFailed')));
+      const failure = await parseApiFailure(res, t('components.versionManager.shareUpdateFailed'));
+      if (failure.review) {
+        showShareReviewRejectedDialog(failure.review, failure.message);
+        throw new Error(SHARE_UPDATE_HANDLED_ERROR);
+      }
+      throw new Error(failure.message);
     }
 
     const data = await res.json().catch(() => ({} as { share_id?: string }));
@@ -404,8 +518,13 @@ async function toggleShare(ver: VersionListItem, value: boolean) {
     message.success(value ? t('components.versionManager.switchedPublic') : t('components.versionManager.switchedPrivate'));
   } catch (e: unknown) {
     ver.is_shared = oldVal;
+    if (e instanceof Error && e.message === SHARE_UPDATE_HANDLED_ERROR) {
+      return;
+    }
     const errorMessage = e instanceof Error ? e.message : t('components.versionManager.shareUpdateFailed');
     message.error(errorMessage);
+  } finally {
+    shareToggleVersionId.value = null;
   }
 }
 
@@ -517,10 +636,23 @@ function handleSystemConfigUpdated(payload: unknown) {
   ) {
     globalShareDisabled.value = (payload as { disable_public_share: boolean }).disable_public_share;
   }
+
+  if (
+    payload &&
+    typeof payload === 'object' &&
+    typeof (payload as { force_public_share_review?: unknown }).force_public_share_review === 'boolean'
+  ) {
+    publicShareReviewEffective.value = showMainlandComplianceFeatures.value
+      && !!(payload as { force_public_share_review: boolean }).force_public_share_review;
+  }
 }
 
 watch(() => props.projectId, () => {
   void loadVersions();
+});
+
+watch(() => locale.value, () => {
+  void loadPublicShareState();
 });
 
 onMounted(() => {
@@ -642,6 +774,40 @@ onBeforeUnmount(() => {
 .version-desc {
   color: var(--n-text-color-3);
   font-size: 0.9em;
+}
+
+.share-review-dialog {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+
+.share-review-dialog-intro,
+.share-review-dialog-footer,
+.share-review-dialog-text {
+  line-height: 1.6;
+  color: var(--n-text-color-2);
+}
+
+.share-review-dialog-block {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.share-review-dialog-label {
+  font-weight: 700;
+  color: var(--n-text-color-1);
+}
+
+.share-review-dialog-list {
+  margin: 0;
+  padding-left: 18px;
+  color: var(--n-text-color-2);
+}
+
+.share-review-dialog-item {
+  line-height: 1.5;
 }
 
 @media (max-width: 720px) {

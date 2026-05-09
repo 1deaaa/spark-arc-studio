@@ -162,6 +162,52 @@ class CriticAgent(SparkBaseAgent):
             "feedback": rewrite_brief,
         }
 
+    def _normalize_public_share_review_result(self, result: Dict[str, Any]) -> Dict[str, Any]:
+        decision = str(result.get("decision") or result.get("status") or "").strip().upper()
+        if decision not in {"PASS", "REJECT"}:
+            decision = "PASS" if result.get("allow") is True else "REJECT"
+
+        reason = str(
+            result.get("reason")
+            or result.get("summary")
+            or result.get("message")
+            or ("审核通过" if decision == "PASS" else "未明确满足公开分享要求")
+        ).strip()
+
+        raw_risk_tags = result.get("risk_tags") or result.get("tags") or []
+        raw_evidence = result.get("evidence") or []
+
+        risk_tags = [
+            str(item).strip()
+            for item in raw_risk_tags
+            if str(item).strip()
+        ] if isinstance(raw_risk_tags, list) else []
+        evidence = [
+            str(item).strip()
+            for item in raw_evidence
+            if str(item).strip()
+        ] if isinstance(raw_evidence, list) else []
+
+        return {
+            "decision": decision,
+            "reason": reason,
+            "risk_tags": risk_tags,
+            "evidence": evidence,
+        }
+
+    def _invoke_prompt_json(self, prompts: Dict[str, Any]) -> Dict[str, Any]:
+        messages = [
+            SystemMessage(content=prompts["system"]),
+            HumanMessage(content=prompts["user"]),
+        ]
+
+        response = self.llm.invoke(messages)
+        raw_content = response.content if isinstance(response.content, str) else str(response.content)
+        content = self._clean_json_block(
+            extract_visible_text_from_plain_text(raw_content)
+        )
+        return json.loads(content)
+
     def evaluate(
         self,
         script_nodes: Optional[List[Dict[str, Any]]] = None,
@@ -194,24 +240,30 @@ class CriticAgent(SparkBaseAgent):
             review_target=review_target or "当前文本/场景",
         )
 
-        messages = [
-            SystemMessage(content=prompts['system']),
-            HumanMessage(content=prompts['user'])
-        ]
-
         try:
-            response = self.llm.invoke(messages)
-            raw_content = (
-                response.content if isinstance(response.content, str) else str(response.content)
-            )
-            content = self._clean_json_block(
-                extract_visible_text_from_plain_text(raw_content)
-            )
-            result = json.loads(content)
+            result = self._invoke_prompt_json(prompts)
             return self._normalize_review_result(result)
             
         except Exception as e:
             raise RuntimeError(f"[Critic] 评审失败: {e}")
+
+    def moderate_public_share(
+        self,
+        content_text: str,
+        review_target: str = "公开分享内容",
+    ) -> Dict[str, Any]:
+        prompts = load_prompt(
+            "critic",
+            "public_share_moderation",
+            review_target=review_target or "公开分享内容",
+            content=content_text.strip() or "（未提供待审核文本）",
+        )
+
+        try:
+            result = self._invoke_prompt_json(prompts)
+            return self._normalize_public_share_review_result(result)
+        except Exception as e:
+            raise RuntimeError(f"[Critic] 公开分享审核失败: {e}")
 
     def _clean_json_block(self, text: str) -> str:
         text = text.strip()

@@ -102,20 +102,17 @@
                         </div>
                         <n-tooltip trigger="hover" placement="top">
                             <template #trigger>
-                                <n-button
-                                    text
-                                    :loading="Boolean(proj._refreshing)"
+                                <button
                                     :disabled="!proj.enabled || isProjectBuilding(proj) || Boolean(proj._refreshing)"
                                     class="refresh-icon-btn"
+                                    :class="{ 'refresh-icon-btn--spinning': Boolean(proj._refreshing) }"
                                     @click="handleRefresh(proj)"
                                     :aria-label="t('components.semanticSearchCard.refreshTooltip')"
                                 >
-                                    <template #icon>
-                                        <n-icon :size="16">
-                                            <RefreshCw />
-                                        </n-icon>
-                                    </template>
-                                </n-button>
+                                    <n-icon :size="15">
+                                        <RefreshCw />
+                                    </n-icon>
+                                </button>
                             </template>
                             {{ proj.enabled
                                 ? t('components.semanticSearchCard.refreshTooltip')
@@ -748,17 +745,41 @@ onBeforeUnmount(() => {
 }
 
 .refresh-icon-btn {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    width: 24px;
+    height: 24px;
+    border: none;
+    border-radius: 6px;
+    background: transparent;
     color: var(--spark-text-muted);
-    transition: color 0.15s ease;
-    padding: 0 4px;
+    cursor: pointer;
+    transition: color 0.15s ease, opacity 0.15s ease;
+    padding: 0;
+    flex-shrink: 0;
 }
 
 .refresh-icon-btn:hover:not(:disabled) {
     color: var(--spark-primary);
 }
 
-.refresh-icon-btn[disabled] {
-    opacity: 0.4;
+.refresh-icon-btn:disabled {
+    opacity: 0.35;
     cursor: not-allowed;
+}
+
+.refresh-icon-btn--spinning {
+    color: var(--spark-primary);
+    opacity: 0.7;
+}
+
+.refresh-icon-btn--spinning :deep(svg) {
+    animation: semantic-refresh-spin 0.9s linear infinite;
+}
+
+@keyframes semantic-refresh-spin {
+    from { transform: rotate(0deg); }
+    to { transform: rotate(360deg); }
 }
 </style>

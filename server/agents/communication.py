@@ -564,13 +564,13 @@ class SparkBaseAgent:
                     from datetime import datetime
                     from zoneinfo import ZoneInfo
 
-                    _search_now = datetime.now(ZoneInfo("Asia/Shanghai")).strftime("%Y-%m-%d %H:%M:%S %z")
+                    _search_date = datetime.now(ZoneInfo("Asia/Shanghai")).strftime("%Y-%m-%d")
                 except Exception:
-                    _search_now = time.strftime("%Y-%m-%d %H:%M:%S %z")
+                    _search_date = time.strftime("%Y-%m-%d")
                 tool_instruction += f"""
 ### 联网搜索时间锚点（仅用于 web_search）
-当前真实时间（UTC+8）：{_search_now}
-- 当用户要求“最新、当前、现在、最近、新闻、实时”等时间敏感信息时，调用 `web_search` 前必须以这个真实时间作为判断基准。
+当前真实日期（UTC+8）：{_search_date}
+- 当用户要求"最新、当前、现在、最近、新闻、实时"等时间敏感信息时，调用 `web_search` 前必须以这个真实日期作为判断基准。
 - 为 `web_search.query` 编写查询词时，应显式包含当前年份/日期或等价时间范围，避免按模型记忆中的旧年份搜索。
 """
             

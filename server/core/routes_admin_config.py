@@ -2,7 +2,16 @@ from pydantic import BaseModel
 from typing import Optional, List, Dict, Any
 from fastapi import APIRouter, Depends, HTTPException
 from .auth import require_admin
-from .system_settings import get_disable_public_share, set_disable_public_share
+from .compliance_features import (
+    is_force_public_share_review_effective,
+    is_mainland_compliance_locale,
+)
+from .system_settings import (
+    get_disable_public_share,
+    get_force_public_share_review,
+    set_disable_public_share,
+    set_force_public_share_review,
+)
 from .verification import (
     VerificationConfigError,
     get_registration_verification_admin_view,
@@ -20,11 +29,15 @@ class AdminConfigResponse(BaseModel):
     use_sys_llm_config: bool
     llm_key_set: bool  # LLM_KEY 是否已设置
     disable_public_share: bool
+    force_public_share_review: bool
+    force_public_share_review_effective: bool
+    mainland_compliance_features_enabled: bool
 
 class AdminConfigUpdate(BaseModel):
     llm_auto_key: Optional[bool] = None
     use_sys_llm_config: Optional[bool] = None
     disable_public_share: Optional[bool] = None
+    force_public_share_review: Optional[bool] = None
 
 class LLMKeyUpdate(BaseModel):
     key: str
@@ -49,6 +62,9 @@ async def get_global_config(admin_user: dict = Depends(require_admin)):
                 "use_sys_llm_config": sys_config["use_sys_llm_config"],
                 "llm_key_set": llm_key_set,
                 "disable_public_share": get_disable_public_share(),
+                "force_public_share_review": get_force_public_share_review(),
+                "force_public_share_review_effective": is_force_public_share_review_effective(),
+                "mainland_compliance_features_enabled": is_mainland_compliance_locale(),
             }
         }
     except Exception as e:
@@ -62,6 +78,9 @@ async def get_public_share_state():
             "success": True,
             "data": {
                 "disable_public_share": get_disable_public_share(),
+                "force_public_share_review": get_force_public_share_review(),
+                "force_public_share_review_effective": is_force_public_share_review_effective(),
+                "mainland_compliance_features_enabled": is_mainland_compliance_locale(),
             }
         }
     except Exception as e:
@@ -81,6 +100,9 @@ async def update_global_config(data: AdminConfigUpdate, admin_user: dict = Depen
 
         if data.disable_public_share is not None:
             set_disable_public_share(bool(data.disable_public_share))
+
+        if data.force_public_share_review is not None:
+            set_force_public_share_review(bool(data.force_public_share_review))
         
     except Exception as e:
         print(f"Update AIManager state failed: {e}")

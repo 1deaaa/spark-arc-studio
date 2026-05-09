@@ -49,6 +49,19 @@
                             </div>
                             <n-switch :value="!config.disable_public_share" @update:value="(val) => updateConfig('disable_public_share', !val)" />
                         </div>
+
+                        <n-divider v-if="showMainlandComplianceConfig" />
+
+                        <div v-if="showMainlandComplianceConfig" class="config-item">
+                            <div class="item-label-group">
+                                <span>{{ t('components.adminConfigPanel.forcePublicShareReview.label') }}</span>
+                                <n-tooltip trigger="hover">
+                                    <template #trigger><n-icon class="help-icon"><CircleHelp /></n-icon></template>
+                                    {{ t('components.adminConfigPanel.forcePublicShareReview.help') }}
+                                </n-tooltip>
+                            </div>
+                            <n-switch v-model:value="config.force_public_share_review" @update:value="(val) => updateConfig('force_public_share_review', val)" />
+                        </div>
                     </div>
                 </n-form>
             </n-card>
@@ -219,6 +232,7 @@ import {
 import SparkAlert from '../share/SparkAlert.vue';
 import { CircleAlert, CircleCheckBig, CircleHelp, Pencil } from 'lucide-vue-next';
 import { fetchWithAuth } from '../../services/api';
+import { useMainlandComplianceLocale } from '@/i18n/compliance';
 import { bus } from '../../eventBus';
 
 type GlobalConfig = {
@@ -226,6 +240,7 @@ type GlobalConfig = {
     use_sys_llm_config: boolean;
     llm_key_set: boolean;
     disable_public_share: boolean;
+    force_public_share_review: boolean;
 };
 
 type RegistrationVerificationView = {
@@ -241,6 +256,7 @@ type VerificationDialogMode = 'enable' | 'edit';
 const message = useMessage();
 const dialog = useDialog();
 const { t } = useI18n();
+const showMainlandComplianceConfig = useMainlandComplianceLocale();
 const loading = ref(false);
 const keySaving = ref(false);
 const newLLMKey = ref('');
@@ -250,6 +266,7 @@ const config = ref<GlobalConfig>({
     use_sys_llm_config: false,
     llm_key_set: false,
     disable_public_share: true,
+    force_public_share_review: true,
 });
 
 const verification = ref<RegistrationVerificationView>({

@@ -3,10 +3,10 @@ from __future__ import annotations
 import bisect
 import os
 import re
-from typing import Any
+from typing import Any, ClassVar
 
 from langchain.tools import tool
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, Field, field_validator
 
 from core.request_context import current_user_id, get_current_project_name
 from core.utils import get_project_path
@@ -23,6 +23,35 @@ class SemanticSearchInput(BaseModel):
     query: str = Field(description="自然语言查询，用于语义搜索当前项目文本与已上传附件。例如 '女主角哭的地方'、'主角与反派的对峙'，或 '附件里关于工厂安全规范的段落'")
     scope: list[str] | None = Field(default=None, description="搜索范围过滤，限定格式类型。可选值：outline, synopsis, beats, worldview, character, arc, novel, chrbind, attachment。例如 ['arc', 'outline'] 只搜剧本和大纲，['attachment'] 只搜已上传附件")
     k: int = Field(default=8, description="返回结果数量上限")
+
+    VALID_SCOPE_VALUES: ClassVar[set[str]] = {
+        "outline", "synopsis", "beats", "worldview",
+        "character", "arc", "novel", "chrbind", "attachment",
+    }
+
+    @field_validator("scope", mode="before")
+    @classmethod
+    def _coerce_scope(cls, v: Any) -> list[str] | None:
+        """LLM 常把 scope 传为字符串（如 'attachment' 或 'arc, outline'），自动 coerce 为列表。"""
+        if v is None:
+            return None
+        if isinstance(v, str):
+            items = [s.strip() for s in v.split(",") if s.strip()]
+            return items if items else None
+        if isinstance(v, list):
+            return v
+        return v
+
+    @field_validator("scope")
+    @classmethod
+    def _validate_scope_values(cls, v: list[str] | None) -> list[str] | None:
+        """校验 scope 值是否合法，给出清晰错误提示。"""
+        if v is None:
+            return None
+        invalid = [s for s in v if s not in cls.VALID_SCOPE_VALUES]
+        if invalid:
+            raise ValueError(f"scope 包含无效值 {invalid}，合法值为: {sorted(cls.VALID_SCOPE_VALUES)}")
+        return v
 
 
 class ReplaceFromSearchInput(BaseModel):

@@ -276,6 +276,16 @@ const zhCN = {
       exportNovelDone: '小说快照已导出',
       exportScriptDone: '剧本快照已导出',
       linkCopied: '分享链接已复制',
+      shareToggleLoading: '正在更新公开状态，请稍候…',
+      shareReviewLoading: '正在执行公开前审核，请稍候…',
+      shareReviewRejectedDialog: {
+        title: '公开前审核未通过',
+        intro: '当前内容暂不适合公开分享。你可以根据以下原因调整后再试。',
+        reasonLabel: '拦截原因',
+        riskTagsLabel: '风险类型',
+        evidenceLabel: '命中片段',
+        footer: '修改内容后，再次切换为公开即可重新发起审核。',
+      },
       publicShareEnableWarning: {
         title: '确认开启公开分享',
         content:
@@ -354,6 +364,10 @@ const zhCN = {
       disablePublicShare: {
         label: '允许公开分享',
         help: '开启后，用户可创建公开分享链接；关闭后，全站公开分享链接不可访问，用户本人仍可通过试玩入口访问自己的版本。',
+      },
+      forcePublicShareReview: {
+        label: '强制公开前审核',
+        help: '开启后，用户将内容切换为公开分享前，会先按中国大陆网络内容管理口径进行审核；只有明确通过才允许公开。关闭后，公开分享仅受总开关约束。',
       },
       publicShareEnableWarning: {
         title: '确认开启全站公开分享',

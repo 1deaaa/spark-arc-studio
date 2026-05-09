@@ -1,11 +1,11 @@
 <template>
-  <span v-if="locale === 'zh-CN'" class="zh-only-tag" :class="type">
+  <span v-if="showZhOnly" class="zh-only-tag" :class="type">
     <slot />
   </span>
 </template>
 
 <script setup lang="ts">
-import { useI18n } from 'vue-i18n';
+import { useMainlandComplianceLocale } from '@/i18n/compliance';
 
 /**
  * 仅在当前界面语言为简体中文时渲染内容的合规标签组件。
@@ -18,7 +18,7 @@ withDefaults(defineProps<{ type?: ZhOnlyTagType }>(), {
   type: 'disclaimer',
 });
 
-const { locale } = useI18n();
+const showZhOnly = useMainlandComplianceLocale();
 </script>
 
 <style scoped>

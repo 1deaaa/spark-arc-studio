@@ -9,9 +9,14 @@ import re
 from datetime import datetime, timezone
 
 from core.auth import get_current_user
+from core.compliance_features import is_force_public_share_review_effective
 from core.models import UserInfoSession, ProjectVersion
 from core.utils import get_project_path
 from core.system_settings import get_disable_public_share
+from story.public_share_review import (
+    PublicShareReviewRejectedError,
+    ensure_public_share_allowed,
+)
 from story.importer import import_project_stories_to_db
 from story.novel_parser import aggregate_novel
 
@@ -211,6 +216,27 @@ async def update_version(version_id: str, data: VersionUpdate, user: dict = Depe
         if data.is_shared is not None:
             if data.is_shared and get_disable_public_share():
                 return JSONResponse(status_code=403, content={'error': '管理员已禁用公开分享'})
+            if data.is_shared and not version.is_shared and is_force_public_share_review_effective():
+                try:
+                    content_format = _decode_version_description(version.description)[1]
+                    ensure_public_share_allowed(user_id, version.project_name, content_format)
+                except PublicShareReviewRejectedError as exc:
+                    return JSONResponse(
+                        status_code=403,
+                        content={
+                            'error': f'公开前审核未通过：{exc.result.reason}',
+                            'review': {
+                                'decision': exc.result.decision,
+                                'reason': exc.result.reason,
+                                'risk_tags': exc.result.risk_tags,
+                                'evidence': exc.result.evidence,
+                                'rejected_chunk_index': exc.result.rejected_chunk_index,
+                                'total_chunks': exc.result.total_chunks,
+                            },
+                        },
+                    )
+                except Exception as exc:
+                    return JSONResponse(status_code=503, content={'error': f'公开前审核失败：{exc}'})
             version.is_shared = data.is_shared
             if version.is_shared and not version.share_id:
                 version.share_id = str(uuid.uuid4())
