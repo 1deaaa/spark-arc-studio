@@ -55,6 +55,12 @@ export type InspirationStatus = 'read' | 'unread';
 
 export type InspirationOrigin = 'ui' | 'mcp' | 'legacy';
 
+// 灵感列表过滤范围：
+// - all：全部（默认）
+// - project：仅返回已绑定到指定项目的灵感
+// - drafts：仅返回未绑定到任何项目的草稿
+export type InspirationScope = 'all' | 'project' | 'drafts';
+
 export type InspirationEntry = {
   id: string;
   timestamp: string;
@@ -63,12 +69,21 @@ export type InspirationEntry = {
   content?: string;
   tags?: InspirationTags;
   status?: InspirationStatus;
+  /**
+   * 已绑定到的项目名列表；空数组 / 缺失 表示草稿。
+   * 多对多软关联：一条灵感可同时属于多个项目。
+   */
+  project_links?: string[];
   [key: string]: unknown;
 };
 
 export type InspirationListResponse = {
   inspirations: InspirationEntry[];
   unreadCount: number;
+  /** 后端回显的过滤范围，供前端验证一致性 */
+  scope?: InspirationScope;
+  /** 后端回显的项目名（其他 scope 下可能为 null） */
+  project?: string | null;
 };
 
 export type OutlineHistoryEntry = {

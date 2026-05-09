@@ -126,6 +126,13 @@ async def delete_project(project_name: str, user: dict = Depends(get_current_use
         except Exception as e:
             print(f"清除项目版本记录失败: {e}")
 
+        # 4. 清理所有灵感的 project_links 引用，避免出现指向已删除项目的“鬼绑定”
+        try:
+            from mcp_server.spark_inspiration.logic import cleanup_project_from_all_inspirations
+            cleanup_project_from_all_inspirations(user_id, project_name)
+        except Exception as e:
+            print(f"清理项目灵感绑定失败: {e}")
+
         return {"success": True, "message": "项目删除成功"}
     except Exception as exc:
         return JSONResponse(status_code=500, content={"success": False, "message": f"项目删除失败: {exc}"})
@@ -166,6 +173,13 @@ async def rename_project(project_name: str, data: ProjectRename, user: dict = De
             ChatManager.rename_project(user_id=user_id, old_name=project_name, new_name=new_name)
         except Exception as e:
             print(f"更新聊天记录失败: {e}")
+
+        # 同步更新灵感的 project_links，保证重命名后绑定关系不丢失
+        try:
+            from mcp_server.spark_inspiration.logic import rename_project_in_all_inspirations
+            rename_project_in_all_inspirations(user_id, project_name, new_name)
+        except Exception as e:
+            print(f"更新灵感绑定关系失败: {e}")
 
         return {"success": True, "message": "项目重命名成功", "newName": new_name}
     except Exception as exc:

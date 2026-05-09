@@ -172,6 +172,14 @@ class InspirationUpdateRequest(BaseModel):
     status: Optional[str] = None  # "unread" / "read"
 
 
+class InspirationBindRequest(BaseModel):
+    """灵感与项目绑定/解绑的请求体。
+
+    project_name 必填：哪怕灵感库是用户级别的，绑定关系仍以项目名为粒度。
+    """
+    projectName: str
+
+
 class SynopsisRequest(BaseModel):
     projectName: Optional[str] = None
     logline: str

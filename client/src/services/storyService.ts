@@ -4,6 +4,7 @@ import type {
   ApiMutationResult,
   InspirationEntry,
   InspirationListResponse,
+  InspirationScope,
   InspirationStatus,
   InspirationTags,
   JsonObject,
@@ -380,17 +381,70 @@ export async function restoreOutlineFromHistory(projectName: string, entryId: nu
 // --- 全局灵感系统 (用户级别，非项目级别) ---
 
 /**
- * 获取所有灵感（全局）
- * @returns {Promise<{inspirations: Array, unread_count: number}>}
+ * 灵感列表查询参数。
+ * - scope=all （默认）返回全部，保持向后兼容；
+ * - scope=project 需同时传 project；
+ * - scope=drafts 仅返回未绑定任何项目的草稿。
  */
-export async function getInspirations(): Promise<InspirationListResponse> {
-  const response = await fetchWithAuth('/api/inspirations');
-  const result = await response.json() as { success?: boolean; error?: string; inspirations?: InspirationEntry[]; unread_count?: number };
+export type InspirationListQuery = {
+  scope?: InspirationScope;
+  project?: string | null;
+};
+
+/**
+ * 获取灵感列表（全局）。按 query 传入可选过滤。
+ * @returns {Promise<InspirationListResponse>}
+ */
+export async function getInspirations(query?: InspirationListQuery): Promise<InspirationListResponse> {
+  const params = new URLSearchParams();
+  if (query?.scope) params.set('scope', query.scope);
+  if (query?.project) params.set('project', query.project);
+  const suffix = params.toString();
+  const url = suffix ? `/api/inspirations?${suffix}` : '/api/inspirations';
+  const response = await fetchWithAuth(url);
+  const result = await response.json() as {
+    success?: boolean;
+    error?: string;
+    inspirations?: InspirationEntry[];
+    unread_count?: number;
+    scope?: InspirationScope;
+    project?: string | null;
+  };
   if (!response.ok || result.success === false) throw new Error(result.error || '获取灵感失败');
   return {
     inspirations: result.inspirations || [],
     unreadCount: result.unread_count || 0,
+    scope: result.scope,
+    project: result.project ?? null,
   };
+}
+
+/**
+ * 将灵感绑定到指定项目（多对多软关联，重复调用幂等）。
+ */
+export async function bindInspiration(entryId: string, projectName: string): Promise<ApiMutationResult> {
+  const response = await fetchWithAuth(`/api/inspirations/${entryId}/bind`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ projectName }),
+  });
+  const result = await response.json() as ApiMutationResult;
+  if (!response.ok || result.success === false) throw new Error(result.error || '绑定灵感失败');
+  return result;
+}
+
+/**
+ * 从指定项目解绑灵感（解绑后仍存在，可能变成草稿或仍属于其他项目）。
+ */
+export async function unbindInspiration(entryId: string, projectName: string): Promise<ApiMutationResult> {
+  const response = await fetchWithAuth(`/api/inspirations/${entryId}/unbind`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ projectName }),
+  });
+  const result = await response.json() as ApiMutationResult;
+  if (!response.ok || result.success === false) throw new Error(result.error || '解绑灵感失败');
+  return result;
 }
 
 /**

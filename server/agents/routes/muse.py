@@ -5,26 +5,38 @@ Muse API - 灵感工坊
 灵感存储在用户级别（非项目级别），支持跨项目复用。
 """
 
-from fastapi import APIRouter, Depends, Request
+from fastapi import APIRouter, Depends, Query, Request
 from fastapi.responses import StreamingResponse, JSONResponse
 from typing import Optional, Dict, List, Any
 import threading
 
 from core.auth import get_current_user
+from core.request_context import normalize_project_name
 
 from agents.setup_agents import MuseAgent
 from llm.agen_matchbox.reasoning_compat import extract_text_content_from_message
 from mcp_server.spark_inspiration.logic import (
+    INSPIRATION_SCOPE_ALL,
+    INSPIRATION_SCOPE_PROJECT,
+    VALID_INSPIRATION_SCOPES,
+    bind_inspiration_to_project,
     save_inspiration,
     get_all_inspirations,
     update_inspiration,
     delete_inspiration,
     mark_as_read,
     get_unread_count,
-    current_user_id
+    unbind_inspiration_from_project,
+    current_user_id,
 )
 
-from .schemas import MuseRequest, InspirationCreateRequest, InspirationUpdateRequest, format_ai_error
+from .schemas import (
+    InspirationBindRequest,
+    InspirationCreateRequest,
+    InspirationUpdateRequest,
+    MuseRequest,
+    format_ai_error,
+)
 from .streaming_utils import iterate_sync_iterable_in_thread
 
 muse_router = APIRouter()
@@ -44,15 +56,52 @@ def _build_muse_tags(data: MuseRequest) -> Dict[str, List[str]]:
 # ==================== 灵感列表与管理 ====================
 
 @muse_router.get('/api/inspirations')
-async def get_inspirations(user: dict = Depends(get_current_user)):
-    """获取用户的所有灵感（全局，按时间倒序）"""
+async def get_inspirations(
+    user: dict = Depends(get_current_user),
+    scope: str = Query(
+        INSPIRATION_SCOPE_ALL,
+        description=(
+            "过滤范围：all=全部（默认）；project=已绑定到指定项目的灵感（必须配合 project 参数）；"
+            "drafts=未绑定任何项目的草稿"
+        ),
+    ),
+    project: Optional[str] = Query(None, description="scope=project 时指定的项目名"),
+):
+    """获取用户的灵感列表（全局，按时间倒序）。
+
+    新增可选过滤参数（向前兼容）：
+    - scope=all（默认）→ 旧行为，返回全部灵感
+    - scope=project + project=<名字> → 仅返回已绑定到该项目的灵感
+    - scope=drafts → 仅返回未绑定到任何项目的草稿
+    """
     user_id = str(user['user_id'])
-    inspirations = get_all_inspirations(user_id)
+
+    normalized_scope = (scope or INSPIRATION_SCOPE_ALL).strip().lower()
+    if normalized_scope not in VALID_INSPIRATION_SCOPES:
+        normalized_scope = INSPIRATION_SCOPE_ALL
+
+    project_name = normalize_project_name(project) if project else None
+    if normalized_scope == INSPIRATION_SCOPE_PROJECT and not project_name:
+        return JSONResponse(
+            status_code=400,
+            content={
+                'success': False,
+                'error': "scope=project 必须同时提供 project 参数",
+            },
+        )
+
+    inspirations = get_all_inspirations(
+        user_id,
+        project_name=project_name,
+        scope=normalized_scope,
+    )
     unread = get_unread_count(user_id)
     return {
         'success': True,
         'inspirations': inspirations,
-        'unread_count': unread
+        'unread_count': unread,
+        'scope': normalized_scope,
+        'project': project_name,
     }
 
 
@@ -130,6 +179,53 @@ async def delete_inspiration_entry(entry_id: str, user: dict = Depends(get_curre
         return {'success': True}
     else:
         return JSONResponse(status_code=404, content={'success': False, 'error': '灵感不存在'})
+
+
+# ==================== 灵感 ↔ 项目 软关联 ====================
+# bind/unbind 与 project_links 字段共同支撑“按项目隔离 AI 上下文”的设计。
+# 详见 mcp_server/spark_inspiration/logic.py 顶部注释。
+
+
+@muse_router.post('/api/inspirations/{entry_id}/bind')
+async def bind_inspiration_entry(
+    entry_id: str,
+    data: InspirationBindRequest,
+    user: dict = Depends(get_current_user),
+):
+    """将灵感条目绑定到指定项目（多对多软关联，重复绑定幂等）。"""
+    user_id = str(user['user_id'])
+    project_name = normalize_project_name(data.projectName) if data.projectName else None
+    if not project_name:
+        return JSONResponse(status_code=400, content={'success': False, 'error': '缺少有效的 projectName'})
+
+    success = bind_inspiration_to_project(user_id, entry_id, project_name)
+    if success:
+        return {'success': True, 'project': project_name}
+    return JSONResponse(
+        status_code=404,
+        content={'success': False, 'error': '灵感不存在或绑定失败'},
+    )
+
+
+@muse_router.post('/api/inspirations/{entry_id}/unbind')
+async def unbind_inspiration_entry(
+    entry_id: str,
+    data: InspirationBindRequest,
+    user: dict = Depends(get_current_user),
+):
+    """将灵感条目从指定项目解绑（解绑后仍存在，可能变成草稿或仍属于其他项目）。"""
+    user_id = str(user['user_id'])
+    project_name = normalize_project_name(data.projectName) if data.projectName else None
+    if not project_name:
+        return JSONResponse(status_code=400, content={'success': False, 'error': '缺少有效的 projectName'})
+
+    success = unbind_inspiration_from_project(user_id, entry_id, project_name)
+    if success:
+        return {'success': True, 'project': project_name}
+    return JSONResponse(
+        status_code=404,
+        content={'success': False, 'error': '灵感不存在或本未绑定到该项目'},
+    )
 
 
 # ==================== 灵感扩展生成 ====================

@@ -40,9 +40,15 @@ from agents.tools.lorebook import (
     update_character,
 )
 from agents.tools.muse import (
+    BindInspirationInput,
     CaptureInspirationInput,
+    ListInspirationsInput,
+    ReadInspirationInput,
     RewriteInspirationInput,
+    bind_inspiration_to_current_project,
     capture_inspiration,
+    list_inspirations,
+    read_inspiration,
     rewrite_inspiration,
 )
 from agents.tools.registry import (
@@ -108,7 +114,10 @@ from agents.tools.web_search import WebSearchInput, web_search
 
 __all__ = [
     "ALL_TOOLS",
+    "BindInspirationInput",
     "CaptureInspirationInput",
+    "ListInspirationsInput",
+    "ReadInspirationInput",
     "CheckScriptwriterStatusInput",
     "CreateChapterInput",
     "CreateOrRewriteScriptInput",
@@ -151,7 +160,10 @@ __all__ = [
     "_get_search_results",
     "_store_search_results",
     "_strip_markdown_fence",
+    "bind_inspiration_to_current_project",
     "capture_inspiration",
+    "list_inspirations",
+    "read_inspiration",
     "check_scriptwriter_status",
     "create_chapter",
     "create_or_rewrite_script",

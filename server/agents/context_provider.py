@@ -34,19 +34,31 @@ class AgentContextProvider:
     # ==================== Muse Agent ====================
 
     def get_inspirations_context(self, limit: int = 5) -> str:
-        """获取最近的灵感列表作为上下文"""
+        """获取与当前项目相关的灵感列表作为上下文。
+
+        关键策略（详见 mcp_server/spark_inspiration/logic.py 顶部注释）：
+        - 仅返回 project_links 命中当前项目的灵感，**草稿绝不进 prompt**；
+        - 当前项目命中 0 条 / 无项目上下文 → 返回空字符串，不注入任何灵感；
+        - 跨项目串台问题在这里被消除：切到项目 B 时，绝不会把项目 A 的灵感塞给 LLM；
+        - 用户希望看到草稿/全部灵感时，应通过 list_inspirations 工具主动检索。
+        """
+        if not self.project_name:
+            # 无项目语境时，灵感库一律不进 prompt（保持 Muse 在“项目外聊天”时的中立性）
+            return ""
+
         try:
-            from mcp_server.spark_inspiration.logic import get_all_inspirations
-            inspirations = get_all_inspirations(self.user_id)[:limit]
+            from mcp_server.spark_inspiration.logic import get_inspirations_for_project
+            inspirations = get_inspirations_for_project(self.user_id, self.project_name)
             if not inspirations:
                 return ""
-            
-            lines = ["### 你最近生成的灵感"]
+
+            inspirations = inspirations[:limit]
+            lines = [f"### 项目「{self.project_name}」已绑定的灵感"]
             for i, insp in enumerate(inspirations, 1):
                 source = (insp.get("source") or "")[:100]
                 content = (insp.get("content") or "")[:300]
                 timestamp = (insp.get("timestamp") or "")[:10]
-                
+
                 # 提取核心概念（如果有）
                 logline = ""
                 if content:
@@ -54,12 +66,16 @@ class AgentContextProvider:
                         if "核心概念" in line or "Logline" in line:
                             logline = line.split(":", 1)[-1].strip()[:150]
                             break
-                
+
                 entry = f"{i}. [{timestamp}] 源: \"{source}\""
                 if logline:
                     entry += f" → {logline}"
                 lines.append(entry)
-            
+
+            lines.append(
+                "（如需查看用户的草稿或其他项目灵感，请主动调用 list_inspirations 工具，"
+                "默认仅展示当前项目已绑定的灵感。）"
+            )
             return "\n".join(lines)
         except Exception as e:
             print(f"[ContextProvider] Error loading inspirations: {e}")

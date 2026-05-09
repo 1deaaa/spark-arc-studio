@@ -4,7 +4,13 @@ from agents.tools.attachment import read_attachment_chunk
 from agents.tools.automation import check_scriptwriter_status, trigger_auto_write, work_tracker
 from agents.tools.delegation import delegate_task
 from agents.tools.lorebook import patch_worldview, rewrite_all_characters, rewrite_worldview, update_character
-from agents.tools.muse import capture_inspiration, rewrite_inspiration
+from agents.tools.muse import (
+    bind_inspiration_to_current_project,
+    capture_inspiration,
+    list_inspirations,
+    read_inspiration,
+    rewrite_inspiration,
+)
 from agents.tools.research import graph_rag_tool
 from agents.tools.scriptwriter import (
     create_chapter,
@@ -29,7 +35,13 @@ from agents.tools.web_search import web_search
 
 MCP_ONLY_TOOLS = [capture_inspiration]
 EXTERNAL_SEARCH_TOOLS = [web_search]
-MUSE_TOOLS = [rewrite_inspiration, web_search]
+MUSE_TOOLS = [
+    rewrite_inspiration,
+    list_inspirations,
+    read_inspiration,
+    bind_inspiration_to_current_project,
+    web_search,
+]
 LOREBOOK_TOOLS = [
     rewrite_worldview,
     rewrite_all_characters,
