@@ -281,6 +281,37 @@ class AIManagerBase:
         self.ensure_database_schema()
         self.initialize_defaults(ensure_schema=False)
 
+    def _resolve_default_ids_from_db(self, session) -> None:
+        """从数据库 sort_order 确定默认平台 ID 和默认模型 ID。
+
+        优先级：
+        1. 数据库中 sort_order 最小的未禁用系统平台
+        2. 该平台内 sort_order 最小的未禁用非 Embedding 模型
+        """
+        from sqlalchemy.orm import selectinload
+
+        default_plat = (
+            session.query(LLMPlatform)
+            .options(selectinload(LLMPlatform.models))
+            .filter_by(is_sys=1, disable=0)
+            .order_by(LLMPlatform.sort_order)
+            .first()
+        )
+        if not default_plat:
+            raise RuntimeError("数据库中没有可用的系统平台")
+
+        self._default_platform_id = default_plat.id
+
+        sorted_models = sorted(default_plat.models, key=lambda m: m.sort_order)
+        default_model = next(
+            (m for m in sorted_models if not m.is_embedding and not self._is_model_disabled(m)),
+            None,
+        )
+        if not default_model:
+            raise RuntimeError(f"默认平台 '{default_plat.name}' 没有可用的 LLM 模型")
+
+        self._default_model_id = default_model.id
+
     def initialize_defaults(self, ensure_schema: bool = True):
         """同步默认平台并初始化默认ID"""
         if ensure_schema:
@@ -289,33 +320,10 @@ class AIManagerBase:
         self._ensure_sys_platform_keys_unique_constraint()
 
         self._sync_default_platforms()
-        
+
         with self.Session() as session:
-            default_platform_name = next(iter(DEFAULT_PLATFORM_CONFIGS))
-            default_platform_config = DEFAULT_PLATFORM_CONFIGS[default_platform_name]
-            default_model_display_name = None
-            for display_name, model_cfg in default_platform_config.get("models", {}).items():
-                if isinstance(model_cfg, dict) and model_cfg.get("is_embedding"):
-                    continue
-                default_model_display_name = display_name
-                break
-            if not default_model_display_name:
-                raise ValueError("默认平台未配置可用的 LLM 模型")
-            
-            default_plat = session.query(LLMPlatform).filter_by(name=default_platform_name, is_sys=1).first()
-            if default_plat:
-                self._default_platform_id = default_plat.id
-                default_model = session.query(LLModels).filter_by(
-                    platform_id=default_plat.id, 
-                    display_name=default_model_display_name
-                ).first()
-                if default_model:
-                    self._default_model_id = default_model.id
-                else:
-                    raise ValueError(f"默认模型 '{default_model_display_name}' 未找到")
-            else:
-                raise ValueError(f"默认平台 '{default_platform_name}' 未找到")
-        
+            self._resolve_default_ids_from_db(session)
+
         with self.Session() as session:
             self.ensure_user_has_config(session, SYSTEM_USER_ID)
 
@@ -409,12 +417,12 @@ class AIManagerBase:
                         plat.disable = 1
                 session.flush()
             
-            for name, cfg in raw_platform_configs.items():
+            for plat_idx, (name, cfg) in enumerate(raw_platform_configs.items()):
                 if not isinstance(cfg, dict) or "base_url" not in cfg:
                     continue
                 base_url = cfg["base_url"]
                 plat = session.query(LLMPlatform).filter_by(base_url=base_url, is_sys=1).first()
-                
+
                 if not plat and base_url not in disabled_base_urls:
                     # 新平台：添加到数据库（跳过已被管理员禁用的）
                     encrypted_key = _prepare_seed_api_key(cfg.get("api_key"))
@@ -424,13 +432,14 @@ class AIManagerBase:
                         api_key=encrypted_key,  # YAML 中若有密钥则加密写入
                         user_id=SYSTEM_USER_ID,
                         is_sys=1,
+                        sort_order=plat_idx,
                     )
                     session.add(plat)
                     session.flush()
                     print(f"[初始化] 添加新系统平台: {name}")
-                    
+
                     # 新平台：添加所有模型
-                    for display_name, model_config in cfg.get("models", {}).items():
+                    for model_idx, (display_name, model_config) in enumerate(cfg.get("models", {}).items()):
                         if isinstance(model_config, str):
                             model_name = model_config
                             extra_body = None
@@ -453,23 +462,27 @@ class AIManagerBase:
                             max_context_tokens=max_context_tokens,
                             max_output_tokens=max_output_tokens,
                             is_embedding=is_embedding,
+                            sort_order=model_idx,
                         )
                         session.add(new_model)
-                
+
                 elif force_reset or is_first_init:
                     # 强制重置或首次初始化：更新平台名称和同步模型
                     if plat.name != name:
                         print(f"[YAML重置] 恢复系统平台名称: {plat.name} -> {name}")
                         plat.name = name
 
+                    # 按 YAML 顺序同步 sort_order
+                    plat.sort_order = plat_idx
+
                     # 若 YAML 提供 API Key，则更新平台默认 Key（加密写入）
                     encrypted_key = _prepare_seed_api_key(cfg.get("api_key"))
                     if encrypted_key:
                         plat.api_key = encrypted_key
-                    
+
                     # 同步模型（覆盖模式）
                     existing_models = {m.display_name: m for m in plat.models}
-                    for display_name, model_config in cfg.get("models", {}).items():
+                    for model_idx, (display_name, model_config) in enumerate(cfg.get("models", {}).items()):
                         if isinstance(model_config, str):
                             model_name = model_config
                             extra_body = None
@@ -498,6 +511,7 @@ class AIManagerBase:
                                 model_to_update.max_context_tokens = max_context_tokens
                             if model_to_update.max_output_tokens != max_output_tokens:
                                 model_to_update.max_output_tokens = max_output_tokens
+                            model_to_update.sort_order = model_idx
                             del existing_models[display_name]
                         else:
                             new_model = LLModels(
@@ -509,9 +523,10 @@ class AIManagerBase:
                                 max_context_tokens=max_context_tokens,
                                 max_output_tokens=max_output_tokens,
                                 is_embedding=is_embedding,
+                                sort_order=model_idx,
                             )
                             session.add(new_model)
-                    
+
                     # 删除 YAML 中已移除的模型
                     for model_to_delete in existing_models.values():
                         session.delete(model_to_delete)
@@ -520,6 +535,7 @@ class AIManagerBase:
                     # 正常启动模式：已存在的平台不做任何修改
                     # 仅添加 YAML 中新增的模型（不覆盖已有模型）
                     existing_model_names = {m.display_name for m in plat.models}
+                    max_sort = max((m.sort_order or 0 for m in plat.models), default=-1)
                     for display_name, model_config in cfg.get("models", {}).items():
                         if display_name not in existing_model_names:
                             if isinstance(model_config, str):
@@ -533,8 +549,9 @@ class AIManagerBase:
                                 temperature = model_config.get("temperature")
                                 is_embedding = 1 if model_config.get("is_embedding") else 0
                             max_context_tokens, max_output_tokens = _resolve_model_limits(model_config)
-                            
+
                             extra_body_json = json.dumps(extra_body) if extra_body else None
+                            max_sort += 1
                             new_model = LLModels(
                                 platform_id=plat.id,
                                 model_name=model_name,
@@ -544,6 +561,7 @@ class AIManagerBase:
                                 max_context_tokens=max_context_tokens,
                                 max_output_tokens=max_output_tokens,
                                 is_embedding=is_embedding,
+                                sort_order=max_sort,
                             )
                             session.add(new_model)
                             print(f"[增量同步] 平台 {name} 添加新模型: {display_name}")
@@ -753,6 +771,7 @@ class AIManagerBase:
                 session.query(LLMPlatform)
                 .options(selectinload(LLMPlatform.models))
                 .filter_by(is_sys=1)
+                .order_by(LLMPlatform.sort_order)
                 .all()
             )
 
@@ -769,7 +788,7 @@ class AIManagerBase:
                 if plat.api_key:
                     plat_config["api_key"] = plat.api_key
 
-                for model in plat.models:
+                for model in sorted(plat.models, key=lambda m: m.sort_order):
                     if self._is_model_disabled(model):
                         continue
 

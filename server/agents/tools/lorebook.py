@@ -71,24 +71,14 @@ def rewrite_all_characters(overwrite_content: str) -> str:
 @tool(args_schema=UpdateCharacterInput)
 def update_character(character_name: str, overwrite_content: str) -> str:
     """覆盖单个角色设定。"""
+    from story.project_files import lookup_character_id_by_name
+
     user_id, project_name = ToolExecutionContext.get_context()
-
     characters_path = ensure_project_characters_directory(user_id, project_name)
-    bind_path = os.path.join(characters_path, "chr.bind")
 
-    if not os.path.exists(bind_path):
-        return f"未找到角色绑定文件，无法修改角色 '{character_name}'。"
-
-    with open(bind_path, "r", encoding="utf-8") as f:
-        mapping = json.load(f) or {}
-
-    char_id = None
-    for cid, name in mapping.items():
-        if name == character_name:
-            char_id = cid
-            break
-
-    if char_id is None:
+    # 复用统一工具，避免重复实现 chr.bind 解析与按名字反查
+    char_id = lookup_character_id_by_name(user_id, project_name, character_name)
+    if not char_id:
         return f"未找到名为 '{character_name}' 的角色。"
 
     content = (overwrite_content or "").strip()

@@ -53,6 +53,7 @@ from agents.tools.muse import (
 )
 from agents.tools.registry import (
     ALL_TOOLS,
+    CRITIC_TOOLS,
     DIRECTOR_TOOLS,
     EXTERNAL_SEARCH_TOOLS,
     LOREBOOK_TOOLS,
@@ -121,6 +122,7 @@ __all__ = [
     "CheckScriptwriterStatusInput",
     "CreateChapterInput",
     "CreateOrRewriteScriptInput",
+    "CRITIC_TOOLS",
     "DIRECTOR_TOOLS",
     "DelegateTaskInput",
     "EXTERNAL_SEARCH_TOOLS",

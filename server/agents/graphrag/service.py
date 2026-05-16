@@ -1,10 +1,13 @@
 from __future__ import annotations
 
+import hashlib
 import json
+import logging
 import os
 import pickle
 import re
 import shutil
+import threading
 from dataclasses import dataclass
 from datetime import datetime, timezone
 from difflib import SequenceMatcher
@@ -21,6 +24,19 @@ from agents.language_policy import prepend_prompt_language_policy
 from story.project_files import collect_project_files
 
 GraphRAGQueryMode = Literal["local", "global", "drift"]
+logger = logging.getLogger(__name__)
+
+
+# ==================== 全局后台构建状态注册表 ====================
+# 与 VectorIndexService 同构：用进程内字典 + 锁追踪每个 (user_id, project_name)
+# 的后台构建生命周期，supports 重入排队（构建中再次触发会自动补一轮）。
+
+_build_state_registry: dict[str, dict] = {}
+_build_state_lock = threading.Lock()
+
+
+def _build_task_key(user_id: str, project_name: str) -> str:
+    return f"{user_id}:{project_name}"
 
 
 @dataclass
@@ -44,7 +60,8 @@ class GraphRAGService:
         self._max_source_chars = int(os.getenv("SPARKARC_GRAPHRAG_MAX_SOURCE_CHARS", "240000"))
         self._max_triplets_per_chunk = int(os.getenv("SPARKARC_GRAPHRAG_MAX_TRIPLETS_PER_CHUNK", "24"))
         self._max_constraints = int(os.getenv("SPARKARC_GRAPHRAG_MAX_CONSTRAINTS", "12"))
-        self._build_usage_key = "fast"
+        self._build_usage_key = (os.getenv("SPARKARC_GRAPHRAG_BUILD_USAGE_KEY", "fast") or "fast").strip().lower() or "fast"
+        self._llm_timeout = float(os.getenv("SPARKARC_GRAPHRAG_LLM_TIMEOUT", "90"))
 
     @property
     def _project_path(self) -> str:
@@ -70,6 +87,7 @@ class GraphRAGService:
         return matchbox().get_user_llm(
             self.user_id,
             usage_key=self._build_usage_key,
+            timeout=self._llm_timeout,
         )
 
     def _get_query_llm(self, query_agent_name: str | None):
@@ -78,8 +96,207 @@ class GraphRAGService:
             return matchbox().get_user_llm(
                 self.user_id,
                 agent_name=query_agent_name,
+                timeout=self._llm_timeout,
             )
-        return matchbox().get_user_llm(self.user_id)
+        return matchbox().get_user_llm(self.user_id, timeout=self._llm_timeout)
+
+    # ==================== 后台构建状态管理 ====================
+
+    @staticmethod
+    def _public_build_state(payload: dict | None) -> dict:
+        """剥离内部字段，输出前端可消费的 build_state。"""
+        state = {
+            key: value
+            for key, value in dict(payload or {}).items()
+            if not str(key).startswith("_")
+        }
+        state["progress"] = dict(state.get("progress") or {})
+        return state
+
+    @staticmethod
+    def _empty_progress() -> dict:
+        return {
+            "total_chunks": 0,
+            "done_chunks": 0,
+            "triplets_collected": 0,
+            "source_docs": 0,
+            "nodes": 0,
+            "edges": 0,
+        }
+
+    def _set_build_state(self, **fields) -> dict:
+        task_key = _build_task_key(self.user_id, self.project_name)
+        with _build_state_lock:
+            current = dict(_build_state_registry.get(task_key) or {})
+            if "progress" in fields:
+                fields["progress"] = dict(fields.get("progress") or {})
+            current.update(fields)
+            _build_state_registry[task_key] = current
+            return dict(current)
+
+    def get_build_state(self) -> dict:
+        """读取当前后台构建状态。
+
+        - 进程内有进行中 / 已完成快照时直接返回；
+        - 否则回退到磁盘 metadata 推断（ready / not_built）。
+        """
+        task_key = _build_task_key(self.user_id, self.project_name)
+        with _build_state_lock:
+            stored = dict(_build_state_registry.get(task_key) or {})
+        if stored:
+            return self._public_build_state(stored)
+
+        artifacts = self._artifacts
+        if os.path.exists(artifacts.pickle_path) or os.path.exists(artifacts.graphml_path):
+            metadata = self._load_metadata()
+            built_at = metadata.get("built_at", "")
+            return {
+                "status": "ready",
+                "stage": "ready",
+                "error": "",
+                "started_at": built_at,
+                "finished_at": built_at,
+                "progress": {
+                    "total_chunks": int(metadata.get("chunks", 0) or 0),
+                    "done_chunks": int(metadata.get("chunks", 0) or 0),
+                    "triplets_collected": int(metadata.get("triplets", 0) or 0),
+                    "source_docs": int(metadata.get("source_docs", 0) or 0),
+                    "nodes": int(metadata.get("nodes", 0) or 0),
+                    "edges": int(metadata.get("edges", 0) or 0),
+                },
+            }
+        return {
+            "status": "not_built",
+            "stage": "idle",
+            "error": "",
+            "started_at": "",
+            "finished_at": "",
+            "progress": self._empty_progress(),
+        }
+
+    def start_background_build(self, force_rebuild: bool = False) -> dict:
+        """在 daemon 线程中触发后台构建；重复触发自动排队补一轮。"""
+        task_key = _build_task_key(self.user_id, self.project_name)
+        now = datetime.now(timezone.utc).isoformat()
+        with _build_state_lock:
+            current = dict(_build_state_registry.get(task_key) or {})
+            if current.get("status") in {"queued", "building"}:
+                current["_pending_refresh"] = True
+                current["_pending_force_rebuild"] = bool(current.get("_pending_force_rebuild")) or bool(force_rebuild)
+                _build_state_registry[task_key] = current
+                return self._public_build_state(current)
+            current.update({
+                "status": "queued",
+                "stage": "queued",
+                "error": "",
+                "started_at": now,
+                "finished_at": "",
+                "_pending_refresh": False,
+                "_pending_force_rebuild": False,
+                "progress": self._empty_progress(),
+            })
+            _build_state_registry[task_key] = current
+
+        def _run() -> None:
+            next_force_rebuild = force_rebuild
+            while True:
+                try:
+                    self.build_index(force_rebuild=next_force_rebuild)
+                except Exception:
+                    # build_index 自身已写 error 状态，这里吞掉避免线程崩
+                    pass
+                with _build_state_lock:
+                    latest = dict(_build_state_registry.get(task_key) or {})
+                    rerun = bool(latest.get("_pending_refresh"))
+                    next_force_rebuild = bool(latest.get("_pending_force_rebuild"))
+                    latest["_pending_refresh"] = False
+                    latest["_pending_force_rebuild"] = False
+                    _build_state_registry[task_key] = latest
+                if not rerun:
+                    break
+
+        thread = threading.Thread(
+            target=_run,
+            daemon=True,
+            name=f"graphrag_build_{task_key}",
+        )
+        thread.start()
+        return self.get_build_state()
+
+    def ensure_background_build_started(self, check_freshness: bool = True) -> dict:
+        """若索引不存在或已过期，则后台启动构建；否则原样返回当前状态。"""
+        status = self.get_status(check_freshness=check_freshness)
+        build_state = dict(status.get("build_state") or {})
+        if build_state.get("status") in {"queued", "building"}:
+            return status
+        if not status.get("graph_ready") or status.get("needs_rebuild"):
+            build_state = self.start_background_build(force_rebuild=False)
+            return {
+                **status,
+                "build_state": build_state,
+            }
+        return status
+
+    # ==================== 文件哈希 / 过期判定 ====================
+
+    @staticmethod
+    def _hash_text(text: str) -> str:
+        try:
+            return hashlib.md5((text or "").encode("utf-8")).hexdigest()
+        except Exception:
+            return ""
+
+    def _compute_file_hashes(self) -> dict[str, str]:
+        """计算当前构建源的内容哈希（仅含真正喂给图谱的文件）。
+
+        与 :meth:`_collect_source_documents` 的过滤边界一致；同时把
+        ``chr/chr.bind`` 单独纳入指纹——它本身不入图谱，但会通过
+        ``collect_project_files`` 影响每个角色文件的"# 角色：xxx" 前缀，
+        进而改变图谱抽取结果，必须参与 freshness 比对。
+        """
+        hashes: dict[str, str] = {}
+
+        try:
+            project_files = collect_project_files(
+                self.user_id,
+                self.project_name,
+                max_source_chars=self._max_source_chars,
+            )
+        except Exception:
+            project_files = []
+
+        for pf in project_files:
+            # 只对 GraphRAG 真正消费的文件做 freshness 比对，
+            # 节拍表 / chr.bind 等不入图谱的文件单独处理（chr.bind 见下方），
+            # 避免用户改节拍表触发无谓的图谱重建。
+            if pf.format_key not in self._GRAPHRAG_INDEX_FORMAT_KEYS:
+                continue
+            hashes[pf.rel_path] = self._hash_text(pf.content)
+
+        # 别名表 chr.bind 自身不入图谱，但它驱动 enrich_character_content 的
+        # 名字注入；改了它，所有角色文件的实际 content 会变。所以单独指纹化。
+        try:
+            bind_path = os.path.join(self._project_path, "chr", "chr.bind")
+            if os.path.exists(bind_path):
+                with open(bind_path, "r", encoding="utf-8") as f:
+                    hashes["chr/chr.bind"] = self._hash_text(f.read())
+        except Exception:
+            pass
+
+        return hashes
+
+    def _needs_rebuild(self, metadata: dict[str, Any]) -> bool:
+        """对比 metadata 中存的 file_hashes 与当前源文件哈希。"""
+        if not isinstance(metadata, dict):
+            return True
+        stored = metadata.get("file_hashes")
+        if not isinstance(stored, dict):
+            # 旧版 metadata 没有 file_hashes，视为需要重建
+            return True
+        current = self._compute_file_hashes()
+        if set(stored.keys()) != set(current.keys()):
+            return True
+        return any(stored.get(key) != current.get(key) for key in current)
 
     @staticmethod
     def _extract_text_from_message(message: Any) -> str:
@@ -170,30 +387,25 @@ class GraphRAGService:
         return aliases[:8]
 
     def _load_character_alias_index(self) -> dict[str, str]:
+        """构建"别名 → 主名"映射，用于图谱节点归一化。
+
+        基础映射（ID → 主名）来自统一工具 ``load_character_id_name_map``；
+        本方法在此之上额外扩展两类别名：
+        1. 从主名本身解析（"主名(别名)"、"主名/别名"等写法）；
+        2. 从角色 .md/.txt 头部的"别名："行解析。
+        """
+        from story.project_files import load_character_id_name_map
+
         alias_map: dict[str, str] = {}
         chr_dir = os.path.join(self._project_path, "chr")
-        bind_path = os.path.join(chr_dir, "chr.bind")
-        if not os.path.exists(bind_path):
+        # 旁白角色对实体合并没有意义，去掉
+        id_to_name = load_character_id_name_map(
+            self.user_id, self.project_name, include_narrator=False,
+        )
+        if not id_to_name:
             return alias_map
 
-        try:
-            with open(bind_path, "r", encoding="utf-8") as f:
-                mapping = json.load(f) or {}
-        except Exception:
-            mapping = {}
-
-        if not isinstance(mapping, dict):
-            return alias_map
-
-        for cid, raw_name in mapping.items():
-            if isinstance(raw_name, dict):
-                canonical = str(raw_name.get("name") or "").strip()
-            else:
-                canonical = str(raw_name or "").strip()
-
-            if not canonical:
-                continue
-
+        for cid, canonical in id_to_name.items():
             aliases = [canonical]
 
             # 兼容常见的“主名(别名)”或“主名/别名”写法
@@ -202,6 +414,7 @@ class GraphRAGService:
                 if item and item not in aliases:
                     aliases.append(item)
 
+            # 从角色档案头部抽取显式声明的别名
             detail_paths = [
                 os.path.join(chr_dir, f"{cid}.md"),
                 os.path.join(chr_dir, f"{cid}.txt"),
@@ -226,10 +439,19 @@ class GraphRAGService:
 
         return alias_map
 
+    # GraphRAG 索引只关心叙事内容：世界观 / 梗概 / 大纲 / 角色设定 / 剧本或小说正文。
+    # 其余 format_key（chrbind 元数据、beats 节拍表）一律不入图谱：
+    #   - chrbind 是 ID→名字 JSON，没有叙事信息，且角色名已经通过 collect_project_files
+    #     的 enrich_character_content 写入到每个角色文件 content 头部；
+    #   - beats 节拍表与大纲信息高度重叠，会让 LLM 抽出大量重复关系。
+    _GRAPHRAG_INDEX_FORMAT_KEYS: frozenset[str] = frozenset(
+        {"worldview", "synopsis", "outline", "character", "arc", "novel"}
+    )
+
     def _collect_source_documents(self) -> list[Document]:
         self._ensure_project_exists()
 
-        # 复用通用项目文件收集
+        # 复用通用项目文件收集（其中 character 文件 content 已被注入"# 角色：xxx"前缀）
         project_files = collect_project_files(
             self.user_id, self.project_name,
             max_source_chars=self._max_source_chars,
@@ -237,9 +459,15 @@ class GraphRAGService:
 
         documents: list[Document] = []
         for pf in project_files:
+            # 仅纳入叙事相关文件
+            if pf.format_key not in self._GRAPHRAG_INDEX_FORMAT_KEYS:
+                continue
             documents.append(Document(
                 page_content=pf.content,
-                metadata={"source": pf.rel_path},
+                metadata={
+                    "source": pf.rel_path,
+                    "format_key": pf.format_key,
+                },
             ))
 
         return documents
@@ -336,13 +564,31 @@ class GraphRAGService:
             return name
         return alias_map.get(self._normalize_entity_name(name), name)
 
-    def _build_graph(self, chunks: list[Document], alias_map: dict[str, str]) -> tuple[nx.Graph, int]:
+    def _build_graph(
+        self,
+        chunks: list[Document],
+        alias_map: dict[str, str],
+        on_chunk_done: Any = None,
+    ) -> tuple[nx.Graph, int]:
+        """从 chunks 抽取三元组并合并入图。
+
+        ``on_chunk_done(done_chunks, total_chunks, triplets_collected, nodes, edges)``
+        会在每个 chunk 处理完成后回调，用于上报后台构建进度。
+        """
         graph = nx.Graph()
         triplet_count = 0
+        total = len(chunks)
 
         for idx, chunk in enumerate(chunks):
-            triplets = self._extract_triplets(chunk.page_content)
             source = str(chunk.metadata.get("source") or "")
+            logger.info(
+                "[GraphRAG] 提取三元组 chunk=%s/%s source=%s chars=%s",
+                idx + 1,
+                total,
+                source,
+                len(chunk.page_content or ""),
+            )
+            triplets = self._extract_triplets(chunk.page_content)
             sample = chunk.page_content.replace("\n", " ").strip()[:120]
             for subj, rel, obj in triplets:
                 subj = self._canonicalize_entity(subj, alias_map)
@@ -371,6 +617,26 @@ class GraphRAGService:
                         last_chunk_id=idx,
                     )
                 triplet_count += 1
+
+            logger.info(
+                "[GraphRAG] chunk=%s/%s 完成，triplets=%s",
+                idx + 1,
+                total,
+                len(triplets),
+            )
+
+            if callable(on_chunk_done):
+                try:
+                    on_chunk_done(
+                        idx + 1,
+                        total,
+                        triplet_count,
+                        int(graph.number_of_nodes()),
+                        int(graph.number_of_edges()),
+                    )
+                except Exception:
+                    # 进度回调不应影响构建主流程
+                    pass
 
         return graph, triplet_count
 
@@ -429,17 +695,47 @@ class GraphRAGService:
             data = json.load(f)
         return data if isinstance(data, dict) else {}
 
-    def get_status(self) -> dict[str, Any]:
+    def get_status(self, check_freshness: bool = True) -> dict[str, Any]:
         artifacts = self._artifacts
         metadata = self._load_metadata()
+        graph_ready = (
+            os.path.exists(artifacts.pickle_path)
+            or os.path.exists(artifacts.graphml_path)
+        )
+        metadata_ready = os.path.exists(artifacts.metadata_path)
+        build_state = self.get_build_state()
+
+        needs_rebuild = False
+        if graph_ready and metadata_ready:
+            if check_freshness and build_state.get("status") not in {"queued", "building", "error"}:
+                try:
+                    needs_rebuild = self._needs_rebuild(metadata)
+                except Exception:
+                    needs_rebuild = False
+                if needs_rebuild:
+                    build_state = {
+                        **build_state,
+                        "status": "stale",
+                        "stage": "stale",
+                    }
+        else:
+            # 无图谱文件：not_built（若没有进行中的构建状态）
+            if build_state.get("status") not in {"queued", "building", "error"}:
+                build_state = {
+                    **build_state,
+                    "status": "not_built",
+                    "stage": "idle",
+                }
+            needs_rebuild = False
 
         return {
             "project": self.project_name,
             "user_id": self.user_id,
             "exists": os.path.isdir(artifacts.base_dir),
-            "graph_ready": os.path.exists(artifacts.pickle_path)
-            or os.path.exists(artifacts.graphml_path),
-            "metadata_ready": os.path.exists(artifacts.metadata_path),
+            "graph_ready": graph_ready,
+            "metadata_ready": metadata_ready,
+            "needs_rebuild": needs_rebuild,
+            "build_state": build_state,
             "artifacts_dir": artifacts.base_dir,
             "metadata": metadata,
             "build_usage_key": self._build_usage_key,
@@ -452,6 +748,10 @@ class GraphRAGService:
         if os.path.isdir(artifacts.base_dir):
             shutil.rmtree(artifacts.base_dir)
             removed = True
+        # 同步清掉进程内的 build_state，避免 UI 上残留 ready/stale
+        task_key = _build_task_key(self.user_id, self.project_name)
+        with _build_state_lock:
+            _build_state_registry.pop(task_key, None)
         return {
             "project": self.project_name,
             "user_id": self.user_id,
@@ -460,48 +760,193 @@ class GraphRAGService:
         }
 
     def build_index(self, force_rebuild: bool = False) -> dict[str, Any]:
+        """同步执行索引构建。建议通过 ``start_background_build`` 在后台触发，
+        前端可通过 ``get_status()`` 轮询 ``build_state`` 字段获取进度。
+        """
         self._ensure_project_exists()
+        started_at = datetime.now(timezone.utc).isoformat()
 
-        status = self.get_status()
-        if status.get("graph_ready") and not force_rebuild:
-            metadata = status.get("metadata") or {}
-            metadata["reused"] = True
-            return metadata
-
-        docs = self._collect_source_documents()
-        if not docs:
-            raise RuntimeError("未找到可用于构建 GraphRAG 的项目文本（世界观/角色/梗概/大纲/剧本）。")
-
-        splitter = RecursiveCharacterTextSplitter(
-            chunk_size=self._chunk_size,
-            chunk_overlap=self._chunk_overlap,
+        # 入口：状态切到 building/prepare
+        self._set_build_state(
+            status="building",
+            stage="prepare",
+            error="",
+            started_at=started_at,
+            finished_at="",
+            progress=self._empty_progress(),
         )
-        chunks = splitter.split_documents(docs)
-        chunks = chunks[: self._max_chunks]
 
-        alias_map = self._load_character_alias_index()
-        graph, triplet_count = self._build_graph(chunks, alias_map)
-        communities = self._build_communities(graph)
+        try:
+            # 哈希与文件采集统一在这里完成，避免后续多次扫盘
+            current_hashes = self._compute_file_hashes()
+            existing_metadata = self._load_metadata()
+            artifacts = self._artifacts
+            graph_ready = (
+                os.path.exists(artifacts.pickle_path)
+                or os.path.exists(artifacts.graphml_path)
+            )
 
-        metadata: dict[str, Any] = {
-            "version": "1.0",
-            "built_at": datetime.now(timezone.utc).isoformat(),
-            "project": self.project_name,
-            "user_id": self.user_id,
-            "build_usage_key": self._build_usage_key,
-            "query_agent_policy": "follow_caller_agent",
-            "alias_count": len(alias_map),
-            "source_docs": len(docs),
-            "chunks": len(chunks),
-            "triplets": triplet_count,
-            "nodes": int(graph.number_of_nodes()),
-            "edges": int(graph.number_of_edges()),
-            "communities": communities,
-            "reused": False,
-        }
+            # 复用判定：图谱文件已在 + 不强制重建 + 哈希与上次一致
+            if graph_ready and not force_rebuild:
+                stored_hashes = existing_metadata.get("file_hashes") if isinstance(existing_metadata, dict) else None
+                if (
+                    isinstance(stored_hashes, dict)
+                    and set(stored_hashes.keys()) == set(current_hashes.keys())
+                    and all(stored_hashes.get(k) == current_hashes.get(k) for k in current_hashes)
+                ):
+                    metadata = dict(existing_metadata or {})
+                    metadata["reused"] = True
+                    finished_at = metadata.get("built_at", started_at)
+                    self._set_build_state(
+                        status="ready",
+                        stage="ready",
+                        error="",
+                        started_at=started_at,
+                        finished_at=finished_at,
+                        progress={
+                            "total_chunks": int(metadata.get("chunks", 0) or 0),
+                            "done_chunks": int(metadata.get("chunks", 0) or 0),
+                            "triplets_collected": int(metadata.get("triplets", 0) or 0),
+                            "source_docs": int(metadata.get("source_docs", 0) or 0),
+                            "nodes": int(metadata.get("nodes", 0) or 0),
+                            "edges": int(metadata.get("edges", 0) or 0),
+                        },
+                    )
+                    return metadata
 
-        self._persist(graph, metadata)
-        return metadata
+            docs = self._collect_source_documents()
+            if not docs:
+                raise RuntimeError("未找到可用于构建 GraphRAG 的项目文本（世界观/角色/梗概/大纲/剧本）。")
+
+            logger.info(
+                "[GraphRAG] 开始构建 project=%s user_id=%s source_docs=%s timeout=%ss",
+                self.project_name,
+                self.user_id,
+                len(docs),
+                self._llm_timeout,
+            )
+
+            # 切块阶段
+            self._set_build_state(
+                status="building",
+                stage="splitting",
+                progress={
+                    **self._empty_progress(),
+                    "source_docs": len(docs),
+                },
+            )
+            splitter = RecursiveCharacterTextSplitter(
+                chunk_size=self._chunk_size,
+                chunk_overlap=self._chunk_overlap,
+            )
+            chunks = splitter.split_documents(docs)
+            chunks = chunks[: self._max_chunks]
+            logger.info(
+                "[GraphRAG] 切块完成 project=%s chunks=%s chunk_size=%s overlap=%s",
+                self.project_name,
+                len(chunks),
+                self._chunk_size,
+                self._chunk_overlap,
+            )
+
+            # 抽取阶段：按 chunk 上报进度
+            self._set_build_state(
+                status="building",
+                stage="extracting",
+                progress={
+                    "total_chunks": len(chunks),
+                    "done_chunks": 0,
+                    "triplets_collected": 0,
+                    "source_docs": len(docs),
+                    "nodes": 0,
+                    "edges": 0,
+                },
+            )
+            alias_map = self._load_character_alias_index()
+
+            def _report_chunk(done: int, total: int, triplets: int, nodes: int, edges: int) -> None:
+                self._set_build_state(
+                    status="building",
+                    stage="extracting",
+                    progress={
+                        "total_chunks": total,
+                        "done_chunks": done,
+                        "triplets_collected": triplets,
+                        "source_docs": len(docs),
+                        "nodes": nodes,
+                        "edges": edges,
+                    },
+                )
+
+            graph, triplet_count = self._build_graph(chunks, alias_map, on_chunk_done=_report_chunk)
+            communities = self._build_communities(graph)
+
+            # 持久化阶段
+            self._set_build_state(
+                status="building",
+                stage="persisting",
+                progress={
+                    "total_chunks": len(chunks),
+                    "done_chunks": len(chunks),
+                    "triplets_collected": triplet_count,
+                    "source_docs": len(docs),
+                    "nodes": int(graph.number_of_nodes()),
+                    "edges": int(graph.number_of_edges()),
+                },
+            )
+
+            built_at = datetime.now(timezone.utc).isoformat()
+            metadata: dict[str, Any] = {
+                "version": "1.1",
+                "built_at": built_at,
+                "project": self.project_name,
+                "user_id": self.user_id,
+                "build_usage_key": self._build_usage_key,
+                "query_agent_policy": "follow_caller_agent",
+                "alias_count": len(alias_map),
+                "source_docs": len(docs),
+                "chunks": len(chunks),
+                "triplets": triplet_count,
+                "nodes": int(graph.number_of_nodes()),
+                "edges": int(graph.number_of_edges()),
+                "communities": communities,
+                "file_hashes": current_hashes,
+                "reused": False,
+            }
+
+            self._persist(graph, metadata)
+            logger.info(
+                "[GraphRAG] 构建完成 project=%s triplets=%s nodes=%s edges=%s",
+                self.project_name,
+                triplet_count,
+                graph.number_of_nodes(),
+                graph.number_of_edges(),
+            )
+
+            self._set_build_state(
+                status="ready",
+                stage="ready",
+                error="",
+                started_at=started_at,
+                finished_at=built_at,
+                progress={
+                    "total_chunks": len(chunks),
+                    "done_chunks": len(chunks),
+                    "triplets_collected": triplet_count,
+                    "source_docs": len(docs),
+                    "nodes": int(graph.number_of_nodes()),
+                    "edges": int(graph.number_of_edges()),
+                },
+            )
+            return metadata
+        except Exception as e:
+            self._set_build_state(
+                status="error",
+                stage="error",
+                error=str(e),
+                finished_at=datetime.now(timezone.utc).isoformat(),
+            )
+            raise
 
     def _extract_query_entities(self, question: str, query_agent_name: str | None, alias_map: dict[str, str]) -> list[str]:
         system_prompt = (

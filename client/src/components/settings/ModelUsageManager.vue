@@ -10,7 +10,7 @@
         <p class="section-desc">{{ t('components.modelUsageManager.subtitle') }}</p>
 
         <div v-if="loading" class="loading-state">
-            <n-spin size="large" />
+            <SparkLoaderAnimation />
         </div>
 
         <div v-else class="usage-list">
@@ -125,8 +125,9 @@
 <script setup lang="ts">
 import { ref, computed, watch } from 'vue';
 import { useI18n } from 'vue-i18n';
-import { NSpin, NButton, NIcon, NSpace, NFormItem, NSelect, NModal, NCard, NForm, NInput, useMessage, useDialog } from 'naive-ui';
+import { NButton, NIcon, NSpace, NFormItem, NSelect, NModal, NCard, NForm, NInput, useMessage, useDialog } from 'naive-ui';
 import SparkAlert from '../share/SparkAlert.vue';
+import SparkLoaderAnimation from '../share/SparkLoaderAnimation.vue';
 import { Plus, Trophy } from 'lucide-vue-next';
 import { createUserUsageSlot, deleteUserUsageSlot, renameUserUsageSlot } from '../../services/api';
 import { useAiStore } from '../stores/aiStore';

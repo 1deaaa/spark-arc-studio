@@ -152,7 +152,7 @@
         </div>
         
         <div v-if="loading" class="loading-state">
-            <n-spin size="large" />
+            <SparkLoaderAnimation />
         </div>
         
         <div v-else>
@@ -911,6 +911,7 @@ import SparkCollapseTransition from '@/components/share/SparkCollapseTransition.
 import { Activity, CircleAlert, CircleCheck, CloudUpload, Download, Info, Key, Lock, Menu, Plus, Server, SquarePen, Trash, Unlock, User, X, Zap } from 'lucide-vue-next';
 import SparkTag from '@/components/share/SparkTag.vue';
 import SparkIcon from '@/components/share/CreditIcon.vue';
+import SparkLoaderAnimation from '@/components/share/SparkLoaderAnimation.vue';
 
 import { useAIPlatformManager } from '@/composables/useAIPlatformManager';
 import { useAIModelManager } from '@/composables/useAIModelManager';

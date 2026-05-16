@@ -5,6 +5,7 @@
 
 默认值：
   semantic_search_enabled: false
+  graphrag_enabled: false
   attachment_index_enabled: true
   attachment_chunk_tokens: 64000  (附件分片 token 上限，等价于"按需读取"滑动窗口的窗口大小)
 """
@@ -23,6 +24,8 @@ _SETTINGS_FILENAME = "settings.json"
 
 _DEFAULT_SETTINGS: Dict[str, Any] = {
     "semantic_search_enabled": False,
+    # 知识图谱（GraphRAG）开关：构建昂贵，默认关闭，由用户在设置中显式开启
+    "graphrag_enabled": False,
     "attachment_index_enabled": True,
     # 聊天附件单分片 token 上限。也是滑动窗口的窗口大小：
     # 大文件按此 token 上限切片；调用 read_attachment_chunk 一次只展开一片，
@@ -59,6 +62,7 @@ def _normalize(raw: Dict[str, Any] | None) -> Dict[str, Any]:
     data = dict(_DEFAULT_SETTINGS)
     if isinstance(raw, dict):
         data["semantic_search_enabled"] = bool(raw.get("semantic_search_enabled", _DEFAULT_SETTINGS["semantic_search_enabled"]))
+        data["graphrag_enabled"] = bool(raw.get("graphrag_enabled", _DEFAULT_SETTINGS["graphrag_enabled"]))
         data["attachment_index_enabled"] = bool(raw.get("attachment_index_enabled", _DEFAULT_SETTINGS["attachment_index_enabled"]))
         data["attachment_chunk_tokens"] = _coerce_attachment_chunk_tokens(
             raw.get("attachment_chunk_tokens", _DEFAULT_SETTINGS["attachment_chunk_tokens"])
@@ -117,6 +121,11 @@ def is_semantic_search_enabled(user_id: str, project_name: str) -> bool:
     return bool(get_project_setting(user_id, project_name, "semantic_search_enabled", False))
 
 
+def is_graphrag_enabled(user_id: str, project_name: str) -> bool:
+    """快捷查询：项目知识图谱（GraphRAG）是否启用。"""
+    return bool(get_project_setting(user_id, project_name, "graphrag_enabled", False))
+
+
 def is_attachment_index_enabled(user_id: str, project_name: str) -> bool:
     """快捷查询：附件是否参与项目语义检索（默认 True）。"""
     return bool(get_project_setting(user_id, project_name, "attachment_index_enabled", True))
@@ -164,12 +173,37 @@ def list_projects_semantic_status(user_id: str) -> List[Dict[str, Any]]:
     return result
 
 
+def list_projects_graphrag_status(user_id: str) -> List[Dict[str, Any]]:
+    """批量查询用户所有项目的 GraphRAG 启用状态。
+
+    返回格式：[{"project_name": str, "enabled": bool}, ...]
+    """
+    projects_root = get_user_projects_root(user_id)
+    result: List[Dict[str, Any]] = []
+    if not os.path.isdir(projects_root):
+        return result
+
+    for name in sorted(os.listdir(projects_root)):
+        project_path = os.path.join(projects_root, name)
+        if not os.path.isdir(project_path):
+            continue
+        with _lock:
+            settings = _load(project_path)
+        result.append({
+            "project_name": name,
+            "enabled": settings.get("graphrag_enabled", False),
+        })
+
+    return result
+
+
 # ==================== 用户级默认配置 ====================
 
 _USER_SETTINGS_FILENAME = "user_settings.json"
 
 _USER_DEFAULTS: Dict[str, Any] = {
     "default_semantic_search_enabled": False,
+    "default_graphrag_enabled": False,
 }
 
 
@@ -190,6 +224,9 @@ def _user_load(user_id: str) -> Dict[str, Any]:
         if isinstance(raw, dict):
             data["default_semantic_search_enabled"] = bool(
                 raw.get("default_semantic_search_enabled", _USER_DEFAULTS["default_semantic_search_enabled"])
+            )
+            data["default_graphrag_enabled"] = bool(
+                raw.get("default_graphrag_enabled", _USER_DEFAULTS["default_graphrag_enabled"])
             )
         return data
     except Exception:
@@ -216,5 +253,20 @@ def set_default_semantic_enabled(user_id: str, value: bool) -> bool:
     with _lock:
         data = _user_load(user_id)
         data["default_semantic_search_enabled"] = value
+        _user_save(user_id, data)
+        return value
+
+
+def get_default_graphrag_enabled(user_id: str) -> bool:
+    """查询用户级默认：新项目是否默认启用 GraphRAG 知识图谱。"""
+    with _lock:
+        return _user_load(user_id).get("default_graphrag_enabled", False)
+
+
+def set_default_graphrag_enabled(user_id: str, value: bool) -> bool:
+    """设置用户级默认：新项目是否默认启用 GraphRAG 知识图谱。"""
+    with _lock:
+        data = _user_load(user_id)
+        data["default_graphrag_enabled"] = value
         _user_save(user_id, data)
         return value

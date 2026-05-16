@@ -79,6 +79,192 @@ def _read_file_text(file_path: str) -> str:
         return f.read()
 
 
+# ==================== 角色 ID ↔ 名字映射（项目级唯一真相源） ====================
+#
+# 设计原则：chr.bind 的解析仅在此处实现一次，其他模块（语义切块、GraphRAG、
+# Agent 工具、lorebook 工具、剧本工具）一律调用本节工具函数，避免散落在多
+# 处反复重写。
+#
+# chr.bind 实际结构有两种历史形态，本工具一并兼容：
+#   1) {"0": "沈逐流"}                   —— 早期纯字符串
+#   2) {"0": {"name": "沈逐流", ...}}    —— 新版含结构化扩展字段
+#
+# 特殊 ID："-1" 视作"旁白"，仅在 ``include_narrator=True`` 时回填默认名"旁白"。
+
+_CHARACTER_NARRATOR_ID = "-1"
+_CHARACTER_NARRATOR_NAME = "旁白"
+
+
+def _character_bind_path(user_id: str, project_name: str) -> str:
+    """计算 chr.bind 的绝对路径。"""
+    return os.path.join(get_project_characters_path(user_id, project_name), "chr.bind")
+
+
+def _coerce_character_name(value) -> str:
+    """从 chr.bind 单条记录抽出"角色名"字段，兼容字符串与字典两种形态。"""
+    if isinstance(value, dict):
+        return str(value.get("name") or "").strip()
+    return str(value or "").strip()
+
+
+def load_character_id_name_map_from_bind_path(
+    bind_path: str,
+    *,
+    include_narrator: bool = True,
+    include_empty: bool = False,
+) -> dict[str, str]:
+    """底层版本：直接按 chr.bind 文件绝对路径读取 ID→名字映射。
+
+    专供"没有 user_id/project_name 上下文"的场景使用（例如语义切块器、
+    某些只有 ``ProjectFile.abs_path`` 的策略实现）。一般业务层应该用
+    :func:`load_character_id_name_map`。
+    """
+    if not bind_path or not os.path.isfile(bind_path):
+        return {}
+
+    try:
+        with open(bind_path, "r", encoding="utf-8") as f:
+            mapping = json.load(f) or {}
+    except Exception:
+        return {}
+
+    if not isinstance(mapping, dict):
+        return {}
+
+    result: dict[str, str] = {}
+    for raw_cid, raw_value in mapping.items():
+        cid = str(raw_cid)
+        name = _coerce_character_name(raw_value)
+        if cid == _CHARACTER_NARRATOR_ID:
+            if not include_narrator:
+                continue
+            # 旁白角色名约定为"旁白"，即便 chr.bind 内是空字符串也补上
+            name = name or _CHARACTER_NARRATOR_NAME
+        if not name and not include_empty:
+            continue
+        result[cid] = name
+    return result
+
+
+def load_character_id_name_map(
+    user_id: str,
+    project_name: str,
+    *,
+    include_narrator: bool = True,
+    include_empty: bool = False,
+) -> dict[str, str]:
+    """读取 chr.bind，返回 ``{character_id: character_name}`` 映射。
+
+    Args:
+        user_id: 用户 ID。
+        project_name: 项目名。
+        include_narrator: 是否把 ID="-1" 的旁白角色纳入映射。默认 True。
+            对于"想拿到全部角色名做实体识别"的场景应保持 True；
+            对于"列出可写作的角色"的场景可以设 False 把旁白排除。
+        include_empty: 是否保留名字为空的条目。默认 False（过滤掉）。
+
+    Returns:
+        ``{cid: name}``。即便 chr.bind 不存在或解析失败，也保证返回 ``{}``。
+    """
+    return load_character_id_name_map_from_bind_path(
+        _character_bind_path(user_id, project_name),
+        include_narrator=include_narrator,
+        include_empty=include_empty,
+    )
+
+
+def lookup_character_name(
+    user_id: str,
+    project_name: str,
+    character_id: str,
+    *,
+    include_narrator: bool = True,
+) -> str:
+    """根据角色 ID 拿到角色名。找不到时返回空字符串。"""
+    if not character_id:
+        return ""
+    name_map = load_character_id_name_map(
+        user_id, project_name, include_narrator=include_narrator,
+    )
+    return name_map.get(str(character_id), "")
+
+
+def lookup_character_id_by_name(
+    user_id: str,
+    project_name: str,
+    character_name: str,
+) -> str:
+    """根据角色名反查 ID。找不到时返回空字符串。"""
+    target = (character_name or "").strip()
+    if not target:
+        return ""
+    name_map = load_character_id_name_map(user_id, project_name)
+    for cid, name in name_map.items():
+        if name == target:
+            return cid
+    return ""
+
+
+def get_character_file_path(
+    user_id: str,
+    project_name: str,
+    character_id: str,
+    *,
+    extensions: tuple[str, ...] = (".txt", ".md"),
+) -> str:
+    """根据角色 ID 找到设定文件的绝对路径。找不到时返回空字符串。"""
+    chr_dir = get_project_characters_path(user_id, project_name)
+    if not os.path.isdir(chr_dir):
+        return ""
+    for ext in extensions:
+        path = os.path.join(chr_dir, f"{character_id}{ext}")
+        if os.path.isfile(path):
+            return path
+    return ""
+
+
+def enrich_character_content(
+    raw_content: str,
+    character_id: str,
+    character_name: str,
+) -> str:
+    """给 character 文件内容补上"角色名"前缀，便于下游 LLM/精确搜索识别。
+
+    设计要点：
+    - 这是 ``collect_project_files`` 内部的内容增强器；其结果会作为
+      ``ProjectFile.content`` 暴露给 vector_index、GraphRAG、grep 等所有下游。
+    - 即便文件本身没有写明角色名（角色 .txt 通常以"职业:xxx 性格:xxx"这种
+      字段形式开头），下游也能直接看到"# 角色：沈逐流（ID: 0）"这一行，
+      避免把陌生 ID 当成实体喂给 LLM。
+    - 已有"角色名："前缀（用户手写场景）时不再重复添加。
+    """
+    text = (raw_content or "").lstrip()
+    name = (character_name or "").strip()
+    cid = (character_id or "").strip()
+
+    if not name and not cid:
+        return raw_content
+
+    # 已经有"角色：xxx"或"角色名：xxx"开头则不重复
+    head_lines = text.splitlines()[:3]
+    head_text = "\n".join(head_lines)
+    if (
+        f"角色：{name}" in head_text
+        or f"角色名：{name}" in head_text
+        or f"# 角色：{name}" in head_text
+    ):
+        return raw_content
+
+    if name and cid:
+        label = f"角色：{name}（ID: {cid}）"
+    elif name:
+        label = f"角色：{name}"
+    else:
+        label = f"角色 ID: {cid}"
+
+    return f"# {label}\n\n{raw_content}"
+
+
 # ==================== 项目文件收集 ====================
 
 def collect_project_files(
@@ -93,10 +279,19 @@ def collect_project_files(
       项目根/世界观.txt, 梗概.txt, 节拍表.txt, 大纲.txt
       chr/chr.bind, chr/*.txt, chr/*.md
       stories/**/*.arc, stories/**/*.md
+
+    内容增强：
+      对 ``format_key == "character"`` 的文件，会在 ``content`` 头部注入
+      "# 角色：xxx（ID: yyy）" 前缀（参见 :func:`enrich_character_content`）。
+      下游（vector_index、GraphRAG、grep）由此可以识别"沈逐流"对应
+      ``chr/0.txt``，而不必各自再写一份 ID→名字解析。
     """
     project_path = get_project_path(user_id, project_name)
     if not os.path.isdir(project_path):
         return []
+
+    # 一次性加载角色 ID → 名字映射（chr.bind 可能不存在，结果为空字典）
+    character_map = load_character_id_name_map(user_id, project_name)
 
     # 按叙事顺序构建候选文件列表
     candidate_files: list[str] = []
@@ -147,6 +342,13 @@ def collect_project_files(
         text = (text or "").strip()
         if not text:
             continue
+
+        # 角色文件：从文件名推断 ID，把"# 角色：xxx（ID: yyy）"前缀注入 content。
+        # 这一步必须放在字符截断之前，避免前缀被截掉。
+        if format_key == "character":
+            character_id = os.path.splitext(filename)[0]
+            character_name = character_map.get(character_id, "")
+            text = enrich_character_content(text, character_id, character_name)
 
         remaining = max_source_chars - total_chars
         if remaining <= 0:

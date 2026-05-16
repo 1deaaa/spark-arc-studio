@@ -341,56 +341,50 @@ class WorldviewAgent(SparkBaseAgent, SparkAgentExecutor):
 
 
 def get_all_characters() -> List[str]:
-    """返回当前上下文项目的所有角色名称。"""
+    """返回当前上下文项目的所有角色名称。
+
+    复用 ``story.project_files.load_character_id_name_map``——chr.bind 解析
+    的真相源在那里，本方法不再自己读 JSON，避免 6 处重复实现。
+    """
+    from story.project_files import load_character_id_name_map
+
     user_id = current_user_id.get()
     project_name = get_current_project_name()
     if not user_id or not project_name:
         return ["错误：无法获取用户或项目上下文。"]
 
     try:
-        characters_path = ensure_project_characters_directory(user_id, project_name)
-        bind_path = os.path.join(characters_path, "chr.bind")
-        if not os.path.exists(bind_path):
-            return []
-        with open(bind_path, "r", encoding="utf-8") as file:
-            mapping = json.load(file)
-        # 强制id为-1的角色名字显示为"旁白"
-        character_names = []
-        for char_id, char_name in mapping.items():
-            if char_id == "-1":
-                character_names.append("旁白")
-            else:
-                character_names.append(char_name)
-        return character_names
+        # include_narrator=True 保证 -1 → "旁白" 也被纳入返回列表
+        id_to_name = load_character_id_name_map(user_id, project_name)
+        return list(id_to_name.values())
     except Exception as exc:  # pragma: no cover - 调试日志
         print(f"获取角色列表失败: {exc}")
         return [f"获取角色列表时出错: {exc}"]
 
 
 def get_character_info(character_name: str) -> str:
-    """返回指定角色的详细设定文本。"""
+    """返回指定角色的详细设定文本。
+
+    复用统一工具 ``lookup_character_id_by_name`` + ``get_character_file_path``，
+    不再各自重写 chr.bind 解析与文件查找。
+    """
+    from story.project_files import (
+        get_character_file_path,
+        lookup_character_id_by_name,
+    )
+
     user_id = current_user_id.get()
     project_name = get_current_project_name()
     if not user_id or not project_name:
         return "错误：无法获取用户或项目上下文。"
 
     try:
-        characters_path = ensure_project_characters_directory(user_id, project_name)
-        bind_path = os.path.join(characters_path, "chr.bind")
-        if not os.path.exists(bind_path):
-            return "角色绑定文件不存在。"
-
-        with open(bind_path, "r", encoding="utf-8") as file:
-            mapping = json.load(file)
-
-        char_id = next(
-            (cid for cid, name in mapping.items() if name == character_name), None
-        )
+        char_id = lookup_character_id_by_name(user_id, project_name, character_name)
         if not char_id:
             return f"未找到名为 '{character_name}' 的角色。"
 
-        char_file_path = os.path.join(characters_path, f"{char_id}.txt")
-        if not os.path.exists(char_file_path):
+        char_file_path = get_character_file_path(user_id, project_name, char_id)
+        if not char_file_path:
             return f"找到了角色 '{character_name}' 但其设定文件丢失。"
 
         with open(char_file_path, "r", encoding="utf-8") as file:

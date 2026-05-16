@@ -5,7 +5,7 @@
         </div>
 
         <div v-if="loading" class="loading-state">
-            <n-spin size="large" />
+            <SparkLoaderAnimation />
         </div>
 
         <div v-else class="config-grid">
@@ -225,11 +225,12 @@
 import { ref, computed, onMounted, onUnmounted } from 'vue';
 import { useI18n } from 'vue-i18n';
 import { 
-    NCard, NForm, NFormItem, NSwitch, NTooltip, NIcon, NSpin, 
+    NCard, NForm, NFormItem, NSwitch, NTooltip, NIcon, 
     NInputGroup, NInput, NButton, NText, useMessage,
     NDivider, useDialog, NModal, NSelect
 } from 'naive-ui';
 import SparkAlert from '../share/SparkAlert.vue';
+import SparkLoaderAnimation from '../share/SparkLoaderAnimation.vue';
 import { CircleAlert, CircleCheckBig, CircleHelp, Pencil } from 'lucide-vue-next';
 import { fetchWithAuth } from '../../services/api';
 import { useMainlandComplianceLocale } from '@/i18n/compliance';

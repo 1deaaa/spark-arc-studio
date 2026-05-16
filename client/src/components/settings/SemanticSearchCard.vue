@@ -6,7 +6,7 @@
         <p class="section-desc">{{ t('components.semanticSearchCard.subtitle') }}</p>
 
         <div v-if="loading" class="loading-state">
-            <n-spin size="large" />
+            <SparkLoaderAnimation />
         </div>
 
         <div v-else>
@@ -30,12 +30,12 @@
 
             <div class="project-summary" v-if="projects.length > 0">
                 <div class="summary-pill summary-pill-enabled">
-                    <span class="summary-number">{{ enabledCount }}</span>
-                    <span class="summary-label">{{ t('components.semanticSearchCard.enabled') }}</span>
+                    <span class="summary-number">{{ semanticEnabledCount }}</span>
+                    <span class="summary-label">{{ t('components.semanticSearchCard.summaryLabelSemantic') }}</span>
                 </div>
-                <div class="summary-pill summary-pill-disabled">
-                    <span class="summary-number">{{ disabledCount }}</span>
-                    <span class="summary-label">{{ t('components.semanticSearchCard.disabled') }}</span>
+                <div class="summary-pill summary-pill-graphrag">
+                    <span class="summary-number">{{ graphragEnabledCount }}</span>
+                    <span class="summary-label">{{ t('components.semanticSearchCard.summaryLabelGraphRAG') }}</span>
                 </div>
                 <div class="summary-pill summary-pill-total">
                     <span class="summary-number">{{ filteredProjects.length }}</span>
@@ -75,7 +75,7 @@
             <div v-if="projects.length > 0" class="project-list-shell">
                 <div v-if="filteredProjects.length > 0" class="project-list">
                     <div v-for="proj in filteredProjects" :key="proj.projectName" class="project-card">
-                        <div class="project-card-main">
+                        <div class="project-card-header">
                             <n-tooltip trigger="hover">
                                 <template #trigger>
                                     <span class="project-name">{{ proj.projectName }}</span>
@@ -83,47 +83,37 @@
                                 {{ proj.projectName }}
                             </n-tooltip>
                         </div>
-                        <div class="project-card-tags">
-                            <n-tooltip
-                                v-for="tag in getProjectStatusTags(proj)"
-                                :key="`${proj.projectName}-${tag.key}`"
-                                trigger="hover"
-                            >
-                                <template #trigger>
-                                    <span
-                                        class="semantic-status-pill"
-                                        :class="`semantic-status-pill-${tag.tone}`"
-                                    >
-                                        {{ tag.label }}
-                                    </span>
-                                </template>
-                                {{ tag.title || tag.label }}
-                            </n-tooltip>
+                        <div class="project-card-rows">
+                            <ProjectIndexRow
+                                kind="semantic"
+                                :label="t('components.semanticSearchCard.indexLabelSemantic')"
+                                :enabled="proj.enabled"
+                                :tags="getSemanticTags(proj)"
+                                :refreshable="!isProjectBuilding(proj)"
+                                :loading="proj._loading"
+                                :refreshing="Boolean(proj._refreshing)"
+                                :refresh-tooltip="t('components.semanticSearchCard.refreshTooltip')"
+                                :refresh-disabled-tooltip="t('components.semanticSearchCard.refreshDisabledTooltip')"
+                                :refresh-busy-tooltip="t('components.semanticSearchCard.refreshBusyTooltip')"
+                                @toggle="(val) => handleToggleSemantic(proj, val)"
+                                @refresh="() => handleRefreshSemantic(proj)"
+                            />
+                            <ProjectIndexRow
+                                v-if="getGraphRAG(proj.projectName)"
+                                kind="graphrag"
+                                :label="t('components.semanticSearchCard.indexLabelGraphRAG')"
+                                :enabled="getGraphRAG(proj.projectName)!.enabled"
+                                :tags="getGraphRAGTags(getGraphRAG(proj.projectName)!)"
+                                :refreshable="!isGraphRAGBuilding(getGraphRAG(proj.projectName)!)"
+                                :loading="Boolean(getGraphRAG(proj.projectName)!._loading)"
+                                :refreshing="Boolean(getGraphRAG(proj.projectName)!._refreshing)"
+                                :refresh-tooltip="t('components.semanticSearchCard.graphragRefreshTooltip')"
+                                :refresh-disabled-tooltip="t('components.semanticSearchCard.graphragRefreshDisabledTooltip')"
+                                :refresh-busy-tooltip="t('components.semanticSearchCard.graphragRefreshBusyTooltip')"
+                                @toggle="(val) => handleToggleGraphRAG(proj.projectName, val)"
+                                @refresh="() => handleRefreshGraphRAG(proj.projectName)"
+                            />
                         </div>
-                        <n-tooltip trigger="hover" placement="top">
-                            <template #trigger>
-                                <button
-                                    :disabled="!proj.enabled || isProjectBuilding(proj) || Boolean(proj._refreshing)"
-                                    class="refresh-icon-btn"
-                                    :class="{ 'refresh-icon-btn--spinning': Boolean(proj._refreshing) }"
-                                    @click="handleRefresh(proj)"
-                                    :aria-label="t('components.semanticSearchCard.refreshTooltip')"
-                                >
-                                    <n-icon :size="15">
-                                        <RefreshCw />
-                                    </n-icon>
-                                </button>
-                            </template>
-                            {{ proj.enabled
-                                ? t('components.semanticSearchCard.refreshTooltip')
-                                : t('components.semanticSearchCard.refreshDisabledTooltip') }}
-                        </n-tooltip>
-                        <n-switch
-                            :value="proj.enabled"
-                            :loading="proj._loading"
-                            @update:value="(val: boolean) => handleToggle(proj, val)"
-                            size="small"
-                        />
                     </div>
                 </div>
                 <n-empty v-else :description="t('components.semanticSearchCard.noSearchResults')" size="small" />
@@ -132,14 +122,33 @@
 
             <!-- 底部：默认启用 + 自动更新提示 -->
             <div class="card-footer">
-                <div class="default-toggle">
-                    <n-switch
-                        :value="defaultEnabled"
-                        @update:value="handleDefaultToggle"
-                        size="small"
-                    />
-                    <div class="default-toggle-text">
-                        <span class="default-toggle-label">{{ t('components.semanticSearchCard.defaultEnabled') }}</span>
+                <div class="default-toggle-group">
+                    <div class="default-toggle">
+                        <n-switch
+                            :value="defaultEnabledSemantic"
+                            @update:value="handleDefaultSemanticToggle"
+                            size="small"
+                        />
+                        <span class="default-toggle-label">{{ t('components.semanticSearchCard.defaultEnabledSemantic') }}</span>
+                    </div>
+                    <div class="default-toggle">
+                        <n-switch
+                            :value="defaultEnabledGraphRAG"
+                            @update:value="handleDefaultGraphRAGToggle"
+                            size="small"
+                        />
+                        <span class="default-toggle-label">{{ t('components.semanticSearchCard.defaultEnabledGraphRAG') }}</span>
+                        <n-popover trigger="hover" placement="top" style="max-width: 320px;">
+                            <template #trigger>
+                                <n-icon :size="14" class="graphrag-fast-tip-icon" :aria-label="t('components.semanticSearchCard.graphragFastModelTipTitle')">
+                                    <Info />
+                                </n-icon>
+                            </template>
+                            <div class="graphrag-fast-tip">
+                                <div class="graphrag-fast-tip-title">{{ t('components.semanticSearchCard.graphragFastModelTipTitle') }}</div>
+                                <div class="graphrag-fast-tip-body">{{ t('components.semanticSearchCard.graphragFastModelTipBody') }}</div>
+                            </div>
+                        </n-popover>
                     </div>
                 </div>
                 <p class="auto-update-hint">{{ t('components.semanticSearchCard.autoUpdateHint') }}</p>
@@ -151,8 +160,10 @@
 <script setup lang="ts">
 import { computed, ref, onBeforeUnmount, onMounted } from 'vue';
 import { useI18n } from 'vue-i18n';
-import { NSpin, NButton, NSwitch, NEmpty, NTooltip, NIcon, useMessage, useDialog } from 'naive-ui';
-import { RefreshCw } from 'lucide-vue-next';
+import { NButton, NSwitch, NEmpty, NTooltip, NPopover, NIcon, useMessage, useDialog } from 'naive-ui';
+import { Info } from 'lucide-vue-next';
+import SparkLoaderAnimation from '../share/SparkLoaderAnimation.vue';
+import ProjectIndexRow, { type IndexRowTag } from './ProjectIndexRow.vue';
 import {
     fetchSemanticSearchStatus,
     enableSemanticSearch,
@@ -160,15 +171,21 @@ import {
     refreshSemanticSearchProject,
     testSemanticEmbedding,
     setSemanticSearchDefaults,
+    fetchGraphRAGStatus,
+    enableGraphRAG,
+    disableGraphRAG,
+    refreshGraphRAGProject,
+    setGraphRAGDefaults,
     type SemanticSearchProjectStatus,
+    type GraphRAGProjectStatus,
 } from '../../services/api';
 
 const { t } = useI18n();
 const message = useMessage();
 const dialog = useDialog();
 
-type ProjectRow = SemanticSearchProjectStatus & { _loading?: boolean; _refreshing?: boolean };
-type ProjectStatusTag = { key: string; label: string; tone: 'info' | 'success' | 'warning' | 'error'; title?: string };
+type SemanticRow = SemanticSearchProjectStatus & { _loading?: boolean; _refreshing?: boolean };
+type GraphRAGRow = GraphRAGProjectStatus & { _loading?: boolean; _refreshing?: boolean };
 
 const BUILDING_STATUSES = new Set(['queued', 'building']);
 const POLL_INTERVAL_MS = 2500;
@@ -177,13 +194,21 @@ const loading = ref(true);
 const testingEmbedding = ref(false);
 const embeddingReady = ref<boolean | null>(null);
 const embeddingModelName = ref('');
-const defaultEnabled = ref(false);
+const defaultEnabledSemantic = ref(false);
+const defaultEnabledGraphRAG = ref(false);
 const searchKeyword = ref('');
-const projects = ref<ProjectRow[]>([]);
+const projects = ref<SemanticRow[]>([]);
+const graphragMap = ref<Map<string, GraphRAGRow>>(new Map());
 let pollingTimer: number | null = null;
 
-const enabledCount = computed(() => projects.value.filter((project) => project.enabled).length);
-const disabledCount = computed(() => projects.value.length - enabledCount.value);
+const semanticEnabledCount = computed(() => projects.value.filter((project) => project.enabled).length);
+const graphragEnabledCount = computed(() => {
+    let count = 0;
+    graphragMap.value.forEach((row) => {
+        if (row.enabled) count += 1;
+    });
+    return count;
+});
 const filteredProjects = computed(() => {
     const keyword = searchKeyword.value.trim().toLowerCase();
     if (!keyword) {
@@ -191,6 +216,10 @@ const filteredProjects = computed(() => {
     }
     return projects.value.filter((project) => project.projectName.toLowerCase().includes(keyword));
 });
+
+function getGraphRAG(projectName: string): GraphRAGRow | undefined {
+    return graphragMap.value.get(projectName);
+}
 
 function clearStatusPolling() {
     if (pollingTimer !== null && typeof window !== 'undefined') {
@@ -203,6 +232,21 @@ function isProjectBuilding(project: SemanticSearchProjectStatus) {
     return BUILDING_STATUSES.has(project.buildState.status);
 }
 
+function isGraphRAGBuilding(project: GraphRAGProjectStatus) {
+    return BUILDING_STATUSES.has(project.buildState.status);
+}
+
+function hasAnyBuilding(): boolean {
+    if (projects.value.some((p) => isProjectBuilding(p))) {
+        return true;
+    }
+    let busy = false;
+    graphragMap.value.forEach((row) => {
+        if (isGraphRAGBuilding(row)) busy = true;
+    });
+    return busy;
+}
+
 function truncateText(text: string, maxLength = 42) {
     if (text.length <= maxLength) {
         return text;
@@ -210,62 +254,130 @@ function truncateText(text: string, maxLength = 42) {
     return `${text.slice(0, maxLength - 1)}…`;
 }
 
-function getProjectStatusTags(project: SemanticSearchProjectStatus): ProjectStatusTag[] {
-    if (project.buildState.status === 'error') {
-        const tags: ProjectStatusTag[] = [
-            {
-                key: 'status',
-                label: t('components.semanticSearchCard.statusError'),
-                tone: 'error',
-            },
+// 语义索引：把后端 build_state 翻译成可读的状态 pill
+function getSemanticTags(project: SemanticSearchProjectStatus): IndexRowTag[] {
+    const buildState = project.buildState;
+    if (buildState.status === 'error') {
+        const tags: IndexRowTag[] = [
+            { key: 'status', label: t('components.semanticSearchCard.statusError'), tone: 'error' },
         ];
-        if (project.buildState.error) {
+        if (buildState.error) {
             tags.push({
                 key: 'error-detail',
-                label: truncateText(project.buildState.error),
+                label: truncateText(buildState.error),
                 tone: 'error',
-                title: project.buildState.error,
+                title: buildState.error,
             });
         }
         return tags;
     }
 
-    if (BUILDING_STATUSES.has(project.buildState.status)) {
+    if (BUILDING_STATUSES.has(buildState.status)) {
+        const progress = buildState.progress;
+        const totalChunks = progress.total_chunks || 0;
+        const embedded = progress.embedded_chunks || 0;
+        const totalFiles = progress.total_files || 0;
+        const doneFiles = progress.done_files || 0;
+        const detail = totalChunks > 0
+            ? t('components.semanticSearchCard.statusBuildingDetailChunks', { done: embedded, total: totalChunks })
+            : t('components.semanticSearchCard.statusBuildingDetailFiles', { done: doneFiles, total: totalFiles });
         return [
-            {
-                key: 'status',
-                label: t('components.semanticSearchCard.statusBuilding'),
-                tone: 'info',
-            },
+            { key: 'status', label: t('components.semanticSearchCard.statusBuilding'), tone: 'info' },
+            { key: 'progress', label: detail, tone: 'info', title: detail },
         ];
     }
 
-    if (!project.indexExists || project.buildState.status === 'not_built') {
+    if (!project.indexExists || buildState.status === 'not_built') {
+        if (!project.enabled) {
+            return [
+                { key: 'status', label: t('components.semanticSearchCard.statusDisabled'), tone: 'muted' },
+            ];
+        }
         return [
-            {
-                key: 'status',
-                label: t('components.semanticSearchCard.statusPending'),
-                tone: 'warning',
-            },
+            { key: 'status', label: t('components.semanticSearchCard.statusPending'), tone: 'warning' },
         ];
     }
 
-    if (project.needsRebuild || project.buildState.status === 'stale') {
+    if (project.needsRebuild || buildState.status === 'stale') {
         return [
-            {
-                key: 'status',
-                label: t('components.semanticSearchCard.statusPendingUpdate'),
-                tone: 'warning',
-            },
+            { key: 'status', label: t('components.semanticSearchCard.statusPendingUpdate'), tone: 'warning' },
         ];
     }
 
     return [
-        {
-            key: 'status',
-            label: t('components.semanticSearchCard.statusReady'),
-            tone: 'success',
-        },
+        { key: 'status', label: t('components.semanticSearchCard.statusReady'), tone: 'success' },
+    ];
+}
+
+// 知识图谱：把后端 build_state 翻译成可读的状态 pill
+function getGraphRAGTags(project: GraphRAGProjectStatus): IndexRowTag[] {
+    const buildState = project.buildState;
+    const stage = (buildState.stage || '').toLowerCase();
+    const progress = buildState.progress;
+
+    if (buildState.status === 'error') {
+        const tags: IndexRowTag[] = [
+            { key: 'status', label: t('components.semanticSearchCard.statusError'), tone: 'error' },
+        ];
+        if (buildState.error) {
+            tags.push({
+                key: 'error-detail',
+                label: truncateText(buildState.error),
+                tone: 'error',
+                title: buildState.error,
+            });
+        }
+        return tags;
+    }
+
+    if (BUILDING_STATUSES.has(buildState.status)) {
+        let stageLabel = t('components.semanticSearchCard.graphragStageBuilding');
+        if (stage === 'prepare' || stage === 'queued') {
+            stageLabel = t('components.semanticSearchCard.graphragStagePrepare');
+        } else if (stage === 'splitting') {
+            stageLabel = t('components.semanticSearchCard.graphragStageSplitting');
+        } else if (stage === 'extracting') {
+            stageLabel = t('components.semanticSearchCard.graphragStageExtracting');
+        } else if (stage === 'persisting') {
+            stageLabel = t('components.semanticSearchCard.graphragStagePersisting');
+        }
+        const detail = (progress.total_chunks || 0) > 0
+            ? t('components.semanticSearchCard.graphragProgressChunks', {
+                done: progress.done_chunks || 0,
+                total: progress.total_chunks || 0,
+                triplets: progress.triplets_collected || 0,
+            })
+            : t('components.semanticSearchCard.graphragProgressIdle');
+        return [
+            { key: 'status', label: stageLabel, tone: 'info' },
+            { key: 'progress', label: detail, tone: 'info', title: detail },
+        ];
+    }
+
+    if (!project.graphReady || buildState.status === 'not_built') {
+        if (!project.enabled) {
+            return [
+                { key: 'status', label: t('components.semanticSearchCard.statusDisabled'), tone: 'muted' },
+            ];
+        }
+        return [
+            { key: 'status', label: t('components.semanticSearchCard.statusPending'), tone: 'warning' },
+        ];
+    }
+
+    if (project.needsRebuild || buildState.status === 'stale') {
+        return [
+            { key: 'status', label: t('components.semanticSearchCard.statusPendingUpdate'), tone: 'warning' },
+        ];
+    }
+
+    const summary = t('components.semanticSearchCard.graphragSummary', {
+        nodes: project.metadata.nodes || 0,
+        edges: project.metadata.edges || 0,
+    });
+    return [
+        { key: 'status', label: t('components.semanticSearchCard.statusReady'), tone: 'success' },
+        { key: 'summary', label: summary, tone: 'success', title: summary },
     ];
 }
 
@@ -274,7 +386,7 @@ function syncStatusPolling() {
     if (typeof window === 'undefined') {
         return;
     }
-    if (!projects.value.some((project) => isProjectBuilding(project))) {
+    if (!hasAnyBuilding()) {
         return;
     }
     pollingTimer = window.setTimeout(() => {
@@ -288,15 +400,35 @@ async function loadData(options: { silent?: boolean } = {}) {
         loading.value = true;
     }
     try {
-        const status = await fetchSemanticSearchStatus();
-        embeddingReady.value = status.embedding_ready;
-        embeddingModelName.value = status.embedding_model_name || '';
-        defaultEnabled.value = status.default_enabled ?? false;
-        const loadingMap = new Map(projects.value.map(project => [project.projectName, Boolean(project._loading)]));
-        projects.value = status.projects.map(project => ({
+        const [semanticStatus, graphragStatus] = await Promise.all([
+            fetchSemanticSearchStatus(),
+            fetchGraphRAGStatus(),
+        ]);
+
+        embeddingReady.value = semanticStatus.embedding_ready;
+        embeddingModelName.value = semanticStatus.embedding_model_name || '';
+        defaultEnabledSemantic.value = semanticStatus.default_enabled ?? false;
+        defaultEnabledGraphRAG.value = graphragStatus.default_enabled ?? false;
+
+        const semanticLoadingMap = new Map(projects.value.map((project) => [project.projectName, Boolean(project._loading)]));
+        const semanticRefreshingMap = new Map(projects.value.map((project) => [project.projectName, Boolean(project._refreshing)]));
+        projects.value = semanticStatus.projects.map((project) => ({
             ...project,
-            _loading: loadingMap.get(project.projectName) ?? false,
+            _loading: semanticLoadingMap.get(project.projectName) ?? false,
+            _refreshing: semanticRefreshingMap.get(project.projectName) ?? false,
         }));
+
+        const previousMap = graphragMap.value;
+        const nextMap = new Map<string, GraphRAGRow>();
+        for (const project of graphragStatus.projects) {
+            const prev = previousMap.get(project.projectName);
+            nextMap.set(project.projectName, {
+                ...project,
+                _loading: prev?._loading ?? false,
+                _refreshing: prev?._refreshing ?? false,
+            });
+        }
+        graphragMap.value = nextMap;
     } catch (e: unknown) {
         const msg = e instanceof Error ? e.message : String(e);
         message.error(msg);
@@ -308,7 +440,7 @@ async function loadData(options: { silent?: boolean } = {}) {
     }
 }
 
-async function handleToggle(proj: ProjectRow, enabled: boolean) {
+async function handleToggleSemantic(proj: SemanticRow, enabled: boolean) {
     proj._loading = true;
     try {
         if (enabled) {
@@ -340,7 +472,7 @@ async function handleToggle(proj: ProjectRow, enabled: boolean) {
             message.error(msg);
         }
     } finally {
-        const target = projects.value.find(project => project.projectName === proj.projectName);
+        const target = projects.value.find((project) => project.projectName === proj.projectName);
         if (target) {
             target._loading = false;
         } else {
@@ -350,7 +482,7 @@ async function handleToggle(proj: ProjectRow, enabled: boolean) {
     }
 }
 
-async function handleRefresh(proj: ProjectRow) {
+async function handleRefreshSemantic(proj: SemanticRow) {
     if (!proj.enabled) {
         message.warning(t('components.semanticSearchCard.refreshDisabledTooltip'));
         return;
@@ -374,11 +506,93 @@ async function handleRefresh(proj: ProjectRow) {
         const msg = e instanceof Error ? e.message : String(e);
         message.error(t('components.semanticSearchCard.refreshFailed', { reason: msg }));
     } finally {
-        const target = projects.value.find(project => project.projectName === proj.projectName);
+        const target = projects.value.find((project) => project.projectName === proj.projectName);
         if (target) {
             target._refreshing = false;
         } else {
             proj._refreshing = false;
+        }
+        syncStatusPolling();
+    }
+}
+
+async function handleToggleGraphRAG(projectName: string, enabled: boolean) {
+    const row = graphragMap.value.get(projectName);
+    if (!row) return;
+    row._loading = true;
+    try {
+        if (enabled) {
+            const result = await enableGraphRAG(projectName);
+            row.enabled = true;
+            row.buildState = result.buildState;
+            row.graphReady = result.graphReady;
+            row.metadataReady = result.metadataReady;
+            row.needsRebuild = result.needsRebuild;
+            row.metadata = result.metadata;
+            message.success(t('components.semanticSearchCard.graphragEnableSuccess', { name: projectName }));
+        } else {
+            const result = await disableGraphRAG(projectName);
+            row.enabled = false;
+            row.buildState = result.buildState;
+            row.graphReady = result.graphReady;
+            row.metadataReady = result.metadataReady;
+            row.needsRebuild = result.needsRebuild;
+            row.metadata = result.metadata;
+            message.success(t('components.semanticSearchCard.graphragDisableSuccess', { name: projectName }));
+        }
+        await loadData({ silent: true });
+    } catch (e: unknown) {
+        const msg = e instanceof Error ? e.message : String(e);
+        if (enabled) {
+            dialog.error({
+                title: t('components.semanticSearchCard.graphragEnableFailed'),
+                content: msg,
+                positiveText: t('common.confirm'),
+            });
+            row.enabled = false;
+        } else {
+            message.error(msg);
+        }
+    } finally {
+        const target = graphragMap.value.get(projectName);
+        if (target) {
+            target._loading = false;
+        }
+        syncStatusPolling();
+    }
+}
+
+async function handleRefreshGraphRAG(projectName: string) {
+    const row = graphragMap.value.get(projectName);
+    if (!row) return;
+    if (!row.enabled) {
+        message.warning(t('components.semanticSearchCard.graphragRefreshDisabledTooltip'));
+        return;
+    }
+    if (row._refreshing || isGraphRAGBuilding(row)) {
+        return;
+    }
+    row._refreshing = true;
+    try {
+        const result = await refreshGraphRAGProject(projectName);
+        row.buildState = result.buildState;
+        row.graphReady = result.graphReady;
+        row.metadataReady = result.metadataReady;
+        row.needsRebuild = result.needsRebuild;
+        row.metadata = result.metadata;
+        if (result.triggered) {
+            message.success(t('components.semanticSearchCard.graphragRefreshTriggered', { name: projectName }));
+        } else {
+            message.info(t('components.semanticSearchCard.graphragRefreshUpToDate', { name: projectName }));
+        }
+        await loadData({ silent: true });
+    } catch (e: unknown) {
+        const msg = e instanceof Error ? e.message : String(e);
+        message.error(t('components.semanticSearchCard.graphragRefreshFailed', { reason: msg }));
+    } finally {
+        const target = graphragMap.value.get(projectName);
+        if (target) {
+            target._refreshing = false;
         }
         syncStatusPolling();
     }
@@ -419,10 +633,20 @@ async function handleTestEmbedding() {
     }
 }
 
-async function handleDefaultToggle(val: boolean) {
+async function handleDefaultSemanticToggle(val: boolean) {
     try {
         const result = await setSemanticSearchDefaults(val);
-        defaultEnabled.value = result.default_enabled;
+        defaultEnabledSemantic.value = result.default_enabled;
+    } catch (e: unknown) {
+        const msg = e instanceof Error ? e.message : String(e);
+        message.error(msg);
+    }
+}
+
+async function handleDefaultGraphRAGToggle(val: boolean) {
+    try {
+        const result = await setGraphRAGDefaults(val);
+        defaultEnabledGraphRAG.value = result.default_enabled;
     } catch (e: unknown) {
         const msg = e instanceof Error ? e.message : String(e);
         message.error(msg);
@@ -541,6 +765,11 @@ onBeforeUnmount(() => {
     color: #2b8a3e;
 }
 
+.summary-pill-graphrag {
+    background: color-mix(in srgb, #8b5cf6 14%, var(--spark-panel-bg));
+    color: #6d28d9;
+}
+
 .summary-pill-disabled {
     background: color-mix(in srgb, #8c8c8c 12%, var(--spark-panel-bg));
     color: var(--spark-text-muted);
@@ -590,104 +819,43 @@ onBeforeUnmount(() => {
 /* 项目列表 */
 .project-list {
     display: grid;
-    grid-template-columns: repeat(auto-fit, minmax(240px, 1fr));
+    grid-template-columns: repeat(auto-fit, minmax(320px, 1fr));
     gap: 8px;
-    max-height: 150px;
+    max-height: 360px;
     overflow: auto;
     padding-right: 2px;
 }
 
 .project-card {
     display: flex;
-    align-items: center;
-    gap: 8px;
-    min-height: 42px;
-    padding: 8px 10px;
+    flex-direction: column;
+    gap: 6px;
+    padding: 10px 12px;
     border: 1px solid color-mix(in srgb, var(--spark-border), transparent 15%);
     border-radius: 10px;
     background: var(--spark-panel-bg);
 }
 
-.project-card-main {
-    flex: 1;
-    min-width: 0;
+.project-card-header {
     display: flex;
     align-items: center;
     gap: 6px;
 }
 
-.project-card-tags {
+.project-card-rows {
     display: flex;
-    align-items: center;
-    justify-content: flex-end;
-    gap: 6px;
-    flex-wrap: wrap;
+    flex-direction: column;
+    gap: 0;
 }
 
 .project-name {
     font-size: var(--spark-fs-base);
     color: var(--spark-text);
-    font-weight: 500;
+    font-weight: 600;
     min-width: 0;
     overflow: hidden;
     text-overflow: ellipsis;
     white-space: nowrap;
-}
-
-.semantic-status-pill {
-    flex-shrink: 0;
-    max-width: 180px;
-    overflow: hidden;
-    text-overflow: ellipsis;
-    white-space: nowrap;
-    font-size: 12px;
-    line-height: 18px;
-    padding: 2px 8px;
-    border-radius: 999px;
-    border: 1px solid transparent;
-}
-
-.semantic-status-pill-info {
-    color: var(--spark-primary);
-    background: color-mix(in srgb, var(--spark-primary) 10%, var(--spark-panel-bg));
-    border-color: color-mix(in srgb, var(--spark-primary) 22%, transparent);
-}
-
-.semantic-status-pill-success {
-    color: #2b8a3e;
-    background: color-mix(in srgb, #52c41a 14%, var(--spark-panel-bg));
-    border-color: color-mix(in srgb, #52c41a 24%, transparent);
-}
-
-.semantic-status-pill-warning {
-    color: #b26a00;
-    background: color-mix(in srgb, #faad14 16%, var(--spark-panel-bg));
-    border-color: color-mix(in srgb, #faad14 24%, transparent);
-}
-
-.semantic-status-pill-error {
-    color: #cf1322;
-    background: color-mix(in srgb, #ff4d4f 14%, var(--spark-panel-bg));
-    border-color: color-mix(in srgb, #ff4d4f 24%, transparent);
-}
-
-.build-spinner {
-    width: 14px;
-    height: 14px;
-    border-radius: 50%;
-    border: 2px solid color-mix(in srgb, var(--spark-primary) 18%, transparent);
-    border-top-color: var(--spark-primary);
-    animation: semantic-build-spin 0.85s linear infinite;
-    flex-shrink: 0;
-}
-
-@keyframes semantic-build-spin {
-    from {
-        transform: rotate(0deg);
-    }
-    to {
-        transform: rotate(360deg);
-    }
 }
 
 /* 移动端适配 */
@@ -703,14 +871,6 @@ onBeforeUnmount(() => {
     .summary-pill {
         padding: 4px 8px;
     }
-
-    .project-card {
-        align-items: flex-start;
-    }
-
-    .project-card-tags {
-        justify-content: flex-start;
-    }
 }
 
 /* 底部 */
@@ -720,20 +880,48 @@ onBeforeUnmount(() => {
     border-top: 1px solid color-mix(in srgb, var(--spark-border), transparent 10%);
 }
 
+.default-toggle-group {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+    gap: 16px;
+}
+
 .default-toggle {
     display: flex;
     align-items: center;
     gap: 8px;
 }
 
-.default-toggle-text {
-    display: flex;
-    align-items: center;
-}
-
 .default-toggle-label {
     font-size: var(--spark-fs-base);
     color: var(--spark-text);
+}
+
+.graphrag-fast-tip-icon {
+    color: var(--spark-text-muted);
+    cursor: help;
+    transition: color 0.15s ease;
+}
+
+.graphrag-fast-tip-icon:hover {
+    color: var(--spark-primary);
+}
+
+.graphrag-fast-tip {
+    max-width: 280px;
+    line-height: 1.5;
+}
+
+.graphrag-fast-tip-title {
+    font-weight: 600;
+    margin-bottom: 4px;
+    color: var(--spark-text);
+}
+
+.graphrag-fast-tip-body {
+    font-size: var(--spark-fs-sm);
+    color: var(--spark-text-muted);
 }
 
 .auto-update-hint {
@@ -742,44 +930,5 @@ onBeforeUnmount(() => {
     margin: 8px 0 0;
     padding-left: 0;
     white-space: pre-line;
-}
-
-.refresh-icon-btn {
-    display: inline-flex;
-    align-items: center;
-    justify-content: center;
-    width: 24px;
-    height: 24px;
-    border: none;
-    border-radius: 6px;
-    background: transparent;
-    color: var(--spark-text-muted);
-    cursor: pointer;
-    transition: color 0.15s ease, opacity 0.15s ease;
-    padding: 0;
-    flex-shrink: 0;
-}
-
-.refresh-icon-btn:hover:not(:disabled) {
-    color: var(--spark-primary);
-}
-
-.refresh-icon-btn:disabled {
-    opacity: 0.35;
-    cursor: not-allowed;
-}
-
-.refresh-icon-btn--spinning {
-    color: var(--spark-primary);
-    opacity: 0.7;
-}
-
-.refresh-icon-btn--spinning :deep(svg) {
-    animation: semantic-refresh-spin 0.9s linear infinite;
-}
-
-@keyframes semantic-refresh-spin {
-    from { transform: rotate(0deg); }
-    to { transform: rotate(360deg); }
 }
 </style>

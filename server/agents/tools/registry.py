@@ -35,6 +35,7 @@ from agents.tools.web_search import web_search
 
 MCP_ONLY_TOOLS = [capture_inspiration]
 EXTERNAL_SEARCH_TOOLS = [web_search]
+OPTIONAL_RESEARCH_TOOLS = [graph_rag_tool]
 MUSE_TOOLS = [
     rewrite_inspiration,
     list_inspirations,
@@ -66,6 +67,7 @@ SCRIPTWRITER_TOOLS = [
     read_synopsis,
     read_beat_sheet,
     work_tracker,
+    *OPTIONAL_RESEARCH_TOOLS,
 ]
 SHARED_READ_TOOLS = [list_chapters, read_chapter_scene, read_chapter_outline_raw]
 DIRECTOR_TOOLS = SHARED_READ_TOOLS + [
@@ -76,10 +78,11 @@ DIRECTOR_TOOLS = SHARED_READ_TOOLS + [
     search_project,
     semantic_search,
     replace_from_search,
+    *OPTIONAL_RESEARCH_TOOLS,
     web_search,
     read_attachment_chunk,
 ]
-OPTIONAL_RESEARCH_TOOLS = [graph_rag_tool]
+CRITIC_TOOLS = SHARED_READ_TOOLS + OPTIONAL_RESEARCH_TOOLS
 ALL_TOOLS = (
     MUSE_TOOLS
     + LOREBOOK_TOOLS
@@ -102,7 +105,7 @@ def get_tools_for_agent(agent_id: str) -> list:
         "agent_showrunner": SHOWRUNNER_TOOLS,
         "agent_scriptwriter": SCRIPTWRITER_TOOLS + SHARED_READ_TOOLS,
         "agent_director": DIRECTOR_TOOLS,
-        "agent_critic": SHARED_READ_TOOLS,
+        "agent_critic": CRITIC_TOOLS,
         "agent_style": [],
     }
     return tool_map.get(agent_id, [])

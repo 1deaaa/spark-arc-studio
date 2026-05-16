@@ -132,6 +132,7 @@
   --loader-glow: var(--spark-primary-glow);
   --loader-orbit-outer: var(--spark-primary);
   --loader-orbit-inner: var(--spark-harmonious-a);
+  --loader-text: var(--spark-text-muted);
 }
 
 :root[data-theme="light"] .spark-loader-wrapper,

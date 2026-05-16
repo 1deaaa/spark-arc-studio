@@ -50,18 +50,28 @@ def read_worldview() -> str:
 
 @tool(args_schema=ReadCharacterInput)
 def read_character(character_name: str) -> str:
-    """读取角色设定。"""
-    from core.utils import get_project_characters_path
+    """读取角色设定。
+
+    历史 Bug：旧版本是用"文件名包含字符串"做匹配，但角色文件是用 ID 命名
+    （如 ``0.txt``），传入真实角色名（如"沈逐流"）永远命中不到。现已改为
+    通过统一工具 ``lookup_character_id_by_name`` 走 chr.bind 反查。
+    """
+    from story.project_files import (
+        get_character_file_path,
+        lookup_character_id_by_name,
+    )
 
     user_id, project_name = ToolExecutionContext.get_context()
-    chars_path = get_project_characters_path(user_id, project_name)
-    if not os.path.exists(chars_path):
-        return f"未找到角色 {character_name} 的设定档案。"
-    for file in os.listdir(chars_path):
-        if file.endswith('.txt') and character_name in file:
-            with open(os.path.join(chars_path, file), 'r', encoding='utf-8') as f:
-                return f.read()
-    return f"未找到名字包含 {character_name} 的角色档案。"
+    char_id = lookup_character_id_by_name(user_id, project_name, character_name)
+    if not char_id:
+        return f"未找到名为 '{character_name}' 的角色档案。"
+
+    char_file = get_character_file_path(user_id, project_name, char_id)
+    if not char_file:
+        return f"找到角色 '{character_name}' 但其设定文件丢失。"
+
+    with open(char_file, "r", encoding="utf-8") as f:
+        return f.read()
 
 
 @tool

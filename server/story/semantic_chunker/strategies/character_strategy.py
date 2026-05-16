@@ -4,11 +4,14 @@
 整文件 = 一个 chunk，从 chr.bind 或文件名推断角色名。
 """
 
-import json
 import os
 from typing import override
 
-from story.project_files import ProjectFile, build_narrative_ref
+from story.project_files import (
+    ProjectFile,
+    build_narrative_ref,
+    load_character_id_name_map_from_bind_path,
+)
 from ..base import SemanticChunk, ChunkStrategy
 
 
@@ -47,22 +50,14 @@ class CharacterChunkStrategy(ChunkStrategy):
 
     @staticmethod
     def _lookup_character_name(project_file: ProjectFile, character_id: str) -> str:
-        """从 chr.bind 查找角色名"""
-        # 尝试从同目录的 chr.bind 读取
+        """通过统一工具 load_character_id_name_map_from_bind_path 解析角色名。"""
         bind_path = os.path.join(os.path.dirname(project_file.abs_path), "chr.bind")
-        if os.path.exists(bind_path):
-            try:
-                with open(bind_path, "r", encoding="utf-8") as f:
-                    mapping = json.load(f)
-                entry = mapping.get(character_id)
-                if isinstance(entry, dict):
-                    return entry.get("name", character_id)
-                elif isinstance(entry, str):
-                    return entry
-            except Exception:
-                pass
+        id_to_name = load_character_id_name_map_from_bind_path(bind_path)
+        name = id_to_name.get(str(character_id), "")
+        if name:
+            return name
 
-        # 回退：从文件内容的第一行提取
+        # 回退：从文件内容的第一行提取（兼容用户手写、且 chr.bind 缺失的项目）
         first_line = project_file.content.split("\n", 1)[0].strip()
         if first_line.startswith("#"):
             return first_line.lstrip("#").strip()

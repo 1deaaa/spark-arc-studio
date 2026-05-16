@@ -39,8 +39,22 @@ def _empty_build_state() -> dict:
     }
 
 
-def _resolve_project_semantic_status_sync(user_id: str, project_name: str, enabled: bool) -> dict:
-    """同步实现：扫文件、算 hash、读 build_state（阻塞 IO 集中在这里）。"""
+def _resolve_project_semantic_status_sync(
+    user_id: str,
+    project_name: str,
+    enabled: bool,
+    *,
+    check_freshness: bool = True,
+) -> dict:
+    """同步实现：读 build_state（按需做 freshness 比对）。
+
+    重要：``check_freshness`` 控制是否进行哈希扫盘（``_needs_rebuild``）。
+
+    - **列表模式默认 False**：避免每次 GET /status 都对所有项目串行扫盘
+      （项目正文 + 附件全文 md5），防止"项目越多越卡"。
+    - **单项目 / 显式刷新模式默认 True**：愿意付出一次扫盘代价换得
+      "待更新"判定。
+    """
     index_exists = False
     build_state = _empty_build_state()
     needs_rebuild = False
@@ -55,7 +69,9 @@ def _resolve_project_semantic_status_sync(user_id: str, project_name: str, enabl
         from agents.vector_index import VectorIndexService
 
         service = VectorIndexService(user_id, project_name)
-        status = service.get_status(check_freshness=enabled)
+        # enabled=False 永远不做 freshness；enabled=True 也按入参开关决定
+        effective_freshness = bool(enabled and check_freshness)
+        status = service.get_status(check_freshness=effective_freshness)
         index_exists = bool(status.get("exists", False))
         needs_rebuild = bool(status.get("needs_rebuild", False))
         build_state = status.get("build_state", build_state)
@@ -74,10 +90,20 @@ def _resolve_project_semantic_status_sync(user_id: str, project_name: str, enabl
     }
 
 
-async def _resolve_project_semantic_status(user_id: str, project_name: str, enabled: bool) -> dict:
+async def _resolve_project_semantic_status(
+    user_id: str,
+    project_name: str,
+    enabled: bool,
+    *,
+    check_freshness: bool = True,
+) -> dict:
     """统一只读状态查询入口：异步外壳，阻塞 IO 走线程池，避免阻塞 event loop。"""
     return await run_in_threadpool(
-        _resolve_project_semantic_status_sync, user_id, project_name, enabled
+        _resolve_project_semantic_status_sync,
+        user_id,
+        project_name,
+        enabled,
+        check_freshness=check_freshness,
     )
 
 
@@ -176,7 +202,10 @@ async def get_semantic_search_status(
         except Exception:
             pass
 
-        index_status = await _resolve_project_semantic_status(user_id, projectName, enabled)
+        # 单项目模式：用户主动看一个项目，可以付出一次扫盘代价换 needs_rebuild 判定
+        index_status = await _resolve_project_semantic_status(
+            user_id, projectName, enabled, check_freshness=True,
+        )
 
         return {
             "projectName": projectName,
@@ -202,11 +231,16 @@ async def get_semantic_search_status(
         except Exception:
             pass
 
+        # 列表模式：N 个项目串行调用，必须避免每个项目都扫盘哈希。
+        # 仅返回 build_state（内存读）+ index_exists（一次目录探测）。
+        # "待更新"判定延迟到用户点单项目或主动 refresh 时进行。
         project_items: list[dict] = []
         for item in projects:
             project_name = str(item.get("project_name", "") or item.get("projectName", "") or "")
             enabled = bool(item.get("enabled", False))
-            index_status = await _resolve_project_semantic_status(user_id, project_name, enabled)
+            index_status = await _resolve_project_semantic_status(
+                user_id, project_name, enabled, check_freshness=False,
+            )
             project_items.append({
                 **item,
                 "index_exists": index_status["index_exists"],
