@@ -16,7 +16,7 @@
       <div id="node-editor-content">
         <!-- 场景编辑器 -->
         <n-form v-if="type === 'scene'" label-placement="top" size="medium">
-          <n-form-item label="场景名称(scene)">
+          <n-form-item label="场景名称">
             <n-input 
               id="scene-name" 
               v-model:value="sceneDraft.scene" 
@@ -26,7 +26,7 @@
             />
           </n-form-item>
 
-          <n-form-item label="场景引导(任务简介显示 仅游戏开发用)">
+          <n-form-item label="导演意图">
             <n-input
               id="scene-guide"
               v-model:value="sceneDraft.guide"
@@ -108,7 +108,7 @@
                   <template #label>
                     <n-space align="center" :size="4">
                       <span>交互按钮文案</span>
-                      <n-text depth="3" style="font-size: var(--spark-fs-2xs);">(button_text) — DialogueTrigger 悬浮提示</n-text>
+                      <n-text depth="3" style="font-size: var(--spark-fs-2xs);">接近角色时显示的对话按钮文本</n-text>
                     </n-space>
                   </template>
                   <n-input
@@ -123,7 +123,7 @@
                   <template #label>
                     <n-space align="center" :size="4">
                       <span>外部触发事件</span>
-                      <n-text depth="3" style="font-size: var(--spark-fs-2xs);">(trigger_event) — 非玩家触碰触发时填写</n-text>
+                      <n-text depth="3" style="font-size: var(--spark-fs-2xs);">非玩家触碰触发时填写</n-text>
                     </n-space>
                   </template>
                   <n-input
@@ -138,7 +138,7 @@
                   <template #label>
                     <n-space align="center" :size="4">
                       <span>播放优先级</span>
-                      <n-text depth="3" style="font-size: var(--spark-fs-2xs);">(priority) — 多场景同时满足时数值越大越先触发</n-text>
+                      <n-text depth="3" style="font-size: var(--spark-fs-2xs);">多场景同时满足时数值越大越先触发</n-text>
                     </n-space>
                   </template>
                   <n-input-number
@@ -154,7 +154,7 @@
                   <template #label>
                     <n-space align="center" :size="4">
                       <span>一次性标记键</span>
-                      <n-text depth="3" style="font-size: var(--spark-fs-2xs);">(once_key) — 场景完成后自动写入 StoryStateStore，防重放</n-text>
+                      <n-text depth="3" style="font-size: var(--spark-fs-2xs);">场景完成后自动写入状态，防重放</n-text>
                     </n-space>
                   </template>
                   <n-input
@@ -169,7 +169,7 @@
                   <template #label>
                     <n-space align="center" :size="4">
                       <span>隐藏场景</span>
-                      <n-text depth="3" style="font-size: var(--spark-fs-2xs);">(hiden) — 开启后不在触发列表中显示，仅可由条件或事件激活</n-text>
+                      <n-text depth="3" style="font-size: var(--spark-fs-2xs);">开启后不在触发列表中显示，仅可由条件或事件激活</n-text>
                     </n-space>
                   </template>
                   <n-switch v-model:value="sceneDraft.hiden" @update:value="applyScene" />
@@ -179,7 +179,7 @@
                   <template #label>
                     <n-space align="center" :size="4">
                       <span>触发条件</span>
-                      <n-text depth="3" style="font-size: var(--spark-fs-2xs);">(conditions) — 满足条件才可见/可触发</n-text>
+                      <n-text depth="3" style="font-size: var(--spark-fs-2xs);">满足条件才可见/可触发</n-text>
                     </n-space>
                   </template>
                   <conditions-editor
@@ -193,7 +193,7 @@
                   <template #label>
                     <n-space align="center" :size="4">
                       <span>场景完成后状态写入</span>
-                      <n-text depth="3" style="font-size: var(--spark-fs-2xs);">(effects) — 场景结束后写回 StoryStateStore（≠ act，不触发函数，只记状态）</n-text>
+                      <n-text depth="3" style="font-size: var(--spark-fs-2xs);">场景结束后写回状态（不触发函数，只记状态）</n-text>
                     </n-space>
                   </template>
                   <effects-editor
@@ -210,11 +210,11 @@
 
         <!-- 对话编辑器 -->
         <n-form v-else-if="type === 'dialogue'" label-placement="top" size="medium">
-          <n-form-item label="对话ID(id)">
+          <n-form-item label="对话 ID">
             <n-input id="dialogue-id" :value="String(dialogueDraft.id)" disabled />
           </n-form-item>
 
-          <n-form-item label="角色(chr)">
+          <n-form-item label="角色">
             <n-select
               id="dialogue-chr"
               v-model:value="dialogueDraft.chr"
@@ -225,7 +225,7 @@
             />
           </n-form-item>
 
-          <n-form-item label="文本(txt)">
+          <n-form-item label="对话文本">
             <n-input 
               id="dialogue-txt" 
               v-model:value="dialogueDraft.txt" 
@@ -237,7 +237,7 @@
             />
           </n-form-item>
 
-          <n-form-item label="跳转(next)">
+          <n-form-item label="跳转场景">
             <n-select
               id="dialogue-next"
               v-model:value="dialogueDraft.next"
@@ -289,7 +289,7 @@
               <template #header>
                 <n-space align="center" :size="6">
                   <n-icon :component="Gamepad2" size="16" />
-                  <span style="font-size: var(--spark-fs-sm); font-weight: 500;">Unity 行为绑定 (act)</span>
+                  <span style="font-size: var(--spark-fs-sm); font-weight: 500;">Unity 行为绑定</span>
                 </n-space>
               </template>
               <template #header-extra>
@@ -308,7 +308,7 @@
 
         <!-- 选项编辑器 -->
         <n-form v-else-if="type === 'option'" label-placement="top" size="medium">
-          <n-form-item label="选项文本(optn)">
+          <n-form-item label="选项文本">
             <n-input 
               id="option-text" 
               v-model:value="optionDraft.optn" 
@@ -371,6 +371,7 @@ import { useCharacterStore } from '@/components/stores/characterStore';
 import { useActionBindingStore } from '@/components/stores/actionBindingStore';
 import MarkdownRenderer from '@/components/share/MarkdownRenderer.vue';
 import type { ArcDialogueNode, ArcOptionNode, ArcScene, SceneEffectItem } from '@/services/arcParser';
+import { autoSaveEnabled } from '@/utils/autoSaveState';
 
 const sceneStore = useSceneStore();
 const projectStore = useProjectStore();
@@ -404,7 +405,6 @@ const sceneSelectOptions = computed(() =>
     .map(name => ({ label: name, value: name }))
 );
 const vm = getCurrentInstance();
-const autoSaveEnabled = computed(() => localStorage.getItem('autoSaveEnabled') !== 'false');
 
 function cleanStoryDataForSave(story) {
   // Deep copy to avoid mutating the reactive state used by the UI

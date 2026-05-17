@@ -290,7 +290,7 @@ const sceneSelectOptions = computed(() =>
 );
 
 // ── 自动保存 ──
-const autoSaveEnabled = computed(() => localStorage.getItem('autoSaveEnabled') !== 'false');
+import { autoSaveEnabled } from '@/utils/autoSaveState';
 
 function useDebounce(fn: Function, delay = 600) {
   let timer: ReturnType<typeof setTimeout> | null = null;

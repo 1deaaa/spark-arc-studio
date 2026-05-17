@@ -95,12 +95,10 @@
           >
             <template #icon>
               <n-icon
-                :component="RefreshCw"
+                :component="autoSaveEnabled ? SaveAll : SaveOff"
                 :color="autoSaveEnabled ? 'var(--n-primary-color)' : '#e88080'"
                 :style="{
-                  opacity: autoSaveEnabled ? 1 : 1,
-                  transition: 'all 0.3s ease',
-                  transform: autoSaveEnabled ? 'rotate(0deg)' : 'rotate(-45deg)'
+                  transition: 'all 0.3s ease'
                 }"
               />
             </template>
@@ -152,7 +150,7 @@
 import { onBeforeUnmount, onMounted, ref, computed, h } from 'vue';
 import { useI18n } from 'vue-i18n';
 import { NButton, NIcon, NText, NDropdown, NTooltip } from 'naive-ui';
-import { Archive, CircleCheck, CloudDownload, CloudUpload, FolderOpen, Laptop, LogOut, Maximize2, Minimize2, Moon, PaintBucket, Play, RefreshCw, Save, Share2, Sun } from 'lucide-vue-next';
+import { Archive, CircleCheck, CloudDownload, CloudUpload, FolderOpen, Laptop, LogOut, Maximize2, Minimize2, Moon, PaintBucket, Play, Save, SaveAll, SaveOff, Share2, Sun } from 'lucide-vue-next';
 import bus from '@/eventBus';
 import ProjectSelector from '../../user/ProjectSelector.vue';
 import { useSceneStore } from '@/components/stores/sceneStore';
@@ -166,6 +164,7 @@ import { useWindowControls } from '@/composables/useWindowControls';
 import { useDockMagnify } from '@/composables/useDockMagnify';
 import AppBrand from '@/components/share/AppBrand.vue';
 import { SPARKARC_GITHUB_URL } from '@/config';
+import { autoSaveEnabled, setAutoSaveEnabled } from '@/utils/autoSaveState';
 import WindowControls from './WindowControls.vue';
 
 const { startDragging, isTauriDesktop: showWinControls } = useWindowControls();
@@ -184,7 +183,6 @@ const { dockRef: dockBarRef, onDockEnter, onDockMove, onDockLeave } = useDockMag
 
 const props = defineProps({
   username: { type: String, default: '' },
-  autoSaveEnabled: { type: Boolean, default: true },
 });
 
 const { t } = useI18n();
@@ -194,9 +192,6 @@ const emit = defineEmits(['open-settings', 'auto-save-changed', 'logout', 'open-
 const saveSucceeded = ref(false);
 const saveButtonText = computed(() => saveSucceeded.value ? t('components.headerToolbar.saveSuccess') : t('views.common.save'));
 const previewing = ref(false);
-
-// 本地响应式状态用于 switch
-const autoSaveEnabled = ref(props.autoSaveEnabled);
 
 const importFileInput = ref(null);
 function triggerFileImport() { importFileInput.value?.click(); }
@@ -373,7 +368,7 @@ async function saveCurrentFile() {
   }
   try {
     await saveStory(projectStore.currentProject, currentFilePath.value, sceneStore.scriptData);
-    if (props.autoSaveEnabled) localStorage.setItem('lastSavedState', JSON.stringify(sceneStore.scriptData));
+    if (autoSaveEnabled.value) localStorage.setItem('lastSavedState', JSON.stringify(sceneStore.scriptData));
     showSavedHint();
     
     // 成功反馈
@@ -439,10 +434,12 @@ async function quickPreview() {
 }
 
 function toggleAutoSave(newVal) {
-  autoSaveEnabled.value = newVal;
-  localStorage.setItem('autoSaveEnabled', String(newVal));
+  setAutoSaveEnabled(newVal);
+  // 仅关闭时提示（开启是默认行为，无需提示）
+  if (!newVal) {
+    bus.emit('toast', { type: 'warning', message: t('components.headerToolbar.autoSaveOff') });
+  }
   emit('auto-save-changed', newVal);
-  bus.emit('toast', { type: 'info', message: newVal ? t('components.headerToolbar.autoSaveOn') : t('components.headerToolbar.autoSaveOff') });
   if (newVal) saveCurrentFile();
 }
 

@@ -80,7 +80,7 @@ def import_project_stories_to_db(user_id: str, project_name: str, *, reset: bool
             default_scene_name = parsed.get('display_name') or os.path.splitext(os.path.basename(rel_path))[0]
 
             for scene_model in scene_models:
-                caption = scene_model.caption or ''
+                guide = scene_model.guide or ''
                 scene_name = scene_model.name or default_scene_name
 
                 progress_counter += 1.0
@@ -93,12 +93,13 @@ def import_project_stories_to_db(user_id: str, project_name: str, *, reset: bool
                     scene_name=str(scene_name),
                     button_text=scene_model.button_text,
                     progress=progress_counter,
-                    caption=str(caption),
+                    guide=str(guide),
                     conditions=copy.deepcopy(scene_model.conditions) if scene_model.conditions is not None else None,
                     effects=copy.deepcopy(scene_model.effects) if scene_model.effects is not None else None,
                     trigger_event=scene_model.trigger_event,
                     priority=scene_model.priority,
                     once_key=scene_model.once_key,
+                    intro=scene_model.intro or None,
                     dlg_json=dlg_payload,
                     hiden=scene_model.hidden,
                 )

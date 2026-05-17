@@ -73,8 +73,9 @@
             <div v-if="showTitle" class="chapter-title-overlay">
                 <div class="title-content">
                   <span class="chapter-label">{{ t('views.player.desktop.chapterLabel', { chapter: currentScene?.chapter || '1' }) }}</span>
-                    <h1>{{ currentScene?.caption || currentScene?.scene_name }}</h1>
+                    <h1>{{ currentScene?.guide || currentScene?.scene_name }}</h1>
                     <div class="title-divider"></div>
+                    <div v-if="currentScene?.intro" class="intro-text">{{ currentScene.intro }}</div>
                 </div>
             </div>
         </transition>
@@ -206,8 +207,9 @@ type StoryDialogue = {
 
 type StoryScene = {
   chapter?: number | string;
-  caption?: string;
+  guide?: string;
   scene_name?: string;
+  intro?: string;
   dlg?: StoryDialogue[];
 };
 
@@ -327,7 +329,7 @@ const currentScene = computed(() => {
 const sceneNavItems = computed<NavItem[]>(() =>
   storyData.value.map((s, idx) => ({
     id: `scene-${idx}`,
-    title: s.caption || s.scene_name || t('views.player.desktop.untitledScene', { index: idx + 1 }),
+    title: s.guide || s.scene_name || t('views.player.desktop.untitledScene', { index: idx + 1 }),
   }))
 );
 
@@ -385,7 +387,7 @@ function clearTitleTimer() {
 function collectSceneText(scene: StoryScene | null): string {
   if (!scene) return '';
   const parts: string[] = [];
-  if (scene.caption) parts.push(scene.caption);
+  if (scene.guide) parts.push(scene.guide);
   if (scene.scene_name) parts.push(scene.scene_name);
   for (const d of scene.dlg || []) {
     if (d.txt) parts.push(d.txt);
@@ -409,11 +411,13 @@ function collectSceneText(scene: StoryScene | null): string {
 function showSceneTitle() {
   clearTitleTimer();
   showTitle.value = true;
-  // warmupSceneFonts(currentSceneIndex.value); // 场景预热已注释
-  titleTimerId.value = window.setTimeout(() => {
-    showTitle.value = false;
-    titleTimerId.value = null;
-  }, 3500);
+  // 有场景引言时不自动消失，等用户点击关闭；无引言时保持原 3.5s 自动消失
+  if (!currentScene.value?.intro) {
+    titleTimerId.value = window.setTimeout(() => {
+      showTitle.value = false;
+      titleTimerId.value = null;
+    }, 3500);
+  }
 }
 
 function clearTypingTimer() {

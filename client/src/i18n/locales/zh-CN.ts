@@ -1195,6 +1195,7 @@ const zhCN = {
       wrongPassword: '密码错误，请重新输入',
       userNotFound: '用户名不存在或已被禁用',
       sessionExpired: '登录状态已失效，请重新登录',
+      serverUnreachable: '无法连接到服务器，请检查网络或服务器地址',
       registerFailed: '注册失败',
     },
     terms: '服务条款',

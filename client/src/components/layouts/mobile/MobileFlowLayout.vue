@@ -51,6 +51,14 @@
           </template>
           {{ t('components.headerToolbar.quickPreviewTitle') }}
         </n-tooltip>
+        <n-tooltip trigger="hover">
+          <template #trigger>
+            <n-button quaternary circle size="small" @click="toggleAutoSave(!autoSaveEnabled)">
+              <template #icon><n-icon :component="autoSaveEnabled ? SaveAll : SaveOff" :color="autoSaveEnabled ? '' : '#e88080'" /></template>
+            </n-button>
+          </template>
+          {{ autoSaveEnabled ? t('components.headerToolbar.autoSaveDisable') : t('components.headerToolbar.autoSaveEnable') }}
+        </n-tooltip>
         <n-button quaternary circle size="small" @click="openSettings">
           <template #icon><n-icon :component="Settings" /></template>
         </n-button>
@@ -179,7 +187,7 @@
 <script setup lang="ts">
 import { ref, computed, onMounted, onUnmounted, provide, watch, h, nextTick } from 'vue';
 import { NButton, NIcon, NDrawer, NDrawerContent, NTabs, NTabPane, NDropdown, NModal, NCard, NTooltip, type DropdownOption, useDialog } from 'naive-ui';
-import { Archive, CircleCheckBig, CirclePlus, FolderOpen, PaintBucket, Play, Settings, Share2, SquarePen, Trash } from 'lucide-vue-next';
+import { Archive, CircleCheckBig, CirclePlus, FolderOpen, PaintBucket, Play, SaveAll, SaveOff, Settings, Share2, SquarePen, Trash } from 'lucide-vue-next';
 import { useI18n } from 'vue-i18n';
 
 import FlowCard from './FlowCard.vue';
@@ -208,6 +216,7 @@ import { useFullscreen } from '../../../composables/useFullscreen';
 import { useOnboarding } from '../../../onboarding';
 import AppBrand from '../../share/AppBrand.vue';
 import { SPARKARC_GITHUB_URL } from '@/config';
+import { autoSaveEnabled, setAutoSaveEnabled } from '@/utils/autoSaveState';
 import VersionManager from '../../dlg-editor/VersionManager.vue';
 import bus from '../../../eventBus';
 import { saveStory, fetchWithAuth } from '../../../services/api';
@@ -227,6 +236,14 @@ const publishDrawerVisible = ref(false);
 const previewing = ref(false);
 
 const workspaceMode = computed(() => sceneStore.workspaceMode || 'script');
+
+function toggleAutoSave(newVal: boolean) {
+  setAutoSaveEnabled(newVal);
+  // 仅关闭时提示（开启是默认行为，无需提示）
+  if (!newVal) {
+    bus.emit('toast', { type: 'warning', message: t('components.headerToolbar.autoSaveOff') });
+  }
+}
 
 // 提供 projectId 给子组件
 provide('projectId', computed(() => projectStore.currentProject));

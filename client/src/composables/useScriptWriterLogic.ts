@@ -9,6 +9,7 @@ import { useFileStore } from '../components/stores/fileStore';
 import { useChatStore } from '../components/stores/chatStore';
 import { getUserInfo } from '../services/api';
 import { serializeToArc } from '../services/arcParser';
+import { autoSaveEnabled } from '../utils/autoSaveState';
 
 export function useScriptWriterLogic() {
     const route = useRoute();
@@ -27,10 +28,7 @@ export function useScriptWriterLogic() {
     const aiSidebarVisible = ref(true);
     const isAdmin = ref(false);
     const username = ref('');
-    const autoSaveEnabled = ref(localStorage.getItem('autoSaveEnabled') !== 'false');
-    const saveHintVisible = ref(false);
     const pendingSync = ref(false);
-    let saveHintTimer: ReturnType<typeof setTimeout> | null = null;
 
     function safeDecodeURIComponent(s) {
         try { return decodeURIComponent(s); } catch { return s; }
@@ -138,11 +136,6 @@ export function useScriptWriterLogic() {
         }
     }
 
-    function showSaveHint() {
-        saveHintVisible.value = true;
-        if (saveHintTimer) clearTimeout(saveHintTimer);
-        saveHintTimer = setTimeout(() => saveHintVisible.value = false, 1200);
-    }
 
     function openSettings() { settingsVisible.value = true; }
 
@@ -180,18 +173,13 @@ export function useScriptWriterLogic() {
         }
 
         window.addEventListener('keydown', onKeydown);
-        bus.on('saved', showSaveHint);
+        // 自动保存是默认行为，不再显示右下角提示
         bus.on('scene-selected', sceneSelectedHandler);
     }
 
     function cleanup() {
         window.removeEventListener('keydown', onKeydown);
-        bus.off('saved', showSaveHint);
         bus.off('scene-selected', sceneSelectedHandler);
-        if (saveHintTimer) {
-            clearTimeout(saveHintTimer);
-            saveHintTimer = null;
-        }
     }
 
     // Pre-hydration check (synchronous)
@@ -275,7 +263,6 @@ export function useScriptWriterLogic() {
         username,
         isAdmin,
         autoSaveEnabled,
-        saveHintVisible,
         settingsVisible,
         versionManagerVisible,
         aiSidebarVisible,

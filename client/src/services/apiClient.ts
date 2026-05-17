@@ -11,6 +11,19 @@ const LOCALE_STORAGE_KEY = 'spark_locale';
 
 export const AUTH_FAILED_TOKEN = '__AUTH_FAILED__';
 
+/** 网络/连接错误，后端不可达或响应体无法解析时抛出 */
+export class NetworkError extends Error {
+  constructor(message?: string) {
+    super(message || 'Network error');
+    this.name = 'NetworkError';
+  }
+}
+
+/** 判断是否为网络/连接错误 */
+export function isNetworkError(e: unknown): e is NetworkError {
+  return e instanceof NetworkError;
+}
+
 /** 认证失败错误，携带后端 error_code 与 require_login 标记 */
 export class AuthError extends Error {
   public readonly errorCode?: string;

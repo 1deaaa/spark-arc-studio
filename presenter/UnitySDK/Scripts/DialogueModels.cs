@@ -12,6 +12,7 @@ namespace SparkArc.Unity
     {
         public string sceneName;
         public string guide;
+        public string intro;
         public JArray dialogues;
         public JToken conditions;
         public JToken effects;

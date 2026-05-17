@@ -1197,6 +1197,7 @@ const enUS = {
       wrongPassword: 'Incorrect password, please try again',
       userNotFound: 'Username does not exist or has been disabled',
       sessionExpired: 'Session expired, please log in again',
+      serverUnreachable: 'Unable to connect to server, please check your network or server address',
       registerFailed: 'Registration failed',
     },
     terms: 'Terms of Service',

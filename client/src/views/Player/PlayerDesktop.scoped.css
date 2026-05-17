@@ -191,6 +191,16 @@
     box-shadow: 0 0 5px var(--accent-glow);
 }
 
+.intro-text {
+    margin-top: 16px;
+    font-style: italic;
+    font-size: 0.95em;
+    opacity: 0.8;
+    line-height: 1.7;
+    max-width: 480px;
+    white-space: pre-line;
+}
+
 /* --- UI 层 --- */
 .layer.ui {
     z-index: 20;

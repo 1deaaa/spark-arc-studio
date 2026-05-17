@@ -116,6 +116,7 @@ import { useProjectStore } from '../stores/projectStore';
 import { useFileStore } from '../stores/fileStore';
 import { fetchWithAuth, fetchCharacters, createCharacter, saveCharacter as saveCharacterApi, renameCharacter as renameCharacterApi, deleteCharacter as deleteCharacterApi } from '../../services/api';
 import { AUTO_SAVE_DEBOUNCE_TIME } from '../../config';
+import { autoSaveEnabled } from '@/utils/autoSaveState';
 
 const projectStore = useProjectStore();
 const fileStore = useFileStore();
@@ -137,7 +138,6 @@ const worldview = ref('');
 const { t } = useI18n();
 
 const characters = ref([]); // [{id, name, content}]
-const autoSaveEnabled = computed(() => localStorage.getItem('autoSaveEnabled') !== 'false');
 
 // 加载世界观
 async function loadWorldview() {

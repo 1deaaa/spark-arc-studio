@@ -55,7 +55,14 @@ namespace SparkArc.Unity
 
             _ui.ShowUI(true);
             _ui.UpdateGuide(scene.guide);
-            
+            _ui.UpdateIntro(scene.intro);
+
+            // TODO: trigger_event — 场景触发外部事件回调，待接入游戏事件系统
+            // if (!string.IsNullOrEmpty(scene.triggerEvent)) { }
+
+            // TODO: priority — 同触发点多场景优先级排序，待接入场景调度器
+            // Debug.Log($"SparkArc: 场景优先级 = {scene.priority}");
+
             StartCoroutine(ExecuteSequence(scene.dialogues));
         }
 
@@ -82,6 +89,9 @@ namespace SparkArc.Unity
             int chrId = node["chr"]?.Value<int>() ?? -1;
             string txt = node["txt"]?.ToString() ?? "";
             string chrName = characterDB != null ? characterDB.GetCharacterName(chrId) : chrId.ToString();
+
+            // thought: 辅助AI决策的字段，运行时不需要处理
+            string thought = node["thought"]?.ToString() ?? "";
 
             // 2. 处理行为 (Actions)
             if (node.ContainsKey("act"))

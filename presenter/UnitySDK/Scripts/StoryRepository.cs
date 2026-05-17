@@ -55,7 +55,7 @@ namespace SparkArc.Unity
                 using (var connection = new SqliteConnection(connectionString))
                 {
                     connection.Open();
-                    const string sql = "SELECT chapter, scene_name, caption, button_text, conditions, effects, trigger_event, priority, once_key, dlg_json, hiden FROM stories ORDER BY chapter ASC, progress ASC, id ASC";
+                    const string sql = "SELECT chapter, scene_name, guide, intro, button_text, conditions, effects, trigger_event, priority, once_key, dlg_json, hiden FROM stories ORDER BY chapter ASC, progress ASC, id ASC";
                     
                     using (var command = new SqliteCommand(sql, connection))
                     using (var reader = command.ExecuteReader())
@@ -71,7 +71,8 @@ namespace SparkArc.Unity
                             var scene = new SceneData
                             {
                                 sceneName = sceneName,
-                                guide = reader["caption"]?.ToString() ?? "",
+                                guide = reader["guide"]?.ToString() ?? "",
+                                intro = reader["intro"]?.ToString() ?? "",
                                 buttonText = reader["button_text"]?.ToString() ?? "",
                                 hidden = false,
                             };

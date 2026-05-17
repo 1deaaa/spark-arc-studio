@@ -44,14 +44,19 @@ namespace DialogSystem.Services
                 using (var connection = new SQLiteConnection($"Data Source={path};Version=3;Read Only=True;"))
                 {
                     connection.Open();
-                    const string sql = "SELECT chapter, scene_name, caption, button_text, conditions, dlg_json, hiden, progress, id FROM stories ORDER BY chapter ASC, progress ASC, id ASC";
+                    const string sql = "SELECT chapter, scene_name, guide, intro, button_text, conditions, effects, trigger_event, priority, once_key, dlg_json, hiden, progress, id FROM stories ORDER BY chapter ASC, progress ASC, id ASC";
                     using (var command = new SQLiteCommand(sql, connection))
                     using (var reader = command.ExecuteReader())
                     {
                         var sceneNameOrdinal = reader.GetOrdinal("scene_name");
-                        var captionOrdinal = reader.GetOrdinal("caption");
+                        var guideOrdinal = reader.GetOrdinal("guide");
+                        var introOrdinal = reader.GetOrdinal("intro");
                         var buttonOrdinal = reader.GetOrdinal("button_text");
                         var condOrdinal = reader.GetOrdinal("conditions");
+                        var effectsOrdinal = reader.GetOrdinal("effects");
+                        var triggerEventOrdinal = reader.GetOrdinal("trigger_event");
+                        var priorityOrdinal = reader.GetOrdinal("priority");
+                        var onceKeyOrdinal = reader.GetOrdinal("once_key");
                         var dlgOrdinal = reader.GetOrdinal("dlg_json");
                         var hiddenOrdinal = reader.GetOrdinal("hiden");
 
@@ -67,7 +72,7 @@ namespace DialogSystem.Services
                             var scene = new JObject
                             {
                                 ["scene"] = sceneName,
-                                ["guide"] = reader.IsDBNull(captionOrdinal) ? string.Empty : reader.GetString(captionOrdinal),
+                                ["guide"] = reader.IsDBNull(guideOrdinal) ? string.Empty : reader.GetString(guideOrdinal),
                             };
 
                             var dialogJson = reader.IsDBNull(dlgOrdinal) ? null : reader.GetString(dlgOrdinal);
@@ -79,6 +84,13 @@ namespace DialogSystem.Services
                             else
                             {
                                 scene["dia"] = new JArray();
+                            }
+
+                            if (!reader.IsDBNull(introOrdinal))
+                            {
+                                var intro = reader.GetString(introOrdinal);
+                                if (!string.IsNullOrWhiteSpace(intro))
+                                    scene["intro"] = intro;
                             }
 
                             if (!reader.IsDBNull(buttonOrdinal))
@@ -96,6 +108,35 @@ namespace DialogSystem.Services
                                     try { scene["conditions"] = JToken.Parse(condText); }
                                     catch { }
                                 }
+                            }
+
+                            if (!reader.IsDBNull(effectsOrdinal))
+                            {
+                                var effectsText = reader.GetString(effectsOrdinal);
+                                if (!string.IsNullOrWhiteSpace(effectsText))
+                                {
+                                    try { scene["effects"] = JToken.Parse(effectsText); }
+                                    catch { }
+                                }
+                            }
+
+                            if (!reader.IsDBNull(triggerEventOrdinal))
+                            {
+                                var triggerEvent = reader.GetString(triggerEventOrdinal);
+                                if (!string.IsNullOrWhiteSpace(triggerEvent))
+                                    scene["trigger_event"] = triggerEvent;
+                            }
+
+                            if (!reader.IsDBNull(priorityOrdinal))
+                            {
+                                scene["priority"] = reader.GetInt32(priorityOrdinal);
+                            }
+
+                            if (!reader.IsDBNull(onceKeyOrdinal))
+                            {
+                                var onceKey = reader.GetString(onceKeyOrdinal);
+                                if (!string.IsNullOrWhiteSpace(onceKey))
+                                    scene["once_key"] = onceKey;
                             }
 
                             if (hiddenOrdinal >= 0 && !reader.IsDBNull(hiddenOrdinal))

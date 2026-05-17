@@ -269,7 +269,7 @@ import { useI18n } from 'vue-i18n';
 import { loginUser, registerUser, getUserInfo, getRegistrationVerificationConfig } from '@/services/api';
 import type { RegistrationVerificationConfig } from '@/services/api';
 import { redeemCode } from '@/services/adminService';
-import { getApiBaseUrl, normalizeApiBaseUrl, setUserId, isAuthError, AUTH_FAILED_TOKEN, getCurrentLocale } from '@/services/apiClient';
+import { getApiBaseUrl, normalizeApiBaseUrl, setUserId, isAuthError, isNetworkError, AUTH_FAILED_TOKEN, getCurrentLocale } from '@/services/apiClient';
 import { useLoginBackground } from '@/hooks/useLoginBackground';
 import { useLoginFx } from '@/hooks/useLoginFx';
 import { useThemeStore } from '@/components/stores/themeStore';
@@ -330,6 +330,8 @@ const LOGIN_ERROR_CODE_I18N_MAP: Record<string, string> = {
 };
 
 function getErrorMessage(error: unknown, fallback: string): string {
+  // 网络/连接错误 → 友好 i18n 提示
+  if (isNetworkError(error)) return t('login.errors.serverUnreachable');
   // 优先按 error_code 映射 i18n
   if (isAuthError(error) && error.errorCode) {
     const i18nKey = LOGIN_ERROR_CODE_I18N_MAP[error.errorCode];

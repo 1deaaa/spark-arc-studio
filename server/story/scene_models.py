@@ -88,7 +88,7 @@ class DialogueNode:
 @dataclass
 class SceneModel:
     name: str
-    caption: str
+    guide: str
     intro: str
     dialogues: List[DialogueNode]
     button_text: Optional[str] = None
@@ -104,7 +104,7 @@ class SceneModel:
     def from_dict(cls, payload: Dict[str, Any]) -> "SceneModel":
         sanitized = _strip_private_fields(_deepcopy(payload or {}))
         name = str(sanitized.get("scene") or sanitized.get("Scene") or "")
-        caption = str(sanitized.get("guide", ""))
+        guide = str(sanitized.get("guide", ""))
         intro = str(sanitized.get("intro", "") or "")
         raw_dialogues = sanitized.get("dia") or []
         dialogues = [DialogueNode.from_dict(d) for d in raw_dialogues if isinstance(d, dict)]
@@ -130,12 +130,12 @@ class SceneModel:
         extras = {
             key: _deepcopy(value)
             for key, value in sanitized.items()
-            if key not in LEGACY_SCENE_KEYS and key != "scene" and key != "guide" and key != "dia" and key != "pgrs"
+            if key not in LEGACY_SCENE_KEYS and key != "scene" and key != "guide" and key != "dia" and key != "pgrs" and key != "thought"
         }
 
         return cls(
             name=name,
-            caption=caption,
+            guide=guide,
             intro=intro.strip(),
             dialogues=dialogues,
             button_text=button_text if button_text else None,
@@ -151,7 +151,7 @@ class SceneModel:
     def to_dict(self) -> Dict[str, Any]:
         data: Dict[str, Any] = {
             "scene": self.name,
-            "guide": self.caption,
+            "guide": self.guide,
             "dia": [dialogue.to_dict() for dialogue in self.dialogues],
         }
         if self.intro:

@@ -58,6 +58,7 @@ import Draggable from 'vuedraggable';
 import { useProjectStore } from '@/components/stores/projectStore';
 import { useFileStore } from '@/components/stores/fileStore';
 import { saveStory } from '@/services/api';
+import { autoSaveEnabled } from '@/utils/autoSaveState';
 import { useCharacterStore } from '@/components/stores/characterStore';
 import DialogueNode from './DialogueNode.vue';
 import bus from '@/eventBus';
@@ -104,8 +105,7 @@ function onMove(evt) {
 }
 
 async function saveAfterDrag(evt) {
-  const autoSave = localStorage.getItem('autoSaveEnabled') !== 'false';
-  if (!autoSave) return;
+  if (!autoSaveEnabled.value) return;
   if (!fileStore.selectedFile?.path || !projectStore.currentProject) return;
   if (evt && evt.oldIndex === evt.newIndex) return;
   try {

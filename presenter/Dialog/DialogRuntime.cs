@@ -77,6 +77,24 @@ namespace DialogSystem
             NextDialog = null;
             waitForChoice = false;
             Program.UI.cap.Text = DialogScene["guide"]?.ToString() ?? string.Empty;
+
+            // 场景引言：在场景标题下方显示的简短介绍文本
+            var introText = DialogScene["intro"]?.ToString();
+            if (!string.IsNullOrWhiteSpace(introText))
+                Method.Inf($"[Intro] {introText}");
+
+            // TODO: effects — 场景播放完成后写回到 StoryStateStore 的效果列表，待接入状态系统
+            // var effects = DialogScene["effects"];
+
+            // TODO: trigger_event — 外部系统事件回调键，待接入游戏事件系统
+            // var triggerEvent = DialogScene["trigger_event"]?.ToString();
+
+            // TODO: priority — 同一触发点命中多个场景时的优先级，待接入场景调度器
+            // var priority = DialogScene["priority"]?.Value<int>() ?? 0;
+
+            // TODO: once_key — 一次性剧情标记键，播放完成后自动写入已播状态，待接入状态系统
+            // var onceKey = DialogScene["once_key"]?.ToString();
+
             DialogArray.Clear();
 
             if (DialogScene["dia"] == null)
@@ -277,6 +295,9 @@ namespace DialogSystem
                         break;
                     case "next":
                         NextDialog = key.Value.ToString();
+                        break;
+                    // thought: 辅助AI决策的字段，运行时不需要处理
+                    case "thought":
                         break;
                 }
             }

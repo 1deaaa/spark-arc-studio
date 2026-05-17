@@ -221,7 +221,7 @@ class Story(StoryData):
 	scene_name = Column(String, nullable=False)#场景名称 也是可选用于索引场景的字段
 	button_text = Column(String) #可选 接近角色时 显示的对话按钮文本 为空时默认是角色名字
 	progress = Column(Float, default=0, nullable=False)#完成当前场景后 欲将主线进度设置的值
-	caption = Column(String, nullable=False)#显示在任务简要概述区的文本
+	guide = Column(String, nullable=False)#场景导演意图/简要概述 对应.arc的guide
 	conditions = Column(SqliteJSONB) #可选 触发该场景的条件 对应行为act节点的record记录关键事件值 如果不符合条件 则根据进度顺序 自动索引到下一符合条件的场景
 	#cond示例
 	# {
@@ -232,6 +232,7 @@ class Story(StoryData):
 	trigger_event = Column(String) # 外部系统事件回调键，如 battle.end.xxx
 	priority = Column(Integer, default=0, nullable=False) # 同一触发点命中多个场景时的优先级
 	once_key = Column(String) # 一次性剧情标记键，播放完成后自动写入已播状态
+	intro = Column(String) #场景引言 对应.arc的@intro
 	dlg_json = Column(SqliteJSONB, nullable=False) #以原始的JSON格式存储每个场景的根级dia 也就是最上层对话节点下面的内容 并不包括子级的dia
 	hiden = Column(Boolean)#为True隐藏本场景 一般情况下为null即可
 

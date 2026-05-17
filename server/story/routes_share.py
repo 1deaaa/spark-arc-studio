@@ -288,10 +288,10 @@ async def get_share_data(share_id: str, request: Request):
                 'id': item.id,
                 'chapter': item.chapter,
                 'scene_name': item.scene_name,
-                'caption': item.caption,
+                'guide': item.guide,
+                'intro': item.intro,
                 'dlg': item.dlg_json,
                 'button_text': item.button_text,
-                'conditions': item.conditions,
                 'hidden': item.hiden,
             }
             for item in stories
@@ -391,10 +391,10 @@ async def get_version_share_data(share_id: str, request: Request):
                 'id': item.id,
                 'chapter': item.chapter,
                 'scene_name': item.scene_name,
-                'caption': item.caption,
+                'guide': item.guide,
+                'intro': item.intro,
                 'dlg': item.dlg_json,
                 'button_text': item.button_text,
-                'conditions': item.conditions,
                 'hidden': item.hiden,
             }
             for item in stories

@@ -18,6 +18,7 @@ namespace SparkArc.Unity
         public TextMeshProUGUI nameText;
         public TextMeshProUGUI contentText;
         public TextMeshProUGUI guideText;
+        public TextMeshProUGUI introText;
         
         [Header("选项设置")]
         public Transform choiceContainer;
@@ -36,6 +37,15 @@ namespace SparkArc.Unity
         public void UpdateGuide(string text)
         {
             if (guideText) guideText.text = text;
+        }
+
+        public void UpdateIntro(string text)
+        {
+            if (introText)
+            {
+                introText.text = text;
+                introText.gameObject.SetActive(!string.IsNullOrEmpty(text));
+            }
         }
 
         public IEnumerator TypeText(string speaker, string text)

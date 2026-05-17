@@ -1197,6 +1197,7 @@ const jaJP = {
       wrongPassword: 'パスワードが間違っています。もう一度入力してください',
       userNotFound: 'ユーザー名が存在しないか、無効化されています',
       sessionExpired: 'ログイン状態が失効しました。再度ログインしてください',
+      serverUnreachable: 'サーバーに接続できません。ネットワークまたはサーバーアドレスを確認してください',
       registerFailed: '登録に失敗しました',
     },
     terms: '利用規約',

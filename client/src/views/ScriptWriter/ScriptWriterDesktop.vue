@@ -3,9 +3,8 @@
   <div class="container">
     <HeaderToolbar
       :username="username"
-      :autoSaveEnabled="autoSaveEnabled"
       @open-settings="openSettings"
-      @auto-save-changed="(v) => autoSaveEnabled = v"
+      @auto-save-changed="onAutoSaveChanged"
       @logout="onLogout"
       @open-version-manager="openVersionManager"
     />
@@ -87,9 +86,6 @@
         </div>
       </div>
   
-      <transition name="save-hint">
-        <div v-show="saveHintVisible" class="save-hint">{{ t('views.scriptWriter.desktop.autoSaved') }}</div>
-      </transition>
 
         <n-modal v-model:show="versionManagerVisible" preset="card" :title="t('views.scriptWriter.desktop.versionManager')" style="width: 800px; max-height: 90vh;">
           <VersionManager :projectId="projectStore.currentProject || undefined" :content-format="workspaceMode" />
@@ -148,7 +144,6 @@ const {
   projectStore,
   username,
   autoSaveEnabled,
-  saveHintVisible,
   settingsVisible,
   versionManagerVisible,
   aiSidebarVisible,
@@ -169,6 +164,10 @@ onMounted(() => {
 onUnmounted(() => {
   bus.off('post-login-ready', onPostLoginReady);
 });
+
+function onAutoSaveChanged(_v: boolean) {
+  // autoSaveEnabled 已改为 computed 读 localStorage，无需手动赋值
+}
 
 function openVersionManager() {
   versionManagerVisible.value = true;
@@ -398,33 +397,6 @@ main {
   min-height: 0;
   overflow: auto;
   padding: 12px;
-}
-
-.save-hint {
-  position: fixed;
-  right: 16px;
-  bottom: 16px;
-  background: var(--spark-success);
-  color: var(--spark-text-inverse);
-  padding: 8px 12px;
-  border-radius: var(--spark-radius-sm);
-  box-shadow: var(--spark-shadow-sm);
-  z-index: 9999;
-}
-
-.save-hint-enter-from,
-.save-hint-leave-to {
-  opacity: 0;
-  transform: translateY(8px) scale(0.98);
-}
-.save-hint-enter-active,
-.save-hint-leave-active {
-  transition: opacity .18s ease, transform .18s ease;
-}
-.save-hint-enter-to,
-.save-hint-leave-from {
-  opacity: 1;
-  transform: translateY(0) scale(1);
 }
 
 .resizer {

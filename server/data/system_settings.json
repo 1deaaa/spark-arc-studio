@@ -1,3 +1,4 @@
 {
-  "disable_public_share": false
+  "disable_public_share": false,
+  "force_public_share_review": false
 }
