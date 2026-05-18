@@ -25,6 +25,7 @@
     "patch-android-adaptive-foreground": "python ../scripts/patch-android-adaptive-foreground.py"
   },
   "dependencies": {
+    "@fingerprintjs/fingerprintjs": "^5.2.0",
     "@fontsource/ma-shan-zheng": "^5.2.9",
     "@fontsource/zcool-xiaowei": "^5.2.8",
     "@microsoft/fetch-event-source": "^2.0.1",
