@@ -3,5 +3,6 @@
     "python-envs.defaultPackageManager": "ms-python.python:conda",
     "dotnet.preferCSharpExtension": true,
     "python.languageServer": "None",
-    "python.terminal.activateEnvironment": true
+    "python.terminal.activateEnvironment": true,
+    "dotnet.defaultSolution": "disable"
 }

@@ -674,7 +674,44 @@ const panelStyle = computed(() => {
 });
 
 const { registry: agentRegistry, load: loadAgentRegistry } = useAgentRegistry();
-const agentOptions = computed(() => (agentRegistry.value || []).map(a => ({ label: a.name, value: a.key })));
+
+/**
+ * 基础 Agent 选项（不带 disabled 状态），从 registry 派生。
+ * 各窗口的 options 会在此基础上叠加占用状态。
+ */
+const baseAgentOptions = computed(() => (agentRegistry.value || []).map(a => ({ label: a.name, value: a.key })));
+
+/**
+ * 构建窗口可见的 Agent 选项列表：
+ * 不再过滤已被其他窗口占用的 Agent，而是用 disabled 标记 + disabledReason 提示，
+ * 让 AgentRadialPicker 能在轮盘里灰化展示并解释原因。
+ *
+ * @param sessionId 当前窗口的 session id；传 null 表示主窗口
+ */
+function buildAgentOptions(sessionId: string | number | null = null) {
+  const mainAgent = chat.currentAgentId;
+  // 收集"对本窗口而言被其他窗口占用"的 Agent
+  const occupiedByOthers = new Set<string>();
+  for (const s of chat.sessionList) {
+    if (sessionId !== null && s.id === sessionId) continue; // 跳过自身
+    if (s.agentId) occupiedByOthers.add(s.agentId);
+  }
+  // 主窗口的 Agent 对额外窗口而言也算占用
+  if (sessionId !== null && mainAgent) {
+    occupiedByOthers.add(mainAgent);
+  }
+  return baseAgentOptions.value.map(a => {
+    const isOccupied = occupiedByOthers.has(a.value);
+    return {
+      ...a,
+      disabled: isOccupied,
+      disabledReason: isOccupied ? t('components.agentRadialPicker.agentInUse') : '',
+    };
+  });
+}
+
+/** 主窗口的 agent 选项（包含跨窗口占用 disabled 标记） */
+const agentOptions = computed(() => buildAgentOptions(null));
 
 // ==================== 多窗口功能 ====================
 
@@ -684,30 +721,22 @@ const extraSessions = computed(() => chat.sessionList);
 /** 当前主窗口占用的 agent + 其他窗口已占用的 agent → 剩余可用 agent 数量 > 0 则可以新开 */
 const canOpenExtraWindow = computed(() => {
   if (isMobile.value) return false;
-  const allOptions = agentOptions.value;
-  // 主窗口占用的 agent
   const mainAgent = chat.currentAgentId;
-  // 额外窗口占用的 agents
   const extraAgents = new Set(chat.sessionList.map(s => s.agentId));
-  // 尚未被占用的 agents
-  const available = allOptions.filter(a => a.value !== mainAgent && !extraAgents.has(a.value));
+  const available = baseAgentOptions.value.filter(a => a.value !== mainAgent && !extraAgents.has(a.value));
   return available.length > 0;
 });
 
-/** 为某个额外窗口获取可选的 agent 列表（排除主窗口和其他额外窗口已选的） */
-function getFilteredAgentOptions(sessionId) {
-  const mainAgent = chat.currentAgentId;
-  const extraAgents = new Set(
-    chat.sessionList.filter(s => s.id !== sessionId).map(s => s.agentId)
-  );
-  return agentOptions.value.filter(a => a.value !== mainAgent && !extraAgents.has(a.value));
+/** 为某个额外窗口获取 agent 选项（含占用 disabled 标记） */
+function getFilteredAgentOptions(sessionId: string | number) {
+  return buildAgentOptions(sessionId);
 }
 
 /** 打开一个新的聊天窗口 */
 function openExtraWindow() {
   const mainAgent = chat.currentAgentId;
   const extraAgents = new Set(chat.sessionList.map(s => s.agentId));
-  const available = agentOptions.value.filter(a => a.value !== mainAgent && !extraAgents.has(a.value));
+  const available = baseAgentOptions.value.filter(a => a.value !== mainAgent && !extraAgents.has(a.value));
   if (available.length === 0) {
     bus.emit('toast', { type: 'warning', message: '所有 Agent 均已在其他窗口中使用' });
     return;

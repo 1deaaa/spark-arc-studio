@@ -109,22 +109,22 @@ class AdminMixin:
                 "status": "needs_reconfigure",
                 "configured": True,
                 "available": False,
-                "message": "检测到仓库同步或历史导入的托管密钥，但它无法被当前站点主密钥直接解开。首次拉取项目后这是常见现象，请站长在设置 LLM_KEY 后重新填写该平台的托管 API Key。",
+                "message": "该平台托管密钥需要配置。首次拉取项目后这是常见现象，请站长为该平台填写自己的 API Key。",
             }
 
         if audience == "user_override":
             return {
-                "status": "failed",
+                "status": "needs_reconfigure",
                 "configured": True,
                 "available": False,
-                "message": "已保存的用户 API Key 无法解密，可能是当前主密钥错误、历史密文来自其他环境，或数据已损坏。请重新配置该平台 API Key。",
+                "message": "您保存的 API Key 需要重新配置，请为该平台重新填写 API Key。",
             }
 
         return {
-            "status": "failed",
+            "status": "needs_reconfigure",
             "configured": True,
             "available": False,
-            "message": "已保存的 API Key 无法解密，可能是当前主密钥错误、历史密文来自其他环境，或数据已损坏。请重新配置。",
+            "message": "该平台 API Key 需要配置，请重新填写 API Key。",
         }
 
     def _build_effective_key_view(
@@ -151,8 +151,8 @@ class AdminMixin:
                     "message": f"{user_key_info.get('message')} 当前已自动回退到站长托管 API Key。",
                 }
             return {
-                "status": "user_override_missing_key" if user_key_info.get("status") == "missing_key" else "user_override_failed",
-                "message": user_key_info.get("message") or "您保存的 API Key 当前不可用。",
+                "status": "user_override_missing_key" if user_key_info.get("status") == "missing_key" else "user_override_needs_reconfigure",
+                "message": user_key_info.get("message") or "您保存的 API Key 需要重新配置。",
             }
 
         if sys_key_info and sys_key_info.get("available") and can_use_sys_key and api_key_available:
@@ -176,7 +176,7 @@ class AdminMixin:
         if sys_key_info and sys_key_info.get("status") == "needs_reconfigure":
             return {
                 "status": "managed_needs_reconfigure",
-                "message": sys_key_info.get("message") or "托管密钥需要重新配置。",
+                "message": sys_key_info.get("message") or "托管密钥需要配置，请为该平台填写 API Key。",
             }
 
         return {

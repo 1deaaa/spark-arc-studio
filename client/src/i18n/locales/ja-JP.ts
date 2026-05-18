@@ -715,7 +715,7 @@ const jaJP = {
       messages: {
         usingUserKey: 'ユーザー自身の API Key を使用中',
         usingManagedKey: '管理者托管 API Key を使用中',
-        noAvailableKey: '利用可能なキーが未設定です。キー設定後に AI 機能をご利用ください。',
+        noAvailableKey: 'このプラットフォームには API Key の設定が必要です。ご自身の API Key を設定するか、管理者に托管キーの設定をご依頼ください。',
         systemLockEnabled: 'システム設定ロックを有効にしました',
         systemLockDisabled: 'システム設定ロックを無効にしました',
         configToggleFailed: '設定切替に失敗しました：{error}',
@@ -732,13 +732,13 @@ const jaJP = {
         masterKeyPending: 'マスターキー待ち',
         managedPending: '管理者設定待ち',
         userConfigNeeded: 'ユーザー設定が必要',
-        reconfigureNeeded: '再設定が必要',
+        reconfigureNeeded: 'キー設定が必要',
         keyMissing: 'キー未設定',
       },
       alerts: {
         savedKeyNotReadableTitle: '保存済みキーを今は直接読み出せません',
-        managedNeedsReconfigureTitle: '初回クローン後は托管キー再設定が必要な場合があります',
-        savedKeyDecryptFailedTitle: '保存済みキーを復号できません',
+        managedNeedsReconfigureTitle: 'このプラットフォームの托管キー設定が必要です',
+        savedKeyDecryptFailedTitle: 'このプラットフォームの API Key 設定が必要です',
         managedLockedTitle: '管理者托管キーは現在全ユーザー向けに開放されていません',
       },
       pricing: {
@@ -796,6 +796,13 @@ const jaJP = {
       openInWorkspace: 'チャットページで開く',
       newWindow: '別の専門家と対話',
       collapse: '折りたたむ',
+    },
+    agentRadialPicker: {
+      label: 'Agent 切替ホイール',
+      switchAgent: 'Agent を切り替え',
+      rerun: 'もう一度',
+      agentInUse: 'この Agent は別のウィンドウで使用中です',
+      dragHint: 'ドラッグまたはクリックで選択',
     },
     chatWelcome: {
       title: 'SparkArc へようこそ',

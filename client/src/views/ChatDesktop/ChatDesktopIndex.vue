@@ -118,7 +118,11 @@ async function applyInitialChatAgent() {
 
 async function initializeChatView() {
   await applyInitialChatAgent();
-  await refresh();
+  // 检查是否有后台聊天任务在跑（多设备/刷新恢复场景）
+  const hasRunning = await chat.checkBackgroundTasks();
+  if (!hasRunning) {
+    await refresh();
+  }
 }
 
 // 项目切换时重新加载聊天历史（resetAllSessions 已清空 history，但 onMounted/onActivated 不会再次触发）

@@ -45,13 +45,11 @@
           <!-- 副标题 -->
           <p ref="subtitleEl" class="welcome-subtitle">{{ t('onboarding.desktop.welcome.subtitle') }}</p>
 
-          <!-- Agent 团队图标 -->
+          <!-- Agent 团队图标（统一使用 AgentAvatar，源于 registry.py 真相源） -->
           <div ref="agentTeamEl" class="agent-team">
-            <div v-for="agent in agents" :key="agent.id" class="agent-badge">
-              <n-icon size="28" :color="agent.color">
-                <component :is="agent.icon" />
-              </n-icon>
-              <span class="agent-name">{{ agent.name }}</span>
+            <div v-for="agentId in agents" :key="agentId" class="agent-badge">
+              <AgentAvatar :agent-id="agentId" :size="40" />
+              <span class="agent-name">{{ getAgentName(agentId) }}</span>
             </div>
           </div>
 
@@ -71,11 +69,11 @@
 </template>
 
 <script setup lang="ts">
-import { ref, onMounted, onUnmounted, markRaw } from 'vue';
-import { NIcon } from 'naive-ui';
+import { ref, onUnmounted } from 'vue';
 import { useI18n } from 'vue-i18n';
 import gsap from 'gsap';
-import { Activity, Eye, Globe2, Lightbulb, List, SquarePen } from 'lucide-vue-next';
+import AgentAvatar from '@/components/share/AgentAvatar.vue';
+import { useAgentRegistry } from '@/composables/useAgentRegistry';
 import { gsapStrokeDraw, gsapFadeIn, gsapSlideUp, gsapStaggerIn, gsapParticleBurst } from '../../animations/gsapPresets';
 
 const { t } = useI18n();
@@ -97,14 +95,23 @@ const emit = defineEmits<{
   (e: 'complete'): void;
 }>();
 
+// Agent 团队列表与渲染统一走 registry + AgentAvatar，不再本地硬编码。
+// 按现有欢迎场景设计，展示 7 个 Agent（导演 + 5 主创作 + 1 风格），
+// 图标/颜色/名称均从 registry.icon / registry.color / registry.name 读取，
+// registry 未加载时 AgentAvatar / getAgentName 内部自动 fallback。
 const agents = [
-  { id: 'director', name: '导演', icon: markRaw(Lightbulb), color: '#ffaa40' },
-  { id: 'muse', name: '灵感', icon: markRaw(Lightbulb), color: '#ff6b6b' },
-  { id: 'lorebook', name: '设定', icon: markRaw(Globe2), color: '#40c9ff' },
-  { id: 'showrunner', name: '策划', icon: markRaw(Activity), color: '#52c41a' },
-  { id: 'scriptwriter', name: '编剧', icon: markRaw(SquarePen), color: '#b37feb' },
-  { id: 'critic', name: '评审', icon: markRaw(Eye), color: '#ffc53d' },
+  'agent_director',
+  'agent_muse',
+  'agent_lorebook',
+  'agent_showrunner',
+  'agent_scriptwriter',
+  'agent_critic',
+  'agent_style',
 ];
+
+const { load: loadAgentRegistry, getAgentName } = useAgentRegistry();
+// 后台预热 registry（不阻塞动画）
+loadAgentRegistry();
 
 let mainTimeline: gsap.core.Timeline | null = null;
 

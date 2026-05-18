@@ -372,7 +372,7 @@ class AIManagerBase:
                     plain_result = sec_mgr.decrypt(raw_value)
                     if plain_result.has_plaintext:
                         return sec_mgr.encrypt(plain_result.value)
-                print("[初始化] 跳过不可解密的 YAML 托管 Key（当前环境无法解开该 ENC 值，将保留平台/模型结构但不导入 Key）")
+                print("[初始化] YAML 托管 Key 与当前站点主密钥不匹配，该平台需要配置 API Key（将保留平台/模型结构但不导入 Key）")
                 return None
 
             if not sec_mgr.has_active_key():

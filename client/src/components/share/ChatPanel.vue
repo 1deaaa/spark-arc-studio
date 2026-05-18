@@ -8,15 +8,13 @@
             <path d="M12 2L14.4 9.6L22 12L14.4 14.4L12 22L9.6 14.4L2 12L9.6 9.6L12 2Z" fill="currentColor"/>
           </svg>
         </span>
-        <n-select
+        <AgentRadialPicker
+          class="agent-radial-picker-inline"
           :value="agentId"
           :options="agentOptions"
           :disabled="sending && !allowAgentSwitchWhileSending"
-          size="small"
-          placeholder="Agent"
-          class="agent-select"
-          v-model:show="agentSelectOpen"
           @update:value="onAgentSelected"
+          @rerun="$emit('rerun')"
         />
         <n-tooltip trigger="hover">
           <template #trigger>
@@ -117,8 +115,9 @@
  */
 import { ref, computed, useSlots, type PropType } from 'vue';
 import { useI18n } from 'vue-i18n';
-import { NButton, NInput, NSelect, NTooltip } from 'naive-ui';
+import { NButton, NInput, NTooltip } from 'naive-ui';
 import ChatMessageList from '@/components/share/ChatMessageList.vue';
+import AgentRadialPicker from '@/components/share/AgentRadialPicker.vue';
 import type { ChatMessage } from '@/services/chatService';
 
 type AgentOption = {
@@ -185,6 +184,7 @@ const emit = defineEmits([
   'clear',
   'send',
   'stop',
+  'rerun',
   'draft-keydown',
   'start-edit',
   'cancel-edit',
@@ -204,16 +204,9 @@ const editingContentLocal = computed({
   set: (val) => emit('update:editingContent', val),
 });
 
-const agentSelectOpen = ref(false);
-
-/** 选中 Agent 后立即收起下拉菜单
- *  移动端聊天抽屉有高度补间动画，若下拉菜单不立刻收起，
- *  会跟随抽屉高度变化一起移动，视觉效果怪异。
- *  此处仅影响聊天面板的 Agent 选择器，其他选择器不受影响。
- */
-function onAgentSelected(val) {
+/** AgentRadialPicker 选中 Agent 时透传给上层（轮盘自身会自动关闭） */
+function onAgentSelected(val: string): void {
   emit('update:agentId', val);
-  agentSelectOpen.value = false;
 }
 
 const chatListRef = ref(null);
@@ -277,9 +270,8 @@ defineExpose({ listRef: chatListRef });
   height: 100%;
 }
 
-/* Agent 选择器 */
-.agent-select {
-  width: 140px;
+/* Agent 轮盘选择器（取代原 n-select） */
+.agent-radial-picker-inline {
   flex-shrink: 0;
 }
 

@@ -715,7 +715,7 @@ const enUS = {
       messages: {
         usingUserKey: 'Using your own API key',
         usingManagedKey: 'Using managed API key',
-        noAvailableKey: 'No usable key configured. AI features may not work until key is configured.',
+        noAvailableKey: 'This platform needs an API Key configured. Please set your own API Key or ask the admin to configure a managed key.',
         systemLockEnabled: 'System config lock enabled',
         systemLockDisabled: 'System config lock disabled',
         configToggleFailed: 'Failed to switch config: {error}',
@@ -732,13 +732,13 @@ const enUS = {
         masterKeyPending: 'Master key pending',
         managedPending: 'Admin pending config',
         userConfigNeeded: 'User config required',
-        reconfigureNeeded: 'Reconfiguration required',
+        reconfigureNeeded: 'Key configuration needed',
         keyMissing: 'Key missing',
       },
       alerts: {
         savedKeyNotReadableTitle: 'Saved key cannot be read directly right now',
-        managedNeedsReconfigureTitle: 'Managed key usually needs reconfiguration after first clone',
-        savedKeyDecryptFailedTitle: 'Saved key cannot be decrypted',
+        managedNeedsReconfigureTitle: 'This platform needs a managed key configured',
+        savedKeyDecryptFailedTitle: 'This platform needs an API Key configured',
         managedLockedTitle: 'Managed key is not open to all users currently',
       },
       pricing: {
@@ -796,6 +796,13 @@ const enUS = {
       openInWorkspace: 'Open in chat page',
       newWindow: 'Chat with another expert',
       collapse: 'Collapse',
+    },
+    agentRadialPicker: {
+      label: 'Agent switcher wheel',
+      switchAgent: 'Switch agent',
+      rerun: 'Rerun',
+      agentInUse: 'This agent is currently in use by another window',
+      dragHint: 'Drag or click to select',
     },
     chatWelcome: {
       title: 'Welcome to SparkArc',

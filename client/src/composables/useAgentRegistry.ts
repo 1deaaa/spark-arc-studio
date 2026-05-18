@@ -18,7 +18,33 @@ export type AgentRegistryEntry = {
   description: string;
   group?: string;
   participatesInBeaconBus?: boolean;
+  /** Lucide 图标名（PascalCase），由后端 registry.py 提供，前端 AgentAvatar 通过映射表转为组件 */
+  icon?: string;
+  /** Agent 专属主题色（hex），由后端 registry.py 提供 */
+  color?: string;
   [k: string]: unknown;
+};
+
+// Agent 图标/颜色 fallback（后端 registry 加载失败时使用）
+// 这里只是兜底，不应作为运行时真相源
+const _iconFallback: Record<string, string> = {
+  agent_director: 'Compass',
+  agent_muse: 'Wand2',
+  agent_lorebook: 'ScrollText',
+  agent_showrunner: 'Waypoints',
+  agent_scriptwriter: 'Feather',
+  agent_critic: 'ScanEye',
+  agent_style: 'Palette',
+};
+
+const _colorFallback: Record<string, string> = {
+  agent_director: '#5b8cff',
+  agent_muse: '#b07cff',
+  agent_lorebook: '#f5b942',
+  agent_showrunner: '#2dd4bf',
+  agent_scriptwriter: '#38bdf8',
+  agent_critic: '#ff6b6b',
+  agent_style: '#ec4899',
 };
 
 // ---- 模块级单例状态（所有 useAgentRegistry() 实例共享） ----
@@ -106,6 +132,28 @@ function getAgentDescription(agentId: string): string {
 }
 
 /**
+ * 根据 agentId 获取 Lucide 图标名（PascalCase）
+ * 优先从后端 registry 取，fallback 到本地映射，仍找不到则返回 null（调用方应自行兜底）
+ */
+function getAgentIcon(agentId?: string | null): string | null {
+  if (!agentId) return _iconFallback.agent_director ?? null;
+  const entry = _registry.value.find(a => a.key === agentId);
+  if (entry?.icon) return entry.icon;
+  return _iconFallback[agentId] ?? null;
+}
+
+/**
+ * 根据 agentId 获取专属主题色（hex）
+ * 优先从后端 registry 取，fallback 到本地映射，仍找不到则返回 CSS 变量字符串
+ */
+function getAgentColor(agentId?: string | null): string {
+  if (!agentId) return _colorFallback.agent_director ?? 'var(--spark-primary)';
+  const entry = _registry.value.find(a => a.key === agentId);
+  if (entry?.color) return entry.color;
+  return _colorFallback[agentId] ?? 'var(--spark-primary)';
+}
+
+/**
  * 获取完整的 registry 列表（只读）
  */
 function getRegistry(): readonly AgentRegistryEntry[] {
@@ -123,6 +171,8 @@ export function useAgentRegistry() {
     load: loadAgentRegistry,
     getAgentName,
     getAgentDescription,
+    getAgentIcon,
+    getAgentColor,
     getRegistry,
   };
 }

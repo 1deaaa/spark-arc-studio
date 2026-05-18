@@ -4,7 +4,7 @@ import { createPinia } from 'pinia';
 import ChatMessageList from '../ChatMessageList.vue';
 import { i18n } from '@/i18n';
 
-// Mock useAgentRegistry — 名称来源唯一化后，测试通过 mock 验证
+// Mock useAgentRegistry — 名称/图标/颜色来源唯一化后，测试通过 mock 验证
 const agentNameMap: Record<string, string> = {
   agent_director: '导演',
   agent_muse: '灵感种子',
@@ -15,6 +15,26 @@ const agentNameMap: Record<string, string> = {
   agent_style: '文风克隆',
 };
 
+const agentIconMap: Record<string, string> = {
+  agent_director: 'Compass',
+  agent_muse: 'Wand2',
+  agent_lorebook: 'ScrollText',
+  agent_showrunner: 'Waypoints',
+  agent_scriptwriter: 'Feather',
+  agent_critic: 'ScanEye',
+  agent_style: 'Palette',
+};
+
+const agentColorMap: Record<string, string> = {
+  agent_director: '#5b8cff',
+  agent_muse: '#b07cff',
+  agent_lorebook: '#f5b942',
+  agent_showrunner: '#2dd4bf',
+  agent_scriptwriter: '#38bdf8',
+  agent_critic: '#ff6b6b',
+  agent_style: '#ec4899',
+};
+
 vi.mock('@/composables/useAgentRegistry', () => ({
   useAgentRegistry: () => ({
     registry: { value: [] },
@@ -22,7 +42,9 @@ vi.mock('@/composables/useAgentRegistry', () => ({
     loading: { value: false },
     load: vi.fn(),
     getAgentName: (agentId?: string | null) => agentNameMap[agentId || 'agent_director'] || agentId || '导演',
-    getAgentDescription: (agentId: string) => '',
+    getAgentDescription: (_agentId: string) => '',
+    getAgentIcon: (agentId?: string | null) => agentIconMap[agentId || 'agent_director'] || 'Compass',
+    getAgentColor: (agentId?: string | null) => agentColorMap[agentId || 'agent_director'] || '#5b8cff',
     getRegistry: () => [],
   }),
 }));
@@ -50,7 +72,9 @@ describe('ChatMessageList agent avatar rendering', () => {
     });
   }
 
-  it('renders mapped globe avatar for lorebook and spark avatar for director', () => {
+  it('renders AgentAvatar for each agent segment with correct aria-label', () => {
+    // 现状：所有 Agent （含 Director）都走统一的 AgentAvatar 组件渲染，
+    // 不再区分「特殊闪电星标」与「普通图标」两种形态。闪电星标仅作为 SparkArc 整体 logo。
     const wrapper = mountWithPinia({
       props: {
         history: [
@@ -71,7 +95,10 @@ describe('ChatMessageList agent avatar rendering', () => {
     expect(avatars[0].attributes('aria-label')).toBe('世界观管理');
     expect(avatars[0].find('.agent-avatar-icon').exists()).toBe(true);
     expect(avatars[1].attributes('aria-label')).toBe('导演');
-    expect(avatars[1].find('.agent-avatar-spark').exists()).toBe(true);
+    // Director 现在也走 AgentAvatar （Compass 图标），不再是独立 spark SVG
+    expect(avatars[1].find('.agent-avatar-icon').exists()).toBe(true);
+    // 旧 .agent-avatar-spark 已删除
+    expect(avatars[1].find('.agent-avatar-spark').exists()).toBe(false);
   });
 
   it('adds active animation class to the currently streaming agent avatar', () => {

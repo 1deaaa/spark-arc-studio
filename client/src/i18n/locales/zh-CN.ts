@@ -713,7 +713,7 @@ const zhCN = {
       messages: {
         usingUserKey: '💳 当前使用您自己的 API Key',
         usingManagedKey: '🏠 当前使用站长托管 API Key',
-        noAvailableKey: '⚠️ 未配置任何可用密钥，AI 功能将无法使用。请设置您自己的 API Key，或联系站长配置托管密钥。',
+        noAvailableKey: '⚠️ 该平台需要配置 API Key，请设置您自己的 API Key，或联系站长配置托管密钥。',
         systemLockEnabled: '已开启强制系统配置模式',
         systemLockDisabled: '已关闭强制系统配置模式',
         configToggleFailed: '切换配置失败：{error}',
@@ -730,13 +730,13 @@ const zhCN = {
         masterKeyPending: '待设置主密钥',
         managedPending: '站长待配置',
         userConfigNeeded: '需个人配置',
-        reconfigureNeeded: '需重新配置',
+        reconfigureNeeded: '需要配置 Key',
         keyMissing: '未配置 Key',
       },
       alerts: {
         savedKeyNotReadableTitle: '当前还不能直接读取已保存密钥',
-        managedNeedsReconfigureTitle: '首次拉取后的托管密钥通常需要重新配置',
-        savedKeyDecryptFailedTitle: '已保存的密钥无法解密',
+        managedNeedsReconfigureTitle: '该平台托管密钥需要配置',
+        savedKeyDecryptFailedTitle: '该平台 API Key 需要配置',
         managedLockedTitle: '站长托管密钥当前未对全体用户开放',
       },
       pricing: {
@@ -794,6 +794,13 @@ const zhCN = {
       openInWorkspace: '在聊天页面打开',
       newWindow: '与另一个专家对话',
       collapse: '收起',
+    },
+    agentRadialPicker: {
+      label: 'Agent 切换轮盘',
+      switchAgent: '切换 Agent',
+      rerun: '再来一次',
+      agentInUse: '该 Agent 正在其他窗口中使用',
+      dragHint: '按住拖动 · 点击选择',
     },
     chatWelcome: {
       title: '欢迎来到 SparkArc',

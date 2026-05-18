@@ -9,7 +9,7 @@
 # ⚠️⚠️⚠️⚠️⚠️⚠️⚠️⚠️⚠️⚠️⚠️⚠️⚠️⚠️⚠️⚠️⚠️⚠️⚠️
 # 数据库迁移备份
 .backup_migrations/
-
+.kilo/
 shares_data/
 __pycache__/
 *.db

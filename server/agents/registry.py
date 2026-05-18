@@ -6,6 +6,10 @@
 # 新增语言时，只需在每个 Agent 条目的 name/display/description 中加一组翻译即可。
 # 前端通过 i18n 的 components.agentNames / agentDescriptions 做本地映射，
 # 后端通过 resolve_agent_i18n_field() 按请求 locale 提取对应字段。
+#
+# icon: Lucide 图标名（PascalCase），前端 AgentAvatar 通过映射表转为组件。
+# color: 该 Agent 的专属主题色（hex），用于头像描边/光晕/轮盘扇片渐变。
+# 这两个字段是前端所有 Agent 视觉呈现的唯一真相源，禁止在前端各处再硬编码。
 
 AGENT_REGISTRY = [
     {
@@ -26,7 +30,9 @@ AGENT_REGISTRY = [
             "ja-JP": "システムの総合入口と調整ハブ。マルチターンのツール呼び出しで自律的に判断：章構造の確認、脚本内容の読み取り、専門 Agent へのタスク委派。ユーザーの質問に直接回答することも、複数の専門家を調整して複雑なタスクを完了することも可能です。",
         },
         "group": "main",
-        "participatesInBeaconBus": True
+        "participatesInBeaconBus": True,
+        "icon": "Compass",
+        "color": "#5b8cff"
     },
     {
         "key": "agent_showrunner",
@@ -45,7 +51,9 @@ AGENT_REGISTRY = [
             "en-US": "Creates story outlines, synopses, plot structures, episode/chapter planning, and beat sheets. Used when discussing overall plot direction or outline structure.",
             "ja-JP": "ストーリーのアウトライン、あらすじ、プロット構造、エピソード/章構成、ビートシートを作成します。全体的なプロットの方向性や構成について議論する際に使用します。",
         },
-        "group": "main"
+        "group": "main",
+        "icon": "Waypoints",
+        "color": "#2dd4bf"
     },
     {
         "key": "agent_scriptwriter",
@@ -64,7 +72,9 @@ AGENT_REGISTRY = [
             "en-US": "Handles actual text writing, scene descriptions, dialogue generation, continuation, and paragraph rewriting. Used when discussing a specific scene or script content.",
             "ja-JP": "本文の執筆、シーン描写、対話生成、続きの執筆、段落の書き直しを担当します。特定のシーンや脚本の内容について議論する際に使用します。",
         },
-        "group": "main"
+        "group": "main",
+        "icon": "Feather",
+        "color": "#38bdf8"
     },
     {
         "key": "agent_critic",
@@ -83,7 +93,9 @@ AGENT_REGISTRY = [
             "en-US": "Conducts rigorous reviews of existing scripts, novel passages, and specific scenes: checks for AI flavor residue, dialogue naturalness, literary quality, logic and character consistency. Can be consulted directly by users or delegated by the Director to review specific scenes.",
             "ja-JP": "既存の脚本や小説の段落、特定のシーンを厳格にレビュー：AI味の残存、対話の自然さ、文学的品質、論理とキャラクター一貫性をチェックします。ユーザーから直接相談されることも、監督から特定シーンのレビューを委派されることもあります。",
         },
-        "group": "main"
+        "group": "main",
+        "icon": "ScanEye",
+        "color": "#ff6b6b"
     },
     {
         "key": "agent_muse",
@@ -102,7 +114,9 @@ AGENT_REGISTRY = [
             "en-US": 'Handles all "inspiration" related tasks: creative ideas, brainstorming, inspiration prompts, viewing/reviewing inspiration content. Used when the user mentions "inspiration" or needs creative suggestions for writer\'s block.',
             "ja-JP": '「着想」に関連するすべてのタスクを担当：クリエイティブなアイデア、ブレインストーミング、着想の促進、着想内容の確認/振り返り。ユーザーが「着想」に言及した場合や、行き詰まった時にクリエイティブな提案が必要な場合に使用します。',
         },
-        "group": "main"
+        "group": "main",
+        "icon": "Wand2",
+        "color": "#b07cff"
     },
     {
         "key": "agent_lorebook",
@@ -121,7 +135,9 @@ AGENT_REGISTRY = [
             "en-US": "Handles worldbuilding settings, character profiles, relationships, backstories, and lore encyclopedia. Used when the user wants to add, modify, or view settings.",
             "ja-JP": "世界観の設定、キャラクタープロフィール、人物関係、バックストーリー、百科事典を担当します。ユーザーが設定を追加、変更、確認したい場合に使用します。",
         },
-        "group": "main"
+        "group": "main",
+        "icon": "ScrollText",
+        "color": "#f5b942"
     },
     {
         "key": "agent_style",
@@ -140,7 +156,9 @@ AGENT_REGISTRY = [
             "en-US": "Handles style analysis, style imitation, and tone tuning. Used when the user wants to imitate someone's writing or adjust language style.",
             "ja-JP": "文体分析、スタイル模写、トーン調整を担当します。誰かの書き方を模倣したい場合や、言語スタイルを調整したい場合に使用します。",
         },
-        "group": "style"
+        "group": "style",
+        "icon": "Palette",
+        "color": "#ec4899"
     }
 ]
 

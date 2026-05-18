@@ -35,17 +35,13 @@
             <div v-if="seg.type === 'reasoning' && getReasoningSegmentText(seg)" class="chat-bubble" :class="{ 'has-agent-avatar': !!seg.source_agent }">
               <n-tooltip v-if="seg.source_agent" trigger="hover">
                 <template #trigger>
-                  <div
-                    class="agent-avatar"
-                    :class="{ 'is-active': isAgentSegmentActive(m, idx, segIdx) }"
+                  <AgentAvatar
+                    class="agent-avatar-anchor"
+                    :agent-id="seg.source_agent"
+                    :size="28"
+                    :active="isAgentSegmentActive(m, idx, segIdx)"
                     :aria-label="`${getAgentName(seg.source_agent)} (${t('components.chatMessageList.thinking')})`"
-                    :style="getAgentAvatarStyle(seg.source_agent)"
-                  >
-                    <svg v-if="isSparkAgent(seg.source_agent)" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg" class="agent-avatar-spark">
-                      <path d="M12 2L14.5 9.5L22 12L14.5 14.5L12 22L9.5 14.5L2 12L9.5 9.5L12 2Z" fill="currentColor" />
-                    </svg>
-                    <n-icon v-else class="agent-avatar-icon" :component="getAgentIcon(seg.source_agent)" />
-                  </div>
+                  />
                 </template>
                 {{ `${getAgentName(seg.source_agent)} (${t('components.chatMessageList.thinking')})` }}
               </n-tooltip>
@@ -122,17 +118,13 @@
             <div v-else-if="seg.type === 'text' && seg.text && seg.text.trim()" class="chat-bubble" :class="{ 'has-agent-avatar': !!seg.source_agent }">
               <n-tooltip v-if="seg.source_agent" trigger="hover">
                 <template #trigger>
-                  <div
-                    class="agent-avatar"
-                    :class="{ 'is-active': isAgentSegmentActive(m, idx, segIdx) }"
+                  <AgentAvatar
+                    class="agent-avatar-anchor"
+                    :agent-id="seg.source_agent"
+                    :size="28"
+                    :active="isAgentSegmentActive(m, idx, segIdx)"
                     :aria-label="getAgentName(seg.source_agent)"
-                    :style="getAgentAvatarStyle(seg.source_agent)"
-                  >
-                    <svg v-if="isSparkAgent(seg.source_agent)" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg" class="agent-avatar-spark">
-                      <path d="M12 2L14.5 9.5L22 12L14.5 14.5L12 22L9.5 14.5L2 12L9.5 9.5L12 2Z" fill="currentColor" />
-                    </svg>
-                    <n-icon v-else class="agent-avatar-icon" :component="getAgentIcon(seg.source_agent)" />
-                  </div>
+                  />
                 </template>
                 {{ getAgentName(seg.source_agent) }}
               </n-tooltip>
@@ -359,10 +351,10 @@
 import { ref, computed, nextTick, watch, type PropType } from 'vue';
 import { useI18n } from 'vue-i18n';
 import { NButton, NIcon, NInput, NPopover, NTooltip, useMessage } from 'naive-ui';
-import { CircleCheck, Globe, Library, Lightbulb, List, SquarePen } from 'lucide-vue-next';
 import MarkdownRenderer from '@/components/share/MarkdownRenderer.vue';
 import SparkAlert from '@/components/share/SparkAlert.vue';
 import SparkCollapseTransition from '@/components/share/SparkCollapseTransition.vue';
+import AgentAvatar from '@/components/share/AgentAvatar.vue';
 import type { ChatMessage } from '@/services/chatService';
 import { useAgentRegistry } from '@/composables/useAgentRegistry';
 
@@ -802,42 +794,8 @@ function getAgentName(agentId?: string): string {
   return _getAgentNameFromRegistry(agentId);
 }
 
-const agentColorMap = {
-  agent_director: 'var(--spark-primary)',
-  agent_lorebook: '#7c6af7',
-  agent_showrunner: '#e07c3c',
-  agent_scriptwriter: '#3c9e7c',
-  agent_muse: '#c060a0',
-  agent_critic: '#d03050',
-  agent_style: '#4080c0',
-};
-
-const agentIconMap = {
-  agent_muse: Lightbulb,
-  agent_lorebook: Globe,
-  agent_showrunner: List,
-  agent_scriptwriter: SquarePen,
-  agent_critic: CircleCheck,
-  agent_style: Library,
-};
-
-function getAgentColor(agentId) {
-  return agentColorMap[agentId] || 'var(--spark-primary)';
-}
-
-function isSparkAgent(agentId) {
-  return !agentId || agentId === 'agent_director' || !agentIconMap[agentId];
-}
-
-function getAgentIcon(agentId) {
-  return agentIconMap[agentId] || null;
-}
-
-function getAgentAvatarStyle(agentId) {
-  return {
-    '--agent-avatar-color': getAgentColor(agentId),
-  };
-}
+// Agent 头像视觉渲染已统一收口到 AgentAvatar 组件（基于 registry.icon / registry.color）。
+// 旧本地 agentIconMap / agentColorMap / isSparkAgent 等硬编码已迁移；如需扩展请改 server/agents/registry.py。
 
 /** 工具 action 中文标签（work_tracker 专用） */
 const workTrackerActionLabelMap: Record<string, string> = {
@@ -1170,70 +1128,17 @@ defineExpose({ listRef });
    以下样式从 GlobalChatFloat.scoped.css 中搬运，保持原样不动
    ==================================================================== */
 
-/* P2: Agent 来源头像 - 在多 agent 协作时用统一 icon 映射表标识当前说话者 */
+/* Agent 来源头像定位锚点：AgentAvatar 视觉由组件自身负责，本处仅控制绝对定位 */
 .has-agent-avatar {
   margin-top: 18px;
   position: relative;
 }
 
-.agent-avatar {
+.agent-avatar-anchor {
   position: absolute;
   top: -16px;
   left: -10px;
-  width: 28px;
-  height: 28px;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  background: var(--spark-panel-bg);
-  border: 1px solid color-mix(in srgb, var(--agent-avatar-color, var(--spark-primary)) 38%, var(--spark-border));
-  border-radius: 50%;
-  box-shadow: 0 4px 10px rgba(0,0,0,0.08);
-  color: var(--agent-avatar-color, var(--spark-primary));
   z-index: 10;
-}
-
-.agent-avatar::after {
-  content: '';
-  position: absolute;
-  inset: 3px;
-  border-radius: 50%;
-  background: color-mix(in srgb, var(--agent-avatar-color, var(--spark-primary)) 8%, var(--spark-panel-bg));
-  z-index: -1;
-}
-
-.agent-avatar-icon,
-.agent-avatar-spark {
-  width: 16px;
-  height: 16px;
-}
-
-.agent-avatar.is-active {
-  animation: agentAvatarPulse 1.4s ease-in-out infinite;
-  box-shadow:
-    0 0 0 0 color-mix(in srgb, var(--agent-avatar-color, var(--spark-primary)) 28%, transparent),
-    0 4px 10px rgba(0,0,0,0.1);
-}
-
-@keyframes agentAvatarPulse {
-  0% {
-    transform: translateY(0) scale(1);
-    box-shadow:
-      0 0 0 0 color-mix(in srgb, var(--agent-avatar-color, var(--spark-primary)) 26%, transparent),
-      0 4px 10px rgba(0,0,0,0.1);
-  }
-  60% {
-    transform: translateY(-1px) scale(1.04);
-    box-shadow:
-      0 0 0 6px color-mix(in srgb, var(--agent-avatar-color, var(--spark-primary)) 0%, transparent),
-      0 6px 14px rgba(0,0,0,0.12);
-  }
-  100% {
-    transform: translateY(0) scale(1);
-    box-shadow:
-      0 0 0 0 color-mix(in srgb, var(--agent-avatar-color, var(--spark-primary)) 0%, transparent),
-      0 4px 10px rgba(0,0,0,0.1);
-  }
 }
 
 

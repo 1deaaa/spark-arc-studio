@@ -969,7 +969,7 @@ function toggleHeaderHint() {
 function platKeyTagType(plat) {
     if (plat.user_key_override) return 'info';
     if (plat.api_key_set) return 'success';
-    if (['managed_missing_key', 'managed_needs_reconfigure', 'managed_available_but_locked', 'user_override_missing_key', 'missing_key'].includes(plat.api_key_status)) {
+    if (['managed_missing_key', 'managed_needs_reconfigure', 'managed_available_but_locked', 'user_override_missing_key', 'user_override_needs_reconfigure', 'needs_reconfigure', 'missing_key'].includes(plat.api_key_status)) {
         return 'warning';
     }
     return 'error';
@@ -997,8 +997,8 @@ function platformStatusBadge(plat: AiPlatform): BadgeMeta | null {
     if (status === 'managed_available_but_locked') {
         return { text: t('components.aiManager.badges.userConfigNeeded'), type: 'warning' };
     }
-    if (status === 'user_override_failed' || status === 'failed') {
-        return { text: t('components.aiManager.badges.reconfigureNeeded'), type: 'error' };
+    if (status === 'user_override_needs_reconfigure' || status === 'user_override_failed' || status === 'failed' || status === 'needs_reconfigure') {
+        return { text: t('components.aiManager.badges.reconfigureNeeded'), type: 'warning' };
     }
     return { text: t('components.aiManager.badges.keyMissing'), type: 'warning' };
 }
@@ -1022,9 +1022,9 @@ function keyAlertMeta(plat: KeyAlertTarget | null | undefined): AlertMeta | null
         };
     }
 
-    if (plat.api_key_status === 'user_override_failed' || plat.api_key_status === 'failed') {
+    if (plat.api_key_status === 'user_override_needs_reconfigure' || plat.api_key_status === 'user_override_failed' || plat.api_key_status === 'failed' || plat.api_key_status === 'needs_reconfigure') {
         return {
-            type: 'error',
+            type: 'warning',
             title: t('components.aiManager.alerts.savedKeyDecryptFailedTitle'),
             message: plat.api_key_message,
         };

@@ -196,9 +196,9 @@ class UserDatabase:
     def create_session(self, user_id: int) -> Optional[str]:
         try:
             token = secrets.token_urlsafe(32)
-            expires_at = datetime.now(timezone.utc) + timedelta(days=7)
+            expires_at = datetime.now(timezone.utc) + timedelta(days=30)
             with self._session() as s:
-                s.execute(update(UserSession).where(UserSession.user_id == user_id, UserSession.is_active == True).values(is_active=False))  # noqa: E712
+                # 不再踢掉其他设备的活跃会话，允许多设备同时登录
                 new_sess = UserSession(user_id=user_id, session_token=token, expires_at=expires_at)
                 s.add(new_sess)
                 s.commit()
@@ -493,7 +493,7 @@ async def login(data: AuthRequest, response: Response):
         return JSONResponse(status_code=500, content={"success": False, "message": "创建会话失败"})
         
     if remember:
-        response.set_cookie(key='session_token', value=token, max_age=7*24*60*60, httponly=True, secure=False)
+        response.set_cookie(key='session_token', value=token, max_age=30*24*60*60, httponly=True, secure=False)
     else:
         response.set_cookie(key='session_token', value=token, httponly=True, secure=False)
         

@@ -20,14 +20,28 @@ button:not(.n-button) {
     box-shadow: 0 2px 5px var(--spark-primary-glow);
 }
 
-button:not(.n-button):hover {
+/*
+ * 全局 button :hover / :active 微动效。
+ *
+ * ⚠️ 用 :where() 把 specificity 降到 0：
+ * 这条规则会用 `transform: translateY(-1px)` 整体覆盖 button 自己的 transform。
+ * 对静态布局 button 没问题，但对 `.agent-radial-slot`、`.agent-radial-center` 这类
+ * 用 transform 做 absolute 定位的 button 会导致它们在 hover 时"瞬移"到屏幕原点。
+ *
+ * 用 :where() 让任何具体类的 :hover 规则（例如 `.agent-radial-slot:hover {...}`）
+ * 都能自然覆盖本规则，无需 !important 或显式重写 transform。
+ *
+ * 历史 bug: AgentRadialPicker 扇片 hover 闪烁——CSS 变量 --dx/--dy 没有变化，
+ * 但 computed transform 被这条规则改成 matrix(1,0,0,1,0,-1)，造成"原位置 ↔ 鼠标位置"循环。
+ */
+:where(button:not(.n-button)):hover {
     background-color: var(--spark-primary-dim);
     border-color: var(--spark-primary-dim);
     transform: translateY(-1px);
     box-shadow: 0 4px 12px var(--spark-primary-glow);
 }
 
-button:not(.n-button):active {
+:where(button:not(.n-button)):active {
     transform: translateY(0);
     box-shadow: none;
 }

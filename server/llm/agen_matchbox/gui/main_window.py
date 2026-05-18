@@ -72,6 +72,19 @@ class LLMConfigGUI(
         scale = min(max(self.ui_scale, 1.0), 1.35)
         return max(value, int(round(value * scale)))
 
+    @staticmethod
+    def _fmt_tokens(n) -> str:
+        """将 Token 数格式化为 K / M 缩写，精确到小数点 3 位。"""
+        try:
+            n = int(n)
+        except (TypeError, ValueError):
+            return str(n)
+        if n >= 1_000_000:
+            return f"{n / 1_000_000:.3f}M"
+        if n >= 1_000:
+            return f"{n / 1_000:.3f}K"
+        return str(n)
+
     def _bootstrap_startup(self):
         """启动自检：强制主密钥、建表初始化、再加载数据库配置。"""
         try:
@@ -107,8 +120,8 @@ class LLMConfigGUI(
 
         left_frame = ttk.Frame(workspace, style="Shell.TFrame")
         right_frame = ttk.Frame(workspace, style="Shell.TFrame")
-        workspace.add(left_frame, weight=11)
-        workspace.add(right_frame, weight=17)
+        workspace.add(left_frame, weight=13)
+        workspace.add(right_frame, weight=15)
 
         self._build_left_panel(left_frame)
         self._build_right_panel(right_frame)
@@ -221,18 +234,18 @@ class LLMConfigGUI(
         columns = ("user_id", "requests", "tokens", "prompt", "completion", "sys_paid", "self_paid", "errors")
         self.user_usage_tree = ttk.Treeview(table_frame, columns=columns, show="headings", height=10)
         headings = {
-            "user_id": ("用户 ID", self._scale(126)),
+            "user_id": ("用户 ID", self._scale(76)),
             "requests": ("调用", self._scale(56)),
-            "tokens": ("总 Token", self._scale(84)),
-            "prompt": ("Prompt", self._scale(72)),
-            "completion": ("Completion", self._scale(84)),
-            "sys_paid": ("站长付费", self._scale(72)),
-            "self_paid": ("用户自费", self._scale(72)),
+            "tokens": ("总 Token", self._scale(92)),
+            "prompt": ("Prompt", self._scale(78)),
+            "completion": ("Completion", self._scale(92)),
+            "sys_paid": ("站长付费", self._scale(78)),
+            "self_paid": ("用户自费", self._scale(78)),
             "errors": ("错误", self._scale(56)),
         }
         for key, (title, width) in headings.items():
             self.user_usage_tree.heading(key, text=title, command=lambda sort_key=key: self.sort_user_usage_overview(sort_key))
-            self.user_usage_tree.column(key, width=width, anchor=tk.W if key == "user_id" else tk.CENTER, stretch=key == "user_id")
+            self.user_usage_tree.column(key, width=width, anchor=tk.W if key == "user_id" else tk.CENTER, stretch=False)
 
         tree_scroll = ttk.Scrollbar(table_frame, orient=tk.VERTICAL, command=self.user_usage_tree.yview)
         self.user_usage_tree.configure(yscrollcommand=tree_scroll.set)
@@ -255,9 +268,9 @@ class LLMConfigGUI(
                 values=(
                     row.get("user_id", "-"),
                     int(row.get("requests", 0)),
-                    int(row.get("total_tokens", 0)),
-                    int(row.get("prompt_tokens", 0)),
-                    int(row.get("completion_tokens", 0)),
+                    self._fmt_tokens(row.get("total_tokens", 0)),
+                    self._fmt_tokens(row.get("prompt_tokens", 0)),
+                    self._fmt_tokens(row.get("completion_tokens", 0)),
                     int(row.get("sys_paid_requests", 0)),
                     int(row.get("self_paid_requests", 0)),
                     int(row.get("errors", 0)),
@@ -382,7 +395,7 @@ class LLMConfigGUI(
 
         summary_items = [
             ("总请求", f"{int(total_payload.get('requests', 0))} 次"),
-            ("总 Token", str(int(total_payload.get('tokens', 0)))),
+            ("总 Token", self._fmt_tokens(total_payload.get('tokens', 0))),
             ("站长付费", f"{int(quota_payload.get('sys_paid', {}).get('total', {}).get('usage', {}).get('requests', 0))} 次"),
             ("用户自费", f"{int(quota_payload.get('self_paid', {}).get('total', {}).get('usage', {}).get('requests', 0))} 次"),
         ]
@@ -423,9 +436,9 @@ class LLMConfigGUI(
                         row.get("platform_name", "-"),
                         row.get("display_name", "-"),
                         int(row.get("call_count", 0)),
-                        int(row.get("total_tokens", 0)),
-                        int(row.get("prompt_tokens", 0)),
-                        int(row.get("completion_tokens", 0)),
+                        self._fmt_tokens(row.get("total_tokens", 0)),
+                        self._fmt_tokens(row.get("prompt_tokens", 0)),
+                        self._fmt_tokens(row.get("completion_tokens", 0)),
                         int(row.get("success_count", 0)),
                         int(row.get("error_count", 0)),
                     ),
@@ -820,7 +833,7 @@ class LLMConfigGUI(
             return result.value
         if result.is_missing_key:
             raise ValueError("检测到加密 API Key，但当前未设置 LLM_KEY")
-        raise ValueError("API Key 解密失败，请检查 LLM_KEY 或重新配置密钥")
+        raise ValueError("托管密钥与当前站点主密钥不匹配，该平台需要配置 API Key")
 
     def _get_probe_cache_key(self, platform_name, base_url, api_key):
         """生成探测缓存 key。"""

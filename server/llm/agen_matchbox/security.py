@@ -136,7 +136,7 @@ class SecurityManager:
                 status="failed",
                 value=None,
                 encrypted_input=True,
-                message="密钥解密层级异常（疑似重复加密或数据结构异常）。",
+                message="托管密钥与当前站点主密钥不匹配，该平台需要配置 API Key。",
                 error="too_many_encryption_layers",
             )
         except Exception as e:
@@ -144,7 +144,7 @@ class SecurityManager:
                 status="failed",
                 value=None,
                 encrypted_input=True,
-                message="火柴网关主密钥无效，待配置新密钥......",
+                message="托管密钥与当前站点主密钥不匹配，该平台需要配置 API Key。",
                 error=str(e),
             )
 
@@ -181,9 +181,11 @@ class SecurityManager:
     def decrypt(self, text: str) -> SecretResolution:
         result = self._resolve_secret(text, self._fernet)
         if result.is_missing_key:
-            print("⚠️ 警告: 遇到加密数据但未设置 LLM_KEY，当前只能保留密文状态")
+            print("[密钥] 遇到托管密钥但当前未设置 LLM_KEY，该平台需要配置 API Key")
         elif result.is_failed:
-            print(f"❌ 解密失败: {result.error or result.message}")
+            # 注意：此状态在仓库同步场景下是正常现象（上游密文用不同 LLM_KEY 加密），
+            # 不应视为错误，而应引导用户为该平台配置自己的 API Key。
+            print(f"[密钥] 托管密钥与当前站点主密钥不匹配，该平台需要配置 API Key（原因: {result.error}）")
         return result
 
     def set_key(self, key: str, persist: bool = True):
