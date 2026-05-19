@@ -1,56 +1,30 @@
-魔搭ModelScope:
-  base_url: https://api-inference.modelscope.cn/v1
-  models:
-    DeepSeek-V3.2:
-      model_name: deepseek-ai/DeepSeek-V3.2
-      extra_body:
-        enable_thinking: false
-    moonshotai/Kimi-K2.5:
-      model_name: moonshotai/Kimi-K2.5
-      extra_body:
-        thinking:
-          type: disabled
-  api_key: ENC:gAAAAABp10vXQf3MpvT5-O30mdRLPvDaHx6g-3cNdjYTAvhsNU_oI_Pzweb_CTLdok7fVhLO5XxHczfUL-dAXFlD56d2LEjDeEbCosXczDXGHFdqUfRYAYSBO2fezcBageVIfICWZk0Y
-阿里云百炼:
-  base_url: https://dashscope.aliyuncs.com/compatible-mode/v1
-  models:
-    通义向量-v4:
-      model_name: text-embedding-v4
-      is_embedding: true
-    qwen3.5-plus-thinking:
-      model_name: qwen3.5-plus
-      extra_body:
-        enable_thinking: true
-    qwen3.5-plus:
-      model_name: qwen3.5-plus
-      extra_body:
-        enable_thinking: false
-    deepseek-v4-flash:
-      model_name: deepseek-v4-flash
-      extra_body:
-        reasoning_effort: max
-  api_key: ENC:gAAAAABp10vXRCFQh_7XwVQm2b9TrWp8Y0iARSrUAnsOTUkwz7GaDsxlD5lz6lepZalNhlJvvjDCBKZlF9enEgb-k-JyuHemsXECnJWB8k0lRU3BeMzpE6hmr4rb0Udi-GT6yRzZLOtM
 Google AIStudio:
   base_url: https://ai.1dea.top/v1
   models:
-    gemini-3.1-pro-preview:
+    gemini-3.5-flash-high:
+      model_name: gemini-3.5-flash
+      extra_body:
+        reasoning_effort: high
+      max_context_tokens: 1048576
+      max_output_tokens: 65536
+    gemini-3.1-pro-high:
       model_name: gemini-3.1-pro-preview
+      extra_body:
+        reasoning_effort: high
       max_context_tokens: 1048576
       max_output_tokens: 65536
-    gemini-3.1-flash-lite-preview:
+    gemini-3.1-flash-lite-high:
       model_name: gemini-3.1-flash-lite-preview
-      max_context_tokens: 1048576
-      max_output_tokens: 65536
-    gemini-3-flash-preview:
-      model_name: gemini-3-flash-preview
+      extra_body:
+        reasoning_effort: high
       max_context_tokens: 1048576
       max_output_tokens: 65536
   api_key: ENC:gAAAAABp10vXCF1zOf2dETLaj04qxVd-wan1WhFMDBkFqtE-pTOeuI7YtcfWPVOSKjaDzxrHuMDOih-vdBar96P5LiLnKamwKWVy7mt7-lllWHSiAAIs38M=
 Gemini快速:
   base_url: https://api.1dea.top/v1
   models:
-    Gemini 3 Flash Preview:
-      model_name: Gemini 3 Flash Preview
+    gemini-3.5-flash-high:
+      model_name: gemini-3.5-flash
       extra_body:
         reasoning_effort: high
   api_key: ENC:gAAAAABp4JM0nIPlU41tn60aQ0XWDSF2usymEhxgsd_PcbImxvzGERZuo4X3PIV0x6xDn5ux4DUm_pLGCpgKNU7I_i3eEpMXUWwEfr04yTdxeJ-RPQSbWCI=
@@ -64,3 +38,22 @@ DeepSeek:
       sys_credit_input_price_per_million: 1.0
       sys_credit_output_price_per_million: 2.0
   api_key: ENC:gAAAAABp7bvEBYi_twxQ6jS3-WviBgZEtLAOhtMHoDHxs98eREeqv5CV6d9m-G6z8xQfugWVgR-tfAoquq_u2FHrOLP534y2rRtvlOo-fkcalyMi6pGW8tDubRaVm5M1Hdnc2FjlMGNe
+阿里云百炼:
+  base_url: https://dashscope.aliyuncs.com/compatible-mode/v1
+  models:
+    通义向量-v4:
+      model_name: text-embedding-v4
+      is_embedding: true
+    deepseek-v4-flash-max:
+      model_name: deepseek-v4-flash
+      extra_body:
+        reasoning_effort: max
+    qwen3.5-plus-thinking:
+      model_name: qwen3.5-plus
+      extra_body:
+        enable_thinking: true
+    qwen3.5-plus:
+      model_name: qwen3.5-plus
+      extra_body:
+        enable_thinking: false
+  api_key: ENC:gAAAAABp10vXRCFQh_7XwVQm2b9TrWp8Y0iARSrUAnsOTUkwz7GaDsxlD5lz6lepZalNhlJvvjDCBKZlF9enEgb-k-JyuHemsXECnJWB8k0lRU3BeMzpE6hmr4rb0Udi-GT6yRzZLOtM

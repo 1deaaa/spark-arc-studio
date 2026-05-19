@@ -480,8 +480,8 @@ class AIManagerBase:
                     if encrypted_key:
                         plat.api_key = encrypted_key
 
-                    # 同步模型（覆盖模式）
-                    existing_models = {m.display_name: m for m in plat.models}
+                    # 同步模型（完全覆盖重置模式，以 (model_name, is_embedding) 作为唯一标识索引，支持显示名 display_name 变更）
+                    existing_models_by_key = {(m.model_name, m.is_embedding): m for m in plat.models}
                     for model_idx, (display_name, model_config) in enumerate(cfg.get("models", {}).items()):
                         if isinstance(model_config, str):
                             model_name = model_config
@@ -496,23 +496,23 @@ class AIManagerBase:
                         max_context_tokens, max_output_tokens = _resolve_model_limits(model_config)
 
                         extra_body_json = json.dumps(extra_body) if extra_body else None
+                        key = (model_name, is_embedding)
 
-                        if display_name in existing_models:
-                            model_to_update = existing_models[display_name]
-                            if model_to_update.model_name != model_name:
-                                model_to_update.model_name = model_name
+                        if key in existing_models_by_key:
+                            model_to_update = existing_models_by_key[key]
+                            if model_to_update.display_name != display_name:
+                                print(f"[YAML重置] 平台 {name} 模型显示名称变更: {model_to_update.display_name} -> {display_name}")
+                                model_to_update.display_name = display_name
                             if model_to_update.extra_body != extra_body_json:
                                 model_to_update.extra_body = extra_body_json
                             if model_to_update.temperature != temperature:
                                 model_to_update.temperature = temperature
-                            if model_to_update.is_embedding != is_embedding:
-                                model_to_update.is_embedding = is_embedding
                             if model_to_update.max_context_tokens != max_context_tokens:
                                 model_to_update.max_context_tokens = max_context_tokens
                             if model_to_update.max_output_tokens != max_output_tokens:
                                 model_to_update.max_output_tokens = max_output_tokens
                             model_to_update.sort_order = model_idx
-                            del existing_models[display_name]
+                            del existing_models_by_key[key]
                         else:
                             new_model = LLModels(
                                 platform_id=plat.id,
@@ -526,31 +526,59 @@ class AIManagerBase:
                                 sort_order=model_idx,
                             )
                             session.add(new_model)
+                            print(f"[YAML重置] 平台 {name} 新增模型: {display_name} ({model_name})")
 
                     # 删除 YAML 中已移除的模型
-                    for model_to_delete in existing_models.values():
+                    for model_to_delete in existing_models_by_key.values():
                         session.delete(model_to_delete)
+                        print(f"[YAML重置] 平台 {name} 删除已废弃模型: {model_to_delete.display_name}")
                 
                 else:
-                    # 正常启动模式：已存在的平台不做任何修改
-                    # 仅添加 YAML 中新增的模型（不覆盖已有模型）
-                    existing_model_names = {m.display_name for m in plat.models}
-                    max_sort = max((m.sort_order or 0 for m in plat.models), default=-1)
-                    for display_name, model_config in cfg.get("models", {}).items():
-                        if display_name not in existing_model_names:
-                            if isinstance(model_config, str):
-                                model_name = model_config
-                                extra_body = None
-                                temperature = None
-                                is_embedding = 0
-                            else:
-                                model_name = model_config.get("model_name")
-                                extra_body = model_config.get("extra_body")
-                                temperature = model_config.get("temperature")
-                                is_embedding = 1 if model_config.get("is_embedding") else 0
-                            max_context_tokens, max_output_tokens = _resolve_model_limits(model_config)
+                    # 正常启动增量更新模式：
+                    # 自动同步平台名称（若有变动）
+                    if plat.name != name:
+                        print(f"[增量同步] 更新系统平台名称: {plat.name} -> {name}")
+                        plat.name = name
 
-                            extra_body_json = json.dumps(extra_body) if extra_body else None
+                    # 智能同步模型：以 (model_name, is_embedding) 作为联合主键：
+                    # - 若标识已存在，仅更新显示名称、上下文上限等，保护本地计费单价 (sys_credit_*) 和 disable 等自定义属性。
+                    # - 若标识不存在，自动添加为新模型。
+                    existing_models_by_key = {(m.model_name, m.is_embedding): m for m in plat.models}
+                    max_sort = max((m.sort_order or 0 for m in plat.models), default=-1)
+
+                    for display_name, model_config in cfg.get("models", {}).items():
+                        if isinstance(model_config, str):
+                            model_name = model_config
+                            extra_body = None
+                            temperature = None
+                            is_embedding = 0
+                        else:
+                            model_name = model_config.get("model_name")
+                            extra_body = model_config.get("extra_body")
+                            temperature = model_config.get("temperature")
+                            is_embedding = 1 if model_config.get("is_embedding") else 0
+                        max_context_tokens, max_output_tokens = _resolve_model_limits(model_config)
+                        extra_body_json = json.dumps(extra_body) if extra_body else None
+                        key = (model_name, is_embedding)
+
+                        if key in existing_models_by_key:
+                            model_to_update = existing_models_by_key[key]
+                            # 如果显示名称改变了，自动修正为 YAML 中的新显示名称
+                            if model_to_update.display_name != display_name:
+                                print(f"[增量同步] 平台 {name} 模型显示名称自动更新: {model_to_update.display_name} -> {display_name}")
+                                model_to_update.display_name = display_name
+                            
+                            # 同步上下文上限、单次输出上限、额外请求体等物理参数
+                            if model_to_update.extra_body != extra_body_json:
+                                model_to_update.extra_body = extra_body_json
+                            if model_to_update.temperature != temperature:
+                                model_to_update.temperature = temperature
+                            if model_to_update.max_context_tokens != max_context_tokens:
+                                model_to_update.max_context_tokens = max_context_tokens
+                            if model_to_update.max_output_tokens != max_output_tokens:
+                                model_to_update.max_output_tokens = max_output_tokens
+                        else:
+                            # 新模型：添加
                             max_sort += 1
                             new_model = LLModels(
                                 platform_id=plat.id,

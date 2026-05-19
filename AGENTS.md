@@ -10,7 +10,7 @@
 - 任何新增能力都要做到“改一处，全链路受益”。
 - 任何短平快修补都不能以破坏长期可维护性为代价。
 
-## 2. 架构北极星：统一收口，不复制实现
+## 2. 统一收口，不复制实现
 
 SparkArc 现有架构已经有清晰收口层。新增功能必须先判断是否能接入现有收口点，而不是新开平行管线。
 
@@ -24,6 +24,11 @@ SparkArc 现有架构已经有清晰收口层。新增功能必须先判断是�
  - 流式桥接层：server/agents/routes/streaming_utils.py
  - 业务语义层：server/agents/routes/stream_semantics.py + server/agents/routes/execution_core.py
  - 路由聚合层：server/agents/routes/__init__.py
+ - **大统一工具性底层（大统一基建）**：
+   - **局部替换与增量修改（Patch）**：统一收口在 `server/agents/tools/common.py` 的 `_apply_patch`。无论是剧本复写、大纲局部修改还是设定更新，凡是涉及“在已有文本中定位并替换”的逻辑，必须复用此底层，严禁各 Agent 自行实现正则或字符串替换。
+   - **智能文本切分（Token Chunking）**：统一收口在 `server/core/file_ingest/chunking.py` 的 `TokenTextSplitter`（或通过 `server/agents/agent_style/text_splitter.py` 兼容重导出）。无论是上传附件、评审专家审稿、还是文风克隆分析，凡是涉及按 Token 数量切分文本的逻辑，必须复用此底层，避免 3 次以上重复实现。
+   - **语义分块器（Semantic Chunker）**：统一收口在 `server/story/semantic_chunker/` 的 `SemanticChunker`。凡是涉及项目文件、知识图谱、向量索引的语义分块，必须复用此底层。
+   - **基建扩展原则**：上述三项仅为当前最典型的工具性基建示例。**后续任何新增的、可能被多处复用的底层基础设施（如向量检索、缓存控制、文件解析等），必须遵循相似的“大统一”原则，先下沉至公共工具层或核心服务层，严禁在各业务线或 Agent 内部重复造轮子。**
 
 前端收口重点：
 
@@ -133,7 +138,7 @@ SparkArc 的每个专家 Agent 必须实现且仅实现三种调用模态，分�
 - 导演委派时 `normalize_handoff_payload` 会强制把 `user_confirmation_state` 提升为 `not_required`，从而保证子 Agent 一定走 `pipeline_system`。
 - 对应测试：`server/test/test_director_skip_confirmation.py`、`server/test/test_director_handoff_protocol.py`。
 
-**`pipeline_system` 写法硬约束（重中之重）**：
+**`pipeline_system` 写法硬约束**：
 
 1. **受众声明**：第一句必须明确"你的受众是导演，不是用户"，避免 LLM 代入头脑风暴/对话模式。
 2. **三件套主干**：正文只写「调工具 + 一步到位 + 向导演简报」三件套，外加必要的反注入/反占位符提示。
@@ -273,7 +278,7 @@ YAML 顶层 `tool_rules` 字段用于存放 Agent 在聊天/委派模式下的�
 新增 Agent 时，除了后端注册，还需要检查以下前端映射点是否需要更新：
 
 1. 视图默认 Agent 分配：client/src/components/share/GlobalChatFloat.vue（viewAgentMap）
-2. 聊天气泡显示名/颜色/图标：client/src/components/share/ChatMessageList.vue
+2. 聊天气泡显示名/颜色/图标：client/src/composables/useAgentRegistry.ts（agentIconMap / agentColorMap / agentNameMap）
 3. Agent 流程蓝图布局与默认连线：client/src/components/lorebook/AgentFlowBlueprint.vue
 4. 运行态 mock 数据（如保留）：client/src/components/stores/agentRuntimeStore.ts
 5. 页面级快捷模型选择入口（如需要）：client/src/components/lorebook/AiSettingsPanel.vue 与对应视图
@@ -362,29 +367,37 @@ YAML 顶层 `tool_rules` 字段用于存放 Agent 在聊天/委派模式下的�
 
 ## 10. 最小回归测试清单
 
-涉及聊天链路、工具事件、多 Agent 委派、流式语义时，至少回归以下测试：
+涉及聊天链路、工具事件、多 Agent 委派、流式语义时，必须执行回归测试。测试文件可能会随架构演进而动态变化，贡献者应遵循以下测试指导原则：
 
-后端：
+### 10.1 测试指导原则
+1. **后端测试原则**：
+   - 任何涉及聊天流（Chat Stream）或 NDJSON 事件的改动，必须回归聊天事件流、历史时序分段（Segments）以及工具 UI 元数据的测试。
+   - 任何涉及导演（Director）调度、委派协议（Handoff）或免确认策略的改动，必须回归多 Agent 调度图与委派协议测试。
+   - 任何涉及业务语义流（SSE）的改动，必须回归流式语义运行态测试。
+2. **前端测试原则**：
+   - 任何涉及聊天流消费、工具事件桥接的改动，必须回归 `chatStore` 单元测试。
+   - 任何涉及流式任务托管、取消、统计的改动，必须回归 `streamingRuntime` 单元测试。
+   - 任何涉及全局加载遮罩、聊天气泡渲染的改动，必须回归对应组件的挂载与事件测试。
 
-- server/test/test_chat_stream_events.py
-- server/test/test_chat_history_segments.py
-- server/test/test_tool_event_ui_metadata.py
-- server/test/test_director_graph.py
-- server/test/test_director_handoff_protocol.py
-- server/test/test_director_skip_confirmation.py
-- server/test/test_stream_semantics_runtime.py
-
-前端：
-
-- client/src/components/stores/__tests__/chatStore.spec.ts
-- client/src/utils/__tests__/streamingRuntime.spec.ts
-- client/src/components/share/__tests__/GlobalLoading.spec.ts
-- client/src/components/share/__tests__/ChatMessageList.spec.ts
-
-建议命令（按需裁剪）：
-
-- 后端：cd server && pytest test/test_chat_stream_events.py test/test_chat_history_segments.py test/test_tool_event_ui_metadata.py test/test_director_graph.py test/test_director_handoff_protocol.py test/test_director_skip_confirmation.py test/test_stream_semantics_runtime.py
-- 前端：cd client && npm run test -- src/components/stores/__tests__/chatStore.spec.ts src/utils/__tests__/streamingRuntime.spec.ts src/components/share/__tests__/GlobalLoading.spec.ts src/components/share/__tests__/ChatMessageList.spec.ts
+### 10.2 推荐测试命令（按需裁剪）
+- **后端测试**：进入 `server` 目录，使用 `pytest` 运行 `test/` 目录下对应的测试脚本。例如：
+  ```bash
+  cd server
+  # 运行聊天与工具事件相关测试
+  pytest test/test_chat_stream_events.py test/test_chat_history_segments.py test/test_tool_event_ui_metadata.py
+  # 运行导演调度与委派协议相关测试
+  pytest test/test_director_graph.py test/test_director_handoff_protocol.py test/test_director_skip_confirmation.py
+  # 运行流式语义相关测试
+  pytest test/test_stream_semantics_runtime.py
+  ```
+- **前端测试**：进入 `client` 目录，使用 `npm run test` 运行对应的 `.spec.ts` 测试。例如：
+  ```bash
+  cd client
+  # 运行 Store 与工具类测试
+  npm run test -- src/components/stores/__tests__/chatStore.spec.ts src/utils/__tests__/streamingRuntime.spec.ts
+  # 运行全局 UI 组件测试
+  npm run test -- src/components/share/__tests__/GlobalLoading.spec.ts src/components/share/__tests__/ChatMessageList.spec.ts
+  ```
 
 ## 11. 提交前自检
 
