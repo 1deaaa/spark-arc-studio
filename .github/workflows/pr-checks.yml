@@ -84,15 +84,7 @@ jobs:
 
       - name: Run backend regression tests
         run: |
-          python -m pytest -vv -s \
-            test/test_chat_stream_events.py \
-            test/test_chat_history_segments.py \
-            test/test_tool_event_ui_metadata.py \
-            test/test_director_graph.py \
-            test/test_director_handoff_protocol.py \
-            test/test_director_skip_confirmation.py \
-            test/test_stream_semantics_runtime.py \
-            test/test_migration_guardrails.py
+          python -m pytest -vv -s test/
 
   docker-build:
     name: Docker Build
