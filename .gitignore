@@ -25,6 +25,7 @@ node_modules/
 # Tauri build outputs (desktop/mobile)
 client/src-tauri/target/
 client/src-tauri/gen/
+/.tmp/
 
 # Tauri icon 构建产物（由 tauri icon 从 app-icon-source.png 生成）
 # 保留: app-icon-source.png, icon.icns, icon.png, icon.ico（tauri.conf.json 引用）
