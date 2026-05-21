@@ -232,7 +232,9 @@ const isCompactViewport = computed(() => viewportWidth.value < 600);
 const effectiveRadius = computed(() => isCompactViewport.value ? Math.min(props.radius, 112) : props.radius);
 const effectiveSweep = computed(() => isCompactViewport.value ? Math.min(props.sweepAngle, 140) : props.sweepAngle);
 const centerAngle = computed(() => props.startAngle + props.sweepAngle / 2);
-const effectiveStart = computed(() => centerAngle.value - effectiveSweep.value / 2);
+// 移动端将中心角顺时针偏转 20°，使扇形整体右移，避免最左侧槽位溢出小屏幕左侧边界
+const effectiveCenterAngle = computed(() => isCompactViewport.value ? centerAngle.value + 20 : centerAngle.value);
+const effectiveStart = computed(() => effectiveCenterAngle.value - effectiveSweep.value / 2);
 const effectiveSlotSize = computed(() => isCompactViewport.value ? Math.min(props.slotAvatarSize, 32) : props.slotAvatarSize);
 
 // 拖拽与跟手
@@ -498,6 +500,9 @@ function recalcWheelCenter(): void {
   let cx = rect.left + rect.width / 2;
   let cy = rect.bottom + 14;
   const margin = 16;
+  // 左侧边界约束：防止扇片溢出屏幕左侧（触发器靠近左边缘时尤为重要）
+  const minCx = effectiveRadius.value + margin;
+  if (cx < minCx) cx = minCx;
   const maxCx = window.innerWidth - effectiveRadius.value - margin;
   if (cx > maxCx) cx = maxCx;
   const maxCy = window.innerHeight - effectiveRadius.value - margin;
@@ -741,8 +746,8 @@ onBeforeUnmount(() => {
   width: 32px;
   height: 32px;
   padding: 0;
-  background: var(--spark-bg-soft, var(--spark-bg));
-  border: 1px solid var(--spark-border);
+  background: transparent;
+  border: 1.5px solid transparent;
   border-radius: 50%;
   color: var(--spark-text);
   cursor: pointer;
@@ -754,13 +759,13 @@ onBeforeUnmount(() => {
     box-shadow 0.18s ease;
   user-select: none;
   -webkit-tap-highlight-color: transparent;
+  touch-action: none; /* 彻底打通移动端“一气呵成滑动”：禁用原生的滑动手势与页面滚动判定，确保手指划动时 pointermove 能够持续稳定触发，不被系统的 pointercancel 截断 */
 }
 
 .picker-trigger:hover:not(:disabled),
 .picker-trigger.is-open {
-  border-color: color-mix(in srgb, var(--spark-primary) 55%, var(--spark-border));
-  background: color-mix(in srgb, var(--spark-primary) 8%, var(--spark-bg-soft, var(--spark-bg)));
-  box-shadow: 0 2px 10px color-mix(in srgb, var(--spark-primary) 16%, transparent);
+  border-color: color-mix(in srgb, var(--spark-primary) 30%, transparent);
+  box-shadow: none;
 }
 
 .picker-trigger:focus-visible {

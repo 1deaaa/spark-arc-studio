@@ -480,8 +480,8 @@ class AIManagerBase:
                     if encrypted_key:
                         plat.api_key = encrypted_key
 
-                    # 同步模型（完全覆盖重置模式，以 (model_name, is_embedding) 作为唯一标识索引，支持显示名 display_name 变更）
-                    existing_models_by_key = {(m.model_name, m.is_embedding): m for m in plat.models}
+                    # 1. 解析 YAML 中该平台的所有模型配置
+                    yaml_models_to_match = []
                     for model_idx, (display_name, model_config) in enumerate(cfg.get("models", {}).items()):
                         if isinstance(model_config, str):
                             model_name = model_config
@@ -494,12 +494,106 @@ class AIManagerBase:
                             temperature = model_config.get("temperature")
                             is_embedding = 1 if model_config.get("is_embedding") else 0
                         max_context_tokens, max_output_tokens = _resolve_model_limits(model_config)
-
                         extra_body_json = json.dumps(extra_body) if extra_body else None
-                        key = (model_name, is_embedding)
 
-                        if key in existing_models_by_key:
-                            model_to_update = existing_models_by_key[key]
+                        yaml_models_to_match.append({
+                            "display_name": display_name,
+                            "model_name": model_name,
+                            "is_embedding": is_embedding,
+                            "extra_body_json": extra_body_json,
+                            "temperature": temperature,
+                            "max_context_tokens": max_context_tokens,
+                            "max_output_tokens": max_output_tokens,
+                            "sort_order": model_idx,
+                        })
+
+                    # 2. 执行多阶段精密匹配算法，关联 YAML 模型配置与数据库已存模型
+                    db_models_pool = list(plat.models)
+                    matched_pairs = {}  # yaml_model_index -> db_model
+                    matched_db_ids = set()
+
+                    # 第一阶段：完美匹配 (display_name, model_name, is_embedding)
+                    for idx, y_m in enumerate(yaml_models_to_match):
+                        for db_m in db_models_pool:
+                            if db_m.id in matched_db_ids:
+                                continue
+                            if (
+                                db_m.display_name == y_m["display_name"]
+                                and db_m.model_name == y_m["model_name"]
+                                and db_m.is_embedding == y_m["is_embedding"]
+                            ):
+                                matched_pairs[idx] = db_m
+                                matched_db_ids.add(db_m.id)
+                                break
+
+                    # 第二阶段：同名同类别匹配 (display_name, is_embedding)，允许 model_name 改动
+                    for idx, y_m in enumerate(yaml_models_to_match):
+                        if idx in matched_pairs:
+                            continue
+                        for db_m in db_models_pool:
+                            if db_m.id in matched_db_ids:
+                                continue
+                            if (
+                                db_m.display_name == y_m["display_name"]
+                                and db_m.is_embedding == y_m["is_embedding"]
+                            ):
+                                matched_pairs[idx] = db_m
+                                matched_db_ids.add(db_m.id)
+                                break
+
+                    # 第三阶段：唯一标识改名匹配（仅在 (model_name, is_embedding) 于当前平台内唯一时适用）
+                    from collections import Counter
+                    yaml_keys_counter = Counter((y["model_name"], y["is_embedding"]) for y in yaml_models_to_match)
+                    
+                    for idx, y_m in enumerate(yaml_models_to_match):
+                        if idx in matched_pairs:
+                            continue
+                        key = (y_m["model_name"], y_m["is_embedding"])
+                        if yaml_keys_counter[key] == 1:
+                            candidates = [
+                                db_m for db_m in db_models_pool
+                                if db_m.id not in matched_db_ids
+                                and db_m.model_name == y_m["model_name"]
+                                and db_m.is_embedding == y_m["is_embedding"]
+                            ]
+                            if len(candidates) == 1:
+                                db_m = candidates[0]
+                                matched_pairs[idx] = db_m
+                                matched_db_ids.add(db_m.id)
+
+                    # 第四阶段：同 model_name 根据 extra_body 匹配（解决相同 model_name 多配置的改名更新匹配）
+                    for idx, y_m in enumerate(yaml_models_to_match):
+                        if idx in matched_pairs:
+                            continue
+                        key = (y_m["model_name"], y_m["is_embedding"])
+                        candidates = [
+                            db_m for db_m in db_models_pool
+                            if db_m.id not in matched_db_ids
+                            and db_m.model_name == y_m["model_name"]
+                            and db_m.is_embedding == y_m["is_embedding"]
+                        ]
+                        if candidates:
+                            best_match = None
+                            for cand in candidates:
+                                if cand.extra_body == y_m["extra_body_json"]:
+                                    best_match = cand
+                                    break
+                            if best_match:
+                                matched_pairs[idx] = best_match
+                                matched_db_ids.add(best_match.id)
+
+                    # 3. 首次初始化或强制重置：同步配置，并删除已废弃模型
+                    for idx, y_m in enumerate(yaml_models_to_match):
+                        display_name = y_m["display_name"]
+                        model_name = y_m["model_name"]
+                        extra_body_json = y_m["extra_body_json"]
+                        temperature = y_m["temperature"]
+                        max_context_tokens = y_m["max_context_tokens"]
+                        max_output_tokens = y_m["max_output_tokens"]
+                        model_idx = y_m["sort_order"]
+
+                        if idx in matched_pairs:
+                            model_to_update = matched_pairs[idx]
                             if model_to_update.display_name != display_name:
                                 print(f"[YAML重置] 平台 {name} 模型显示名称变更: {model_to_update.display_name} -> {display_name}")
                                 model_to_update.display_name = display_name
@@ -512,7 +606,6 @@ class AIManagerBase:
                             if model_to_update.max_output_tokens != max_output_tokens:
                                 model_to_update.max_output_tokens = max_output_tokens
                             model_to_update.sort_order = model_idx
-                            del existing_models_by_key[key]
                         else:
                             new_model = LLModels(
                                 platform_id=plat.id,
@@ -522,16 +615,17 @@ class AIManagerBase:
                                 temperature=temperature,
                                 max_context_tokens=max_context_tokens,
                                 max_output_tokens=max_output_tokens,
-                                is_embedding=is_embedding,
+                                is_embedding=y_m["is_embedding"],
                                 sort_order=model_idx,
                             )
                             session.add(new_model)
                             print(f"[YAML重置] 平台 {name} 新增模型: {display_name} ({model_name})")
 
-                    # 删除 YAML 中已移除的模型
-                    for model_to_delete in existing_models_by_key.values():
-                        session.delete(model_to_delete)
-                        print(f"[YAML重置] 平台 {name} 删除已废弃模型: {model_to_delete.display_name}")
+                    # 删除已在 YAML 中废弃（未匹配到）的系统模型
+                    for db_m in db_models_pool:
+                        if db_m.id not in matched_db_ids:
+                            session.delete(db_m)
+                            print(f"[YAML重置] 平台 {name} 删除已废弃模型: {db_m.display_name}")
                 
                 else:
                     # 正常启动增量更新模式：
@@ -540,13 +634,9 @@ class AIManagerBase:
                         print(f"[增量同步] 更新系统平台名称: {plat.name} -> {name}")
                         plat.name = name
 
-                    # 智能同步模型：以 (model_name, is_embedding) 作为联合主键：
-                    # - 若标识已存在，仅更新显示名称、上下文上限等，保护本地计费单价 (sys_credit_*) 和 disable 等自定义属性。
-                    # - 若标识不存在，自动添加为新模型。
-                    existing_models_by_key = {(m.model_name, m.is_embedding): m for m in plat.models}
-                    max_sort = max((m.sort_order or 0 for m in plat.models), default=-1)
-
-                    for display_name, model_config in cfg.get("models", {}).items():
+                    # 1. 解析 YAML 中该平台的所有模型配置
+                    yaml_models_to_match = []
+                    for model_idx, (display_name, model_config) in enumerate(cfg.get("models", {}).items()):
                         if isinstance(model_config, str):
                             model_name = model_config
                             extra_body = None
@@ -559,16 +649,109 @@ class AIManagerBase:
                             is_embedding = 1 if model_config.get("is_embedding") else 0
                         max_context_tokens, max_output_tokens = _resolve_model_limits(model_config)
                         extra_body_json = json.dumps(extra_body) if extra_body else None
-                        key = (model_name, is_embedding)
 
-                        if key in existing_models_by_key:
-                            model_to_update = existing_models_by_key[key]
-                            # 如果显示名称改变了，自动修正为 YAML 中的新显示名称
+                        yaml_models_to_match.append({
+                            "display_name": display_name,
+                            "model_name": model_name,
+                            "is_embedding": is_embedding,
+                            "extra_body_json": extra_body_json,
+                            "temperature": temperature,
+                            "max_context_tokens": max_context_tokens,
+                            "max_output_tokens": max_output_tokens,
+                            "sort_order": model_idx,
+                        })
+
+                    # 2. 执行多阶段精密匹配算法，关联 YAML 模型配置与数据库已存模型
+                    db_models_pool = list(plat.models)
+                    matched_pairs = {}  # yaml_model_index -> db_model
+                    matched_db_ids = set()
+
+                    # 第一阶段：完美匹配 (display_name, model_name, is_embedding)
+                    for idx, y_m in enumerate(yaml_models_to_match):
+                        for db_m in db_models_pool:
+                            if db_m.id in matched_db_ids:
+                                continue
+                            if (
+                                db_m.display_name == y_m["display_name"]
+                                and db_m.model_name == y_m["model_name"]
+                                and db_m.is_embedding == y_m["is_embedding"]
+                            ):
+                                matched_pairs[idx] = db_m
+                                matched_db_ids.add(db_m.id)
+                                break
+
+                    # 第二阶段：同名同类别匹配 (display_name, is_embedding)，允许 model_name 改动
+                    for idx, y_m in enumerate(yaml_models_to_match):
+                        if idx in matched_pairs:
+                            continue
+                        for db_m in db_models_pool:
+                            if db_m.id in matched_db_ids:
+                                continue
+                            if (
+                                db_m.display_name == y_m["display_name"]
+                                and db_m.is_embedding == y_m["is_embedding"]
+                            ):
+                                matched_pairs[idx] = db_m
+                                matched_db_ids.add(db_m.id)
+                                break
+
+                    # 第三阶段：唯一标识改名匹配（仅在 (model_name, is_embedding) 于当前平台内唯一时适用）
+                    from collections import Counter
+                    yaml_keys_counter = Counter((y["model_name"], y["is_embedding"]) for y in yaml_models_to_match)
+                    
+                    for idx, y_m in enumerate(yaml_models_to_match):
+                        if idx in matched_pairs:
+                            continue
+                        key = (y_m["model_name"], y_m["is_embedding"])
+                        if yaml_keys_counter[key] == 1:
+                            candidates = [
+                                db_m for db_m in db_models_pool
+                                if db_m.id not in matched_db_ids
+                                and db_m.model_name == y_m["model_name"]
+                                and db_m.is_embedding == y_m["is_embedding"]
+                            ]
+                            if len(candidates) == 1:
+                                db_m = candidates[0]
+                                matched_pairs[idx] = db_m
+                                matched_db_ids.add(db_m.id)
+
+                    # 第四阶段：同 model_name 根据 extra_body 匹配（解决相同 model_name 多配置的改名更新匹配）
+                    for idx, y_m in enumerate(yaml_models_to_match):
+                        if idx in matched_pairs:
+                            continue
+                        key = (y_m["model_name"], y_m["is_embedding"])
+                        candidates = [
+                            db_m for db_m in db_models_pool
+                            if db_m.id not in matched_db_ids
+                            and db_m.model_name == y_m["model_name"]
+                            and db_m.is_embedding == y_m["is_embedding"]
+                        ]
+                        if candidates:
+                            best_match = None
+                            for cand in candidates:
+                                if cand.extra_body == y_m["extra_body_json"]:
+                                    best_match = cand
+                                    break
+                            if best_match:
+                                matched_pairs[idx] = best_match
+                                matched_db_ids.add(best_match.id)
+
+                    # 3. 正常启动增量更新模式：同步配置且新增，不删除自定义模型
+                    max_sort = max((m.sort_order or 0 for m in plat.models), default=-1)
+
+                    for idx, y_m in enumerate(yaml_models_to_match):
+                        display_name = y_m["display_name"]
+                        model_name = y_m["model_name"]
+                        extra_body_json = y_m["extra_body_json"]
+                        temperature = y_m["temperature"]
+                        max_context_tokens = y_m["max_context_tokens"]
+                        max_output_tokens = y_m["max_output_tokens"]
+
+                        if idx in matched_pairs:
+                            model_to_update = matched_pairs[idx]
                             if model_to_update.display_name != display_name:
                                 print(f"[增量同步] 平台 {name} 模型显示名称自动更新: {model_to_update.display_name} -> {display_name}")
                                 model_to_update.display_name = display_name
-                            
-                            # 同步上下文上限、单次输出上限、额外请求体等物理参数
                             if model_to_update.extra_body != extra_body_json:
                                 model_to_update.extra_body = extra_body_json
                             if model_to_update.temperature != temperature:
@@ -578,7 +761,6 @@ class AIManagerBase:
                             if model_to_update.max_output_tokens != max_output_tokens:
                                 model_to_update.max_output_tokens = max_output_tokens
                         else:
-                            # 新模型：添加
                             max_sort += 1
                             new_model = LLModels(
                                 platform_id=plat.id,
@@ -588,7 +770,7 @@ class AIManagerBase:
                                 temperature=temperature,
                                 max_context_tokens=max_context_tokens,
                                 max_output_tokens=max_output_tokens,
-                                is_embedding=is_embedding,
+                                is_embedding=y_m["is_embedding"],
                                 sort_order=max_sort,
                             )
                             session.add(new_model)
