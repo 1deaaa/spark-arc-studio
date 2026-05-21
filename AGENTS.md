@@ -113,7 +113,7 @@ SparkArc 现有架构已经有清晰收口层。新增功能必须先判断是�
 
  禁止：
 
- - 在单个 Agent 内部私自定义一套独立工具调用协议。
+ - 在单个 Agent 内部私定义一套独立工具调用协议。
  - 在路由层直接执行“伪工具逻辑”绕过工具门面。
  - 在 `server/agents/tools/registry.py` 之外再造第二套工具注册表、Agent→工具映射或平行工具管线。
  - 工具层直接反向依赖 `server/agents/routes/*` 私有实现；若需要复用能力，应先下沉到 `agent_factory.py` / `project_content.py` / `auto_write_service.py` 这类公共层。
@@ -212,7 +212,7 @@ YAML 顶层 `base` 字段用于提取多模态共享的提示词片段（如身�
 **贡献者常见错误**：
 
 - ❌ 在 `system` 和 `pipeline_system` 里重复书写同一段身份声明或核心要求，造成双份维护漂移。
-- ❌ 在 `base` 的值中使用需要运行时数据的占位符（如 `{worldview}`）——`base` 是静态共享片段，不应依赖请求上下文。
+- ❌ 在 `base` 的值中使用需要运行时数据（如 `{worldview}`）的占位符——`base` 是静态共享片段，不应依赖请求上下文。
 
 ### 4.5.3 工具补充规则：`tool_rules` 字段
 
@@ -246,7 +246,7 @@ YAML 顶层 `tool_rules` 字段用于存放 Agent 在聊天/委派模式下的�
 新增 Agent 时，以下所有项必须同时满足：
 
  1. `server/agents/prompts/<agent>.yaml` 同时定义 `system`、`chat_system`、`pipeline_system` 三个顶层字段。
- 2. 若该 Agent 有落盘工具：必须在 Agent 子类重写 `_get_tool_prompt_references()`，把 yaml `system`（或对应子 prompt `system`）绑定到落盘工具；对应 Agent 的 `pipeline_system` 保持极简三件套（受众 / 调工具 / 简报）。
+ 2. 若该 Agent 有落盘工具：必须在 Agent 子类重写 `_get_tool_prompt_references()`，把 yaml `system`（或对应子 prompt `system`）绑定 to 落盘工具；对应 Agent 的 `pipeline_system` 保持极简三件套（受众 / 调工具 / 简报）。
  3. 若该 Agent 没有落盘工具（产出直接给导演，如 critic）：必须在 `pipeline_system` 里直接内嵌产出规范的关键摘要（字段清单、等级标准等），不得引用式指向 `system`。
  4. 多模态共享的提示词片段（身份声明、核心要求等）必须提取到 YAML 顶层 `base` 字段，各模态通过 `{base.xxx}` 占位符引用，禁止在 `system` / `chat_system` / `pipeline_system` 之间重复书写。
  5. 若该 Agent 有工具使用补充规则（调用顺序、输出纯度、反注入等），必须写入 YAML 顶层 `tool_rules` 字段，由基类 `_build_tool_system_prompt` 自动加载；禁止在 Python 侧重写 `_build_tool_system_prompt` 追加硬编码规则。
@@ -353,19 +353,24 @@ YAML 顶层 `tool_rules` 字段用于存放 Agent 在聊天/委派模式下的�
 3. 统一发送 onXxx 语义帧与 cancelled/error 终态。
 4. 前端通过 createStreamingTask + consumeSSEReader 接入。
 
-## 9. 反模式清单（禁止堆屎山）
+## 9. 反模式清单（禁止堆屎山与技术债）
 
-以下行为默认视为架构违规：
+为了确保代码的卓越质量，以下行为默认视为架构违规。贡献者在开发前必须熟读并严格避免：
 
-1. 在多个路由复制同一段流式桥接逻辑，不抽到 streaming_utils。
-2. 在组件里手写全局遮罩协议，不走 createStreamingTask。
-3. 在多个地方重复维护工具到 UI 的映射，且不同步后端 binding。
-4. 在聊天与业务流之间混用事件协议，导致消费器耦合。
-5. 在 Agent 内直接写文件路径与 IO 细节，绕过 write_result 统一出口。
-6. 为赶进度创建“临时入口”而不接入 registry/director_graph/tools 门面。
-7. 修改数据模型后不走迁移生成流程。
-8. 把测试运行过程中生成的缓存、索引、向量库、图谱、中间文件、导出结果直接写入被 Git 跟踪的测试目录（如 `server/test/`、`client/**/__tests__/` 或人工维护的 fixture / baseline 目录），导致版本库被运行产物污染。
-9. 在实现测试、调试脚本或一次性验证脚本时，默认复用现有测试目录作为输出目录，而不先确认该目录是否受 Git 跟踪、是否仅用于手工维护样例。
+1. 在多个路由复制同一段流式桥接逻辑，不抽到 streaming_utils。正确方式：统一在 `server/agents/routes/streaming_utils.py` 中使用 `iterate_sync_iterable_in_thread` 桥接同步生成器。
+2. 在组件里手写全局遮罩协议，不走 createStreamingTask。正确方式：前端长耗时任务必须通过 `client/src/utils/streamingRuntime.ts` 中的 `createStreamingTask` 统一托管。
+3. 在多个地方重复维护工具到 UI 的映射，且不同步后端 binding。正确方式：工具 UI 联动事件必须在后端由 `communication.py` 的 `build_tool_stream_event` 注入元数据，前端 `chatStore` 统一读取。
+4. 在聊天与业务流之间混用事件协议，导致消费器耦合。正确方式：聊天流和独立业务流的协议边界隔离，聊天侧统一用 `chatStore` 消费 NDJSON，业务侧由 `streamingRuntime` 的 SSE 读取器消费语义帧。
+5. 在 Agent 内直接写文件路径与 IO 细节，绕过 write_result 统一出口。正确方式：Agent 执行协议必须完整实现 `build_context` -> `execute` -> `write_result` 并统一进行文件落盘。
+6. 为赶进度创建“临时入口”而不接入 registry/director_graph/tools 门面。正确方式：新增 Agent/流程/工具后，必须同步在 `registry.py` 等四大收口点完成注册并走门面导出。
+7. 修改数据模型后不走迁移生成流程。正确方式：修改模型定义后必须通过 `python server/gen_migration.py` 自动派生 Alembic 迁移脚本，由系统启动生命周期自动执行升级。
+8. 把测试运行过程中生成的缓存、索引、向量库、图谱、中间文件、导出结果直接写入被 Git 跟踪的测试目录（如 `server/test/`、`client/**/__tests__/` 或人工维护的 fixture / baseline 目录），导致版本库被运行产物污染。正确方式：测试或调试产生的中间临时产物必须强制写入根目录下的 `/.tmp/`，禁止污染 Git 库。
+9. 在实现测试、调试脚本或一次性验证脚本时，默认复用现有测试目录作为输出目录，而不先确认该目录是否受 Git 跟踪、是否仅用于手工维护样例。正确方式：一次性脚本的输出应定向到项目根目录下的 `/.tmp/`，或写入被 `.gitignore` 覆盖的物理位置。
+10. 自行编写正则表达式或 `.replace()` 方式进行文本的定位和局部替换。正确方式：凡涉及在已有文本中定位并替换的逻辑，必须复用 `server/agents/tools/common.py` 的 `_apply_patch` 统一底层。
+11. 在业务层自写字符或段落 `split()` 等简陋方法来切分长文本。正确方式：涉及分块的逻辑，必须复用 `TokenTextSplitter`（按 Token 切分）或 `SemanticChunker`（语义分块）基建底座。
+
+以上内容不代表全部，实际工程中还有许多类似逻辑，请灵活运用
+---
 
 ## 10. 最小回归测试清单
 
@@ -404,6 +409,8 @@ YAML 顶层 `tool_rules` 字段用于存放 Agent 在聊天/委派模式下的�
   npm run test -- src/components/share/__tests__/GlobalLoading.spec.ts src/components/share/__tests__/ChatMessageList.spec.ts
   ```
 
+---
+
 ## 11. 提交前自检
 
 提交前请逐项确认：
@@ -412,7 +419,10 @@ YAML 顶层 `tool_rules` 字段用于存放 Agent 在聊天/委派模式下的�
 2. 是否避免了页面层/路由层重复状态机。
 3. 后端与前端的工具 UI 映射是否双端一致。
 4. 数据变更是否遵守迁移流程。
-5. 是否补齐了对应链路测试。
-6. 新增测试、调试脚本或一次性验证逻辑时，是否避免把运行产物写入被 Git 跟踪的测试目录，并已将临时输出落到 `.gitignore` 覆盖的位置。
+5. 是否补齐了对应回归测试并确保通过。
+6. 新增测试、调试脚本或一次性验证逻辑时，是否避免把运行产物写入被 Git 跟踪的测试目录，并已将临时输出落到 `.gitignore` 覆盖的位置（如写入项目根 `/.tmp/`）。
+7. 新增的长耗时物理任务是否显式配备了并发写锁保护，且前端消费重连流时是否遵循了 clientId 校验规约。
+8. 公共服务或工具类是否完全独立，无任何指向路由层的反向依赖。
 
 如果以上任一项答案为“否”，先修正架构再提交。
+【FORBIDDEN】未经用户明确授权的情况下，AI助手严禁执行任何git的提交、推送或者其他可能修改历史的行为！
