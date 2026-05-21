@@ -1129,7 +1129,7 @@ export const useChatStore = defineStore('chat', {
       const session = this.sessions[sessionId];
       if (!session) return;
 
-      const { silent = false, preserveLocalTail = null } = options || {};
+      const { silent = false, preserveLocalTail = null, authoritative = false } = options || {};
       const agentIdAtStart = session.agentId;
       const contextKeyAtStart = session.contextKey;
       const requestSeq = (session.historyRequestSeq || 0) + 1;
@@ -1149,7 +1149,9 @@ export const useChatStore = defineStore('chat', {
           return;
         }
         // 历史刷新、后台恢复与本地 optimistic 消息统一走同一套 reconciliation 规则。
-        session.history = reconcileSessionHistory(rawHistory || [], preserveLocalTail, session.history);
+        const fallbackAssistant = authoritative ? null : preserveLocalTail;
+        const localHistory = authoritative ? [] : session.history;
+        session.history = reconcileSessionHistory(rawHistory || [], fallbackAssistant, localHistory);
         session.contextTokenCount = _latestHistoryLlmUsageTotal(session.history);
         // 历史中存在附件且 session.attachments 为空时，恢复完整列表（多附件场景下也能正确还原）。
         if ((session.attachments?.length || 0) === 0) {
@@ -1351,7 +1353,7 @@ export const useChatStore = defineStore('chat', {
         if (status.status === 'error') {
           session.lastError = String(status.error || _defaultBackgroundTaskError());
         }
-        await this.refreshSessionHistory(session.id, 80, { silent: true });
+        await this.refreshSessionHistory(session.id, 80, { silent: true, authoritative: true });
         return true;
       }
 
@@ -1374,7 +1376,7 @@ export const useChatStore = defineStore('chat', {
           for (const session of Object.values(this.sessions) as ChatSession[]) {
             if (session.backgroundTaskStatus === 'running') {
               session.backgroundTaskStatus = null;
-              await this.refreshSessionHistory(session.id, 80, { silent: true });
+              await this.refreshSessionHistory(session.id, 80, { silent: true, authoritative: true });
             }
           }
           return false;
@@ -1412,7 +1414,7 @@ export const useChatStore = defineStore('chat', {
             if (status === 'error') {
               session.lastError = String(task.error || _defaultBackgroundTaskError());
             }
-            await this.refreshSessionHistory(session.id, 80, { silent: true });
+            await this.refreshSessionHistory(session.id, 80, { silent: true, authoritative: true });
           }
         }
         return hasRunning;
@@ -1456,9 +1458,9 @@ export const useChatStore = defineStore('chat', {
             session.backgroundTaskStatus = null;
             session.sending = false;
             if (status === 'error') {
-          session.lastError = String((result as AnyRecord).error || _defaultBackgroundTaskError());
+              session.lastError = String((result as AnyRecord).error || _defaultBackgroundTaskError());
             }
-            await this.refreshSessionHistory(sessionId, 80, { silent: true });
+            await this.refreshSessionHistory(sessionId, 80, { silent: true, authoritative: true });
           }
           return;
         }
@@ -1546,7 +1548,7 @@ export const useChatStore = defineStore('chat', {
             if (taskStatus.status === 'error') {
               session.lastError = String(taskStatus.error || _defaultBackgroundTaskError());
             }
-            await this.refreshSessionHistory(sessionId, 80, { silent: true });
+            await this.refreshSessionHistory(sessionId, 80, { silent: true, authoritative: true });
             return;
           }
         }
@@ -1576,7 +1578,7 @@ export const useChatStore = defineStore('chat', {
                 m => !(m.role === 'assistant' && m.clientId === partialClientId),
               );
             }
-            await this.refreshSessionHistory(sessionId, 80, { silent: true });
+            await this.refreshSessionHistory(sessionId, 80, { silent: true, authoritative: true });
           }
         }
       }
@@ -2442,6 +2444,7 @@ export const useChatStore = defineStore('chat', {
           return;
         }
         if (eventType === 'error') {
+          streamState.receivedTaskDone = true;
           const errMsg = pickEventText(evt, ['message', 'data', 'text']);
           session.lastError = errMsg;
           session.sending = false;

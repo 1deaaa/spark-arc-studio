@@ -712,6 +712,20 @@ describe('chatStore tool-first stream handling', () => {
     expect(store.sessions[0].lastError).toContain('重试3次后仍然失败');
   });
 
+  it('treats an error event as a terminal stream outcome', async () => {
+    mockedSendChatMessageStream.mockResolvedValueOnce(createNdjsonReader([
+      JSON.stringify({ event: 'error', message: '上游模型错误' }),
+    ]));
+
+    const store = useChatStore();
+    await store.sendSessionMessage(0, '触发上游错误');
+
+    expect(mockedGetChatTaskStatus).not.toHaveBeenCalled();
+    expect(store.sessions[0].sending).toBe(false);
+    expect(store.sessions[0].backgroundTaskStatus).toBeNull();
+    expect(store.sessions[0].lastError).toContain('上游模型错误');
+  });
+
   it('hydrates a reconnect snapshot as the current assistant state', async () => {
     mockedSendChatMessageStream.mockResolvedValueOnce(createNdjsonReader([
       JSON.stringify({
@@ -809,5 +823,36 @@ describe('chatStore tool-first stream handling', () => {
     expect(hasRunning).toBe(false);
     const museSession = Object.values(store.sessions).find(session => session.agentId === 'agent_muse');
     expect(museSession?.history[0].content).toContain('后台刚完成的回复');
+  });
+
+  it('uses authoritative server history for completed background tasks', async () => {
+    mockedGetChatRecentTasks.mockResolvedValueOnce({
+      count: 1,
+      tasks: [{ hasTask: true, status: 'completed', agentId: 'agent_muse', contextKey: 'global', resultMessageId: 202 }],
+    });
+    mockedGetChatHistory.mockResolvedValueOnce([
+      { id: 201, role: 'user', content: '请继续', timestamp: 11, metadata: {} },
+      { id: 202, role: 'assistant', content: '后台最终回复', timestamp: 12, metadata: {} },
+    ]);
+
+    const store = useChatStore();
+    store.primaryAgentId = 'agent_muse';
+    store.primaryContextKey = 'global';
+    store.sessions[0].agentId = 'agent_muse';
+    store.sessions[0].contextKey = 'global';
+    store.sessions[0].backgroundTaskStatus = 'running';
+    store.sessions[0].history = [
+      { clientId: 'local-user-1', role: 'user', content: '请继续', timestamp: 1 },
+      { clientId: 'local-user-2', role: 'user', content: '请继续', timestamp: 2 },
+      { clientId: 'local-assistant-1', role: 'assistant', content: '半截回复', timestamp: 3 },
+    ];
+
+    const hasRunning = await store.checkBackgroundTasks();
+
+    expect(hasRunning).toBe(false);
+    expect(store.sessions[0].history).toHaveLength(2);
+    expect(store.sessions[0].history.map(item => item.id)).toEqual([201, 202]);
+    expect(store.sessions[0].history.some(item => String(item.clientId || '').startsWith('local-'))).toBe(false);
+    expect(store.sessions[0].history[1].content).toBe('后台最终回复');
   });
 });

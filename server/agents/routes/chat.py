@@ -118,6 +118,41 @@ def _serialize_stream_event(delta) -> str:
     return json.dumps(event, ensure_ascii=False) + "\n"
 
 
+def _coerce_stream_error_text(value: Any) -> str:
+    if value is None:
+        return ''
+    if isinstance(value, str):
+        return value.strip()
+    if isinstance(value, dict):
+        for key in ('message', 'error', 'data', 'text'):
+            text = _coerce_stream_error_text(value.get(key))
+            if text:
+                return text
+        try:
+            return json.dumps(value, ensure_ascii=False)
+        except Exception:
+            return str(value).strip()
+    if isinstance(value, (list, tuple)):
+        parts = [_coerce_stream_error_text(item) for item in value]
+        return ''.join(part for part in parts if part).strip()
+    return str(value).strip()
+
+
+def _mark_chat_task_error(
+    cm: ChatManager,
+    entry: ChatTaskEntry,
+    task_key: str,
+    error_payload: Any,
+    *,
+    retry_count: int = 0,
+) -> str:
+    error_message = _coerce_stream_error_text(error_payload) or '聊天生成失败'
+    entry.error_message = error_message
+    update_task_status(task_key, 'error', error_message=error_message, retry_count=retry_count)
+    _checkpoint_chat_task(cm, entry, force=True, stream_status='error')
+    return error_message
+
+
 _NDJSON_MEDIA_TYPE = 'application/x-ndjson; charset=utf-8'
 
 # 旁路标记前缀：用于从工具返回文本中提取导演触发 Auto-Write 的结构化元数据
@@ -623,6 +658,9 @@ async def edit_chat_message_stream(request: Request, data: ChatMessageEditReques
                         continue
                     event = entry.append_event(delta)
                     event_type = event.get("event")
+                    if event_type == "error":
+                        final_error_message = _mark_chat_task_error(cm, entry, task_key, event)
+                        break
                     _checkpoint_chat_task(
                         cm,
                         entry,
@@ -631,16 +669,17 @@ async def edit_chat_message_stream(request: Request, data: ChatMessageEditReques
                     )
                 if stop_event.is_set():
                     terminated_early = True
+                if final_error_message:
+                    entry.error_message = final_error_message
 
             except Exception as e:
                 if stop_event.is_set():
                     terminated_early = True
                 else:
                     from .schemas import format_ai_error
-                    err = f"\n{format_ai_error(e)}"
-                    final_error_message = err
-                    entry.error_message = err
+                    err = format_ai_error(e)
                     entry.append_event({"event": "error", "message": err})
+                    final_error_message = _mark_chat_task_error(cm, entry, task_key, err)
             finally:
                 try:
                     if terminated_early:
@@ -872,6 +911,15 @@ async def send_chat_message_stream(request: Request, data: ChatSendRequest, user
                                 continue
                             event = entry.append_event(delta)
                             event_type = event.get("event")
+                            if event_type == "error":
+                                final_error_message = _mark_chat_task_error(
+                                    cm,
+                                    entry,
+                                    task_key,
+                                    event,
+                                    retry_count=retry_count,
+                                )
+                                break
                             _checkpoint_chat_task(
                                 cm,
                                 entry,
@@ -881,6 +929,8 @@ async def send_chat_message_stream(request: Request, data: ChatSendRequest, user
 
                         if stop_event.is_set():
                             terminated_early = True
+                            break
+                        if final_error_message:
                             break
 
                         # chat_stream 正常结束，跳出重试循环
@@ -909,11 +959,14 @@ async def send_chat_message_stream(request: Request, data: ChatSendRequest, user
                                 break
                         else:
                             # 3 次均失败，报具体错误
-                            err = f"\n{last_error_summary}"
-                            final_error_message = err
-                            entry.error_message = err
-                            entry.append_event({"event": "error", "message": err})
-                            update_task_status(task_key, 'error', error_message=err, retry_count=attempt)
+                            entry.append_event({"event": "error", "message": last_error_summary})
+                            final_error_message = _mark_chat_task_error(
+                                cm,
+                                entry,
+                                task_key,
+                                last_error_summary,
+                                retry_count=attempt,
+                            )
             finally:
                 try:
                     if terminated_early:
