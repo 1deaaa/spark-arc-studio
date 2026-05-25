@@ -415,22 +415,16 @@ class GraphRAGService:
                     aliases.append(item)
 
             # 从角色档案头部抽取显式声明的别名
-            detail_paths = [
-                os.path.join(chr_dir, f"{cid}.md"),
-                os.path.join(chr_dir, f"{cid}.txt"),
-            ]
-            for detail_path in detail_paths:
-                if not os.path.exists(detail_path):
-                    continue
+            detail_path = os.path.join(chr_dir, f"{cid}.txt")
+            if os.path.exists(detail_path):
                 try:
                     with open(detail_path, "r", encoding="utf-8", errors="ignore") as f:
                         detail_text = f.read()
                     for alias in self._extract_aliases_from_text(detail_text):
                         if alias not in aliases:
                             aliases.append(alias)
-                    break
                 except Exception:
-                    continue
+                    pass
 
             for alias in aliases:
                 key = self._normalize_entity_name(alias)

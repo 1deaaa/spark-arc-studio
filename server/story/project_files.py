@@ -51,7 +51,7 @@ def classify_file(rel_path: str, filename: str) -> Optional[str]:
     if len(parts) >= 2 and parts[0] == "chr":
         if filename == "chr.bind":
             return "chrbind"
-        if filename.endswith((".txt", ".md")):
+        if filename.endswith(".txt"):
             return "character"
         return None
 
@@ -277,7 +277,7 @@ def collect_project_files(
 
     扫描范围：
       项目根/世界观.txt, 梗概.txt, 节拍表.txt, 大纲.txt
-      chr/chr.bind, chr/*.txt, chr/*.md
+      chr/chr.bind, chr/*.txt
       stories/**/*.arc, stories/**/*.md
 
     内容增强：
@@ -307,7 +307,7 @@ def collect_project_files(
         if os.path.isfile(chr_bind):
             candidate_files.append(chr_bind)
         for name in sorted(os.listdir(chr_dir)):
-            if name.endswith((".txt", ".md")) and name != "chr.bind":
+            if name.endswith(".txt") and name != "chr.bind":
                 candidate_files.append(os.path.join(chr_dir, name))
 
     # stories/ 目录

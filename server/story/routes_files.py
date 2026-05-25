@@ -346,6 +346,39 @@ async def delete_file_or_folder(data: FileOperation, user: dict = Depends(get_cu
         return JSONResponse(status_code=500, content={"success": False, "message": f"删除失败: {exc}"})
 
 
+def _extract_chapter_number(dir_rel_path: str, stories_path: str) -> Optional[int]:
+    import re
+    cleaned_dir = str(dir_rel_path).replace('\\', '/').strip('/')
+    if not cleaned_dir:
+        return None
+    
+    # 1. 尝试从最内层文件夹名中直接匹配首个连续数字
+    folder_name = os.path.basename(cleaned_dir)
+    match = re.search(r'(\d+)', folder_name)
+    if match:
+        return int(match.group(1))
+        
+    # 2. 兜底：扫描同级所有文件夹，找到自己在其中的排序索引 + 1
+    parent_dir = os.path.dirname(cleaned_dir)
+    parent_abs_path = os.path.join(stories_path, parent_dir)
+    if not os.path.exists(parent_abs_path) or not os.path.isdir(parent_abs_path):
+        return None
+        
+    try:
+        subdirs = []
+        for item in os.listdir(parent_abs_path):
+            if item.startswith('.'):
+                continue
+            if os.path.isdir(os.path.join(parent_abs_path, item)):
+                subdirs.append(item)
+        subdirs.sort() # 按默认排序
+        if folder_name in subdirs:
+            return subdirs.index(folder_name) + 1
+    except Exception:
+        pass
+    return None
+
+
 @files_router.post('/api/file-operations/move')
 async def move_file_or_folder(data: FileOperation, user: dict = Depends(get_current_user)):
     """移动或移动重命名文件/文件夹"""
@@ -372,10 +405,18 @@ async def move_file_or_folder(data: FileOperation, user: dict = Depends(get_curr
         if resolved_source_path and parsed:
             target_dir_rel = os.path.dirname(str(target).replace('\\', '/').strip('/'))
             target_display_name = sanitize_story_display_name(os.path.splitext(os.path.basename(target))[0])
+            
+            # 动态计算并纠正移动后的目标章节号
+            target_chapter_num = _extract_chapter_number(target_dir_rel, stories_path)
+            
             final_target_path = os.path.join(
                 stories_path,
                 target_dir_rel,
-                rebuild_story_filename(os.path.basename(resolved_source_path), display_name=target_display_name),
+                rebuild_story_filename(
+                    os.path.basename(resolved_source_path),
+                    display_name=target_display_name,
+                    chapter_num=target_chapter_num
+                ),
             )
             os.makedirs(os.path.dirname(final_target_path), exist_ok=True)
             shutil.move(resolved_source_path, final_target_path)

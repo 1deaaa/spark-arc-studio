@@ -11,6 +11,7 @@ from core.utils import (
     ensure_project_stories_directory,
 )
 from .file_naming import parse_story_filename, story_sort_key
+from .project_files import _coerce_character_name
 from .scene_loader import load_story_file
 
 
@@ -119,9 +120,12 @@ def import_project_stories_to_db(user_id: str, project_name: str, *, reset: bool
         # 1. 兼容旧表 BindChr
         try:
             session.execute(delete(BindChr))
-            for chr_id_str, chr_name in chr_bindings.items():
+            for chr_id_str, raw_value in chr_bindings.items():
                 try:
                     chr_id_int = int(chr_id_str)
+                    chr_name = _coerce_character_name(raw_value)
+                    if not chr_name:
+                        continue
                     session.add(BindChr(chr_id=chr_id_int, chr_name=chr_name))
                 except (ValueError, TypeError):
                     continue
@@ -138,8 +142,9 @@ def import_project_stories_to_db(user_id: str, project_name: str, *, reset: bool
             all_ids = seen_char_ids.union(bound_ids)
             
             for cid in all_ids:
-                # 优先使用绑定文件中的名字
-                name = chr_bindings.get(str(cid))
+                # 优先使用绑定文件中的名字（兼容 dict 与 string 两种格式）
+                raw = chr_bindings.get(str(cid))
+                name = _coerce_character_name(raw) if raw else None
                 if not name:
                     if cid == -1:
                         name = "旁白"

@@ -260,8 +260,10 @@ async def generate_script_stream(
             current_scene_title = scene_title
             
             # Prepare file path for this specific scene
+            from agents.tools.scriptwriter import _ensure_chapter_dir
+            chapter_dir = _ensure_chapter_dir(stories_path, chapter_title)
             filename = build_scene_output_filename(chapter_num, chapter_title, scene_idx, scene_title, export_format)
-            filepath = os.path.join(stories_path, filename)
+            filepath = os.path.join(chapter_dir, filename)
             display_filename = strip_story_filename_meta(filename)
             
             scene_arc_content = []

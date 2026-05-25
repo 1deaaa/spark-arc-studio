@@ -168,6 +168,8 @@ class WorldviewAgent(SparkBaseAgent, SparkAgentExecutor):
             f.write(content or "")
 
     def _snapshot_characters(self, user_id: str, project_name: str):
+        from story.project_files import _coerce_character_name
+
         characters_path = ensure_project_characters_directory(user_id, project_name)
         bind_path = os.path.join(characters_path, "chr.bind")
 
@@ -180,8 +182,9 @@ class WorldviewAgent(SparkBaseAgent, SparkAgentExecutor):
                 mapping = {}
 
         lines = []
-        for cid, name in mapping.items():
+        for cid, raw_value in mapping.items():
             try:
+                name = _coerce_character_name(raw_value)
                 char_file = os.path.join(characters_path, f"{cid}.txt")
                 content = ""
                 if os.path.exists(char_file):
@@ -196,7 +199,8 @@ class WorldviewAgent(SparkBaseAgent, SparkAgentExecutor):
             except Exception:
                 continue
 
-        narrator_name = mapping.get("-1") if "-1" in mapping else None
+        narrator_raw = mapping.get("-1") if "-1" in mapping else None
+        narrator_name = _coerce_character_name(narrator_raw) if narrator_raw else None
         existing_block = "\n".join(lines) if lines else ""
         return characters_path, bind_path, mapping, existing_block, narrator_name
 

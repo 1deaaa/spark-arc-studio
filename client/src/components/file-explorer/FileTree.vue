@@ -19,14 +19,14 @@
       <div class="file-tree-empty__icon">
         <n-icon :component="Book" :size="36" />
       </div>
-      <div class="file-tree-empty__title">暂无作品</div>
-      <div class="file-tree-empty__hint">右键空白区域或使用下方按钮新建作品或章节</div>
+      <div class="file-tree-empty__title">{{ $t('components.fileExplorer.emptyTitle') }}</div>
+      <div class="file-tree-empty__hint">{{ $t('components.fileExplorer.emptyHint') }}</div>
       <div class="file-tree-empty__actions">
         <button class="file-tree-empty__btn" type="button" @click.stop="fileStore.createFile('story')">
-          <n-icon :component="Plus" :size="13" style="margin-right:4px;" />新建作品
+          <n-icon :component="Plus" :size="13" style="margin-right:4px;" />{{ $t('components.fileExplorer.newScene') }}
         </button>
         <button class="file-tree-empty__btn file-tree-empty__btn--ghost" type="button" @click.stop="fileStore.createFile('folder')">
-          <n-icon :component="SquarePen" :size="13" style="margin-right:4px;" />新建章节
+          <n-icon :component="SquarePen" :size="13" style="margin-right:4px;" />{{ $t('components.fileExplorer.newChapter') }}
         </button>
       </div>
     </div>
@@ -50,6 +50,7 @@ import { computed, reactive, onMounted, onBeforeUnmount, h, type Component } fro
 import { NDropdown, NIcon } from 'naive-ui';
 import draggable from 'vuedraggable';
 import { Book, Plus, SquarePen } from 'lucide-vue-next';
+import { useI18n } from 'vue-i18n';
 import FileItem from './FileItem.vue';
 import { useFileStore } from '@/components/stores/fileStore';
 import { useProjectStore } from '@/components/stores/projectStore';
@@ -57,6 +58,7 @@ import { useSceneStore } from '@/components/stores/sceneStore';
 import { saveStoriesOrder, moveFileOrFolder } from '@/services/api';
 import bus from '@/eventBus';
 
+const { t } = useI18n();
 const fileStore = useFileStore();
 const projectStore = useProjectStore();
 const sceneStore = useSceneStore();
@@ -72,18 +74,18 @@ const blankMenu = reactive({ visible: false, x: 0, y: 0 });
 const _menuIcon = (comp: Component) => () => h(NIcon, { component: comp, size: 14 });
 
 // Naive UI 下拉菜单选项
-const blankMenuOptions = [
+const blankMenuOptions = computed(() => [
   {
-    label: '新建作品',
+    label: t('components.fileExplorer.newScene'),
     key: 'new-story',
     icon: _menuIcon(Plus)
   },
   {
-    label: '新建章节',
+    label: t('components.fileExplorer.newChapter'),
     key: 'new-folder',
     icon: _menuIcon(SquarePen)
   }
-];
+]);
 
 function onBlankContextMenu(e) {
   // 仅在点击容器空白区域且未命中文件项时显示
@@ -187,7 +189,7 @@ async function onRootChange(evt) {
     await fileStore.loadFileTree(projectStore.currentProject);
   } catch (e: unknown) {
     const errorMessage = e instanceof Error ? e.message : String(e || '未知错误');
-    bus.emit('toast', { type: 'error', message: `操作失败: ${errorMessage}` });
+    bus.emit('toast', { type: 'error', message: t('components.fileExplorer.operationFailed', { error: errorMessage }) });
     await fileStore.loadFileTree(projectStore.currentProject);
   }
 }
@@ -236,16 +238,24 @@ onBeforeUnmount(() => {
 }
 
 .file-tree-empty {
-  flex: 1;
-  min-height: 140px;
+  position: absolute;
+  top: 0;
+  left: 0;
+  right: 0;
+  bottom: 0;
   display: flex;
   flex-direction: column;
   align-items: center;
-  justify-content: center;
+  justify-content: flex-start;
   gap: 10px;
-  padding: 20px 14px;
+  padding: 48px 14px 20px 14px;
   text-align: center;
   color: var(--spark-text-muted, var(--n-text-color-disabled));
+  pointer-events: none;
+}
+
+.file-tree-empty > * {
+  pointer-events: auto;
 }
 
 .file-tree-empty__icon {

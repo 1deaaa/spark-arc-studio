@@ -103,13 +103,43 @@ export const useFileStore = defineStore('file', {
         const requestId = ++fileTreeRequestSeq;
         const selectedPath = this.selectedFile?.path || null;
         this.activeFormatFilter = normalizedFormat;
+
+        // 1. 同步加载本地 localStorage 缓存，实现瞬间“秒开”
+        const cacheKey = `filetree-cache:${projectName}:${normalizedFormat}`;
+        try {
+          const cached = localStorage.getItem(cacheKey);
+          if (cached) {
+            const cachedFiles = JSON.parse(cached);
+            if (Array.isArray(cachedFiles)) {
+              this.fileTree = cachedFiles;
+              if (selectedPath) {
+                this.selectedFile = findByPath(cachedFiles, selectedPath);
+              }
+            }
+          }
+        } catch (cacheError) {
+          console.warn('[fileStore] 加载或解析本地文件树缓存失败:', cacheError);
+        }
+
+        // 2. 异步静默拉取后端最新数据
         const files = await fetchFileTree(projectName, normalizedFormat);
         if (requestId !== fileTreeRequestSeq) {
           return;
         }
-        this.fileTree = files;
-        if (selectedPath) {
-          this.selectedFile = findByPath(files, selectedPath);
+
+        // 3. 对比差异 (SWR 策略)：仅在确实有变动时更新 State 并重新写入缓存，避免 DOM 震荡
+        const newFilesStr = JSON.stringify(files);
+        const oldFilesStr = JSON.stringify(this.fileTree);
+        if (newFilesStr !== oldFilesStr) {
+          this.fileTree = files;
+          if (selectedPath) {
+            this.selectedFile = findByPath(files, selectedPath);
+          }
+          try {
+            localStorage.setItem(cacheKey, newFilesStr);
+          } catch (storageError) {
+            console.warn('[fileStore] 保存本地文件树缓存失败:', storageError);
+          }
         }
       } catch (error: unknown) {
         console.error('加载文件树失败:', error);

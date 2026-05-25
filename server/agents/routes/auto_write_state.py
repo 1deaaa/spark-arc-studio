@@ -200,10 +200,12 @@ def build_auto_write_chapter_plan(
         # 判断是否存在该章任意一个场景文件
         scenes = chapter.get("children", [])
         any_exists = False
+        from agents.tools.scriptwriter import _ensure_chapter_dir
+        chapter_dir = _ensure_chapter_dir(stories_path, chapter_title)
         for s_idx, scene in enumerate(scenes):
             scene_title = scene.get("title", f"Scene {s_idx + 1}")
             fn = build_scene_output_filename(chapter_num, chapter_title, s_idx, scene_title, export_format)
-            if os.path.exists(os.path.join(stories_path, fn)):
+            if os.path.exists(os.path.join(chapter_dir, fn)):
                 any_exists = True
                 break
         plan.append(
@@ -248,8 +250,10 @@ def build_auto_write_scene_plan(
         scenes = chapter.get("children", [])
         for s_idx, scene in enumerate(scenes):
             scene_title = scene.get("title", f"Scene {s_idx + 1}")
+            from agents.tools.scriptwriter import _ensure_chapter_dir
+            chapter_dir = _ensure_chapter_dir(stories_path, chapter_title)
             filename = build_scene_output_filename(chapter_num, chapter_title, s_idx, scene_title, export_format)
-            file_path = os.path.join(stories_path, filename)
+            file_path = os.path.join(chapter_dir, filename)
             plan.append(
                 {
                     "chapterIndex": ch_idx,

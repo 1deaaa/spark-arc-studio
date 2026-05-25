@@ -2,7 +2,6 @@
 Characters API - 角色设定（统一接口）
 
 统一使用 /api/characters 端点，支持 includeContent 参数按需加载内容。
-兼容读取历史 .txt 文件，写入统一使用 .md 格式。
 """
 
 from fastapi import APIRouter, Depends, Query
@@ -26,60 +25,35 @@ characters_router = APIRouter()
 # ==================== 辅助函数 ====================
 
 def _read_character_content(chr_dir: str, char_id: str) -> str:
-    """
-    兼容读取角色内容：优先 .md，降级 .txt
-    读取 .txt 时自动解析 "名字\\n\\n内容" 格式
-    """
-    md_file = os.path.join(chr_dir, f'{char_id}.md')
+    """读取角色设定内容（.txt 格式：名字\n\n内容）"""
     txt_file = os.path.join(chr_dir, f'{char_id}.txt')
-    
-    if os.path.exists(md_file):
-        with open(md_file, 'r', encoding='utf-8') as f:
-            return f.read()
-    
-    if os.path.exists(txt_file):
-        with open(txt_file, 'r', encoding='utf-8') as f:
-            text = f.read()
-        # 旧格式: 名字\n\n内容
-        parts = text.split('\n', 2)
-        if len(parts) >= 3:
-            return parts[2]
-        elif len(parts) == 2:
-            return parts[1]
-        else:
-            return parts[0] if parts else ''
-    
-    return ''
+    if not os.path.exists(txt_file):
+        return ''
+    with open(txt_file, 'r', encoding='utf-8') as f:
+        text = f.read()
+    parts = text.split('\n', 2)
+    if len(parts) >= 3:
+        return parts[2]
+    elif len(parts) == 2:
+        return parts[1]
+    return parts[0] if parts else ''
 
 
 def _write_character_content(chr_dir: str, char_id: str, content: str):
-    """
-    统一写入角色内容到 .md 文件
-    如果存在旧的 .txt 文件，自动删除（完成迁移）
-    """
-    md_file = os.path.join(chr_dir, f'{char_id}.md')
+    """写入角色设定内容（.txt 格式）"""
     txt_file = os.path.join(chr_dir, f'{char_id}.txt')
-    
-    with open(md_file, 'w', encoding='utf-8') as f:
+    with open(txt_file, 'w', encoding='utf-8') as f:
         f.write(content)
-    
-    # 迁移：删除旧 .txt 文件
-    if os.path.exists(txt_file):
-        try:
-            os.remove(txt_file)
-        except Exception:
-            pass
 
 
 def _delete_character_files(chr_dir: str, char_id: str):
-    """删除角色的所有相关文件（.md 和 .txt）"""
-    for ext in ('.md', '.txt'):
-        file_path = os.path.join(chr_dir, f'{char_id}{ext}')
-        if os.path.exists(file_path):
-            try:
-                os.remove(file_path)
-            except Exception:
-                pass
+    """删除角色的设定文件"""
+    file_path = os.path.join(chr_dir, f'{char_id}.txt')
+    if os.path.exists(file_path):
+        try:
+            os.remove(file_path)
+        except Exception:
+            pass
 
 
 def _load_bind_file(bind_file: str) -> dict:
@@ -100,12 +74,11 @@ def _save_bind_file(bind_file: str, data: dict):
         json.dump(data, f, ensure_ascii=False, indent=2)
 
 
-def _normalize_bind_entry(entry) -> dict:
-    """将 bind 条目统一为 dict 格式 {name, desc}"""
+def _coerce_bind_name(entry) -> str:
+    """从 bind 条目提取角色名，兼容 dict 与 string 两种格式"""
     if isinstance(entry, dict):
-        return {'name': entry.get('name', ''), 'desc': entry.get('desc', '')}
-    else:
-        return {'name': str(entry), 'desc': ''}
+        return str(entry.get('name', '')).strip()
+    return str(entry or '').strip()
 
 
 # ==================== 统一接口 ====================
@@ -133,11 +106,10 @@ async def get_characters(
     
     characters = []
     for chr_id, info in chr_data.items():
-        entry = _normalize_bind_entry(info)
         char = {
             'id': int(chr_id),
-            'name': entry['name'],
-            'desc': entry['desc']
+            'name': _coerce_bind_name(info),
+            'desc': ''
         }
         
         if includeContent:
@@ -169,13 +141,13 @@ async def get_character_content(
     if chr_id not in chr_data:
         return JSONResponse(status_code=404, content={'error': '角色不存在'})
     
-    entry = _normalize_bind_entry(chr_data[chr_id])
+    name = _coerce_bind_name(chr_data[chr_id])
     content = _read_character_content(chr_dir, chr_id)
     
     return {
         'id': character_id,
-        'name': entry['name'],
-        'desc': entry['desc'],
+        'name': name,
+        'desc': '',
         'content': content
     }
 
@@ -201,12 +173,12 @@ async def create_character(
     new_id = max(existing_ids, default=-1) + 1
     
     name = data.name or '新角色'
-    chr_data[str(new_id)] = {'name': name, 'desc': ''}
+    chr_data[str(new_id)] = name
     
     _save_bind_file(bind_file, chr_data)
     
-    # 创建角色设定文件（.md）
-    _write_character_content(chr_dir, str(new_id), f'# {name}\n\n在这里描述你的角色...')
+    # 创建角色设定文件（.txt）
+    _write_character_content(chr_dir, str(new_id), f'{name}\n\n在这里描述你的角色...')
     
     return {'success': True, 'id': new_id, 'name': name}
 
@@ -249,9 +221,7 @@ async def rename_character(
     if chr_id not in chr_data:
         return JSONResponse(status_code=404, content={'error': '角色不存在'})
     
-    entry = _normalize_bind_entry(chr_data[chr_id])
-    entry['name'] = data.newName
-    chr_data[chr_id] = entry
+    chr_data[chr_id] = data.newName
     
     _save_bind_file(bind_file, chr_data)
     
@@ -280,7 +250,7 @@ async def delete_character(
         del chr_data[chr_id]
         _save_bind_file(bind_file, chr_data)
     
-    # 删除设定文件（.md 和 .txt）
+    # 删除设定文件
     _delete_character_files(chr_dir, chr_id)
     
     return {'success': True}

@@ -89,6 +89,18 @@ def update_character(character_name: str, overwrite_content: str) -> str:
     with open(char_file, "w", encoding="utf-8") as f:
         f.write(f"{character_name}\n\n{content}")
 
+    # 同步更新 chr.bind 中的角色名（使用 dict 格式）
+    bind_path = os.path.join(characters_path, "chr.bind")
+    if os.path.exists(bind_path):
+        try:
+            with open(bind_path, "r", encoding="utf-8") as f:
+                bind_data = json.load(f) or {}
+            bind_data[str(char_id)] = character_name
+            with open(bind_path, "w", encoding="utf-8") as f:
+                json.dump(bind_data, f, ensure_ascii=False, indent=2)
+        except Exception:
+            pass
+
     return f"已成功修改角色 '{character_name}' 的设定。"
 
 

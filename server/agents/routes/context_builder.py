@@ -35,6 +35,7 @@ from core.utils import (
     get_project_path,
     get_project_stories_path,
 )
+from story.project_files import _coerce_character_name
 
 
 # ─────────────────────────── 原子加载函数 ───────────────────────────
@@ -87,34 +88,22 @@ def load_character_bundle(user_id: str, project_name: str) -> Dict[str, Any]:
         except Exception:
             continue
 
-        if isinstance(raw_info, dict):
-            raw_name = raw_info.get("name", f"角色{cid}")
-            raw_desc = raw_info.get("desc", "")
-        else:
-            raw_name = str(raw_info)
-            raw_desc = ""
-
+        raw_name = _coerce_character_name(raw_info)
         display_name = "旁白" if cid == -1 else raw_name
         chr_map[cid] = display_name
 
         content = ""
-        candidate_paths = [
-            os.path.join(characters_path, f"{cid_str}.md"),
-            os.path.join(characters_path, f"{cid_str}.txt"),
-        ]
-        for detail_path in candidate_paths:
-            if not os.path.exists(detail_path):
-                continue
+        detail_path = os.path.join(characters_path, f"{cid_str}.txt")
+        if os.path.exists(detail_path):
             try:
                 with open(detail_path, "r", encoding="utf-8") as f:
                     text = f.read().strip()
                 if text:
                     content = text
-                    break
             except Exception:
                 continue
 
-        desc = raw_desc or (content.replace("\n", " ") if content else "")
+        desc = content.replace("\n", " ") if content else ""
         characters.append(
             {
                 "id": cid,

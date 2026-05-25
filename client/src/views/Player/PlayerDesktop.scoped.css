@@ -192,13 +192,51 @@
 }
 
 .intro-text {
-    margin-top: 16px;
-    font-style: italic;
-    font-size: 0.95em;
-    opacity: 0.8;
-    line-height: 1.7;
-    max-width: 480px;
-    white-space: pre-line;
+    margin: 24px auto 0;
+    padding: 20px 28px;
+    background: rgba(255, 255, 255, 0.02);
+    border: 1px solid rgba(255, 255, 255, 0.08);
+    border-radius: 12px;
+    backdrop-filter: blur(12px);
+    -webkit-backdrop-filter: blur(12px);
+    box-shadow: 0 12px 40px rgba(0, 0, 0, 0.3);
+    font-size: 1rem;
+    line-height: 1.8;
+    color: rgba(216, 220, 232, 0.9);
+    max-width: 640px;
+    text-align: left; /* 左对齐更契合大段叙事文本 */
+    white-space: pre-wrap;
+    max-height: 260px; /* 超过此高度时自动展示细腻滚动条 */
+    overflow-y: auto;
+    animation: introFadeIn 0.8s cubic-bezier(0.25, 1, 0.5, 1) both;
+}
+
+/* 美化卡片内部滚动条 */
+.intro-text::-webkit-scrollbar {
+    width: 5px;
+}
+.intro-text::-webkit-scrollbar-track {
+    background: rgba(255, 255, 255, 0.01);
+    border-radius: 3px;
+}
+.intro-text::-webkit-scrollbar-thumb {
+    background: rgba(255, 255, 255, 0.15);
+    border-radius: 3px;
+}
+.intro-text::-webkit-scrollbar-thumb:hover {
+    background: rgba(255, 255, 255, 0.3);
+}
+
+/* 优雅卡片渐显动画 */
+@keyframes introFadeIn {
+    from {
+        opacity: 0;
+        transform: translateY(12px);
+    }
+    to {
+        opacity: 1;
+        transform: translateY(0);
+    }
 }
 
 /* --- UI 层 --- */

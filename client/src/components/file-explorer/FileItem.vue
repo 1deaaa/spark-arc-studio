@@ -21,7 +21,7 @@
       </span>
       <span class="file-name">{{ item.name }}</span>
       <span v-if="item.type === 'story'" class="file-format-badge" :class="`format-${item.format || 'arc'}`">
-        {{ item.format === 'novel' ? '小说' : '剧本' }}
+        {{ item.format === 'novel' ? $t('components.fileExplorer.novel') : $t('components.fileExplorer.script') }}
       </span>
     </div>
     <div v-if="isFolderAndOpen" class="folder-children">
@@ -60,12 +60,15 @@ import { ref, computed, reactive, onMounted, onBeforeUnmount, watch, h, type Com
 import { NDropdown, NIcon } from 'naive-ui';
 import draggable from 'vuedraggable';
 import { BookOpen, ChevronDown, ChevronRight, Folder, FolderOpen, Newspaper, Pencil, Plus, SquarePen, Trash } from 'lucide-vue-next';
+import { useI18n } from 'vue-i18n';
 import { useSceneStore } from '@/components/stores/sceneStore';
 import { useFileStore, flattenFileTree } from '@/components/stores/fileStore';
 import { useProjectStore } from '@/components/stores/projectStore';
 import bus from '@/eventBus';
 import { saveStoriesOrder, moveFileOrFolder } from '@/services/api';
 import type { StoryFileTreeNode } from '@/services/aiContracts';
+
+const { t } = useI18n();
 
 type FileTreeItem = StoryFileTreeNode;
 
@@ -97,7 +100,7 @@ const _iconDanger = (component: Component) => () => h(NIcon, { component, size: 
 const fileMenuOptions = computed(() => {
   const base = [
     {
-      label: '重命名',
+      label: t('components.fileExplorer.rename'),
       key: 'rename',
       icon: _icon(Pencil)
     },
@@ -105,7 +108,7 @@ const fileMenuOptions = computed(() => {
       type: 'divider'
     },
     {
-      label: '删除作品',
+      label: t('components.fileExplorer.deleteScene'),
       key: 'delete',
       icon: _iconDanger(Trash),
       props: { style: 'color: #e74c3c;' }
@@ -115,7 +118,7 @@ const fileMenuOptions = computed(() => {
     base.push(
       { type: 'divider' } as never,
       {
-        label: `批量删除 (${fileStore.selectedCount} 项)`,
+        label: t('components.fileExplorer.batchDelete', { count: fileStore.selectedCount }),
         key: 'delete-batch',
         icon: _iconDanger(Trash),
         props: { style: 'color: #e74c3c; font-weight: bold;' }
@@ -129,12 +132,12 @@ const fileMenuOptions = computed(() => {
 const folderMenuOptions = computed(() => {
   const base = [
     {
-      label: '新建作品',
+      label: t('components.fileExplorer.newScene'),
       key: 'new-story',
       icon: _icon(Plus)
     },
     {
-      label: '新建章节',
+      label: t('components.fileExplorer.newChapter'),
       key: 'new-folder',
       icon: _icon(SquarePen)
     },
@@ -142,7 +145,7 @@ const folderMenuOptions = computed(() => {
       type: 'divider'
     },
     {
-      label: '重命名',
+      label: t('components.fileExplorer.rename'),
       key: 'rename',
       icon: _icon(Pencil)
     },
@@ -150,7 +153,7 @@ const folderMenuOptions = computed(() => {
       type: 'divider'
     },
     {
-      label: '删除章节',
+      label: t('components.fileExplorer.deleteChapter'),
       key: 'delete',
       icon: _iconDanger(Trash),
       props: { style: 'color: #e74c3c;' }
@@ -160,7 +163,7 @@ const folderMenuOptions = computed(() => {
     base.push(
       { type: 'divider' } as never,
       {
-        label: `批量删除 (${fileStore.selectedCount} 项)`,
+        label: t('components.fileExplorer.batchDelete', { count: fileStore.selectedCount }),
         key: 'delete-batch',
         icon: _iconDanger(Trash),
         props: { style: 'color: #e74c3c; font-weight: bold;' }
@@ -193,6 +196,9 @@ function selectFile(e) {
   } else {
     // 普通点击：单选
     fileStore.selectSingle(props.item);
+    if (props.item.type === 'folder') {
+      toggleFolder();
+    }
   }
   
   // 如果是故事文件，加载它
@@ -272,7 +278,7 @@ async function onDirChange(evt: unknown) {
       if (sourcePath !== targetPath) {
         // 防止父目录移入其子目录导致循环，简单保护
         if (el.type === 'folder' && sourcePath && targetPath.startsWith(`${sourcePath}/`)) {
-          throw new Error('不能将文件夹移动到其子目录');
+          throw new Error(t('components.fileExplorer.cannotMoveToChild'));
         }
         await moveFileOrFolder(projectStore.currentProject, sourcePath, targetPath);
       }
@@ -283,7 +289,7 @@ async function onDirChange(evt: unknown) {
     await fileStore.loadFileTree(projectStore.currentProject);
   } catch (e: unknown) {
     const errorMessage = e instanceof Error ? e.message : String(e || '未知错误');
-    bus.emit('toast', { type: 'error', message: `操作失败: ${errorMessage}` });
+    bus.emit('toast', { type: 'error', message: t('components.fileExplorer.operationFailed', { error: errorMessage }) });
     await fileStore.loadFileTree(projectStore.currentProject);
   }
 }

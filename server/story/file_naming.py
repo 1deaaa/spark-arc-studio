@@ -138,16 +138,23 @@ def build_display_story_path(relative_dir: str, filename: str) -> str:
     return rel.replace(os.sep, "/")
 
 
-def rebuild_story_filename(filename: str, *, display_name: Optional[str] = None, order: Optional[int] = None) -> str:
+def rebuild_story_filename(
+    filename: str,
+    *,
+    display_name: Optional[str] = None,
+    order: Optional[int] = None,
+    chapter_num: Optional[int] = None,
+) -> str:
     parsed = parse_story_filename(filename)
     if not parsed:
         base = sanitize_story_display_name(display_name or os.path.splitext(filename)[0])
         return f"{base}{os.path.splitext(filename)[1] or '.arc'}"
     effective_order = parsed["order"] if order is None else int(order)
+    effective_chap = parsed["chapter_num"] if chapter_num is None else chapter_num
     return build_story_filename(
         display_name or parsed["display_name"],
         file_format=parsed["format"],
-        chapter_num=parsed["chapter_num"],
+        chapter_num=effective_chap,
         scene_num=parsed["scene_num"],
         order=effective_order,
         group=parsed["group"],
