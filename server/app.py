@@ -47,6 +47,8 @@ from fastapi.staticfiles import StaticFiles
 from fastapi.responses import FileResponse
 from fastapi.middleware.cors import CORSMiddleware
 from contextlib import asynccontextmanager
+from starlette.datastructures import Headers
+from starlette.staticfiles import NotModifiedResponse
 
 # 自定义 uvicorn 日志配置，为 INFO 日志添加时间戳（精确到秒）
 import copy
@@ -312,6 +314,58 @@ app = FastAPI(
 )
 
 
+SPA_HTML_CACHE_CONTROL = "no-cache"
+FINGERPRINTED_ASSET_CACHE_CONTROL = "public, max-age=31536000, immutable"
+ROOT_STATIC_CACHE_CONTROL = "public, max-age=604800"
+
+
+def _normalize_dist_relative_path(relative_path: str) -> str:
+    return str(relative_path or "").replace("\\", "/").lstrip("/")
+
+
+def _get_dist_cache_control(relative_path: str) -> str:
+    normalized = _normalize_dist_relative_path(relative_path)
+    if not normalized or normalized == "index.html":
+        return SPA_HTML_CACHE_CONTROL
+    if normalized.startswith("assets/"):
+        return FINGERPRINTED_ASSET_CACHE_CONTROL
+    return ROOT_STATIC_CACHE_CONTROL
+
+
+def _build_cached_file_response(
+    request: Request,
+    file_path: str,
+    *,
+    cache_path: str,
+):
+    stat_result = os.stat(file_path)
+    response = FileResponse(file_path, stat_result=stat_result)
+    response.headers["Cache-Control"] = _get_dist_cache_control(cache_path)
+    if StaticFiles.is_not_modified(None, response.headers, request.headers):
+        return NotModifiedResponse(response.headers)
+    return response
+
+
+class CachedStaticFiles(StaticFiles):
+    def __init__(self, *args, cache_path_prefix: str = "", **kwargs):
+        super().__init__(*args, **kwargs)
+        self.cache_path_prefix = _normalize_dist_relative_path(cache_path_prefix)
+
+    def file_response(self, full_path, stat_result, scope, status_code: int = 200):
+        request_headers = Headers(scope=scope)
+        response = FileResponse(full_path, status_code=status_code, stat_result=stat_result)
+        relative_path = os.path.relpath(str(full_path), str(self.directory or ""))
+        cache_path = _normalize_dist_relative_path(
+            os.path.join(self.cache_path_prefix, relative_path)
+            if self.cache_path_prefix
+            else relative_path
+        )
+        response.headers["Cache-Control"] = _get_dist_cache_control(cache_path)
+        if self.is_not_modified(response.headers, request_headers):
+            return NotModifiedResponse(response.headers)
+        return response
+
+
 @app.middleware("http")
 async def locale_context_middleware(request: Request, call_next):
     locale = request.headers.get("X-Spark-Locale") or request.headers.get("Accept-Language")
@@ -532,7 +586,11 @@ dist_dir = os.path.join(os.path.dirname(current_dir), 'client', 'dist')
 if os.path.exists(dist_dir):
     assets_dir = os.path.join(dist_dir, "assets")
     if os.path.exists(assets_dir):
-        app.mount("/assets", StaticFiles(directory=assets_dir), name="assets")
+        app.mount(
+            "/assets",
+            CachedStaticFiles(directory=assets_dir, cache_path_prefix="assets"),
+            name="assets",
+        )
     
     @app.get("/{full_path:path}")
     async def serve_spa(request: Request, full_path: str):
@@ -544,12 +602,20 @@ if os.path.exists(dist_dir):
         # 检查请求的路径是否是静态文件
         file_path = os.path.join(dist_dir, full_path)
         if full_path and os.path.isfile(file_path):
-            return FileResponse(file_path)
-        
+            return _build_cached_file_response(
+                request,
+                file_path,
+                cache_path=full_path,
+            )
+
         # 提供 SPA 的主入口 index.html
         index_path = os.path.join(dist_dir, 'index.html')
         if os.path.exists(index_path):
-            return FileResponse(index_path)
+            return _build_cached_file_response(
+                request,
+                index_path,
+                cache_path='index.html',
+            )
         return {"message": "SPA not found. Please build the client first."}
 else:
     @app.get("/")
