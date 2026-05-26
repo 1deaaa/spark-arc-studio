@@ -23,7 +23,7 @@ class CreateChapterInput(BaseModel):
 
 
 class PatchScriptInput(BaseModel):
-    search_text: str = Field(description="需要被替换的剧本片段（必须精确匹配原文）")
+    search_text: str = Field(description="需要被替换的剧本片段（必须精确匹配原文）。传入空字符串可将 replace_text 追加到文件末尾")
     replace_text: str = Field(description="修改后的新文本片段")
 
 
@@ -159,7 +159,7 @@ def create_chapter(chapter_name: str) -> str:
 
 @tool(args_schema=PatchScriptInput)
 def patch_script(search_text: str, replace_text: str) -> str:
-    """局部修改剧本内容。"""
+    """局部修改剧本内容。search_text 传空字符串可将 replace_text 追加到文件末尾。"""
     from core.utils import get_project_stories_path
 
     user_id, project_name = ToolExecutionContext.get_context()

@@ -20,9 +20,10 @@ class TriggerAutoWriteInput(BaseModel):
 
 
 class WorkTrackerInput(BaseModel):
-    action: str = Field(description="操作类型：read=读取当前任务列表；update=覆盖更新任务列表（可同时更新 summary）；clear=清空所有任务（全部完成时使用）")
+    action: str = Field(description="操作类型：read=读取当前任务列表；update=覆盖更新任务列表（可同时更新 summary 与 contract）；clear=清空所有任务（全部完成时使用）")
     items: list[dict] | None = Field(default=None, description="任务条目列表，仅 update 时有效。每项格式：{\"task\": \"任务描述\", \"status\": \"pending|in_progress|completed|blocked\", \"priority\": \"high|medium|low\", \"notes\": \"备注（可选）\"}")
     summary: str | None = Field(default=None, description="全局目标/备注描述，仅 update 时有效。不传则保持原有 summary 不变")
+    contract: dict | None = Field(default=None, description="结构化创作契约，仅 update 时有效。不传则保持原有 contract 不变。建议记录章节/场景/篇幅/角色数量范围/题材/风格/目标受众/阶段性完成度等可核查参数")
 
 
 class CheckScriptwriterStatusInput(BaseModel):
@@ -170,10 +171,19 @@ def check_scriptwriter_status(export_format: str = "arc") -> str:
                 tracker = json.load(f)
             items = tracker.get("items") or []
             summary = tracker.get("summary", "")
+            contract = tracker.get("contract") or {}
             updated = tracker.get("updated_at", "")
 
             if summary:
                 lines.append(f"目标：{summary}")
+            if contract:
+                lines.append("创作契约：")
+                for key, value in contract.items():
+                    if isinstance(value, (dict, list)):
+                        value_text = json.dumps(value, ensure_ascii=False)
+                    else:
+                        value_text = str(value)
+                    lines.append(f"- {key}：{value_text}")
             if updated:
                 lines.append(f"最后更新：{updated}")
 
@@ -202,8 +212,9 @@ def work_tracker(
     action: str,
     items: list[dict] | None = None,
     summary: str | None = None,
+    contract: dict | None = None,
 ) -> str:
-    """读取、更新或清空当前 Agent 的工作追踪。"""
+    """读取、更新或清空当前 Agent 的工作追踪。update 时可通过 contract 字段写入结构化创作契约（章节数、角色数量范围、题材风格等可核查参数）。"""
     user_id, project_name = ToolExecutionContext.get_context()
     agent_id = ToolExecutionContext.get_agent_id() or "unknown"
     project_path = get_project_path(user_id, project_name)
@@ -211,14 +222,27 @@ def work_tracker(
 
     def _format_tracker_text(data: dict) -> str:
         item_count = len(data.get("items") or [])
+        contract_data = data.get("contract") or {}
+        contract_lines = []
+        if contract_data:
+            contract_lines.append("创作契约：")
+            for key, value in contract_data.items():
+                if isinstance(value, (dict, list)):
+                    value_text = json.dumps(value, ensure_ascii=False)
+                else:
+                    value_text = str(value)
+                contract_lines.append(f"- {key}：{value_text}")
         if item_count == 0:
             msg = "当前工作追踪列表为空。"
             if data.get("summary"):
                 msg += f"\n全局备注：{data['summary']}"
+            if contract_lines:
+                msg += "\n" + "\n".join(contract_lines)
             return msg
         lines = []
         if data.get("summary"):
             lines.append(f"目标：{data['summary']}")
+        lines.extend(contract_lines)
         lines.append(f"共 {item_count} 个任务：")
         for idx, item in enumerate(data["items"], 1):
             status_icon = {"completed": "✅", "in_progress": "🔄", "blocked": "🚫"}.get(item.get("status", ""), "⬜")
@@ -232,12 +256,12 @@ def work_tracker(
 
     def _load() -> dict:
         if not os.path.exists(tracker_path):
-            return {"summary": "", "items": [], "updated_at": ""}
+            return {"summary": "", "contract": {}, "items": [], "updated_at": ""}
         try:
             with open(tracker_path, "r", encoding="utf-8") as f:
                 return json.load(f)
         except Exception:
-            return {"summary": "", "items": [], "updated_at": ""}
+            return {"summary": "", "contract": {}, "items": [], "updated_at": ""}
 
     def _save(data: dict) -> None:
         import datetime
@@ -256,10 +280,12 @@ def work_tracker(
             data["items"] = items
         if summary is not None:
             data["summary"] = summary
+        if contract is not None:
+            data["contract"] = contract
         _save(data)
         return _format_tracker_text(data)
     if action == "clear":
-        _save({"summary": "", "items": [], "updated_at": ""})
+        _save({"summary": "", "contract": {}, "items": [], "updated_at": ""})
         return "工作追踪已清空。"
 
     return f"未知操作类型：{action}。支持的操作：read / update / clear。"

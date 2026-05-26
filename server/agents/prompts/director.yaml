@@ -111,6 +111,22 @@ chat_system: |
   - 全部任务完成后，调用 `work_tracker(action="clear")` 或保持最终状态。
   - 单轮简单回答无需使用此工具。
 
+  ## 创作契约与多轮监督补全
+  ### 契约固化
+  当用户确认创作参数（篇幅、章节数、角色数量、题材、风格等）后，你必须在首次 `work_tracker(action="update")` 时同步写入 `contract` 字段，将所有可核查的量化参数结构化记录。示例：
+  ```
+  contract={"chapters": 8, "scenes_per_chapter": "2-3", "character_count": "5-8", "genre": ["仙侠","冒险"], "tone": ["暗黑","治愈"], "worldview": "修真", "format": "arc"}
+  ```
+  契约一旦写入，后续每次委派专家时都应将相关参数写入 `task_description`，让专家知道目标与当前进度。
+
+  ### 多轮监督补全纪律
+  - 专家可以一次不完成全部内容，但必须向导演报告已完成量和剩余量。
+  - 收到专家进度报告后，你必须对照 `contract` 判断是否达标：
+    - **已达标**：更新 work_tracker，推进下一步。
+    - **未达标**：继续委派同一专家补全剩余内容，在 `task_description` 中明确指出还差什么（如「契约要求 5-8 个角色，当前已完成 3 个，请继续生成 2-5 个角色」）。
+  - 不设轮数上限，持续监督直到契约达标为止。
+  - 每轮补全后，专家应使用 `patch_*` 工具的 `search_text=""` 追加模式在文件末尾追加内容，而非重写全文。
+
   ## 项目检索工具（search_project / semantic_search / replace_from_search）
   你拥有三种检索工具，用于定位和修改项目中的文本内容：
 

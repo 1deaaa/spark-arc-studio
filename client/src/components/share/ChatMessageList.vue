@@ -956,85 +956,10 @@ function scrollReasoningToBottom(key) {
   el.scrollTop = el.scrollHeight;
 }
 
-/**
- * 程序化展开深度思考块（用于自动展开等场景）
- * 使用 FLIP 技术：先设置初始状态，再触发动画
- */
-function expandReasoningAnimated(key) {
-  if (reasoningExpanded.value[key]) return; // 已展开
-
-  const contentEl = reasoningContentRefs.value[key];
-  const wrapperEl = contentEl?.parentElement;
-
-  if (!wrapperEl) {
-    reasoningExpanded.value = { ...reasoningExpanded.value, [key]: true };
-    return;
-  }
-
-  // 先设置初始高度为 0，确保内容不可见
-  wrapperEl.style.height = '0px';
-  wrapperEl.style.overflow = 'hidden';
-
-  // 添加 is-expanded 类（CSS 会设置 height: auto，但内联样式优先级更高）
-  reasoningExpanded.value = { ...reasoningExpanded.value, [key]: true };
-
-  nextTick(() => {
-    // 测量目标高度
-    const targetHeight = contentEl.scrollHeight;
-
-    // 强制重排以确保初始状态生效
-    wrapperEl.offsetHeight;
-
-    // 设置目标高度触发过渡动画
-    wrapperEl.style.height = `${targetHeight}px`;
-
-    // 动画完成后设为 auto，以适应内容变化
-    const onTransitionEnd = () => {
-      wrapperEl.style.height = 'auto';
-      wrapperEl.style.overflow = '';
-      wrapperEl.removeEventListener('transitionend', onTransitionEnd);
-    };
-    wrapperEl.addEventListener('transitionend', onTransitionEnd);
-
-    scrollReasoningToBottom(key);
-  });
-}
-
-/**
- * 程序化折叠深度思考块（用于自动折叠等场景）
- */
-function collapseReasoningAnimated(key) {
-  if (!reasoningExpanded.value[key]) return; // 已折叠
-
-  const contentEl = reasoningContentRefs.value[key];
-  const wrapperEl = contentEl?.parentElement;
-
-  if (!wrapperEl) {
-    reasoningExpanded.value = { ...reasoningExpanded.value, [key]: false };
-    return;
-  }
-
-  const currentHeight = wrapperEl.scrollHeight;
-  wrapperEl.style.height = `${currentHeight}px`;
-  wrapperEl.offsetHeight; // 强制重排
-  wrapperEl.style.height = '0px';
-
-  const onTransitionEnd = () => {
-    reasoningExpanded.value = { ...reasoningExpanded.value, [key]: false };
-    wrapperEl.removeEventListener('transitionend', onTransitionEnd);
-  };
-  wrapperEl.addEventListener('transitionend', onTransitionEnd);
-}
-
-/**
- * 切换深度思考块的展开/折叠状态
- * 使用动态高度 + CSS transition 实现流畅动画，避免 grid-template-rows 的 Layout thrashing
- */
 function toggleReasoning(key) {
+  reasoningExpanded.value = { ...reasoningExpanded.value, [key]: !reasoningExpanded.value[key] };
   if (reasoningExpanded.value[key]) {
-    collapseReasoningAnimated(key);
-  } else {
-    expandReasoningAnimated(key);
+    nextTick(() => scrollReasoningToBottom(key));
   }
 }
 
@@ -1108,7 +1033,7 @@ watch(
         if (!autoExpandedMap.value[reasoningKey]) {
           autoExpandedMap.value = { ...autoExpandedMap.value, [reasoningKey]: true };
           if (!reasoningExpanded.value[reasoningKey]) {
-            expandReasoningAnimated(reasoningKey);
+            reasoningExpanded.value = { ...reasoningExpanded.value, [reasoningKey]: true };
           }
         }
         nextTick(() => scrollReasoningToBottom(reasoningKey));
@@ -1127,7 +1052,7 @@ watch(
         })() : false;
 
         if (!oldHasDisplayAfter && reasoningExpanded.value[reasoningKey]) {
-          collapseReasoningAnimated(reasoningKey);
+          reasoningExpanded.value = { ...reasoningExpanded.value, [reasoningKey]: false };
         }
       }
     }
@@ -1834,28 +1759,21 @@ defineExpose({ listRef });
   margin-left: auto;
 }
 
-/* 深度思考展开面板 - 使用 height 过渡替代 grid-template-rows，避免移动端 Layout thrashing */
+/* 深度思考展开面板 - CSS Grid 0fr/1fr 折叠动画（移动端流畅，无 JS layout thrashing） */
 .reasoning-content-wrapper {
-  height: 0;
-  overflow: hidden;
-  transition: height 0.25s cubic-bezier(0.4, 0, 0.2, 1);
-  will-change: height;
+  display: grid;
+  grid-template-rows: 0fr;
+  transition: grid-template-rows 0.2s cubic-bezier(0.4, 0, 1, 1);
 }
 
 .reasoning-content-wrapper.is-expanded {
-  /* 展开时由 JS 动态设置 height，过渡完成后设为 auto */
-  height: auto;
+  grid-template-rows: 1fr;
+  transition: grid-template-rows 0.2s cubic-bezier(0, 0, 0.2, 1);
 }
 
 .reasoning-content {
-  /* 内容容器，用于测量实际高度 */
-}
-
-/* 流式传输期间：使用 max-height 限制内容，避免每次更新都触发布局重排 */
-.reasoning-content-wrapper.is-auto-streaming {
-  height: auto;
-  max-height: calc(1.5em * 5 + 12px);
-  transition: none; /* 流式传输期间禁用过渡动画 */
+  overflow: hidden;
+  min-height: 0;
 }
 
 .reasoning-content-wrapper.is-auto-streaming .reasoning-content {

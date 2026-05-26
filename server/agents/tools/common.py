@@ -54,10 +54,24 @@ def _apply_patch(
     label = file_label or os.path.basename(file_path)
 
     if not os.path.exists(file_path):
+        # 末尾追加模式下文件不存在时，直接创建新文件
+        if not search_text:
+            os.makedirs(os.path.dirname(file_path), exist_ok=True)
+            with open(file_path, "w", encoding="utf-8") as f:
+                f.write(replace_text)
+            return f"已成功创建并写入 '{label}'。"
         return f"局部修改失败：文件 '{label}' 不存在。"
 
     with open(file_path, "r", encoding="utf-8") as f:
         original = f.read()
+
+    # 末尾追加模式：search_text 为空字符串时，将 replace_text 追加到文件末尾
+    if not search_text:
+        separator = "\n" if original and not original.endswith("\n") else ""
+        new_content = original + separator + replace_text
+        with open(file_path, "w", encoding="utf-8") as f:
+            f.write(new_content)
+        return f"已成功在 '{label}' 末尾追加内容。"
 
     if search_text in original:
         new_content = original.replace(search_text, replace_text, 1)

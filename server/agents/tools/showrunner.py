@@ -23,17 +23,17 @@ class RewriteOutlineInput(BaseModel):
 
 
 class PatchSynopsisInput(BaseModel):
-    search_text: str = Field(description="需要被替换的原文片段（必须精确匹配原文）")
+    search_text: str = Field(description="需要被替换的原文片段（必须精确匹配原文）。传入空字符串可将 replace_text 追加到文件末尾")
     replace_text: str = Field(description="修改后的新文本片段")
 
 
 class PatchBeatSheetInput(BaseModel):
-    search_text: str = Field(description="需要被替换的原文片段（必须精确匹配原文）")
+    search_text: str = Field(description="需要被替换的原文片段（必须精确匹配原文）。传入空字符串可将 replace_text 追加到文件末尾")
     replace_text: str = Field(description="修改后的新文本片段")
 
 
 class PatchOutlineInput(BaseModel):
-    search_text: str = Field(description="需要被替换的原文片段（必须精确匹配原文中的连续文字，建议提取完整的1~3句话）")
+    search_text: str = Field(description="需要被替换的原文片段（必须精确匹配原文中的连续文字，建议提取完整的1~3句话）。传入空字符串可将 replace_text 追加到文件末尾")
     replace_text: str = Field(description="修改后的新文本片段")
 
 
@@ -87,7 +87,7 @@ def rewrite_outline(overwrite_content: str) -> str:
 
 @tool(args_schema=PatchSynopsisInput)
 def patch_synopsis(search_text: str, replace_text: str) -> str:
-    """局部修改梗概。"""
+    """局部修改梗概。search_text 传空字符串可将 replace_text 追加到文件末尾。"""
     user_id, project_name = ToolExecutionContext.get_context()
     synopsis_path = os.path.join(get_project_path(user_id, project_name), "梗概.txt")
     return _apply_patch(synopsis_path, search_text, replace_text, file_label="梗概.txt")
@@ -95,7 +95,7 @@ def patch_synopsis(search_text: str, replace_text: str) -> str:
 
 @tool(args_schema=PatchBeatSheetInput)
 def patch_beat_sheet(search_text: str, replace_text: str) -> str:
-    """局部修改节拍表。"""
+    """局部修改节拍表。search_text 传空字符串可将 replace_text 追加到文件末尾。"""
     user_id, project_name = ToolExecutionContext.get_context()
     beats_path = os.path.join(get_project_path(user_id, project_name), "节拍表.txt")
     return _apply_patch(beats_path, search_text, replace_text, file_label="节拍表.txt")
@@ -103,7 +103,7 @@ def patch_beat_sheet(search_text: str, replace_text: str) -> str:
 
 @tool(args_schema=PatchOutlineInput)
 def patch_outline(search_text: str, replace_text: str) -> str:
-    """局部修改大纲。"""
+    """局部修改大纲。search_text 传空字符串可将 replace_text 追加到文件末尾。"""
     user_id, project_name = ToolExecutionContext.get_context()
     outline_path = os.path.join(get_project_path(user_id, project_name), "大纲.txt")
     return _apply_patch(outline_path, search_text, replace_text, file_label="大纲.txt")
