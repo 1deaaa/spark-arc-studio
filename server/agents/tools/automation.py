@@ -8,6 +8,7 @@ from pydantic import BaseModel, Field
 
 from agents.auto_write_service import load_auto_write_status, start_auto_write_background
 from core.utils import get_project_path
+from core.project_settings import get_project_story_tags, set_project_story_tags
 
 from .common import ToolExecutionContext
 
@@ -28,6 +29,16 @@ class WorkTrackerInput(BaseModel):
 
 class CheckScriptwriterStatusInput(BaseModel):
     export_format: str = Field(default="arc", description="导出格式（arc / novel），用于读取匹配的自动写作状态")
+
+
+class UpdateProjectStoryTagsInput(BaseModel):
+    style: str | None = Field(default=None, description="风格（单选，如'治愈'、'悬疑'）")
+    genres: list[str] | None = Field(default=None, description="题材（多选，如['仙侠', '冒险']）")
+    tones: list[str] | None = Field(default=None, description="基调（多选，如['暗黑', '治愈']）")
+    worldviews: list[str] | None = Field(default=None, description="世界观（多选，如['修真']）")
+    pov: str | None = Field(default=None, description="人称视角（单选，如'第一人称'、'第三人称全知'）")
+    length_hint: str | None = Field(default=None, description="篇幅（单选，如'短篇'、'中篇'、'长篇'）")
+    active_inspiration_id: str | None = Field(default=None, description="当前生效的灵感 ID（可选，用于追溯来源）")
 
 
 @tool(args_schema=TriggerAutoWriteInput)
@@ -282,6 +293,24 @@ def work_tracker(
             data["summary"] = summary
         if contract is not None:
             data["contract"] = contract
+        else:
+            # 自动从 story_tags 填充 contract（如果未显式传入）
+            try:
+                story_tags = get_project_story_tags(user_id, project_name)
+                if story_tags:
+                    auto_contract = {
+                        "style": story_tags.get("style"),
+                        "genres": story_tags.get("genres", []),
+                        "tones": story_tags.get("tones", []),
+                        "worldviews": story_tags.get("worldviews", []),
+                        "pov": story_tags.get("pov"),
+                        "length_hint": story_tags.get("length_hint"),
+                    }
+                    # 仅当至少有一个字段非空时才写入
+                    if any(v for v in auto_contract.values() if v not in (None, [], "")):
+                        data["contract"] = auto_contract
+            except Exception:
+                pass  # 读取失败时保持原有 contract
         _save(data)
         return _format_tracker_text(data)
     if action == "clear":
@@ -289,3 +318,99 @@ def work_tracker(
         return "工作追踪已清空。"
 
     return f"未知操作类型：{action}。支持的操作：read / update / clear。"
+
+
+@tool
+def read_project_story_tags() -> str:
+    """读取当前项目的故事主题参数（风格/题材/基调/世界观/人称/篇幅）。
+    
+    这些参数是"项目宪法"，贯穿整个创作周期，所有 Agent 通过 context_provider 统一读取。
+    返回格式化的文本，若某项未设置则标注"未设置"。
+    """
+    user_id, project_name = ToolExecutionContext.get_context()
+    
+    try:
+        tags = get_project_story_tags(user_id, project_name)
+    except Exception as e:
+        return f"读取项目故事主题参数失败：{e}"
+    
+    lines = ["══ 项目故事主题参数 ══"]
+    
+    # POV 醒目展示
+    pov = tags.get("pov")
+    if pov:
+        lines.append(f"⚠️ 人称视角：{pov}（已锁定）")
+    else:
+        lines.append("人称视角：未设置")
+    
+    # 其他参数
+    style = tags.get("style")
+    lines.append(f"风格：{style or '未设置'}")
+    
+    genres = tags.get("genres", [])
+    lines.append(f"题材：{'、'.join(genres) if genres else '未设置'}")
+    
+    tones = tags.get("tones", [])
+    lines.append(f"基调：{'、'.join(tones) if tones else '未设置'}")
+    
+    worldviews = tags.get("worldviews", [])
+    lines.append(f"世界观：{'、'.join(worldviews) if worldviews else '未设置'}")
+    
+    length_hint = tags.get("length_hint")
+    lines.append(f"篇幅：{length_hint or '未设置'}")
+    
+    return "\n".join(lines)
+
+
+@tool(args_schema=UpdateProjectStoryTagsInput)
+def update_project_story_tags(
+    style: str | None = None,
+    genres: list[str] | None = None,
+    tones: list[str] | None = None,
+    worldviews: list[str] | None = None,
+    pov: str | None = None,
+    length_hint: str | None = None,
+    active_inspiration_id: str | None = None,
+) -> str:
+    """更新当前项目的故事主题参数（部分更新，仅覆盖传入的字段）。
+    
+    这些参数是"项目宪法"，贯穿整个创作周期，所有 Agent 通过 context_provider 统一读取。
+    Director 在"从头创作"流程中应调用此工具固化用户确认的创作参数。
+    """
+    user_id, project_name = ToolExecutionContext.get_context()
+    
+    try:
+        tags = set_project_story_tags(
+            user_id=user_id,
+            project_name=project_name,
+            style=style,
+            genres=genres,
+            tones=tones,
+            worldviews=worldviews,
+            pov=pov,
+            length_hint=length_hint,
+            active_inspiration_id=active_inspiration_id,
+        )
+    except Exception as e:
+        return f"更新项目故事主题参数失败：{e}"
+    
+    # 构建更新摘要
+    updated_fields = []
+    if style is not None:
+        updated_fields.append(f"风格={style}")
+    if genres is not None:
+        updated_fields.append(f"题材={genres}")
+    if tones is not None:
+        updated_fields.append(f"基调={tones}")
+    if worldviews is not None:
+        updated_fields.append(f"世界观={worldviews}")
+    if pov is not None:
+        updated_fields.append(f"人称视角={pov}")
+    if length_hint is not None:
+        updated_fields.append(f"篇幅={length_hint}")
+    if active_inspiration_id is not None:
+        updated_fields.append(f"灵感ID={active_inspiration_id}")
+    
+    summary = "、".join(updated_fields) if updated_fields else "无变更"
+    
+    return f"项目故事主题参数已更新：{summary}\n所有 Agent 将在下次对话时自动读取新参数。"

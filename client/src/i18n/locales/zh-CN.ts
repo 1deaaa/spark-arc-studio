@@ -970,6 +970,15 @@ const zhCN = {
       confirmDeleteWarning: '项目数据文件将会立刻丢失，无法找回！',
       confirmDeleteFinal: '此操作不可撤销！再次确认删除项目 "{project}"？所有数据将永久丢失！',
     },
+    storyTagsPanel: {
+      title: '项目主题参数',
+      noProject: '请先选择项目',
+      saveSuccess: '项目主题参数已保存',
+      saveFailed: '保存失败',
+    },
+    inspireTagsPanel: {
+      title: '灵感主题参数',
+    },
     outlineNode: {
       descPlaceholder: '描述...',
       chapterNumber: '章节序号',
@@ -1487,6 +1496,7 @@ const zhCN = {
         resultPlaceholder: '灵感生成结果...',
         emptyResult: '点燃灵感以查看建议',
         ignite: '点燃灵感',
+        pinInspiration: '采纳灵感',
         generateSettings: '生成设定',
         worldAndCharacter: '世界观与角色设定',
         saveWorld: '保存世界观',

@@ -3,10 +3,19 @@ import { ref, watch, onBeforeUnmount, onMounted, h, nextTick } from 'vue';
 import { useMessage, useDialog, NButton, NSpace } from 'naive-ui';
 import { useProjectStore } from '../components/stores/projectStore';
 import { useViewStore } from '../components/stores/viewStore';
-import { igniteMuse, fetchWithAuth, createInspiration, updateInspiration, getInspirations } from '../services/api';
+import { igniteMuse, fetchWithAuth, createInspiration, updateInspiration, getInspirations, bindInspiration } from '../services/api';
 import { resolveApiUrl } from '../services/apiClient';
 import bus from '../eventBus';
 import { createStreamingTask, consumeTextReader, createAbortableEventSource, isAbortLikeError } from '@/utils/streamingRuntime';
+
+// 简单的 debounce 函数
+function debounce<T extends (...args: any[]) => any>(func: T, wait: number): (...args: Parameters<T>) => void {
+    let timeout: ReturnType<typeof setTimeout> | null = null;
+    return (...args: Parameters<T>) => {
+        if (timeout) clearTimeout(timeout);
+        timeout = setTimeout(() => func(...args), wait);
+    };
+}
 
 type InspirationTags = {
     styles?: string[];
@@ -79,7 +88,27 @@ export function useWorldLogic() {
 
     watch(museResult, (val) => { projectStore.currentInspiration = val; });
 
-    watch(() => projectStore.currentProject, (nextProject, prevProject) => {
+    // 自动保存灵感条目内容（source/content 编辑时 debounce 写回后端）
+    const autoSaveInspirationEntry = debounce(async () => {
+        if (!currentInspirationId.value) return;
+        try {
+            await updateInspiration(currentInspirationId.value, {
+                source: museInput.value || undefined,
+                content: museResult.value || undefined,
+            });
+        } catch (e) {
+            console.warn('自动保存灵感条目失败:', e);
+        }
+    }, 800);
+
+    // 监听灵感输入和结果变化，自动保存到灵感条目
+    watch([museInput, museResult], () => {
+        if (currentInspirationId.value) {
+            autoSaveInspirationEntry();
+        }
+    });
+
+    watch(() => projectStore.currentProject, async (nextProject, prevProject) => {
         if (nextProject === prevProject) return;
         museInput.value = '';
         museResult.value = '';
@@ -87,11 +116,46 @@ export function useWorldLogic() {
         projectStore.currentInspiration = '';
         projectStore.currentInspirationId = null;
         unreadCount.value = 0;
-        selectedGenres.value = [];
-        selectedTones.value = [];
-        selectedWorldviews.value = [];
-        selectedPov.value = undefined;
-        selectedLength.value = undefined;
+        
+        // 从后端加载项目的 story tags
+        if (nextProject) {
+            try {
+                const response = await fetchWithAuth(`/api/project/story-tags?projectName=${encodeURIComponent(nextProject)}`);
+                if (response.ok) {
+                    const data = await response.json();
+                    if (data.success && data.tags) {
+                        selectedGenres.value = data.tags.genres || [];
+                        selectedTones.value = data.tags.tones || [];
+                        selectedWorldviews.value = data.tags.worldviews || [];
+                        selectedPov.value = data.tags.pov || undefined;
+                        selectedLength.value = data.tags.length_hint || undefined;
+                    } else {
+                        // 如果没有 story tags，重置为空
+                        selectedGenres.value = [];
+                        selectedTones.value = [];
+                        selectedWorldviews.value = [];
+                        selectedPov.value = undefined;
+                        selectedLength.value = undefined;
+                    }
+                }
+            } catch (e) {
+                console.warn('加载项目 story tags 失败:', e);
+                // 失败时重置为空
+                selectedGenres.value = [];
+                selectedTones.value = [];
+                selectedWorldviews.value = [];
+                selectedPov.value = undefined;
+                selectedLength.value = undefined;
+            }
+        } else {
+            // 没有项目时重置
+            selectedGenres.value = [];
+            selectedTones.value = [];
+            selectedWorldviews.value = [];
+            selectedPov.value = undefined;
+            selectedLength.value = undefined;
+        }
+        
         museHistoryRef.value?.refresh();
         bus.emit('lorebook-refresh');
     });
@@ -145,6 +209,20 @@ export function useWorldLogic() {
                 inspirationId = createResult.id;
                 currentInspirationId.value = createResult.id;
                 projectStore.currentInspirationId = createResult.id;
+
+                // 自动排他绑定到当前项目：创建灵感后立即关联，无需用户手动点 Pin
+                if (projectStore.currentProject) {
+                    bindInspiration(createResult.id, projectStore.currentProject, true)
+                        .then((result: any) => {
+                            // 通知 HistoryPanel 局部更新绑定状态
+                            bus.emit('inspiration-bind-changed', {
+                                boundId: createResult.id,
+                                unboundIds: result?.unbound_ids || [],
+                                projectName: projectStore.currentProject,
+                            });
+                        })
+                        .catch(e => console.warn('自动绑定灵感失败:', e));
+                }
             }
             // 无输入：跳过预创建，由后端生成完成后自动创建带 [AI] 前缀的条目
 
@@ -190,21 +268,22 @@ export function useWorldLogic() {
         if (item.source) museInput.value = item.source;
         currentInspirationId.value = item.id;
         projectStore.currentInspirationId = item.id || null;
-
-        // 恢复标签选择
+        // 恢复该灵感条目的 tags 到灵感主题参数面板
         if (item.tags) {
             selectedGenres.value = item.tags.genres || [];
             selectedTones.value = item.tags.tones || [];
             selectedWorldviews.value = item.tags.worldviews || [];
-
-            // 处理人称视角：可能是字符串（旧数据）或列表（新数据）
-            const pv = item.tags.pov;
-            selectedPov.value = Array.isArray(pv) ? (pv[0] || undefined) : (pv || undefined);
-
-            // 处理篇幅建议：可能是字符串（旧数据）或列表（新数据）
-            const lh = item.tags.lengthHint;
-            selectedLength.value = Array.isArray(lh) ? (lh[0] || undefined) : (lh || undefined);
+            selectedPov.value = item.tags.pov?.[0] || undefined;
+            selectedLength.value = item.tags.lengthHint?.[0] || undefined;
+        } else {
+            selectedGenres.value = [];
+            selectedTones.value = [];
+            selectedWorldviews.value = [];
+            selectedPov.value = undefined;
+            selectedLength.value = undefined;
         }
+        // 注意：选择历史灵感时不自动绑定到项目
+        // 用户可能只是想查看，绑定应该在明确采纳时进行
     }
 
     async function handleGenerateFromMuse() {
@@ -455,6 +534,82 @@ export function useWorldLogic() {
         proceedToSynopsis();
     }
 
+    // 保存 story tags 到后端的函数（带 debounce）
+    const saveStoryTags = debounce(async () => {
+        if (!projectStore.currentProject) return;
+        
+        try {
+            const response = await fetchWithAuth('/api/project/story-tags', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({
+                    projectName: projectStore.currentProject,
+                    genres: selectedGenres.value,
+                    tones: selectedTones.value,
+                    worldviews: selectedWorldviews.value,
+                    pov: selectedPov.value || null,
+                    lengthHint: selectedLength.value || null,
+                }),
+            });
+            
+            if (!response.ok) {
+                console.warn('保存 story tags 失败:', response.status);
+            }
+        } catch (e) {
+            console.warn('保存 story tags 失败:', e);
+        }
+    }, 500); // 500ms debounce
+
+    // 监听 tags 变化，自动保存到后端
+    watch([selectedGenres, selectedTones, selectedWorldviews, selectedPov, selectedLength], () => {
+        saveStoryTags();
+    });
+
+    // 手动采纳灵感：排他绑定 + 保存 story tags（不跳转页面）
+    async function handlePinInspiration() {
+        if (!museResult.value) {
+            message.warning('请先生成或选择一条灵感');
+            return;
+        }
+        if (!projectStore.currentProject) {
+            message.warning('请先选择项目');
+            return;
+        }
+
+        try {
+            // 排他绑定当前灵感到项目
+            if (currentInspirationId.value) {
+                const result = await bindInspiration(currentInspirationId.value, projectStore.currentProject, true) as any;
+                // 通知 HistoryPanel 局部更新绑定状态
+                bus.emit('inspiration-bind-changed', {
+                    boundId: currentInspirationId.value,
+                    unboundIds: result?.unbound_ids || [],
+                    projectName: projectStore.currentProject,
+                });
+            }
+
+            // 立即保存 story tags
+            await fetchWithAuth('/api/project/story-tags', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({
+                    projectName: projectStore.currentProject,
+                    genres: selectedGenres.value,
+                    tones: selectedTones.value,
+                    worldviews: selectedWorldviews.value,
+                    pov: selectedPov.value || null,
+                    lengthHint: selectedLength.value || null,
+                    activeInspirationId: currentInspirationId.value || null,
+                }),
+            });
+
+            message.success('灵感已采纳到当前项目');
+        } catch (e) {
+            console.warn('采纳灵感失败:', e);
+            message.error('采纳灵感失败');
+        }
+    }
+
     function proceedToSynopsis() {
         // 提取 Logline
         let logline = '';
@@ -486,6 +641,37 @@ export function useWorldLogic() {
             } else {
                 // 3. 最后手段：取最后一段
                 logline = lines[lines.length - 1]?.replace(/[\[\]]/g, '').trim() || '';
+            }
+        }
+
+        // 立即保存 story tags（不等待 debounce）+ 兜底排他绑定灵感
+        if (projectStore.currentProject) {
+            fetchWithAuth('/api/project/story-tags', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({
+                    projectName: projectStore.currentProject,
+                    genres: selectedGenres.value,
+                    tones: selectedTones.value,
+                    worldviews: selectedWorldviews.value,
+                    pov: selectedPov.value || null,
+                    lengthHint: selectedLength.value || null,
+                    activeInspirationId: currentInspirationId.value || null,
+                }),
+            }).catch(e => console.warn('保存 story tags 失败:', e));
+
+            // 兜底：确保当前灵感已排他绑定到项目（防止前序自动绑定因网络等原因失败）
+            if (currentInspirationId.value) {
+                bindInspiration(currentInspirationId.value, projectStore.currentProject, true)
+                    .then((result: any) => {
+                        // 通知 HistoryPanel 局部更新绑定状态
+                        bus.emit('inspiration-bind-changed', {
+                            boundId: currentInspirationId.value,
+                            unboundIds: result?.unbound_ids || [],
+                            projectName: projectStore.currentProject,
+                        });
+                    })
+                    .catch(e => console.warn('兜底绑定灵感失败:', e));
             }
         }
 
@@ -535,6 +721,7 @@ export function useWorldLogic() {
         handleIgnite,
         handleMuseHistorySelect,
         handleGenerateFromMuse,
+        handlePinInspiration,
         goToSynopsis
     };
 }

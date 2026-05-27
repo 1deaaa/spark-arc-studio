@@ -167,6 +167,7 @@ class InspirationCreateRequest(BaseModel):
 
 class InspirationUpdateRequest(BaseModel):
     """更新灵感的请求"""
+    source: Optional[str] = None
     content: Optional[str] = None
     tags: Optional[Dict[str, List[str]]] = None
     status: Optional[str] = None  # "unread" / "read"
@@ -176,8 +177,10 @@ class InspirationBindRequest(BaseModel):
     """灵感与项目绑定/解绑的请求体。
 
     project_name 必填：哪怕灵感库是用户级别的，绑定关系仍以项目名为粒度。
+    exclusive 为 True 时执行排他绑定：绑定新灵感的同时解绑该项目下的旧灵感。
     """
     projectName: str
+    exclusive: bool = False
 
 
 class SynopsisRequest(BaseModel):

@@ -18,9 +18,12 @@ from agents.tools.attachment import (
 from agents.tools.automation import (
     CheckScriptwriterStatusInput,
     TriggerAutoWriteInput,
+    UpdateProjectStoryTagsInput,
     WorkTrackerInput,
     check_scriptwriter_status,
+    read_project_story_tags,
     trigger_auto_write,
+    update_project_story_tags,
     work_tracker,
 )
 from agents.tools.common import (
@@ -159,6 +162,7 @@ __all__ = [
     "ToolExecutionContext",
     "TriggerAutoWriteInput",
     "UpdateCharacterInput",
+    "UpdateProjectStoryTagsInput",
     "WebSearchInput",
     "WorkTrackerInput",
     "_apply_patch",
@@ -187,6 +191,7 @@ __all__ = [
     "read_character",
     "read_chapter_outline_raw",
     "read_chapter_scene",
+    "read_project_story_tags",
     "read_synopsis",
     "read_worldview",
     "replace_from_search",
@@ -200,6 +205,7 @@ __all__ = [
     "semantic_search",
     "trigger_auto_write",
     "update_character",
+    "update_project_story_tags",
     "work_tracker",
     "web_search",
 ]

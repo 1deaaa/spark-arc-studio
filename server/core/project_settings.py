@@ -8,6 +8,8 @@
   graphrag_enabled: false
   attachment_index_enabled: true
   attachment_chunk_tokens: 64000  (附件分片 token 上限，等价于"按需读取"滑动窗口的窗口大小)
+  story_tags: {}  (项目级故事主题参数：风格/题材/基调/世界观/人称/篇幅)
+  active_inspiration_id: null  (当前生效的灵感 ID，用于追溯来源)
 """
 
 from __future__ import annotations
@@ -31,6 +33,18 @@ _DEFAULT_SETTINGS: Dict[str, Any] = {
     # 大文件按此 token 上限切片；调用 read_attachment_chunk 一次只展开一片，
     # 所以增大此值会让单次注入更长，减小则把 LLM context 让给更多其他内容。
     "attachment_chunk_tokens": 64000,
+    # 项目级故事主题参数（"项目宪法"）：风格/题材/基调/世界观/人称/篇幅
+    # 这些参数贯穿整个创作周期，所有 Agent 通过 context_provider 统一读取
+    "story_tags": {
+        "style": None,           # 风格（单选，如"治愈"）
+        "genres": [],            # 题材（多选，如["仙侠", "冒险"]）
+        "tones": [],             # 基调（多选，如["暗黑", "治愈"]）
+        "worldviews": [],        # 世界观（多选，如["修真"]）
+        "pov": None,             # 人称视角（单选，如"第一人称"）
+        "length_hint": None,     # 篇幅（单选，如"中篇"）
+    },
+    # 当前生效的灵感 ID（可选，用于追溯项目参数的来源灵感）
+    "active_inspiration_id": None,
 }
 
 # 与 routes_import.py 的 chunk_tokens 校验保持一致，避免极端值。
@@ -67,6 +81,20 @@ def _normalize(raw: Dict[str, Any] | None) -> Dict[str, Any]:
         data["attachment_chunk_tokens"] = _coerce_attachment_chunk_tokens(
             raw.get("attachment_chunk_tokens", _DEFAULT_SETTINGS["attachment_chunk_tokens"])
         )
+        # 规范化 story_tags：保留已有值，补齐缺失字段
+        raw_tags = raw.get("story_tags")
+        if isinstance(raw_tags, dict):
+            default_tags = _DEFAULT_SETTINGS["story_tags"]
+            data["story_tags"] = {
+                "style": raw_tags.get("style", default_tags["style"]),
+                "genres": raw_tags.get("genres", default_tags["genres"]) or [],
+                "tones": raw_tags.get("tones", default_tags["tones"]) or [],
+                "worldviews": raw_tags.get("worldviews", default_tags["worldviews"]) or [],
+                "pov": raw_tags.get("pov", default_tags["pov"]),
+                "length_hint": raw_tags.get("length_hint", default_tags["length_hint"]),
+            }
+        # 规范化 active_inspiration_id
+        data["active_inspiration_id"] = raw.get("active_inspiration_id", _DEFAULT_SETTINGS["active_inspiration_id"])
     return data
 
 
@@ -270,3 +298,79 @@ def set_default_graphrag_enabled(user_id: str, value: bool) -> bool:
         data["default_graphrag_enabled"] = value
         _user_save(user_id, data)
         return value
+
+
+# ==================== 项目级故事主题参数（Story Tags）====================
+
+
+def get_project_story_tags(user_id: str, project_name: str) -> Dict[str, Any]:
+    """读取项目级故事主题参数（风格/题材/基调/世界观/人称/篇幅）。
+    
+    返回格式：
+    {
+        "style": str | None,
+        "genres": list[str],
+        "tones": list[str],
+        "worldviews": list[str],
+        "pov": str | None,
+        "length_hint": str | None,
+    }
+    """
+    settings = get_project_settings(user_id, project_name)
+    return settings.get("story_tags", _DEFAULT_SETTINGS["story_tags"])
+
+
+def set_project_story_tags(
+    user_id: str,
+    project_name: str,
+    style: Optional[str] = None,
+    genres: Optional[List[str]] = None,
+    tones: Optional[List[str]] = None,
+    worldviews: Optional[List[str]] = None,
+    pov: Optional[str] = None,
+    length_hint: Optional[str] = None,
+    active_inspiration_id: Optional[str] = None,
+) -> Dict[str, Any]:
+    """设置项目级故事主题参数（部分更新，仅覆盖传入的字段）。
+    
+    Args:
+        user_id: 用户 ID
+        project_name: 项目名称
+        style: 风格（单选，如"治愈"）
+        genres: 题材（多选，如["仙侠", "冒险"]）
+        tones: 基调（多选，如["暗黑", "治愈"]）
+        worldviews: 世界观（多选，如["修真"]）
+        pov: 人称视角（单选，如"第一人称"）
+        length_hint: 篇幅（单选，如"中篇"）
+        active_inspiration_id: 当前生效的灵感 ID（可选）
+    
+    Returns:
+        更新后的完整 story_tags 字典
+    """
+    with _lock:
+        project_path = get_project_path(user_id, project_name)
+        settings = _load(project_path)
+        current_tags = settings.get("story_tags", _DEFAULT_SETTINGS["story_tags"])
+        
+        # 部分更新：仅覆盖传入的字段
+        if style is not None:
+            current_tags["style"] = style
+        if genres is not None:
+            current_tags["genres"] = genres
+        if tones is not None:
+            current_tags["tones"] = tones
+        if worldviews is not None:
+            current_tags["worldviews"] = worldviews
+        if pov is not None:
+            current_tags["pov"] = pov
+        if length_hint is not None:
+            current_tags["length_hint"] = length_hint
+        
+        settings["story_tags"] = current_tags
+        
+        # 更新 active_inspiration_id（如果传入）
+        if active_inspiration_id is not None:
+            settings["active_inspiration_id"] = active_inspiration_id
+        
+        _save(project_path, settings)
+        return dict(current_tags)

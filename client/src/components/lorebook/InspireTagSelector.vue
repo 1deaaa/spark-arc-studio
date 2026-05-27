@@ -4,7 +4,7 @@
     <div class="tags-entry" @click="showTags = !showTags">
       <div class="entry-left">
         <n-icon :component="Tag" size="18" class="entry-icon" />
-        <span class="entry-label">故事主题参数</span>
+        <span class="entry-label">{{ title }}</span>
       </div>
       <div class="entry-right">
         <span class="entry-sub" v-if="totalTagsCount > 0">{{ totalTagsCount }} 个参数</span>
@@ -20,7 +20,7 @@
       <div class="selector-grid">
     <!-- 风格选择 - 点击显示标签面板 -->
     <div v-if="showStyle" class="selector-row">
-      <n-popover trigger="click" placement="bottom-start" width="trigger">
+      <n-popover trigger="click" placement="bottom-start" :flip="true" width="trigger">
         <template #trigger>
           <div class="selector-trigger">
             <span v-if="selectedStyles.length === 0" class="placeholder">选择风格</span>
@@ -57,7 +57,7 @@
 
     <!-- 题材选择 - 点击显示标签面板 -->
     <div class="selector-row">
-      <n-popover trigger="click" placement="bottom-start" width="trigger">
+      <n-popover trigger="click" placement="bottom-start" :flip="true" width="trigger">
         <template #trigger>
           <div class="selector-trigger">
             <span v-if="selectedGenres.length === 0" class="placeholder">选择题材</span>
@@ -95,7 +95,7 @@
 
     <!-- 基调选择 - 点击显示标签面板 -->
     <div class="selector-row">
-      <n-popover trigger="click" placement="bottom-start" width="trigger">
+      <n-popover trigger="click" placement="top-start" width="trigger">
         <template #trigger>
           <div class="selector-trigger">
             <span v-if="selectedTones.length === 0" class="placeholder">选择基调</span>
@@ -132,7 +132,7 @@
 
     <!-- 世界观选择 - 点击显示标签面板 -->
     <div class="selector-row">
-      <n-popover trigger="click" placement="bottom-start" width="trigger">
+      <n-popover trigger="click" placement="top-start" width="trigger">
         <template #trigger>
           <div class="selector-trigger">
             <span v-if="selectedWorldviews.length === 0" class="placeholder">选择世界观</span>
@@ -240,6 +240,7 @@ import { ChevronDown, Plus, Tag } from 'lucide-vue-next';
 import { fetchWithAuth } from '../../services/api';
 
 const props = defineProps({
+  title: { type: String, default: '故事主题参数' },
   style: { type: String, default: null },
   genres: { type: Array, default: () => [] },
   tones: { type: Array, default: () => [] },
@@ -247,14 +248,15 @@ const props = defineProps({
   pov: { type: String, default: null },
   lengthHint: { type: String, default: null },
   showLength: { type: Boolean, default: false },
-  showStyle: { type: Boolean, default: true }
+  showStyle: { type: Boolean, default: true },
+  defaultOpen: { type: Boolean, default: false }
 });
 
 const emit = defineEmits(['update:style', 'update:genres', 'update:tones', 'update:worldviews', 'update:pov', 'update:lengthHint']);
 
 const message = useMessage();
 const dialog = useDialog();
-const showTags = ref(false);
+const showTags = ref(props.defaultOpen);
 
 const totalTagsCount = computed(() => {
   return (props.showStyle ? selectedStyles.value.length : 0) + 

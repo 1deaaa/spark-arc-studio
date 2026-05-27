@@ -131,7 +131,7 @@
 </template>
 
 <script setup lang="ts">
-import { ref, onMounted, computed, watch } from 'vue';
+import { ref, onMounted, onBeforeUnmount, computed, watch } from 'vue';
 import { NButton, NIcon, NEmpty, NSpin, NEllipsis, NTag, NBadge, NTooltip, useMessage } from 'naive-ui';
 import { Clock, FileEdit, Layers, Link2, Pin, PinOff, RefreshCw, Trash } from 'lucide-vue-next';
 import {
@@ -140,6 +140,7 @@ import {
   getOutlineHistory, deleteOutlineHistory, restoreOutlineFromHistory
 } from '../../services/api';
 import { useProjectStore } from '../stores/projectStore';
+import bus from '../../eventBus';
 import type { InspirationEntry, InspirationScope, OutlineHistoryEntry } from '../../services/aiContracts';
 
 type HistoryItem = InspirationEntry | OutlineHistoryEntry;
@@ -217,8 +218,9 @@ const emptyDescription = computed(() => {
 });
 
 // 加载历史
-async function refresh() {
-  loading.value = true;
+// @param silent - 静默模式：不显示 loading 状态，用于局部更新后的同步
+async function refresh(silent: boolean = false) {
+  if (!silent) loading.value = true;
   try {
     let data: HistoryItem[] = [];
     if (props.type === 'muse') {
@@ -250,7 +252,7 @@ async function refresh() {
     const errorMessage = e instanceof Error ? e.message : String(e || '未知错误');
     message.error('加载历史失败: ' + errorMessage);
   } finally {
-    loading.value = false;
+    if (!silent) loading.value = false;
   }
 }
 
@@ -375,16 +377,48 @@ async function toggleBind(item: HistoryItem) {
         (name: string) => name !== projectName
       );
       message.success(`已从「${projectName}」解绑`);
+      // 通知其他组件绑定状态变化
+      bus.emit('inspiration-bind-changed', {
+        boundId: null,
+        unboundIds: [inspiration.id],
+        projectName,
+      });
     } else {
-      await bindInspiration(inspiration.id, projectName);
+      // 排他绑定：绑定新灵感时自动解绑该项目下的旧灵感
+      const result = await bindInspiration(inspiration.id, projectName, true);
+      const unboundIds = (result as any)?.unbound_ids || [];
+      
+      // 局部更新：更新当前条目的 project_links
       const links = Array.isArray(inspiration.project_links) ? [...inspiration.project_links] : [];
       if (!links.includes(projectName)) links.push(projectName);
       inspiration.project_links = links;
+      
+      // 局部更新：更新被解绑的旧灵感的 project_links
+      if (unboundIds.length > 0) {
+        for (const unboundId of unboundIds) {
+          const unboundItem = history.value.find(h => h.id === unboundId) as InspirationEntry | undefined;
+          if (unboundItem) {
+            unboundItem.project_links = (unboundItem.project_links || []).filter(
+              (name: string) => name !== projectName
+            );
+          }
+        }
+      }
+      
       message.success(`已绑定到「${projectName}」`);
+      // 通知其他组件绑定状态变化
+      bus.emit('inspiration-bind-changed', {
+        boundId: inspiration.id,
+        unboundIds,
+        projectName,
+      });
     }
-    // 在“当前项目”或“草稿”过滤下，绑定状态变化后需要重拉以保证可见性一致
-    if (currentScope.value !== 'all') {
-      await refresh();
+    // 在"当前项目"或"草稿"过滤下，绑定状态变化后需要检查可见性
+    // 如果当前条目不再符合过滤条件，才需要静默刷新
+    if (currentScope.value === 'project' && !isBoundToCurrent(inspiration)) {
+      await refresh(true);
+    } else if (currentScope.value === 'drafts' && inspiration.project_links && inspiration.project_links.length > 0) {
+      await refresh(true);
     }
   } catch (e: unknown) {
     const errorMessage = e instanceof Error ? e.message : String(e || '未知错误');
@@ -451,9 +485,52 @@ function isMcpUnread(item) {
 
 onMounted(() => {
   refresh();
+  // 监听外部绑定状态变化事件，局部更新
+  bus.on('inspiration-bind-changed', handleExternalBindChange);
 });
 
-// 监听项目切换：如果当前以“当前项目”过滤但项目被清空，需要回退到全部
+onBeforeUnmount(() => {
+  bus.off('inspiration-bind-changed', handleExternalBindChange);
+});
+
+// 处理外部触发的绑定状态变化（如 useWorldLogic 中的自动绑定）
+function handleExternalBindChange(payload: unknown) {
+  if (props.type !== 'muse') return;
+  const data = payload as { boundId?: string | null; unboundIds?: string[]; projectName?: string };
+  if (!data?.projectName) return;
+  
+  const projectName = data.projectName;
+  const boundId = data.boundId;
+  const unboundIds = data.unboundIds || [];
+  
+  // 局部更新：更新被绑定的条目
+  if (boundId) {
+    const boundItem = history.value.find(h => h.id === boundId) as InspirationEntry | undefined;
+    if (boundItem) {
+      const links = Array.isArray(boundItem.project_links) ? [...boundItem.project_links] : [];
+      if (!links.includes(projectName)) links.push(projectName);
+      boundItem.project_links = links;
+    }
+  }
+  
+  // 局部更新：更新被解绑的条目
+  for (const unboundId of unboundIds) {
+    const unboundItem = history.value.find(h => h.id === unboundId) as InspirationEntry | undefined;
+    if (unboundItem) {
+      unboundItem.project_links = (unboundItem.project_links || []).filter(
+        (name: string) => name !== projectName
+      );
+    }
+  }
+  
+  // 检查是否需要全量刷新（当前过滤条件下条目可见性可能变化）
+  if (currentScope.value === 'project' || currentScope.value === 'drafts') {
+    // 延迟静默刷新，避免频繁请求且不触发 loading 闪烁
+    setTimeout(() => refresh(true), 100);
+  }
+}
+
+// 监听项目切换：如果当前以"当前项目"过滤但项目被清空，需要回退到全部
 watch(() => projectStore.currentProject, (next) => {
   if (!next && currentScope.value === 'project') {
     currentScope.value = 'all';
@@ -509,9 +586,10 @@ defineExpose({ refresh });
   padding: 8px 10px;
   background: var(--spark-bg);
   border: 1px solid var(--spark-border);
+  border-left: 3px solid transparent;
   border-radius: 6px;
   cursor: pointer;
-  transition: all 0.2s;
+  transition: background 0.2s, border-color 0.2s;
 }
 
 .history-item:hover {

@@ -20,6 +20,7 @@ from mcp_server.spark_inspiration.logic import (
     INSPIRATION_SCOPE_PROJECT,
     VALID_INSPIRATION_SCOPES,
     bind_inspiration_to_project,
+    bind_inspiration_exclusive,
     save_inspiration,
     get_all_inspirations,
     update_inspiration,
@@ -142,6 +143,8 @@ async def update_inspiration_entry(
     user_id = str(user['user_id'])
     
     updates = {}
+    if data.source is not None:
+        updates['source'] = data.source
     if data.content is not None:
         updates['content'] = data.content
     if data.tags is not None:
@@ -192,19 +195,32 @@ async def bind_inspiration_entry(
     data: InspirationBindRequest,
     user: dict = Depends(get_current_user),
 ):
-    """将灵感条目绑定到指定项目（多对多软关联，重复绑定幂等）。"""
+    """将灵感条目绑定到指定项目。
+
+    exclusive=True 时执行排他绑定：绑定新灵感的同时自动解绑该项目下的旧灵感，
+    保证一个项目同一时刻只有一个"活跃灵感"。
+    """
     user_id = str(user['user_id'])
     project_name = normalize_project_name(data.projectName) if data.projectName else None
     if not project_name:
         return JSONResponse(status_code=400, content={'success': False, 'error': '缺少有效的 projectName'})
 
-    success = bind_inspiration_to_project(user_id, entry_id, project_name)
-    if success:
-        return {'success': True, 'project': project_name}
-    return JSONResponse(
-        status_code=404,
-        content={'success': False, 'error': '灵感不存在或绑定失败'},
-    )
+    if data.exclusive:
+        result = bind_inspiration_exclusive(user_id, entry_id, project_name)
+        if result['success']:
+            return {'success': True, 'project': project_name, 'unbound_ids': result.get('unbound_ids', [])}
+        return JSONResponse(
+            status_code=404,
+            content={'success': False, 'error': '灵感不存在或绑定失败'},
+        )
+    else:
+        success = bind_inspiration_to_project(user_id, entry_id, project_name)
+        if success:
+            return {'success': True, 'project': project_name}
+        return JSONResponse(
+            status_code=404,
+            content={'success': False, 'error': '灵感不存在或绑定失败'},
+        )
 
 
 @muse_router.post('/api/inspirations/{entry_id}/unbind')

@@ -264,7 +264,7 @@ def update_inspiration(user_id: str, entry_id: str, updates: Dict[str, Any]) -> 
         for entry in entries:
             if entry.get("id") == entry_id:
                 for key, value in updates.items():
-                    if key in ["content", "tags", "status"]:
+                    if key in ["content", "tags", "status", "source"]:
                         entry[key] = value
                     elif key == "project_links":
                         entry["project_links"] = _normalize_project_links(value)
@@ -415,6 +415,50 @@ def bind_inspiration_to_project(user_id: str, entry_id: str, project_name: str) 
 
     changed = _rewrite_inspiration_file(inspiration_file, _bind)
     return found["value"] and changed >= 0
+
+
+def bind_inspiration_exclusive(user_id: str, entry_id: str, project_name: str) -> Dict[str, Any]:
+    """排他绑定：将灵感绑定到项目，同时解绑该项目下所有其他灵感。
+
+    语义约束：
+    - 一条灵感可以绑定到多个项目（多对多）
+    - 一个项目同一时刻只能有一个"活跃灵感"（排他）
+    - 排他绑定 = 先解绑旧灵感 + 再绑定新灵感，原子操作
+
+    Returns:
+        {"success": bool, "unbound_ids": [...]}  unbound_ids 是被解绑的旧灵感 ID 列表
+    """
+    project_name = (project_name or "").strip()
+    if not entry_id or not project_name:
+        return {"success": False, "unbound_ids": []}
+
+    inspiration_file = get_user_inspiration_path(user_id)
+    if not os.path.exists(inspiration_file):
+        return {"success": False, "unbound_ids": []}
+
+    unbound_ids: List[str] = []
+
+    def _exclusive_bind(entry: Dict[str, Any]) -> bool:
+        links = list(entry.get("project_links") or [])
+        eid = entry.get("id", "")
+
+        if eid == entry_id:
+            # 目标灵感：确保 project_name 在 links 中
+            if project_name in links:
+                return False  # 已绑定，无需写回
+            links.append(project_name)
+            entry["project_links"] = _normalize_project_links(links)
+            return True
+        else:
+            # 其他灵感：如果绑定了同一项目，则解绑
+            if project_name not in links:
+                return False
+            entry["project_links"] = [name for name in links if name != project_name]
+            unbound_ids.append(eid)
+            return True
+
+    changed = _rewrite_inspiration_file(inspiration_file, _exclusive_bind)
+    return {"success": changed >= 0, "unbound_ids": unbound_ids}
 
 
 def unbind_inspiration_from_project(user_id: str, entry_id: str, project_name: str) -> bool:

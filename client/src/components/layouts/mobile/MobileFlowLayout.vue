@@ -23,18 +23,7 @@
             </n-tooltip>
           </span>
         </n-dropdown>
-        <n-dropdown trigger="click" :options="projectIOOptions" @select="handleProjectIO">
-          <span class="tooltip-dropdown-trigger">
-            <n-tooltip trigger="hover">
-              <template #trigger>
-                <n-button quaternary circle size="small">
-                  <template #icon><n-icon :component="Archive" /></template>
-                </n-button>
-              </template>
-              {{ t('mobileFlow.header.projectIO') }}
-            </n-tooltip>
-          </span>
-        </n-dropdown>
+        <StoryTagsPanel />
         <n-tooltip trigger="hover">
           <template #trigger>
             <n-button quaternary circle size="small" @click="openPublishDrawer">
@@ -50,14 +39,6 @@
             </n-button>
           </template>
           {{ t('components.headerToolbar.quickPreviewTitle') }}
-        </n-tooltip>
-        <n-tooltip trigger="hover">
-          <template #trigger>
-            <n-button quaternary circle size="small" @click="toggleAutoSave(!autoSaveEnabled)">
-              <template #icon><n-icon :component="autoSaveEnabled ? SaveAll : SaveOff" :color="autoSaveEnabled ? '' : '#e88080'" /></template>
-            </n-button>
-          </template>
-          {{ autoSaveEnabled ? t('components.headerToolbar.autoSaveDisable') : t('components.headerToolbar.autoSaveEnable') }}
         </n-tooltip>
         <n-button quaternary circle size="small" @click="openSettings">
           <template #icon><n-icon :component="Settings" /></template>
@@ -181,13 +162,14 @@
         </n-tabs>
       </n-drawer-content>
     </n-drawer>
+
   </div>
 </template>
 
 <script setup lang="ts">
 import { ref, computed, onMounted, onUnmounted, provide, watch, h, nextTick } from 'vue';
 import { NButton, NIcon, NDrawer, NDrawerContent, NTabs, NTabPane, NDropdown, NModal, NCard, NTooltip, type DropdownOption, useDialog } from 'naive-ui';
-import { Archive, CircleCheckBig, CirclePlus, FolderOpen, PaintBucket, Play, SaveAll, SaveOff, Settings, Share2, SquarePen, Trash } from 'lucide-vue-next';
+import { Archive, CircleCheckBig, CirclePlus, FolderOpen, PaintBucket, Play, Settings, Share2, SquarePen, Trash } from 'lucide-vue-next';
 import { useI18n } from 'vue-i18n';
 
 import FlowCard from './FlowCard.vue';
@@ -216,11 +198,11 @@ import { useFullscreen } from '../../../composables/useFullscreen';
 import { useOnboarding } from '../../../onboarding';
 import AppBrand from '../../share/AppBrand.vue';
 import { SPARKARC_GITHUB_URL } from '@/config';
-import { autoSaveEnabled, setAutoSaveEnabled } from '@/utils/autoSaveState';
 import VersionManager from '../../dlg-editor/VersionManager.vue';
 import bus from '../../../eventBus';
 import { saveStory, fetchWithAuth } from '../../../services/api';
 import { exportProjectAsSpark, importProjectFromSpark } from '../../../services/projectService';
+import StoryTagsPanel from '../../share/StoryTagsPanel.vue';
 
 const projectStore = useProjectStore();
 const viewStore = useViewStore();
@@ -237,13 +219,6 @@ const previewing = ref(false);
 
 const workspaceMode = computed(() => sceneStore.workspaceMode || 'script');
 
-function toggleAutoSave(newVal: boolean) {
-  setAutoSaveEnabled(newVal);
-  // 仅关闭时提示（开启是默认行为，无需提示）
-  if (!newVal) {
-    bus.emit('toast', { type: 'warning', message: t('components.headerToolbar.autoSaveOff') });
-  }
-}
 
 // 提供 projectId 给子组件
 provide('projectId', computed(() => projectStore.currentProject));
@@ -279,7 +254,7 @@ function openPublishDrawer() {
   publishDrawerVisible.value = true;
 }
 
-// ── 项目切换下拉 ──
+// ── 项目菜单（含切换、新建、重命名、删除、导入导出） ──
 const projectSwitchOptions = computed<DropdownOption[]>(() => {
   const items: DropdownOption[] = projectStore.projects.map(p => ({
     label: p === projectStore.currentProject ? `✓ ${p}` : p,
@@ -291,6 +266,9 @@ const projectSwitchOptions = computed<DropdownOption[]>(() => {
     items.push({ label: t('components.projectSelector.renameCurrentProject'), key: 'rename', icon: () => h(NIcon, null, { default: () => h(SquarePen) }) });
     items.push({ label: t('components.projectSelector.deleteCurrentProject'), key: 'delete', icon: () => h(NIcon, null, { default: () => h(Trash) }) });
   }
+  items.push({ type: 'divider', key: 'd2' });
+  items.push({ label: t('components.headerToolbar.exportProject'), key: 'export_project', icon: () => h(NIcon, null, { default: () => h(Archive) }) });
+  items.push({ label: t('components.headerToolbar.importProject'), key: 'import_project', icon: () => h(NIcon, null, { default: () => h(PaintBucket) }) });
   return items;
 });
 
@@ -301,6 +279,10 @@ async function handleProjectSwitch(key: string) {
     handleRenameProject();
   } else if (key === 'delete') {
     handleDeleteProject();
+  } else if (key === 'export_project') {
+    exportProjectSpark();
+  } else if (key === 'import_project') {
+    importSparkInput.value?.click();
   } else if (key.startsWith('switch:')) {
     const name = key.slice(7);
     if (name !== projectStore.currentProject) {
@@ -345,18 +327,7 @@ function handleDeleteProject() {
   });
 }
 
-// ── 项目导入/导出下拉 ──
-const projectIOOptions = computed<DropdownOption[]>(() => [
-  { label: t('components.headerToolbar.exportProject'), key: 'export_project', icon: () => h(NIcon, null, { default: () => h(Archive) }) },
-  { label: t('components.headerToolbar.importProject'), key: 'import_project', icon: () => h(NIcon, null, { default: () => h(PaintBucket) }) },
-]);
-
 const importSparkInput = ref<HTMLInputElement | null>(null);
-
-function handleProjectIO(key: string) {
-  if (key === 'export_project') exportProjectSpark();
-  else if (key === 'import_project') importSparkInput.value?.click();
-}
 
 function onSparkFileChange(e: Event) {
   const file = (e.target as HTMLInputElement).files?.[0];

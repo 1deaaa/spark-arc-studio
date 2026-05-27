@@ -1,7 +1,13 @@
 from __future__ import annotations
 
 from agents.tools.attachment import read_attachment_chunk
-from agents.tools.automation import check_scriptwriter_status, trigger_auto_write, work_tracker
+from agents.tools.automation import (
+    check_scriptwriter_status,
+    read_project_story_tags,
+    trigger_auto_write,
+    update_project_story_tags,
+    work_tracker,
+)
 from agents.tools.delegation import delegate_task
 from agents.tools.lorebook import patch_worldview, rewrite_all_characters, rewrite_worldview, update_character
 from agents.tools.muse import (
@@ -78,6 +84,8 @@ DIRECTOR_TOOLS = SHARED_READ_TOOLS + [
     work_tracker,
     trigger_auto_write,
     check_scriptwriter_status,
+    read_project_story_tags,
+    update_project_story_tags,
     search_project,
     semantic_search,
     replace_from_search,
@@ -92,7 +100,17 @@ ALL_TOOLS = (
     + SHOWRUNNER_TOOLS
     + SCRIPTWRITER_TOOLS
     + SHARED_READ_TOOLS
-    + [delegate_task, trigger_auto_write, check_scriptwriter_status, search_project, semantic_search, replace_from_search, read_attachment_chunk]
+    + [
+        delegate_task,
+        trigger_auto_write,
+        check_scriptwriter_status,
+        read_project_story_tags,
+        update_project_story_tags,
+        search_project,
+        semantic_search,
+        replace_from_search,
+        read_attachment_chunk,
+    ]
     + EXTERNAL_SEARCH_TOOLS
     + OPTIONAL_RESEARCH_TOOLS
 )

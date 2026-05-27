@@ -12,6 +12,7 @@ import json
 from core.auth import get_current_user
 from core.request_context import get_current_project_name, resolve_project_name, set_agent_context
 from core.utils import get_project_path
+from core.project_settings import get_project_story_tags
 
 from agents import ShowrunnerAgent
 from agents.agent_style.utils import load_project_style_profile
@@ -101,6 +102,10 @@ async def generate_synopsis_stream_ai(
     set_agent_context(user_id, project_name)
     bundle = load_project_context_bundle(user_id, project_name)
     project_style_profile = load_project_style_profile(user_id=user_id, project_name=project_name)
+    
+    # 从 project_settings 读取 length_hint 作为 fallback
+    story_tags = get_project_story_tags(user_id, project_name)
+    length_hint = data.lengthHint or story_tags.get("length_hint")
 
     try:
         showrunner = ShowrunnerAgent(user_id)
@@ -118,7 +123,7 @@ async def generate_synopsis_stream_ai(
         roles=bundle.get("roles", ""),
         guidance=data.guidance,
         style_profile=data.style_profile if data.style_profile is not None else project_style_profile,
-        length_hint=data.lengthHint,
+        length_hint=length_hint,
     )
     stop_event = threading.Event()
 
@@ -197,6 +202,10 @@ async def generate_beat_sheet_stream_ai(
     set_agent_context(user_id, project_name)
     bundle = load_project_context_bundle(user_id, project_name)
     project_style_profile = load_project_style_profile(user_id=user_id, project_name=project_name)
+    
+    # 从 project_settings 读取 length_hint 作为 fallback
+    story_tags = get_project_story_tags(user_id, project_name)
+    length_hint = data.lengthHint or story_tags.get("length_hint")
 
     try:
         showrunner = ShowrunnerAgent(user_id)
@@ -214,7 +223,7 @@ async def generate_beat_sheet_stream_ai(
         roles=bundle.get("roles", ""),
         guidance=data.guidance,
         style_profile=project_style_profile,
-        length_hint=data.lengthHint,
+        length_hint=length_hint,
     )
     stop_event = threading.Event()
 

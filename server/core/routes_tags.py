@@ -13,6 +13,7 @@ import json
 
 from core.auth import get_current_user
 from core.utils import USERDATA_ROOT
+from core.project_settings import get_project_story_tags, set_project_story_tags
 
 
 tags_router = APIRouter()
@@ -136,3 +137,78 @@ async def get_tags_catalog(
         "custom": custom,
         "all": merged
     }
+
+
+# ==================== 项目级故事主题参数（Story Tags）====================
+
+
+class ProjectStoryTagsRequest(BaseModel):
+    """项目级故事主题参数请求体"""
+    projectName: str
+    style: Optional[str] = None
+    genres: Optional[List[str]] = None
+    tones: Optional[List[str]] = None
+    worldviews: Optional[List[str]] = None
+    pov: Optional[str] = None
+    lengthHint: Optional[str] = None
+    activeInspirationId: Optional[str] = None
+
+
+@tags_router.get('/api/project/story-tags')
+async def get_project_story_tags_api(
+    projectName: str,
+    user: dict = Depends(get_current_user)
+):
+    """
+    读取项目级故事主题参数（风格/题材/基调/世界观/人称/篇幅）。
+    
+    这些参数是"项目宪法"，贯穿整个创作周期，所有 Agent 通过 context_provider 统一读取。
+    """
+    user_id = str(user['user_id'])
+    try:
+        tags = get_project_story_tags(user_id, projectName)
+        return {
+            "success": True,
+            "tags": tags
+        }
+    except Exception as e:
+        print(f"Error loading project story tags: {e}")
+        return JSONResponse(
+            status_code=500,
+            content={"success": False, "error": str(e)}
+        )
+
+
+@tags_router.post('/api/project/story-tags')
+async def set_project_story_tags_api(
+    data: ProjectStoryTagsRequest,
+    user: dict = Depends(get_current_user)
+):
+    """
+    设置项目级故事主题参数（部分更新，仅覆盖传入的字段）。
+    
+    这些参数是"项目宪法"，贯穿整个创作周期，所有 Agent 通过 context_provider 统一读取。
+    """
+    user_id = str(user['user_id'])
+    try:
+        tags = set_project_story_tags(
+            user_id=user_id,
+            project_name=data.projectName,
+            style=data.style,
+            genres=data.genres,
+            tones=data.tones,
+            worldviews=data.worldviews,
+            pov=data.pov,
+            length_hint=data.lengthHint,
+            active_inspiration_id=data.activeInspirationId
+        )
+        return {
+            "success": True,
+            "tags": tags
+        }
+    except Exception as e:
+        print(f"Error saving project story tags: {e}")
+        return JSONResponse(
+            status_code=500,
+            content={"success": False, "error": str(e)}
+        )

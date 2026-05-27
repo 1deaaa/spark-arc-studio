@@ -34,6 +34,7 @@ from fastapi.responses import StreamingResponse
 
 from core.auth import get_current_user
 from core.utils import get_project_path
+from core.project_settings import get_project_story_tags
 from agents.agent_scriptwriter import ScriptwriterAgent
 from .stream_semantics import (
     semantic_sse_data,
@@ -62,6 +63,57 @@ from .context_builder import (
 from agents.agent_style.utils import load_project_style_profile
 
 auto_write_router = APIRouter()
+
+
+def _build_story_tags_block_for_auto_write(story_tags: Dict[str, Any]) -> str:
+    """
+    构建项目级故事主题参数的注入块（用于 auto_write 上下文）。
+    
+    与 context_provider._build_story_tags_block 保持一致的格式，
+    包含 POV 醒目优化（三层锚定策略）。
+    
+    Args:
+        story_tags: 从 get_project_story_tags 返回的字典
+        
+    Returns:
+        格式化后的 story tags 文本块，若所有字段均为空则返回空字符串
+    """
+    if not story_tags:
+        return ""
+    
+    parts = []
+    
+    # POV 醒目优化（最关键参数，必须引起 LLM 注意力机制）
+    pov = story_tags.get("pov")
+    if pov:
+        parts.append(
+            f"⚠️⚠️⚠️ 【叙事人称锁定】本文严格使用「{pov}」叙事。"
+            f"所有描写、对话、心理活动必须符合此人称视角，禁止切换。⚠️⚠️⚠️"
+        )
+    
+    # 其他 tags 格式化为紧凑单行
+    tag_lines = []
+    style = story_tags.get("style")
+    if style:
+        tag_lines.append(f"风格：{style}")
+    genres = story_tags.get("genres", [])
+    if genres:
+        tag_lines.append(f"题材：{'、'.join(genres)}")
+    tones = story_tags.get("tones", [])
+    if tones:
+        tag_lines.append(f"基调：{'、'.join(tones)}")
+    worldviews = story_tags.get("worldviews", [])
+    if worldviews:
+        tag_lines.append(f"世界观：{'、'.join(worldviews)}")
+    length_hint = story_tags.get("length_hint")
+    if length_hint:
+        tag_lines.append(f"篇幅：{length_hint}")
+    
+    if tag_lines:
+        parts.append("【创作参数】" + " | ".join(tag_lines))
+    
+    return "\n".join(parts)
+
 
 # 全局存储运行中项目的 stop_event
 _auto_write_stop_events: Dict[str, threading.Event] = {}
@@ -180,6 +232,13 @@ async def generate_script_stream(
     full_outline = load_full_outline(user_id, project_name)
     narrative_memory, _ = load_narrative_memory(user_id, project_name)
     style_profile = load_project_style_profile(user_id=user_id, project_name=project_name)
+    
+    # ── 加载项目级故事主题参数（story_tags）────────────────────────────────
+    # 这些参数是"项目宪法"，包含 POV、风格、题材、基调、世界观、篇幅等
+    story_tags = get_project_story_tags(user_id, project_name)
+    
+    # 构建 story_tags 注入块（与 context_provider._build_story_tags_block 保持一致）
+    story_tags_block = _build_story_tags_block_for_auto_write(story_tags)
 
     # Context accumulation (简单片段积累，三圈记忆策略会在 build_scene_context 里处理跨章前文)
     chapters_processed = 0
@@ -315,6 +374,11 @@ async def generate_script_stream(
                 current_chapter_index=i,
                 current_scene_index=scene_idx,
             )
+            
+            # ── 注入项目级故事主题参数（POV 等）──────────────────────────────
+            # 将 story_tags_block 前置到 context_str，确保 POV 等关键参数在上下文最前面
+            if story_tags_block:
+                context_str = story_tags_block + "\n\n" + context_str
 
             # 场景元数据（从大纲 > 行解析）
             scene_meta_parts = []

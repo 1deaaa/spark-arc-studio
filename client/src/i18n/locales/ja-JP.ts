@@ -972,6 +972,15 @@ const jaJP = {
       confirmDeleteWarning: 'プロジェクトデータは直ちに失われ、復元できません！',
       confirmDeleteFinal: 'この操作は取り消せません！プロジェクト「{project}」の削除を再確認しますか？すべてのデータが永久に失われます！',
     },
+    storyTagsPanel: {
+      title: 'プロジェクトストーリータグ',
+      noProject: 'プロジェクトを選択してください',
+      saveSuccess: 'プロジェクトストーリータグを保存しました',
+      saveFailed: '保存に失敗しました',
+    },
+    inspireTagsPanel: {
+      title: '着想タグ',
+    },
     outlineNode: {
       descPlaceholder: '説明...',
       chapterNumber: '章番号',
@@ -1489,6 +1498,7 @@ const jaJP = {
         resultPlaceholder: '着想生成結果...',
         emptyResult: '着想を点火すると提案が表示されます',
         ignite: '着想を点火',
+        pinInspiration: '着想を採用',
         generateSettings: '設定を生成',
         worldAndCharacter: '世界観とキャラクター設定',
         saveWorld: '世界観を保存',

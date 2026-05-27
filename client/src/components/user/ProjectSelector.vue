@@ -28,6 +28,7 @@
         </template>
         {{ t('components.projectSelector.newProject') }}
       </n-tooltip>
+      <StoryTagsPanel />
       <n-tooltip trigger="hover">
         <template #trigger>
           <n-button
@@ -70,6 +71,7 @@ import { CirclePlus, FolderOpen, SquarePen, Trash } from 'lucide-vue-next';
 import { useProjectStore } from '../stores/projectStore';
 import { useFileStore } from '../stores/fileStore';
 import bus from '@/eventBus';
+import StoryTagsPanel from '../share/StoryTagsPanel.vue';
 
 const { t } = useI18n();
 const dialog = useDialog();

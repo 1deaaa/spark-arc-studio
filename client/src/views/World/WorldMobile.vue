@@ -24,6 +24,16 @@
             type="primary"
             secondary
             :disabled="!museResult || isGenerating"
+            @click="handlePinInspiration"
+          >
+            <template #icon><n-icon :component="Pin" /></template>
+            {{ t('views.world.desktop.pinInspiration') }}
+          </n-button>
+          <n-button
+            size="tiny"
+            type="primary"
+            secondary
+            :disabled="!museResult || isGenerating"
             @click="handleGenerateFromMuse"
           >
             <template #icon><n-icon :component="Sparkles" /></template>
@@ -40,9 +50,17 @@
       />
       </div>
     
-    <!-- 标签选择器 -->
+    <!-- 历史记录快捷入口 -->
+      <div class="history-hint" @click="showHistory = true">
+      <n-icon :component="Clock" size="16" />
+        <span>{{ t('views.world.mobile.viewHistory') }}</span>
+      <n-icon :component="ChevronRight" size="16" />
+      </div>
+    
+    <!-- 灵感主题参数 -->
       <div class="flow-section tags-section">
       <InspireTagSelector
+        :title="t('components.inspireTagsPanel.title')"
         v-model:genres="selectedGenres"
         v-model:tones="selectedTones"
         v-model:worldviews="selectedWorldviews"
@@ -79,13 +97,6 @@
       />
       </div>
     
-    <!-- 历史记录快捷入口 -->
-      <div class="history-hint" @click="showHistory = true">
-      <n-icon :component="Clock" size="16" />
-        <span>{{ t('views.world.mobile.viewHistory') }}</span>
-      <n-icon :component="ChevronRight" size="16" />
-      </div>
-    
     <!-- 历史记录抽屉 -->
       <n-drawer v-model:show="showHistory" placement="bottom" height="70%">
       <n-drawer-content :title="t('views.world.common.history')" closable>
@@ -105,7 +116,7 @@
 import { ref } from 'vue';
 import { NInput, NButton, NIcon, NDrawer, NDrawerContent } from 'naive-ui';
 import { useI18n } from 'vue-i18n';
-import { ChevronRight, Clock, Sparkles, Zap } from 'lucide-vue-next';
+import { ChevronRight, Clock, Pin, Sparkles, Zap } from 'lucide-vue-next';
 import HistoryPanel from '../../components/dlg-editor/HistoryPanel.vue';
 import GlobalLoading from '../../components/share/GlobalLoading.vue';
 import InspireTagSelector from '../../components/lorebook/InspireTagSelector.vue';
@@ -129,6 +140,7 @@ const {
   handleIgnite,
   handleMuseHistorySelect,
   handleGenerateFromMuse,
+  handlePinInspiration,
   goToSynopsis
 } = useWorldLogic();
 </script>

@@ -20,6 +20,7 @@ from core.utils import (
     ensure_project_directory,
     ensure_project_characters_directory,
 )
+from core.project_settings import get_project_story_tags
 
 from agents.agent_lorebook import WorldviewAgent
 from agents.agent_utils import iter_text_output
@@ -245,12 +246,16 @@ async def generate_worldview(
             status_code=500, content={"error": f"AI 服务初始化失败: {e}"}
         )
     style_profile = load_project_style_profile(user_id=user_id, project_name=project_name)
+    
+    # 从 project_settings 读取 length_hint 作为 fallback
+    story_tags = get_project_story_tags(user_id, project_name)
+    length_hint = data.lengthHint or story_tags.get("length_hint")
 
     context = agent.build_context(
         operation="worldview",
         seed=seed_text,
         style_profile=style_profile,
-        length_hint=data.lengthHint,
+        length_hint=length_hint,
     )
     stop_event = threading.Event()
 

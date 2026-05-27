@@ -25,6 +25,7 @@ type StreamOptions = {
 type StoryBindingsPayload = JsonObject[] | JsonObject;
 
 type InspirationUpdatePayload = {
+  source?: string;
   content?: string;
   tags?: InspirationTags;
   status?: InspirationStatus;
@@ -421,12 +422,18 @@ export async function getInspirations(query?: InspirationListQuery): Promise<Ins
 
 /**
  * 将灵感绑定到指定项目（多对多软关联，重复调用幂等）。
+ *
+ * @param exclusive 排他绑定：为 true 时自动解绑该项目下的旧灵感，保证一个项目只有一个活跃灵感
  */
-export async function bindInspiration(entryId: string, projectName: string): Promise<ApiMutationResult> {
+export async function bindInspiration(
+  entryId: string,
+  projectName: string,
+  exclusive: boolean = false,
+): Promise<ApiMutationResult> {
   const response = await fetchWithAuth(`/api/inspirations/${entryId}/bind`, {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({ projectName }),
+    body: JSON.stringify({ projectName, exclusive }),
   });
   const result = await response.json() as ApiMutationResult;
   if (!response.ok || result.success === false) throw new Error(result.error || '绑定灵感失败');

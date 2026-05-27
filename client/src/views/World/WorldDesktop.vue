@@ -93,7 +93,8 @@
 
           <div class="result-split-bottom">
             <div class="controls-scroll">
-              <InspireTagSelector 
+              <InspireTagSelector
+                :title="t('components.inspireTagsPanel.title')"
                 v-model:genres="selectedGenres"
                 v-model:tones="selectedTones"
                 v-model:worldviews="selectedWorldviews"
@@ -112,6 +113,16 @@
                 >
                   <template #icon><n-icon :component="Zap" /></template>
                   {{ t('views.world.desktop.ignite') }}
+                </n-button>
+                
+                <n-button
+                  type="primary" secondary
+                  class="action-btn"
+                  :disabled="!museResult || isGenerating"
+                  @click="handlePinInspiration"
+                >
+                  <template #icon><n-icon :component="Pin" /></template>
+                  {{ t('views.world.desktop.pinInspiration') }}
                 </n-button>
                 
                 <n-button
@@ -166,7 +177,7 @@
 import { ref } from 'vue';
 import { NInput, NButton, NIcon, NEmpty, NBadge } from 'naive-ui';
 import { useI18n } from 'vue-i18n';
-import { ArrowRight, ChevronDown, ChevronUp, Clock, RefreshCw, Save, Sparkles, X, Zap } from 'lucide-vue-next';
+import { ArrowRight, ChevronDown, ChevronUp, Clock, Pin, RefreshCw, Save, Sparkles, X, Zap } from 'lucide-vue-next';
 import LorebookEditor from '../../components/lorebook/LorebookEditor.vue';
 import CharacterGeneratorPanel from '../../components/lorebook/CharacterGeneratorPanel.vue';
 import AiSettingsPanel from '../../components/lorebook/AiSettingsPanel.vue';
@@ -202,6 +213,7 @@ const {
   handleIgnite,
   handleMuseHistorySelect,
   handleGenerateFromMuse,
+  handlePinInspiration,
   goToSynopsis
 } = useWorldLogic();
 </script>

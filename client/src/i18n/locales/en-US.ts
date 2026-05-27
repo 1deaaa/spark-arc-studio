@@ -972,6 +972,15 @@ const enUS = {
       confirmDeleteWarning: 'Project data will be lost immediately and cannot be recovered!',
       confirmDeleteFinal: 'This action cannot be undone! Confirm again to delete project "{project}"? All data will be permanently lost!',
     },
+    storyTagsPanel: {
+      title: 'Project Story Tags',
+      noProject: 'Please select a project first',
+      saveSuccess: 'Project story tags saved',
+      saveFailed: 'Save failed',
+    },
+    inspireTagsPanel: {
+      title: 'Inspiration Tags',
+    },
     outlineNode: {
       descPlaceholder: 'Description...',
       chapterNumber: 'Chapter number',
@@ -1489,6 +1498,7 @@ const enUS = {
         resultPlaceholder: 'Generated inspiration result...',
         emptyResult: 'Ignite inspiration to view suggestions',
         ignite: 'Ignite',
+        pinInspiration: 'Pin Inspiration',
         generateSettings: 'Generate Settings',
         worldAndCharacter: 'World & Character Settings',
         saveWorld: 'Save Worldview',
