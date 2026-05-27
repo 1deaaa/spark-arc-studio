@@ -10,6 +10,8 @@
 import { ref, readonly, watch } from 'vue';
 import { fetchAgentRegistry } from '@/services/agentUsage';
 import { i18n } from '@/i18n';
+import { useThemeStore } from '@/components/stores/themeStore';
+import { getDerivedColors } from '@/styles/tokens';
 
 export type AgentRegistryEntry = {
   key: string;
@@ -143,11 +145,46 @@ function getAgentIcon(agentId?: string | null): string | null {
 }
 
 /**
+ * Director Agent 的颜色特殊处理：跟随当前主题色 --spark-primary
+ *
+ * 设计原因：
+ * - 导演（agent_director）作为统帅 Agent，视觉上应当与应用主色调保持一致，
+ *   而不是固定 hex 色（在自定义主题色或亮/暗模式切换时显得突兀）。
+ * - 本函数显式访问 themeStore 的响应式属性以建立依赖追踪，
+ *   主题切换时所有调用方的 computed 会自动重算。
+ *
+ * SVG 渐变兼容性：返回值是真实 hex（来自 getDerivedColors），
+ * 与其他 Agent 的 hex 一致，可直接用于 stop-color、HSL 混色计算。
+ */
+let _themeStoreCache: ReturnType<typeof useThemeStore> | null = null;
+function _resolveDirectorColor(): string {
+  if (_themeStoreCache === null) {
+    try {
+      _themeStoreCache = useThemeStore();
+    } catch {
+      // Pinia 未初始化（如 SSR 或测试环境），使用 fallback
+      return _colorFallback.agent_director;
+    }
+  }
+  const store = _themeStoreCache;
+  const isDark = store.themeMode === 'dark'
+    || (store.themeMode === 'system' && store.prefersDark);
+  const override = (isDark
+    ? store.primaryColorDark
+    : store.primaryColorLight || '').toString().trim();
+  return getDerivedColors(isDark, override || null).primary || _colorFallback.agent_director;
+}
+
+/**
  * 根据 agentId 获取专属主题色（hex）
  * 优先从后端 registry 取，fallback 到本地映射，仍找不到则返回 CSS 变量字符串
+ *
+ * 特例：agent_director 始终跟随当前主题主色 --spark-primary（忽略 registry 的固定 color）。
  */
 function getAgentColor(agentId?: string | null): string {
-  if (!agentId) return _colorFallback.agent_director ?? 'var(--spark-primary)';
+  if (agentId === 'agent_director' || !agentId) {
+    return _resolveDirectorColor();
+  }
   const entry = _registry.value.find(a => a.key === agentId);
   if (entry?.color) return entry.color;
   return _colorFallback[agentId] ?? 'var(--spark-primary)';

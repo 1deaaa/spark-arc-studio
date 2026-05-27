@@ -1,7 +1,7 @@
 {
   "identifier": "main-capability",
   "description": "Main window permissions",
-  "windows": ["main"],
+  "windows": ["*"],
   "permissions": [
     "core:default",
     "core:window:default",
@@ -12,6 +12,7 @@
     "core:window:allow-close",
     "core:window:allow-set-focus",
     "core:window:allow-start-resize-dragging",
+    "core:webview:allow-create-webview-window",
     "os:default",
     {
       "identifier": "opener:allow-open-url",

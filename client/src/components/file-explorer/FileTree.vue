@@ -235,6 +235,8 @@ onBeforeUnmount(() => {
 .file-tree :deep(.vuedraggable) {
   flex: 1;
   min-height: 0;
+  overflow-y: auto;
+  overflow-x: hidden;
 }
 
 .file-tree-empty {

@@ -1,29 +1,28 @@
 <template>
-  <div class="agent-radial-picker" :class="{ 'is-disabled': disabled }">
-    <!-- 触发器：纯圆形 Agent 头像 -->
-    <button
-      ref="triggerRef"
-      type="button"
-      class="picker-trigger"
-      :class="{ 'is-open': isOpen }"
-      :disabled="disabled"
-      :aria-haspopup="'listbox'"
-      :aria-expanded="isOpen"
-      :aria-label="`${currentName} (${t('components.agentRadialPicker.switchAgent')})`"
-      :title="`${currentName} · ${t('components.agentRadialPicker.switchAgent')}`"
-      @pointerdown="onTriggerPointerDown"
-      @click="onTriggerClick"
-      @keydown="onTriggerKeyDown"
-    >
-      <AgentAvatar
-        class="picker-trigger-avatar"
-        :agent-id="value"
-        :size="26"
-      />
-    </button>
+  <!-- 触发器：纯圆形 Agent 头像（作为组件根元素，无外层容器） -->
+  <button
+    ref="triggerRef"
+    type="button"
+    class="picker-trigger"
+    :class="[$attrs.class, { 'is-open': isOpen }]"
+    :disabled="disabled"
+    :aria-haspopup="'listbox'"
+    :aria-expanded="isOpen"
+    :aria-label="`${currentName} (${t('components.agentRadialPicker.switchAgent')})`"
+    :title="`${currentName} · ${t('components.agentRadialPicker.switchAgent')}`"
+    @pointerdown="onTriggerPointerDown"
+    @click="onTriggerClick"
+    @keydown="onTriggerKeyDown"
+  >
+    <AgentAvatar
+      class="picker-trigger-avatar"
+      :agent-id="value"
+      :size="26"
+    />
+  </button>
 
-    <!-- 轮盘 -->
-    <Teleport to="body">
+  <!-- 轮盘 -->
+  <Teleport to="body">
       <Transition name="agent-radial-fade">
         <div
           v-if="isOpen"
@@ -169,11 +168,12 @@
           </div>
         </div>
       </Transition>
-    </Teleport>
-  </div>
+  </Teleport>
 </template>
 
 <script setup lang="ts">
+defineOptions({ inheritAttrs: false });
+
 /**
  * AgentRadialPicker.vue —— Agent 轮盘选择器
  *
@@ -232,8 +232,10 @@ const isCompactViewport = computed(() => viewportWidth.value < 600);
 const effectiveRadius = computed(() => isCompactViewport.value ? Math.min(props.radius, 112) : props.radius);
 const effectiveSweep = computed(() => isCompactViewport.value ? Math.min(props.sweepAngle, 140) : props.sweepAngle);
 const centerAngle = computed(() => props.startAngle + props.sweepAngle / 2);
-// 移动端将中心角顺时针偏转 20°，使扇形整体右移，避免最左侧槽位溢出小屏幕左侧边界
-const effectiveCenterAngle = computed(() => isCompactViewport.value ? centerAngle.value + 20 : centerAngle.value);
+// 动态扇形旋转偏移量：保持触发器按钮位置不变（不再钳制 cx），转而调整扇形整体旋转角度
+// 让所有槽位都落在视口可见区域内，避免溢出屏幕边缘
+const dynamicCenterDelta = ref(0);
+const effectiveCenterAngle = computed(() => centerAngle.value + dynamicCenterDelta.value);
 const effectiveStart = computed(() => effectiveCenterAngle.value - effectiveSweep.value / 2);
 const effectiveSlotSize = computed(() => isCompactViewport.value ? Math.min(props.slotAvatarSize, 32) : props.slotAvatarSize);
 
@@ -497,17 +499,68 @@ function recalcWheelCenter(): void {
   const trig = triggerRef.value;
   if (!trig) return;
   const rect = trig.getBoundingClientRect();
-  let cx = rect.left + rect.width / 2;
-  let cy = rect.bottom + 14;
-  const margin = 16;
-  // 左侧边界约束：防止扇片溢出屏幕左侧（触发器靠近左边缘时尤为重要）
-  const minCx = effectiveRadius.value + margin;
-  if (cx < minCx) cx = minCx;
-  const maxCx = window.innerWidth - effectiveRadius.value - margin;
-  if (cx > maxCx) cx = maxCx;
-  const maxCy = window.innerHeight - effectiveRadius.value - margin;
-  if (cy > maxCy) cy = maxCy;
+  // 关键：不再钳制 cx/cy，wheel 中心严格对齐触发器按钮中心，按钮位置永远不漂移
+  const cx = rect.left + rect.width / 2;
+  const cy = rect.bottom + 14;
   wheelCenter.value = { x: cx, y: cy };
+
+  // 仅在压缩视口（移动端/窄聊天窗）下启用动态扇形旋转：
+  // 桌面端保持原始视觉设计（默认扇形朝右下方），不因小幅顶部溢出而调整
+  if (isCompactViewport.value) {
+    dynamicCenterDelta.value = computeFanDelta(cx, cy);
+  } else {
+    dynamicCenterDelta.value = 0;
+  }
+}
+
+/**
+ * 启发式算法：根据轮盘几何中心 (cx, cy) 在视口中的位置，
+ * 寻找一个使所有槽位都不溢出视口边界的 centerAngle 偏移量。
+ *
+ * 策略：从 0° 开始，按 5° 递增对正负方向交替试探（优先无偏移），
+ * 只要找到能让全部槽位完整落入安全区域的角度即返回。
+ */
+function computeFanDelta(cx: number, cy: number): number {
+  if (typeof window === 'undefined') return 0;
+  const N = displayOptions.value.length;
+  if (N <= 0) return 0;
+
+  const vw = window.innerWidth;
+  const vh = window.innerHeight;
+  const radius = effectiveRadius.value;
+  const sweep = effectiveSweep.value;
+  const baseCenter = centerAngle.value;
+  const margin = 12;
+  // 槽位自身半径，用于计算槽位边缘是否溢出视口
+  const slotHalf = (effectiveSlotSize.value + 8) / 2;
+
+  const fits = (delta: number): boolean => {
+    const start = baseCenter + delta - sweep / 2;
+    for (let i = 0; i < N; i++) {
+      const angle = start + ((i + 0.5) / N) * sweep;
+      const rad = (angle * Math.PI) / 180;
+      const sx = cx + Math.cos(rad) * radius;
+      const sy = cy + Math.sin(rad) * radius;
+      if (sx - slotHalf < margin) return false;
+      if (sx + slotHalf > vw - margin) return false;
+      if (sy - slotHalf < margin) return false;
+      if (sy + slotHalf > vh - margin) return false;
+    }
+    return true;
+  };
+
+  // 优先 delta = 0（保持原始视觉设计）
+  if (fits(0)) return 0;
+  // 然后按 5° 步进对正负方向同步搜索（先试小偏移）
+  for (let step = 5; step <= 120; step += 5) {
+    if (fits(step)) return step;
+    if (fits(-step)) return -step;
+  }
+  // 实在塞不下时按按钮在视口的水平比例给一个粗略偏移（保底，不会找不到结果）
+  const ratio = Math.max(0, Math.min(1, cx / vw));
+  if (ratio < 0.3) return -30;  // 按钮靠左，扇形朝右下方倾斜（centerAngle 减小）
+  if (ratio > 0.7) return 30;   // 按钮靠右，扇形朝左下方倾斜（centerAngle 增大）
+  return 0;
 }
 
 async function open(): Promise<void> {
@@ -732,17 +785,12 @@ onBeforeUnmount(() => {
 </script>
 
 <style scoped>
-.agent-radial-picker {
-  position: relative;
-  display: inline-flex;
-  align-items: center;
-}
-
-/* ============ 触发器：纯圆形 Agent 头像 ============ */
+/* ============ 触发器：纯圆形 Agent 头像（同时也是组件根元素） ============ */
 .picker-trigger {
   display: inline-flex;
   align-items: center;
   justify-content: center;
+  flex-shrink: 0; /* 在 flex 父容器（如聊天 header）中防止按钮被压缩 */
   width: 32px;
   height: 32px;
   padding: 0;

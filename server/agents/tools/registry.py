@@ -15,6 +15,7 @@ from agents.tools.research import graph_rag_tool
 from agents.tools.scriptwriter import (
     create_chapter,
     create_or_rewrite_script,
+    organize_scenes_to_chapter,
     patch_script,
     read_beat_sheet,
     read_character,
@@ -61,6 +62,7 @@ SHOWRUNNER_TOOLS = [
 SCRIPTWRITER_TOOLS = [
     create_chapter,
     create_or_rewrite_script,
+    organize_scenes_to_chapter,
     patch_script,
     read_worldview,
     read_character,
@@ -72,6 +74,7 @@ SCRIPTWRITER_TOOLS = [
 SHARED_READ_TOOLS = [list_chapters, read_chapter_scene, read_chapter_outline_raw]
 DIRECTOR_TOOLS = SHARED_READ_TOOLS + [
     delegate_task,
+    organize_scenes_to_chapter,
     work_tracker,
     trigger_auto_write,
     check_scriptwriter_status,

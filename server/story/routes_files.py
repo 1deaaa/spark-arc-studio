@@ -105,10 +105,45 @@ async def get_story_files(
             except Exception:
                 order_map = {}
 
+        def _extract_chapter_num(folder_name: str) -> int:
+            """从文件夹名中提取章节号，支持多种格式：
+            - '一 · 开端' -> 1, '二 · 相遇' -> 2（中文数字）
+            - '第1章_开端' -> 1, '第02章_相遇' -> 2（第X章格式）
+            - '01_开端' -> 1（纯数字开头）
+            """
+            import re
+            # 中文数字映射
+            cn_num_map = {
+                '一': 1, '二': 2, '三': 3, '四': 4, '五': 5,
+                '六': 6, '七': 7, '八': 8, '九': 9, '十': 10,
+                '十一': 11, '十二': 12, '十三': 13, '十四': 14, '十五': 15,
+                '十六': 16, '十七': 17, '十八': 18, '十九': 19, '二十': 20,
+            }
+            # 匹配「中文数字 · 标题」格式，如「一 · 开端」
+            match = re.match(r'^([一二三四五六七八九十]+)\s*[·•]\s*', folder_name)
+            if match:
+                cn_num = match.group(1)
+                if cn_num in cn_num_map:
+                    return cn_num_map[cn_num]
+            # 匹配 "第X章" 或 "第XX章" 格式
+            match = re.search(r'第(\d+)章', folder_name)
+            if match:
+                return int(match.group(1))
+            # 匹配纯数字开头的格式，如 "01_开端"
+            match = re.match(r'^(\d+)', folder_name)
+            if match:
+                return int(match.group(1))
+            return 999999  # 无法识别的放最后
+
         def reorder_by_user_order(items_list, dir_rel_path):
             order = order_map.get(dir_rel_path or '')
             if not order or not isinstance(order, list):
-                return items_list
+                # 没有用户自定义顺序时，按章节号排序文件夹
+                def default_key_fn(entry):
+                    if entry.get('type') == 'folder':
+                        return (_extract_chapter_num(entry.get('name', '')), entry.get('name', '').lower())
+                    return (999999, entry.get('name', '').lower())
+                return sorted(items_list, key=default_key_fn)
             index_map = {name: idx for idx, name in enumerate(order)}
             def key_fn(entry):
                 name = entry.get('name', '')

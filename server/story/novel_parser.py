@@ -1,9 +1,50 @@
 import json
 import os
 import re
-from typing import Dict, Any, List
+from typing import Dict, Any, List, Optional, Tuple
 from core.utils import get_project_stories_path, get_project_path
-from story.file_naming import build_scene_story_filename, strip_story_filename_meta
+from story.file_naming import (
+    build_scene_story_filename,
+    strip_story_filename_meta,
+    parse_story_filename,
+)
+
+
+def _find_scene_file(
+    stories_path: str,
+    chapter_num: int,
+    scene_num: int,
+    scene_title: str,
+    file_format: str = "md",
+) -> Tuple[Optional[str], bool]:
+    """
+    递归查找匹配指定章节/场景编号的文件。
+
+    优先按元数据（chap=xxx, scene=xxx）匹配，支持文件在任意子目录。
+    返回 (文件绝对路径, 是否存在)。
+    """
+    target_ext = ".md" if file_format == "novel" else ".arc"
+
+    # 递归扫描 stories 目录
+    for root, _, files in os.walk(stories_path):
+        for filename in files:
+            if not filename.endswith(target_ext):
+                continue
+            parsed = parse_story_filename(filename)
+            if not parsed:
+                continue
+            # 按元数据匹配：章节号 + 场景号
+            if (
+                parsed.get("chapter_num") == chapter_num
+                and parsed.get("scene_num") == scene_num
+            ):
+                return os.path.join(root, filename), True
+
+    # 未找到，返回预期路径（用于显示）
+    expected_filename = build_scene_story_filename(
+        chapter_num, scene_num, scene_title, file_format=file_format
+    )
+    return os.path.join(stories_path, expected_filename), False
 
 
 def _load_project_outline(user_id: str, project_name: str) -> Dict[str, Any]:
@@ -57,26 +98,32 @@ def get_novel_chapter_list(user_id: str, project_name: str, export_format: str =
         
         for s_idx, scene in enumerate(scenes):
             scene_title = scene.get("title", f"Scene {s_idx + 1}")
-            filename = build_scene_story_filename(
+            # 递归查找场景文件（支持子目录）
+            filepath, exists = _find_scene_file(
+                stories_path,
                 chapter_num,
                 s_idx + 1,
                 scene_title,
                 file_format=export_format,
             )
-            filepath = os.path.join(stories_path, filename)
             
             content = ""
-            if os.path.exists(filepath):
+            if exists:
                 with open(filepath, "r", encoding="utf-8") as f:
                     raw_content = f.read()
                 content = parse_scene_md(raw_content)
+            
+            # 从实际路径提取文件名用于显示
+            actual_filename = os.path.basename(filepath) if exists else build_scene_story_filename(
+                chapter_num, s_idx + 1, scene_title, file_format=export_format
+            )
                 
             chapter_info["scenes"].append({
                 "scene_idx": s_idx,
                 "title": scene_title,
                 "content": content,
-                "exists": os.path.exists(filepath),
-                "filename": strip_story_filename_meta(filename)
+                "exists": exists,
+                "filename": strip_story_filename_meta(actual_filename)
             })
             
         toc.append(chapter_info)

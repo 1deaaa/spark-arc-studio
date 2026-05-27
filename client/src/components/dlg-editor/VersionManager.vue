@@ -1,21 +1,19 @@
 <template>
   <div class="version-manager">
-    <div class="header">
-      <div class="left">
+    <div class="vm-toolbar">
+      <div class="vm-toolbar__info">
         <div class="title-row">
-          <h3>{{ t('components.versionManager.title') }}</h3>
+          <h3 class="vm-title">{{ t('components.versionManager.title') }}</h3>
           <n-tag size="small" :type="contentFormat === 'novel' ? 'warning' : 'info'">
             {{ t('components.versionManager.currentMode') }}：{{ contentFormat === 'novel' ? t('components.versionManager.modeNovel') : t('components.versionManager.modeScript') }}
           </n-tag>
         </div>
         <n-text depth="3" class="subtitle">{{ t('components.versionManager.subtitle') }}</n-text>
       </div>
-      <n-space align="center">
-        <n-button type="primary" @click="openCreateModal">
-          <template #icon><n-icon :component="Save" /></template>
-          {{ t('components.versionManager.createVersion') }}
-        </n-button>
-      </n-space>
+      <n-button class="vm-create-btn" type="primary" @click="openCreateModal">
+        <template #icon><n-icon :component="Save" /></template>
+        {{ t('components.versionManager.createVersion') }}
+      </n-button>
     </div>
 
     <n-alert v-if="globalShareDisabled" type="warning" class="share-disabled-banner" :show-icon="true">
@@ -24,12 +22,12 @@
 
     <div class="filter-bar" v-if="!projectId">
       <n-select 
+        class="filter-bar__select"
         v-model:value="filterProject" 
         :options="projectOptions" 
         :placeholder="t('components.versionManager.filterProject')" 
         clearable 
         @update:value="loadVersions"
-        style="width: 200px"
       />
     </div>
 
@@ -39,78 +37,19 @@
         
         <n-card v-for="ver in versions" :key="ver.id" class="version-item" size="small">
           <template #header>
-            <div class="version-header">
-              <span class="version-title">{{ ver.version_name }}</span>
-              <n-tag size="small" :type="ver.content_format === 'novel' ? 'warning' : 'info'">
-                {{ ver.content_format === 'novel' ? t('components.versionManager.modeNovel') : t('components.versionManager.modeScript') }}
-              </n-tag>
-            </div>
-          </template>
-          <template #header-extra>
-            <n-text depth="3" size="small">{{ formatDate(ver.created_at) }}</n-text>
-          </template>
-          
-          <div class="version-content">
-            <div class="version-desc">{{ ver.description || t('components.versionManager.noDescription') }}</div>
-            <n-alert
-              v-if="globalShareDisabled && ver.is_shared"
-              type="warning"
-              class="version-warning"
-              :show-icon="false"
-            >
-              {{ t('components.versionManager.publicShareDisabledOnItem') }}
-            </n-alert>
-            <n-space class="version-top-actions" justify="end" align="center" wrap>
-              <n-button size="small" secondary @click="downloadVersionSnapshot(ver)">
-                <template #icon><n-icon :component="CloudDownload" /></template>
-                {{ ver.content_format === 'novel' ? t('components.versionManager.exportNovel') : t('components.versionManager.exportScript') }}
-              </n-button>
-
-              <n-popconfirm v-if="ver.content_format !== 'novel'" @positive-click="restoreVersion(ver)">
-                <template #trigger>
-                  <n-button size="small" secondary>
-                    <template #icon><n-icon :component="RefreshCw" /></template>
-                    {{ t('components.versionManager.restoreToThisVersion') }}
-                  </n-button>
-                </template>
-                {{ t('components.versionManager.confirmRestore') }}
-              </n-popconfirm>
-
-              <n-popconfirm @positive-click="deleteVersion(ver.id)">
-                <template #trigger>
-                  <n-button size="small" type="error" ghost>
-                    <template #icon><n-icon :component="Trash" /></template>
-                  </n-button>
-                </template>
-                {{ t('components.versionManager.confirmDelete') }}
-              </n-popconfirm>
-            </n-space>
-          </div>
-          
-          <template #action>
-            <div class="action-row">
-              <div class="action-right-group">
-                <n-space class="action-buttons" align="center" wrap>
-                  <n-button size="small" :disabled="!ver.is_shared || globalShareDisabled" @click="copyLink(ver.share_id)">
-                    <template #icon><n-icon :component="Copy" /></template>
-                    {{ t('components.versionManager.copyLink') }}
-                  </n-button>
-
-                  <n-button size="small" @click="editVersion(ver)">
-                    <template #icon><n-icon :component="SquarePen" /></template>
-                    {{ t('components.versionManager.edit') }}
-                  </n-button>
-                  
-                  <n-button size="small" type="info" @click="openLink(ver.share_id || ver.id)">
-                    <template #icon><n-icon :component="Play" /></template>
-                    {{ ver.content_format === 'novel' ? t('components.versionManager.previewRead') : t('components.versionManager.previewPlay') }}
-                  </n-button>
-                </n-space>
-
+            <div class="version-card-header">
+              <div class="version-card-header__main">
+                <span class="version-title">{{ ver.version_name }}</span>
+                <n-tag size="small" :type="ver.content_format === 'novel' ? 'warning' : 'info'">
+                  {{ ver.content_format === 'novel' ? t('components.versionManager.modeNovel') : t('components.versionManager.modeScript') }}
+                </n-tag>
+              </div>
+              <div class="version-card-header__meta">
+                <n-text depth="3" size="small" class="version-date">{{ formatDate(ver.created_at) }}</n-text>
                 <n-tooltip trigger="hover">
                   <template #trigger>
                     <div class="share-toggle">
-                      <n-text depth="3" class="share-state-label">{{ ver.is_shared ? t('components.versionManager.public') : t('components.versionManager.private') }}</n-text>
+                      <n-text depth="3" size="small" class="share-state-label">{{ ver.is_shared ? t('components.versionManager.public') : t('components.versionManager.private') }}</n-text>
                       <n-switch
                         size="small"
                         :value="ver.is_shared"
@@ -131,6 +70,79 @@
               </div>
             </div>
           </template>
+
+          <div class="version-content">
+            <div class="version-desc">{{ ver.description || t('components.versionManager.noDescription') }}</div>
+            <n-alert
+              v-if="globalShareDisabled && ver.is_shared"
+              type="warning"
+              class="version-warning"
+              :show-icon="false"
+            >
+              {{ t('components.versionManager.publicShareDisabledOnItem') }}
+            </n-alert>
+
+            <div class="version-actions">
+              <div class="version-actions__primary">
+                <n-button
+                  size="small"
+                  type="info"
+                  strong
+                  class="vm-action-btn vm-action-btn--play"
+                  @click="openLink(ver.share_id || ver.id)"
+                >
+                  <template #icon><n-icon :component="Play" /></template>
+                  {{ ver.content_format === 'novel' ? t('components.versionManager.previewRead') : t('components.versionManager.previewPlay') }}
+                </n-button>
+                <n-button
+                  size="small"
+                  class="vm-action-btn"
+                  :disabled="!ver.is_shared || globalShareDisabled"
+                  @click="copyLink(ver.share_id)"
+                >
+                  <template #icon><n-icon :component="Copy" /></template>
+                  {{ t('components.versionManager.copyLink') }}
+                </n-button>
+                <n-button
+                  size="small"
+                  secondary
+                  class="vm-action-btn"
+                  @click="editVersion(ver)"
+                >
+                  <template #icon><n-icon :component="SquarePen" /></template>
+                  {{ t('components.versionManager.edit') }}
+                </n-button>
+              </div>
+
+              <div class="version-actions__secondary">
+                <n-button size="tiny" quaternary @click="downloadVersionSnapshot(ver)">
+                  <template #icon><n-icon :component="CloudDownload" /></template>
+                  {{ ver.content_format === 'novel' ? t('components.versionManager.exportNovel') : t('components.versionManager.exportScript') }}
+                </n-button>
+
+                <n-popconfirm v-if="ver.content_format !== 'novel'" @positive-click="restoreVersion(ver)">
+                  <template #trigger>
+                    <n-button size="tiny" quaternary>
+                      <template #icon><n-icon :component="RefreshCw" /></template>
+                      {{ t('components.versionManager.restoreToThisVersion') }}
+                    </n-button>
+                  </template>
+                  {{ t('components.versionManager.confirmRestore') }}
+                </n-popconfirm>
+
+                <span class="version-actions__spacer" />
+
+                <n-popconfirm @positive-click="deleteVersion(ver.id)">
+                  <template #trigger>
+                    <n-button size="tiny" type="error" quaternary class="vm-delete-btn">
+                      <template #icon><n-icon :component="Trash" /></template>
+                    </n-button>
+                  </template>
+                  {{ t('components.versionManager.confirmDelete') }}
+                </n-popconfirm>
+              </div>
+            </div>
+          </div>
         </n-card>
       </div>
     </n-spin>
@@ -670,59 +682,24 @@ onBeforeUnmount(() => {
 </script>
 
 <style scoped>
-.header {
-  display: flex;
-  justify-content: space-between;
-  align-items: center;
-  margin-bottom: 20px;
-}
-
-.subtitle {
-  font-size: 0.9em;
-}
-
-.filter-bar {
-  margin-bottom: 16px;
-}
-
-.share-disabled-banner {
-  margin-bottom: 12px;
-}
-
-.version-list {
+.version-manager {
   display: flex;
   flex-direction: column;
   gap: 12px;
 }
 
-.version-header {
+/* === 顶部 toolbar === */
+.vm-toolbar {
   display: flex;
-  align-items: center;
-  gap: 8px;
-}
-
-.version-content {
-  margin: 8px 0;
-  display: flex;
-  gap: 12px;
   align-items: flex-start;
   justify-content: space-between;
+  gap: 12px;
+  margin-bottom: 4px;
 }
 
-.version-desc {
-  color: var(--n-text-color-3);
-  font-size: 0.9em;
+.vm-toolbar__info {
   flex: 1 1 auto;
   min-width: 0;
-}
-
-.version-top-actions {
-  flex: 0 0 auto;
-  align-self: center;
-}
-
-.version-warning {
-  margin-top: 8px;
 }
 
 .title-row {
@@ -732,50 +709,149 @@ onBeforeUnmount(() => {
   flex-wrap: wrap;
 }
 
-.action-row {
-  display: flex;
-  align-items: center;
-  gap: 16px;
-  width: 100%;
+.vm-title {
+  margin: 0;
+  font-size: 1.1rem;
+  line-height: 1.3;
 }
 
-.action-right-group {
-  display: flex;
-  align-items: center;
-  gap: 16px;
-  margin-left: auto;
+.subtitle {
+  display: block;
+  margin-top: 4px;
+  font-size: 0.85em;
+  line-height: 1.4;
 }
 
-.action-buttons {
+.vm-create-btn {
   flex: 0 0 auto;
+}
+
+/* === 筛选 / 公告条 === */
+.filter-bar {
+  margin-bottom: 4px;
+}
+
+.filter-bar__select {
+  width: 220px;
+  max-width: 100%;
+}
+
+.share-disabled-banner {
+  margin-bottom: 4px;
+}
+
+/* === 版本列表 === */
+.version-list {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+
+.version-item :deep(.n-card-header) {
+  padding-bottom: 6px;
+}
+
+.version-card-header {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px 12px;
+  width: 100%;
   min-width: 0;
-  justify-content: flex-end;
+}
+
+.version-card-header__main {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  flex-wrap: wrap;
+  min-width: 0;
+}
+
+.version-card-header__meta {
+  display: inline-flex;
+  align-items: center;
+  gap: 12px;
+  flex-wrap: wrap;
+}
+
+.version-title {
+  font-weight: 700;
+  word-break: break-all;
+}
+
+.version-date {
+  white-space: nowrap;
 }
 
 .share-toggle {
   display: inline-flex;
   align-items: center;
-  gap: 8px;
-  padding: 0 4px;
-  flex: 0 0 auto;
+  gap: 6px;
+  padding: 0 2px;
 }
 
 .share-state-label {
-  min-width: 2.5em;
+  min-width: 2.2em;
   text-align: right;
   color: var(--n-primary-color);
   font-weight: 600;
 }
 
-.version-title {
-  font-weight: bold;
+/* === 卡片正文 === */
+.version-content {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
 }
 
 .version-desc {
   color: var(--n-text-color-3);
   font-size: 0.9em;
+  line-height: 1.5;
+  word-break: break-word;
 }
 
+.version-warning {
+  margin-top: 0;
+}
+
+/* === 操作区 === */
+.version-actions {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.version-actions__primary {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+
+.version-actions__primary .vm-action-btn {
+  flex: 1 1 0;
+  min-width: 96px;
+}
+
+.version-actions__secondary {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 4px;
+  padding-top: 2px;
+}
+
+.version-actions__spacer {
+  flex: 1 1 auto;
+}
+
+.vm-delete-btn {
+  margin-left: auto;
+}
+
+/* === 审核拒绝对话框（保留原样式） === */
 .share-review-dialog {
   display: flex;
   flex-direction: column;
@@ -810,31 +886,63 @@ onBeforeUnmount(() => {
   line-height: 1.5;
 }
 
+/* === 移动端响应式：≤720px === */
 @media (max-width: 720px) {
-  .version-content,
-  .action-row {
+  .vm-toolbar {
     flex-direction: column;
     align-items: stretch;
+    gap: 10px;
   }
 
-  .version-top-actions,
-  .action-buttons,
-  .share-toggle {
+  .vm-create-btn {
     width: 100%;
-    justify-content: flex-start;
+    justify-content: center;
+  }
+
+  .filter-bar__select {
+    width: 100%;
+  }
+
+  .version-card-header {
+    flex-direction: column;
+    align-items: stretch;
+    gap: 6px;
+  }
+
+  .version-card-header__main {
+    width: 100%;
+  }
+
+  .version-card-header__meta {
+    width: 100%;
+    justify-content: space-between;
+    gap: 8px;
+  }
+
+  .version-actions__primary {
+    display: grid;
+    grid-template-columns: repeat(3, minmax(0, 1fr));
+    gap: 6px;
+  }
+
+  .version-actions__primary .vm-action-btn {
+    width: 100%;
     min-width: 0;
-    margin-left: 0;
   }
 
-  .action-right-group {
-    width: 100%;
-    margin-left: 0;
-    flex-direction: column;
-    align-items: stretch;
+  .version-actions__secondary {
+    gap: 6px;
+  }
+}
+
+/* === 极窄屏：≤420px，主操作改 1+2 布局，让“试玩”独占首行 === */
+@media (max-width: 420px) {
+  .version-actions__primary {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
   }
 
-  .title-row {
-    align-items: flex-start;
+  .version-actions__primary .vm-action-btn--play {
+    grid-column: 1 / -1;
   }
 }
 </style>

@@ -9,7 +9,6 @@
           </svg>
         </span>
         <AgentRadialPicker
-          class="agent-radial-picker-inline"
           :value="agentId"
           :options="agentOptions"
           :disabled="sending && !allowAgentSwitchWhileSending"
@@ -268,11 +267,6 @@ defineExpose({ listRef: chatListRef });
 .chat-header-icon svg {
   width: 100%;
   height: 100%;
-}
-
-/* Agent 轮盘选择器（取代原 n-select） */
-.agent-radial-picker-inline {
-  flex-shrink: 0;
 }
 
 /* 清空/操作按钮 */

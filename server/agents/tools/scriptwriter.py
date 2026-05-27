@@ -13,13 +13,13 @@ from .common import ToolExecutionContext, _apply_patch
 
 class CreateOrRewriteScriptInput(BaseModel):
     overwrite_content: str = Field(description="完整的剧本/小说正文。若目标场景文件尚不存在，系统将自动创建；若已存在则覆盖。必须只包含最终可保存的正文，不得混入解释、确认话术或元话语。")
-    chapter_name: str | None = Field(default=None, description="目标章节名称（即文件夹名称）。【CRITICAL】剧本将保存到该章节目录下。写剧本/小说前，必须先调用 create_chapter 确保该章节目录存在，并在此传入一致的章节名。严禁在不指定章节的情况下调用此工具往根目录写入孤儿场景文件。")
-    work_name: str | None = Field(default=None, description="场景文件的显示名称（不含扩展名）。若不提供，系统将自动根据内容或上下文命名。")
+    chapter_name: str | None = Field(default=None, description="目标章节名称（即文件夹名称），格式为「中文数字 · 标题」（如「一 · 开端」「二 · 相遇」）。【CRITICAL】剧本将保存到该章节目录下。写剧本/小说前，必须先调用 create_chapter 确保该章节目录存在，并在此传入一致的章节名。严禁在不指定章节的情况下调用此工具往根目录写入孤儿场景文件。")
+    work_name: str | None = Field(default=None, description="场景文件的显示名称（不含扩展名），格式为「章节号-场景号 场景名」（如「1-1 初遇」「2-3 决战」）。若不提供，系统将自动根据内容或上下文命名。")
     export_format: str | None = Field(default=None, description="输出格式：'arc' 为互动剧本（默认），'novel' 为纯文学小说。决定文件扩展名与格式规范。")
 
 
 class CreateChapterInput(BaseModel):
-    chapter_name: str = Field(description="章节名称，将作为 stories 目录下的子文件夹名称。建议格式如「第一章_开端」或「第01章_相遇」。")
+    chapter_name: str = Field(description="章节名称，将作为 stories 目录下的子文件夹名称。格式为「中文数字 · 标题」（如「一 · 开端」「二 · 相遇」「十 · 终章」）。")
 
 
 class PatchScriptInput(BaseModel):
@@ -29,6 +29,25 @@ class PatchScriptInput(BaseModel):
 
 class ReadCharacterInput(BaseModel):
     character_name: str = Field(description="要查阅的角色名字，例如'张三'")
+
+
+class OrganizeScenesToChapterInput(BaseModel):
+    scene_paths: list[str] = Field(
+        description="要归纳的场景文件相对路径列表（相对于 stories 目录）。"
+                    "例如：['旧场景.arc', '一 · 开端/1-1 初遇.arc']。"
+                    "可通过 list_chapters 或 search_project 获取现有文件路径。"
+    )
+    new_chapter_name: str = Field(
+        description="目标章节名称（即文件夹名称），格式为「中文数字 · 标题」（如「二 · 发展」「三 · 转折」）。若章节不存在将自动创建。"
+    )
+    chapter_num: int | None = Field(
+        default=None,
+        description="章节编号（用于文件名元数据 chap=xxx）。若不指定，将根据现有章节自动推算。"
+    )
+    preserve_originals: bool = Field(
+        default=False,
+        description="是否保留原文件。False=移动（删除原文件），True=复制（保留原文件）。"
+    )
 
 
 def _ensure_chapter_dir(stories_path: str, chapter_name: str) -> str:
@@ -186,3 +205,99 @@ def patch_script(search_text: str, replace_text: str) -> str:
         "局部修改剧本失败：在当前项目所有剧本文件中均未找到与 search_text 匹配的片段。\n"
         "提示：请确保 search_text 取自原文的完整连续片段（建议 1‑3 句），不要包含额外解释性文字。"
     )
+
+
+@tool(args_schema=OrganizeScenesToChapterInput)
+def organize_scenes_to_chapter(
+    scene_paths: list[str],
+    new_chapter_name: str,
+    chapter_num: int | None = None,
+    preserve_originals: bool = False,
+) -> str:
+    """将指定的场景文件归纳到目标章节目录下。
+
+    适用场景：
+    - 整理散落在 stories 根目录的孤儿场景文件
+    - 将多个相关场景合并到新章节
+    - 重新组织章节结构
+
+    核心操作：
+    1. 更新文件名中的元数据（chap=xxx, order=xxx）
+    2. 可选：移动文件到章节文件夹（自动创建）
+    """
+    from core.utils import get_project_stories_path
+    from story.file_naming import (
+        parse_story_filename,
+        rebuild_story_filename,
+        next_story_order,
+    )
+    import shutil
+
+    user_id, project_name = ToolExecutionContext.get_context()
+    stories_path = get_project_stories_path(user_id, project_name)
+
+    if not scene_paths:
+        return "整理失败：scene_paths 不能为空。"
+
+    # 1. 验证所有源文件存在
+    source_files = []
+    for rel_path in scene_paths:
+        full_path = os.path.join(stories_path, rel_path.replace("/", os.sep))
+        if not os.path.exists(full_path):
+            return f"整理失败：文件不存在 - {rel_path}"
+        parsed = parse_story_filename(os.path.basename(full_path))
+        if not parsed:
+            return f"整理失败：无法解析文件名元数据 - {rel_path}"
+        source_files.append((rel_path, full_path, parsed))
+
+    # 2. 创建目标章节目录
+    target_chapter_name = (new_chapter_name or "").strip()
+    if not target_chapter_name:
+        return "整理失败：new_chapter_name 不能为空。"
+    target_dir = _ensure_chapter_dir(stories_path, target_chapter_name)
+
+    # 3. 确定章节编号
+    effective_chap = chapter_num
+    if effective_chap is None:
+        # 自动推算：扫描现有章节目录，取最大编号 +1
+        existing_chaps = []
+        for root, dirs, files in os.walk(stories_path):
+            for f in files:
+                p = parse_story_filename(f)
+                if p and p["chapter_num"] is not None:
+                    existing_chaps.append(p["chapter_num"])
+        effective_chap = max(existing_chaps, default=0) + 1
+
+    # 4. 获取目标目录的下一个可用 order
+    current_order = next_story_order(stories_path, target_chapter_name)
+
+    # 5. 逐个处理文件
+    moved_files = []
+    errors = []
+    for rel_path, full_path, parsed in source_files:
+        try:
+            # 构建新文件名（更新 chap 和 order）
+            new_filename = rebuild_story_filename(
+                os.path.basename(full_path),
+                chapter_num=effective_chap,
+                order=current_order,
+            )
+            target_path = os.path.join(target_dir, new_filename)
+
+            # 移动或复制
+            if preserve_originals:
+                shutil.copy2(full_path, target_path)
+            else:
+                shutil.move(full_path, target_path)
+
+            moved_files.append(f"{rel_path} → {target_chapter_name}/{new_filename}")
+            current_order += 1
+        except Exception as e:
+            errors.append(f"{rel_path}: {e}")
+
+    # 6. 返回结果
+    if errors:
+        return f"部分完成：\n成功：{moved_files}\n失败：{errors}"
+
+    action = "复制" if preserve_originals else "移动"
+    return f"已成功{action} {len(moved_files)} 个场景到章节「{target_chapter_name}」：\n" + "\n".join(moved_files)

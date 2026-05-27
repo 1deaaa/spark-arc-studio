@@ -4,6 +4,7 @@ import os
 
 from sqlalchemy import create_engine, delete, select, func
 from sqlalchemy.orm import sessionmaker
+from sqlalchemy.pool import NullPool
 
 from core.models import Story, StoryData
 from core.utils import (
@@ -31,7 +32,9 @@ def import_project_stories_to_db(user_id: str, project_name: str, *, reset: bool
     stories_dir = ensure_project_stories_directory(user_id, project_name)
     db_path = os.path.join(project_root, 'stories.db')
 
-    engine = create_engine(f'sqlite:///{db_path}', echo=False, future=True)
+    # 使用 NullPool 确保连接用完后立即真正关闭，避免 Windows 上 SQLite 文件锁残留
+    # 导致后续的 shutil.copy2 快照复制失败（第一次创建分享/版本必定失败的根因）
+    engine = create_engine(f'sqlite:///{db_path}', echo=False, future=True, poolclass=NullPool)
     StoryData.metadata.create_all(engine)
     Session = sessionmaker(bind=engine, expire_on_commit=False, future=True)
 
