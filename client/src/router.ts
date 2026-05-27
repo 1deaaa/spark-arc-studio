@@ -71,6 +71,13 @@ router.beforeEach(async (to, from, next) => {
 
   const requiresAuth = to.matched.some(record => record.meta.requiresAuth);
 
+  // 对于不需要认证的路由（如公开分享页面），直接放行，跳过认证检查
+  // 这样可以避免未登录用户访问公开分享时被强制跳转到登录页
+  if (!requiresAuth && to.name !== 'Login') {
+    next();
+    return;
+  }
+
   //  optimization: check local token first
   const hasLocalToken = !!getSessionToken();
 
