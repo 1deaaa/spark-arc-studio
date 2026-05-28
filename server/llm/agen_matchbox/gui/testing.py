@@ -209,14 +209,14 @@ class TestingMixin:
                         self.root.after(0, lambda m=item["error"]: self.log(f"✗ 测速出错: {m}"))
                         break
                     if item["type"] == "update":
-                        msg = f"  进度: {item['elapsed']}s | 速度: {item['speed']:.1f} chars/s"
+                        msg = f"  进度: {item['elapsed']}s | 速度: {item['speed']:.1f} token/s"
                         self.root.after(0, lambda m=msg: self.log(m))
                     elif item["type"] == "final":
                         ftl_str = f"{item['ftl']:.0f}ms" if item['ftl'] else "N/A"
                         res = (f"✓ 测速完成: {display_name}\n"
-                               f"  平均速度: {item['speed']:.1f} chars/s\n"
+                               f"  平均速度: {item['speed']:.1f} token/s\n"
                                f"  首次延迟: {ftl_str} (含推理时间)\n"
-                               f"  总输出字符: {item['total_chars']}")
+                               f"  总输出 token: {item['total_tokens']}")
                         self.root.after(0, lambda r=res: self.log(r, tag="success"))
                         self.root.after(0, lambda r=res: messagebox.showinfo("测速结果", r))
             except Exception as e:

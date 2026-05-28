@@ -420,7 +420,7 @@ export function useAIModelManager(
                 }
             });
             if (speedResults.value[modelKey]?.speed > 0) {
-                message.success(`${model.display_name} 测速完成: ${speedResults.value[modelKey].speed.toFixed(1)} char/s`);
+                message.success(`${model.display_name} 测速完成: ${speedResults.value[modelKey].speed.toFixed(1)} token/s`);
             }
         } catch (e: unknown) {
             message.error(`${model.display_name} 测速失败: ${getErrorMessage(e)}`);

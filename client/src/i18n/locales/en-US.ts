@@ -1498,7 +1498,7 @@ const enUS = {
         resultPlaceholder: 'Generated inspiration result...',
         emptyResult: 'Ignite inspiration to view suggestions',
         ignite: 'Ignite',
-        pinInspiration: 'Pin Inspiration',
+        pinInspiration: 'Pin',
         generateSettings: 'Generate Settings',
         worldAndCharacter: 'World & Character Settings',
         saveWorld: 'Save Worldview',

@@ -376,11 +376,11 @@
                                                 <template #icon v-if="speedTestingModelIds.has(model.model_id)">
                                                     <n-spin size="small" stroke="#67c23a" />
                                                 </template>
-                                                {{ speedResults[model.model_id].speed.toFixed(1) }} char/s
+                                                {{ speedResults[model.model_id].speed.toFixed(1) }} token/s
                                             </n-tag>
                                         </template>
                                         <div style="text-align: left">
-                                            <div>{{ t('components.aiManager.speed.avgSpeed') }}: {{ speedResults[model.model_id].speed.toFixed(1) }} char/s</div>
+                                            <div>{{ t('components.aiManager.speed.avgSpeed') }}: {{ speedResults[model.model_id].speed.toFixed(1) }} token/s</div>
                                             <div>{{ t('components.aiManager.speed.firstTokenLatency') }}: {{ speedResults[model.model_id].ftl ? speedResults[model.model_id].ftl.toFixed(0) + 'ms' : t('components.aiManager.speed.waiting') }} <span style="font-size: var(--spark-fs-3xs); opacity: 0.8">({{ t('components.aiManager.speed.withReasoning') }})</span></div>
                                         </div>
                                     </n-tooltip>

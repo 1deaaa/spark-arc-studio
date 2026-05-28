@@ -65,7 +65,10 @@
                 >
                   <div class="reasoning-content" :ref="(el) => setReasoningContentRef(getReasoningSegmentKey(m, idx, segIdx), el)">
                     <div class="reasoning-inner">
-                      <MarkdownRenderer :content="getReasoningSegmentText(seg)" />
+                      <MarkdownRenderer
+                        :content="getReasoningSegmentText(seg)"
+                        :streaming="isReasoningSegmentThinking(m, idx, segIdx)"
+                      />
                     </div>
                   </div>
                 </div>
@@ -1764,11 +1767,14 @@ defineExpose({ listRef });
   display: grid;
   grid-template-rows: 0fr;
   transition: grid-template-rows 0.2s cubic-bezier(0.4, 0, 1, 1);
+  /* 折叠时跳过内部渲染，减少主线程压力 */
+  contain: layout style;
 }
 
 .reasoning-content-wrapper.is-expanded {
   grid-template-rows: 1fr;
   transition: grid-template-rows 0.2s cubic-bezier(0, 0, 0.2, 1);
+  contain: none;
 }
 
 .reasoning-content {
@@ -1788,5 +1794,9 @@ defineExpose({ listRef });
   line-height: 1.5;
   color: var(--spark-text-secondary);
   border-top: 1px solid var(--spark-border);
+  /* 隔离内部布局变化对外层的影响，减少移动端重排范围 */
+  contain: content;
+  /* 流式期间允许内容溢出裁剪但不触发外层重排 */
+  overflow: hidden;
 }
 </style>

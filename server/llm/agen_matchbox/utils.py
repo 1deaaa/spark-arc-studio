@@ -360,11 +360,11 @@ def stream_speed_test(
 ):
     """
     流式测速逻辑
-    1. 发送请求要求输出 1000 字左右文本
+    1. 发送请求要求输出 1000 个 "hello"（每个 hello = 1 token）
     2. 区分 reasoning_content（推理）和 content（正文）
     3. 首字延迟 = 从请求发送到首个正文 content 出现的时间（含推理时间）
     4. 5秒计时从首个正文 content 出现后开始
-    5. 平均速度仅计算正文字符，时间从正文开始算
+    5. 速度按 token 计（统计 hello 个数），时间从正文开始算
     """
     try:
         import requests
@@ -380,7 +380,7 @@ def stream_speed_test(
 
     payload = {
         "model": model_name,
-        "messages": [{"role": "user", "content": "请写一篇关于未来科技的一千字左右的长篇文章，要求逻辑严密，文笔优美。请立即开始输出，不要废话。"}],
+        "messages": [{"role": "user", "content": "此信息仅用于测试最快输出速度，不要任何思考，以最快的方式回答1000个\"hello\"，以空格分割"}],
         "stream": True
     }
     if extra_body:
@@ -388,7 +388,8 @@ def stream_speed_test(
 
     request_start_time = time.time()
     first_content_time = None
-    content_chars = 0
+    content_buffer = ""
+    token_count = 0
     last_update_time = None
 
     try:
@@ -430,7 +431,8 @@ def stream_speed_test(
                             ftl = (first_content_time - request_start_time) * 1000
                             yield {"type": "first_token", "ftl": ftl}
 
-                        content_chars += len(content)
+                        content_buffer += content
+                        token_count = content_buffer.lower().count("hello")
 
                     # 推理内容不计入速度统计
                     if reasoning_content and first_content_time is None:
@@ -443,12 +445,12 @@ def stream_speed_test(
             if first_content_time is not None and last_update_time is not None:
                 if current_time - last_update_time >= 1.0:
                     content_elapsed = current_time - first_content_time
-                    avg_speed = content_chars / content_elapsed if content_elapsed > 0 else 0
+                    avg_speed = token_count / content_elapsed if content_elapsed > 0 else 0
                     yield {
                         "type": "update",
                         "speed": avg_speed,
                         "elapsed": int(content_elapsed),
-                        "total_chars": content_chars
+                        "total_tokens": token_count
                     }
                     last_update_time = current_time
 
@@ -456,7 +458,7 @@ def stream_speed_test(
         end_time = time.time()
         if first_content_time is not None:
             content_elapsed = min(end_time - first_content_time, 5.0)
-            final_speed = content_chars / content_elapsed if content_elapsed > 0 else 0
+            final_speed = token_count / content_elapsed if content_elapsed > 0 else 0
             ftl = (first_content_time - request_start_time) * 1000
         else:
             content_elapsed = 0
@@ -467,7 +469,7 @@ def stream_speed_test(
             "type": "final",
             "speed": final_speed,
             "ftl": ftl,
-            "total_chars": content_chars,
+            "total_tokens": token_count,
             "elapsed": content_elapsed
         }
 

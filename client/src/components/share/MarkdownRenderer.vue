@@ -1,15 +1,24 @@
 <template>
-  <div class="markdown-content" v-html="renderedContent"></div>
+  <div class="markdown-content" v-html="displayedHtml"></div>
 </template>
 
 <script setup lang="ts">
-import { computed } from 'vue';
+import { computed, ref, watch, onBeforeUnmount } from 'vue';
 import katex from 'katex';
 
 const props = defineProps({
   content: {
     type: String,
     default: ''
+  },
+  /**
+   * 流式模式：启用后渲染会以防抖方式批量更新，
+   * 避免每个 token 都触发完整 markdown 解析和 DOM 重排。
+   * 仅在内容快速变化时使用（如流式推理链），静态内容无需开启。
+   */
+  streaming: {
+    type: Boolean,
+    default: false
   }
 });
 
@@ -273,7 +282,80 @@ function renderTables(text) {
   return output.join('\n');
 }
 
+/** 完整渲染结果（非流式模式直接使用） */
 const renderedContent = computed(() => renderMarkdown(props.content));
+
+/**
+ * 流式防抖渲染：
+ * - 每 80ms 最多更新一次 DOM
+ * - 仅在内容增量超过阈值（约一行文字）时才触发重渲染
+ * - 减少移动端主线程 layout thrashing
+ */
+const STREAMING_DEBOUNCE_MS = 80;
+const STREAMING_MIN_DELTA = 30; // 约一行中文字符数阈值
+
+const streamedHtml = ref('');
+let _streamTimer: ReturnType<typeof setTimeout> | null = null;
+let _lastRenderedLen = 0;
+
+function _scheduleStreamRender() {
+  if (_streamTimer !== null) return;
+  _streamTimer = setTimeout(() => {
+    _streamTimer = null;
+    const currentLen = props.content?.length ?? 0;
+    const delta = currentLen - _lastRenderedLen;
+    // 仅在增量足够大或内容缩短时才重渲染
+    if (delta >= STREAMING_MIN_DELTA || delta < 0 || _lastRenderedLen === 0) {
+      streamedHtml.value = renderMarkdown(props.content);
+      _lastRenderedLen = currentLen;
+    }
+  }, STREAMING_DEBOUNCE_MS);
+}
+
+watch(
+  () => props.content,
+  () => {
+    if (props.streaming) {
+      _scheduleStreamRender();
+    }
+  },
+);
+
+// 流式模式切换时立即同步
+watch(
+  () => props.streaming,
+  (isStreaming) => {
+    if (!isStreaming) {
+      // 退出流式模式：清理定时器，同步最新内容
+      if (_streamTimer !== null) {
+        clearTimeout(_streamTimer);
+        _streamTimer = null;
+      }
+      streamedHtml.value = renderMarkdown(props.content);
+      _lastRenderedLen = props.content?.length ?? 0;
+    } else {
+      // 进入流式模式：立即渲染一次
+      streamedHtml.value = renderMarkdown(props.content);
+      _lastRenderedLen = props.content?.length ?? 0;
+    }
+  },
+);
+
+onBeforeUnmount(() => {
+  if (_streamTimer !== null) {
+    clearTimeout(_streamTimer);
+    _streamTimer = null;
+  }
+});
+
+/** 最终展示的 HTML：流式模式用防抖结果，否则用实时计算结果 */
+const displayedHtml = computed(() => {
+  if (props.streaming) {
+    // 首次进入流式模式时 streamedHtml 可能为空，回退到实时渲染
+    return streamedHtml.value || renderedContent.value;
+  }
+  return renderedContent.value;
+});
 </script>
 
 <style scoped>
