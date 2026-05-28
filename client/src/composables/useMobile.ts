@@ -14,6 +14,25 @@ const windowWidth = ref(window.innerWidth);
 function ensureSafeAreaFallback() {
     if (window.innerWidth > 768) return; // 仅移动端
 
+    // 区分普通网页访问与全屏 App / PWA 独立应用模式
+    // 普通网页访问时，浏览器视口已避开状态栏，无需任何兜底留白
+    const isStandalone = 
+        (window.navigator as any).standalone || 
+        window.matchMedia('(display-mode: standalone)').matches ||
+        window.matchMedia('(display-mode: fullscreen)').matches ||
+        window.matchMedia('(display-mode: minimal-ui)').matches;
+
+    const isTauri = !!(
+        (window as any).__TAURI_INTERNALS__ || 
+        (window as any).__TAURI__ || 
+        navigator.userAgent.toLowerCase().includes('tauri')
+    );
+
+    // 如果既不是 Tauri App，也不是 PWA 独立应用模式，说明是普通移动端网页访问，直接返回
+    if (!isTauri && !isStandalone) {
+        return;
+    }
+
     // 用临时元素测量 env(safe-area-inset-top) 的实际计算值
     const probe = document.createElement('div');
     probe.style.cssText =
