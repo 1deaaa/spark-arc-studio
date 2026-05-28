@@ -1,7 +1,9 @@
 <template>
+  <!-- 桌面端：popover 锚定按钮，bottom-end 对齐避免右侧溢出 -->
   <n-popover
+    v-if="!isMobile"
     trigger="click"
-    :placement="isMobile ? 'bottom' : 'bottom-end'"
+    placement="bottom-end"
     :show-arrow="false"
     raw
     content-class="story-tags-popover-raw"
@@ -17,7 +19,7 @@
         {{ t('components.storyTagsPanel.title') }}
       </n-tooltip>
     </template>
-    <div :class="['story-tags-popover', { 'mobile-full-width': isMobile }]">
+    <div class="story-tags-popover">
       <div class="popover-body">
         <InspireTagSelector
           :default-open="true"
@@ -32,10 +34,47 @@
       </div>
     </div>
   </n-popover>
+
+  <!-- 移动端：脱离按钮锚点，从标题栏下方居中弹出，自适应宽度 -->
+  <template v-else>
+    <n-tooltip trigger="hover">
+      <template #trigger>
+        <n-button quaternary circle :size="buttonSize" @click="show = !show">
+          <template #icon><n-icon :component="Tags" /></template>
+        </n-button>
+      </template>
+      {{ t('components.storyTagsPanel.title') }}
+    </n-tooltip>
+
+    <Teleport to="body">
+      <Transition name="story-tags-mobile">
+        <div
+          v-if="show"
+          class="story-tags-mobile-overlay"
+          @click.self="show = false"
+        >
+          <div class="story-tags-mobile-panel" @click.stop>
+            <div class="popover-body">
+              <InspireTagSelector
+                :default-open="true"
+                v-model:genres="selectedGenres"
+                v-model:tones="selectedTones"
+                v-model:worldviews="selectedWorldviews"
+                v-model:pov="selectedPov"
+                v-model:lengthHint="selectedLength"
+                :show-style="false"
+                :show-length="true"
+              />
+            </div>
+          </div>
+        </div>
+      </Transition>
+    </Teleport>
+  </template>
 </template>
 
 <script setup lang="ts">
-import { ref, watch, onMounted } from 'vue';
+import { ref, watch, onMounted, onBeforeUnmount } from 'vue';
 import { useI18n } from 'vue-i18n';
 import { NPopover, NButton, NIcon, NTooltip } from 'naive-ui';
 import { Tags } from 'lucide-vue-next';
@@ -58,6 +97,14 @@ const selectedTones = ref<string[]>([]);
 const selectedWorldviews = ref<string[]>([]);
 const selectedPov = ref<string | undefined>(undefined);
 const selectedLength = ref<string | undefined>(undefined);
+
+// 移动端弹出菜单的显示状态（脱离按钮锚点的居中弹出）
+const show = ref(false);
+
+// Escape 键关闭移动端弹出菜单
+function onKeydown(e: KeyboardEvent) {
+  if (e.key === 'Escape' && show.value) show.value = false;
+}
 
 // ── 从后端加载 ──
 async function loadFromBackend() {
@@ -118,6 +165,11 @@ watch(() => projectStore.currentProject, () => {
 
 onMounted(() => {
   loadFromBackend();
+  window.addEventListener('keydown', onKeydown);
+});
+
+onBeforeUnmount(() => {
+  window.removeEventListener('keydown', onKeydown);
 });
 </script>
 
@@ -133,14 +185,62 @@ onMounted(() => {
   -webkit-user-select: none;
 }
 
-.story-tags-popover.mobile-full-width {
-  width: calc(100vw - 16px);
-}
-
 .popover-body {
   padding: 12px 16px;
   max-height: 50vh;
   overflow-y: auto;
+}
+
+/* ── 移动端：标题栏下方居中弹出 ── */
+.story-tags-mobile-overlay {
+  position: fixed;
+  top: calc(var(--mobile-header-height, 44px) + var(--sat, 0px));
+  left: 0;
+  right: 0;
+  bottom: 0;
+  z-index: 199; /* 低于 mobile header(z-index:200)，让标题栏按钮可再次点击关闭 */
+  display: flex;
+  justify-content: center;
+  align-items: flex-start;
+  padding: 8px;
+  background: rgba(0, 0, 0, 0.18);
+  backdrop-filter: blur(2px);
+}
+
+.story-tags-mobile-panel {
+  width: 100%;
+  max-width: 480px;
+  background: var(--spark-panel-bg);
+  border: 1px solid var(--spark-border);
+  border-radius: 12px;
+  overflow: hidden;
+  box-shadow: 0 4px 16px rgba(0, 0, 0, 0.2);
+  user-select: none;
+  -webkit-user-select: none;
+}
+
+.story-tags-mobile-panel .popover-body {
+  padding: 12px 16px;
+  max-height: calc(100dvh - var(--mobile-header-height, 44px) - var(--sat, 0px) - var(--sab, 0px) - 32px);
+  overflow-y: auto;
+}
+
+.story-tags-mobile-enter-active,
+.story-tags-mobile-leave-active {
+  transition: opacity 0.18s ease;
+}
+.story-tags-mobile-enter-active .story-tags-mobile-panel,
+.story-tags-mobile-leave-active .story-tags-mobile-panel {
+  transition: transform 0.18s ease, opacity 0.18s ease;
+}
+.story-tags-mobile-enter-from,
+.story-tags-mobile-leave-to {
+  opacity: 0;
+}
+.story-tags-mobile-enter-from .story-tags-mobile-panel,
+.story-tags-mobile-leave-to .story-tags-mobile-panel {
+  transform: translateY(-8px);
+  opacity: 0;
 }
 </style>
 

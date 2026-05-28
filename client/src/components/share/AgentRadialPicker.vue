@@ -23,11 +23,16 @@
 
   <!-- 轮盘 -->
   <Teleport to="body">
-      <Transition name="agent-radial-fade">
+      <Transition
+        name="agent-radial-fade"
+        @after-enter="onOverlayAfterEnter"
+        @before-leave="onOverlayBeforeLeave"
+      >
         <div
           v-if="isOpen"
           ref="overlayRef"
           class="agent-radial-overlay"
+          :class="{ 'is-stable': overlayStable }"
           @pointerdown.self="onOverlayPointerDown"
         >
           <div
@@ -225,6 +230,9 @@ const wheelRef = ref<HTMLDivElement | null>(null);
 const slotRefs = ref<Array<HTMLElement | null>>([]);
 const hoverIndex = ref(-1);
 const wheelCenter = ref({ x: 0, y: 0 });
+// 入场动画结束前不挂 backdrop-filter，避免整屏高斯模糊与弹性 transform: scale 同帧合成
+// 在弱 GPU 移动端，这是首次打开轮盘卡顿的主要根因
+const overlayStable = ref(false);
 
 const viewportWidth = ref(typeof window !== 'undefined' ? window.innerWidth : 1024);
 const isCompactViewport = computed(() => viewportWidth.value < 600);
@@ -581,6 +589,23 @@ function close(): void {
   pointerDownOnTrigger.value = false;
 }
 
+/**
+ * 入场动画完整结束后再挂 backdrop-filter：
+ * 入场期间 wheel 在做 cubic-bezier 弹性 scale，整屏 backdrop blur 与之同帧合成会拖慢首帧。
+ * 等 transform 收敛后再缓 fade-in 磨砂背景，视觉上几乎察觉不到差异。
+ */
+function onOverlayAfterEnter(): void {
+  overlayStable.value = true;
+}
+
+/**
+ * 退出前先撤掉 backdrop-filter，使其立即消失，再让透明度收尾。
+ * 避免退出动画期间 backdrop blur 仍在持续合成，进一步拖慢关闭。
+ */
+function onOverlayBeforeLeave(): void {
+  overlayStable.value = false;
+}
+
 function commitSelectionAndClose(value: string, idx: number): void {
   renderSnapshot.value = [...renderableOptions.value];
   hoverIndex.value = idx;
@@ -674,6 +699,25 @@ function onWindowPointerUp(evt: PointerEvent): void {
     }
     hoverIndex.value = -1;
   } else {
+    /*
+     * 关键修复：单击 trigger 后立即抬起的场景。
+     * 由于 overlay 在 open() 后立即覆盖整个视口，pointerup 的 hit-test 通常会落在 overlay 上而不是 trigger。
+     * 同时 wheel 中央 hub 位于 trigger 下方 14px 处，仅右上边少量与 trigger 重叠，
+     * 这造成点击 trigger 视觉中心时 evt.target === overlayRef 为真 → close()，出现“点一下立刻消失”。
+     * 修复：按鼠标抬起的物理坐标是否仍在 trigger rect 内判断，是则保持轮盘打开。
+     */
+    const trig = triggerRef.value;
+    let stillOnTrigger = false;
+    if (trig) {
+      const r = trig.getBoundingClientRect();
+      stillOnTrigger =
+        evt.clientX >= r.left && evt.clientX <= r.right &&
+        evt.clientY >= r.top && evt.clientY <= r.bottom;
+    }
+    if (stillOnTrigger) {
+      // 单击未拖动 + 抬起仍在 trigger 上，保持轮盘打开等待后续选择
+      return;
+    }
     if (evt.target === overlayRef.value) {
       close();
     }
@@ -785,40 +829,66 @@ onBeforeUnmount(() => {
 </script>
 
 <style scoped>
-/* ============ 触发器：纯圆形 Agent 头像（同时也是组件根元素） ============ */
+/* ============ 触发器：与 AgentAvatar “合二为一” ============ */
+/*
+ * 设计原则：button 作为组件根仅保留无障碍/键盘交互，视觉上完全是 AgentAvatar 本身。
+ * 必须彻底重置 button 的 user-agent 默认样式（特别是 iOS Safari/Chrome 移动端会给 button 默认加
+ * 渐变背景、圆角、font/line-height 偏移、默认 padding 等），避免移动端出现 button “压变形”。
+ * 高亮所有反馈都作用在内层 .picker-trigger-avatar 上，让头像本身亮起来。
+ */
 .picker-trigger {
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
-  flex-shrink: 0; /* 在 flex 父容器（如聊天 header）中防止按钮被压缩 */
-  width: 32px;
-  height: 32px;
+  /* 彻底重置 button 的所有 user-agent 默认样式 */
+  -webkit-appearance: none;
+  appearance: none;
+  margin: 0;
   padding: 0;
+  border: 0;
   background: transparent;
-  border: 1.5px solid transparent;
+  font: inherit;
+  color: inherit;
+  line-height: 0; /* 除去 button 默认 baseline 间距，防止产生高度变形 */
+
+  /* 仅保留 hit area 与交互反馈所需的样式 */
+  display: inline-flex;
+  flex-shrink: 0; /* 在 flex 父容器（如聊天 header）中防止按钮被压缩 */
+  position: relative; /* 为 ::before 扩展 hit area 提供定位上下文 */
   border-radius: 50%;
-  color: var(--spark-text);
   cursor: pointer;
-  font-family: inherit;
   outline: none;
-  transition:
-    background 0.15s ease,
-    border-color 0.15s ease,
-    box-shadow 0.18s ease;
   user-select: none;
   -webkit-tap-highlight-color: transparent;
   touch-action: none; /* 彻底打通移动端“一气呵成滑动”：禁用原生的滑动手势与页面滚动判定，确保手指划动时 pointermove 能够持续稳定触发，不被系统的 pointercancel 截断 */
+  transition: transform 0.18s ease;
+}
+
+/*
+ * 透明 hit area 扩展：在不改变头像视觉尺寸的前提下，把可点击区域从 26x26 拓到 ≈34x34。
+ * 伪元素不会成为 event.target，鼠标命中 ::before 时事件仍会派发到父 button 上，onTriggerPointerDown 正常触发。
+ * inset -4px 与两侧兄弟元素的 gap 8px 不产生重叠，不会误伤邻居点击区。
+ */
+.picker-trigger::before {
+  content: '';
+  position: absolute;
+  inset: -4px;
+  border-radius: inherit;
 }
 
 .picker-trigger:hover:not(:disabled),
 .picker-trigger.is-open {
-  border-color: color-mix(in srgb, var(--spark-primary) 30%, transparent);
-  box-shadow: none;
+  /* 微放大＋内层头像光环表达高亮，不需要外层边框 */
+  transform: scale(1.06);
 }
 
-.picker-trigger:focus-visible {
-  border-color: var(--spark-primary);
-  box-shadow: 0 0 0 3px color-mix(in srgb, var(--spark-primary) 25%, transparent);
+.picker-trigger:active:not(:disabled) {
+  transform: scale(0.96);
+  transition-duration: 0.08s;
+}
+
+.picker-trigger:focus-visible .picker-trigger-avatar {
+  /* focus ring 贴着圆形头像边缘，不在外面形成矩形 outline、避免破坏圆形视觉 */
+  box-shadow:
+    0 0 0 2px color-mix(in srgb, var(--spark-primary) 60%, transparent),
+    0 4px 10px rgba(0, 0, 0, 0.08);
 }
 
 .picker-trigger:disabled {
@@ -828,6 +898,16 @@ onBeforeUnmount(() => {
 
 .picker-trigger-avatar {
   flex-shrink: 0;
+  /* 根据父层 hover/open/focus 状态驱动内层光环 */
+  transition: box-shadow 0.2s ease;
+}
+
+.picker-trigger:hover:not(:disabled) .picker-trigger-avatar,
+.picker-trigger.is-open .picker-trigger-avatar {
+  /* 高亮通过头像自身的光环表达——不是外层多一圈边框，而是头像本身“亮起来” */
+  box-shadow:
+    0 0 0 2px color-mix(in srgb, var(--spark-primary) 32%, transparent),
+    0 6px 14px rgba(0, 0, 0, 0.16);
 }
 
 /* ============ 轮盘 Overlay ============ */
@@ -836,11 +916,23 @@ onBeforeUnmount(() => {
   inset: 0;
   z-index: 9000;
   background: color-mix(in srgb, var(--spark-bg) 70%, transparent);
-  backdrop-filter: blur(6px) saturate(0.85);
-  -webkit-backdrop-filter: blur(6px) saturate(0.85);
+  /*
+   * 默认不挂 backdrop-filter：入场弹性动画期间整屏高斯模糊会与 wheel 的 transform: scale 同帧重做合成，
+   * 是移动端首次打开轮盘的主要卡顿源。改为入场动画结束（@after-enter）后通过 .is-stable 缓 fade-in。
+   */
   pointer-events: auto;
   outline: none;
   touch-action: none;
+  /* 提示浏览器为后续 backdrop-filter 留独立合成层，避免动态加滤镜时再做一次 layer promotion */
+  will-change: backdrop-filter;
+}
+
+.agent-radial-overlay.is-stable {
+  backdrop-filter: blur(6px) saturate(0.85);
+  -webkit-backdrop-filter: blur(6px) saturate(0.85);
+  transition:
+    backdrop-filter 0.18s ease,
+    -webkit-backdrop-filter 0.18s ease;
 }
 
 .agent-radial-wheel {
@@ -848,6 +940,8 @@ onBeforeUnmount(() => {
   width: 0;
   height: 0;
   pointer-events: none;
+  /* 入场期间 transform: scale 走独立合成层，与 overlay 解耦，进一步降低首帧合成耦合 */
+  will-change: transform;
   --slot-size: 56px;
   --label-offset: 44px;
 }
@@ -996,24 +1090,45 @@ onBeforeUnmount(() => {
   white-space: nowrap;
   pointer-events: none;
   z-index: 15;
-  animation: agentRadialHintBreathe 2.4s ease-in-out infinite;
+  /*
+   * 仅做 opacity 呼吸（GPU 合成）；放射光环移到 ::before 的 transform: scale 上，
+   * 取代旧版 box-shadow 0→8px 的 spread 动画——box-shadow 不能 GPU 加速，每帧都要 paint，
+   * 在打开瞬间叠加 backdrop-filter 会进一步拖慢首帧。
+   */
+  animation: agentRadialHintFade 2.4s ease-in-out infinite;
 }
 
-@keyframes agentRadialHintBreathe {
-  0%, 100% {
-    opacity: 0.65;
-    box-shadow: 0 0 0 0 color-mix(in srgb, var(--spark-primary) 24%, transparent);
-  }
-  50% {
-    opacity: 1;
-    box-shadow: 0 0 0 8px color-mix(in srgb, var(--spark-primary) 0%, transparent);
-  }
+.agent-radial-hint::before {
+  content: '';
+  position: absolute;
+  inset: 0;
+  border-radius: inherit;
+  border: 1px solid color-mix(in srgb, var(--spark-primary) 28%, transparent);
+  pointer-events: none;
+  animation: agentRadialHintRing 2.4s ease-in-out infinite;
+  /* 关键：transform 触发 GPU 合成层而非 paint */
+  will-change: transform, opacity;
+}
+
+@keyframes agentRadialHintFade {
+  0%, 100% { opacity: 0.65; }
+  50% { opacity: 1; }
+}
+
+@keyframes agentRadialHintRing {
+  0%, 100% { transform: scale(1); opacity: 0.55; }
+  50% { transform: scale(1.22); opacity: 0; }
 }
 
 .agent-radial-hint.is-dragging {
   animation: none;
   opacity: 0;
   transition: opacity 0.16s ease-out;
+}
+
+.agent-radial-hint.is-dragging::before {
+  animation: none;
+  opacity: 0;
 }
 
 /* ============ 扇片：圆形头像按钮 ============ */
@@ -1135,6 +1250,11 @@ onBeforeUnmount(() => {
   .picker-trigger,
   .agent-radial-slot {
     transition: none;
+  }
+
+  .agent-radial-hint,
+  .agent-radial-hint::before {
+    animation: none;
   }
 }
 

@@ -45,7 +45,10 @@
                 </template>
                 {{ `${getAgentName(seg.source_agent)} (${t('components.chatMessageList.thinking')})` }}
               </n-tooltip>
-              <div class="reasoning-block">
+              <div
+                class="reasoning-block"
+                :class="{ 'is-finished': !isReasoningSegmentThinking(m, idx, segIdx) }"
+              >
                 <div class="reasoning-toggle" :class="{ 'is-thinking': isReasoningSegmentThinking(m, idx, segIdx) }" @click="toggleReasoning(getReasoningSegmentKey(m, idx, segIdx))">
                   <svg v-if="isReasoningSegmentThinking(m, idx, segIdx)" class="reasoning-thinking-icon" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
                     <path d="M12 21C16.9706 21 21 16.9706 21 12C21 7.02944 16.9706 3 12 3C7.02944 3 3 7.02944 3 12C3 16.9706 7.02944 21 12 21Z" stroke="currentColor" stroke-width="2" stroke-dasharray="15 30" stroke-linecap="round" class="spinner-ring" />
@@ -65,10 +68,7 @@
                 >
                   <div class="reasoning-content" :ref="(el) => setReasoningContentRef(getReasoningSegmentKey(m, idx, segIdx), el)">
                     <div class="reasoning-inner">
-                      <MarkdownRenderer
-                        :content="getReasoningSegmentText(seg)"
-                        :streaming="isReasoningSegmentThinking(m, idx, segIdx)"
-                      />
+                      <div class="reasoning-text">{{ getReasoningSegmentText(seg) }}</div>
                     </div>
                   </div>
                 </div>
@@ -1767,14 +1767,15 @@ defineExpose({ listRef });
   display: grid;
   grid-template-rows: 0fr;
   transition: grid-template-rows 0.2s cubic-bezier(0.4, 0, 1, 1);
-  /* 折叠时跳过内部渲染，减少主线程压力 */
+  /* 始终保留 layout/style 隔离：阻止 inner 高度变化冒泡到外层 chat-list；
+     无论展开/折叠都生效，避免流式期间用户手动展开时引发整列重排。
+     contain 不参与 transition 插值，只在 class 切换时离散变化，不影响动画曲线。 */
   contain: layout style;
 }
 
 .reasoning-content-wrapper.is-expanded {
   grid-template-rows: 1fr;
   transition: grid-template-rows 0.2s cubic-bezier(0, 0, 0.2, 1);
-  contain: none;
 }
 
 .reasoning-content {
@@ -1798,5 +1799,26 @@ defineExpose({ listRef });
   contain: content;
   /* 流式期间允许内容溢出裁剪但不触发外层重排 */
   overflow: hidden;
+}
+
+/* 深度思考纯文本展示器：
+   - 直接用 textNode + white-space: pre-wrap，零 markdown 解析、零 v-html 替换；
+   - 流式期间每次 delta 仅做 textContent 增量更新，浏览器对此场景有极致优化；
+   - 显式声明字号/行高/颜色，与原 MarkdownRenderer 视觉保持一致。 */
+.reasoning-text {
+  white-space: pre-wrap;
+  word-break: break-word;
+  font-size: var(--spark-fs-base);
+  line-height: 1.32;
+  color: var(--spark-text);
+}
+
+/* 已完成的深度思考块：滚出视口时跳过其内部渲染，长聊天历史下显著降低主线程压力。
+   - 仅在非流式（is-finished）时启用，流式中保持完整渲染时序与展开/收起动画完整性；
+   - contain-intrinsic-size 使用 auto 关键字让浏览器在首次渲染后记忆实际尺寸，
+     再次进入视口时按记忆尺寸直接显示，避免抖动；fallback 80px 仅用于尚未渲染过的元素。 */
+.reasoning-block.is-finished {
+  content-visibility: auto;
+  contain-intrinsic-size: auto 80px;
 }
 </style>
