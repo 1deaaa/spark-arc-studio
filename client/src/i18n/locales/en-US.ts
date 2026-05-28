@@ -4,6 +4,11 @@ const enUS = {
     'en-US': 'English',
     'ja-JP': '日本語',
   },
+  seo: {
+    title: 'SparkArc Studio - One Line of Inspiration, A Whole World',
+    description:
+      'Fully automated screenwriting workflow with multi-expert autonomous collaboration. One-click sharing. Unity integration. Turn a single spark of inspiration into a complete world.',
+  },
   common: {
     confirm: 'Confirm',
     cancel: 'Cancel',

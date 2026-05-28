@@ -4,6 +4,11 @@ const jaJP = {
     'en-US': 'English',
     'ja-JP': '日本語',
   },
+  seo: {
+    title: 'SparkArc Studio - ひとつの閃きから世界を創る',
+    description:
+      '完全自動脚本ワークフロー、マルチエージェント自律協調、ワンクリック共有、Unity 連携対応。ひとつの閃きから世界を創る。',
+  },
   common: {
     confirm: '確認',
     cancel: 'キャンセル',

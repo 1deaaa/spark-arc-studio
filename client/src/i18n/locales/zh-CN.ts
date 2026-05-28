@@ -4,6 +4,11 @@ const zhCN = {
     'en-US': 'English',
     'ja-JP': '日本語',
   },
+  seo: {
+    title: 'SparkArc Studio - 一句话让灵感成为世界',
+    description:
+      '全自动编剧工作流，多专家自主协作，一键分享，支持驱动 Unity。一句话让灵感成为世界。',
+  },
   common: {
     confirm: '确定',
     cancel: '取消',

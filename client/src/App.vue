@@ -98,6 +98,7 @@ import { useLocaleStore } from './components/stores/localeStore';
 import { useNaiveTheme } from './styles/themeConfig';
 import { captureLauncherThemeSnapshot, persistLauncherThemeSnapshot } from './utils/launcherThemeSync';
 import { isLocalTauriShell, isTauriDesktop } from './composables/usePlatform';
+import { useSeoMeta } from './composables/useSeoMeta';
 import { useI18n } from 'vue-i18n';
 import router from './router';
 
@@ -105,6 +106,7 @@ const themeStore = useThemeStore();
 const { theme, themeOverrides } = useNaiveTheme(themeStore);
 const localeStore = useLocaleStore();
 const { t } = useI18n();
+useSeoMeta();
 
 watch(
   () => [
