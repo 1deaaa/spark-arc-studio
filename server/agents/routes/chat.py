@@ -153,6 +153,137 @@ def _mark_chat_task_error(
     return error_message
 
 
+# ── 自动重试统一收口 ─────────────────────────────────────────────
+#
+# 设计原则：
+# 1. chat_stream 的两类失败都必须触发重试：
+#    a) generator 抛 Python 异常（罕见，多是协程中断 / 强制结束）
+#    b) generator yield 出 ``{"event": "error", ...}``（常见，上游 LLM/工具
+#       异常被捕获后通过事件传递）
+# 2. 重试期间静默吃掉中间 error：仅向前端推 ``retry_attempt`` 事件，禁止
+#    把中间错误事件落到 ``entry.event_log``，否则前端会立即清零 ``sending``
+#    并在 observer 重连回放时再次"假完结"。
+# 3. 仅最后一次失败才正式落盘 error 事件 + 触发 ``_mark_chat_task_error``。
+# 4. ``send_chat_message_stream`` 与 ``edit_chat_message_stream`` 必须共用
+#    本函数，保证两条入口的容错 / 重试语义完全一致。
+_CHAT_MAX_RETRIES = 3
+_CHAT_RETRY_DELAY = 5.0
+
+
+def _run_chat_stream_with_retry(
+    *,
+    agent_inst: Any,
+    message: str,
+    history: list,
+    active_context: Any,
+    cm: ChatManager,
+    entry: ChatTaskEntry,
+    task_key: str,
+    stop_event: threading.Event,
+    max_retries: int = _CHAT_MAX_RETRIES,
+    retry_delay: float = _CHAT_RETRY_DELAY,
+) -> tuple[bool, str, int]:
+    """统一驱动 ``agent.chat_stream`` 的执行 + 自动重试。
+
+    返回 ``(terminated_early, final_error_message, retry_count)``：
+
+    - ``terminated_early``: 因 ``stop_event`` 被触发而提前退出。
+    - ``final_error_message``: 重试全部失败后的最终错误摘要；正常完成时为 ``''``。
+    - ``retry_count``: 实际发生过的重试次数（0 表示一次成功）。
+    """
+    from .schemas import format_ai_error  # 局部导入避免循环依赖
+
+    terminated_early = False
+    final_error_message = ''
+    retry_count = 0
+
+    for attempt in range(1, max_retries + 1):
+        # 重试前清空上一轮残留：accumulator 重置 + 推 snapshot 让前端 UI 复位
+        if attempt > 1:
+            entry.reset_for_retry()
+            _checkpoint_chat_task(cm, entry, force=True, stream_status='running')
+            entry.append_control_event(entry.build_snapshot())
+
+        last_error_summary = ''
+        encountered_error = False
+
+        try:
+            for delta in agent_inst.chat_stream(
+                message,
+                history=history,
+                active_context=active_context,
+                stop_event=stop_event,
+            ):
+                if stop_event.is_set():
+                    terminated_early = True
+                    break
+                if not delta:
+                    continue
+
+                # ⚠️ 拦截 yield 出来的 error 事件：暂不落盘，由重试逻辑统一裁决
+                #   这是状态唯一性的关键 —— 中间错误若被 append 进 event_log，
+                #   observer 重连回放时会让前端误以为任务已终结。
+                if isinstance(delta, dict) and delta.get('event') == 'error':
+                    last_error_summary = _coerce_stream_error_text(delta) or '聊天生成失败'
+                    encountered_error = True
+                    break
+
+                event = entry.append_event(delta)
+                event_type = event.get('event')
+                _checkpoint_chat_task(
+                    cm,
+                    entry,
+                    force=event_type in {
+                        'tool_intent_started',
+                        'tool_exec_started',
+                        'tool_exec_finished',
+                        'tool_exec_failed',
+                    },
+                    stream_status='running',
+                )
+
+            if stop_event.is_set():
+                terminated_early = True
+                break
+
+            if not encountered_error:
+                # chat_stream 正常结束，跳出重试循环
+                return terminated_early, final_error_message, retry_count
+
+        except Exception as e:
+            if stop_event.is_set():
+                terminated_early = True
+                break
+            last_error_summary = format_ai_error(e)
+            encountered_error = True
+
+        # 走到这里说明该 attempt 触发了错误：要么走重试，要么落盘最终错误
+        retry_count = attempt
+        if attempt < max_retries:
+            entry.append_event({
+                'event': 'retry_attempt',
+                'attempt': attempt,
+                'max_retries': max_retries,
+                'error_summary': last_error_summary,
+            }, accumulate=False)
+            update_task_status(task_key, 'running', retry_count=attempt)
+            if stop_event.wait(retry_delay):
+                terminated_early = True
+                break
+        else:
+            # 最后一次失败：正式落盘 error 事件 + 标记任务为 error
+            entry.append_event({'event': 'error', 'message': last_error_summary})
+            final_error_message = _mark_chat_task_error(
+                cm,
+                entry,
+                task_key,
+                last_error_summary,
+                retry_count=attempt,
+            )
+
+    return terminated_early, final_error_message, retry_count
+
+
 _NDJSON_MEDIA_TYPE = 'application/x-ndjson; charset=utf-8'
 
 # 旁路标记前缀：用于从工具返回文本中提取导演触发 Auto-Write 的结构化元数据
@@ -643,43 +774,19 @@ async def edit_chat_message_stream(request: Request, data: ChatMessageEditReques
 
             terminated_early = False
             final_error_message = ''
+            retry_count = 0
 
             try:
-                for delta in agent_inst.chat_stream(
-                    data.content,
+                terminated_early, final_error_message, retry_count = _run_chat_stream_with_retry(
+                    agent_inst=agent_inst,
+                    message=data.content,
                     history=history,
                     active_context=effective_active_context,
+                    cm=cm,
+                    entry=entry,
+                    task_key=task_key,
                     stop_event=stop_event,
-                ):
-                    if stop_event.is_set():
-                        terminated_early = True
-                        break
-                    if not delta:
-                        continue
-                    event = entry.append_event(delta)
-                    event_type = event.get("event")
-                    if event_type == "error":
-                        final_error_message = _mark_chat_task_error(cm, entry, task_key, event)
-                        break
-                    _checkpoint_chat_task(
-                        cm,
-                        entry,
-                        force=event_type in {"tool_intent_started", "tool_exec_started", "tool_exec_finished", "tool_exec_failed", "error"},
-                        stream_status='running',
-                    )
-                if stop_event.is_set():
-                    terminated_early = True
-                if final_error_message:
-                    entry.error_message = final_error_message
-
-            except Exception as e:
-                if stop_event.is_set():
-                    terminated_early = True
-                else:
-                    from .schemas import format_ai_error
-                    err = format_ai_error(e)
-                    entry.append_event({"event": "error", "message": err})
-                    final_error_message = _mark_chat_task_error(cm, entry, task_key, err)
+                )
             finally:
                 try:
                     if terminated_early:
@@ -707,6 +814,7 @@ async def edit_chat_message_stream(request: Request, data: ChatMessageEditReques
                         result_content=reply,
                         result_metadata=metadata,
                         error_message=final_error_message,
+                        retry_count=retry_count,
                     )
                     cleanup_task(task_key)
                 finally:
@@ -880,93 +988,21 @@ async def send_chat_message_stream(request: Request, data: ChatSendRequest, user
             current_project_name.set(project_name)
             usage_token = current_llm_usage_context.set(_make_llm_usage_context(entry.task_id))
 
-            # ── 自动重试配置 ──
-            _MAX_RETRIES = 3
-            _RETRY_DELAY = 2.0
-
             terminated_early = False
-            last_error_summary: str = ''
-            retry_count = 0
             final_error_message = ''
+            retry_count = 0
 
             try:
-                for attempt in range(1, _MAX_RETRIES + 1):
-                    # 重试前清空上一轮残留
-                    if attempt > 1:
-                        entry.reset_for_retry()
-                        _checkpoint_chat_task(cm, entry, force=True, stream_status='running')
-                        entry.append_control_event(entry.build_snapshot())
-
-                    try:
-                        for delta in agent_inst.chat_stream(
-                            message,
-                            history=history,
-                            active_context=effective_active_context,
-                            stop_event=stop_event,
-                        ):
-                            if stop_event.is_set():
-                                terminated_early = True
-                                break
-                            if not delta:
-                                continue
-                            event = entry.append_event(delta)
-                            event_type = event.get("event")
-                            if event_type == "error":
-                                final_error_message = _mark_chat_task_error(
-                                    cm,
-                                    entry,
-                                    task_key,
-                                    event,
-                                    retry_count=retry_count,
-                                )
-                                break
-                            _checkpoint_chat_task(
-                                cm,
-                                entry,
-                                force=event_type in {"tool_intent_started", "tool_exec_started", "tool_exec_finished", "tool_exec_failed", "error"},
-                                stream_status='running',
-                            )
-
-                        if stop_event.is_set():
-                            terminated_early = True
-                            break
-                        if final_error_message:
-                            break
-
-                        # chat_stream 正常结束，跳出重试循环
-                        break
-
-                    except Exception as e:
-                        if stop_event.is_set():
-                            terminated_early = True
-                            break
-
-                        from .schemas import format_ai_error
-                        last_error_summary = format_ai_error(e)
-                        retry_count = attempt
-
-                        if attempt < _MAX_RETRIES:
-                            # 推送重试事件，告知前端即将重试
-                            entry.append_event({
-                                "event": "retry_attempt",
-                                "attempt": attempt,
-                                "max_retries": _MAX_RETRIES,
-                                "error_summary": last_error_summary,
-                            }, accumulate=False)
-                            update_task_status(task_key, 'running', retry_count=attempt)
-                            if stop_event.wait(_RETRY_DELAY):
-                                terminated_early = True
-                                break
-                        else:
-                            # 3 次均失败，报具体错误
-                            entry.append_event({"event": "error", "message": last_error_summary})
-                            final_error_message = _mark_chat_task_error(
-                                cm,
-                                entry,
-                                task_key,
-                                last_error_summary,
-                                retry_count=attempt,
-                            )
+                terminated_early, final_error_message, retry_count = _run_chat_stream_with_retry(
+                    agent_inst=agent_inst,
+                    message=message,
+                    history=history,
+                    active_context=effective_active_context,
+                    cm=cm,
+                    entry=entry,
+                    task_key=task_key,
+                    stop_event=stop_event,
+                )
             finally:
                 try:
                     if terminated_early:

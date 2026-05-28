@@ -755,6 +755,13 @@ export const useChatStore = defineStore('chat', {
     _invalidateSessionStream(sessionId) {
       const session = this.sessions[sessionId];
       if (!session) return;
+      // 状态唯一性收口：切换 agent / contextKey / 关闭窗口时，必须把"前端清零 sending"
+      // 与"后端取消任务"两个动作一并完成，否则后端 _active_chat_tasks 中残留的
+      // running 任务会在用户下一次发送时抛 409（"该会话已有任务在执行"），
+      // 导致按钮可用但发送失败的状态分歧。fire-and-forget 即可，不阻塞 UI。
+      const wasRunning = !!(session.sending || session.backgroundTaskStatus === 'running');
+      const agentIdSnapshot = session.agentId;
+      const contextKeySnapshot = session.contextKey;
       session.streamEpoch = (session.streamEpoch || 0) + 1;
       if (session.toolClearTimer) {
         clearTimeout(session.toolClearTimer);
@@ -768,10 +775,22 @@ export const useChatStore = defineStore('chat', {
       }
       session.abortController = null;
       session.sending = false;
+      session.backgroundTaskStatus = null;
       session.toolCalling = false;
       session.toolName = '';
       session.toolProgressText = '';
       session.toolStateStartedAt = 0;
+      session.retryAttempt = null;
+      session.retryErrorSummary = '';
+
+      if (wasRunning && agentIdSnapshot) {
+        const projectStore = useProjectStore();
+        const projectName = projectStore.currentProject;
+        if (projectName) {
+          // fire-and-forget：失败也不阻塞，后端最终会通过 60s cleanup 自然清理
+          cancelChatTask(projectName, agentIdSnapshot, contextKeySnapshot || 'global').catch(() => {});
+        }
+      }
     },
 
     /** 注册全局上下文提供器 */
@@ -2444,11 +2463,16 @@ export const useChatStore = defineStore('chat', {
           return;
         }
         if (eventType === 'error') {
+          // 状态唯一性原则：
+          //   - sending / backgroundTaskStatus 的清零统一交给 sendSessionMessage / _reconnectTaskStream
+          //     的 finally 块（它们会在流自然结束或主动 abort 时收口），避免在事件层"提前清零"
+          //     与后端 _active_chat_tasks 中残留的 running 任务出现分歧。
+          //   - 但 error 事件仍标记 receivedTaskDone，让外层不再触发不必要的 observer 重连
+          //     —— 后端中间错误已统一被 _run_chat_stream_with_retry 静默拦截，前端能拿到的
+          //     error 事件已经是"全部重试均失败"的最终结论。
           streamState.receivedTaskDone = true;
           const errMsg = pickEventText(evt, ['message', 'data', 'text']);
           session.lastError = errMsg;
-          session.sending = false;
-          session.backgroundTaskStatus = null;
           session.retryAttempt = null;
           session.retryErrorSummary = '';
           if (errMsg) {

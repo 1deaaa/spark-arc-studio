@@ -37,6 +37,7 @@ const mockedRemoveChatMessageAttachment = vi.mocked(chatService.removeChatMessag
 const mockedGetChatRecentTasks = vi.mocked(chatService.getChatRecentTasks);
 const mockedGetChatTaskStatus = vi.mocked(chatService.getChatTaskStatus);
 const mockedReconnectChatTaskStream = vi.mocked(chatService.reconnectChatTaskStream);
+const mockedCancelChatTask = vi.mocked(chatService.cancelChatTask);
 
 function createNdjsonReader(lines: NdjsonLine[]): StreamReader {
   const encoder = new TextEncoder();
@@ -823,6 +824,79 @@ describe('chatStore tool-first stream handling', () => {
     expect(hasRunning).toBe(false);
     const museSession = Object.values(store.sessions).find(session => session.agentId === 'agent_muse');
     expect(museSession?.history[0].content).toContain('后台刚完成的回复');
+  });
+
+  // ── 状态唯一性回归测试 ──────────────────────────────────────────────
+  // 这三个用例守护"sending / backgroundTaskStatus 的清零只由流真正结束（task_done）
+  // 或主动 abort 收口"的核心契约，防止再次出现"按钮可用但发送显示已有任务在执行"
+  // 的状态分歧 bug。
+  it('does not prematurely clear sending when only an error event arrives mid-stream', async () => {
+    const deferred = createDeferredNdjsonReader();
+    mockedSendChatMessageStream.mockResolvedValueOnce(deferred.reader);
+
+    const store = useChatStore();
+    const sendPromise = store.sendSessionMessage(0, '触发错误');
+
+    // 让流先发出 error 事件但暂不结束
+    deferred.push(JSON.stringify({ event: 'assistant_delta', text: '部分回复。' }));
+    deferred.push(JSON.stringify({ event: 'error', message: '上游模型错误' }));
+    // 等待流读到 error 事件并触发 handleStreamEvent
+    await vi.waitFor(() => {
+      expect(store.sessions[0].lastError).toContain('上游模型错误');
+    });
+
+    // 关键断言：error 事件只应承载错误摘要，不应提前清零运行态
+    expect(store.sessions[0].sending).toBe(true);
+    expect(store.sessions[0].backgroundTaskStatus).toBe('running');
+
+    // task_done 抵达后才正式释放运行态
+    deferred.push(JSON.stringify({ event: 'task_done', status: 'error', error: '上游模型错误' }));
+    deferred.finish();
+    await sendPromise;
+
+    expect(store.sessions[0].sending).toBe(false);
+    expect(store.sessions[0].backgroundTaskStatus).toBeNull();
+  });
+
+  it('treats task_done as the sole authoritative terminator for background task status', async () => {
+    mockedSendChatMessageStream.mockResolvedValueOnce(createNdjsonReader([
+      JSON.stringify({ event: 'assistant_delta', text: '回答。' }),
+      JSON.stringify({ event: 'task_done', status: 'completed' }),
+    ]));
+
+    const store = useChatStore();
+    await store.sendSessionMessage(0, '正常发送');
+
+    expect(store.sessions[0].sending).toBe(false);
+    expect(store.sessions[0].backgroundTaskStatus).toBeNull();
+    expect(store.sessions[0].lastError).toBe('');
+  });
+
+  it('cancels the backend task when invalidating a session that is still running', async () => {
+    const deferred = createDeferredNdjsonReader();
+    mockedSendChatMessageStream.mockResolvedValueOnce(deferred.reader);
+
+    const store = useChatStore();
+    const sendPromise = store.sendSessionMessage(0, '正在生成');
+    await Promise.resolve();
+    expect(store.sessions[0].sending).toBe(true);
+    expect(store.sessions[0].backgroundTaskStatus).toBe('running');
+
+    const originalAgentId = store.sessions[0].agentId;
+    const originalContextKey = store.sessions[0].contextKey || 'global';
+
+    // 切换 contextKey 直接触发当前 session 的 _invalidateSessionStream
+    store.setSessionContextKey(0, 'switch-target');
+
+    // 立即清零前端运行态，并 fire-and-forget 通知后端取消，避免后端 _active_chat_tasks
+    // 中残留的 running 任务在用户下一次发送时抛出 409 ("该会话已有任务在执行")。
+    expect(store.sessions[0].sending).toBe(false);
+    expect(store.sessions[0].backgroundTaskStatus).toBeNull();
+    expect(mockedCancelChatTask).toHaveBeenCalledWith('测试项目', originalAgentId, originalContextKey);
+
+    // 让原 stream 自然结束以收尾 promise
+    deferred.finish();
+    await sendPromise;
   });
 
   it('uses authoritative server history for completed background tasks', async () => {
