@@ -1,0 +1,21 @@
+{
+  "name": "SparkArc Studio",
+  "short_name": "SparkArc",
+  "description": "全自动编剧工作流，多专家自主协作，一键分享，支持驱动 Unity。一句话让灵感成为世界。",
+  "start_url": "/",
+  "display": "standalone",
+  "background_color": "#020617",
+  "theme_color": "#0f172a",
+  "icons": [
+    {
+      "src": "/icon.png",
+      "sizes": "512x512",
+      "type": "image/png"
+    },
+    {
+      "src": "/apple-touch-icon.png",
+      "sizes": "180x180",
+      "type": "image/png"
+    }
+  ]
+}

@@ -1,0 +1,4 @@
+User-agent: *
+Allow: /
+
+Sitemap: https://arc.1dea.top/sitemap.xml
