@@ -28,7 +28,7 @@ RUN npm run build
 # ==========================================
 # 第二阶段: 运行时环境 (Runtime)
 # ==========================================
-FROM python:3.12-slim
+FROM python:3.13-slim
 
 WORKDIR /app
 

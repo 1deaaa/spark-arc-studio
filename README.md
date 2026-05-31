@@ -181,7 +181,7 @@ docker compose logs --tail=120 sparkarc
 
    ```bash
    # 1. 创建并激活 Conda 环境（先确保你部署好了miniconda或anaconda）
-   conda create -n sparkarc python=3.12 -y
+   conda create -n sparkarc python=3.13 -y
    conda activate sparkarc
 
    # 2. 安装后端依赖（依赖清单在项目根目录）

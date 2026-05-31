@@ -519,7 +519,7 @@ This ensures:
 
    ```bash
    # 1. Create and activate Conda env (requires miniconda or anaconda)
-   conda create -n sparkarc python=3.12 -y
+   conda create -n sparkarc python=3.13 -y
    conda activate sparkarc
 
    # 2. Install server dependencies (requirements at project root)
