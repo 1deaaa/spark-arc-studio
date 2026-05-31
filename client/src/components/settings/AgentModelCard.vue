@@ -98,7 +98,7 @@
 import { ref, computed, onMounted, watch } from 'vue';
 import { useI18n } from 'vue-i18n';
 import { NCard, NButton, NIcon, NSelect, NFormItem, NTabs, NTabPane, NSpin } from 'naive-ui';
-import { Link, RefreshCw, Rocket } from 'lucide-vue-next';
+import { Link, RefreshCw, Rocket } from '@lucide/vue';
 import { fetchAgentUsageBindings, saveAgentBinding } from '../../services/agentUsage';
 import { useAgentRegistry } from '@/composables/useAgentRegistry';
 import { useAiStore } from '../stores/aiStore';

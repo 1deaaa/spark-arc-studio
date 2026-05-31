@@ -152,7 +152,7 @@ import { useI18n } from 'vue-i18n';
 import bus from '../../eventBus';
 import { NButton, NIcon, NInput, NSpin, NEmpty, NDrawer, NDrawerContent, useMessage } from 'naive-ui';
 import SparkTag from '../../components/share/SparkTag.vue';
-import { Book, ChevronRight, CircleUser, Globe, Maximize2, Save, UserPlus, Users, Wrench } from 'lucide-vue-next';
+import { Book, ChevronRight, CircleUser, Globe, Maximize2, Save, UserPlus, Users, Wrench } from '@lucide/vue';
 import LorebookEditor from '../../components/lorebook/LorebookEditor.vue';
 import GlobalLoading from '../../components/share/GlobalLoading.vue';
 import CharacterGeneratorPanel from '../../components/lorebook/CharacterGeneratorPanel.vue';

@@ -137,7 +137,7 @@
 import { ref, computed, onMounted, onBeforeUnmount, nextTick, watch } from 'vue';
 import { useI18n } from 'vue-i18n';
 import { NIcon, NTabs, NTabPane, NFormItem, NSelect, NTooltip } from 'naive-ui';
-import { Link } from 'lucide-vue-next';
+import { Link } from '@lucide/vue';
 import { fetchAgentUsageBindings, saveAgentBinding } from '@/services/agentUsage';
 import { useAgentRegistry } from '@/composables/useAgentRegistry';
 import { useAiStore } from '@/components/stores/aiStore';

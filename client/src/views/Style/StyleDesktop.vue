@@ -190,7 +190,7 @@ import {
 } from 'naive-ui';
 import SparkAlert from '../../components/share/SparkAlert.vue';
 import DocumentImportPicker from '../../components/share/DocumentImportPicker.vue';
-import { Bookmark, Palette, Plus, RefreshCw, Trash } from 'lucide-vue-next';
+import { Bookmark, Palette, Plus, RefreshCw, Trash } from '@lucide/vue';
 import AiSettingsPanel from '../../components/lorebook/AiSettingsPanel.vue';
 import GlobalLoading from '../../components/share/GlobalLoading.vue';
 import { useStyleLogic } from '../../composables/useStyleLogic';

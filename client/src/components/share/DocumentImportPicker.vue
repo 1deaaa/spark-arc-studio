@@ -30,7 +30,7 @@
 <script setup lang="ts">
 import { computed, onMounted } from 'vue';
 import { NIcon } from 'naive-ui';
-import { CloudUpload } from 'lucide-vue-next';
+import { CloudUpload } from '@lucide/vue';
 import { useDocumentImport } from '@/composables/useDocumentImport';
 import type { ImportUsage } from '@/services/fileImportService';
 

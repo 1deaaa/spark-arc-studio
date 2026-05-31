@@ -29,7 +29,7 @@
 import { computed, markRaw, type Component } from 'vue';
 import {
   Compass, Wand2, ScrollText, Waypoints, Feather, ScanEye, Palette, Sparkles,
-} from 'lucide-vue-next';
+} from '@lucide/vue';
 import { useAgentRegistry } from '@/composables/useAgentRegistry';
 
 /**

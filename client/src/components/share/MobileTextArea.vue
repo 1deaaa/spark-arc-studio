@@ -37,7 +37,7 @@
 <script setup lang="ts">
 import { ref, watch } from 'vue';
 import { NInput, NButton, NIcon } from 'naive-ui';
-import { Maximize2 } from 'lucide-vue-next';
+import { Maximize2 } from '@lucide/vue';
 import MobileTextEditor from './MobileTextEditor.vue';
 
 const props = defineProps({

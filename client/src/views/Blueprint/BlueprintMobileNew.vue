@@ -99,7 +99,7 @@
 <script setup lang="ts">
 import { ref, computed, inject, watch, onMounted, type Ref } from 'vue';
 import { NSelect, NDrawer, NDrawerContent, NInput, NButton, NIcon, NEmpty, NTag } from 'naive-ui';
-import { ArrowRight, GitBranch } from 'lucide-vue-next';
+import { ArrowRight, GitBranch } from '@lucide/vue';
 import { useI18n } from 'vue-i18n';
 import { useSceneStore, type SceneWithClientId } from '../../components/stores/sceneStore';
 import { useFileStore } from '../../components/stores/fileStore';

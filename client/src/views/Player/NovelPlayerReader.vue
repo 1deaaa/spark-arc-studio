@@ -128,7 +128,7 @@ import { useI18n } from 'vue-i18n';
 import ZhOnlyTag from '@/components/share/ZhOnlyTag.vue';
 import BookNavButton from '@/components/share/BookNavButton.vue';
 import { NIcon, NTooltip } from 'naive-ui';
-import { ChevronLeft, ChevronRight, Settings, X } from 'lucide-vue-next';
+import { ChevronLeft, ChevronRight, Settings, X } from '@lucide/vue';
 import type { NavItem } from '@/components/share/SceneNavPanel.vue';
 import { fetchWithAuth } from '@/services/apiClient';
 import { useMobile } from '@/composables/useMobile';

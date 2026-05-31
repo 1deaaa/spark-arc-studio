@@ -8,15 +8,15 @@
 .section-header {
     display: flex;
     justify-content: space-between;
-    align-items: flex-start;
+    align-items: center;
     gap: 12px;
+    margin-bottom: 12px;
 }
 
 .header-title-group {
     display: flex;
     align-items: center;
     gap: 6px;
-    margin-bottom: 8px;
 }
 
 .header-title-group h3 {
@@ -39,8 +39,20 @@
     color: var(--spark-primary);
 }
 
+.header-billing-switch {
+    display: flex;
+    align-items: center;
+    flex-shrink: 0;
+}
+
+.header-billing-switch .status-icon-wrapper {
+    padding: 4px 8px;
+    gap: 6px;
+    border-radius: 6px;
+}
+
 .settings-section h3 {
-    margin: 0 0 8px 0;
+    margin: 0;
     font-size: var(--spark-fs-h3);
     color: var(--spark-primary);
     user-select: none;
@@ -510,9 +522,14 @@
     }
 
     .section-header {
-        flex-direction: column;
-        align-items: flex-start;
+        align-items: center;
         gap: 8px;
+        margin-bottom: 8px;
+    }
+
+    .header-billing-switch .status-icon-wrapper {
+        padding: 3px 6px;
+        gap: 4px;
     }
 
     .section-desc {
@@ -691,6 +708,15 @@
 
     .section-header h3 {
         font-size: var(--spark-fs-lg);
+    }
+
+    .header-billing-switch .status-icon-wrapper {
+        padding: 3px 6px;
+        gap: 4px;
+    }
+
+    .header-billing-switch .status-text {
+        display: none;
     }
 
     .platform-name {

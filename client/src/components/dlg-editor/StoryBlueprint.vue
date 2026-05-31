@@ -110,7 +110,7 @@
 import { ref, onMounted, onBeforeUnmount, watch, h, onActivated, computed, nextTick } from 'vue';
 import { useI18n } from 'vue-i18n';
 import { NButton, NDropdown, NIcon, NTooltip, type DropdownOption } from 'naive-ui';
-import { Pencil, Plus, Sparkles, Trash2 } from 'lucide-vue-next';
+import { Pencil, Plus, Sparkles, Trash2 } from '@lucide/vue';
 import { useRoute } from 'vue-router';
 import { useSceneStore } from '../stores/sceneStore';
 import { useFileStore } from '../stores/fileStore';

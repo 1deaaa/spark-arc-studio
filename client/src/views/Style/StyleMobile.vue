@@ -144,7 +144,7 @@ import { useI18n } from 'vue-i18n';
 import { NIcon, NSpin, NButton, NInput, NEmpty, NDrawer, NDrawerContent, NModal, NFormItem } from 'naive-ui';
 import SparkTag from '../../components/share/SparkTag.vue';
 import DocumentImportPicker from '../../components/share/DocumentImportPicker.vue';
-import { ChevronRight, Plus, RefreshCw } from 'lucide-vue-next';
+import { ChevronRight, Plus, RefreshCw } from '@lucide/vue';
 import GlobalLoading from '../../components/share/GlobalLoading.vue';
 import { useStyleLogic } from '../../composables/useStyleLogic';
 

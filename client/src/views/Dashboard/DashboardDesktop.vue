@@ -274,7 +274,7 @@ import SparkTag from '../../components/share/SparkTag.vue';
 import SparkSegment from '../../components/share/SparkSegment.vue';
 import SparkAlert from '../../components/share/SparkAlert.vue';
 import SparkIcon from '../../components/share/CreditIcon.vue';
-import { Key, RefreshCw, ShieldCheck } from 'lucide-vue-next';
+import { Key, RefreshCw, ShieldCheck } from '@lucide/vue';
 import MCPConnectCard from '../../components/settings/MCPConnectCard.vue';
 import FeedbackCard from '../../components/settings/FeedbackCard.vue';
 import AdminRedeemCodeManager from '../../components/settings/AdminRedeemCodeManager.vue';

@@ -91,7 +91,7 @@ import { useI18n } from 'vue-i18n';
 import { NCard, NButton, NIcon, NStatistic, NGrid, NGi, NDataTable, NSpin, NSpace, NTooltip } from 'naive-ui';
 import SparkSegment from '../../components/share/SparkSegment.vue';
 import SparkIcon from '../../components/share/CreditIcon.vue';
-import { RefreshCw } from 'lucide-vue-next';
+import { RefreshCw } from '@lucide/vue';
 import AdminRedeemCodeManager from '../../components/settings/AdminRedeemCodeManager.vue';
 import UserRedeemCard from '../../components/settings/UserRedeemCard.vue';
 import FeedbackCard from '../../components/settings/FeedbackCard.vue';

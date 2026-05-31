@@ -183,7 +183,7 @@ import {
   NForm, NFormItem, NSelect, NInput, NSwitch, NSpin,
   NText, NTooltip, useMessage, useDialog
 } from 'naive-ui';
-import { CloudDownload, Copy, Play, RefreshCw, Save, SquarePen, Trash } from 'lucide-vue-next';
+import { CloudDownload, Copy, Play, RefreshCw, Save, SquarePen, Trash } from '@lucide/vue';
 import { fetchWithAuth } from '@/services/api';
 import { useMainlandComplianceLocale } from '@/i18n/compliance';
 import { useProjectStore } from '@/components/stores/projectStore';

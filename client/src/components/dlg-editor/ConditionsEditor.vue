@@ -92,7 +92,7 @@ import {
   NIcon, NText, NTag,
 } from 'naive-ui';
 import SparkSegment from '../share/SparkSegment.vue';
-import { Plus, X } from 'lucide-vue-next';
+import { Plus, X } from '@lucide/vue';
 
 /** 条件行的内部表示（仅在可视化模式使用） */
 interface ConditionRow {

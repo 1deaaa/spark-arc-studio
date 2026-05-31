@@ -2,10 +2,12 @@ from fastapi import APIRouter, Depends, UploadFile, File
 from fastapi.responses import JSONResponse, Response
 from pydantic import BaseModel
 from typing import Optional
+import gc
 import io
 import os
 import re
 import shutil
+import time
 import zipfile
 from datetime import datetime
 from urllib.parse import quote
@@ -25,6 +27,59 @@ from agents.chat_manager import ChatManager
 from story.file_naming import build_story_filename
 
 project_router = APIRouter()
+
+
+def _cancel_project_background_builds(
+    user_id: str,
+    project_name: str,
+    *,
+    vector_wait_timeout: float = 4.0,
+    graph_wait_timeout: float = 2.0,
+) -> list[str]:
+    """删除项目优先级最高：先请求停止项目级后台索引/图谱构建。"""
+    warnings: list[str] = []
+
+    try:
+        from agents.vector_index import VectorIndexService
+
+        service = VectorIndexService(user_id, project_name)
+        service.cancel_background_build(wait_timeout=vector_wait_timeout)
+        VectorIndexService.release_process_resources()
+    except Exception as exc:
+        warnings.append(f"取消向量索引构建失败: {exc}")
+
+    try:
+        from agents.graphrag import GraphRAGService
+
+        GraphRAGService(user_id=user_id, project_name=project_name).cancel_background_build(wait_timeout=graph_wait_timeout)
+    except Exception as exc:
+        warnings.append(f"取消知识图谱构建失败: {exc}")
+
+    gc.collect()
+    return warnings
+
+
+def _remove_project_directory_with_retries(user_id: str, project_name: str, project_path: str) -> None:
+    """Windows 下索引文件句柄释放可能略有延迟，删除时做短重试。"""
+    last_exc: Exception | None = None
+    for attempt in range(8):
+        if not os.path.exists(project_path):
+            return
+        try:
+            shutil.rmtree(project_path)
+            return
+        except (PermissionError, OSError) as exc:
+            last_exc = exc
+            _cancel_project_background_builds(
+                user_id,
+                project_name,
+                vector_wait_timeout=0.5,
+                graph_wait_timeout=0.0,
+            )
+            if attempt < 7:
+                time.sleep(0.25 * (attempt + 1))
+    if last_exc:
+        raise last_exc
 
 class ProjectCreate(BaseModel):
     projectName: str
@@ -105,8 +160,11 @@ async def delete_project(project_name: str, user: dict = Depends(get_current_use
         if not os.path.exists(project_path):
             return JSONResponse(status_code=404, content={"success": False, "message": "项目不存在"})
 
-        # 1. 删除项目文件目录
-        shutil.rmtree(project_path)
+        # 1. 删除项目文件目录前，优先中断可能持有文件句柄的后台构建。
+        cancel_warnings = _cancel_project_background_builds(user_id, project_name)
+        for warning in cancel_warnings:
+            print(warning)
+        _remove_project_directory_with_retries(user_id, project_name, project_path)
 
         # 2. 清除该项目所有聊天记录
         try:

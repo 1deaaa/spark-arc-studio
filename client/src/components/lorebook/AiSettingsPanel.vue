@@ -128,7 +128,7 @@
 import { computed, ref, watch, onMounted, onBeforeUnmount, nextTick } from 'vue';
 import { NCard, NForm, NFormItem, NSelect, NIcon, NDivider, NSpin, useMessage, NPopover, NButton, NTabs, NTabPane } from 'naive-ui';
 import SparkAlert from '@/components/share/SparkAlert.vue';
-import { Info, Zap } from 'lucide-vue-next';
+import { Info, Zap } from '@lucide/vue';
 import { useAiStore } from '@/components/stores/aiStore';
 import { fetchAgentUsageBindings, saveAgentBinding } from '@/services/agentUsage';
 import bus from '@/eventBus';

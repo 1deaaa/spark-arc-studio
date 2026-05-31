@@ -156,7 +156,7 @@ import { ref } from 'vue';
 import { NButton, NIcon, NInput, NTabs, NTabPane, NInputNumber, NSelect } from 'naive-ui';
 import { useI18n } from 'vue-i18n';
 import GlobalLoading from '../../components/share/GlobalLoading.vue';
-import { ArrowRight, Workflow, Zap } from 'lucide-vue-next';
+import { ArrowRight, Workflow, Zap } from '@lucide/vue';
 import AiSettingsPanel from '../../components/lorebook/AiSettingsPanel.vue';
 import OutlineEditor from '../../components/dlg-editor/OutlineEditor.vue';
 import HistoryPanel from '../../components/dlg-editor/HistoryPanel.vue';

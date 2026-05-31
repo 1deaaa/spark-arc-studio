@@ -168,7 +168,7 @@ import {
   NDescriptions, NDescriptionsItem,
   NDivider, NEmpty,
 } from 'naive-ui';
-import { Ban, Copy, Eye, Plus, RefreshCw, Trash } from 'lucide-vue-next';
+import { Ban, Copy, Eye, Plus, RefreshCw, Trash } from '@lucide/vue';
 import SparkTag from '../share/SparkTag.vue';
 import SparkIcon from '@/components/share/CreditIcon.vue';
 import { useMobile } from '@/composables/useMobile';

@@ -24,7 +24,7 @@ export default defineConfig({
       output: {
         manualChunks: {
           'naive-ui': ['naive-ui'],
-          lucide: ['lucide-vue-next'],
+          lucide: ['@lucide/vue'],
           'vue-vendor': ['vue', 'vue-router', 'pinia'],
         },
       },

@@ -47,7 +47,7 @@ import { ref } from 'vue';
 import { NIcon, NButton, useMessage } from 'naive-ui';
 import { useI18n } from 'vue-i18n';
 import SparkTag from '../../components/share/SparkTag.vue';
-import { Copy, Gamepad2, Monitor } from 'lucide-vue-next';
+import { Copy, Gamepad2, Monitor } from '@lucide/vue';
 import AgentModelCard from '../../components/settings/AgentModelCard.vue';
 
 const { t } = useI18n();

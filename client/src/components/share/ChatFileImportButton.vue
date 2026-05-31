@@ -121,7 +121,7 @@
 import { computed, ref, watch } from 'vue';
 import { useI18n } from 'vue-i18n';
 import { NButton, NIcon, NInputNumber, NPopover, NTooltip } from 'naive-ui';
-import { FileText, Paperclip, X } from 'lucide-vue-next';
+import { FileText, Paperclip, X } from '@lucide/vue';
 import { useChatFileImport } from '@/composables/useChatFileImport';
 
 const props = defineProps<{

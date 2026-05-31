@@ -91,7 +91,7 @@
 import { ref, reactive, watch, computed } from 'vue';
 import { NInput, NSelect, NButton, NIcon, NText, NTag } from 'naive-ui';
 import SparkSegment from '../share/SparkSegment.vue';
-import { Plus, X } from 'lucide-vue-next';
+import { Plus, X } from '@lucide/vue';
 import { storeToRefs } from 'pinia';
 import { useActionBindingStore } from '@/components/stores/actionBindingStore';
 

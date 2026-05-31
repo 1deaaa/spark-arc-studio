@@ -159,7 +159,7 @@ import { ref } from 'vue';
 import { NInput, NSelect, NButton, NIcon, NEmpty, NDrawer, NDrawerContent } from 'naive-ui';
 import { useI18n } from 'vue-i18n';
 import SparkTag from '../../components/share/SparkTag.vue';
-import { Activity, BookOpen, FileText, MessagesSquare, Save, Sparkles, X } from 'lucide-vue-next';
+import { Activity, BookOpen, FileText, MessagesSquare, Save, Sparkles, X } from '@lucide/vue';
 import { useSynopsisLogic } from '../../composables/useSynopsisLogic';
 import GlobalLoading from '../../components/share/GlobalLoading.vue';
 import MobileTextArea from '../../components/share/MobileTextArea.vue';

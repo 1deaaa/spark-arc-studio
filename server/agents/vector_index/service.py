@@ -10,9 +10,10 @@ import json
 import os
 import shutil
 import threading
+import gc
 from dataclasses import dataclass
 from datetime import datetime, timezone
-from typing import Optional
+from typing import Any, Optional
 
 from langchain_chroma import Chroma
 from langchain_core.documents import Document
@@ -75,6 +76,13 @@ class IndexBuildNotReadyError(RuntimeError):
         self.status_payload = status_payload
 
 
+class IndexBuildCancelledError(RuntimeError):
+    """索引构建被上游高优先级操作取消。"""
+
+
+_ACTIVE_BUILD_STATUSES = {"queued", "building", "cancelling"}
+
+
 # ==================== 向量索引服务 ====================
 
 class VectorIndexService:
@@ -107,9 +115,10 @@ class VectorIndexService:
     def start_background_build(self, force_rebuild: bool = False) -> dict:
         task_key = _build_task_key(self.user_id, self.project_name)
         now = datetime.now(timezone.utc).isoformat()
+        cancel_event = threading.Event()
         with _build_state_lock:
             current = dict(_build_state_registry.get(task_key) or {})
-            if current.get("status") in {"queued", "building"}:
+            if current.get("status") in _ACTIVE_BUILD_STATUSES:
                 current["_pending_refresh"] = True
                 current["_pending_force_rebuild"] = bool(current.get("_pending_force_rebuild")) or bool(force_rebuild)
                 _build_state_registry[task_key] = current
@@ -122,6 +131,8 @@ class VectorIndexService:
                 "finished_at": "",
                 "_pending_refresh": False,
                 "_pending_force_rebuild": False,
+                "_cancel_event": cancel_event,
+                "_thread": None,
                 "progress": {
                     "total_files": 0,
                     "done_files": 0,
@@ -139,14 +150,24 @@ class VectorIndexService:
             while True:
                 try:
                     self.build_index(force_rebuild=next_force_rebuild)
+                except IndexBuildCancelledError:
+                    pass
                 except Exception:
                     pass
                 with _build_state_lock:
                     latest = dict(_build_state_registry.get(task_key) or {})
-                    rerun = bool(latest.get("_pending_refresh"))
+                    cancelled = bool(cancel_event.is_set())
+                    rerun = bool(latest.get("_pending_refresh")) and not cancelled
                     next_force_rebuild = bool(latest.get("_pending_force_rebuild"))
                     latest["_pending_refresh"] = False
                     latest["_pending_force_rebuild"] = False
+                    if cancelled and latest.get("status") not in {"cancelled", "error"}:
+                        latest.update({
+                            "status": "cancelled",
+                            "stage": "cancelled",
+                            "error": "向量索引构建已取消",
+                            "finished_at": datetime.now(timezone.utc).isoformat(),
+                        })
                     _build_state_registry[task_key] = latest
                 if not rerun:
                     break
@@ -157,12 +178,17 @@ class VectorIndexService:
             name=f"semantic_index_build_{task_key}",
         )
         thread.start()
+        with _build_state_lock:
+            latest = dict(_build_state_registry.get(task_key) or {})
+            if latest.get("_cancel_event") is cancel_event:
+                latest["_thread"] = thread
+                _build_state_registry[task_key] = latest
         return self.get_build_state()
 
     def ensure_background_build_started(self, check_freshness: bool = True) -> dict:
         status = self.get_status(check_freshness=check_freshness)
         build_state = dict(status.get("build_state") or {})
-        if build_state.get("status") in {"queued", "building"}:
+        if build_state.get("status") in _ACTIVE_BUILD_STATUSES:
             return status
         if not status.get("exists") or status.get("needs_rebuild"):
             build_state = self.start_background_build(force_rebuild=False)
@@ -217,6 +243,75 @@ class VectorIndexService:
             _build_state_registry[task_key] = current
             return dict(current)
 
+    def _get_cancel_event(self) -> threading.Event | None:
+        task_key = _build_task_key(self.user_id, self.project_name)
+        with _build_state_lock:
+            event = (_build_state_registry.get(task_key) or {}).get("_cancel_event")
+        return event if isinstance(event, threading.Event) else None
+
+    def _check_cancelled(self) -> None:
+        event = self._get_cancel_event()
+        if event and event.is_set():
+            raise IndexBuildCancelledError("向量索引构建已取消")
+
+    @staticmethod
+    def _release_vector_store(vector_store: Any | None) -> None:
+        """尽量释放 Chroma 持有的底层句柄，避免 Windows 删除目录失败。"""
+        if vector_store is None:
+            return
+        try:
+            client = getattr(vector_store, "_client", None)
+            system = getattr(client, "_system", None)
+            stop = getattr(system, "stop", None)
+            if callable(stop):
+                stop()
+        except Exception:
+            pass
+        try:
+            del vector_store
+        except Exception:
+            pass
+        gc.collect()
+
+    @staticmethod
+    def release_process_resources() -> None:
+        """清理 Chroma 进程级缓存，删除项目时用于释放遗留文件句柄。"""
+        try:
+            from chromadb.api.client import SharedSystemClient
+
+            clear_cache = getattr(SharedSystemClient, "clear_system_cache", None)
+            if callable(clear_cache):
+                clear_cache()
+        except Exception:
+            pass
+        gc.collect()
+
+    def cancel_background_build(self, wait_timeout: float = 5.0) -> dict:
+        """请求取消后台索引构建，并在限定时间内等待线程主动退出。"""
+        task_key = _build_task_key(self.user_id, self.project_name)
+        with _build_state_lock:
+            current = dict(_build_state_registry.get(task_key) or {})
+            status = current.get("status")
+            event = current.get("_cancel_event")
+            thread = current.get("_thread")
+            if status not in _ACTIVE_BUILD_STATUSES or not isinstance(event, threading.Event):
+                return self._public_build_state(current)
+            event.set()
+            current.update({
+                "status": "cancelling",
+                "stage": "cancelling",
+                "error": "正在取消向量索引构建",
+                "_pending_refresh": False,
+                "_pending_force_rebuild": False,
+            })
+            _build_state_registry[task_key] = current
+
+        if isinstance(thread, threading.Thread) and thread.is_alive() and thread is not threading.current_thread():
+            thread.join(timeout=max(0.0, float(wait_timeout)))
+
+        self.release_process_resources()
+        return self.get_build_state()
+
     # ==================== 索引构建 ====================
 
     def build_index(self, force_rebuild: bool = False) -> dict:
@@ -250,10 +345,13 @@ class VectorIndexService:
             },
         )
 
+        vector_store: Chroma | None = None
         try:
+            self._check_cancelled()
             metadata = self._load_meta() if os.path.isdir(self._persist_dir) else {}
             chunker = SemanticChunker()
             chunk_state = chunker.chunk_project_state(self.user_id, self.project_name, use_cache=True)
+            self._check_cancelled()
             chunks_by_file = {
                 str(rel_path): list(file_chunks)
                 for rel_path, file_chunks in dict(chunk_state.get("chunks_by_file") or {}).items()
@@ -316,6 +414,7 @@ class VectorIndexService:
             if not all_chunks:
                 raise RuntimeError("未找到可用于构建向量索引的项目文本。")
 
+            self._check_cancelled()
             embeddings = self._get_embeddings()
             target_files = list(dict.fromkeys([*delta["added_files"], *delta["changed_files"]]))
             removed_files = list(delta["removed_files"])
@@ -341,12 +440,12 @@ class VectorIndexService:
                 if os.path.isdir(self._persist_dir):
                     shutil.rmtree(self._persist_dir)
 
-                vector_store: Chroma | None = None
                 rebuilt_doc_ids: dict[str, list[str]] = {}
                 processed_files = 0
                 embedded_chunks = 0
 
                 for rel_path, file_chunks in chunks_by_file.items():
+                    self._check_cancelled()
                     ids, documents = self._file_chunks_to_documents(rel_path, file_chunks)
                     rebuilt_doc_ids[rel_path] = ids
 
@@ -363,12 +462,14 @@ class VectorIndexService:
                             )
                             embedded_chunks += len(first_batch)
                             for i in range(batch_size, len(documents), batch_size):
+                                self._check_cancelled()
                                 batch_documents = documents[i:i + batch_size]
                                 batch_ids = ids[i:i + batch_size]
                                 vector_store.add_documents(batch_documents, ids=batch_ids)
                                 embedded_chunks += len(batch_documents)
                         else:
                             for i in range(0, len(documents), batch_size):
+                                self._check_cancelled()
                                 batch_documents = documents[i:i + batch_size]
                                 batch_ids = ids[i:i + batch_size]
                                 vector_store.add_documents(batch_documents, ids=batch_ids)
@@ -405,6 +506,7 @@ class VectorIndexService:
                 delete_ids: list[str] = []
                 # 1) 文件被删除：该文件下所有旧 chunk 全删
                 for rel_path in removed_files:
+                    self._check_cancelled()
                     delete_ids.extend(file_doc_ids.get(rel_path, []))
 
                 # 2) added_files：旧里没有这个文件，所有 chunk 都需新 embed
@@ -414,6 +516,7 @@ class VectorIndexService:
                 reused_chunk_count = 0
 
                 for rel_path in delta["added_files"]:
+                    self._check_cancelled()
                     new_ids, new_documents = self._file_chunks_to_documents(
                         rel_path, chunks_by_file.get(rel_path, [])
                     )
@@ -421,6 +524,7 @@ class VectorIndexService:
                     embed_pairs_by_file[rel_path] = list(zip(new_ids, new_documents))
 
                 for rel_path in delta["changed_files"]:
+                    self._check_cancelled()
                     new_ids, new_documents = self._file_chunks_to_documents(
                         rel_path, chunks_by_file.get(rel_path, [])
                     )
@@ -443,6 +547,7 @@ class VectorIndexService:
                     reused_chunk_count += len(old_id_set & new_id_set)
 
                 if delete_ids:
+                    self._check_cancelled()
                     vector_store.delete(ids=delete_ids)
 
                 # 同步元数据中的 file_doc_ids：删除文件清掉条目，其他覆盖为最新完整 id 列表
@@ -474,11 +579,13 @@ class VectorIndexService:
                     )
 
                 for rel_path in target_files:
+                    self._check_cancelled()
                     pairs = embed_pairs_by_file.get(rel_path, [])
                     if pairs:
                         chunk_ids = [cid for cid, _ in pairs]
                         documents = [doc for _, doc in pairs]
                         for i in range(0, len(documents), batch_size):
+                            self._check_cancelled()
                             batch_documents = documents[i:i + batch_size]
                             batch_ids = chunk_ids[i:i + batch_size]
                             vector_store.add_documents(batch_documents, ids=batch_ids)
@@ -527,6 +634,7 @@ class VectorIndexService:
                 },
                 "reused": False,
             }
+            self._check_cancelled()
             self._save_meta(meta)
             self._set_build_state(
                 status="ready",
@@ -545,6 +653,14 @@ class VectorIndexService:
                 },
             )
             return meta
+        except IndexBuildCancelledError as e:
+            self._set_build_state(
+                status="cancelled",
+                stage="cancelled",
+                error=str(e),
+                finished_at=datetime.now(timezone.utc).isoformat(),
+            )
+            raise
         except Exception as e:
             self._set_build_state(
                 status="error",
@@ -553,6 +669,8 @@ class VectorIndexService:
                 finished_at=datetime.now(timezone.utc).isoformat(),
             )
             raise
+        finally:
+            self._release_vector_store(vector_store)
 
     # ==================== 查询 ====================
 
@@ -577,18 +695,22 @@ class VectorIndexService:
             raise IndexBuildNotReadyError(status)
 
         embeddings = self._get_embeddings()
-        vector_store = Chroma(
-            collection_name=self._collection_name,
-            embedding_function=embeddings,
-            persist_directory=self._persist_dir,
-        )
+        vector_store = None
+        try:
+            vector_store = Chroma(
+                collection_name=self._collection_name,
+                embedding_function=embeddings,
+                persist_directory=self._persist_dir,
+            )
 
-        # 执行搜索
-        search_kwargs = {"k": k}
-        if filter:
-            search_kwargs["filter"] = filter
+            # 执行搜索
+            search_kwargs = {"k": k}
+            if filter:
+                search_kwargs["filter"] = filter
 
-        results = vector_store.similarity_search_with_score(query_text, **search_kwargs)
+            results = vector_store.similarity_search_with_score(query_text, **search_kwargs)
+        finally:
+            self._release_vector_store(vector_store)
 
         # 组装 SearchHit
         hits: list[SearchHit] = []
@@ -626,13 +748,13 @@ class VectorIndexService:
         needs_rebuild = False
         if exists and metadata and not self._supports_incremental_meta(metadata):
             needs_rebuild = True
-            if build_state.get("status") not in {"queued", "building", "error"}:
+            if build_state.get("status") not in (_ACTIVE_BUILD_STATUSES | {"error"}):
                 build_state = {
                     **build_state,
                     "status": "stale",
                     "stage": "reindex",
                 }
-        elif check_freshness and exists and metadata and build_state.get("status") not in {"queued", "building", "error"}:
+        elif check_freshness and exists and metadata and build_state.get("status") not in (_ACTIVE_BUILD_STATUSES | {"error"}):
             try:
                 needs_rebuild = self._needs_rebuild(metadata)
             except Exception:
@@ -655,10 +777,14 @@ class VectorIndexService:
 
     def reset(self) -> dict:
         """删除索引"""
+        self.cancel_background_build(wait_timeout=2.0)
         removed = False
         if os.path.isdir(self._persist_dir):
             shutil.rmtree(self._persist_dir)
             removed = True
+        task_key = _build_task_key(self.user_id, self.project_name)
+        with _build_state_lock:
+            _build_state_registry.pop(task_key, None)
         return {
             "project": self.project_name,
             "user_id": self.user_id,

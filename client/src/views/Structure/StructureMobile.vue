@@ -149,7 +149,7 @@ import { useI18n } from 'vue-i18n';
 import SparkTag from '../../components/share/SparkTag.vue';
 import GlobalLoading from '../../components/share/GlobalLoading.vue';
 import MobileTextArea from '../../components/share/MobileTextArea.vue';
-import { ChevronRight, Clock, Files, List, Save, Sparkles } from 'lucide-vue-next';
+import { ChevronRight, Clock, Files, List, Save, Sparkles } from '@lucide/vue';
 import HistoryPanel from '../../components/dlg-editor/HistoryPanel.vue';
 import { useStructureLogic } from '../../composables/useStructureLogic';
 

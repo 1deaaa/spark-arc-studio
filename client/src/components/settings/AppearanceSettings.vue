@@ -112,7 +112,7 @@
 <script setup lang="ts">
 import { ref, onMounted, watch, nextTick, h, computed } from 'vue';
 import { NForm, NFormItem, NColorPicker, NSelect, NText, NTooltip, NIcon, NPopover } from 'naive-ui';
-import { Info } from 'lucide-vue-next';
+import { Info } from '@lucide/vue';
 import { useThemeStore } from '../stores/themeStore';
 import { useI18n } from 'vue-i18n';
 

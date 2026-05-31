@@ -177,7 +177,7 @@
 import { ref } from 'vue';
 import { NInput, NButton, NIcon, NEmpty, NBadge } from 'naive-ui';
 import { useI18n } from 'vue-i18n';
-import { ArrowRight, ChevronDown, ChevronUp, Clock, Pin, RefreshCw, Save, Sparkles, X, Zap } from 'lucide-vue-next';
+import { ArrowRight, ChevronDown, ChevronUp, Clock, Pin, RefreshCw, Save, Sparkles, X, Zap } from '@lucide/vue';
 import LorebookEditor from '../../components/lorebook/LorebookEditor.vue';
 import CharacterGeneratorPanel from '../../components/lorebook/CharacterGeneratorPanel.vue';
 import AiSettingsPanel from '../../components/lorebook/AiSettingsPanel.vue';

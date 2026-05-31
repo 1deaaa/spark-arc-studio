@@ -38,7 +38,7 @@
 <script setup lang="ts">
 import { ref } from 'vue';
 import { NCard, NForm, NButton, NIcon } from 'naive-ui';
-import { Rocket } from 'lucide-vue-next';
+import { Rocket } from '@lucide/vue';
 import StudioSeamlessTextarea from '@/components/share/StudioSeamlessTextarea.vue';
 import { fetchWithAuth } from '@/services/api';
 import { fetchCharacters } from '@/services/storyService';
@@ -235,7 +235,7 @@ async function handleAdjust() {
   line-height: 1.2;
 }
 
-.right-panel-section.is-embedded :deep(.n-card__content) {
+.right-panel-section.is-embedded :deep(.n-card-content) {
   padding: 0 !important;
 }
 

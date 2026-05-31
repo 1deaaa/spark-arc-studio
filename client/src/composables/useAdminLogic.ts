@@ -1,7 +1,7 @@
 
 import { ref, computed, onMounted, h } from 'vue';
 import { useMessage, NTag, NButton, NIcon, NPopconfirm, NSpace, NTooltip } from 'naive-ui';
-import { Trash, Ban, Unlock } from 'lucide-vue-next';
+import { Trash, Ban, Unlock } from '@lucide/vue';
 import {
     getMyUsage,
     getMyQuotaStatus,

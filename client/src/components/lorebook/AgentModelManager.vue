@@ -105,7 +105,7 @@
 import { ref, computed, onMounted, watch } from 'vue';
 import { NButton, NIcon, NSpin, NTabs, NTabPane, NFormItem, NSelect, NTag, NGrid, NGi } from 'naive-ui';
 import SparkAlert from '@/components/share/SparkAlert.vue';
-import { Link, RefreshCw } from 'lucide-vue-next';
+import { Link, RefreshCw } from '@lucide/vue';
 import { fetchAgentUsageBindings, saveAgentBinding } from '../../services/agentUsage';
 import { useAgentRegistry } from '@/composables/useAgentRegistry';
 import { useAiStore } from '../stores/aiStore';

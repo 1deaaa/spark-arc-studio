@@ -19,7 +19,7 @@
 <script setup lang="ts">
 import { ref, onMounted, onUnmounted, markRaw, type PropType } from 'vue';
 import { NIcon } from 'naive-ui';
-import { Activity, Globe2, Lightbulb, List, Map as MapIcon, SquarePen } from 'lucide-vue-next';
+import { Activity, Globe2, Lightbulb, List, Map as MapIcon, SquarePen } from '@lucide/vue';
 
 // 图标映射
 const iconMap = {

@@ -67,7 +67,7 @@ import { onMounted, computed } from 'vue';
 import { useI18n } from 'vue-i18n';
 import { useRouter } from 'vue-router';
 import { NSpace, NText, NSelect, NButton, NIcon, NTooltip, useDialog } from 'naive-ui';
-import { CirclePlus, FolderOpen, SquarePen, Trash } from 'lucide-vue-next';
+import { CirclePlus, FolderOpen, SquarePen, Trash } from '@lucide/vue';
 import { useProjectStore } from '../stores/projectStore';
 import { useFileStore } from '../stores/fileStore';
 import bus from '@/eventBus';

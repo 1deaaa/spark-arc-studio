@@ -153,7 +153,7 @@ import { useI18n } from 'vue-i18n';
 import SparkTag from '../share/SparkTag.vue';
 import SparkAlert from '../share/SparkAlert.vue';
 import SparkSegment from '../share/SparkSegment.vue';
-import { RefreshCw } from 'lucide-vue-next';
+import { RefreshCw } from '@lucide/vue';
 import SparkIcon from '@/components/share/CreditIcon.vue';
 import { getMyQuotaStatus, getMyCreditStatus, formatTokens, redeemCode } from '../../services/adminService';
 

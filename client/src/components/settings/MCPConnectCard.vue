@@ -109,7 +109,7 @@ import {
 import SparkCollapseTransition from '../share/SparkCollapseTransition.vue';
 import SparkTag from '../share/SparkTag.vue';
 import SparkAlert from '../share/SparkAlert.vue';
-import { Activity, ChevronDown, Copy, RefreshCw } from 'lucide-vue-next';
+import { Activity, ChevronDown, Copy, RefreshCw } from '@lucide/vue';
 import { fetchWithAuth } from '../../services/api';
 
 const { t } = useI18n();

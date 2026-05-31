@@ -69,7 +69,7 @@
 import { ref, computed, markRaw, watch } from 'vue';
 import { NIcon, NTooltip } from 'naive-ui';
 import { useI18n } from 'vue-i18n';
-import { Activity, Code, Gauge, Library, Lightbulb, List, Map as MapIcon, MessagesSquare, Settings, SquarePen } from 'lucide-vue-next';
+import { Activity, Code, Gauge, Library, Lightbulb, List, Map as MapIcon, MessagesSquare, Settings, SquarePen } from '@lucide/vue';
 import { useViewStore, type AppViewKey } from '../../stores/viewStore';
 
 type ActivityItem = {

@@ -233,7 +233,7 @@ function onAgentChanged(agentId) {
   border-bottom: none;
 }
 
-.extra-chat-window :deep(.n-card__content) {
+.extra-chat-window :deep(.n-card-content) {
   flex: 1;
   overflow: hidden;
   display: flex;

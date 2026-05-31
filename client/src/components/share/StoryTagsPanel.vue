@@ -77,16 +77,17 @@
 import { ref, watch, onMounted, onBeforeUnmount } from 'vue';
 import { useI18n } from 'vue-i18n';
 import { NPopover, NButton, NIcon, NTooltip } from 'naive-ui';
-import { Tags } from 'lucide-vue-next';
+import { Tags } from '@lucide/vue';
 import InspireTagSelector from '../lorebook/InspireTagSelector.vue';
 import { useProjectStore } from '../stores/projectStore';
 import { fetchWithAuth } from '../../services/api';
 import { useMobile } from '../../composables/useMobile';
+import type { PropType } from 'vue';
 
 const { isMobile } = useMobile();
 
 defineProps({
-  buttonSize: { type: String, default: 'small' },
+  buttonSize: { type: String as PropType<'tiny' | 'small' | 'medium' | 'large'>, default: 'small' },
 });
 
 const { t } = useI18n();

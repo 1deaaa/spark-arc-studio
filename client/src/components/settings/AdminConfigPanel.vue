@@ -231,7 +231,7 @@ import {
 } from 'naive-ui';
 import SparkAlert from '../share/SparkAlert.vue';
 import SparkLoaderAnimation from '../share/SparkLoaderAnimation.vue';
-import { CircleAlert, CircleCheckBig, CircleHelp, Pencil } from 'lucide-vue-next';
+import { CircleAlert, CircleCheckBig, CircleHelp, Pencil } from '@lucide/vue';
 import { fetchWithAuth } from '../../services/api';
 import { useMainlandComplianceLocale } from '@/i18n/compliance';
 import { bus } from '../../eventBus';

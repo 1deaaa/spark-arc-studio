@@ -48,7 +48,7 @@
 <script setup lang="ts">
 import { computed } from 'vue';
 import { NSwitch, NTooltip, NIcon } from 'naive-ui';
-import { RefreshCw, Search, Network } from 'lucide-vue-next';
+import { RefreshCw, Search, Network } from '@lucide/vue';
 
 export type IndexKind = 'semantic' | 'graphrag';
 

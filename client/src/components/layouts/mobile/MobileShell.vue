@@ -35,7 +35,7 @@
 <script setup lang="ts">
 import { computed } from 'vue';
 import { NButton, NIcon } from 'naive-ui';
-import { Settings } from 'lucide-vue-next';
+import { Settings } from '@lucide/vue';
 import AppBrand from '../../share/AppBrand.vue';
 import { SPARKARC_GITHUB_URL } from '@/config';
 import WorkflowNavigation from './WorkflowNavigation.vue';

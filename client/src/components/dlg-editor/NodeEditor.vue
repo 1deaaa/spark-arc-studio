@@ -358,7 +358,7 @@
 import { computed, reactive, ref, watch, getCurrentInstance, onMounted, onBeforeUnmount } from 'vue';
 import { NCard, NForm, NFormItem, NInput, NInputNumber, NSwitch, NSelect, NButton, NIcon, NDivider, NSpace, NPopconfirm, NEmpty, NCollapse, NCollapseItem, NText } from 'naive-ui';
 import SparkTag from '../share/SparkTag.vue';
-import { ArrowDown, ChartColumn, CircleDot, CircleHelp, CirclePlus, Film, Gamepad2, MessageCircle, Plus, Trash, User } from 'lucide-vue-next';
+import { ArrowDown, ChartColumn, CircleDot, CircleHelp, CirclePlus, Film, Gamepad2, MessageCircle, Plus, Trash, User } from '@lucide/vue';
 import bus from '@/eventBus';
 import ConditionsEditor from './ConditionsEditor.vue';
 import EffectsEditor from './EffectsEditor.vue';
@@ -757,7 +757,7 @@ watch(
 }
 
 /* 让 n-card header 固定，content 区域可滚动 */
-#node-editor :deep(.n-card__content) {
+#node-editor :deep(.n-card-content) {
   flex: 1;
   overflow-y: auto;
   min-height: 0;

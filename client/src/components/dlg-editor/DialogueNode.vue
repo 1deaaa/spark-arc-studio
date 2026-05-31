@@ -104,7 +104,7 @@
 <script setup lang="ts">
 import { computed } from 'vue';
 import { NCard, NText, NTag, NSpace, NEllipsis, NButton, NIcon, NTooltip } from 'naive-ui';
-import { GitBranch } from 'lucide-vue-next';
+import { GitBranch } from '@lucide/vue';
 import Draggable from 'vuedraggable';
 
 type DialogueOption = {
@@ -184,7 +184,7 @@ const getOptionKey = (option: DialogueOption) => {
   box-shadow: 0 0 0 1px var(--node-border-selected);
 }
 
-.tree-node:deep(.n-card__content) {
+.tree-node:deep(.n-card-content) {
   padding: 8px 12px !important;
 }
 

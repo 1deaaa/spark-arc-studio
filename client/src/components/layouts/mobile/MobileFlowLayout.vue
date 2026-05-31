@@ -169,7 +169,7 @@
 <script setup lang="ts">
 import { ref, computed, onMounted, onUnmounted, provide, watch, h, nextTick } from 'vue';
 import { NButton, NIcon, NDrawer, NDrawerContent, NTabs, NTabPane, NDropdown, NModal, NCard, NTooltip, type DropdownOption, useDialog } from 'naive-ui';
-import { Archive, CircleCheckBig, CirclePlus, FolderOpen, PaintBucket, Play, Settings, Share2, SquarePen, Trash } from 'lucide-vue-next';
+import { Archive, CircleCheckBig, CirclePlus, FolderOpen, PaintBucket, Play, Settings, Share2, SquarePen, Trash } from '@lucide/vue';
 import { useI18n } from 'vue-i18n';
 
 import FlowCard from './FlowCard.vue';

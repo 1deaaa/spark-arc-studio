@@ -19,7 +19,7 @@
 <script setup lang="ts">
 import { computed, markRaw } from 'vue';
 import { NIcon } from 'naive-ui';
-import { Lightbulb, List, SquarePen } from 'lucide-vue-next';
+import { Lightbulb, List, SquarePen } from '@lucide/vue';
 import { useViewStore } from '../../stores/viewStore';
 
 const viewStore = useViewStore();

@@ -128,7 +128,7 @@ import { useI18n } from 'vue-i18n';
 import { NButton, NIcon, NSpace, NFormItem, NSelect, NModal, NCard, NForm, NInput, useMessage, useDialog } from 'naive-ui';
 import SparkAlert from '../share/SparkAlert.vue';
 import SparkLoaderAnimation from '../share/SparkLoaderAnimation.vue';
-import { Plus, Trophy } from 'lucide-vue-next';
+import { Plus, Trophy } from '@lucide/vue';
 import { createUserUsageSlot, deleteUserUsageSlot, renameUserUsageSlot } from '../../services/api';
 import { useAiStore } from '../stores/aiStore';
 

@@ -65,7 +65,7 @@ import { useI18n } from 'vue-i18n';
 import { NCard, NIcon, NButton, NTooltip, useMessage } from 'naive-ui';
 import SparkCollapseTransition from '../share/SparkCollapseTransition.vue';
 import SparkTag from '../share/SparkTag.vue';
-import { ChevronDown, ExternalLink, MessagesSquare, Plus } from 'lucide-vue-next';
+import { ChevronDown, ExternalLink, MessagesSquare, Plus } from '@lucide/vue';
 import FeedbackModal from './FeedbackModal.vue';
 import { getMyFeedbacks, getMyUnreadCount, getAllFeedbacks, getAdminUnreadCount } from '../../services/feedbackService';
 import type { FeedbackItem } from '../../services/feedbackService';

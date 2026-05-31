@@ -22,6 +22,38 @@
                     {{ t('components.aiManager.adminHint') }}
                 </n-tooltip>
             </div>
+            <div class="header-billing-switch">
+                <n-tooltip trigger="hover" placement="top">
+                    <template #trigger>
+                        <div class="status-icon-wrapper" :class="{ active: systemConfig.billing_enabled }">
+                            <n-icon size="18">
+                                <Zap />
+                            </n-icon>
+                            <span class="status-text">
+                                {{ systemConfig.billing_enabled ? t('components.aiManager.status.billingOn') : t('components.aiManager.status.billingOff') }}
+                            </span>
+                            <n-switch
+                                v-if="isAdmin"
+                                size="small"
+                                :value="systemConfig.billing_enabled"
+                                @click.stop
+                                @update:value="toggleBillingEnabled"
+                            />
+                        </div>
+                    </template>
+                    <div class="status-tooltip">
+                        <div class="tooltip-title">
+                            {{ systemConfig.billing_enabled ? t('components.aiManager.status.billingOnTitle') : t('components.aiManager.status.billingOffTitle') }}
+                        </div>
+                        <div class="tooltip-desc">
+                            {{ systemConfig.billing_enabled
+                                ? t('components.aiManager.status.billingOnDesc')
+                                : t('components.aiManager.status.billingOffDesc')
+                            }}
+                        </div>
+                    </div>
+                </n-tooltip>
+            </div>
         </div>
         
         <div style="margin-bottom: 16px;">
@@ -79,39 +111,6 @@
                                 </div>
                             </div>
                         </n-tooltip>
-                 </div>
-
-                 <div class="status-item">
-                    <n-tooltip trigger="hover" placement="top">
-                        <template #trigger>
-                            <div class="status-icon-wrapper" :class="{ active: systemConfig.billing_enabled }">
-                                <n-icon size="20">
-                                    <Zap />
-                                </n-icon>
-                                <span class="status-text">
-                                    {{ systemConfig.billing_enabled ? t('components.aiManager.status.billingOn') : t('components.aiManager.status.billingOff') }}
-                                </span>
-                                <n-switch
-                                    v-if="isAdmin"
-                                    size="small"
-                                    :value="systemConfig.billing_enabled"
-                                    @click.stop
-                                    @update:value="toggleBillingEnabled"
-                                />
-                            </div>
-                        </template>
-                        <div class="status-tooltip">
-                            <div class="tooltip-title">
-                                {{ systemConfig.billing_enabled ? t('components.aiManager.status.billingOnTitle') : t('components.aiManager.status.billingOffTitle') }}
-                            </div>
-                            <div class="tooltip-desc">
-                                {{ systemConfig.billing_enabled
-                                    ? t('components.aiManager.status.billingOnDesc')
-                                    : t('components.aiManager.status.billingOffDesc')
-                                }}
-                            </div>
-                        </div>
-                    </n-tooltip>
                  </div>
 
                  <div class="status-actions">
@@ -908,7 +907,7 @@ import {
 } from 'naive-ui';
 import SparkAlert from '@/components/share/SparkAlert.vue';
 import SparkCollapseTransition from '@/components/share/SparkCollapseTransition.vue';
-import { Activity, CircleAlert, CircleCheck, CloudUpload, Download, Info, Key, Lock, Menu, Plus, Server, SquarePen, Trash, Unlock, User, X, Zap } from 'lucide-vue-next';
+import { Activity, CircleAlert, CircleCheck, CloudUpload, Download, Info, Key, Lock, Menu, Plus, Server, SquarePen, Trash, Unlock, User, X, Zap } from '@lucide/vue';
 import SparkTag from '@/components/share/SparkTag.vue';
 import SparkIcon from '@/components/share/CreditIcon.vue';
 import SparkLoaderAnimation from '@/components/share/SparkLoaderAnimation.vue';

@@ -38,7 +38,7 @@
 <script setup lang="ts">
 import { ref } from 'vue';
 import { NCard, NForm, NButton, NIcon } from 'naive-ui';
-import { Zap } from 'lucide-vue-next';
+import { Zap } from '@lucide/vue';
 import StudioSeamlessTextarea from '@/components/share/StudioSeamlessTextarea.vue';
 import { fetchWithAuth } from '@/services/api';
 import { fetchCharacters } from '@/services/storyService';
@@ -238,7 +238,7 @@ async function handleAdjust() {
   line-height: 1.2;
 }
 
-.world-gen-panel.is-embedded :deep(.n-card__content) {
+.world-gen-panel.is-embedded :deep(.n-card-content) {
   padding: 0 !important;
 }
 

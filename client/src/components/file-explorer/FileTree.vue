@@ -49,7 +49,7 @@
 import { computed, reactive, onMounted, onBeforeUnmount, h, type Component } from 'vue';
 import { NDropdown, NIcon } from 'naive-ui';
 import draggable from 'vuedraggable';
-import { Book, Plus, SquarePen } from 'lucide-vue-next';
+import { Book, Plus, SquarePen } from '@lucide/vue';
 import { useI18n } from 'vue-i18n';
 import FileItem from './FileItem.vue';
 import { useFileStore } from '@/components/stores/fileStore';

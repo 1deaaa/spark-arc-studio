@@ -108,7 +108,7 @@ import { ref, onMounted, onBeforeUnmount, computed, onActivated, watch } from 'v
 import { useI18n } from 'vue-i18n';
 import { useRoute } from 'vue-router';
 import { NCard, NInput, NButton, NIcon, NSpace, NPopconfirm } from 'naive-ui';
-import { Plus, Save, SquarePen, Trash } from 'lucide-vue-next';
+import { Plus, Save, SquarePen, Trash } from '@lucide/vue';
 import StudioSeamlessTextarea from '../share/StudioSeamlessTextarea.vue';
 import bus from '../../eventBus';
 import GlobalLoading from '../share/GlobalLoading.vue';
@@ -540,7 +540,7 @@ function onStreamedCharacter(payload) {
 }
 
 .settings-editor-container :deep(.lorebook-card .n-card__header),
-.settings-editor-container :deep(.lorebook-card .n-card__content),
+.settings-editor-container :deep(.lorebook-card .n-card-content),
 .settings-editor-container :deep(.lorebook-card .n-card__action) {
   border-radius: 0 !important;
   background: transparent !important;
@@ -550,7 +550,7 @@ function onStreamedCharacter(payload) {
   padding: 0 0 8px !important;
 }
 
-.settings-editor-container.is-embedded :deep(.lorebook-card .n-card__content) {
+.settings-editor-container.is-embedded :deep(.lorebook-card .n-card-content) {
   padding: 0 !important;
 }
 
@@ -569,7 +569,7 @@ function onStreamedCharacter(payload) {
   flex-direction: column;
 }
 
-.worldview-card :deep(.n-card__content) {
+.worldview-card :deep(.n-card-content) {
   flex: 1;
   display: flex;
   flex-direction: column;
@@ -601,7 +601,7 @@ function onStreamedCharacter(payload) {
   flex-direction: column;
 }
 
-.character-section-card :deep(.n-card__content) {
+.character-section-card :deep(.n-card-content) {
   flex: 1;
   min-height: 0;
   overflow: auto;
@@ -650,7 +650,7 @@ function onStreamedCharacter(payload) {
   font-weight: 600;
 }
 
-.character-card :deep(.n-card__content) {
+.character-card :deep(.n-card-content) {
   padding: 0 !important;
   overflow: auto;
   flex: 1;

@@ -150,7 +150,7 @@
 import { NInput, NButton, NIcon, NSelect } from 'naive-ui';
 import { useI18n } from 'vue-i18n';
 import SparkTag from '../../components/share/SparkTag.vue';
-import { ArrowRight, RefreshCw, X, Zap } from 'lucide-vue-next';
+import { ArrowRight, RefreshCw, X, Zap } from '@lucide/vue';
 import { useSynopsisLogic } from '../../composables/useSynopsisLogic';
 import AiSettingsPanel from '../../components/lorebook/AiSettingsPanel.vue';
 import GlobalLoading from '../../components/share/GlobalLoading.vue';

@@ -40,7 +40,7 @@
 import { computed } from 'vue';
 import { useI18n } from 'vue-i18n';
 import { NButton, NIcon, NTooltip } from 'naive-ui';
-import { Plus } from 'lucide-vue-next';
+import { Plus } from '@lucide/vue';
 import bus from '@/eventBus';
 import { useSceneStore, type SceneWithClientId } from '@/components/stores/sceneStore';
 import Draggable from 'vuedraggable';

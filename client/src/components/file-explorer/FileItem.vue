@@ -59,7 +59,7 @@
 import { ref, computed, reactive, onMounted, onBeforeUnmount, watch, h, type Component } from 'vue';
 import { NDropdown, NIcon } from 'naive-ui';
 import draggable from 'vuedraggable';
-import { BookOpen, ChevronDown, ChevronRight, Folder, FolderOpen, Newspaper, Pencil, Plus, SquarePen, Trash } from 'lucide-vue-next';
+import { BookOpen, ChevronDown, ChevronRight, Folder, FolderOpen, Newspaper, Pencil, Plus, SquarePen, Trash } from '@lucide/vue';
 import { useI18n } from 'vue-i18n';
 import { useSceneStore } from '@/components/stores/sceneStore';
 import { useFileStore, flattenFileTree } from '@/components/stores/fileStore';

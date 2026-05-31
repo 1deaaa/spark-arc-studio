@@ -236,7 +236,7 @@ import { ref, computed, onMounted, watch } from 'vue';
 import { NPopover, NButton, NIcon, NModal, NInput, NTag, useMessage, useDialog } from 'naive-ui';
 import SparkSegment from '../share/SparkSegment.vue';
 import SparkCollapseTransition from '../share/SparkCollapseTransition.vue';
-import { ChevronDown, Plus, Tag } from 'lucide-vue-next';
+import { ChevronDown, Plus, Tag } from '@lucide/vue';
 import { fetchWithAuth } from '../../services/api';
 
 const props = defineProps({

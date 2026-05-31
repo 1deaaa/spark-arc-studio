@@ -258,7 +258,7 @@ import {
   NTag, NCollapse, NCollapseItem, NForm, NFormItem, NEmpty
 } from 'naive-ui';
 import SparkAlert from '@/components/share/SparkAlert.vue';
-import { Code, List, Plus, Save, Trash } from 'lucide-vue-next';
+import { Code, List, Plus, Save, Trash } from '@lucide/vue';
 import { useProjectStore } from '@/components/stores/projectStore';
 import { useActionBindingStore } from '@/components/stores/actionBindingStore';
 import bus from '@/eventBus';

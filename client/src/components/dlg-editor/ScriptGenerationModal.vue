@@ -197,7 +197,7 @@ import { NModal, NIcon, NForm, NFormItem, NSelect, NButton, NProgress, useDialog
 import SparkTag from '../share/SparkTag.vue';
 import SparkAlert from '../share/SparkAlert.vue';
 import SparkSegment from '../share/SparkSegment.vue';
-import { Pause, Play, SkipForward, TriangleAlert } from 'lucide-vue-next';
+import { Pause, Play, SkipForward, TriangleAlert } from '@lucide/vue';
 import { useProjectStore } from '../stores/projectStore';
 import { fetchEventSource } from '@microsoft/fetch-event-source';
 import { fetchWithAuth, resolveApiUrl } from '@/services/apiClient';

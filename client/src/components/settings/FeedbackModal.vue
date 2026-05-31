@@ -256,7 +256,7 @@ import {
 import SparkTag from '../share/SparkTag.vue';
 import SparkCollapseTransition from '../share/SparkCollapseTransition.vue';
 import SparkAlert from '../share/SparkAlert.vue';
-import { RefreshCw } from 'lucide-vue-next';
+import { RefreshCw } from '@lucide/vue';
 import {
   createFeedback, getMyFeedbacks, markFeedbackRead, getMyUnreadCount,
   getAllFeedbacks, updateFeedbackStatus, replyFeedback, getAdminUnreadCount,
@@ -730,7 +730,7 @@ watch(() => props.show, (val) => {
   flex-direction: column;
   max-height: min(86vh, 760px);
 }
-.feedback-modal .n-card__content {
+.feedback-modal .n-card-content {
   flex: 1;
   min-height: 0;
   overflow: hidden;

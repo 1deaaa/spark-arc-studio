@@ -331,7 +331,7 @@
 import { computed, onMounted, ref, watch } from 'vue';
 import { NCard, NForm, NFormItem, NSelect, NInputNumber, NButton, NInput, NIcon, NSpace, NTag, NDivider, NCollapse, NCollapseItem, useDialog } from 'naive-ui';
 import SparkAlert from '@/components/share/SparkAlert.vue';
-import { ChartColumn, CircleCheck, FileText, Files, GitBranch, RefreshCw, SquarePen, TriangleAlert, User, Zap } from 'lucide-vue-next';
+import { ChartColumn, CircleCheck, FileText, Files, GitBranch, RefreshCw, SquarePen, TriangleAlert, User, Zap } from '@lucide/vue';
 import bus from '@/eventBus';
 import MarkdownRenderer from '@/components/share/MarkdownRenderer.vue';
 import { useSceneStore } from '@/components/stores/sceneStore';

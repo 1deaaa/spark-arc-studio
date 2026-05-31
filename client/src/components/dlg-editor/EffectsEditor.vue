@@ -80,7 +80,7 @@ import {
   NInput, NSelect, NButton, NIcon, NText,
 } from 'naive-ui';
 import SparkSegment from '../share/SparkSegment.vue';
-import { Plus, X } from 'lucide-vue-next';
+import { Plus, X } from '@lucide/vue';
 
 /**
  * 效果行的内部表示（场景完成后的状态写入）。

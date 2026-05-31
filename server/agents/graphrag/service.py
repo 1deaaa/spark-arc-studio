@@ -33,10 +33,15 @@ logger = logging.getLogger(__name__)
 
 _build_state_registry: dict[str, dict] = {}
 _build_state_lock = threading.Lock()
+_ACTIVE_BUILD_STATUSES = {"queued", "building", "cancelling"}
 
 
 def _build_task_key(user_id: str, project_name: str) -> str:
     return f"{user_id}:{project_name}"
+
+
+class GraphRAGBuildCancelledError(RuntimeError):
+    """知识图谱构建被上游高优先级操作取消。"""
 
 
 @dataclass
@@ -134,6 +139,41 @@ class GraphRAGService:
             _build_state_registry[task_key] = current
             return dict(current)
 
+    def _get_cancel_event(self) -> threading.Event | None:
+        task_key = _build_task_key(self.user_id, self.project_name)
+        with _build_state_lock:
+            event = (_build_state_registry.get(task_key) or {}).get("_cancel_event")
+        return event if isinstance(event, threading.Event) else None
+
+    def _check_cancelled(self) -> None:
+        event = self._get_cancel_event()
+        if event and event.is_set():
+            raise GraphRAGBuildCancelledError("知识图谱构建已取消")
+
+    def cancel_background_build(self, wait_timeout: float = 5.0) -> dict:
+        """请求取消后台图谱构建，并在限定时间内等待线程主动退出。"""
+        task_key = _build_task_key(self.user_id, self.project_name)
+        with _build_state_lock:
+            current = dict(_build_state_registry.get(task_key) or {})
+            status = current.get("status")
+            event = current.get("_cancel_event")
+            thread = current.get("_thread")
+            if status not in _ACTIVE_BUILD_STATUSES or not isinstance(event, threading.Event):
+                return self._public_build_state(current)
+            event.set()
+            current.update({
+                "status": "cancelling",
+                "stage": "cancelling",
+                "error": "正在取消知识图谱构建",
+                "_pending_refresh": False,
+                "_pending_force_rebuild": False,
+            })
+            _build_state_registry[task_key] = current
+
+        if isinstance(thread, threading.Thread) and thread.is_alive() and thread is not threading.current_thread():
+            thread.join(timeout=max(0.0, float(wait_timeout)))
+        return self.get_build_state()
+
     def get_build_state(self) -> dict:
         """读取当前后台构建状态。
 
@@ -178,9 +218,10 @@ class GraphRAGService:
         """在 daemon 线程中触发后台构建；重复触发自动排队补一轮。"""
         task_key = _build_task_key(self.user_id, self.project_name)
         now = datetime.now(timezone.utc).isoformat()
+        cancel_event = threading.Event()
         with _build_state_lock:
             current = dict(_build_state_registry.get(task_key) or {})
-            if current.get("status") in {"queued", "building"}:
+            if current.get("status") in _ACTIVE_BUILD_STATUSES:
                 current["_pending_refresh"] = True
                 current["_pending_force_rebuild"] = bool(current.get("_pending_force_rebuild")) or bool(force_rebuild)
                 _build_state_registry[task_key] = current
@@ -193,6 +234,8 @@ class GraphRAGService:
                 "finished_at": "",
                 "_pending_refresh": False,
                 "_pending_force_rebuild": False,
+                "_cancel_event": cancel_event,
+                "_thread": None,
                 "progress": self._empty_progress(),
             })
             _build_state_registry[task_key] = current
@@ -202,15 +245,25 @@ class GraphRAGService:
             while True:
                 try:
                     self.build_index(force_rebuild=next_force_rebuild)
+                except GraphRAGBuildCancelledError:
+                    pass
                 except Exception:
                     # build_index 自身已写 error 状态，这里吞掉避免线程崩
                     pass
                 with _build_state_lock:
                     latest = dict(_build_state_registry.get(task_key) or {})
-                    rerun = bool(latest.get("_pending_refresh"))
+                    cancelled = bool(cancel_event.is_set())
+                    rerun = bool(latest.get("_pending_refresh")) and not cancelled
                     next_force_rebuild = bool(latest.get("_pending_force_rebuild"))
                     latest["_pending_refresh"] = False
                     latest["_pending_force_rebuild"] = False
+                    if cancelled and latest.get("status") not in {"cancelled", "error"}:
+                        latest.update({
+                            "status": "cancelled",
+                            "stage": "cancelled",
+                            "error": "知识图谱构建已取消",
+                            "finished_at": datetime.now(timezone.utc).isoformat(),
+                        })
                     _build_state_registry[task_key] = latest
                 if not rerun:
                     break
@@ -221,13 +274,18 @@ class GraphRAGService:
             name=f"graphrag_build_{task_key}",
         )
         thread.start()
+        with _build_state_lock:
+            latest = dict(_build_state_registry.get(task_key) or {})
+            if latest.get("_cancel_event") is cancel_event:
+                latest["_thread"] = thread
+                _build_state_registry[task_key] = latest
         return self.get_build_state()
 
     def ensure_background_build_started(self, check_freshness: bool = True) -> dict:
         """若索引不存在或已过期，则后台启动构建；否则原样返回当前状态。"""
         status = self.get_status(check_freshness=check_freshness)
         build_state = dict(status.get("build_state") or {})
-        if build_state.get("status") in {"queued", "building"}:
+        if build_state.get("status") in _ACTIVE_BUILD_STATUSES:
             return status
         if not status.get("graph_ready") or status.get("needs_rebuild"):
             build_state = self.start_background_build(force_rebuild=False)
@@ -574,6 +632,7 @@ class GraphRAGService:
         total = len(chunks)
 
         for idx, chunk in enumerate(chunks):
+            self._check_cancelled()
             source = str(chunk.metadata.get("source") or "")
             logger.info(
                 "[GraphRAG] 提取三元组 chunk=%s/%s source=%s chars=%s",
@@ -583,6 +642,7 @@ class GraphRAGService:
                 len(chunk.page_content or ""),
             )
             triplets = self._extract_triplets(chunk.page_content)
+            self._check_cancelled()
             sample = chunk.page_content.replace("\n", " ").strip()[:120]
             for subj, rel, obj in triplets:
                 subj = self._canonicalize_entity(subj, alias_map)
@@ -701,7 +761,7 @@ class GraphRAGService:
 
         needs_rebuild = False
         if graph_ready and metadata_ready:
-            if check_freshness and build_state.get("status") not in {"queued", "building", "error"}:
+            if check_freshness and build_state.get("status") not in (_ACTIVE_BUILD_STATUSES | {"error"}):
                 try:
                     needs_rebuild = self._needs_rebuild(metadata)
                 except Exception:
@@ -714,7 +774,7 @@ class GraphRAGService:
                     }
         else:
             # 无图谱文件：not_built（若没有进行中的构建状态）
-            if build_state.get("status") not in {"queued", "building", "error"}:
+            if build_state.get("status") not in (_ACTIVE_BUILD_STATUSES | {"error"}):
                 build_state = {
                     **build_state,
                     "status": "not_built",
@@ -737,6 +797,7 @@ class GraphRAGService:
         }
 
     def reset(self) -> dict[str, Any]:
+        self.cancel_background_build(wait_timeout=2.0)
         artifacts = self._artifacts
         removed = False
         if os.path.isdir(artifacts.base_dir):
@@ -771,8 +832,10 @@ class GraphRAGService:
         )
 
         try:
+            self._check_cancelled()
             # 哈希与文件采集统一在这里完成，避免后续多次扫盘
             current_hashes = self._compute_file_hashes()
+            self._check_cancelled()
             existing_metadata = self._load_metadata()
             artifacts = self._artifacts
             graph_ready = (
@@ -809,6 +872,7 @@ class GraphRAGService:
                     return metadata
 
             docs = self._collect_source_documents()
+            self._check_cancelled()
             if not docs:
                 raise RuntimeError("未找到可用于构建 GraphRAG 的项目文本（世界观/角色/梗概/大纲/剧本）。")
 
@@ -834,6 +898,7 @@ class GraphRAGService:
                 chunk_overlap=self._chunk_overlap,
             )
             chunks = splitter.split_documents(docs)
+            self._check_cancelled()
             chunks = chunks[: self._max_chunks]
             logger.info(
                 "[GraphRAG] 切块完成 project=%s chunks=%s chunk_size=%s overlap=%s",
@@ -857,6 +922,7 @@ class GraphRAGService:
                 },
             )
             alias_map = self._load_character_alias_index()
+            self._check_cancelled()
 
             def _report_chunk(done: int, total: int, triplets: int, nodes: int, edges: int) -> None:
                 self._set_build_state(
@@ -873,6 +939,7 @@ class GraphRAGService:
                 )
 
             graph, triplet_count = self._build_graph(chunks, alias_map, on_chunk_done=_report_chunk)
+            self._check_cancelled()
             communities = self._build_communities(graph)
 
             # 持久化阶段
@@ -933,6 +1000,14 @@ class GraphRAGService:
                 },
             )
             return metadata
+        except GraphRAGBuildCancelledError as e:
+            self._set_build_state(
+                status="cancelled",
+                stage="cancelled",
+                error=str(e),
+                finished_at=datetime.now(timezone.utc).isoformat(),
+            )
+            raise
         except Exception as e:
             self._set_build_state(
                 status="error",

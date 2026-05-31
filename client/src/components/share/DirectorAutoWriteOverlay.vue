@@ -241,7 +241,7 @@
 <script setup lang="ts">
 import { computed, ref, reactive, watch, onMounted, onUnmounted } from 'vue';
 import { NIcon } from 'naive-ui';
-import { CircleAlert, CircleCheck, CircleX, FileText, FolderOpen, Info, Play, RotateCw, Square, SquarePen, TriangleAlert, X } from 'lucide-vue-next';
+import { CircleAlert, CircleCheck, CircleX, FileText, FolderOpen, Info, Play, RotateCw, Square, SquarePen, TriangleAlert, X } from '@lucide/vue';
 import { useI18n } from 'vue-i18n';
 import { useDirectorAutoWriteStore } from '@/components/stores/directorAutoWriteStore';
 import { useProjectStore } from '@/components/stores/projectStore';

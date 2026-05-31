@@ -278,7 +278,7 @@ import { SPARKARC_GITHUB_URL } from '@/config';
 
 import TermsModal from '@/components/user/TermsModal.vue';
 import { NIcon, NTooltip } from 'naive-ui';
-import { Server } from 'lucide-vue-next';
+import { Server } from '@lucide/vue';
 
 type LoginMode = 'login' | 'register';
 

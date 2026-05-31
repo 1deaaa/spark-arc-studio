@@ -150,7 +150,7 @@
 import { onBeforeUnmount, onMounted, ref, computed, h } from 'vue';
 import { useI18n } from 'vue-i18n';
 import { NButton, NIcon, NText, NDropdown, NTooltip } from 'naive-ui';
-import { Archive, CircleCheck, CloudDownload, CloudUpload, FolderOpen, Laptop, LogOut, Maximize2, Minimize2, Moon, PaintBucket, Play, Save, SaveAll, SaveOff, Share2, Sun } from 'lucide-vue-next';
+import { Archive, CircleCheck, CloudDownload, CloudUpload, FolderOpen, Laptop, LogOut, Maximize2, Minimize2, Moon, PaintBucket, Play, Save, SaveAll, SaveOff, Share2, Sun } from '@lucide/vue';
 import bus from '@/eventBus';
 import ProjectSelector from '../../user/ProjectSelector.vue';
 import { useSceneStore } from '@/components/stores/sceneStore';

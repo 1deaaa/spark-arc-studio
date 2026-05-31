@@ -116,7 +116,7 @@
 import { ref } from 'vue';
 import { NInput, NButton, NIcon, NDrawer, NDrawerContent } from 'naive-ui';
 import { useI18n } from 'vue-i18n';
-import { ChevronRight, Clock, Pin, Sparkles, Zap } from 'lucide-vue-next';
+import { ChevronRight, Clock, Pin, Sparkles, Zap } from '@lucide/vue';
 import HistoryPanel from '../../components/dlg-editor/HistoryPanel.vue';
 import GlobalLoading from '../../components/share/GlobalLoading.vue';
 import InspireTagSelector from '../../components/lorebook/InspireTagSelector.vue';

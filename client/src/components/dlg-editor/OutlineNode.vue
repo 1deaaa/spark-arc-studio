@@ -155,7 +155,7 @@ import {
 import SparkTag from '../share/SparkTag.vue';
 import SparkSegment from '../share/SparkSegment.vue';
 import type { DropdownOption } from 'naive-ui';
-import { ArrowDown, Check, ChevronDown, ChevronRight, Copy, EllipsisVertical, Plus, SquarePen, Trash, X } from 'lucide-vue-next';
+import { ArrowDown, Check, ChevronDown, ChevronRight, Copy, EllipsisVertical, Plus, SquarePen, Trash, X } from '@lucide/vue';
 import type { OutlineChapter, OutlineScene } from '@/services/aiContracts';
 
 type OutlineTension = OutlineScene['tension'] | 'Explosive';

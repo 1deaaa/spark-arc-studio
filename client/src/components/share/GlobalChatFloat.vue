@@ -237,7 +237,7 @@
 import { computed, nextTick, onMounted, onUnmounted, reactive, ref, watch } from 'vue';
 import { useI18n } from 'vue-i18n';
 import { NButton, NCard, NInput, NSpace, NSelect, NDrawer, NDrawerContent, NIcon, NTooltip } from 'naive-ui';
-import { CircleUser } from 'lucide-vue-next';
+import { CircleUser } from '@lucide/vue';
 
 import ChatPanel from '@/components/share/ChatPanel.vue';
 import ChatFileImportButton from '@/components/share/ChatFileImportButton.vue';

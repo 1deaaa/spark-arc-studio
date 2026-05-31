@@ -161,7 +161,7 @@
 import { computed, ref, onBeforeUnmount, onMounted } from 'vue';
 import { useI18n } from 'vue-i18n';
 import { NButton, NSwitch, NEmpty, NTooltip, NPopover, NIcon, useMessage, useDialog } from 'naive-ui';
-import { Info } from 'lucide-vue-next';
+import { Info } from '@lucide/vue';
 import SparkLoaderAnimation from '../share/SparkLoaderAnimation.vue';
 import ProjectIndexRow, { type IndexRowTag } from './ProjectIndexRow.vue';
 import {

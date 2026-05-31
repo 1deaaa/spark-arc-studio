@@ -6,7 +6,7 @@ import { getStyleProfile, getStyleProfileMeta } from '../services/storyService';
 import { useProjectStore } from '../components/stores/projectStore';
 import { createStreamingTask, isAbortLikeError } from '@/utils/streamingRuntime';
 import type { JsonObject } from '../services/aiContracts';
-import { Activity, Book, Eye, Image as ImageIcon, Layers, MessageSquare, MessagesSquare, Palette, Search, Workflow } from 'lucide-vue-next';
+import { Activity, Book, Eye, Image as ImageIcon, Layers, MessageSquare, MessagesSquare, Palette, Search, Workflow } from '@lucide/vue';
 
 type StreamTaskLike = {
     signal?: AbortSignal;

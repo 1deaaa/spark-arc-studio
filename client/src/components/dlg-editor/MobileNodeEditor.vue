@@ -216,7 +216,7 @@
 <script setup lang="ts">
 import { computed, reactive, ref, watch } from 'vue';
 import { NDrawer, NDrawerContent, NInput, NInputNumber, NSelect, NButton, NIcon, NSwitch, NCollapse, NCollapseItem, NPopconfirm, NEmpty, NSpace, NText } from 'naive-ui';
-import { ArrowDown, CircleDot, CirclePlus, Film, Gamepad2, MessageCircle, Plus, Settings, Trash } from 'lucide-vue-next';
+import { ArrowDown, CircleDot, CirclePlus, Film, Gamepad2, MessageCircle, Plus, Settings, Trash } from '@lucide/vue';
 import { useI18n } from 'vue-i18n';
 import { useSceneStore, type SceneWithClientId } from '../stores/sceneStore';
 import { useProjectStore } from '../stores/projectStore';

@@ -6,7 +6,7 @@
         {{ title }}
         <n-badge v-if="type === 'muse' && unreadCount > 0" :value="unreadCount" :max="99" />
       </h3>
-      <n-button size="tiny" quaternary @click="refresh" :loading="loading">
+      <n-button size="tiny" quaternary @click="() => refresh()" :loading="loading">
         <n-icon :component="RefreshCw" />
       </n-button>
     </div>
@@ -133,7 +133,7 @@
 <script setup lang="ts">
 import { ref, onMounted, onBeforeUnmount, computed, watch } from 'vue';
 import { NButton, NIcon, NEmpty, NSpin, NEllipsis, NTag, NBadge, NTooltip, useMessage } from 'naive-ui';
-import { Clock, FileEdit, Layers, Link2, Pin, PinOff, RefreshCw, Trash } from 'lucide-vue-next';
+import { Clock, FileEdit, Layers, Link2, Pin, PinOff, RefreshCw, Trash } from '@lucide/vue';
 import {
   getInspirations, deleteInspiration, markInspirationRead,
   bindInspiration, unbindInspiration,
