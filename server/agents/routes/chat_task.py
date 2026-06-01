@@ -216,4 +216,13 @@ def build_task_status_payload(entry: ChatTaskEntry) -> Dict[str, Any]:
         payload['resultContent'] = entry.result_content
     if entry.llm_usage:
         payload['llmUsage'] = dict(entry.llm_usage)
+    context_window_stats = None
+    if isinstance(entry.result_metadata, dict):
+        result_stats = entry.result_metadata.get('context_window_stats') or entry.result_metadata.get('contextWindowStats')
+        if isinstance(result_stats, dict):
+            context_window_stats = dict(result_stats)
+    if context_window_stats is None and entry.accumulator is not None and isinstance(entry.accumulator.context_window_stats, dict):
+        context_window_stats = dict(entry.accumulator.context_window_stats)
+    if context_window_stats:
+        payload['contextWindowStats'] = context_window_stats
     return payload

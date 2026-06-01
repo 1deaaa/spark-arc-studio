@@ -3,6 +3,7 @@ import os
 import re
 import threading
 import warnings
+import logging
 from collections import OrderedDict
 from concurrent.futures import Future, ThreadPoolExecutor
 from contextlib import contextmanager
@@ -101,19 +102,18 @@ ALNUM_CJK = re.compile(r'[\u3000-\u9fff\uac00-\ud7af\uff00-\uffefA-Za-z0-9_]')
 #   b) google.genai 的 ExperimentalWarning 在 count_tokens() 运行时触发，
 #      需 catch_warnings 局部包裹
 # 因此这些逻辑集中在此区域管理
-def _suppress_transformers_logger():
-    """导入 transformers 后立即调用：禁用其自带 stderr handler"""
-    import logging
-    _lg = logging.getLogger("transformers")
-    if _lg.level != logging.ERROR:
-        _lg.setLevel(logging.ERROR)
-        for h in list(_lg.handlers):
-            _lg.removeHandler(h)
+def _suppress_noisy_library_loggers():
+    """导入第三方 tokenizer 相关依赖后，强制压低其自带 logger 噪音。"""
+    for logger_name in ("transformers", "transformers_modules", "huggingface_hub"):
+        library_logger = logging.getLogger(logger_name)
+        library_logger.setLevel(logging.ERROR)
+        for handler in list(library_logger.handlers):
+            library_logger.removeHandler(handler)
 
 
 def _lazy_auto_tokenizer():
     from transformers import AutoTokenizer
-    _suppress_transformers_logger()
+    _suppress_noisy_library_loggers()
     return AutoTokenizer
 
 
@@ -155,7 +155,14 @@ def _wrap_tiktoken_counter(enc) -> Callable[[str], int]:
 
 def _wrap_hf_tokenizer_counter(tok) -> Callable[[str], int]:
     def _count(text: str) -> int:
-        return len(tok.encode(text, add_special_tokens=False))
+        encoded = tok(
+            text,
+            add_special_tokens=False,
+            return_attention_mask=False,
+            return_token_type_ids=False,
+        )
+        input_ids = encoded["input_ids"]
+        return len(input_ids)
     return _count
 
 

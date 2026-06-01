@@ -10,8 +10,10 @@ import logging
 # ── 1. 环境变量 ──────────────────────────────────────────────────────────
 # TRANSFORMERS_NO_ADVISORY_WARNINGS: 抑制 "PyTorch was not found" 等 print
 # PYTHONWARNINGS: 确保子进程（uvicorn --reload）也继承 DeprecationWarning 抑制
+# HF_HUB_VERBOSITY: 让 huggingface_hub 自身初始化时直接只放行 ERROR
 os.environ.setdefault("TRANSFORMERS_NO_ADVISORY_WARNINGS", "1")
 os.environ.setdefault("PYTHONWARNINGS", "ignore::DeprecationWarning")
+os.environ.setdefault("HF_HUB_VERBOSITY", "error")
 
 # ── 2. warnings 过滤 ────────────────────────────────────────────────────
 # SWIG 生成的 C 扩展在 Python 3.12+ 触发 DeprecationWarning（SwigPyPacked /
@@ -61,6 +63,24 @@ UVICORN_LOG_CONFIG["formatters"]["access"]["fmt"] = '%(asctime)s - %(levelprefix
 UVICORN_LOG_CONFIG["formatters"]["access"]["datefmt"] = "%Y-%m-%d %H:%M:%S"
 # 立即应用配置，确保 CLI 模式 (uvicorn app:app) 也能生效
 logging.config.dictConfig(UVICORN_LOG_CONFIG)
+
+
+def _suppress_noisy_library_logger(name: str) -> None:
+    """
+    对噪音较大的第三方 logger 做强制降噪。
+
+    说明：
+    1. 部分库会在导入时自己挂 StreamHandler，绕过 root logger filter。
+    2. 这里直接把命名空间 logger 降到 ERROR，并清掉自带 handler，
+       让后续子 logger 继承这一层级，避免 INFO/WARNING 污染控制台。
+    """
+    logger = logging.getLogger(name)
+    logger.setLevel(logging.ERROR)
+    logger.handlers.clear()
+
+
+for _logger_name in ("transformers", "transformers_modules", "huggingface_hub", "torch"):
+    _suppress_noisy_library_logger(_logger_name)
 
 # 降噪第三方日志
 logging.getLogger("docket.worker").setLevel(logging.WARNING)

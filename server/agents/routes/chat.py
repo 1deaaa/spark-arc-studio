@@ -379,6 +379,48 @@ def _collect_chat_task_llm_usage(entry: ChatTaskEntry) -> Dict[str, Any] | None:
     }
 
 
+def _merge_context_window_stats_with_usage(
+    context_window_stats: Dict[str, Any] | None,
+    llm_usage: Dict[str, Any] | None,
+) -> Dict[str, Any] | None:
+    if not isinstance(context_window_stats, dict):
+        return None
+
+    merged = dict(context_window_stats)
+    if not isinstance(llm_usage, dict):
+        return merged
+
+    agent_id = str(
+        merged.get("agent_id")
+        or merged.get("agentId")
+        or merged.get("source_agent")
+        or merged.get("sourceAgent")
+        or ""
+    ).strip()
+    if not agent_id:
+        return merged
+
+    by_agent = llm_usage.get("by_agent") or llm_usage.get("byAgent")
+    if not isinstance(by_agent, dict):
+        return merged
+
+    agent_usage = by_agent.get(agent_id)
+    if not isinstance(agent_usage, dict):
+        return merged
+
+    completion_tokens = agent_usage.get("completion_tokens")
+    if completion_tokens is None:
+        completion_tokens = agent_usage.get("completionTokens")
+    if completion_tokens is None:
+        return merged
+
+    try:
+        merged["output_tokens"] = max(int(completion_tokens), 0)
+    except Exception:
+        return merged
+    return merged
+
+
 def _visible_chat_history(history: list[dict]) -> list[dict]:
     return [item for item in history if item.get("role") != "system"]
 
@@ -566,6 +608,16 @@ async def compact_chat_context(data: ChatContextCompactRequest, user: dict = Dep
             metadata={
                 "kind": "context_compaction_notice",
                 "channel": "manual_compaction",
+                "context_window_stats": {
+                    "agent_id": data.agentId,
+                    "input_tokens": summary_tokens,
+                    "output_tokens": 0,
+                    "original_tokens": original_tokens,
+                    "retained_messages": 1,
+                    "model": model_name,
+                    "compacted": True,
+                    "reason": "manual_context_compacted",
+                },
                 "segments": [
                     {
                         "type": "context_compaction_summary",
@@ -965,6 +1017,11 @@ async def edit_chat_message_stream(request: Request, data: ChatMessageEditReques
                         final_status = 'completed'
 
                     entry.llm_usage = _collect_chat_task_llm_usage(entry)
+                    if entry.accumulator is not None:
+                        entry.accumulator.context_window_stats = _merge_context_window_stats_with_usage(
+                            entry.accumulator.context_window_stats,
+                            entry.llm_usage,
+                        )
                     reply = entry.accumulator.content if entry.accumulator is not None else ''
                     metadata = entry.build_metadata(stream_status=final_status)
                     _checkpoint_chat_task(cm, entry, force=True, stream_status=final_status)
@@ -974,6 +1031,7 @@ async def edit_chat_message_stream(request: Request, data: ChatMessageEditReques
                         "assistant_message_id": entry.assistant_message_id,
                         "result_message_id": entry.assistant_message_id,
                         **({"llm_usage": entry.llm_usage} if entry.llm_usage else {}),
+                        **({"context_window_stats": entry.accumulator.context_window_stats} if entry.accumulator is not None and entry.accumulator.context_window_stats else {}),
                         **({"error": final_error_message} if final_error_message else {}),
                     })
                     update_task_status(
@@ -1181,6 +1239,11 @@ async def send_chat_message_stream(request: Request, data: ChatSendRequest, user
                         final_status = 'completed'
 
                     entry.llm_usage = _collect_chat_task_llm_usage(entry)
+                    if entry.accumulator is not None:
+                        entry.accumulator.context_window_stats = _merge_context_window_stats_with_usage(
+                            entry.accumulator.context_window_stats,
+                            entry.llm_usage,
+                        )
                     reply = entry.accumulator.content if entry.accumulator is not None else ''
                     metadata = entry.build_metadata(stream_status=final_status)
                     _checkpoint_chat_task(cm, entry, force=True, stream_status=final_status)
@@ -1190,6 +1253,7 @@ async def send_chat_message_stream(request: Request, data: ChatSendRequest, user
                         "assistant_message_id": entry.assistant_message_id,
                         "result_message_id": entry.assistant_message_id,
                         **({"llm_usage": entry.llm_usage} if entry.llm_usage else {}),
+                        **({"context_window_stats": entry.accumulator.context_window_stats} if entry.accumulator is not None and entry.accumulator.context_window_stats else {}),
                         **({"error": final_error_message} if final_error_message else {}),
                     })
                     update_task_status(

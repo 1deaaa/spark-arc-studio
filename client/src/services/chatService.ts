@@ -196,6 +196,8 @@ export type ChatTaskStatus = {
   resultMessageId?: number;
   resultContent?: string;
   error?: string;
+  llmUsage?: Record<string, unknown>;
+  contextWindowStats?: Record<string, unknown>;
 };
 
 export type ChatRunningTasks = {

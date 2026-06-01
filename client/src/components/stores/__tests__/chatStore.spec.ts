@@ -372,6 +372,49 @@ describe('chatStore tool-first stream handling', () => {
     expect(store.sessions[0].contextTokenCount).toBe(321);
   });
 
+  it('restores persisted context window stats from assistant metadata', async () => {
+    mockedGetChatHistory.mockResolvedValueOnce([
+      {
+        id: 1,
+        role: 'assistant',
+        content: '历史回复',
+        timestamp: 1,
+        metadata: {
+          llm_usage: {
+            total_tokens: 654,
+            prompt_tokens: 540,
+            completion_tokens: 114,
+            by_agent: {
+              agent_director: {
+                prompt_tokens: 280,
+                completion_tokens: 66,
+                total_tokens: 346,
+              },
+            },
+          },
+          context_window_stats: {
+            agent_id: 'agent_director',
+            input_tokens: 280,
+            output_tokens: 0,
+            original_tokens: 1200,
+            retained_messages: 4,
+            model: 'gpt-4o',
+            compacted: false,
+            reason: 'within_budget',
+          },
+        },
+      },
+    ]);
+
+    const store = useChatStore();
+    await store.refreshSessionHistory(0);
+
+    expect(store.sessions[0].contextWindowStats?.agentId).toBe('agent_director');
+    expect(store.sessions[0].contextWindowStats?.inputTokens).toBe(280);
+    expect(store.sessions[0].contextWindowStats?.outputTokens).toBe(66);
+    expect(store.sessions[0].contextWindowStats?.originalTokens).toBe(1200);
+  });
+
   it('keeps previous assistant message when next user message triggers a refresh gap', async () => {
     const existingAssistant = {
       id: 10,

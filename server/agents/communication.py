@@ -391,9 +391,10 @@ class SparkBaseAgent:
     所有参与通讯系统的 Agent 基类。
     封装了身份管理、信标/号角/旗帜控制以及消息收发的核心逻辑。
     """
-    def __init__(self, agent_id: str, user_id: str):
+    def __init__(self, agent_id: str, user_id: str, project_name: str = ""):
         self.agent_id = agent_id  # Agent 的功能 ID (如 agent_showrunner)
         self.user_id = str(user_id)    # 所属用户的 ID
+        self.project_name = str(project_name or "")
         self.context: Optional['CommunicationContext'] = None # 绑定的通讯总线上下文
         self.signals = AgentSignalState() # 初始化信标 / 号角 / 旗帜 三件套
         

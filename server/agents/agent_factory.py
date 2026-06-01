@@ -79,4 +79,6 @@ def create_agent_instance(agent_id: str, user_id: str, project_name: str):
         return cls(agent_id=agent_id, user_id=user_id)
     if cls is StyleChatAgent:
         return cls(user_id=user_id, project_name=project_name)
+    if agent_id == "agent_muse":
+        return cls(user_id=user_id, project_name=project_name)
     return cls(user_id=user_id)

@@ -6,8 +6,8 @@ from agents.agent_utils import load_prompt, build_length_hint_str, SparkAgentExe
 from .communication import SparkBaseAgent
 
 class MuseAgent(SparkBaseAgent, SparkAgentExecutor):
-    def __init__(self, user_id):
-        super().__init__(agent_id="agent_muse", user_id=user_id)
+    def __init__(self, user_id, project_name: str = ""):
+        super().__init__(agent_id="agent_muse", user_id=user_id, project_name=project_name)
         self.llm = matchbox().get_user_llm(str(user_id), agent_name="agent_muse")
 
     def _get_tool_prompt_references(self) -> dict[str, list[dict]]:

@@ -777,7 +777,7 @@ const zhCN = {
       compactingContextProgress: '系统正在整理当前聊天历史，并生成可继续任务的内部摘要',
       taskTokenLabel: '任务 {tokens}',
       taskTokenIoLabel: '任务 ↑{input} / ↓{output}',
-      taskTokenHint: '当前整个任务的真实 token 消耗。↑ 表示输入到模型的上下文 token，↓ 表示模型输出 token；这里会合计导演、子 Agent、多轮工具循环等所有请求。',
+      taskTokenHint: '当前整个任务的真实 token 消耗。↑表示输入，↓表示输出；这里会合计导演、子 Agent、多轮工具循环等所有请求。',
       windowTokenLabel: '窗口 ↑{input} / ↓{output}',
       windowTokenHint: '当前聊天面板最近一次实际塞入该 Agent 上下文窗口的 token。↑ 表示本次请求真正进入窗口的上下文输入，↓ 表示该 Agent 在本次任务中的真实输出。',
       stop: '停止',

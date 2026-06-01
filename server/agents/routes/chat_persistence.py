@@ -17,6 +17,64 @@ def _extract_visible_text(delta) -> str:
     return ""
 
 
+def _extract_context_window_stats_from_event(delta: Any) -> Dict[str, Any] | None:
+    if not isinstance(delta, dict):
+        return None
+
+    stats_payload: Dict[str, Any] | None = None
+    event_type = str(delta.get("event") or "").strip()
+    if event_type == "context_window_stats":
+        stats_payload = delta
+    else:
+        nested = delta.get("context_window_stats") or delta.get("contextWindowStats")
+        if isinstance(nested, dict):
+            stats_payload = nested
+
+    if not isinstance(stats_payload, dict):
+        return None
+
+    agent_id = str(
+        stats_payload.get("agent_id")
+        or stats_payload.get("agentId")
+        or stats_payload.get("source_agent")
+        or stats_payload.get("sourceAgent")
+        or ""
+    ).strip()
+    input_tokens = int(stats_payload.get("input_tokens") or stats_payload.get("inputTokens") or 0)
+    output_tokens = int(stats_payload.get("output_tokens") or stats_payload.get("outputTokens") or 0)
+    original_tokens = int(stats_payload.get("original_tokens") or stats_payload.get("originalTokens") or 0)
+    retained_messages = int(stats_payload.get("retained_messages") or stats_payload.get("retainedMessages") or 0)
+    model = str(stats_payload.get("model") or "").strip()
+    compacted = bool(stats_payload.get("compacted"))
+    reason = str(stats_payload.get("reason") or "").strip()
+
+    normalized: Dict[str, Any] = {
+        "agent_id": agent_id,
+        "input_tokens": max(input_tokens, 0),
+        "output_tokens": max(output_tokens, 0),
+        "original_tokens": max(original_tokens, 0),
+        "retained_messages": max(retained_messages, 0),
+        "model": model,
+        "compacted": compacted,
+        "reason": reason,
+    }
+    for key in ("max_context_tokens", "max_output_tokens", "hard_budget", "trigger_budget"):
+        value = stats_payload.get(key)
+        if value is None:
+            camel_key = "".join(
+                part.capitalize() if index > 0 else part
+                for index, part in enumerate(key.split("_"))
+            )
+            value = stats_payload.get(camel_key)
+        if value is None:
+            continue
+        try:
+            normalized[key] = max(int(value), 0)
+        except Exception:
+            continue
+    return normalized
+
+
 def _collect_tool_trace_from_event(tool_trace_map: Dict[str, Dict[str, Any]], delta: Any, now_ts: float | None = None) -> None:
     if not isinstance(delta, dict):
         return
@@ -438,6 +496,7 @@ class ChatStreamAccumulator:
         self.reasoning_parts: List[str] = []
         self.tool_trace_map: Dict[str, Dict[str, Any]] = {}
         self.segments: List[Dict[str, Any]] = []
+        self.context_window_stats: Dict[str, Any] | None = None
         self._seg_invocation_counter: List[int] = [0]
 
     @property
@@ -454,6 +513,7 @@ class ChatStreamAccumulator:
         self.reasoning_parts.clear()
         self.tool_trace_map.clear()
         self.segments.clear()
+        self.context_window_stats = None
         self._seg_invocation_counter[0] = 0
 
     def append_event(self, delta: Any, *, seq: int | None = None, now_ts: float | None = None) -> None:
@@ -462,6 +522,9 @@ class ChatStreamAccumulator:
 
         _collect_tool_trace_from_event(self.tool_trace_map, delta, now_ts=now_ts)
         _collect_segment_from_event(self.segments, self._seg_invocation_counter, delta, now_ts=now_ts)
+        context_window_stats = _extract_context_window_stats_from_event(delta)
+        if context_window_stats is not None:
+            self.context_window_stats = context_window_stats
 
         event_type = delta.get("event") if isinstance(delta, dict) else "assistant_delta"
         if event_type == "reasoning_delta":
@@ -498,6 +561,8 @@ class ChatStreamAccumulator:
             metadata["task_id"] = self.task_id
         if assistant_message_id is not None:
             metadata["assistant_message_id"] = assistant_message_id
+        if self.context_window_stats:
+            metadata["context_window_stats"] = deepcopy(self.context_window_stats)
         if stream_status == "error":
             metadata["finish_reason"] = "error"
         elif stream_status == "completed":
@@ -527,6 +592,8 @@ class ChatStreamAccumulator:
             "segments": metadata.get("segments", []),
             "metadata": metadata,
         }
+        if metadata.get("context_window_stats"):
+            payload["context_window_stats"] = deepcopy(metadata["context_window_stats"])
         if error_message:
             payload["error"] = error_message
         return payload

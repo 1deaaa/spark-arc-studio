@@ -306,6 +306,40 @@ function _extractContextWindowStats(evt: AnyRecord): ContextWindowStats {
   };
 }
 
+function _extractContextWindowStatsFromPayload(payload: AnyRecord | null | undefined): ContextWindowStats | null {
+  if (!payload || typeof payload !== 'object') return null;
+
+  const nestedStats = payload.context_window_stats || payload.contextWindowStats || payload.metadata?.context_window_stats || payload.metadata?.contextWindowStats;
+  if (nestedStats && typeof nestedStats === 'object') {
+    return _extractContextWindowStats({
+      event: 'context_window_stats',
+      ...nestedStats,
+    });
+  }
+
+  const looksLikeStatsPayload = payload.event === 'context_window_stats'
+    || payload.input_tokens != null
+    || payload.inputTokens != null
+    || payload.original_tokens != null
+    || payload.originalTokens != null;
+  if (!looksLikeStatsPayload) return null;
+
+  return _extractContextWindowStats(payload);
+}
+
+function _mergeContextWindowStatsWithPayload(
+  stats: ContextWindowStats | null,
+  payload: AnyRecord | null | undefined,
+): ContextWindowStats | null {
+  if (!stats) return null;
+  const agentOutput = _extractAgentCompletionTokens(payload, stats.agentId);
+  if (agentOutput == null) return stats;
+  return {
+    ...stats,
+    outputTokens: agentOutput,
+  };
+}
+
 function _latestHistoryLlmUsageTotal(history: AnyRecord[] = []): number | null {
   return _latestHistoryLlmUsageStats(history)?.totalTokens ?? null;
 }
@@ -318,6 +352,35 @@ function _latestHistoryLlmUsageStats(history: AnyRecord[] = []): TokenUsageStats
     if (usage != null) return usage;
   }
   return null;
+}
+
+function _latestHistoryContextWindowStats(history: AnyRecord[] = []): ContextWindowStats | null {
+  for (let i = history.length - 1; i >= 0; i -= 1) {
+    const message = history[i];
+    if (message?.role !== 'assistant') continue;
+    const stats = _extractContextWindowStatsFromPayload(message);
+    if (stats == null) continue;
+    return _mergeContextWindowStatsWithPayload(stats, message);
+  }
+  return null;
+}
+
+function _applyPersistedTokenStats(session: ChatSession, payload: AnyRecord | null | undefined) {
+  const usageStats = _extractLlmUsageStats(payload);
+  if (usageStats != null) {
+    session.contextTokenUsage = usageStats;
+    session.contextTokenCount = usageStats.totalTokens;
+  }
+
+  const nextWindowStats = _extractContextWindowStatsFromPayload(payload);
+  if (nextWindowStats != null) {
+    session.contextWindowStats = _mergeContextWindowStatsWithPayload(nextWindowStats, payload);
+    return;
+  }
+
+  if (session.contextWindowStats) {
+    session.contextWindowStats = _mergeContextWindowStatsWithPayload(session.contextWindowStats, payload);
+  }
 }
 
 function _serializeImportedContext(payload: ChatImportedContext): AnyRecord {
@@ -1255,6 +1318,7 @@ export const useChatStore = defineStore('chat', {
         session.history = reconcileSessionHistory(rawHistory || [], fallbackAssistant, localHistory);
         session.contextTokenUsage = _latestHistoryLlmUsageStats(session.history);
         session.contextTokenCount = session.contextTokenUsage?.totalTokens ?? null;
+        session.contextWindowStats = _latestHistoryContextWindowStats(session.history);
         // 历史中存在附件且 session.attachments 为空时，恢复完整列表（多附件场景下也能正确还原）。
         if ((session.attachments?.length || 0) === 0) {
           const restored = _findLatestImportedContexts(session.history);
@@ -1447,6 +1511,7 @@ export const useChatStore = defineStore('chat', {
         session.backgroundTaskStatus = 'running';
         session.sending = true;
         session.lastError = '';
+        _applyPersistedTokenStats(session, status);
         await this._reconnectTaskStream(session, agentId, contextKey, Number(afterSeq || 0));
         return true;
       }
@@ -1454,6 +1519,7 @@ export const useChatStore = defineStore('chat', {
       if (status.status === 'completed' || status.status === 'cancelled' || status.status === 'error') {
         session.backgroundTaskStatus = null;
         session.sending = false;
+        _applyPersistedTokenStats(session, status);
         if (status.status === 'error') {
           session.lastError = String(status.error || _defaultBackgroundTaskError());
         }
@@ -1500,6 +1566,7 @@ export const useChatStore = defineStore('chat', {
             session.retryAttempt = null;
             session.retryMaxRetries = 3;
             session.retryErrorSummary = '';
+            _applyPersistedTokenStats(session, task as AnyRecord);
             hasRunning = true;
 
             if (!this.primaryExpanded || !this.primaryAgentId || this.primaryAgentId === 'agent_director') {
@@ -1515,6 +1582,7 @@ export const useChatStore = defineStore('chat', {
           } else if (status === 'completed' || status === 'cancelled' || status === 'error') {
             session.backgroundTaskStatus = null;
             session.sending = false;
+            _applyPersistedTokenStats(session, task as AnyRecord);
             if (status === 'error') {
               session.lastError = String(task.error || _defaultBackgroundTaskError());
             }
@@ -1561,6 +1629,7 @@ export const useChatStore = defineStore('chat', {
           if (status === 'completed' || status === 'cancelled' || status === 'error') {
             session.backgroundTaskStatus = null;
             session.sending = false;
+            _applyPersistedTokenStats(session, result as AnyRecord);
             if (status === 'error') {
               session.lastError = String((result as AnyRecord).error || _defaultBackgroundTaskError());
             }
@@ -1629,6 +1698,7 @@ export const useChatStore = defineStore('chat', {
           if (taskStatus?.status === 'running' && retryIndex < maxTransportRetries) {
             session.backgroundTaskStatus = 'running';
             session.sending = true;
+            _applyPersistedTokenStats(session, taskStatus);
             const nextSeq = Math.max(Number(afterSeq || 0), _getAssistantStreamSeq(assistantMsg));
             await _delay(Math.min(2500, 500 * (retryIndex + 1)));
             await this._reconnectTaskStream(session, agentId, contextKey, nextSeq, {
@@ -1641,6 +1711,7 @@ export const useChatStore = defineStore('chat', {
           if (taskStatus?.status === 'running') {
             session.backgroundTaskStatus = 'running';
             session.sending = true;
+            _applyPersistedTokenStats(session, taskStatus);
             keepBackgroundRunning = true;
             console.warn('聊天观察流重连失败，但后台任务仍在运行，保持运行态等待后续恢复。', e);
             return;
@@ -1649,6 +1720,7 @@ export const useChatStore = defineStore('chat', {
           if (taskStatus?.status === 'completed' || taskStatus?.status === 'cancelled' || taskStatus?.status === 'error') {
             session.backgroundTaskStatus = null;
             session.sending = false;
+            _applyPersistedTokenStats(session, taskStatus);
             if (taskStatus.status === 'error') {
               session.lastError = String(taskStatus.error || _defaultBackgroundTaskError());
             }
@@ -2356,11 +2428,7 @@ export const useChatStore = defineStore('chat', {
         if (evt.metadata && typeof evt.metadata === 'object') {
           assistantMsg.metadata = { ...(assistantMsg.metadata || {}), ...evt.metadata };
         }
-        const usageStats = _extractLlmUsageStats(evt);
-        if (usageStats != null) {
-          session.contextTokenUsage = usageStats;
-          session.contextTokenCount = usageStats.totalTokens;
-        }
+        _applyPersistedTokenStats(session, evt);
         ensureAssistantAdded();
         syncAssistantSnapshot();
 
@@ -2415,23 +2483,17 @@ export const useChatStore = defineStore('chat', {
           session.backgroundTaskStatus = null;
           session.sending = false;
           const usageStats = _extractLlmUsageStats(evt);
+          _applyPersistedTokenStats(session, evt);
           if (usageStats != null) {
-            session.contextTokenUsage = usageStats;
-            session.contextTokenCount = usageStats.totalTokens;
             assistantMsg.metadata = {
               ...(assistantMsg.metadata || {}),
               llm_usage: evt.llm_usage || evt.llmUsage,
             };
-            syncAssistantSnapshot();
-          }
-          if (session.contextWindowStats) {
-            const agentOutput = _extractAgentCompletionTokens(evt, session.contextWindowStats.agentId);
-            if (agentOutput != null) {
-              session.contextWindowStats = {
-                ...session.contextWindowStats,
-                outputTokens: agentOutput,
-              };
+            const taskWindowStats = _extractContextWindowStatsFromPayload(evt);
+            if (taskWindowStats != null) {
+              assistantMsg.metadata.context_window_stats = evt.context_window_stats || evt.contextWindowStats;
             }
+            syncAssistantSnapshot();
           }
           if (evt.status === 'error') {
             session.lastError = String(evt.error || session.lastError || _defaultBackgroundTaskError());
