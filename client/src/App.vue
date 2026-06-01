@@ -567,9 +567,11 @@ onBeforeUnmount(() => {
 /* Minimal styles for the root component */
 #app {
   height: 100vh;
-  width: 100vw;
+  width: 100%;
+  max-width: 100%;
   display: flex;
   flex-direction: column;
+  overflow-x: clip;
 }
 
 

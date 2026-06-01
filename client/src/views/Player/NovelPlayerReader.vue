@@ -871,7 +871,8 @@ onBeforeUnmount(() => {
   --reader-font-size: 17px;
   --font-main: var(--spark-font);
 
-  width: 100vw;
+  width: 100%;
+  max-width: 100%;
   height: 100vh; /* 旧浏览器回退 */
   height: 100dvh; /* 动态视口高度，移动端浏览器地址栏可见时仍正确 */
   background: var(--bg-color);

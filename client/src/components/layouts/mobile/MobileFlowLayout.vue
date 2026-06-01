@@ -569,7 +569,7 @@ onUnmounted(() => {
   
   /* 确保宽度正确 */
   width: 100%;
-  max-width: 100vw;
+  max-width: 100%;
   
   overflow-y: auto;
   overflow-x: hidden;

@@ -635,6 +635,7 @@ onBeforeUnmount(() => {
   transform: translate(var(--translateX, 0), var(--translateY, 0));
   z-index: 10;
   overflow: hidden;
+  user-select: none;
 }
 
 .agent-node:hover {
@@ -650,7 +651,6 @@ onBeforeUnmount(() => {
   background: color-mix(in srgb, var(--spark-primary-container), transparent 18%);
   border-bottom: 1px solid var(--spark-border);
   cursor: grab;
-  user-select: none;
 }
 
 .agent-node-header:active {

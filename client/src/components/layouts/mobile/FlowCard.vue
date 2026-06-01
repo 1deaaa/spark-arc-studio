@@ -74,7 +74,7 @@ function scrollToNext() {
 .flow-card {
   /* 确保宽度正确 */
   width: 100%;
-  max-width: 100vw;
+  max-width: 100%;
   flex-shrink: 0;
 
   min-height: 100vh;

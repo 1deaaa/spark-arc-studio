@@ -176,8 +176,8 @@
               <pre class="chat-json">{{ formatObject(seg.content) }}</pre>
             </div>
           </template>
-          <!-- 助手操作按钮（始终在最后，发送时隐藏） -->
-          <div v-if="!sending" class="bubble-actions bubble-actions-assistant">
+          <!-- 助手操作按钮（始终在最后，发送时隐藏；纯上下文压缩通知不显示） -->
+          <div v-if="!sending && getMessageSegments(m).some(s => s.type !== 'context_compaction' && s.type !== 'context_compaction_summary')" class="bubble-actions bubble-actions-assistant">
             <n-tooltip trigger="hover">
               <template #trigger>
                 <n-button
@@ -1379,11 +1379,9 @@ defineExpose({ listRef });
   width: min(90%, 1040px);
   max-width: 90%;
   padding: 10px !important;
-  border-color: rgba(var(--spark-primary-rgb), 0.26) !important;
-  background:
-    radial-gradient(circle at 24px 18px, rgba(var(--spark-primary-rgb), 0.16), transparent 30px),
-    linear-gradient(135deg, rgba(var(--spark-primary-rgb), 0.045), rgba(var(--spark-primary-rgb), 0.015)) !important;
-  box-shadow: 0 12px 32px rgba(15, 23, 42, 0.06) !important;
+  border-color: color-mix(in srgb, var(--spark-border), var(--spark-primary) 18%) !important;
+  background: color-mix(in srgb, var(--spark-panel-bg), var(--spark-primary) 4%) !important;
+  box-shadow: var(--spark-shadow-sm) !important;
 }
 
 .context-compaction-card {
@@ -1407,20 +1405,18 @@ defineExpose({ listRef });
   display: flex;
   align-items: stretch;
   gap: 12px;
-  padding: 12px 14px;
-  border-radius: 15px;
-  border-color: rgba(var(--spark-primary-rgb), 0.34);
-  background:
-    linear-gradient(135deg, rgba(var(--spark-primary-rgb), 0.1), rgba(var(--spark-primary-rgb), 0.035)),
-    var(--spark-panel-bg);
-  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.45);
+  /* 去掉一层外壳：折叠头部不再单独绘制边框/背景/阴影，由外层 .context-summary-bubble 承担容器视觉 */
+  padding: 0;
+  border: none;
+  background: transparent;
+  box-shadow: none;
+  border-radius: 0;
+  user-select: none;
 }
 
 .context-summary-card:hover {
-  border-color: rgba(var(--spark-primary-rgb), 0.48);
-  background:
-    linear-gradient(135deg, rgba(var(--spark-primary-rgb), 0.13), rgba(var(--spark-primary-rgb), 0.05)),
-    var(--spark-panel-bg);
+  border-color: transparent;
+  background: transparent;
 }
 
 .context-compaction-card::before {
@@ -1448,23 +1444,21 @@ defineExpose({ listRef });
 }
 
 .context-summary-icon {
-  width: 38px;
-  height: 38px;
+  width: 34px;
+  height: 34px;
   display: inline-flex;
   align-items: center;
   justify-content: center;
   flex: 0 0 auto;
-  border-radius: 13px;
+  border-radius: var(--spark-radius-sm);
   color: var(--spark-primary);
-  border: 1px solid rgba(var(--spark-primary-rgb), 0.24);
-  background:
-    radial-gradient(circle at 35% 25%, rgba(255, 255, 255, 0.75), transparent 38%),
-    rgba(var(--spark-primary-rgb), 0.11);
+  border: 1px solid color-mix(in srgb, var(--spark-border), var(--spark-primary) 22%);
+  background: color-mix(in srgb, var(--spark-panel-bg), var(--spark-primary) 12%);
 }
 
 .context-summary-icon svg {
-  width: 24px;
-  height: 24px;
+  width: 21px;
+  height: 21px;
 }
 
 .context-compaction-motion {
@@ -1558,21 +1552,21 @@ defineExpose({ listRef });
   55%, 100% { transform: translateX(100%); }
 }
 
-:global(html.viewport-mobile) .context-compaction-card {
+:global(html.viewport-mobile .chat-list .context-compaction-card) {
   align-items: flex-start;
 }
 
-:global(html.viewport-mobile) .context-summary-bubble {
+:global(html.viewport-mobile .chat-list .context-summary-bubble) {
   width: 100%;
   max-width: 100%;
 }
 
-:global(html.viewport-mobile) .context-summary-card {
+:global(html.viewport-mobile .chat-list .context-summary-card) {
   gap: 10px;
   padding: 11px 12px;
 }
 
-:global(html.viewport-mobile) .context-compaction-meta {
+:global(html.viewport-mobile .chat-list .context-compaction-meta) {
   white-space: normal;
 }
 
@@ -1582,17 +1576,16 @@ defineExpose({ listRef });
   max-width: 100%;
   margin: 10px 0 0;
   padding: 14px 16px;
-  border: 1px solid rgba(var(--spark-primary-rgb), 0.2);
-  border-radius: 14px;
-  background:
-    linear-gradient(180deg, rgba(var(--spark-primary-rgb), 0.06), rgba(var(--spark-primary-rgb), 0.025)),
-    var(--spark-panel-bg);
+  border: 1px solid color-mix(in srgb, var(--spark-border), var(--spark-primary) 12%);
+  border-radius: var(--spark-radius);
+  background: color-mix(in srgb, var(--spark-bg), var(--spark-panel-bg) 62%);
   color: var(--spark-text);
+  font-family: inherit;
   font-size: var(--spark-fs-xs);
   line-height: 1.55;
   white-space: pre-wrap;
   word-break: break-word;
-  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.36);
+  box-shadow: inset 0 0 0 1px color-mix(in srgb, var(--spark-panel-bg), transparent 45%);
 }
 
 .tool-trace-list {
