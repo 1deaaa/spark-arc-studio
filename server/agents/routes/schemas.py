@@ -112,6 +112,13 @@ class ChatTaskCancelRequest(BaseModel):
     contextKey: str = 'global'
 
 
+class ChatContextCompactRequest(BaseModel):
+    projectName: Optional[str] = None
+    agentId: str
+    contextKey: str = 'global'
+    targetTokens: int = 8000
+
+
 class BridgeRequest(BaseModel):
     projectName: Optional[str] = None
     prev_scene_content: str

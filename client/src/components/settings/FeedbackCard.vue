@@ -2,7 +2,7 @@
   <n-card class="feedback-card" size="small">
     <template #header>
       <div class="card-header" @click="toggleFold">
-        <n-icon size="18" :component="MessagesSquare" color="#63e2b7" />
+        <n-icon size="18" :component="MessagesSquare" style="color: var(--spark-primary)" />
         <span class="title">{{ isAdmin ? t('components.feedbackCard.titleAdmin') : t('components.feedbackCard.title') }}</span>
         <div class="header-controls" @click.stop>
           <!-- 未读角标 -->
@@ -151,6 +151,7 @@ onMounted(() => {
   margin-bottom: 20px;
   border-color: var(--spark-border);
   background-color: var(--spark-panel-bg);
+  border-radius: var(--spark-radius);
 }
 
 .card-header {

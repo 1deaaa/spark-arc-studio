@@ -1280,7 +1280,6 @@ class SparkBaseAgent:
         """
         通用的直接对话入口。
         """
-        from langchain_core.messages import HumanMessage, SystemMessage, AIMessage
         from .agent_utils import load_prompt
 
         if not active_context:
@@ -1304,38 +1303,27 @@ class SparkBaseAgent:
         # 1.1 注入互动模式与上下文与工具说明
         system_instruction = self._build_tool_system_prompt(system_prompt, active_context, skip_tool_confirmation=skip_tool_confirmation)
 
-        # 2. 构建消息序列
-        messages = [SystemMessage(content=system_instruction)]
-        
-        # 添加历史记录
-        if history:
-            for msg in history[-10:]: # 最多取 10 条
-                role = msg.get("role")
-                content = msg.get("content")
-                if not content: continue
-                
-                # content 可能是字典（导演的路由总结），转为字符串
-                if isinstance(content, dict):
-                    import json
-                    content = json.dumps(content, ensure_ascii=False)
-                
-                if role == "user":
-                    messages.append(HumanMessage(content=str(content)))
-                elif role == "assistant":
-                    messages.append(AIMessage(content=str(content)))
-
-        # 添加当前消息
-        messages.append(HumanMessage(content=user_message))
-
-        # 3. 调用 LLM（支持多轮工具调用）
+        # 2. 调用 LLM（支持多轮工具调用）
         try:
             from langchain_core.messages import ToolMessage as _ToolMessage
             from llm.agen_matchbox import matchbox
             from agents.tools.registry import get_tools_for_agent
+            from agents.context_budget import prepare_chat_messages_with_budget, rebudget_existing_messages
+
             invoke_llm = matchbox().get_user_llm(
                 self.user_id,
                 agent_name=self.agent_id,
             )
+            base_llm_client = invoke_llm
+            messages = prepare_chat_messages_with_budget(
+                user_id=self.user_id,
+                project_name=self.project_name,
+                agent_id=self.agent_id,
+                system_instruction=system_instruction,
+                history=history,
+                user_message=user_message,
+                llm_client=base_llm_client,
+            ).messages
             tools = get_tools_for_agent(self.agent_id)
             if tools:
                 invoke_llm = invoke_llm.bind_tools(tools)
@@ -1396,6 +1384,14 @@ class SparkBaseAgent:
                     messages.append(_ToolMessage(content=t_result or "", tool_call_id=call_id, name=t_name))
                 # 附件分片滑动窗口：只保留本轮新 read_attachment_chunk 的完整正文，其余折叠
                 collapse_attachment_chunk_history(messages, fresh_call_ids=fresh_call_ids)
+                messages = rebudget_existing_messages(
+                    user_id=self.user_id,
+                    project_name=self.project_name,
+                    agent_id=self.agent_id,
+                    messages=messages,
+                    llm_client=base_llm_client,
+                    current_user_message=user_message,
+                ).messages
 
         except Exception as e:
             import traceback
@@ -1404,7 +1400,6 @@ class SparkBaseAgent:
 
     def chat_stream(self, user_message: str, history: List[Dict[str, Any]] = None, active_context: str = None, skip_tool_confirmation: bool = False, stop_event: Any = None):
         """通用流式对话入口。逐段 yield 文本增量。"""
-        from langchain_core.messages import HumanMessage, SystemMessage, AIMessage
         from .agent_utils import load_prompt
 
         if is_stop_event_set(stop_event):
@@ -1426,36 +1421,36 @@ class SparkBaseAgent:
 
         system_instruction = self._build_tool_system_prompt(system_prompt, active_context, skip_tool_confirmation=skip_tool_confirmation)
 
-        messages = [SystemMessage(content=system_instruction)]
-
-        if history:
-            for msg in history[-10:]:
-                role = msg.get("role")
-                content = msg.get("content")
-                if not content:
-                    continue
-                if isinstance(content, dict):
-                    import json
-                    content = json.dumps(content, ensure_ascii=False)
-                if role == "user":
-                    messages.append(HumanMessage(content=str(content)))
-                elif role == "assistant":
-                    messages.append(AIMessage(content=str(content)))
-
-        messages.append(HumanMessage(content=user_message))
-
         from llm.agen_matchbox import matchbox
         from agents.tools.registry import get_tools_for_agent
+        from agents.context_budget import prepare_chat_messages_with_budget, rebudget_existing_messages
         stream_llm = matchbox().get_user_llm(
             self.user_id,
             agent_name=self.agent_id,
         )
+        base_stream_llm = stream_llm
+        pending_budget_events: List[Dict[str, Any]] = []
+        messages = prepare_chat_messages_with_budget(
+            user_id=self.user_id,
+            project_name=self.project_name,
+            agent_id=self.agent_id,
+            system_instruction=system_instruction,
+            history=history,
+            user_message=user_message,
+            llm_client=base_stream_llm,
+            emit_event=pending_budget_events.append,
+        ).messages
         tools = get_tools_for_agent(self.agent_id)
         if tools:
             stream_llm = stream_llm.bind_tools(tools)
 
         try:
             from langchain_core.messages import ToolMessage as _ToolMessage
+
+            for budget_event in pending_budget_events:
+                if is_stop_event_set(stop_event):
+                    return
+                yield budget_event
 
             while True:
                 if is_stop_event_set(stop_event):
@@ -1663,6 +1658,20 @@ class SparkBaseAgent:
                     messages.append(_ToolMessage(content=t_result or "", tool_call_id=call_id, name=t_name))
                 # 附件分片滑动窗口：只保留本轮新 read_attachment_chunk 的完整正文，其余折叠
                 collapse_attachment_chunk_history(messages, fresh_call_ids=fresh_call_ids)
+                tool_budget_events: List[Dict[str, Any]] = []
+                messages = rebudget_existing_messages(
+                    user_id=self.user_id,
+                    project_name=self.project_name,
+                    agent_id=self.agent_id,
+                    messages=messages,
+                    llm_client=base_stream_llm,
+                    emit_event=tool_budget_events.append,
+                    current_user_message=user_message,
+                ).messages
+                for budget_event in tool_budget_events:
+                    if is_stop_event_set(stop_event):
+                        return
+                    yield budget_event
 
         except Exception as e:
             import traceback

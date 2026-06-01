@@ -143,6 +143,7 @@ def director_node(state: DirectorState) -> Dict[str, Any]:
         writer({"event": "agent_turn_started", "source_agent": "agent_director"})
     
     stream_llm = matchbox().get_user_llm(user_id, agent_name="agent_director")
+    base_stream_llm = stream_llm
     tools = get_tools_for_agent("agent_director")
     if tools:
         stream_llm = stream_llm.bind_tools(tools)
@@ -167,10 +168,31 @@ def director_node(state: DirectorState) -> Dict[str, Any]:
     messages_with_system = [SystemMessage(content=system_instruction)] + list(messages)
     # -------------------------------------------------------------------
     
+    stream_events = []
+    try:
+        from agents.context_budget import rebudget_existing_messages
+
+        budget_events: list[dict] = []
+        messages_with_system = rebudget_existing_messages(
+            user_id=user_id,
+            project_name=project_name,
+            agent_id="agent_director",
+            messages=messages_with_system,
+            llm_client=base_stream_llm,
+            emit_event=budget_events.append,
+            current_user_message=user_message,
+        ).messages
+        for evt in budget_events:
+            evt["source_agent"] = "agent_director"
+            if writer:
+                writer(evt)
+            stream_events.append(evt)
+    except Exception:
+        pass
+
     tool_chunk_buffers: Dict[int, Dict] = {}
     started_tools = set()
     tool_intent_keys: Dict[str, str] = {}
-    stream_events = []
     aggregated_chunk = None
     
     adapter = MessageEventStreamReasoningAdapter()

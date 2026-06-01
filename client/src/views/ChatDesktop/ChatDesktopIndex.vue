@@ -16,10 +16,15 @@
         :editing-message-id="editingMessageId"
         :editing-content="editingContent"
         :draft="draft"
+        :context-token-count="chat.contextTokenCount"
+        :context-token-usage="chat.contextTokenUsage"
+        :context-window-stats="chat.contextWindowStats"
+        loading-target="chat-primary"
         @update:agent-id="onAgentChanged"
         @update:draft="draft = $event"
         @update:editing-content="editingContent = $event"
         @clear="clear"
+        @compact-context="compactContext"
         @send="send"
         @stop="stop"
         @draft-keydown="onDraftKeydown"
@@ -80,8 +85,15 @@ async function clear() {
   await chatActions.clear();
 }
 
+async function compactContext() {
+  if (chat.sending) return;
+  await chat.compactContext();
+}
+
 const { registry: agentRegistry, load: loadAgentRegistry } = useAgentRegistry();
-const agentOptions = computed(() => (agentRegistry.value || []).map(a => ({ label: a.name, value: a.key })));
+const agentOptions = computed(() => (agentRegistry.value || [])
+  .filter(a => a.visibleInChat !== false)
+  .map(a => ({ label: a.name, value: a.key })));
 const primarySessionId = computed(() => chat.primarySession?.id ?? null);
 
 async function loadRegistry() {

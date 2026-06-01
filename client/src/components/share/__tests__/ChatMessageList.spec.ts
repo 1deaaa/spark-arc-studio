@@ -1,5 +1,6 @@
 import { describe, expect, it, vi } from 'vitest';
 import { mount } from '@vue/test-utils';
+import { nextTick } from 'vue';
 import { createPinia } from 'pinia';
 import ChatMessageList from '../ChatMessageList.vue';
 import { i18n } from '@/i18n';
@@ -123,7 +124,73 @@ describe('ChatMessageList agent avatar rendering', () => {
     expect(activeAvatar.attributes('aria-label')).toBe('执笔编剧');
   });
 
-  it('renders compact input and output token usage with text arrows', () => {
+  it('renders context compaction segment', () => {
+    const wrapper = mountWithPinia({
+      props: {
+        history: [
+          {
+            id: 3,
+            role: 'assistant',
+            segments: [
+              {
+                type: 'context_compaction',
+                status: 'finished',
+                original_tokens: 12000,
+                compacted_tokens: 3000,
+                retained_messages: 6,
+                model: 'gpt-4o',
+              },
+            ],
+          },
+        ],
+      },
+    });
+
+    expect(wrapper.find('.context-compaction-card.is-finished').exists()).toBe(true);
+    expect(wrapper.text()).toContain(i18n.global.t('components.chatMessageList.contextCompacted'));
+    expect(wrapper.text()).toContain('12.0K → 3.0K');
+  });
+
+  it('renders persisted context summary as an archive card with expandable text', async () => {
+    const wrapper = mountWithPinia({
+      props: {
+        history: [
+          {
+            id: 31,
+            role: 'assistant',
+            content: '',
+            metadata: {
+              kind: 'context_compaction_notice',
+              segments: [
+                {
+                  type: 'context_compaction_summary',
+                  status: 'finished',
+                  summary_text: '摘要：\n- 已完成前置分析\n\n待办事项：\n- 继续生成正文',
+                  original_messages: 12,
+                  compacted_tokens: 1800,
+                  model: 'gemini-3-flash',
+                },
+              ],
+            },
+          },
+        ],
+      },
+    });
+
+    const card = wrapper.find('.context-summary-card');
+    expect(wrapper.find('.context-summary-bubble').exists()).toBe(true);
+    expect(wrapper.find('.context-summary-icon').exists()).toBe(true);
+    expect(card.exists()).toBe(true);
+    expect(wrapper.text()).toContain(i18n.global.t('components.chatMessageList.contextCompactManualDone'));
+
+    await card.trigger('click');
+    await nextTick();
+
+    expect(wrapper.find('.context-summary-text').text()).toContain('已完成前置分析');
+    expect(wrapper.find('.context-summary-text').text()).toContain('继续生成正文');
+  });
+
+  it('does not render legacy per-message token usage chips', () => {
     const wrapper = mountWithPinia({
       props: {
         history: [
@@ -144,8 +211,7 @@ describe('ChatMessageList agent avatar rendering', () => {
     });
 
     const tokenLabel = wrapper.find('.token-count-label');
-    expect(tokenLabel.exists()).toBe(true);
-    expect(tokenLabel.text()).toBe('↑1.2K / ↓56');
+    expect(tokenLabel.exists()).toBe(false);
   });
 
   it('renders lastError as an error bubble instead of a muted hint', () => {

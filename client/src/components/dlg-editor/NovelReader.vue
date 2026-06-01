@@ -278,44 +278,40 @@ onBeforeUnmount(() => {
   box-shadow: inset 0 0 0 1px color-mix(in srgb, var(--spark-success), transparent 78%);
 }
 
-@media (max-width: 1024px) {
-  .stats-dock {
-    top: 14px;
-    right: 14px;
-  }
-
-  .editor-frame {
-    padding: 72px 30px 32px;
-  }
-
-  .editor-placeholder {
-    inset: 72px 30px 32px;
-  }
+:global(html.viewport-tablet-down .novel-reader .stats-dock) {
+  top: 14px;
+  right: 14px;
 }
 
-@media (max-width: 768px) {
-  .stats-dock {
-    flex-wrap: wrap;
-    justify-content: flex-end;
-    max-width: calc(100% - 24px);
-  }
+:global(html.viewport-tablet-down .novel-reader .editor-frame) {
+  padding: 72px 30px 32px;
+}
 
-  .stat-pill {
-    min-width: 78px;
-  }
+:global(html.viewport-tablet-down .novel-reader .editor-placeholder) {
+  inset: 72px 30px 32px;
+}
 
-  .editor-frame {
-    padding: 84px 20px 24px;
-  }
+:global(html.viewport-mobile .novel-reader .stats-dock) {
+  flex-wrap: wrap;
+  justify-content: flex-end;
+  max-width: calc(100% - 24px);
+}
 
-  .editor-placeholder {
-    inset: 84px 20px 24px;
-  }
+:global(html.viewport-mobile .novel-reader .stat-pill) {
+  min-width: 78px;
+}
 
-  .reader-editor,
-  .editor-placeholder {
-    font-size: var(--spark-fs-lg);
-    line-height: 1.9;
-  }
+:global(html.viewport-mobile .novel-reader .editor-frame) {
+  padding: 84px 20px 24px;
+}
+
+:global(html.viewport-mobile .novel-reader .editor-placeholder) {
+  inset: 84px 20px 24px;
+}
+
+:global(html.viewport-mobile .novel-reader .reader-editor),
+:global(html.viewport-mobile .novel-reader .editor-placeholder) {
+  font-size: var(--spark-fs-lg);
+  line-height: 1.9;
 }
 </style>

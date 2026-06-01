@@ -510,194 +510,191 @@
 }
 
 /* 窄宽度断点 - 移动端/窄窗口 */
-@media (max-width: 768px) {
-
+:global(html.viewport-mobile .ai-manager.settings-section) {
     /* 整体卡片减小外边距，撤销卡片背景和过度 padding */
-    .settings-section {
-        padding: 4px 6px;
-        margin-bottom: 8px;
-        background: transparent;
-        border: none;
-        border-radius: 0;
-    }
+    padding: 4px 6px;
+    margin-bottom: 8px;
+    background: transparent;
+    border: none;
+    border-radius: var(--spark-radius);
+}
 
-    .section-header {
-        align-items: center;
-        gap: 8px;
-        margin-bottom: 8px;
-    }
+:global(html.viewport-mobile .ai-manager .section-header) {
+    align-items: center;
+    gap: 8px;
+    margin-bottom: 8px;
+}
 
-    .header-billing-switch .status-icon-wrapper {
-        padding: 3px 6px;
-        gap: 4px;
-    }
+:global(html.viewport-mobile .ai-manager .header-billing-switch .status-icon-wrapper) {
+    padding: 3px 6px;
+    gap: 4px;
+}
 
-    .section-desc {
-        margin-bottom: 12px;
-        font-size: var(--spark-fs-sm);
-    }
+:global(html.viewport-mobile .ai-manager .section-desc) {
+    margin-bottom: 12px;
+    font-size: var(--spark-fs-sm);
+}
 
-    .status-bar {
-        gap: 6px;
-        padding: 6px 8px;
-        flex-wrap: nowrap !important;
-    }
+:global(html.viewport-mobile .ai-manager .status-bar) {
+    gap: 6px;
+    padding: 6px 8px;
+    flex-wrap: nowrap !important;
+}
 
-    .status-actions {
-        margin-left: auto;
-        flex-shrink: 0;
-        justify-content: flex-end;
-        gap: 4px;
-    }
+:global(html.viewport-mobile .ai-manager .status-actions) {
+    margin-left: auto;
+    flex-shrink: 0;
+    justify-content: flex-end;
+    gap: 4px;
+}
 
-    .status-icon-wrapper {
-        padding: 3px 5px;
-        gap: 4px;
-        flex-shrink: 1;
-        min-width: 0;
-    }
+:global(html.viewport-mobile .ai-manager .status-icon-wrapper) {
+    padding: 3px 5px;
+    gap: 4px;
+    flex-shrink: 1;
+    min-width: 0;
+}
 
-    .status-text {
-        font-size: var(--spark-fs-2xs);
-    }
+:global(html.viewport-mobile .ai-manager .status-text) {
+    font-size: var(--spark-fs-2xs);
+}
 
-    /* 优化拖动句柄以节省空间，而不是隐藏 */
-    .drag-handle {
-        font-size: var(--spark-fs-h3);
-        padding: 4px;
-        margin-right: 2px;
-        opacity: 0.6;
-    }
+/* 优化拖动句柄以节省空间，而不是隐藏 */
+:global(html.viewport-mobile .ai-manager .drag-handle) {
+    font-size: var(--spark-fs-h3);
+    padding: 4px;
+    margin-right: 2px;
+    opacity: 0.6;
+}
 
-    /* 平台行 - 尽可能保持在一行 */
-    .platform-row {
-        flex-direction: row;
-        align-items: center;
-        flex-wrap: nowrap;
-        gap: 8px;
-        padding-right: 0;
-        width: 100%;
-        overflow: hidden;
-    }
+/* 平台行 - 尽可能保持在一行 */
+:global(html.viewport-mobile .ai-manager .platform-row) {
+    flex-direction: row;
+    align-items: center;
+    flex-wrap: nowrap;
+    gap: 8px;
+    padding-right: 0;
+    width: 100%;
+    overflow: hidden;
+}
 
-    .platform-left {
-        flex-wrap: nowrap;
-        gap: 6px;
-        flex: 1 1 0;
-        min-width: 0;
-        overflow: hidden;
-    }
+:global(html.viewport-mobile .ai-manager .platform-left) {
+    flex-wrap: nowrap;
+    gap: 6px;
+    flex: 1 1 0;
+    min-width: 0;
+    overflow: hidden;
+}
 
-    .platform-name {
-        font-size: var(--spark-fs-base);
-        white-space: nowrap;
-        overflow: hidden;
-        text-overflow: ellipsis;
-        flex-shrink: 1;
-        /* 允许名称缩小以显示省略号 */
-    }
+:global(html.viewport-mobile .ai-manager .platform-name) {
+    font-size: var(--spark-fs-base);
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    flex-shrink: 1;
+    /* 允许名称缩小以显示省略号 */
+}
 
-    .platform-url {
-        display: none;
-        /* 窄宽度下隐藏URL */
-    }
+:global(html.viewport-mobile .ai-manager .platform-url) {
+    display: none;
+    /* 窄宽度下隐藏URL */
+}
 
-    .platform-actions {
-        width: auto;
-        flex-wrap: nowrap;
-        gap: 4px;
-        justify-content: flex-end;
-        flex-shrink: 0;
-        /* 操作按钮不缩小 */
-    }
+:global(html.viewport-mobile .ai-manager .platform-actions) {
+    width: auto;
+    flex-wrap: nowrap;
+    gap: 4px;
+    justify-content: flex-end;
+    flex-shrink: 0;
+    /* 操作按钮不缩小 */
+}
 
-    .platform-actions .n-button {
-        flex: 0 0 auto;
-    }
+:global(html.viewport-mobile .ai-manager .platform-actions .n-button) {
+    flex: 0 0 auto;
+}
 
-    /* 模型区域 */
-    .model-section {
-        padding: 6px 0 6px 8px;
-    }
+/* 模型区域 */
+:global(html.viewport-mobile .ai-manager .model-section) {
+    padding: 6px 0 6px 8px;
+}
 
-    /* 模型行 - 保持两行布局。第一行：名称和ID；第二行：操作 */
-    .model-row {
-        flex-direction: column;
-        align-items: stretch;
-        gap: 8px;
-        padding: 10px;
-        position: relative;
-    }
+/* 模型行 - 保持两行布局。第一行：名称和ID；第二行：操作 */
+:global(html.viewport-mobile .ai-manager .model-row) {
+    flex-direction: column;
+    align-items: stretch;
+    gap: 8px;
+    padding: 10px;
+    position: relative;
+}
 
-    .model-info {
-        width: 100%;
-        flex-wrap: nowrap;
-        gap: 6px;
-        overflow: hidden;
-    }
+:global(html.viewport-mobile .ai-manager .model-info) {
+    width: 100%;
+    flex-wrap: nowrap;
+    gap: 6px;
+    overflow: hidden;
+}
 
-    .model-info .drag-handle-sm {
-        position: absolute;
-        bottom: 12px;
-        left: 10px;
-        margin: 0;
-        z-index: 2;
-    }
+:global(html.viewport-mobile .ai-manager .model-info .drag-handle-sm) {
+    position: absolute;
+    bottom: 12px;
+    left: 10px;
+    margin: 0;
+    z-index: 2;
+}
 
-    .model-display-name {
-        font-size: var(--spark-fs-base);
-        flex-shrink: 0;
-        max-width: 45%;
-        white-space: nowrap;
-        overflow: hidden;
-        text-overflow: ellipsis;
-    }
+:global(html.viewport-mobile .ai-manager .model-display-name) {
+    font-size: var(--spark-fs-base);
+    flex-shrink: 0;
+    max-width: 45%;
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+}
 
-    .model-actions {
-        width: 100%;
-        flex-wrap: nowrap;
-        /* 不换行，靠右对齐 */
-        gap: 8px;
-        justify-content: flex-end;
-        overflow-x: auto;
-        /* 极小屏幕横向滑动，保证不破行 */
-    }
+:global(html.viewport-mobile .ai-manager .model-actions) {
+    width: 100%;
+    flex-wrap: nowrap;
+    /* 不换行，靠右对齐 */
+    gap: 8px;
+    justify-content: flex-end;
+    overflow-x: auto;
+    /* 极小屏幕横向滑动，保证不破行 */
+}
 
-    .model-actions::-webkit-scrollbar {
-        display: none;
-    }
+:global(html.viewport-mobile .ai-manager .model-actions::-webkit-scrollbar) {
+    display: none;
+}
 
-    .extra-tag-desktop {
-        display: none !important;
-    }
+:global(html.viewport-mobile .ai-manager .extra-tag-desktop) {
+    display: none !important;
+}
 
-    .extra-tag-mobile {
-        display: inline-flex !important;
-    }
+:global(html.viewport-mobile .ai-manager .extra-tag-mobile) {
+    display: inline-flex !important;
+}
 
-    .model-credit-tag {
-        display: none !important;
-    }
+:global(html.viewport-mobile .ai-manager .model-credit-tag) {
+    display: none !important;
+}
 
-    .model-credit-tag-mobile {
-        display: inline-flex !important;
-    }
+:global(html.viewport-mobile .ai-manager .model-credit-tag-mobile) {
+    display: inline-flex !important;
+}
 
-    .action-btn {
-        min-width: 42px;
-        font-size: var(--spark-fs-xs);
-        padding: 0 8px;
-    }
+:global(html.viewport-mobile .ai-manager .action-btn) {
+    min-width: 42px;
+    font-size: var(--spark-fs-xs);
+    padding: 0 8px;
+}
 
-    .speed-tag {
-        font-size: var(--spark-fs-2xs);
-    }
+:global(html.viewport-mobile .ai-manager .speed-tag) {
+    font-size: var(--spark-fs-2xs);
+}
 
-    /* 弹窗响应式 */
-    :deep(.n-modal) .n-card {
-        width: calc(100vw - 32px) !important;
-        max-width: 500px;
-    }
+/* 弹窗响应式 */
+:global(html.viewport-mobile .n-modal .n-card) {
+    width: calc(100vw - 32px) !important;
+    max-width: 500px;
 }
 
 /* 超窄宽度 - 小屏手机 */

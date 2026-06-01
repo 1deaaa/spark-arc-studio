@@ -1,8 +1,24 @@
-import { ref, onMounted, onUnmounted, computed, type ComputedRef, type Ref } from 'vue';
+import { computed, ref, type ComputedRef } from 'vue';
+import { applyViewportClasses, getViewportSnapshot, TABLET_MAX_WIDTH, type ViewportSnapshot } from '../utils/responsive';
 
-const isMobile = ref(false);
-const isTablet = ref(false);
-const windowWidth = ref(window.innerWidth);
+const initialSnapshot = typeof window !== 'undefined'
+    ? getViewportSnapshot()
+    : {
+        width: TABLET_MAX_WIDTH,
+        height: TABLET_MAX_WIDTH,
+        shortSide: TABLET_MAX_WIDTH,
+        longSide: TABLET_MAX_WIDTH,
+        comparisonWidth: TABLET_MAX_WIDTH,
+        tier: 'tablet' as const,
+        hasCoarsePointer: false,
+        isPortrait: true,
+    };
+
+const viewportSnapshot = ref<ViewportSnapshot>(initialSnapshot);
+const isMobile = computed(() => viewportSnapshot.value.tier === 'mobile');
+const isTablet = computed(() => viewportSnapshot.value.tier === 'tablet');
+const windowWidth = computed(() => viewportSnapshot.value.width);
+let hasBoundViewportEvents = false;
 
 /**
  * Android WebView 经常把 env(safe-area-inset-top) 返回为 0，
@@ -12,7 +28,7 @@ const windowWidth = ref(window.innerWidth);
  * iOS 上 env() 正确上报时，fallback 为 0，max(env值, 0) = env值，零干扰。
  */
 function ensureSafeAreaFallback() {
-    if (window.innerWidth > 768) return; // 仅移动端
+    if (typeof window === 'undefined' || typeof document === 'undefined') return;
 
     // 区分普通网页访问与全屏 App / PWA 独立应用模式
     // 普通网页访问时，浏览器视口已避开状态栏，无需任何兜底留白
@@ -54,43 +70,50 @@ function ensureSafeAreaFallback() {
     if (hasStatusBar) {
         // 注入 Android 状态栏高度兜底（24px ≈ 24dp @1x，大多数 Android 状态栏）
         document.documentElement.style.setProperty('--fallback-sat', '24px');
+        return;
     }
-}
 
-// 导出供 main.ts 早期调用；模块自身被 import 时也会自动执行一次（幂等）
-ensureSafeAreaFallback();
+    document.documentElement.style.setProperty('--fallback-sat', '0px');
+}
 
 export { ensureSafeAreaFallback };
 
 type UseMobileResult = {
-    isMobile: Ref<boolean>;
-    isTablet: Ref<boolean>;
-    windowWidth: Ref<number>;
+    isMobile: ComputedRef<boolean>;
+    isTablet: ComputedRef<boolean>;
+    windowWidth: ComputedRef<number>;
     isCompact: ComputedRef<boolean>;
+    viewportTier: ComputedRef<ViewportSnapshot['tier']>;
 };
 
+function updateViewportState() {
+    if (typeof window === 'undefined') return;
+
+    const snapshot = getViewportSnapshot();
+    viewportSnapshot.value = snapshot;
+    applyViewportClasses(snapshot);
+    ensureSafeAreaFallback();
+}
+
+function bindViewportEvents() {
+    if (typeof window === 'undefined' || hasBoundViewportEvents) return;
+
+    hasBoundViewportEvents = true;
+    window.addEventListener('resize', updateViewportState, { passive: true });
+    window.addEventListener('orientationchange', updateViewportState, { passive: true });
+}
+
+bindViewportEvents();
+updateViewportState();
+
 export function useMobile(): UseMobileResult {
-
-    const updateDimensions = () => {
-        windowWidth.value = window.innerWidth;
-        isMobile.value = window.innerWidth <= 768;
-        isTablet.value = window.innerWidth > 768 && window.innerWidth <= 1024;
-    };
-
-    onMounted(() => {
-        updateDimensions();
-        window.addEventListener('resize', updateDimensions);
-    });
-
-    onUnmounted(() => {
-        window.removeEventListener('resize', updateDimensions);
-    });
 
     return {
         isMobile,
         isTablet,
         windowWidth,
         // Helper to check if we are in "compact" mode (mobile or portrait tablet)
-        isCompact: computed(() => isMobile.value || (isTablet.value && window.innerWidth < window.innerHeight))
+        isCompact: computed(() => isMobile.value || (isTablet.value && viewportSnapshot.value.isPortrait)),
+        viewportTier: computed(() => viewportSnapshot.value.tier),
     };
 }

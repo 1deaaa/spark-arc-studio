@@ -37,6 +37,7 @@ class TokenTextSplitter:
         max_tokens: int = 120000,
         tail_merge_threshold_ratio: float = 0.2,
         tail_merge_cap_ratio: float = 1.15,
+        estimate_model: str | None = None,
     ):
         """Token 驱动的文本分块器。
 
@@ -52,9 +53,11 @@ class TokenTextSplitter:
         self.max_tokens = max_tokens
         self.tail_merge_threshold_ratio = max(0.0, min(float(tail_merge_threshold_ratio), 0.95))
         self.tail_merge_cap_ratio = max(1.0, float(tail_merge_cap_ratio))
+        normalized_model = str(estimate_model).strip() if estimate_model is not None else ""
+        self.estimate_model = normalized_model or None
 
     def estimate(self, text: str) -> int:
-        return estimate_tokens(text, model=None)
+        return estimate_tokens(text, model=self.estimate_model)
 
     def split(self, text: str) -> list[TokenChunk]:
         normalized = self._normalize_text(text)
@@ -280,9 +283,11 @@ def split_text_by_tokens(
     chunk_tokens: int = 30000,
     tail_merge_threshold_ratio: float = 0.2,
     tail_merge_cap_ratio: float = 1.15,
+    estimate_model: str | None = None,
 ) -> list[TokenChunk]:
     return TokenTextSplitter(
         chunk_tokens=chunk_tokens,
         tail_merge_threshold_ratio=tail_merge_threshold_ratio,
         tail_merge_cap_ratio=tail_merge_cap_ratio,
+        estimate_model=estimate_model,
     ).split(text)

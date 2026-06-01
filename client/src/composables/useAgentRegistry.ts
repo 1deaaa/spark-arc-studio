@@ -20,6 +20,8 @@ export type AgentRegistryEntry = {
   description: string;
   group?: string;
   participatesInBeaconBus?: boolean;
+  visibleInChat?: boolean;
+  visibleInModelBinding?: boolean;
   /** Lucide 图标名（PascalCase），由后端 registry.py 提供，前端 AgentAvatar 通过映射表转为组件 */
   icon?: string;
   /** Agent 专属主题色（hex），由后端 registry.py 提供 */
@@ -37,6 +39,7 @@ const _iconFallback: Record<string, string> = {
   agent_scriptwriter: 'Feather',
   agent_critic: 'ScanEye',
   agent_style: 'Palette',
+  agent_utility: 'Settings2',
 };
 
 const _colorFallback: Record<string, string> = {
@@ -47,6 +50,7 @@ const _colorFallback: Record<string, string> = {
   agent_scriptwriter: '#38bdf8',
   agent_critic: '#ff6b6b',
   agent_style: '#ec4899',
+  agent_utility: '#64748b',
 };
 
 // ---- 模块级单例状态（所有 useAgentRegistry() 实例共享） ----
@@ -70,6 +74,7 @@ const _nameFallbackKeys: Record<string, string> = {
   agent_scriptwriter: 'components.agentNames.agent_scriptwriter',
   agent_critic: 'components.agentNames.agent_critic',
   agent_style: 'components.agentNames.agent_style',
+  agent_utility: 'components.agentNames.agent_utility',
 };
 
 const _descFallbackKeys: Record<string, string> = {
@@ -80,6 +85,7 @@ const _descFallbackKeys: Record<string, string> = {
   agent_scriptwriter: 'components.agentDescriptions.agent_scriptwriter',
   agent_critic: 'components.agentDescriptions.agent_critic',
   agent_style: 'components.agentDescriptions.agent_style',
+  agent_utility: 'components.agentDescriptions.agent_utility',
 };
 
 /**

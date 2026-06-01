@@ -5,6 +5,7 @@ import './styles/base.css'
 import './styles/layout.css'
 import './styles/theme.css'
 import './styles/components.css'
+import './styles/mobile.css'
 import './styles/studio.css'
 import 'katex/dist/katex.min.css'
 // 字体已改为 CDN 加载 LXGW WenKai Lite，见 index.html <link>
@@ -15,7 +16,9 @@ import { useLocaleStore } from './components/stores/localeStore'
 import { i18n } from './i18n'
 import { setupTauriOfflineFallback } from './utils/tauriOfflineFallback'
 import { setupExternalLinkHandling } from './utils/externalLinks'
+import { setupMobileTooltipGuard } from './utils/mobileTooltipGuard'
 import './composables/useMobile' // 早期触发 safe-area 兜底检测
+import './composables/usePlatform' // 早期同步平台壳类名，供响应式样式复用
 import { warmupAppFontInBackground } from './utils/fontWarmup'
 
 const pinia = createPinia()
@@ -33,5 +36,6 @@ void localeStore
 app.use(router) // Use the router
 setupExternalLinkHandling()
 setupTauriOfflineFallback()
+setupMobileTooltipGuard()
 warmupAppFontInBackground('')
 app.mount('#app')

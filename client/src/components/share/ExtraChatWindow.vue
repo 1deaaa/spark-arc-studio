@@ -40,6 +40,10 @@
           :retry-attempt="session.retryAttempt"
           :retry-max-retries="session.retryMaxRetries"
           :retry-error-summary="session.retryErrorSummary"
+          :context-token-count="session.contextTokenCount"
+          :context-token-usage="session.contextTokenUsage"
+          :context-window-stats="session.contextWindowStats"
+          :loading-target="`chat-session-${session.id}`"
           :editing-message-id="actions.editingMessageId.value"
           :editing-content="actions.editingContent.value"
           :draft="actions.draft.value"
@@ -48,6 +52,7 @@
           @update:draft="actions.draft.value = $event"
           @update:editing-content="actions.editingContent.value = $event"
           @clear="actions.clear"
+          @compact-context="compactContext"
           @send="actions.send"
           @stop="actions.stop"
           @draft-keydown="actions.onDraftKeydown"
@@ -139,6 +144,11 @@ const actions = useChatActions({
   listRef,
   getEditScopeKey: () => `${props.session.agentId || ''}::${props.session.contextKey || ''}`,
 });
+
+async function compactContext() {
+  if (props.session.sending) return;
+  await chatSession.compactSessionContext(props.session.id);
+}
 
 // ==================== 使用 useResizable composable ====================
 const windowPos = reactive({ right: 0, top: 80 });

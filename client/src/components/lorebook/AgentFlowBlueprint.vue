@@ -529,7 +529,7 @@ async function init() {
     await runtimeStore.fetchRuntimeState();
 
     await loadAgentRegistry();
-    const registry = getRegistry();
+    const registry = getRegistry().filter((agent) => agent.visibleInChat !== false);
 
     try {
       agentBindings.value = await fetchAgentUsageBindings();

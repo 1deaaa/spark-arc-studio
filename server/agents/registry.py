@@ -159,6 +159,30 @@ AGENT_REGISTRY = [
         "group": "style",
         "icon": "Palette",
         "color": "#ec4899"
+    },
+    {
+        "key": "agent_utility",
+        "name": {
+            "zh-CN": "系统工具",
+            "en-US": "System Utility",
+            "ja-JP": "システムツール",
+        },
+        "display": {
+            "zh-CN": "负责上下文压缩与聊天附件预处理等系统内部任务。",
+            "en-US": "Handles internal system tasks such as context compaction and chat attachment preprocessing.",
+            "ja-JP": "コンテキスト圧縮やチャット添付の前処理など、内部システムタスクを担当します。",
+        },
+        "description": {
+            "zh-CN": "系统内部工具 Agent，不进入聊天入口、不参与信标总线或导演委派，但可单独绑定模型，用于长上下文压缩和聊天附件切分等基础能力。",
+            "en-US": "An internal utility agent. It is hidden from chat entry points and delegation, but can be bound to its own model for context compaction and attachment preprocessing.",
+            "ja-JP": "内部ユーティリティ Agent。チャット入口や委任には表示されませんが、コンテキスト圧縮や添付前処理用に個別モデルを割り当てられます。",
+        },
+        "group": "system",
+        "participatesInBeaconBus": False,
+        "visibleInChat": False,
+        "visibleInModelBinding": True,
+        "icon": "Settings2",
+        "color": "#64748b"
     }
 ]
 

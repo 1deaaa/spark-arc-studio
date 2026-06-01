@@ -56,6 +56,7 @@ class UsageServicesMixin:
                 func.coalesce(func.sum(UsageLogEntry.prompt_tokens), 0).label("prompt_tokens"),
                 func.coalesce(func.sum(UsageLogEntry.completion_tokens), 0).label("completion_tokens"),
                 func.coalesce(func.sum(UsageLogEntry.total_tokens), 0).label("total_tokens"),
+                func.coalesce(func.sum(UsageLogEntry.cached_prompt_tokens), 0).label("cached_prompt_tokens"),
                 func.count(UsageLogEntry.id).label("call_count"),
                 func.sum(UsageLogEntry.success).label("success_count"),
                 func.sum(1 - UsageLogEntry.success).label("error_count"),
@@ -104,6 +105,7 @@ class UsageServicesMixin:
                     "prompt_tokens": int(row.prompt_tokens),
                     "completion_tokens": int(row.completion_tokens),
                     "total_tokens": int(row.total_tokens),
+                    "cached_prompt_tokens": int(row.cached_prompt_tokens or 0),
                     "call_count": int(row.call_count),
                     "success_count": int(row.success_count or 0),
                     "error_count": int(row.error_count or 0),
@@ -119,6 +121,7 @@ class UsageServicesMixin:
                 func.coalesce(func.sum(UsageLogEntry.prompt_tokens), 0).label("prompt_tokens"),
                 func.coalesce(func.sum(UsageLogEntry.completion_tokens), 0).label("completion_tokens"),
                 func.coalesce(func.sum(UsageLogEntry.total_tokens), 0).label("total_tokens"),
+                func.coalesce(func.sum(UsageLogEntry.cached_prompt_tokens), 0).label("cached_prompt_tokens"),
                 func.count(UsageLogEntry.id).label("requests"),
                 func.coalesce(func.sum(1 - UsageLogEntry.success), 0).label("errors"),
                 func.coalesce(
@@ -137,6 +140,7 @@ class UsageServicesMixin:
                     "prompt_tokens": int(row.prompt_tokens or 0),
                     "completion_tokens": int(row.completion_tokens or 0),
                     "total_tokens": int(row.total_tokens or 0),
+                    "cached_prompt_tokens": int(row.cached_prompt_tokens or 0),
                     "requests": int(row.requests or 0),
                     "errors": int(row.errors or 0),
                     "sys_paid_requests": int(row.sys_paid_requests or 0),
@@ -195,6 +199,7 @@ class UsageServicesMixin:
                 func.coalesce(func.sum(UsageLogEntry.total_tokens), 0).label("tokens"),
                 func.coalesce(func.sum(UsageLogEntry.prompt_tokens), 0).label("prompt_tokens"),
                 func.coalesce(func.sum(UsageLogEntry.completion_tokens), 0).label("completion_tokens"),
+                func.coalesce(func.sum(UsageLogEntry.cached_prompt_tokens), 0).label("cached_prompt_tokens"),
                 func.count(UsageLogEntry.id).label("requests"),
                 func.sum(1 - UsageLogEntry.success).label("errors"),
             ).filter(
@@ -213,6 +218,7 @@ class UsageServicesMixin:
                 "tokens": int(result.tokens or 0),
                 "prompt_tokens": int(result.prompt_tokens or 0),
                 "completion_tokens": int(result.completion_tokens or 0),
+                "cached_prompt_tokens": int(result.cached_prompt_tokens or 0),
                 "requests": int(result.requests or 0),
                 "errors": int(result.errors or 0),
             }
@@ -234,6 +240,7 @@ class UsageServicesMixin:
                 func.coalesce(func.sum(UsageLogEntry.total_tokens), 0).label("tokens"),
                 func.coalesce(func.sum(UsageLogEntry.prompt_tokens), 0).label("prompt_tokens"),
                 func.coalesce(func.sum(UsageLogEntry.completion_tokens), 0).label("completion_tokens"),
+                func.coalesce(func.sum(UsageLogEntry.cached_prompt_tokens), 0).label("cached_prompt_tokens"),
                 func.count(UsageLogEntry.id).label("requests"),
             ).filter(
                 UsageLogEntry.user_id == user_id
@@ -253,6 +260,7 @@ class UsageServicesMixin:
                     "tokens": int(row.tokens),
                     "prompt_tokens": int(row.prompt_tokens),
                     "completion_tokens": int(row.completion_tokens),
+                    "cached_prompt_tokens": int(row.cached_prompt_tokens or 0),
                     "requests": int(row.requests),
                 }
                 for row in rows

@@ -1394,52 +1394,48 @@ onBeforeUnmount(() => {
 }
 
 /* ====== 响应式 ====== */
-@media (max-width: 1024px) {
-  .page-inner {
-    max-width: none;
-    padding: 36px 32px 28px;
-  }
-
-  .topbar-inner {
-    padding: 8px 16px;
-  }
+:global(html.viewport-tablet-down .novel-player .page-inner) {
+  max-width: none;
+  padding: 36px 32px 28px;
 }
 
-@media (max-width: 768px) {
-  .page-inner {
-    padding: 28px 16px calc(24px + var(--sab, env(safe-area-inset-bottom, 0px)));
-  }
+:global(html.viewport-tablet-down .novel-player .topbar-inner) {
+  padding: 8px 16px;
+}
 
-  .topbar-inner {
-    padding: 8px 12px;
-  }
+:global(html.viewport-mobile .novel-player .page-inner) {
+  padding: 28px 16px calc(24px + var(--sab, env(safe-area-inset-bottom, 0px)));
+}
 
-  .topbar-title {
-    font-size: var(--spark-fs-xs);
-  }
+:global(html.viewport-mobile .novel-player .topbar-inner) {
+  padding: 8px 12px;
+}
 
-  .topbar-center {
-    gap: 4px;
-  }
+:global(html.viewport-mobile .novel-player .topbar-title) {
+  font-size: var(--spark-fs-xs);
+}
 
-  .topbar-page-info {
-    font-size: 10px;
-    min-width: 44px;
-  }
+:global(html.viewport-mobile .novel-player .topbar-center) {
+  gap: 4px;
+}
 
-  .topbar-icon-btn {
-    width: 28px;
-    height: 28px;
-  }
+:global(html.viewport-mobile .novel-player .topbar-page-info) {
+  font-size: 10px;
+  min-width: 44px;
+}
 
-  .novel-paragraph {
-    text-align: left;
-    text-indent: 1.8em;
-    line-height: 1.92;
-  }
+:global(html.viewport-mobile .novel-player .topbar-icon-btn) {
+  width: 28px;
+  height: 28px;
+}
 
-  .settings-drawer {
-    width: min(300px, 90vw);
-  }
+:global(html.viewport-mobile .novel-player .novel-paragraph) {
+  text-align: left;
+  text-indent: 1.8em;
+  line-height: 1.92;
+}
+
+:global(html.viewport-mobile .novel-player .settings-drawer) {
+  width: min(300px, 90vw);
 }
 </style>

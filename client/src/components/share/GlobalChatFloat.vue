@@ -76,6 +76,10 @@
           :retry-attempt="chat.retryAttempt"
           :retry-max-retries="chat.retryMaxRetries"
           :retry-error-summary="chat.retryErrorSummary"
+          :context-token-count="chat.contextTokenCount"
+          :context-token-usage="chat.contextTokenUsage"
+          :context-window-stats="chat.contextWindowStats"
+          loading-target="chat-primary"
           :editing-message-id="editingMessageId"
           :editing-content="editingContent"
           :draft="draft"
@@ -83,6 +87,7 @@
           @update:draft="draft = $event"
           @update:editing-content="editingContent = $event"
           @clear="clear"
+          @compact-context="compactContext"
           @send="send"
           @stop="stop"
           @draft-keydown="onDraftKeydown"
@@ -182,6 +187,10 @@
         :retry-attempt="chat.retryAttempt"
         :retry-max-retries="chat.retryMaxRetries"
         :retry-error-summary="chat.retryErrorSummary"
+        :context-token-count="chat.contextTokenCount"
+        :context-token-usage="chat.contextTokenUsage"
+        :context-window-stats="chat.contextWindowStats"
+        loading-target="chat-primary"
         :editing-message-id="editingMessageId"
         :editing-content="editingContent"
         :draft="draft"
@@ -192,6 +201,7 @@
         @update:draft="draft = $event"
         @update:editing-content="editingContent = $event"
         @clear="clear"
+        @compact-context="compactContext"
         @send="send"
         @stop="stop"
         @draft-keydown="onDraftKeydown"
@@ -299,6 +309,11 @@ const { draft, editingMessageId, editingContent, thinkingSeconds, lastMessageIsA
 
 async function clear() {
   await chatActions.clear();
+}
+
+async function compactContext() {
+  if (chat.sending) return;
+  await chat.compactContext();
 }
 
 
@@ -679,7 +694,9 @@ const { registry: agentRegistry, load: loadAgentRegistry } = useAgentRegistry();
  * 基础 Agent 选项（不带 disabled 状态），从 registry 派生。
  * 各窗口的 options 会在此基础上叠加占用状态。
  */
-const baseAgentOptions = computed(() => (agentRegistry.value || []).map(a => ({ label: a.name, value: a.key })));
+const baseAgentOptions = computed(() => (agentRegistry.value || [])
+  .filter(a => a.visibleInChat !== false)
+  .map(a => ({ label: a.name, value: a.key })));
 
 /**
  * 构建窗口可见的 Agent 选项列表：

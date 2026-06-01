@@ -67,11 +67,20 @@ async def get_runtime_signals(user: dict = Depends(get_current_user)):
         
     namespace = ctx._user_namespaces[user_id]
     for agent_info in registry:
+        if agent_info.get("participatesInBeaconBus") is False:
+            continue
         aid = agent_info['key']
         _ensure_runtime_agent(namespace, aid, user_id)
 
+    signal_agent_ids = {
+        item.get("key")
+        for item in registry
+        if item.get("participatesInBeaconBus") is not False
+    }
     result = {}
     for aid, agent in namespace.items():
+        if aid not in signal_agent_ids:
+            continue
         result[aid] = _serialize_runtime_signal_state(agent)
     return result
 
@@ -118,5 +127,4 @@ async def toggle_agent_horn(data: AgentSignalToggleRequest, user: dict = Depends
         agent.lower_horn()
 
     return _serialize_runtime_signal_state(agent)
-
 

@@ -1,5 +1,5 @@
 <template>
-    <div class="settings-section">
+    <div class="settings-section appearance-settings">
         <h3>{{ t('settings.appearance.title') }}</h3>
         <p class="section-desc">{{ t('settings.appearance.description') }}</p>
 
@@ -470,43 +470,40 @@ const renderFontOptionLabel = (option) => {
     color: var(--spark-text);
 }
 
-/* 窄宽度断点 - 移动端 */
-@media (max-width: 768px) {
-    .settings-section {
-        padding: 4px 6px;
-        margin-bottom: 8px;
-        background: transparent;
-        border: none;
-        border-radius: 0;
-    }
-    
-    .settings-section h3 {
-        font-size: var(--spark-fs-lg);
-    }
-    
-    .section-desc {
-        font-size: var(--spark-fs-sm);
-        margin-bottom: 12px;
-    }
-    
-    .color-swatch {
-        min-width: 90px;
-        max-width: 140px;
-        height: 28px;
-    }
-    
-    .swatch-hex {
-        font-size: var(--spark-fs-2xs);
-    }
-    
-    .hint-text {
-        font-size: var(--spark-fs-2xs);
-    }
-    
-    .preview-text {
-        padding: 8px 10px;
-        font-size: var(--spark-fs-base);
-    }
+:global(html.viewport-mobile .appearance-settings) {
+    padding: 4px 6px;
+    margin-bottom: 8px;
+    background: transparent;
+    border: none;
+    border-radius: var(--spark-radius);
+}
+
+:global(html.viewport-mobile .appearance-settings h3) {
+    font-size: var(--spark-fs-lg);
+}
+
+:global(html.viewport-mobile .appearance-settings .section-desc) {
+    font-size: var(--spark-fs-sm);
+    margin-bottom: 12px;
+}
+
+:global(html.viewport-mobile .appearance-settings .color-swatch) {
+    min-width: 90px;
+    max-width: 140px;
+    height: 28px;
+}
+
+:global(html.viewport-mobile .appearance-settings .swatch-hex) {
+    font-size: var(--spark-fs-2xs);
+}
+
+:global(html.viewport-mobile .appearance-settings .hint-text) {
+    font-size: var(--spark-fs-2xs);
+}
+
+:global(html.viewport-mobile .appearance-settings .preview-text) {
+    padding: 8px 10px;
+    font-size: var(--spark-fs-base);
 }
 
 /* 超窄宽度 - 小屏手机 */

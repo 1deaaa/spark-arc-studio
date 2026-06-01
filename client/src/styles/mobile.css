@@ -3,103 +3,88 @@
    Overrides for Naive UI and global styles for touch devices 
 */
 
-@media (max-width: 768px) {
-    /* --- 沉浸式全屏：背景铺满刘海/挖孔区域 --- */
-    html, body {
-        height: 100%;
-        width: 100%;
-        overflow: hidden;
-    }
-
-    /* 安全区域变量：背景铺满全屏，交互内容通过 padding 下推到安全区内 */
-    :root {
-        /*
-         * --sat 兜底机制：
-         *   env() 正确上报时 → max(env值, 0px) = env值，原样使用，零干扰
-         *   env() 返回 0 但设备有状态栏时 → JS 注入 --fallback-sat，max(0, fallback) 生效
-         *   env() 返回 0 且无状态栏（无刘海 Android） → max(0, 0) = 0，标题栏仅 44px 基础高度
-         */
-        --fallback-sat: 0px;
-        --sat: max(env(safe-area-inset-top, 0px), var(--fallback-sat));
-        --sab: env(safe-area-inset-bottom, 0px);
-
-        /* 移动端布局尺寸变量（统一真相源，改高度只动此处） */
-        --mobile-header-height: 44px;
-        --mobile-bottom-nav-height: 60px;
-    }
-
-    /* --- 基础交互优化 --- */
-
-    /* 增大点击区域 */
-    .n-button {
-        min-height: 40px !important;
-    }
-
-    .n-button--tiny-type,
-    .n-button--small-type {
-        min-height: 32px !important;
-    }
-
-    /* 防止 iOS 输入框缩放 */
-    .n-input .n-input__input-el,
-    .n-base-selection-label {
-        font-size: 16px !important;
-    }
-
-    /* 滚动条隐藏但保留功能 (更像原生 App) */
-    ::-webkit-scrollbar {
-        width: 4px;
-        height: 4px;
-    }
-
-    /* --- 布局优化 --- */
-
-    /* 卡片全宽，移除多余边距 */
-    .n-card {
-        border-radius: 0 !important;
-        box-shadow: none !important;
-    }
-
-    .n-card>.n-card-header {
-        padding: 12px 16px !important;
-    }
-
-    .n-card>.n-card-content {
-        padding: 12px 16px !important;
-    }
-
-    /* 抽屉优化 */
-    .n-drawer {
-        border-radius: 16px 16px 0 0;
-        /* 圆角顶部 */
-    }
-
-    .n-drawer-header {
-        border-bottom: 1px solid var(--n-divider-color);
-        padding: 16px !important;
-    }
-
-    /* --- SparkArc 特定组件覆盖 --- */
-
-    /* 隐藏部分仅PC适合的装饰性元素 */
-    .spark-anim-fade {
-        animation: none !important;
-        /* 减少动画以提升低端机性能 */
-    }
-
-    /* 调整 Toast 位置 */
-    .n-message-container {
-        top: 60px !important;
-    }
+html.viewport-mobile,
+html.platform-mobile-shell {
+    /*
+     * --sat 兜底机制：
+     *   env() 正确上报时 → max(env值, 0px) = env值，原样使用，零干扰
+     *   env() 返回 0 但设备有状态栏时 → JS 注入 --fallback-sat，max(0, fallback) 生效
+     *   env() 返回 0 且无状态栏（无刘海 Android） → max(0, 0) = 0，标题栏仅 44px 基础高度
+     */
+    --fallback-sat: 0px;
+    --sat: max(env(safe-area-inset-top, 0px), var(--fallback-sat));
+    --sab: env(safe-area-inset-bottom, 0px);
+    --mobile-header-height: 44px;
+    --mobile-bottom-nav-height: 60px;
 }
 
-/* 全局工具类 */
-.mobile-hidden {
+html.viewport-mobile,
+html.viewport-mobile body,
+html.platform-mobile-shell,
+html.platform-mobile-shell body {
+    height: 100%;
+    width: 100%;
+}
+
+html.viewport-mobile body,
+html.platform-mobile-shell body {
+    overflow: hidden;
+}
+
+html.viewport-mobile .n-button {
+    min-height: 40px !important;
+}
+
+html.viewport-mobile .n-button--tiny-type,
+html.viewport-mobile .n-button--small-type {
+    min-height: 32px !important;
+}
+
+html.viewport-mobile .n-input .n-input__input-el,
+html.viewport-mobile .n-base-selection-label {
+    font-size: 16px !important;
+}
+
+html.viewport-mobile ::-webkit-scrollbar,
+html.platform-mobile-shell ::-webkit-scrollbar {
+    width: 4px;
+    height: 4px;
+}
+
+html.viewport-mobile .n-card {
+    border-radius: var(--spark-radius) !important;
+    box-shadow: none !important;
+}
+
+html.viewport-mobile .n-card > .n-card-header {
+    padding: 12px 16px !important;
+}
+
+html.viewport-mobile .n-card > .n-card-content {
+    padding: 12px 16px !important;
+}
+
+html.viewport-mobile .n-drawer {
+    border-radius: 16px 16px 0 0;
+}
+
+html.viewport-mobile .n-drawer-header {
+    border-bottom: 1px solid var(--n-divider-color);
+    padding: 16px !important;
+}
+
+html.viewport-mobile .spark-anim-fade {
+    animation: none !important;
+}
+
+html.viewport-mobile .n-message-container {
+    top: 60px !important;
+}
+
+html.viewport-mobile .mobile-hidden {
     display: none !important;
 }
 
-@media (min-width: 769px) {
-    .desktop-hidden {
-        display: none !important;
-    }
+html.viewport-not-mobile .desktop-hidden {
+    display: none !important;
 }

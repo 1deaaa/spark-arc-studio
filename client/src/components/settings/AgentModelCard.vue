@@ -137,7 +137,7 @@ const loadData = async () => {
 
 // Agent 选项列表
 const agentOptions = computed(() =>
-  agentRegistry.value.map(agent => ({
+  agentRegistry.value.filter(agent => agent.visibleInModelBinding !== false).map(agent => ({
     label: agent.name,
     value: agent.key
   }))
@@ -324,6 +324,7 @@ onMounted(() => {
   margin-bottom: 16px;
   border-color: var(--spark-border);
   background: var(--spark-panel-bg);
+  border-radius: var(--spark-radius);
 }
 
 .card-header {

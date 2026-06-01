@@ -28,7 +28,7 @@
  */
 import { computed, markRaw, type Component } from 'vue';
 import {
-  Compass, Wand2, ScrollText, Waypoints, Feather, ScanEye, Palette, Sparkles,
+  Compass, Wand2, ScrollText, Waypoints, Feather, ScanEye, Palette, Sparkles, Settings2,
 } from '@lucide/vue';
 import { useAgentRegistry } from '@/composables/useAgentRegistry';
 
@@ -46,6 +46,7 @@ const LUCIDE_ICON_MAP: Record<string, Component> = {
   ScanEye: markRaw(ScanEye),
   Palette: markRaw(Palette),
   Sparkles: markRaw(Sparkles),
+  Settings2: markRaw(Settings2),
 };
 
 const props = defineProps({

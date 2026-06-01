@@ -179,6 +179,47 @@ def _append_or_upgrade_tool_segment(
     })
 
 
+def _append_or_update_context_compaction_segment(
+    segments: List[Dict[str, Any]],
+    *,
+    event_type: str,
+    ts: float,
+    delta: Dict[str, Any],
+) -> None:
+    status = "running"
+    if event_type == "context_compaction_finished":
+        status = "finished"
+    elif event_type == "context_compaction_failed":
+        status = "failed"
+
+    for seg in reversed(segments):
+        if seg.get("type") == "context_compaction" and seg.get("status") == "running":
+            seg["status"] = status
+            seg["updated_at"] = ts
+            if status != "running":
+                seg["finished_at"] = ts
+                started = seg.get("started_at")
+                if isinstance(started, (int, float)):
+                    seg["duration"] = round(ts - started, 2)
+            for key in ("original_tokens", "compacted_tokens", "retained_messages", "model", "reason", "message"):
+                if key in delta:
+                    seg[key] = delta[key]
+            return
+
+    segment = {
+        "type": "context_compaction",
+        "status": status,
+        "started_at": ts,
+        "updated_at": ts,
+    }
+    if status != "running":
+        segment["finished_at"] = ts
+    for key in ("original_tokens", "compacted_tokens", "retained_messages", "model", "reason", "message"):
+        if key in delta:
+            segment[key] = delta[key]
+    segments.append(segment)
+
+
 def _terminal_tool_status(stream_status: str) -> str:
     if stream_status == "cancelled":
         return "cancelled"
@@ -239,6 +280,15 @@ def _collect_segment_from_event(
         if not raw_text:
             return
         _append_text_segment(segments, seg_type="text", text=raw_text, source_agent=source_agent)
+        return
+
+    if event_type in {"context_compaction_started", "context_compaction_finished", "context_compaction_failed"}:
+        _append_or_update_context_compaction_segment(
+            segments,
+            event_type=event_type,
+            ts=ts,
+            delta=delta,
+        )
         return
 
     tool_name = str(delta.get("tool_name") or delta.get("toolName") or "").strip()
@@ -332,6 +382,12 @@ def _finalize_segments(segments: List[Dict[str, Any]], stream_status: str = "com
     for seg in segments:
         if seg.get("type") == "tool_trace" and seg.get("status") not in ("finished", "failed", "cancelled"):
             seg["status"] = _terminal_tool_status(stream_status)
+            seg["finished_at"] = now_ts
+            started = seg.get("started_at")
+            if isinstance(started, (int, float)):
+                seg["duration"] = round(now_ts - started, 2)
+        if seg.get("type") == "context_compaction" and seg.get("status") == "running":
+            seg["status"] = "failed" if stream_status == "error" else "finished"
             seg["finished_at"] = now_ts
             started = seg.get("started_at")
             if isinstance(started, (int, float)):

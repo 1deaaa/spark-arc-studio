@@ -1,5 +1,5 @@
 <template>
-  <div class="settings-section">
+  <div class="settings-section agent-model-manager">
     <div class="section-title">
       <h3>Agent 模型配置</h3>
       <n-button text @click="loadData" :disabled="loading" size="small">
@@ -533,17 +533,15 @@ watch(() => aiStore.usageSelections, () => {
 /* 已移除每卡片的“保存中”弹窗相关样式（避免布局抖动）。如果需要可改为全局状态栏或浮层显示。 */
 
 /* Responsive */
-@media (max-width: 768px) {
-  .settings-section {
-    padding: 16px;
-  }
-  
-  .agent-item {
-    padding: 16px;
-  }
-  
-  .agent-name {
-    font-size: var(--spark-fs-base);
-  }
+:global(html.viewport-mobile .agent-model-manager) {
+  padding: 16px;
+}
+
+:global(html.viewport-mobile .agent-model-manager .agent-item) {
+  padding: 16px;
+}
+
+:global(html.viewport-mobile .agent-model-manager .agent-name) {
+  font-size: var(--spark-fs-base);
 }
 </style>

@@ -4,6 +4,7 @@ import { createPinia, setActivePinia } from 'pinia';
 vi.mock('@/services/chatService', () => ({
   getChatHistory: vi.fn(async () => []),
   clearChatHistory: vi.fn(async () => ({})),
+  compactChatContext: vi.fn(async () => ({ success: true, compacted: true })),
   deleteChatMessage: vi.fn(async () => ({})),
   removeChatMessageAttachment: vi.fn(async () => ({ success: true })),
   editChatMessageStream: vi.fn(),
@@ -249,6 +250,109 @@ describe('chatStore tool-first stream handling', () => {
     expect(store.sessions[0].contextTokenCount).toBe(154);
     const assistantMessage = store.sessions[0].history.find((item) => item.role === 'assistant');
     expect(assistantMessage?.metadata?.llm_usage?.total_tokens).toBe(154);
+  });
+
+  it('tracks actual context window input and current agent output tokens', async () => {
+    mockedSendChatMessageStream.mockResolvedValueOnce(createNdjsonReader([
+      JSON.stringify({
+        event: 'context_window_stats',
+        agent_id: 'agent_director',
+        input_tokens: 3200,
+        original_tokens: 9000,
+        retained_messages: 8,
+        model: 'gpt-4o',
+      }),
+      JSON.stringify({
+        event: 'task_done',
+        status: 'completed',
+        llm_usage: {
+          prompt_tokens: 12000,
+          completion_tokens: 600,
+          total_tokens: 12600,
+          by_agent: {
+            agent_director: {
+              prompt_tokens: 3200,
+              completion_tokens: 180,
+              total_tokens: 3380,
+            },
+            agent_muse: {
+              prompt_tokens: 8800,
+              completion_tokens: 420,
+              total_tokens: 9220,
+            },
+          },
+        },
+      }),
+    ]));
+
+    const store = useChatStore();
+    await store.sendSessionMessage(0, '请继续');
+
+    expect(store.sessions[0].contextTokenCount).toBe(12600);
+    expect(store.sessions[0].contextWindowStats?.inputTokens).toBe(3200);
+    expect(store.sessions[0].contextWindowStats?.outputTokens).toBe(180);
+    expect(store.sessions[0].contextWindowStats?.agentId).toBe('agent_director');
+  });
+
+  it('stores context compaction stream events as assistant segments', async () => {
+    mockedSendChatMessageStream.mockResolvedValueOnce(createNdjsonReader([
+      JSON.stringify({ event: 'context_compaction_started', original_tokens: 12000, model: 'gpt-4o' }),
+      JSON.stringify({ event: 'context_compaction_finished', original_tokens: 12000, compacted_tokens: 3200, retained_messages: 5, model: 'gpt-4o' }),
+      JSON.stringify({ event: 'assistant_delta', text: '继续回答。' }),
+    ]));
+
+    const store = useChatStore();
+    await store.sendSessionMessage(0, '请继续');
+
+    const assistantMessage = store.sessions[0].history.find((item) => item.role === 'assistant');
+    const compactionSeg = assistantMessage?.segments?.find((seg) => seg.type === 'context_compaction');
+    expect(compactionSeg?.status).toBe('finished');
+    expect(compactionSeg?.compacted_tokens).toBe(3200);
+    expect(assistantMessage?.content).toContain('继续回答。');
+  });
+
+  it('restores persisted context summary notice from assistant metadata segments in order', async () => {
+    mockedGetChatHistory.mockResolvedValueOnce([
+      {
+        id: 1,
+        role: 'user',
+        content: '压缩前的最后一个请求',
+        timestamp: 1,
+      },
+      {
+        id: 2,
+        role: 'assistant',
+        content: '',
+        timestamp: 2,
+        metadata: {
+          kind: 'context_compaction_notice',
+          segments: [
+            {
+              type: 'context_compaction_summary',
+              status: 'finished',
+              summary_text: '摘要：\n- 旧上下文已归档',
+              original_messages: 10,
+              compacted_tokens: 1500,
+              model: 'gemini-3-flash',
+            },
+          ],
+        },
+      },
+      {
+        id: 3,
+        role: 'assistant',
+        content: '压缩后继续执行。',
+        timestamp: 3,
+      },
+    ]);
+
+    const store = useChatStore();
+    await store.refreshSessionHistory(0);
+
+    expect(store.sessions[0].history.map(item => item.id)).toEqual([1, 2, 3]);
+    const notice = store.sessions[0].history[1];
+    expect(notice.segments?.[0]?.type).toBe('context_compaction_summary');
+    expect(notice.segments?.[0]?.summary_text).toContain('旧上下文已归档');
   });
 
   it('restores the displayed token total from persisted assistant metadata', async () => {

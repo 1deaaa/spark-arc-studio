@@ -49,7 +49,13 @@ def delegate_task(
     if not user_id:
         return "委派任务失败：缺少用户上下文。"
 
-    valid_agents = {a["key"] for a in AGENT_REGISTRY if a["key"] != "agent_director"}
+    valid_agents = {
+        a["key"]
+        for a in AGENT_REGISTRY
+        if a["key"] != "agent_director"
+        and a.get("participatesInBeaconBus") is not False
+        and a.get("visibleInChat") is not False
+    }
     if target_agent not in valid_agents:
         return f"委派任务失败：未知的 Agent '{target_agent}'。可选: {', '.join(sorted(valid_agents))}"
 

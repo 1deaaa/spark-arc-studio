@@ -283,6 +283,28 @@ function normalizeAssistantContent(message: AnyRecord = {}) {
   return normalizeMessageText(message.content || '');
 }
 
+function normalizeAssistantSegments(message: AnyRecord = {}) {
+  const directSegments = Array.isArray(message.segments) ? message.segments : [];
+  if (directSegments.length > 0) return directSegments;
+  const metadataSegments = Array.isArray(message.metadata?.segments) ? message.metadata.segments : [];
+  return metadataSegments;
+}
+
+function getComparableSegmentSignature(segments: AnyRecord[] = []) {
+  if (!Array.isArray(segments) || segments.length === 0) return '';
+  const structuralSegments = segments.filter(seg => (
+    seg?.type === 'context_compaction'
+    || seg?.type === 'context_compaction_summary'
+  ));
+  if (structuralSegments.length === 0) return '';
+  return JSON.stringify(structuralSegments.map(seg => ({
+    type: seg?.type || '',
+    status: seg?.status || '',
+    summary_text: seg?.summary_text || '',
+    _seg_id: seg?._seg_id || '',
+  })));
+}
+
 export function normalizeHistoryMessage(message: AnyRecord = {}): AnyRecord {
   if (!message || typeof message !== 'object') return message;
   if (message.role !== 'assistant') {
@@ -298,7 +320,7 @@ export function normalizeHistoryMessage(message: AnyRecord = {}): AnyRecord {
     reasoning: normalizeAssistantReasoning(message),
     reasoning_duration: message.reasoning_duration || message.metadata?.reasoning_duration || 0,
     tool_traces: normalizeToolTraceList(message.tool_traces || message.metadata?.tool_traces || []),
-    segments: message.segments || message.metadata?.segments || [],
+    segments: normalizeAssistantSegments(message),
   };
 }
 
@@ -312,6 +334,7 @@ function messageHasAssistantPayload(message: AnyRecord | null | undefined = {}) 
     normalizeAssistantContent(message).trim()
     || normalizeAssistantReasoning(message).trim()
     || normalizeToolTraceList(message.tool_traces || message.metadata?.tool_traces || []).length
+    || normalizeAssistantSegments(message).length
   );
 }
 
@@ -322,6 +345,8 @@ function isSameAssistantMessage(a: AnyRecord | null | undefined = {}, b: AnyReco
     && normalizeAssistantReasoning(a).trim() === normalizeAssistantReasoning(b).trim()
     && getComparableToolTraceSignature(a.tool_traces || a.metadata?.tool_traces || [])
       === getComparableToolTraceSignature(b.tool_traces || b.metadata?.tool_traces || [])
+    && getComparableSegmentSignature(normalizeAssistantSegments(a))
+      === getComparableSegmentSignature(normalizeAssistantSegments(b))
   );
 }
 

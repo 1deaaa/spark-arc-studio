@@ -12,8 +12,8 @@ except ImportError:
             return len(text)
 
 
-def estimate_text_tokens(text: str) -> int:
-    return estimate_tokens(text or "", model=None)
+def estimate_text_tokens(text: str, model: str | None = None) -> int:
+    return estimate_tokens(text or "", model=model)
 
 
 def normalize_text(text: str) -> str:

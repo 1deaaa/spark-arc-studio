@@ -295,6 +295,8 @@ class UsageLogEntry(Base):
     prompt_tokens = Column(Integer, default=0)
     completion_tokens = Column(Integer, default=0)
     total_tokens = Column(Integer, default=0)
+    # 输入侧命中的提示词缓存 token 数。0 表示未命中或上游未返回该统计。
+    cached_prompt_tokens = Column(Integer, default=0)
     
     # 调用状态 (1=成功, 0=失败)
     success = Column(Integer, default=1)

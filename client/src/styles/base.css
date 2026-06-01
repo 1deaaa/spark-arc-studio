@@ -135,3 +135,24 @@ input:focus, textarea:focus, select:focus {
     from { opacity: 1; }
     to { opacity: 0; }
 }
+
+html.viewport-tablet-down {
+    --spark-tooltip-mobile-max-width: min(calc(100vw - 24px), 320px);
+}
+
+html.viewport-tablet-down .v-binder-follower-container .n-popover.n-tooltip,
+html.viewport-tablet-down .n-popover.n-tooltip {
+    /* Naive UI 的 tooltip 会挂到跟随层里，窄屏下统一限制最大宽度，避免贴边后溢出视口 */
+    max-inline-size: var(--spark-tooltip-mobile-max-width);
+    box-sizing: border-box;
+}
+
+html.viewport-tablet-down .v-binder-follower-container .n-popover.n-tooltip .n-popover__content,
+html.viewport-tablet-down .n-popover.n-tooltip .n-popover__content {
+    /* 允许提示文本在移动端自动换行，长串字符也能强制断开 */
+    max-inline-size: 100%;
+    min-inline-size: 0;
+    white-space: normal !important;
+    overflow-wrap: anywhere;
+    word-break: break-word;
+}

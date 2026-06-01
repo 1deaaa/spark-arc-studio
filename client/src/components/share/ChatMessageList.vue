@@ -74,6 +74,45 @@
                 </div>
               </div>
             </div>
+            <div v-else-if="seg.type === 'context_compaction'" class="chat-bubble context-compaction-bubble">
+              <div class="context-compaction-card" :class="`is-${getContextCompactionStatus(seg)}`">
+                <div class="context-compaction-motion" aria-hidden="true">
+                  <span></span>
+                  <span></span>
+                  <span></span>
+                </div>
+                <div class="context-compaction-copy">
+                  <div class="context-compaction-title">{{ formatContextCompactionLabel(seg) }}</div>
+                  <div class="context-compaction-meta">{{ formatContextCompactionStats(seg) }}</div>
+                </div>
+              </div>
+            </div>
+            <div v-else-if="seg.type === 'context_compaction_summary'" class="chat-bubble context-compaction-bubble context-summary-bubble">
+              <div
+                class="context-compaction-card context-summary-card is-finished is-expandable"
+                @click="toggleContextSummary(getContextSummaryKey(m, idx, segIdx))"
+              >
+                <div class="context-summary-icon" aria-hidden="true">
+                  <svg viewBox="0 0 28 28" fill="none" xmlns="http://www.w3.org/2000/svg">
+                    <path d="M7 5.5h14c1.1 0 2 .9 2 2v13c0 1.1-.9 2-2 2H7c-1.1 0-2-.9-2-2v-13c0-1.1.9-2 2-2Z" stroke="currentColor" stroke-width="1.7" />
+                    <path d="M9 10h10M9 14h7M9 18h4.5" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" />
+                    <path d="M19.5 16.5 22 19l-2.5 2.5M22 19h-5.5" stroke="currentColor" stroke-width="1.55" stroke-linecap="round" stroke-linejoin="round" />
+                  </svg>
+                </div>
+                <div class="context-compaction-copy">
+                  <div class="context-compaction-title">
+                    {{ t('components.chatMessageList.contextCompactManualDone') }}
+                    <svg class="context-summary-chevron" :class="{ 'is-open': contextSummaryExpanded[getContextSummaryKey(m, idx, segIdx)] }" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.6">
+                      <polyline points="4 6 8 10 12 6"></polyline>
+                    </svg>
+                  </div>
+                  <div class="context-compaction-meta">{{ formatContextSummaryStats(seg) }}</div>
+                </div>
+              </div>
+              <SparkCollapseTransition :show="!!contextSummaryExpanded[getContextSummaryKey(m, idx, segIdx)]" no-opacity duration="0.2s">
+                <pre class="context-summary-text">{{ getContextSummaryText(seg) }}</pre>
+              </SparkCollapseTransition>
+            </div>
             <div v-else-if="seg.type === 'tool_trace'" class="chat-bubble tool-trace-bubble" :class="{ 'is-expandable': isToolTraceExpandable(seg) }">
               <div class="tool-trace-list">
                 <span
@@ -185,12 +224,6 @@
                 </n-button>
               </template>
               {{ canMutateMessage(m) ? t('common.delete') : t('components.chatMessageList.syncWaitDelete') }}
-            </n-tooltip>
-            <n-tooltip v-if="idx === history.length - 1 && getLlmUsageTokenLabel(m)" trigger="hover">
-              <template #trigger>
-                <span class="token-count-label">{{ getLlmUsageTokenLabel(m) }}</span>
-              </template>
-              {{ t('components.chatMessageList.contextTokenCount') }}
             </n-tooltip>
           </div>
         </template>
@@ -555,18 +588,58 @@ function formatTokenCount(value: number) {
   return `${num}`;
 }
 
-function getLlmUsageMeta(message: ChatMessageItem | null | undefined): LlmUsageMeta | null {
-  const usage = message?.llm_usage || message?.llmUsage || message?.metadata?.llm_usage || message?.metadata?.llmUsage;
-  return usage && typeof usage === 'object' ? usage : null;
+function getContextCompactionStatus(seg: MessageSegment) {
+  const status = String(seg?.status || '').trim();
+  if (status === 'finished' || status === 'failed') return status;
+  return 'running';
 }
 
-function getLlmUsageTokenLabel(message: ChatMessageItem | null | undefined) {
-  const usage = getLlmUsageMeta(message);
-  if (!usage) return '';
-  const inputTokens = Number(usage.prompt_tokens ?? usage.promptTokens ?? 0);
-  const outputTokens = Number(usage.completion_tokens ?? usage.completionTokens ?? 0);
-  if (!Number.isFinite(inputTokens) && !Number.isFinite(outputTokens)) return '';
-  return `↑${formatTokenCount(Math.max(0, inputTokens || 0))} / ↓${formatTokenCount(Math.max(0, outputTokens || 0))}`;
+function formatContextCompactionLabel(seg: MessageSegment) {
+  const status = getContextCompactionStatus(seg);
+  if (status === 'finished') return t('components.chatMessageList.contextCompacted');
+  if (status === 'failed') return t('components.chatMessageList.contextCompactFailed');
+  return t('components.chatMessageList.contextCompacting');
+}
+
+function formatContextCompactionStats(seg: MessageSegment) {
+  const original = Number(seg?.original_tokens ?? seg?.originalTokens ?? 0) || 0;
+  const compacted = Number(seg?.compacted_tokens ?? seg?.compactedTokens ?? 0) || 0;
+  const retained = Number(seg?.retained_messages ?? seg?.retainedMessages ?? 0) || 0;
+  const model = String(seg?.model || '').trim();
+  const tokenText = compacted > 0
+    ? `${formatTokenCount(original)} → ${formatTokenCount(compacted)}`
+    : formatTokenCount(original);
+  return t('components.chatMessageList.contextCompactStats', {
+    tokens: tokenText,
+    retained,
+    model,
+  });
+}
+
+function getContextSummaryKey(message: ChatMessageItem, messageIdx: number, segIdx: number) {
+  return `summary-${getMessageKey(message, messageIdx)}-${segIdx}`;
+}
+
+function toggleContextSummary(key: string) {
+  contextSummaryExpanded.value = {
+    ...contextSummaryExpanded.value,
+    [key]: !contextSummaryExpanded.value[key],
+  };
+}
+
+function getContextSummaryText(seg: MessageSegment) {
+  return String(seg?.summary_text ?? seg?.summaryText ?? '').trim();
+}
+
+function formatContextSummaryStats(seg: MessageSegment) {
+  const compacted = Number(seg?.compacted_tokens ?? seg?.compactedTokens ?? 0) || 0;
+  const originalMessages = Number(seg?.original_messages ?? seg?.originalMessages ?? 0) || 0;
+  const model = String(seg?.model || '').trim();
+  return t('components.chatMessageList.contextCompactManualStats', {
+    tokens: formatTokenCount(compacted),
+    messages: originalMessages,
+    model,
+  });
 }
 
 function getMessageKey(message, idx) {
@@ -739,7 +812,7 @@ function getToolTraces(message) {
  * 返回消息的有序分段数组。优先使用 segments 字段（流式），
  * 无 segments 时从 tool_traces + content 重建（确保刷新后正文和工具标记可见）。
  */
-function getMessageSegments(message) {
+function getMessageSegments(message): MessageSegment[] {
   if (Array.isArray(message?.segments) && message.segments.length > 0) {
     const existingSegments: MessageSegment[] = message.segments.map((s: MessageSegment) => ({ ...s }));
     if (!existingSegments.some(s => s?.type === 'reasoning')) {
@@ -749,6 +822,9 @@ function getMessageSegments(message) {
       }
     }
     return existingSegments;
+  }
+  if (Array.isArray(message?.metadata?.segments) && message.metadata.segments.length > 0) {
+    return message.metadata.segments.map((s: MessageSegment) => ({ ...s }));
   }
   const segments: MessageSegment[] = [];
   const reasoning = getReasoningText(message);
@@ -781,6 +857,8 @@ function hasRenderableAssistantActivity(message) {
     if (seg?.type === 'reasoning') return !!getReasoningSegmentText(seg).trim();
     if (seg?.type === 'text') return !!String(seg?.text || '').trim();
     if (seg?.type === 'tool_trace') return true;
+    if (seg?.type === 'context_compaction') return true;
+    if (seg?.type === 'context_compaction_summary') return true;
     if (seg?.type === 'json') return true;
     return false;
   });
@@ -868,6 +946,7 @@ function toggleThinkingNotice() {
 
 const reasoningExpanded = ref({});
 const toolTraceExpanded = ref({});
+const contextSummaryExpanded = ref({});
 const reasoningContentRefs = ref({});
 function getReasoningSegmentKey(message, idx, segIdx) {
   return `${getMessageKey(message, idx)}:reasoning:${segIdx}`;
@@ -1286,6 +1365,236 @@ defineExpose({ listRef });
   padding: 8px 12px !important;
 }
 
+.context-compaction-bubble {
+  width: min(100%, 760px);
+  max-width: 100%;
+  background: transparent !important;
+  border: 1px solid rgba(var(--spark-primary-rgb), 0.22) !important;
+  border-radius: 16px !important;
+  box-shadow: none !important;
+  padding: 8px !important;
+}
+
+.context-summary-bubble {
+  width: min(90%, 1040px);
+  max-width: 90%;
+  padding: 10px !important;
+  border-color: rgba(var(--spark-primary-rgb), 0.26) !important;
+  background:
+    radial-gradient(circle at 24px 18px, rgba(var(--spark-primary-rgb), 0.16), transparent 30px),
+    linear-gradient(135deg, rgba(var(--spark-primary-rgb), 0.045), rgba(var(--spark-primary-rgb), 0.015)) !important;
+  box-shadow: 0 12px 32px rgba(15, 23, 42, 0.06) !important;
+}
+
+.context-compaction-card {
+  position: relative;
+  display: inline-flex;
+  align-items: center;
+  gap: 10px;
+  width: 100%;
+  max-width: 100%;
+  padding: 9px 12px;
+  border-radius: 14px;
+  border: 1px solid rgba(var(--spark-primary-rgb), 0.28);
+  background:
+    linear-gradient(135deg, rgba(var(--spark-primary-rgb), 0.08), rgba(var(--spark-primary-rgb), 0.03)),
+    var(--spark-panel-bg);
+  color: var(--spark-text);
+  overflow: hidden;
+}
+
+.context-summary-card {
+  display: flex;
+  align-items: stretch;
+  gap: 12px;
+  padding: 12px 14px;
+  border-radius: 15px;
+  border-color: rgba(var(--spark-primary-rgb), 0.34);
+  background:
+    linear-gradient(135deg, rgba(var(--spark-primary-rgb), 0.1), rgba(var(--spark-primary-rgb), 0.035)),
+    var(--spark-panel-bg);
+  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.45);
+}
+
+.context-summary-card:hover {
+  border-color: rgba(var(--spark-primary-rgb), 0.48);
+  background:
+    linear-gradient(135deg, rgba(var(--spark-primary-rgb), 0.13), rgba(var(--spark-primary-rgb), 0.05)),
+    var(--spark-panel-bg);
+}
+
+.context-compaction-card::before {
+  content: "";
+  position: absolute;
+  inset: 0;
+  background: linear-gradient(90deg, transparent, rgba(var(--spark-primary-rgb), 0.16), transparent);
+  transform: translateX(-100%);
+  animation: context-sweep 1.8s ease-in-out infinite;
+  pointer-events: none;
+}
+
+.context-compaction-card.is-finished::before,
+.context-compaction-card.is-failed::before {
+  display: none;
+}
+
+.context-compaction-card.is-failed {
+  border-color: rgba(208, 48, 80, 0.18);
+  background: linear-gradient(135deg, rgba(208, 48, 80, 0.08), rgba(208, 48, 80, 0.03)), var(--spark-panel-bg);
+}
+
+.context-compaction-card.is-expandable {
+  cursor: pointer;
+}
+
+.context-summary-icon {
+  width: 38px;
+  height: 38px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  flex: 0 0 auto;
+  border-radius: 13px;
+  color: var(--spark-primary);
+  border: 1px solid rgba(var(--spark-primary-rgb), 0.24);
+  background:
+    radial-gradient(circle at 35% 25%, rgba(255, 255, 255, 0.75), transparent 38%),
+    rgba(var(--spark-primary-rgb), 0.11);
+}
+
+.context-summary-icon svg {
+  width: 24px;
+  height: 24px;
+}
+
+.context-compaction-motion {
+  width: 34px;
+  height: 22px;
+  display: grid;
+  gap: 3px;
+  flex-shrink: 0;
+}
+
+.context-compaction-motion span {
+  display: block;
+  height: 4px;
+  border-radius: 999px;
+  background: rgba(var(--spark-primary-rgb), 0.55);
+  transform-origin: left center;
+  animation: context-fold 1.2s ease-in-out infinite;
+}
+
+.context-compaction-motion span:nth-child(2) {
+  width: 75%;
+  animation-delay: 0.12s;
+}
+
+.context-compaction-motion span:nth-child(3) {
+  width: 52%;
+  animation-delay: 0.24s;
+}
+
+.context-compaction-card.is-finished .context-compaction-motion span {
+  animation: none;
+  background: rgba(var(--spark-primary-rgb), 0.7);
+}
+
+.context-compaction-card.is-failed .context-compaction-motion span {
+  animation: none;
+  background: rgba(208, 48, 80, 0.65);
+}
+
+.context-compaction-copy {
+  min-width: 0;
+  flex: 1 1 auto;
+  line-height: 1.35;
+}
+
+.context-compaction-title {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  font-size: var(--spark-fs-xs);
+  font-weight: 700;
+  color: var(--spark-primary);
+}
+
+.context-summary-chevron {
+  width: 13px;
+  height: 13px;
+  transition: transform 0.18s ease;
+}
+
+.context-summary-chevron.is-open {
+  transform: rotate(180deg);
+}
+
+.context-compaction-card.is-failed .context-compaction-title {
+  color: var(--spark-danger, #d03050);
+}
+
+.context-compaction-meta {
+  margin-top: 2px;
+  font-size: var(--spark-fs-2xs);
+  color: var(--spark-text-muted);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.context-summary-card .context-compaction-meta {
+  white-space: normal;
+  overflow: visible;
+  text-overflow: clip;
+}
+
+@keyframes context-fold {
+  0%, 100% { transform: scaleX(1); opacity: 0.95; }
+  50% { transform: scaleX(0.48); opacity: 0.45; }
+}
+
+@keyframes context-sweep {
+  0% { transform: translateX(-100%); }
+  55%, 100% { transform: translateX(100%); }
+}
+
+:global(html.viewport-mobile) .context-compaction-card {
+  align-items: flex-start;
+}
+
+:global(html.viewport-mobile) .context-summary-bubble {
+  width: 100%;
+  max-width: 100%;
+}
+
+:global(html.viewport-mobile) .context-summary-card {
+  gap: 10px;
+  padding: 11px 12px;
+}
+
+:global(html.viewport-mobile) .context-compaction-meta {
+  white-space: normal;
+}
+
+.context-summary-text {
+  box-sizing: border-box;
+  width: 100%;
+  max-width: 100%;
+  margin: 10px 0 0;
+  padding: 14px 16px;
+  border: 1px solid rgba(var(--spark-primary-rgb), 0.2);
+  border-radius: 14px;
+  background:
+    linear-gradient(180deg, rgba(var(--spark-primary-rgb), 0.06), rgba(var(--spark-primary-rgb), 0.025)),
+    var(--spark-panel-bg);
+  color: var(--spark-text);
+  font-size: var(--spark-fs-xs);
+  line-height: 1.55;
+  white-space: pre-wrap;
+  word-break: break-word;
+  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.36);
+}
+
 .tool-trace-list {
   display: flex;
   flex-wrap: wrap;
@@ -1300,17 +1609,6 @@ defineExpose({ listRef });
 
 .bubble-actions-assistant {
   opacity: 1;
-}
-
-.token-count-label {
-  display: inline-flex;
-  align-items: center;
-  margin-left: auto;
-  padding-left: 6px;
-  font-size: var(--spark-fs-xs, 11px);
-  color: var(--spark-text-muted);
-  white-space: nowrap;
-  user-select: none;
 }
 
 .tool-trace-chip {

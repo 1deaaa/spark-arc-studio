@@ -1,5 +1,5 @@
 <template>
-    <div class="settings-section">
+    <div class="settings-section model-usage-manager">
         <div class="section-header">
             <h3>{{ t('components.modelUsageManager.title') }}</h3>
             <n-button class="rank-link" text tag="a" href="https://openlm.ai/chatbot-arena/" target="_blank" rel="noopener noreferrer" type="primary" size="small">
@@ -464,22 +464,19 @@ async function deleteUsage(usage) {
     min-height: 200px;
 }
 
-@media (max-width: 768px) {
-    .settings-section {
-        padding: 4px 6px;
-        margin-bottom: 8px;
-        background: transparent;
-        border: none;
-        border-radius: 0;
-    }
+:global(html.viewport-mobile .model-usage-manager) {
+    padding: 4px 6px;
+    margin-bottom: 8px;
+    background: transparent;
+    border: none;
+    border-radius: var(--spark-radius);
+}
 
-    .usage-header {
-        flex-wrap: wrap;
-    }
+:global(html.viewport-mobile .model-usage-manager .usage-header) {
+    flex-wrap: wrap;
+}
 
-    .usage-actions {
-        margin-left: auto;
-    }
-
+:global(html.viewport-mobile .model-usage-manager .usage-actions) {
+    margin-left: auto;
 }
 </style>

@@ -8,12 +8,10 @@ from pydantic import BaseModel
 from starlette.concurrency import run_in_threadpool
 
 from core.auth import get_current_user
-from core.file_ingest.chunking import TokenTextSplitter
 from core.file_ingest.service import (
     ImportTextEmptyError,
     UnsupportedImportFormatError,
     get_capabilities_payload,
-    parse_uploaded_file,
 )
 from core.project_settings import (
     ATTACHMENT_CHUNK_TOKENS_DEFAULT,
@@ -26,6 +24,20 @@ from core.request_context import get_current_project_name, resolve_project_name
 
 
 import_router = APIRouter()
+
+
+def _resolve_import_estimate_model_name(user_id: str) -> str | None:
+    """复用当前主用途模型，统一附件解析与切分的 token 估算口径。"""
+    try:
+        from llm.agen_matchbox import DEFAULT_USAGE_KEY, matchbox
+
+        detail = matchbox().get_user_selection_detail(str(user_id), usage_key=DEFAULT_USAGE_KEY)
+        current = detail.get("current") if isinstance(detail, dict) else None
+        model_name = current.get("model_name") if isinstance(current, dict) else None
+        normalized = str(model_name or "").strip()
+        return normalized or None
+    except Exception:
+        return None
 
 
 @import_router.get("/api/import/capabilities")
@@ -113,8 +125,7 @@ async def parse_import_file(
         with open(tmp_path, "wb") as f:
             shutil.copyfileobj(file.file, f)
 
-        parsed = await run_in_threadpool(parse_uploaded_file, tmp_path, file.filename or "")
-
+        estimate_model = _resolve_import_estimate_model_name(user_id)
         # chunk_tokens 优先级：前端显式传值 > 项目级配置 > 默认值。
         # 不再硬编码 30000——项目可在附件面板里调整滑动窗口大小并持久化。
         from core.project_settings import _coerce_attachment_chunk_tokens
@@ -123,41 +134,19 @@ async def parse_import_file(
         else:
             chunk_tokens = _coerce_attachment_chunk_tokens(chunkTokens)
 
-        def _split_text():
-            # 聊天附件场景：合并阈值 0.5、cap 1.5，避免"64.1K 切成 64K + 0.1K"这类小尾巴
-            splitter = TokenTextSplitter(
-                chunk_tokens=chunk_tokens,
-                tail_merge_threshold_ratio=0.5,
-                tail_merge_cap_ratio=1.5,
-            )
-            return splitter.split_with_info(parsed.full_text)
+        from agents.utility_agent import UtilityAgent
 
-        chunks, chunk_info = await run_in_threadpool(_split_text)
+        prepared = await run_in_threadpool(
+            UtilityAgent.prepare_chat_attachment,
+            user_id=user_id,
+            project_name=project_name,
+            file_path=tmp_path,
+            filename=file.filename or "",
+            chunk_tokens=chunk_tokens,
+            estimate_model=estimate_model,
+        )
 
-        attachment_id: str | None = None
-        chunk_count = len(chunks)
-        total_tokens_estimated = int(chunk_info.get("total_tokens_estimated") or 0)
-        from agents.attachment import save_attachment
-
-        def _persist():
-            meta = save_attachment(
-                user_id=user_id,
-                project_name=project_name,
-                filename=parsed.filename or (file.filename or ""),
-                source_format=parsed.source_format,
-                full_text=parsed.full_text,
-                chunks=[c.text for c in chunks],
-                total_tokens=total_tokens_estimated,
-            )
-            return meta.attachment_id
-
-        try:
-            attachment_id = await run_in_threadpool(_persist)
-        except Exception as e:
-            print(f"[import] 附件落盘失败: {e}")
-            return JSONResponse(status_code=500, content={"error": f"聊天附件保存失败: {e}"})
-
-        if not attachment_id:
+        if not prepared.attachment_id:
             return JSONResponse(status_code=500, content={"error": "聊天附件保存失败：attachment_id 为空"})
 
         # 附件落盘成功后，按统一策略后台异步补一轮语义增量更新。
@@ -190,26 +179,26 @@ async def parse_import_file(
 
         return {
             "success": True,
-            "attachment_id": attachment_id,
-            "filename": parsed.filename,
-            "source_format": parsed.source_format,
-            "full_text": parsed.full_text,
+            "attachment_id": prepared.attachment_id,
+            "filename": prepared.parsed.filename,
+            "source_format": prepared.parsed.source_format,
+            "full_text": prepared.parsed.full_text,
             "sections": [
                 {
                     "section_type": section.section_type,
                     "title": section.title,
                     "estimated_tokens": section.estimated_tokens,
                 }
-                for section in parsed.sections
+                for section in prepared.parsed.sections
             ],
             "warnings": [
                 {
                     "code": warning.code,
                     "message": warning.message,
                 }
-                for warning in parsed.warnings
+                for warning in prepared.parsed.warnings
             ],
-            "metadata": parsed.metadata,
+            "metadata": prepared.parsed.metadata,
             "chunks": [
                 {
                     "text": chunk.text,
@@ -219,10 +208,10 @@ async def parse_import_file(
                     "estimated_tokens": chunk.estimated_tokens,
                     "previous_tail": chunk.previous_tail,
                 }
-                for chunk in chunks
+                for chunk in prepared.chunks
             ],
-            "chunk_info": chunk_info,
-            "chunk_count": chunk_count,
+            "chunk_info": prepared.chunk_info,
+            "chunk_count": prepared.chunk_count,
         }
     except UnsupportedImportFormatError as e:
         return JSONResponse(status_code=400, content={"error": str(e)})

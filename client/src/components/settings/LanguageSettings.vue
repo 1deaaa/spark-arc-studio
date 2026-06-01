@@ -1,5 +1,5 @@
 <template>
-  <div class="settings-section">
+  <div class="settings-section language-settings">
     <h3>{{ t('settings.language.title') }}</h3>
     <p class="section-desc">{{ t('settings.language.description') }}</p>
 
@@ -68,14 +68,12 @@ const localeOptions = computed(() => [
   margin-top: 8px;
 }
 
-@media (max-width: 768px) {
-  .settings-section {
-    padding: 4px 6px;
-    margin-bottom: 8px;
-    background: transparent;
-    border: none;
-    border-radius: 0;
-  }
+:global(html.viewport-mobile .language-settings) {
+  padding: 4px 6px;
+  margin-bottom: 8px;
+  background: transparent;
+  border: none;
+  border-radius: var(--spark-radius);
 }
 
 @media (max-width: 480px) {

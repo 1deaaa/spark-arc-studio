@@ -26,7 +26,7 @@
 import { defineStore } from 'pinia';
 import { i18n } from '@/i18n';
 
-import { getChatHistory, sendChatMessageStream, clearChatHistory, deleteChatMessage, removeChatMessageAttachment, editChatMessageStream, getChatTaskStatus, getChatRecentTasks, cancelChatTask, reconnectChatTaskStream } from '@/services/chatService';
+import { getChatHistory, sendChatMessageStream, clearChatHistory, compactChatContext, deleteChatMessage, removeChatMessageAttachment, editChatMessageStream, getChatTaskStatus, getChatRecentTasks, cancelChatTask, reconnectChatTaskStream } from '@/services/chatService';
 import { useProjectStore } from './projectStore';
 import bus from '@/eventBus';
 import { createStreamingTask } from '@/utils/streamingRuntime';
@@ -58,6 +58,23 @@ type ChatImportedContext = {
   isPartial: boolean;
   warnings: Array<{ code: string; message: string }>;
   uploadedAt: number;
+};
+
+type ContextWindowStats = {
+  agentId: string;
+  inputTokens: number;
+  outputTokens: number;
+  originalTokens: number;
+  retainedMessages: number;
+  model: string;
+  compacted: boolean;
+  reason: string;
+};
+
+type TokenUsageStats = {
+  promptTokens: number;
+  completionTokens: number;
+  totalTokens: number;
 };
 
 type ChatSession = {
@@ -98,6 +115,10 @@ type ChatSession = {
   importedContext: ChatImportedContext | null;
   /** 最近一次聊天任务真实 LLM token 总数（后端 usage log 聚合，null 表示未统计） */
   contextTokenCount: number | null;
+  /** 最近一次聊天任务真实输入/输出 token（所有 Agent/请求聚合） */
+  contextTokenUsage: TokenUsageStats | null;
+  /** 最近一次实际塞入当前 Agent LLM 窗口的请求 token 统计 */
+  contextWindowStats: ContextWindowStats | null;
 };
 
 type ChatStoreState = {
@@ -164,6 +185,8 @@ function _createSession(id: number, agentId = 'agent_director', kind: ChatSessio
     attachments: [],
     importedContext: null,
     contextTokenCount: null,
+    contextTokenUsage: null,
+    contextWindowStats: null,
   };
 }
 
@@ -238,22 +261,61 @@ function _delay(ms: number) {
 }
 
 function _extractLlmUsageTotal(payload: AnyRecord | null | undefined): number | null {
+  const usageStats = _extractLlmUsageStats(payload);
+  return usageStats?.totalTokens ?? null;
+}
+
+function _extractLlmUsageStats(payload: AnyRecord | null | undefined): TokenUsageStats | null {
   if (!payload || typeof payload !== 'object') return null;
   const usage = payload.llm_usage || payload.llmUsage || payload.metadata?.llm_usage || payload.metadata?.llmUsage;
   if (!usage || typeof usage !== 'object') return null;
+  const promptTokens = Number(usage.prompt_tokens ?? usage.promptTokens ?? 0) || 0;
+  const completionTokens = Number(usage.completion_tokens ?? usage.completionTokens ?? 0) || 0;
   const rawTotal = usage.total_tokens ?? usage.totalTokens;
   const total = rawTotal != null
     ? Number(rawTotal)
-    : Number(usage.prompt_tokens ?? usage.promptTokens ?? 0) + Number(usage.completion_tokens ?? usage.completionTokens ?? 0);
-  return Number.isFinite(total) && total >= 0 ? total : null;
+    : promptTokens + completionTokens;
+  if (!Number.isFinite(total) || total < 0) return null;
+  return {
+    promptTokens: Math.max(0, promptTokens),
+    completionTokens: Math.max(0, completionTokens),
+    totalTokens: Math.max(0, total),
+  };
+}
+
+function _extractAgentCompletionTokens(payload: AnyRecord | null | undefined, agentId: string): number | null {
+  if (!payload || typeof payload !== 'object' || !agentId) return null;
+  const usage = payload.llm_usage || payload.llmUsage || payload.metadata?.llm_usage || payload.metadata?.llmUsage;
+  const byAgent = usage?.by_agent || usage?.byAgent;
+  const agentUsage = byAgent?.[agentId];
+  if (!agentUsage || typeof agentUsage !== 'object') return null;
+  const value = Number(agentUsage.completion_tokens ?? agentUsage.completionTokens ?? 0);
+  return Number.isFinite(value) && value >= 0 ? value : null;
+}
+
+function _extractContextWindowStats(evt: AnyRecord): ContextWindowStats {
+  return {
+    agentId: String(evt.agent_id || evt.agentId || evt.source_agent || evt.sourceAgent || ''),
+    inputTokens: Number(evt.input_tokens ?? evt.inputTokens ?? 0) || 0,
+    outputTokens: Number(evt.output_tokens ?? evt.outputTokens ?? 0) || 0,
+    originalTokens: Number(evt.original_tokens ?? evt.originalTokens ?? 0) || 0,
+    retainedMessages: Number(evt.retained_messages ?? evt.retainedMessages ?? 0) || 0,
+    model: String(evt.model || ''),
+    compacted: !!evt.compacted,
+    reason: String(evt.reason || ''),
+  };
 }
 
 function _latestHistoryLlmUsageTotal(history: AnyRecord[] = []): number | null {
+  return _latestHistoryLlmUsageStats(history)?.totalTokens ?? null;
+}
+
+function _latestHistoryLlmUsageStats(history: AnyRecord[] = []): TokenUsageStats | null {
   for (let i = history.length - 1; i >= 0; i -= 1) {
     const message = history[i];
     if (message?.role !== 'assistant') continue;
-    const total = _extractLlmUsageTotal(message);
-    if (total != null) return total;
+    const usage = _extractLlmUsageStats(message);
+    if (usage != null) return usage;
   }
   return null;
 }
@@ -736,6 +798,14 @@ export const useChatStore = defineStore('chat', {
       const sessionId = state.primarySessionBindings[_getPrimaryScopeKey(state.primaryAgentId, state.primaryContextKey)];
       return state.sessions[sessionId]?.contextTokenCount ?? null;
     },
+    contextTokenUsage: (state: ChatStoreState) => {
+      const sessionId = state.primarySessionBindings[_getPrimaryScopeKey(state.primaryAgentId, state.primaryContextKey)];
+      return state.sessions[sessionId]?.contextTokenUsage ?? null;
+    },
+    contextWindowStats: (state: ChatStoreState) => {
+      const sessionId = state.primarySessionBindings[_getPrimaryScopeKey(state.primaryAgentId, state.primaryContextKey)];
+      return state.sessions[sessionId]?.contextWindowStats ?? null;
+    },
 
     // ---------- 多窗口 getter ----------
     /** 所有额外会话（不含主会话） */
@@ -972,6 +1042,12 @@ export const useChatStore = defineStore('chat', {
       await this.clearSession(session.id);
     },
 
+    async compactContext(targetTokens = 8000) {
+      const session = this._getPrimarySession();
+      if (!session) return;
+      await this.compactSessionContext(session.id, targetTokens);
+    },
+
     async deleteMessage(messageId) {
       const session = this._getPrimarySession();
       if (!session) return;
@@ -1048,6 +1124,8 @@ export const useChatStore = defineStore('chat', {
           s.loading = false;
           s.importedContext = null;
           s.contextTokenCount = null;
+          s.contextTokenUsage = null;
+          s.contextWindowStats = null;
           s.historyRequestSeq = (s.historyRequestSeq || 0) + 1;
         }
       }
@@ -1073,6 +1151,8 @@ export const useChatStore = defineStore('chat', {
       session.loading = false;
       session.importedContext = null;
       session.contextTokenCount = null;
+      session.contextTokenUsage = null;
+      session.contextWindowStats = null;
       session.historyRequestSeq += 1;
       return true;
     },
@@ -1088,6 +1168,8 @@ export const useChatStore = defineStore('chat', {
         session.loading = false;
         session.importedContext = null;
         session.contextTokenCount = null;
+        session.contextTokenUsage = null;
+        session.contextWindowStats = null;
         session.historyRequestSeq += 1;
       }
     },
@@ -1171,7 +1253,8 @@ export const useChatStore = defineStore('chat', {
         const fallbackAssistant = authoritative ? null : preserveLocalTail;
         const localHistory = authoritative ? [] : session.history;
         session.history = reconcileSessionHistory(rawHistory || [], fallbackAssistant, localHistory);
-        session.contextTokenCount = _latestHistoryLlmUsageTotal(session.history);
+        session.contextTokenUsage = _latestHistoryLlmUsageStats(session.history);
+        session.contextTokenCount = session.contextTokenUsage?.totalTokens ?? null;
         // 历史中存在附件且 session.attachments 为空时，恢复完整列表（多附件场景下也能正确还原）。
         if ((session.attachments?.length || 0) === 0) {
           const restored = _findLatestImportedContexts(session.history);
@@ -1226,6 +1309,8 @@ export const useChatStore = defineStore('chat', {
       session.retryMaxRetries = 3;
       session.retryErrorSummary = '';
       session.contextTokenCount = null;
+      session.contextTokenUsage = null;
+      session.contextWindowStats = null;
 
       try {
         const resolvedContext = contextOverride || (() => {
@@ -1647,6 +1732,45 @@ export const useChatStore = defineStore('chat', {
       }
     },
 
+    async compactSessionContext(sessionId, targetTokens = 8000) {
+      const session = this.sessions[sessionId];
+      if (!session || session.sending) return;
+      const projectStore = useProjectStore();
+      const projectName = projectStore.currentProject;
+      if (!projectName) return;
+      const loadingTarget = sessionId === PRIMARY_SESSION_ID ? 'chat-primary' : `chat-session-${sessionId}`;
+      const task = createStreamingTask('chat', {
+        target: loadingTarget,
+        text: i18n.global.t('components.chatPanel.compactingContext'),
+        progress: i18n.global.t('components.chatPanel.compactingContextProgress'),
+        canCancel: false,
+        showStats: true,
+        statsMode: 'elapsed',
+      });
+      try {
+        const result = await compactChatContext(projectName, session.agentId, session.contextKey, targetTokens) as AnyRecord;
+        const nextStats = result.contextWindowStats || result.context_window_stats;
+        if (nextStats && typeof nextStats === 'object') {
+          session.contextWindowStats = _extractContextWindowStats({
+            event: 'context_window_stats',
+            agent_id: session.agentId,
+            ...nextStats,
+          });
+        } else {
+          session.contextWindowStats = null;
+        }
+        await this.refreshSessionHistory(sessionId, 80, { silent: true, authoritative: true });
+        bus.emit('toast', { type: 'success', message: i18n.global.t('components.chatPanel.compactContextSuccess') });
+      } catch (e: unknown) {
+        const message = _getErrorMessage(e, i18n.global.t('components.chatPanel.compactContextFailed'));
+        bus.emit('toast', { type: 'error', message });
+        throw e;
+      } finally {
+        task.hide();
+        task.dispose();
+      }
+    },
+
     /** 移除消息的附件上下文（不删除消息本身）。
      *
      * 多附件场景下可选传入 ``attachmentId`` 精确指定要删除的附件；不传时
@@ -1757,6 +1881,8 @@ export const useChatStore = defineStore('chat', {
       session.retryMaxRetries = 3;
       session.retryErrorSummary = '';
       session.contextTokenCount = null;
+      session.contextTokenUsage = null;
+      session.contextWindowStats = null;
       try {
         // 立即在本地截断该消息之后的回复
         const index = session.history.findIndex(m => m.id === targetMessage.id);
@@ -2129,6 +2255,34 @@ export const useChatStore = defineStore('chat', {
         syncAssistantSnapshot();
       };
 
+      const appendContextCompactionSegment = (evt: AnyRecord) => {
+        ensureAssistantAdded();
+        const segs = assistantMsg.segments;
+        const eventType = String(evt.event || '');
+        const status = eventType === 'context_compaction_finished'
+          ? 'finished'
+          : eventType === 'context_compaction_failed'
+            ? 'failed'
+            : 'running';
+        const payload = {
+          type: 'context_compaction',
+          status,
+          original_tokens: Number(evt.original_tokens ?? evt.originalTokens ?? 0) || 0,
+          compacted_tokens: Number(evt.compacted_tokens ?? evt.compactedTokens ?? 0) || 0,
+          retained_messages: Number(evt.retained_messages ?? evt.retainedMessages ?? 0) || 0,
+          model: String(evt.model || ''),
+          reason: String(evt.reason || ''),
+          message: String(evt.message || ''),
+        };
+        const existingIdx = segs.findIndex(seg => seg.type === 'context_compaction' && seg.status === 'running');
+        if (existingIdx >= 0) {
+          segs[existingIdx] = { ...segs[existingIdx], ...payload };
+        } else {
+          segs.push(payload);
+        }
+        syncAssistantSnapshot();
+      };
+
       const onToolCallStart = (toolName: string, progressText: string, status = 'started', evt: AnyRecord = {}) => {
         if (!isStreamCurrent()) return;
         if (!toolName) return;
@@ -2202,9 +2356,10 @@ export const useChatStore = defineStore('chat', {
         if (evt.metadata && typeof evt.metadata === 'object') {
           assistantMsg.metadata = { ...(assistantMsg.metadata || {}), ...evt.metadata };
         }
-        const usageTotal = _extractLlmUsageTotal(evt);
-        if (usageTotal != null) {
-          session.contextTokenCount = usageTotal;
+        const usageStats = _extractLlmUsageStats(evt);
+        if (usageStats != null) {
+          session.contextTokenUsage = usageStats;
+          session.contextTokenCount = usageStats.totalTokens;
         }
         ensureAssistantAdded();
         syncAssistantSnapshot();
@@ -2251,18 +2406,32 @@ export const useChatStore = defineStore('chat', {
           applyTaskSnapshot(evt);
           return;
         }
+        if (eventType === 'context_window_stats') {
+          session.contextWindowStats = _extractContextWindowStats(evt);
+          return;
+        }
         if (eventType === 'task_done') {
           streamState.receivedTaskDone = true;
           session.backgroundTaskStatus = null;
           session.sending = false;
-          const usageTotal = _extractLlmUsageTotal(evt);
-          if (usageTotal != null) {
-            session.contextTokenCount = usageTotal;
+          const usageStats = _extractLlmUsageStats(evt);
+          if (usageStats != null) {
+            session.contextTokenUsage = usageStats;
+            session.contextTokenCount = usageStats.totalTokens;
             assistantMsg.metadata = {
               ...(assistantMsg.metadata || {}),
               llm_usage: evt.llm_usage || evt.llmUsage,
             };
             syncAssistantSnapshot();
+          }
+          if (session.contextWindowStats) {
+            const agentOutput = _extractAgentCompletionTokens(evt, session.contextWindowStats.agentId);
+            if (agentOutput != null) {
+              session.contextWindowStats = {
+                ...session.contextWindowStats,
+                outputTokens: agentOutput,
+              };
+            }
           }
           if (evt.status === 'error') {
             session.lastError = String(evt.error || session.lastError || _defaultBackgroundTaskError());
@@ -2276,6 +2445,11 @@ export const useChatStore = defineStore('chat', {
           session.retryAttempt = Number(evt.attempt || 0) || null;
           session.retryMaxRetries = Number(evt.max_retries ?? evt.maxRetries ?? session.retryMaxRetries ?? 3) || 3;
           session.retryErrorSummary = String(evt.error_summary || evt.errorSummary || '');
+          return;
+        }
+        if (eventType === 'context_compaction_started' || eventType === 'context_compaction_finished' || eventType === 'context_compaction_failed') {
+          assistantMsg.streamSeq = Number(evt.seq ?? assistantMsg.streamSeq ?? 0) || assistantMsg.streamSeq;
+          appendContextCompactionSegment(evt);
           return;
         }
         if (eventType === 'reasoning_delta') {

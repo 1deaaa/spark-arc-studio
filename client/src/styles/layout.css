@@ -6,6 +6,10 @@
     background-color: var(--spark-bg);
 }
 
+html.platform-mobile-shell .container {
+    height: 100dvh;
+}
+
 header.app-header {
     display: grid;
     grid-template-columns: auto 1fr auto;
@@ -20,6 +24,11 @@ header.app-header {
     position: relative;
     transition: background-color 0.3s, color 0.3s, box-shadow 0.3s;
     z-index: 10;
+}
+
+html.platform-mobile-shell header.app-header {
+    padding-top: var(--sat, 0px);
+    height: calc(60px + var(--sat, 0px));
 }
 
 .header-left, .header-right {

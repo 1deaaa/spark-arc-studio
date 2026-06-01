@@ -191,6 +191,7 @@ import { computed, nextTick, onBeforeUnmount, onMounted, ref, watch, type PropTy
 import { useI18n } from 'vue-i18n';
 import AgentAvatar from '@/components/share/AgentAvatar.vue';
 import { useAgentRegistry } from '@/composables/useAgentRegistry';
+import { TABLET_MAX_WIDTH } from '@/utils/responsive';
 
 type RadialOption = {
   value: string;
@@ -234,7 +235,7 @@ const wheelCenter = ref({ x: 0, y: 0 });
 // 在弱 GPU 移动端，这是首次打开轮盘卡顿的主要根因
 const overlayStable = ref(false);
 
-const viewportWidth = ref(typeof window !== 'undefined' ? window.innerWidth : 1024);
+const viewportWidth = ref(typeof window !== 'undefined' ? window.innerWidth : TABLET_MAX_WIDTH);
 const isCompactViewport = computed(() => viewportWidth.value < 600);
 
 const effectiveRadius = computed(() => isCompactViewport.value ? Math.min(props.radius, 112) : props.radius);

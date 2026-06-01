@@ -7,6 +7,7 @@
  * - mid: 默认档，保留核心视觉
  * - low: 高像素负载或用户偏好减少动态，最小视觉
  */
+import { getViewportSnapshot } from './responsive';
 
 export type GpuTier = 'high' | 'mid' | 'low';
 
@@ -36,8 +37,8 @@ function getEffectivePixelLoad(): number {
 export function isMobileDevice(): boolean {
   const ua = navigator.userAgent;
   const isMobileUa = /Android|iPhone|iPad|iPod|Opera Mini|IEMobile|Mobile/i.test(ua);
-  const isSmallScreen = window.innerWidth < 768;
-  return isMobileUa || (isSmallScreen && hasCoarsePointer());
+  const snapshot = getViewportSnapshot();
+  return isMobileUa || (snapshot.tier === 'mobile' && snapshot.hasCoarsePointer);
 }
 
 /** 检测初始性能档 */

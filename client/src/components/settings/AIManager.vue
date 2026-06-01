@@ -1,5 +1,5 @@
 <template>
-    <div class="settings-section">
+    <div class="settings-section ai-manager">
         <div class="section-header">
             <div class="header-title-group">
                 <h3>{{ t('components.aiManager.title') }}</h3>
@@ -26,9 +26,7 @@
                 <n-tooltip trigger="hover" placement="top">
                     <template #trigger>
                         <div class="status-icon-wrapper" :class="{ active: systemConfig.billing_enabled }">
-                            <n-icon size="18">
-                                <Zap />
-                            </n-icon>
+                            <SparkIcon :size="16" color="auto" />
                             <span class="status-text">
                                 {{ systemConfig.billing_enabled ? t('components.aiManager.status.billingOn') : t('components.aiManager.status.billingOff') }}
                             </span>

@@ -270,6 +270,33 @@ def _get_gemini_local_counter(cache_key: str, model_name: str) -> Optional[Calla
         return None
 
 
+_GEMINI_LOCAL_TOKENIZER_CANDIDATES = (
+    "gemini-3-flash-preview",
+    "gemini-3-pro-preview",
+    "gemini-2.5-flash",
+)
+
+
+def _get_gemini_local_counter_with_fallback(
+    cache_key: str,
+    model_name: Optional[str],
+) -> Optional[Callable[[str], int]]:
+    """优先尝试 Gemini 3 Flash，本地 SDK 不支持时回退到同代/次代可用模型。"""
+    candidates: list[str] = []
+    normalized = str(model_name or "").strip()
+    if normalized and "gemini" in normalized.lower() and "-" in normalized:
+        candidates.append(normalized)
+    for candidate in _GEMINI_LOCAL_TOKENIZER_CANDIDATES:
+        if candidate not in candidates:
+            candidates.append(candidate)
+
+    for candidate in candidates:
+        counter = _get_gemini_local_counter(cache_key, candidate)
+        if counter is not None:
+            return counter
+    return None
+
+
 # -----------------------------------------------------------------------------
 # 模型规则
 # keys 只保留“模型族名 / 公司名”
@@ -348,10 +375,11 @@ MODEL_RULES = [
         "name": "gemini",
         "keys": ("gemini",),
         "vocab_size": 256000,
-        # Python 官方 SDK 已提供 LocalTokenizer；若本地未安装 google-genai，则回退估算
-        "exact_loader": lambda model: _get_gemini_local_counter(
+        # Python 官方 SDK 已提供 LocalTokenizer；优先尝试 Gemini 3 Flash，
+        # 当前环境若尚未支持该具体型号，再回退到同代/次代可用模型。
+        "exact_loader": lambda model: _get_gemini_local_counter_with_fallback(
             "exact::gemini",
-            model if model and "gemini" in model.lower() and "-" in model else "gemini-2.5-flash"
+            model,
         ),
         "fallback_encoder": _get_cl100k,
         "fallback_factors": (1.00, 0.72, 0.90),

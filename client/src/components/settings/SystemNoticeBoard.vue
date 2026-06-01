@@ -1,5 +1,5 @@
 <template>
-    <div class="settings-section notice-board" :class="{ collapsed: isCollapsed }">
+    <div class="settings-section notice-board system-notice-board" :class="{ collapsed: isCollapsed }">
         <div class="notice-header">
             <div class="header-left" @click="toggleCollapse">
                 <h3>{{ t('components.systemNoticeBoard.title') }}</h3>
@@ -588,23 +588,24 @@ onMounted(async () => {
     display: block;
 }
 
-@media (max-width: 768px) {
-    .settings-section {
-        margin-bottom: 8px;
-        border: none;
-        border-radius: 0;
-        background: transparent;
-    }
-    .notice-board {
-        border-left: none;
-        border-top: 2px solid var(--spark-primary);
-    }
-    .notice-header {
-        padding: 8px 6px;
-    }
-    .notice-content-wrapper {
-        padding: 0 6px 12px;
-    }
+:global(html.viewport-mobile .system-notice-board.settings-section) {
+    margin-bottom: 8px;
+    border: none;
+    border-radius: var(--spark-radius);
+    background: transparent;
+}
+
+:global(html.viewport-mobile .system-notice-board.notice-board) {
+    border-left: none;
+    border-top: 2px solid var(--spark-primary);
+}
+
+:global(html.viewport-mobile .system-notice-board .notice-header) {
+    padding: 8px 6px;
+}
+
+:global(html.viewport-mobile .system-notice-board .notice-content-wrapper) {
+    padding: 0 6px 12px;
 }
 
 @media (max-width: 480px) {

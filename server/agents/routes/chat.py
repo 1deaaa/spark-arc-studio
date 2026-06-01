@@ -67,11 +67,13 @@ from core.request_context import (
 )
 
 from agents.agent_factory import create_agent_instance
+from agents.context_budget import CHAT_HISTORY_FETCH_LIMIT
 from agents.chat_manager import ChatManager
 
 from .schemas import (
     ChatSendRequest, ChatMessageEditRequest, ChatTaskCancelRequest,
     ChatMessageAttachmentRemoveRequest,
+    ChatContextCompactRequest,
     _resolve_effective_active_context,
 )
 from .chat_attachment import (
@@ -328,26 +330,85 @@ def _collect_chat_task_llm_usage(entry: ChatTaskEntry) -> Dict[str, Any] | None:
                 func.coalesce(func.sum(UsageLogEntry.prompt_tokens), 0).label("prompt_tokens"),
                 func.coalesce(func.sum(UsageLogEntry.completion_tokens), 0).label("completion_tokens"),
                 func.coalesce(func.sum(UsageLogEntry.total_tokens), 0).label("total_tokens"),
+                func.coalesce(func.sum(UsageLogEntry.cached_prompt_tokens), 0).label("cached_prompt_tokens"),
                 func.count(UsageLogEntry.id).label("requests"),
                 func.coalesce(func.sum(1 - UsageLogEntry.success), 0).label("errors"),
             ).filter(
                 UsageLogEntry.user_id == str(entry.user_id),
                 UsageLogEntry.context_key == usage_context,
             ).first()
+            agent_rows = session.query(
+                UsageLogEntry.agent_name.label("agent_name"),
+                func.coalesce(func.sum(UsageLogEntry.prompt_tokens), 0).label("prompt_tokens"),
+                func.coalesce(func.sum(UsageLogEntry.completion_tokens), 0).label("completion_tokens"),
+                func.coalesce(func.sum(UsageLogEntry.total_tokens), 0).label("total_tokens"),
+                func.coalesce(func.sum(UsageLogEntry.cached_prompt_tokens), 0).label("cached_prompt_tokens"),
+                func.count(UsageLogEntry.id).label("requests"),
+                func.coalesce(func.sum(1 - UsageLogEntry.success), 0).label("errors"),
+            ).filter(
+                UsageLogEntry.user_id == str(entry.user_id),
+                UsageLogEntry.context_key == usage_context,
+            ).group_by(UsageLogEntry.agent_name).all()
     except Exception:
         return None
 
     requests = int(result.requests or 0) if result is not None else 0
     if requests <= 0:
         return None
+    by_agent = {}
+    for row in agent_rows or []:
+        agent_name = str(row.agent_name or "").strip() or "unknown"
+        by_agent[agent_name] = {
+            "prompt_tokens": int(row.prompt_tokens or 0),
+            "completion_tokens": int(row.completion_tokens or 0),
+            "total_tokens": int(row.total_tokens or 0),
+            "cached_prompt_tokens": int(row.cached_prompt_tokens or 0),
+            "requests": int(row.requests or 0),
+            "errors": int(row.errors or 0),
+        }
+
     return {
         "prompt_tokens": int(result.prompt_tokens or 0),
         "completion_tokens": int(result.completion_tokens or 0),
         "total_tokens": int(result.total_tokens or 0),
+        "cached_prompt_tokens": int(result.cached_prompt_tokens or 0),
         "requests": requests,
         "errors": int(result.errors or 0),
+        "by_agent": by_agent,
         "source": "usage_log",
     }
+
+
+def _visible_chat_history(history: list[dict]) -> list[dict]:
+    return [item for item in history if item.get("role") != "system"]
+
+
+def _context_summary_plain_text(summary: Dict[str, Any]) -> str:
+    if not isinstance(summary, dict):
+        return str(summary or "").strip()
+    lines: list[str] = []
+    title_map = {
+        "summary": "摘要",
+        "user_goal": "用户目标",
+        "current_progress": "当前进度",
+        "important_facts": "重要事实",
+        "decisions": "已定决策",
+        "open_tasks": "待办事项",
+        "recent_turns": "近期上下文",
+        "tool_results": "工具结果",
+        "handoff_notes": "交接提醒",
+    }
+    for key, title in title_map.items():
+        value = summary.get(key)
+        if value in (None, "", [], {}):
+            continue
+        lines.append(f"{title}：")
+        if isinstance(value, list):
+            lines.extend(f"- {str(item).strip()}" for item in value if str(item).strip())
+        else:
+            lines.append(str(value).strip())
+        lines.append("")
+    return "\n".join(lines).strip()
 
 
 def _checkpoint_chat_task(cm: ChatManager, entry: ChatTaskEntry, *, force: bool = False, stream_status: str | None = None) -> None:
@@ -415,7 +476,7 @@ async def get_chat_history(
 
     cm = ChatManager(user_id=user_id, project_name=project_name)
     history = cm.get_history(agent_id=agentId, context_key=contextKey, limit=limit)
-    return {'success': True, 'history': history}
+    return {'success': True, 'history': _visible_chat_history(history)}
 
 
 @chat_router.delete('/api/chat/history')
@@ -434,6 +495,113 @@ async def clear_chat_history(
     cm = ChatManager(user_id=user_id, project_name=project_name)
     ok = cm.clear_session(agent_id=agentId, context_key=contextKey)
     return {'success': True, 'cleared': ok}
+
+
+@chat_router.post('/api/chat/context/compact')
+async def compact_chat_context(data: ChatContextCompactRequest, user: dict = Depends(get_current_user)):
+    """手动压缩当前 Agent + contextKey 的聊天上下文为内部摘要。"""
+    user_id = str(user['user_id'])
+    project_name = resolve_project_name(get_current_project_name(), data.projectName)
+    if not project_name:
+        return JSONResponse(status_code=400, content={'error': '缺少项目名称'})
+
+    cm = ChatManager(user_id=user_id, project_name=project_name)
+    history = cm.get_history(agent_id=data.agentId, context_key=data.contextKey, limit=CHAT_HISTORY_FETCH_LIMIT)
+    compactible_history = [
+        {
+            "role": item.get("role"),
+            "content": item.get("content"),
+        }
+        for item in history
+        if item.get("role") in {"user", "assistant"} and str(item.get("content") or "").strip()
+    ]
+    if not compactible_history:
+        return {'success': True, 'compacted': False, 'message': '当前会话没有可压缩的上下文'}
+
+    try:
+        from agents.utility_agent import UtilityAgent
+        from llm.agen_matchbox import matchbox
+
+        llm = matchbox().get_user_llm(user_id, agent_name=data.agentId)
+        model_name = str(getattr(getattr(llm, "usage", None), "model_name", "") or getattr(llm, "model_name", "") or "")
+        target_tokens = max(1200, min(int(data.targetTokens or 8000), 24000))
+
+        utility = UtilityAgent(user_id=user_id, project_name=project_name)
+        summary = await run_in_threadpool(
+            utility.compress_chat_history,
+            history_items=compactible_history,
+            agent_id=data.agentId,
+            model_name=model_name,
+            target_tokens=target_tokens,
+            current_user_message="用户手动触发上下文压缩。",
+        )
+        summary_text = _context_summary_plain_text(summary)
+        summary_json = json.dumps(summary, ensure_ascii=False, indent=2)
+        try:
+            from llm.agen_matchbox.estimate_tokens import estimate_tokens
+            summary_tokens = int(estimate_tokens(summary_json, model=model_name))
+            original_tokens = int(estimate_tokens(json.dumps(compactible_history, ensure_ascii=False), model=model_name))
+        except Exception:
+            summary_tokens = 0
+            original_tokens = 0
+        msg = cm.append_message(
+            agent_id=data.agentId,
+            context_key=data.contextKey,
+            role='system',
+            content=summary_json,
+            metadata={
+                "kind": "context_summary",
+                "source": "manual_compaction",
+                "original_messages": len(compactible_history),
+                "target_tokens": target_tokens,
+                "model": model_name,
+                "created_at": int(time.time()),
+            },
+        )
+        notice = cm.append_message(
+            agent_id=data.agentId,
+            context_key=data.contextKey,
+            role='assistant',
+            content='',
+            metadata={
+                "kind": "context_compaction_notice",
+                "channel": "manual_compaction",
+                "segments": [
+                    {
+                        "type": "context_compaction_summary",
+                        "status": "finished",
+                        "summary_text": summary_text,
+                        "summary_message_id": msg.id,
+                        "original_messages": len(compactible_history),
+                        "compacted_tokens": summary_tokens,
+                        "model": model_name,
+                    }
+                ],
+            },
+        )
+        return {
+            'success': True,
+            'compacted': True,
+            'summaryMessageId': msg.id,
+            'noticeMessageId': notice.id,
+            'originalMessages': len(compactible_history),
+            'targetTokens': target_tokens,
+            'summaryText': summary_text,
+            'contextWindowStats': {
+                'agent_id': data.agentId,
+                'input_tokens': summary_tokens,
+                'original_tokens': original_tokens,
+                'retained_messages': 1,
+                'model': model_name,
+                'compacted': True,
+                'reason': 'manual_context_compacted',
+            },
+        }
+    except Exception as e:
+        import traceback
+        traceback.print_exc()
+        from .schemas import format_ai_error
+        return JSONResponse(status_code=500, content={'error': format_ai_error(e)})
 
 
 @chat_router.delete('/api/chat/message')
@@ -647,7 +815,7 @@ async def edit_chat_message(data: ChatMessageEditRequest, user: dict = Depends(g
 
         # 统一实例化 Agent（包括导演）并获取回复
         # get_history 返回的历史已含编辑后的用户消息，需移除以避免与 data.content 双喂
-        history = cm.get_history(agent_id=data.agentId, context_key=data.contextKey, limit=10)
+        history = cm.get_history(agent_id=data.agentId, context_key=data.contextKey, limit=CHAT_HISTORY_FETCH_LIMIT)
         if history and history[-1].get('role') == 'user':
             history = history[:-1]
 
@@ -755,7 +923,7 @@ async def edit_chat_message_stream(request: Request, data: ChatMessageEditReques
     _checkpoint_chat_task(cm, entry, force=True, stream_status='running')
 
     # get_history 返回的历史已含编辑后的用户消息，需移除以避免与 data.content 双喂
-    history = cm.get_history(agent_id=data.agentId, context_key=data.contextKey, limit=10)
+    history = cm.get_history(agent_id=data.agentId, context_key=data.contextKey, limit=CHAT_HISTORY_FETCH_LIMIT)
     if history and history[-1].get('role') == 'user':
         history = history[:-1]
     agent_inst = create_agent_instance(data.agentId, user_id, project_name)
@@ -861,7 +1029,7 @@ async def send_chat_message(data: ChatSendRequest, user: dict = Depends(get_curr
     cm = ChatManager(user_id=user_id, project_name=project_name)
 
     # 1. 先取历史（不含当前消息），避免双喂
-    history = cm.get_history(agent_id=agent_id, context_key=context_key, limit=10)
+    history = cm.get_history(agent_id=agent_id, context_key=context_key, limit=CHAT_HISTORY_FETCH_LIMIT)
 
     # 2. 保存用户消息到 DB
     cm.append_message(
@@ -946,7 +1114,7 @@ async def send_chat_message_stream(request: Request, data: ChatSendRequest, user
     cm = ChatManager(user_id=user_id, project_name=project_name)
 
     # 先取历史（不含当前消息），避免双喂
-    history = cm.get_history(agent_id=agent_id, context_key=context_key, limit=10)
+    history = cm.get_history(agent_id=agent_id, context_key=context_key, limit=CHAT_HISTORY_FETCH_LIMIT)
 
     # 保存用户消息到 DB（在取历史之后，确保 history 不含当前消息）
     cm.append_message(

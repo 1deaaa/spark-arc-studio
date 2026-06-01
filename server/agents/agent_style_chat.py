@@ -14,8 +14,6 @@ Style 聊天 Agent
 import json
 from typing import Any, Dict, List, Optional
 
-from langchain_core.messages import AIMessage, HumanMessage, SystemMessage
-
 from core.request_context import get_current_project_name, resolve_project_name
 from llm.agen_matchbox.reasoning_compat import (
     extract_reasoning_text_from_message,
@@ -31,6 +29,7 @@ from .agent_style import (
     resolve_project_style_author_id,
 )
 from .communication import SparkBaseAgent, is_stop_event_set
+from .context_budget import prepare_chat_messages_with_budget
 from .language_policy import prepend_prompt_language_policy
 
 
@@ -166,23 +165,15 @@ class StyleChatAgent(SparkBaseAgent):
         history: Optional[List[Dict[str, Any]]] = None,
         active_context: Optional[str] = None,
     ):
-        messages = [SystemMessage(content=self._build_style_system_prompt(active_context=active_context, user_message=user_message))]
-
-        if history:
-            for msg in history[-10:]:
-                role = msg.get("role")
-                content = msg.get("content")
-                if not content:
-                    continue
-                if isinstance(content, dict):
-                    content = json.dumps(content, ensure_ascii=False)
-                if role == "user":
-                    messages.append(HumanMessage(content=str(content)))
-                elif role == "assistant":
-                    messages.append(AIMessage(content=str(content)))
-
-        messages.append(HumanMessage(content=user_message))
-        return messages
+        return prepare_chat_messages_with_budget(
+            user_id=self.user_id,
+            project_name=self.project_name or "",
+            agent_id=self.agent_id,
+            system_instruction=self._build_style_system_prompt(active_context=active_context, user_message=user_message),
+            history=history,
+            user_message=user_message,
+            llm_client=self.llm,
+        ).messages
 
     def chat(self, user_message: str, history: List[Dict[str, Any]] = None, active_context: str = None) -> str:
         if not active_context:

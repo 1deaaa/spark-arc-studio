@@ -61,30 +61,39 @@ def get_capabilities_payload() -> dict:
     }
 
 
-def parse_uploaded_file(file_path: str, filename: str | None = None) -> ParsedDocument:
+def parse_uploaded_file(
+    file_path: str,
+    filename: str | None = None,
+    estimate_model: str | None = None,
+) -> ParsedDocument:
     suffix = Path(filename or file_path).suffix.lower()
     if suffix not in SUPPORTED_IMPORT_FORMATS:
         raise UnsupportedImportFormatError(f"仅支持 {', '.join(get_supported_formats('general'))} 文件")
 
     if suffix in {".txt", ".md"}:
-        parsed = _parse_text_like_file(file_path, suffix, filename)
+        parsed = _parse_text_like_file(file_path, suffix, filename, estimate_model=estimate_model)
     elif suffix == ".docx":
-        parsed = _parse_docx_file(file_path, filename)
+        parsed = _parse_docx_file(file_path, filename, estimate_model=estimate_model)
     elif suffix == ".epub":
-        parsed = _parse_epub_file(file_path, filename)
+        parsed = _parse_epub_file(file_path, filename, estimate_model=estimate_model)
     else:
-        parsed = _parse_pdf_file(file_path, filename)
+        parsed = _parse_pdf_file(file_path, filename, estimate_model=estimate_model)
 
     if not parsed.full_text.strip():
         raise ImportTextEmptyError("无法从文件中提取文本")
     return parsed
 
 
-def _parse_text_like_file(file_path: str, suffix: str, filename: str | None = None) -> ParsedDocument:
+def _parse_text_like_file(
+    file_path: str,
+    suffix: str,
+    filename: str | None = None,
+    estimate_model: str | None = None,
+) -> ParsedDocument:
     with open(file_path, "rb") as f:
         raw_bytes = f.read()
     full_text, encoding_meta = decode_text_bytes(raw_bytes)
-    sections = _build_text_sections(full_text, suffix)
+    sections = _build_text_sections(full_text, suffix, estimate_model=estimate_model)
     return ParsedDocument(
         filename=filename or os.path.basename(file_path),
         source_format=suffix,
@@ -94,7 +103,11 @@ def _parse_text_like_file(file_path: str, suffix: str, filename: str | None = No
     )
 
 
-def _parse_docx_file(file_path: str, filename: str | None = None) -> ParsedDocument:
+def _parse_docx_file(
+    file_path: str,
+    filename: str | None = None,
+    estimate_model: str | None = None,
+) -> ParsedDocument:
     document = Document(file_path)
     sections: list[DocumentSection] = []
     current_title = ""
@@ -113,7 +126,7 @@ def _parse_docx_file(file_path: str, filename: str | None = None) -> ParsedDocum
                         section_type="heading",
                         title=current_title,
                         metadata={"style_name": style_name},
-                        estimated_tokens=estimate_text_tokens(section_text),
+                        estimated_tokens=estimate_text_tokens(section_text, model=estimate_model),
                     )
                 )
             current_lines = []
@@ -133,7 +146,7 @@ def _parse_docx_file(file_path: str, filename: str | None = None) -> ParsedDocum
                     text=section_text,
                     section_type="heading" if current_title else "paragraph_group",
                     title=current_title,
-                    estimated_tokens=estimate_text_tokens(section_text),
+                    estimated_tokens=estimate_text_tokens(section_text, model=estimate_model),
                 )
             )
 
@@ -146,7 +159,11 @@ def _parse_docx_file(file_path: str, filename: str | None = None) -> ParsedDocum
     )
 
 
-def _parse_epub_file(file_path: str, filename: str | None = None) -> ParsedDocument:
+def _parse_epub_file(
+    file_path: str,
+    filename: str | None = None,
+    estimate_model: str | None = None,
+) -> ParsedDocument:
     chapter_texts = extract_text_from_epub(file_path, merge_short_chapters=False, min_chunk_size=3000)
     sections = [
         DocumentSection(
@@ -154,7 +171,7 @@ def _parse_epub_file(file_path: str, filename: str | None = None) -> ParsedDocum
             section_type="chapter",
             title="",
             metadata={"chapter_index": index},
-            estimated_tokens=estimate_text_tokens(chapter_text),
+            estimated_tokens=estimate_text_tokens(chapter_text, model=estimate_model),
         )
         for index, chapter_text in enumerate(chapter_texts)
         if normalize_text(chapter_text)
@@ -168,7 +185,11 @@ def _parse_epub_file(file_path: str, filename: str | None = None) -> ParsedDocum
     )
 
 
-def _parse_pdf_file(file_path: str, filename: str | None = None) -> ParsedDocument:
+def _parse_pdf_file(
+    file_path: str,
+    filename: str | None = None,
+    estimate_model: str | None = None,
+) -> ParsedDocument:
     reader = PdfReader(file_path)
     page_texts: list[str] = []
     for page in reader.pages:
@@ -181,7 +202,7 @@ def _parse_pdf_file(file_path: str, filename: str | None = None) -> ParsedDocume
             section_type="page",
             title=f"第 {index + 1} 页",
             metadata={"page_index": index},
-            estimated_tokens=estimate_text_tokens(page_text),
+            estimated_tokens=estimate_text_tokens(page_text, model=estimate_model),
         )
         for index, page_text in enumerate(cleaned_pages)
         if page_text
@@ -204,7 +225,11 @@ def _parse_pdf_file(file_path: str, filename: str | None = None) -> ParsedDocume
     )
 
 
-def _build_text_sections(full_text: str, suffix: str) -> list[DocumentSection]:
+def _build_text_sections(
+    full_text: str,
+    suffix: str,
+    estimate_model: str | None = None,
+) -> list[DocumentSection]:
     blocks = [normalize_text(block) for block in re.split(r"\n\s*\n+", full_text) if normalize_text(block)]
     sections: list[DocumentSection] = []
     current_lines: list[str] = []
@@ -220,7 +245,7 @@ def _build_text_sections(full_text: str, suffix: str) -> list[DocumentSection]:
                         text=section_text,
                         section_type="heading" if current_title else "paragraph_group",
                         title=current_title,
-                        estimated_tokens=estimate_text_tokens(section_text),
+                        estimated_tokens=estimate_text_tokens(section_text, model=estimate_model),
                     )
                 )
             current_lines = []
@@ -236,7 +261,7 @@ def _build_text_sections(full_text: str, suffix: str) -> list[DocumentSection]:
                     text=section_text,
                     section_type="heading" if current_title else "paragraph_group",
                     title=current_title,
-                    estimated_tokens=estimate_text_tokens(section_text),
+                    estimated_tokens=estimate_text_tokens(section_text, model=estimate_model),
                 )
             )
 
@@ -257,12 +282,16 @@ def _extract_heading(block: str, suffix: str) -> str:
     return ""
 
 
-def parse_uploaded_bytes(raw_bytes: bytes, filename: str) -> ParsedDocument:
+def parse_uploaded_bytes(
+    raw_bytes: bytes,
+    filename: str,
+    estimate_model: str | None = None,
+) -> ParsedDocument:
     suffix = Path(filename).suffix.lower()
     if suffix in {".txt", ".md"}:
         tmp_path = BytesIO(raw_bytes)
         full_text, encoding_meta = decode_text_bytes(tmp_path.getvalue())
-        sections = _build_text_sections(full_text, suffix)
+        sections = _build_text_sections(full_text, suffix, estimate_model=estimate_model)
         return ParsedDocument(
             filename=filename,
             source_format=suffix,

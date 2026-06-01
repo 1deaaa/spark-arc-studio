@@ -510,26 +510,24 @@
 }
 
 /* --- 移动端适配 --- */
-@media (max-width: 768px) {
-    .title-content h1 {
-        font-size: 2rem;
-    }
-    
-    .dialogue-box {
-        width: 95%;
-        padding: 20px 25px;
-        min-height: 220px; /* 手机上留更多空间给文字 */
-    }
+:global(html.viewport-mobile .player-container .title-content h1) {
+    font-size: 2rem;
+}
 
-    .text-content {
-        font-size: 1.1rem;
-    }
+:global(html.viewport-mobile .player-container .dialogue-box) {
+    width: 95%;
+    padding: 20px 25px;
+    min-height: 220px; /* 手机上留更多空间给文字 */
+}
 
-    .choice-btn {
-        padding: 15px 20px;
-    }
-    
-    .name-tag-wrapper {
-        left: 20px;
-    }
+:global(html.viewport-mobile .player-container .text-content) {
+    font-size: 1.1rem;
+}
+
+:global(html.viewport-mobile .player-container .choice-btn) {
+    padding: 15px 20px;
+}
+
+:global(html.viewport-mobile .player-container .name-tag-wrapper) {
+    left: 20px;
 }
