@@ -23,7 +23,7 @@
             size="tiny"
             type="primary"
             secondary
-            :disabled="!museResult || isGenerating"
+            :disabled="!museResult || isGenerating || isCurrentInspirationBound"
             @click="handlePinInspiration"
           >
             <template #icon><n-icon :component="Pin" /></template>
@@ -34,7 +34,7 @@
             type="primary"
             secondary
             :disabled="!museResult || isGenerating"
-            @click="handleGenerateFromMuse"
+            @click="handleGenerateSettingsAndScroll"
           >
             <template #icon><n-icon :component="Sparkles" /></template>
             {{ t('views.world.desktop.generateSettings') }}
@@ -82,9 +82,10 @@
             size="tiny"
             type="primary"
             :disabled="!museResult || isGenerating"
-            @click="goToSynopsis"
+            @click="handleGenerateSettingsAndScroll"
           >
-            {{ t('views.world.mobile.fillToSynopsis') }}
+            <template #icon><n-icon :component="ArrowRight" /></template>
+            {{ t('views.world.desktop.generateSettings') }}
           </n-button>
           <n-button size="tiny" quaternary @click="museResult = ''">{{ t('views.world.mobile.clear') }}</n-button>
         </div>
@@ -114,14 +115,15 @@
 
 <script setup lang="ts">
 import { ref } from 'vue';
-import { NInput, NButton, NIcon, NDrawer, NDrawerContent } from 'naive-ui';
+import { NButton, NIcon, NDrawer, NDrawerContent } from 'naive-ui';
 import { useI18n } from 'vue-i18n';
-import { ChevronRight, Clock, Pin, Sparkles, Zap } from '@lucide/vue';
+import { ArrowRight, ChevronRight, Clock, Pin, Sparkles, Zap } from '@lucide/vue';
 import HistoryPanel from '../../components/dlg-editor/HistoryPanel.vue';
 import GlobalLoading from '../../components/share/GlobalLoading.vue';
 import InspireTagSelector from '../../components/lorebook/InspireTagSelector.vue';
 import MobileTextArea from '../../components/share/MobileTextArea.vue';
 import { useWorldLogic } from '../../composables/useWorldLogic';
+import { scrollToFlowStep } from '../../utils/mobileFlow';
 
 const { t } = useI18n();
 const showHistory = ref(false);
@@ -132,6 +134,7 @@ const {
   museResult,
   museHistoryRef,
   isGenerating,
+  isCurrentInspirationBound,
   selectedGenres,
   selectedTones,
   selectedWorldviews,
@@ -141,8 +144,13 @@ const {
   handleMuseHistorySelect,
   handleGenerateFromMuse,
   handlePinInspiration,
-  goToSynopsis
 } = useWorldLogic();
+
+function handleGenerateSettingsAndScroll() {
+  void handleGenerateFromMuse({
+    beforeGenerate: () => scrollToFlowStep(2),
+  });
+}
 </script>
 
 <style scoped>
@@ -179,11 +187,13 @@ const {
 .header-actions {
   display: flex;
   align-items: center;
+  flex-wrap: wrap;
+  justify-content: flex-end;
   gap: 6px;
   margin-left: auto;
 }
 
-.section-header .n-button {
+.section-header > .n-button {
   margin-left: auto;
 }
 

@@ -1,7 +1,8 @@
 import bus from '@/eventBus';
 import { defineStore } from 'pinia';
-import { fetchProjects, createProject, deleteProject, renameProject, refreshSemanticSearchProject } from '@/services/api';
+import { fetchProjects, createProject, deleteProject, renameProject, refreshSemanticSearchProject, getInspirations } from '@/services/api';
 import { getUserId } from '@/services/apiClient';
+import type { InspirationEntry } from '@/services/aiContracts';
 import { useFileStore } from './fileStore';
 import { useCharacterStore } from './characterStore';
 import { useChatStore } from './chatStore';
@@ -42,15 +43,32 @@ type PendingSynopsisAdoption = {
   logline?: string;
   inspiration?: string;
   lengthHint?: unknown;
+  pov?: string;
+  autoGenerateSynopsis?: boolean;
+  autoGenerateBeats?: boolean;
   [key: string]: unknown;
 };
+
+type PendingStructureAdoption = {
+  projectName?: string;
+  context?: string;
+  guidance?: string;
+  autoGenerateOutline?: boolean;
+  [key: string]: unknown;
+};
+
+type BoundInspirationEntry = Pick<InspirationEntry, 'id' | 'source' | 'content'>;
 
 type ProjectStoreState = {
   projects: string[];
   _currentProject: string | null;
   currentInspiration: string;
   currentInspirationId: string | null;
+  boundInspiration: string;
+  boundInspirationSource: string;
+  boundInspirationId: string | null;
   pendingSynopsisAdoption: PendingSynopsisAdoption | null;
+  pendingStructureAdoption: PendingStructureAdoption | null;
 };
 
 export const useProjectStore = defineStore('project', {
@@ -59,7 +77,11 @@ export const useProjectStore = defineStore('project', {
     _currentProject: null,
     currentInspiration: '', // 当前灵感，供大纲页面使用
     currentInspirationId: null,
+    boundInspiration: '',
+    boundInspirationSource: '',
+    boundInspirationId: null,
     pendingSynopsisAdoption: null,
+    pendingStructureAdoption: null,
   }),
   getters: {
     currentProject: (state): string => state._currentProject || '',
@@ -140,6 +162,11 @@ export const useProjectStore = defineStore('project', {
       // 清空灵感数据
       this.currentInspiration = '';
       this.currentInspirationId = null;
+      this.boundInspiration = '';
+      this.boundInspirationSource = '';
+      this.boundInspirationId = null;
+      this.pendingSynopsisAdoption = null;
+      this.pendingStructureAdoption = null;
 
       const fileStore = useFileStore();
       const chrStore = useCharacterStore();
@@ -150,12 +177,42 @@ export const useProjectStore = defineStore('project', {
         blueprintStore.loadBlueprint(this._currentProject);
         // 进入工作台/切换项目时统一触发一次语义索引差异检查（仅一次/每会话/每项目）
         triggerSemanticRefreshOnce(this._currentProject);
+        void this.refreshCurrentProjectInspiration(this._currentProject);
       } else {
         // 没有项目时清空文件树和蓝图
         fileStore.fileTree = [];
         fileStore.selectedFile = null;
         chrStore.load(null);
         blueprintStore.loadBlueprint(null);
+      }
+    },
+    applyBoundInspiration(entry: BoundInspirationEntry | null | undefined) {
+      const safeEntry = entry || null;
+      this.boundInspiration = safeEntry?.content || '';
+      this.boundInspirationSource = safeEntry?.source || '';
+      this.boundInspirationId = safeEntry?.id || null;
+    },
+    async refreshCurrentProjectInspiration(projectName?: string | null) {
+      const targetProject = typeof projectName === 'string'
+        ? projectName.trim()
+        : (this._currentProject || '').trim();
+      if (!targetProject) {
+        this.applyBoundInspiration(null);
+        return null;
+      }
+      try {
+        const result = await getInspirations({ scope: 'project', project: targetProject });
+        const entry = Array.isArray(result?.inspirations) ? result.inspirations[0] || null : null;
+        if (this._currentProject === targetProject) {
+          this.applyBoundInspiration(entry);
+        }
+        return entry;
+      } catch (error: unknown) {
+        console.warn('刷新当前项目绑定灵感失败:', error);
+        if (this._currentProject === targetProject) {
+          this.applyBoundInspiration(null);
+        }
+        return null;
       }
     },
     async createProject() {
@@ -221,6 +278,12 @@ export const useProjectStore = defineStore('project', {
     clearPendingSynopsisAdoption() {
       this.pendingSynopsisAdoption = null;
     },
+    setPendingStructureAdoption(payload: PendingStructureAdoption | null | undefined) {
+      this.pendingStructureAdoption = payload || null;
+    },
+    clearPendingStructureAdoption() {
+      this.pendingStructureAdoption = null;
+    },
     /**
      * 登出时重置项目状态，防止切换用户后残留旧项目名
      * 触发后端 ensure_project_* 副作用而意外创建幽灵项目目录。
@@ -230,7 +293,11 @@ export const useProjectStore = defineStore('project', {
       this.projects = [];
       this.currentInspiration = '';
       this.currentInspirationId = null;
+      this.boundInspiration = '';
+      this.boundInspirationSource = '';
+      this.boundInspirationId = null;
       this.pendingSynopsisAdoption = null;
+      this.pendingStructureAdoption = null;
       localStorage.removeItem(getLastProjectKey());
       // 登出后清空“已触发刷新”的项目集合，下个用户重新进入再触发
       semanticRefreshTriggeredProjects.clear();

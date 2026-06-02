@@ -13,34 +13,47 @@
       <div class="header-right">
         <n-dropdown trigger="click" :options="projectSwitchOptions" @select="handleProjectSwitch">
           <span class="tooltip-dropdown-trigger">
-            <n-tooltip trigger="hover">
-              <template #trigger>
-                <n-button quaternary circle size="small">
-                  <template #icon><n-icon :component="FolderOpen" /></template>
-                </n-button>
-              </template>
-              {{ t('mobileFlow.header.switchProject') }}
-            </n-tooltip>
+            <n-button
+              quaternary
+              circle
+              size="small"
+              :aria-label="t('mobileFlow.header.switchProject')"
+              :title="t('mobileFlow.header.switchProject')"
+            >
+              <template #icon><n-icon :component="FolderOpen" /></template>
+            </n-button>
           </span>
         </n-dropdown>
         <StoryTagsPanel />
-        <n-tooltip trigger="hover">
-          <template #trigger>
-            <n-button quaternary circle size="small" @click="openPublishDrawer">
-              <template #icon><n-icon :component="Share2" /></template>
-            </n-button>
-          </template>
-          {{ t('components.headerToolbar.publishTitle') }}
-        </n-tooltip>
-        <n-tooltip trigger="hover">
-          <template #trigger>
-            <n-button quaternary circle size="small" @click="quickPreview" :loading="previewing">
-              <template #icon><n-icon :component="Play" /></template>
-            </n-button>
-          </template>
-          {{ t('components.headerToolbar.quickPreviewTitle') }}
-        </n-tooltip>
-        <n-button quaternary circle size="small" @click="openSettings">
+        <n-button
+          quaternary
+          circle
+          size="small"
+          :aria-label="t('components.headerToolbar.publishTitle')"
+          :title="t('components.headerToolbar.publishTitle')"
+          @click="openPublishDrawer"
+        >
+          <template #icon><n-icon :component="Share2" /></template>
+        </n-button>
+        <n-button
+          quaternary
+          circle
+          size="small"
+          :aria-label="t('components.headerToolbar.quickPreviewTitle')"
+          :title="t('components.headerToolbar.quickPreviewTitle')"
+          @click="quickPreview"
+          :loading="previewing"
+        >
+          <template #icon><n-icon :component="Play" /></template>
+        </n-button>
+        <n-button
+          quaternary
+          circle
+          size="small"
+          :aria-label="t('mobileFlow.drawer.tabs.settings')"
+          :title="t('mobileFlow.drawer.tabs.settings')"
+          @click="openSettings"
+        >
           <template #icon><n-icon :component="Settings" /></template>
         </n-button>
       </div>
@@ -168,7 +181,7 @@
 
 <script setup lang="ts">
 import { ref, computed, onMounted, onUnmounted, provide, watch, h, nextTick } from 'vue';
-import { NButton, NIcon, NDrawer, NDrawerContent, NTabs, NTabPane, NDropdown, NModal, NCard, NTooltip, type DropdownOption, useDialog } from 'naive-ui';
+import { NButton, NIcon, NDrawer, NDrawerContent, NTabs, NTabPane, NDropdown, type DropdownOption, useDialog } from 'naive-ui';
 import { Archive, CircleCheckBig, CirclePlus, FolderOpen, PaintBucket, Play, Settings, Share2, SquarePen, Trash } from '@lucide/vue';
 import { useI18n } from 'vue-i18n';
 
@@ -518,22 +531,34 @@ onUnmounted(() => {
   background: color-mix(in srgb, var(--spark-panel-bg) 85%, transparent);
   backdrop-filter: blur(16px);
   border-bottom: 1px solid color-mix(in srgb, var(--spark-border) 50%, transparent);
+  overflow-x: hidden;
 }
 
 .header-left, .header-right {
   width: 48px;
   display: flex;
   justify-content: center;
+  flex-shrink: 0;
 }
 
 .header-left {
   justify-content: flex-start;
 }
 
+.header-center {
+  flex: 1;
+  min-width: 0;
+  display: flex;
+  justify-content: center;
+}
+
 .header-right {
   justify-content: flex-end;
   gap: 4px;
   width: auto;
+  min-width: 0;
+  max-width: calc(100% - 96px);
+  overflow: hidden;
 }
 
 .app-logo-link {
@@ -555,9 +580,15 @@ onUnmounted(() => {
 
 
 .current-step-label {
+  display: block;
   font-weight: 600;
   font-size: var(--spark-fs-md);
   color: var(--spark-text);
+  min-width: 0;
+  max-width: 100%;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
 }
 
 /* 滚动容器 */

@@ -168,6 +168,19 @@ def director_node(state: DirectorState) -> Dict[str, Any]:
     messages_with_system = [SystemMessage(content=system_instruction)] + list(messages)
     # -------------------------------------------------------------------
     
+    current_user_message = ""
+    for message in reversed(messages):
+        if isinstance(message, HumanMessage):
+            content = getattr(message, "content", "")
+            if isinstance(content, str):
+                current_user_message = content
+            else:
+                try:
+                    current_user_message = json.dumps(content, ensure_ascii=False)
+                except Exception:
+                    current_user_message = str(content)
+            break
+
     stream_events = []
     try:
         from agents.context_budget import rebudget_existing_messages
@@ -180,7 +193,7 @@ def director_node(state: DirectorState) -> Dict[str, Any]:
             messages=messages_with_system,
             llm_client=base_stream_llm,
             emit_event=budget_events.append,
-            current_user_message=user_message,
+            current_user_message=current_user_message,
         ).messages
         for evt in budget_events:
             evt["source_agent"] = "agent_director"

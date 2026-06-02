@@ -15,18 +15,12 @@
           @update:value="onAgentSelected"
           @rerun="$emit('rerun')"
         />
-        <div v-if="contextTokenLabel || contextWindowLabel" class="chat-token-meter">
+        <div v-if="contextTokenLabel" class="chat-token-meter">
           <n-tooltip v-if="contextTokenLabel" trigger="hover">
             <template #trigger>
               <span class="chat-token-chip">{{ contextTokenLabel }}</span>
             </template>
             {{ t('components.chatPanel.taskTokenHint') }}
-          </n-tooltip>
-          <n-tooltip v-if="contextWindowLabel" trigger="hover">
-            <template #trigger>
-              <span class="chat-token-chip is-window">{{ contextWindowLabel }}</span>
-            </template>
-            {{ t('components.chatPanel.windowTokenHint') }}
           </n-tooltip>
         </div>
         <n-popconfirm
@@ -310,18 +304,6 @@ const contextTokenLabel = computed(() => {
   const total = Number(props.contextTokenCount ?? 0);
   if (!Number.isFinite(total) || total <= 0) return '';
   return t('components.chatPanel.taskTokenLabel', { tokens: formatTokenCount(total) });
-});
-
-const contextWindowLabel = computed(() => {
-  const stats = props.contextWindowStats;
-  if (!stats) return '';
-  const input = Number(stats.inputTokens ?? 0) || 0;
-  const output = Number(stats.outputTokens ?? 0) || 0;
-  if (input <= 0 && output <= 0) return '';
-  return t('components.chatPanel.windowTokenLabel', {
-    input: formatTokenCount(input),
-    output: formatTokenCount(output),
-  });
 });
 
 /** AgentRadialPicker 选中 Agent 时透传给上层（轮盘自身会自动关闭） */

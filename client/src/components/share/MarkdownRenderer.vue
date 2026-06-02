@@ -102,7 +102,7 @@ function renderMarkdown(text) {
     'update_character': '修改角色',
     'updatecharacter': '修改角色',
     'rewrite_synopsis': '重写梗概',
-    'rewrite_beat_sheet': '重写节拍',
+    'rewrite_beat_sheet': '重写节奏',
     'rewrite_outline': '重写大纲',
     'create_or_rewrite_script': '重写剧本',
   };

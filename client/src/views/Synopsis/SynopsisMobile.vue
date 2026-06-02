@@ -26,7 +26,7 @@
             type="primary"
             :loading="isGenerating"
             :disabled="!synopsisData.logline?.trim()"
-            @click="handleGenerateSynopsis"
+            @click="handleGenerateSynopsisClick"
           >
             <template #icon><n-icon :component="Sparkles" /></template>
             {{ t('views.synopsis.mobile.generateFullSynopsis') }}
@@ -45,13 +45,13 @@
     <!-- 梗概内容 -->
     <div class="flow-section content-section" v-if="synopsisData.synopsis_text || isGenerating">
       <GlobalLoading scope="synopsis" target="content" variant="card" />
-      <div class="section-header">
+        <div class="section-header">
         <n-icon :component="BookOpen" size="18" />
         <span>{{ t('views.synopsis.mobile.storySynopsis') }}</span>
         <div class="header-actions">
-          <n-button size="tiny" type="primary" @click="handleSave">
-            <template #icon><n-icon :component="Save" /></template>
-            {{ t('views.common.save') }}
+          <n-button size="tiny" type="primary" @click="goToStructureStep">
+            <template #icon><n-icon :component="ArrowRight" /></template>
+            {{ t('views.structure.mobile.generateOutline') }}
           </n-button>
           <n-button size="tiny" quaternary @click="synopsisData.synopsis_text = ''">{{ t('views.world.mobile.clear') }}</n-button>
         </div>
@@ -77,7 +77,7 @@
           ghost
           :loading="isGeneratingBeats"
           :disabled="!synopsisData.synopsis_text?.trim()"
-          @click="handleGenerateBeats"
+          @click="handleGenerateBeatsClick"
         >
           {{ t('views.synopsis.mobile.generateBeat') }}
         </n-button>
@@ -159,10 +159,11 @@ import { ref } from 'vue';
 import { NInput, NSelect, NButton, NIcon, NEmpty, NDrawer, NDrawerContent } from 'naive-ui';
 import { useI18n } from 'vue-i18n';
 import SparkTag from '../../components/share/SparkTag.vue';
-import { Activity, BookOpen, FileText, MessagesSquare, Save, Sparkles, X } from '@lucide/vue';
+import { Activity, ArrowRight, BookOpen, FileText, MessagesSquare, Sparkles, X } from '@lucide/vue';
 import { useSynopsisLogic } from '../../composables/useSynopsisLogic';
 import GlobalLoading from '../../components/share/GlobalLoading.vue';
 import MobileTextArea from '../../components/share/MobileTextArea.vue';
+import { scrollToFlowStep } from '../../utils/mobileFlow';
 
 const { t } = useI18n();
 const showBeatDetail = ref(false);
@@ -175,12 +176,27 @@ const {
   tensionOptions,
   getTensionHeight,
   getBeatColor,
-  handleSave,
   handleGenerateSynopsis,
   handleGenerateBeats,
   addBeat,
-  removeBeat
+  removeBeat,
+  goToStructure
 } = useSynopsisLogic();
+
+function handleGenerateSynopsisClick() {
+  void handleGenerateSynopsis();
+}
+
+function handleGenerateBeatsClick() {
+  void handleGenerateBeats();
+}
+
+function goToStructureStep() {
+  void goToStructure({
+    autoGenerateOutline: true,
+    beforeNavigate: () => scrollToFlowStep(4),
+  });
+}
 </script>
 
 <style scoped>
@@ -220,11 +236,13 @@ const {
 .header-actions {
   display: flex;
   align-items: center;
+  flex-wrap: wrap;
+  justify-content: flex-end;
   gap: 6px;
   margin-left: auto;
 }
 
-.section-header .n-button {
+.section-header > .n-button {
   margin-left: auto;
 }
 

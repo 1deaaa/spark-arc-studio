@@ -17,7 +17,7 @@
         <n-button type="primary" @click="handleSave">{{ t('views.common.saveAll') }}</n-button>
       </div>
       <div class="spark-desktop-header__right">
-        <n-button :disabled="!synopsisData.synopsis_text" size="small" secondary type="primary" @click="goToStructure">
+        <n-button :disabled="!synopsisData.synopsis_text" size="small" secondary type="primary" @click="goToStructure({ autoGenerateOutline: true })">
           {{ t('views.synopsis.desktop.nextStep') }}
           <template #icon><n-icon><ArrowRight /></n-icon></template>
         </n-button>
@@ -44,7 +44,7 @@
               type="primary" 
               size="small"
               :loading="isGenerating"
-              @click="handleGenerateSynopsis"
+              @click="handleGenerateSynopsisClick"
             >
               <template #icon><n-icon :component="Zap" /></template>
               {{ isGenerating ? t('views.common.generating') : t('views.synopsis.desktop.generateSynopsis') }}
@@ -70,7 +70,7 @@
               ghost 
               size="small"
               :loading="isGeneratingBeats"
-              @click="handleGenerateBeats"
+              @click="handleGenerateBeatsClick"
             >
               <template #icon><n-icon :component="Zap" /></template>
               {{ t('views.synopsis.desktop.generateBeatsFromSynopsis') }}
@@ -174,6 +174,14 @@ const {
   removeBeat,
   goToStructure
 } = useSynopsisLogic();
+
+function handleGenerateSynopsisClick() {
+  void handleGenerateSynopsis();
+}
+
+function handleGenerateBeatsClick() {
+  void handleGenerateBeats();
+}
 </script>
 
 <style scoped>

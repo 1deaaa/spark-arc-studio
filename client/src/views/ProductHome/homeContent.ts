@@ -114,7 +114,7 @@ export const ensemble = {
       name: 'Showrunner',
       zh: '文案策划',
       role: '给故事一副不会塌的骨架。',
-      work: '生成节拍表、树状大纲，控制幕结构。',
+      work: '生成节奏表、树状大纲，控制幕结构。',
       signature: 'agent_showrunner.py',
       seat: 'bottom-right',
     },
@@ -172,11 +172,11 @@ export const pipeline = {
     },
     {
       idx: '03',
-      zh: '节拍',
+      zh: '节奏',
       en: 'Beats',
       hollywood: 'Beat Sheet',
       desc: '故事的心跳。哪里紧，哪里松，哪里翻面。',
-      work: 'Showrunner 生成节拍表；你手动调张力曲线。',
+      work: 'Showrunner 生成节奏表；你手动调张力曲线。',
     },
     {
       idx: '04',
@@ -207,7 +207,7 @@ export const pipeline = {
     title: '当前工单 · 示例',
     fields: [
       { label: '场景', value: '废弃地铁站 · 凌晨 3:17' },
-      { label: '节拍', value: '主角首次见到反派' },
+      { label: '节奏', value: '主角首次见到反派' },
       { label: '情绪张力', value: '0.82 · 紧绷' },
       { label: 'Critic 等级', value: 'B · 对白解释腔略重' },
       { label: 'fix_ticket', value: '#0132 → 回到第 05 站' },

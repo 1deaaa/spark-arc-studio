@@ -11,9 +11,9 @@ import { useProjectStore } from '../components/stores/projectStore';
 import { useViewStore } from '../components/stores/viewStore';
 import bus from '../eventBus';
 import { createStreamingTask, consumeTextReader, isAbortLikeError } from '@/utils/streamingRuntime';
-import type { BeatSheetBeat, BeatSheetData, JsonObject } from '@/services/aiContracts';
+import type { BeatSheetBeat, BeatSheetData } from '@/services/aiContracts';
 import { parseSynopsisMarkup, parseBeatSheetMarkup, serializeSynopsisToMarkup, serializeBeatSheetToMarkup } from '../utils/markupSerializer';
-import type { SynopsisData as MarkupSynopsisData } from '../utils/markupSerializer';
+import { buildInspirationGuidance, extractLoglineFromInspiration } from '@/utils/inspiration';
 
 type SynopsisData = {
     title: string;
@@ -31,7 +31,14 @@ type InspirationAdoptionPayload = {
     logline?: string;
     inspiration?: string;
     lengthHint?: unknown;
+    pov?: string;
+    autoGenerateSynopsis?: boolean;
+    autoGenerateBeats?: boolean;
     [key: string]: unknown;
+};
+
+type GenerateOptions = {
+    skipOverwriteConfirm?: boolean;
 };
 
 function getErrorMessage(error: unknown) {
@@ -100,26 +107,44 @@ export function useSynopsisLogic() {
         if (!payload || typeof payload !== 'object') return;
         const data = payload as InspirationAdoptionPayload;
         if (data.projectName && data.projectName !== projectStore.currentProject) return;
-        if (data.logline) {
+        if (data.logline && !synopsisData.logline.trim()) {
             synopsisData.logline = data.logline;
         }
-        if (data.inspiration) {
-            synopsisData.guidance = `基于以下灵感扩展：\n${data.inspiration}`;
+        if (data.inspiration && !synopsisData.guidance.trim()) {
+            synopsisData.guidance = buildInspirationGuidance(data.inspiration);
         }
-        if (data.lengthHint) {
+        if (data.lengthHint && currentLengthHint.value == null) {
             currentLengthHint.value = data.lengthHint;
         }
-        if (data.pov) {
+        if (data.pov && !synopsisData.narrative_pov.trim()) {
             synopsisData.narrative_pov = data.pov as string;
         }
     };
 
-    const consumePendingSynopsisAdoption = () => {
+    function applyBoundInspirationIfNeeded() {
+        const boundInspiration = (projectStore.boundInspiration || '').trim();
+        if (!boundInspiration) return;
+        if (!synopsisData.logline.trim()) {
+            synopsisData.logline = extractLoglineFromInspiration(boundInspiration);
+        }
+        if (!synopsisData.guidance.trim()) {
+            synopsisData.guidance = buildInspirationGuidance(boundInspiration);
+        }
+    }
+
+    const consumePendingSynopsisAdoption = async () => {
         const pending = projectStore.pendingSynopsisAdoption as InspirationAdoptionPayload | null;
         if (!pending) return;
         if (pending.projectName && pending.projectName !== projectStore.currentProject) return;
-        handleAdoptInspiration(pending);
         projectStore.clearPendingSynopsisAdoption();
+        handleAdoptInspiration(pending);
+        if (pending.autoGenerateSynopsis) {
+            const synopsisGenerated = await handleGenerateSynopsis({ skipOverwriteConfirm: true });
+            if (!synopsisGenerated) return;
+        }
+        if (pending.autoGenerateBeats && synopsisData.synopsis_text.trim()) {
+            await handleGenerateBeats({ skipOverwriteConfirm: true });
+        }
     };
 
     const handleSynopsisRefresh = () => {
@@ -158,6 +183,7 @@ export function useSynopsisLogic() {
                 beatSheet.beats = [];
                 beatSheet.global_emotional_arc = '';
             }
+            applyBoundInspirationIfNeeded();
         } catch (e) {
             console.error('Failed to load project data:', e);
         }
@@ -182,7 +208,7 @@ export function useSynopsisLogic() {
                 saveSynopsis(projectStore.currentProject, synMarkup),
                 saveBeatSheet(projectStore.currentProject, bMarkup)
             ]);
-            message.success('梗概与节拍表已保存');
+            message.success('梗概与节奏表已保存');
         } catch (e: unknown) {
             message.error('保存失败: ' + getErrorMessage(e));
         } finally {
@@ -190,8 +216,22 @@ export function useSynopsisLogic() {
         }
     }
 
-    async function handleGenerateSynopsis() {
-        if (!projectStore.currentProject) return;
+    async function handleGenerateSynopsis(options: GenerateOptions = {}) {
+        if (!projectStore.currentProject) return false;
+        if (synopsisData.synopsis_text.trim() && !options.skipOverwriteConfirm) {
+            const shouldOverwrite = await new Promise<boolean>((resolve) => {
+                dialog.warning({
+                    title: '确认覆盖',
+                    content: '当前梗概已有内容，继续生成将覆盖现有梗概。是否继续？',
+                    positiveText: '覆盖并生成',
+                    negativeText: '取消',
+                    onPositiveClick: () => resolve(true),
+                    onNegativeClick: () => resolve(false),
+                    onClose: () => resolve(false),
+                });
+            });
+            if (!shouldOverwrite) return false;
+        }
         isGenerating.value = true;
         synopsisData.synopsis_text = '';
         const task = createStreamingTask('synopsis', {
@@ -224,7 +264,7 @@ export function useSynopsisLogic() {
                 }
             });
 
-            if (task.aborted) return;
+            if (task.aborted) return false;
 
             // 流结束后，解析 Markup 元数据
             try {
@@ -239,30 +279,32 @@ export function useSynopsisLogic() {
             }
 
             message.success('梗概已生成');
+            return true;
         } catch (e: unknown) {
             if (isAbortLikeError(e)) {
                 message.info('已取消生成');
-                return;
+                return false;
             }
             message.error('生成失败: ' + getErrorMessage(e));
+            return false;
         } finally {
             isGenerating.value = false;
             task.dispose();
         }
     }
 
-    async function handleGenerateBeats() {
-        if (!projectStore.currentProject) return;
+    async function handleGenerateBeats(options: GenerateOptions = {}) {
+        if (!projectStore.currentProject) return false;
         if (!synopsisData.synopsis_text) {
             message.warning('请先生成或编写梗概');
-            return;
+            return false;
         }
 
-        if (Array.isArray(beatSheet.beats) && beatSheet.beats.length > 0) {
+        if (Array.isArray(beatSheet.beats) && beatSheet.beats.length > 0 && !options.skipOverwriteConfirm) {
             const shouldOverwrite = await new Promise<boolean>((resolve) => {
                 dialog.warning({
                     title: '确认覆盖',
-                    content: '当前节拍表已有内容，继续生成将覆盖现有节拍。是否继续？',
+                    content: '当前节奏表已有内容，继续生成将覆盖现有节奏。是否继续？',
                     positiveText: '覆盖并生成',
                     negativeText: '取消',
                     onPositiveClick: () => resolve(true),
@@ -270,13 +312,13 @@ export function useSynopsisLogic() {
                     onClose: () => resolve(false)
                 });
             });
-            if (!shouldOverwrite) return;
+            if (!shouldOverwrite) return false;
         }
 
         isGeneratingBeats.value = true;
         const task = createStreamingTask('synopsis', {
             target: 'beats',
-            text: '正在从梗概生成节拍表...',
+            text: '正在从梗概生成节奏表...',
             progress: '请稍候',
             canCancel: true,
         });
@@ -291,26 +333,28 @@ export function useSynopsisLogic() {
                 currentLengthHint.value,
                 {
                     signal: task.signal,
-                    onChunk: (chunk) => task.push(chunk, '正在从梗概生成节拍表...')
+                    onChunk: (chunk) => task.push(chunk, '正在从梗概生成节奏表...')
                 }
             );
-            if (task.aborted) return;
+            if (task.aborted) return false;
             if (result && result.beats) {
                 beatSheet.beats = result.beats;
                 beatSheet.global_emotional_arc = result.global_emotional_arc;
                 // 序列化为 Markup 保存
                 const bMarkup = serializeBeatSheetToMarkup(result);
                 await saveBeatSheet(projectStore.currentProject, bMarkup);
-                message.success('节拍表已生成');
+                message.success('节奏表已生成');
+                return true;
             } else {
-                throw new Error('生成结果缺少有效节拍数据');
+                throw new Error('生成结果缺少有效节奏数据');
             }
         } catch (e: unknown) {
             if (isAbortLikeError(e)) {
                 message.info('已取消生成');
-                return;
+                return false;
             }
             message.error('生成失败: ' + getErrorMessage(e));
+            return false;
         } finally {
             isGeneratingBeats.value = false;
             task.dispose();
@@ -332,8 +376,11 @@ export function useSynopsisLogic() {
         beatSheet.beats.splice(index, 1);
     }
 
-    async function goToStructure() {
-        if (!synopsisData.synopsis_text) return message.warning('请先生成或编写梗概');
+    async function goToStructure(options: { autoGenerateOutline?: boolean; beforeNavigate?: () => void } = {}) {
+        if (!synopsisData.synopsis_text) {
+            message.warning('请先生成或编写梗概');
+            return false;
+        }
 
         // 在离开前自动保存当前页面的梗概和节拍表，确保下一个页面能读取到最新数据
         try {
@@ -342,9 +389,14 @@ export function useSynopsisLogic() {
             console.warn('自动保存失败，但不影响跳转:', e);
         }
 
-
         const synopsisContext = (synopsisData.synopsis_text || '').trim();
         const synopsisGuidance = (synopsisData.pacing_guide || '').trim();
+        const adoptionPayload = {
+            projectName: projectStore.currentProject,
+            context: synopsisContext,
+            guidance: synopsisGuidance,
+            autoGenerateOutline: !!options.autoGenerateOutline,
+        };
 
         // 检查是否已有大纲
         try {
@@ -353,14 +405,19 @@ export function useSynopsisLogic() {
                 return new Promise<void>((resolve) => {
                     dialog.warning({
                         title: '确认前往',
-                        content: '大纲页面已有内容。如果您在大纲页执行\u201c重新生成\u201d，当前梗概将覆盖现有大纲。是否确定前往？',
-                        positiveText: '确定前往',
+                        content: options.autoGenerateOutline
+                            ? '大纲页面已有内容，继续将覆盖现有大纲。是否继续？'
+                            : '大纲页面已有内容。如果您在大纲页执行“重新生成”，当前梗概将覆盖现有大纲。是否确定前往？',
+                        positiveText: options.autoGenerateOutline ? '覆盖并继续' : '确定前往',
                         negativeText: '取消',
                         onPositiveClick: () => {
-                            bus.emit('adopt-synopsis', { context: synopsisContext, guidance: synopsisGuidance });
+                            options.beforeNavigate?.();
+                            projectStore.setPendingStructureAdoption(adoptionPayload);
+                            bus.emit('adopt-synopsis', adoptionPayload);
                             viewStore.setView('structure');
                             resolve();
-                        }
+                        },
+                        onClose: () => resolve(),
                     });
                 });
             }
@@ -369,8 +426,11 @@ export function useSynopsisLogic() {
         }
 
         // 无已有大纲，直接跳转并传递梗概
-        bus.emit('adopt-synopsis', { context: synopsisContext, guidance: synopsisGuidance });
+        options.beforeNavigate?.();
+        projectStore.setPendingStructureAdoption(adoptionPayload);
+        bus.emit('adopt-synopsis', adoptionPayload);
         viewStore.setView('structure');
+        return true;
     }
 
     // 简易防抖函数
@@ -423,19 +483,24 @@ export function useSynopsisLogic() {
     watch(() => projectStore.currentProject, async (newProj) => {
         if (newProj) {
             await loadFromProject();
-            consumePendingSynopsisAdoption();
+            void consumePendingSynopsisAdoption();
         }
     }, { immediate: false });
 
     watch(() => projectStore.pendingSynopsisAdoption, () => {
-        consumePendingSynopsisAdoption();
+        void consumePendingSynopsisAdoption();
+    });
+
+    watch(() => [projectStore.boundInspirationId, projectStore.boundInspiration], () => {
+        applyBoundInspirationIfNeeded();
     });
 
     onMounted(async () => {
         bus.on('adopt-inspiration', handleAdoptInspiration);
         bus.on('synopsis-refresh', handleSynopsisRefresh);
         await loadFromProject();
-        consumePendingSynopsisAdoption();
+        applyBoundInspirationIfNeeded();
+        void consumePendingSynopsisAdoption();
     });
 
     onBeforeUnmount(() => {

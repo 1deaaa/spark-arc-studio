@@ -852,7 +852,7 @@ export async function generateBeatSheet(projectName: string, synopsis: string, g
     throw new Error(getFriendlyErrorMessage(fullText));
   }
 
-  throw new Error('节拍表生成结果格式无法解析，请检查模型输出格式');
+  throw new Error('节奏表生成结果格式无法解析，请检查模型输出格式');
 }
 
 export async function generateOutline(projectName: string, context: string, guidance: string, options: StreamRequestOptions & {

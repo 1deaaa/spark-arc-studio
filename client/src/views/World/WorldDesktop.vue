@@ -12,7 +12,7 @@
         </div>
       </div>
       <div class="spark-desktop-header__right">
-        <n-button :disabled="!museResult || isGenerating" size="small" secondary type="primary" @click="goToSynopsis">
+        <n-button :disabled="!museResult || isGenerating" size="small" secondary type="primary" @click="goToSynopsis({ autoGenerateSynopsis: true, autoGenerateBeats: true })">
           {{ t('views.world.desktop.nextStep') }}
           <template #icon><n-icon :component="ArrowRight" /></template>
         </n-button>
@@ -118,7 +118,7 @@
                 <n-button
                   type="primary" secondary
                   class="action-btn"
-                  :disabled="!museResult || isGenerating"
+                  :disabled="!museResult || isGenerating || isCurrentInspirationBound"
                   @click="handlePinInspiration"
                 >
                   <template #icon><n-icon :component="Pin" /></template>
@@ -129,7 +129,7 @@
                   type="primary" secondary
                   class="action-btn"
                   :disabled="!museResult || isGenerating"
-                  @click="handleGenerateFromMuse"
+                  @click="handleGenerateFromMuseClick"
                 >
                   <template #icon><n-icon :component="Sparkles" /></template>
                   {{ t('views.world.desktop.generateSettings') }}
@@ -195,6 +195,10 @@ function handleSaveWorldview() {
   lorebookEditorRef.value?.saveWorldview();
 }
 
+function handleGenerateFromMuseClick() {
+  void handleGenerateFromMuse();
+}
+
 const {
   museInput,
   museLoading,
@@ -202,6 +206,7 @@ const {
   museHistoryRef,
   isGenerating,
   isHistoryCollapsed,
+  isCurrentInspirationBound,
   unreadCount,
   toggleHistoryCollapse,
   handleUnreadChange,

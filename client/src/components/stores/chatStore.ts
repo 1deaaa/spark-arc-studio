@@ -1372,10 +1372,6 @@ export const useChatStore = defineStore('chat', {
       session.retryAttempt = null;
       session.retryMaxRetries = 3;
       session.retryErrorSummary = '';
-      session.contextTokenCount = null;
-      session.contextTokenUsage = null;
-      session.contextWindowStats = null;
-
       try {
         const resolvedContext = contextOverride || (() => {
           const { activeContext, activeMeta } = _resolveActiveContext(this._contextProvider, session.attachments);
@@ -1771,6 +1767,11 @@ export const useChatStore = defineStore('chat', {
       await clearChatHistory(projectName, session.agentId, session.contextKey);
       session.history = [];
       session.importedContext = null;
+      session.attachments = [];
+      session.contextTokenCount = null;
+      session.contextTokenUsage = null;
+      session.contextWindowStats = null;
+      session.lastError = '';
     },
 
     /** 删除会话中的单条消息 */
@@ -1952,9 +1953,6 @@ export const useChatStore = defineStore('chat', {
       session.retryAttempt = null;
       session.retryMaxRetries = 3;
       session.retryErrorSummary = '';
-      session.contextTokenCount = null;
-      session.contextTokenUsage = null;
-      session.contextWindowStats = null;
       try {
         // 立即在本地截断该消息之后的回复
         const index = session.history.findIndex(m => m.id === targetMessage.id);
@@ -2475,7 +2473,23 @@ export const useChatStore = defineStore('chat', {
           return;
         }
         if (eventType === 'context_window_stats') {
-          session.contextWindowStats = _extractContextWindowStats(evt);
+          const nextWindowStats = _extractContextWindowStats(evt);
+          session.contextWindowStats = nextWindowStats;
+          ensureAssistantAdded();
+          assistantMsg.metadata = {
+            ...(assistantMsg.metadata || {}),
+            context_window_stats: {
+              agent_id: nextWindowStats.agentId,
+              input_tokens: nextWindowStats.inputTokens,
+              output_tokens: nextWindowStats.outputTokens,
+              original_tokens: nextWindowStats.originalTokens,
+              retained_messages: nextWindowStats.retainedMessages,
+              model: nextWindowStats.model,
+              compacted: nextWindowStats.compacted,
+              reason: nextWindowStats.reason,
+            },
+          };
+          syncAssistantSnapshot();
           return;
         }
         if (eventType === 'task_done') {
@@ -2483,16 +2497,33 @@ export const useChatStore = defineStore('chat', {
           session.backgroundTaskStatus = null;
           session.sending = false;
           const usageStats = _extractLlmUsageStats(evt);
+          const taskWindowStats = _extractContextWindowStatsFromPayload(evt);
           _applyPersistedTokenStats(session, evt);
+          let metadataPatched = false;
           if (usageStats != null) {
             assistantMsg.metadata = {
               ...(assistantMsg.metadata || {}),
               llm_usage: evt.llm_usage || evt.llmUsage,
             };
-            const taskWindowStats = _extractContextWindowStatsFromPayload(evt);
-            if (taskWindowStats != null) {
-              assistantMsg.metadata.context_window_stats = evt.context_window_stats || evt.contextWindowStats;
-            }
+            metadataPatched = true;
+          }
+          if (taskWindowStats != null) {
+            assistantMsg.metadata = {
+              ...(assistantMsg.metadata || {}),
+              context_window_stats: evt.context_window_stats || evt.contextWindowStats || {
+                agent_id: taskWindowStats.agentId,
+                input_tokens: taskWindowStats.inputTokens,
+                output_tokens: taskWindowStats.outputTokens,
+                original_tokens: taskWindowStats.originalTokens,
+                retained_messages: taskWindowStats.retainedMessages,
+                model: taskWindowStats.model,
+                compacted: taskWindowStats.compacted,
+                reason: taskWindowStats.reason,
+              },
+            };
+            metadataPatched = true;
+          }
+          if (metadataPatched) {
             syncAssistantSnapshot();
           }
           if (evt.status === 'error') {

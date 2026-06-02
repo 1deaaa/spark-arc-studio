@@ -20,7 +20,7 @@
         >
           <svg viewBox="0 0 24 24" fill="none" class="fab-icon">
              <circle cx="12" cy="12" r="11" stroke="currentColor" stroke-width="1.5" class="fab-circle"/>
-             <path d="M12 8L12 16M12 16L15 13M12 16L9 13" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" class="fab-arrow"/>
+             <path d="M8 12H16M16 12L13 9M16 12L13 15" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" class="fab-arrow"/>
           </svg>
           <span class="fab-ripple"></span>
         </button>
@@ -204,8 +204,8 @@ function scrollToNext() {
 }
 
 @keyframes flow-arrow {
-  0%, 100% { transform: translateY(-3px); }
-  50% { transform: translateY(3px); }
+  0%, 100% { transform: translateX(-3px); }
+  50% { transform: translateX(3px); }
 }
 
 /* 呼吸光环 */

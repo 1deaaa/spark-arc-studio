@@ -1,12 +1,12 @@
 
-import { ref, watch, onBeforeUnmount, onMounted, h, nextTick } from 'vue';
+import { ref, watch, onBeforeUnmount, onMounted, h, nextTick, computed } from 'vue';
 import { useMessage, useDialog, NButton, NSpace } from 'naive-ui';
 import { useProjectStore } from '../components/stores/projectStore';
 import { useViewStore } from '../components/stores/viewStore';
-import { igniteMuse, fetchWithAuth, createInspiration, updateInspiration, getInspirations, bindInspiration } from '../services/api';
-import { resolveApiUrl } from '../services/apiClient';
+import { igniteMuse, fetchWithAuth, createInspiration, updateInspiration, getInspirations, bindInspiration, fetchSynopsis, fetchBeatSheet } from '../services/api';
 import bus from '../eventBus';
 import { createStreamingTask, consumeTextReader, createAbortableEventSource, isAbortLikeError } from '@/utils/streamingRuntime';
+import { extractLoglineFromInspiration } from '@/utils/inspiration';
 
 // 简单的 debounce 函数
 function debounce<T extends (...args: any[]) => any>(func: T, wait: number): (...args: Parameters<T>) => void {
@@ -41,9 +41,9 @@ type CreateInspirationResponse = {
     id: string;
 };
 
-type SynopsisApiPayload = {
-    logline?: string;
-    synopsis_text?: string;
+type GoToSynopsisOptions = {
+    autoGenerateSynopsis?: boolean;
+    autoGenerateBeats?: boolean;
 };
 
 type StreamingHandle = {
@@ -70,6 +70,11 @@ export function useWorldLogic() {
     const isHistoryCollapsed = ref(false);
     const currentInspirationId = ref<string | null>(null);  // 当前正在编辑的灵感ID
     const unreadCount = ref(0);  // 未读灵感数量
+    const isCurrentInspirationBound = computed(() => (
+        !!currentInspirationId.value
+        && !!projectStore.boundInspirationId
+        && currentInspirationId.value === projectStore.boundInspirationId
+    ));
 
     function toggleHistoryCollapse() {
         isHistoryCollapsed.value = !isHistoryCollapsed.value;
@@ -87,6 +92,15 @@ export function useWorldLogic() {
     const selectedLength = ref<string | undefined>(undefined);
 
     watch(museResult, (val) => { projectStore.currentInspiration = val; });
+
+    watch([museInput, museResult, currentInspirationId, isCurrentInspirationBound], () => {
+        if (!isCurrentInspirationBound.value || !currentInspirationId.value) return;
+        projectStore.applyBoundInspiration({
+            id: currentInspirationId.value,
+            source: museInput.value,
+            content: museResult.value,
+        });
+    });
 
     // 自动保存灵感条目内容（source/content 编辑时 debounce 写回后端）
     const autoSaveInspirationEntry = debounce(async () => {
@@ -108,6 +122,44 @@ export function useWorldLogic() {
         }
     });
 
+    async function loadProjectStoryTags(projectName: string | null | undefined) {
+        if (!projectName) {
+            selectedGenres.value = [];
+            selectedTones.value = [];
+            selectedWorldviews.value = [];
+            selectedPov.value = undefined;
+            selectedLength.value = undefined;
+            return;
+        }
+        try {
+            const response = await fetchWithAuth(`/api/project/story-tags?projectName=${encodeURIComponent(projectName)}`);
+            if (!response.ok) {
+                selectedGenres.value = [];
+                selectedTones.value = [];
+                selectedWorldviews.value = [];
+                selectedPov.value = undefined;
+                selectedLength.value = undefined;
+                return;
+            }
+            const data = await response.json();
+            if (data.success && data.tags) {
+                selectedGenres.value = data.tags.genres || [];
+                selectedTones.value = data.tags.tones || [];
+                selectedWorldviews.value = data.tags.worldviews || [];
+                selectedPov.value = data.tags.pov || undefined;
+                selectedLength.value = data.tags.length_hint || undefined;
+                return;
+            }
+        } catch (e) {
+            console.warn('加载项目 story tags 失败:', e);
+        }
+        selectedGenres.value = [];
+        selectedTones.value = [];
+        selectedWorldviews.value = [];
+        selectedPov.value = undefined;
+        selectedLength.value = undefined;
+    }
+
     watch(() => projectStore.currentProject, async (nextProject, prevProject) => {
         if (nextProject === prevProject) return;
         museInput.value = '';
@@ -116,49 +168,17 @@ export function useWorldLogic() {
         projectStore.currentInspiration = '';
         projectStore.currentInspirationId = null;
         unreadCount.value = 0;
-        
-        // 从后端加载项目的 story tags
+        await loadProjectStoryTags(nextProject);
         if (nextProject) {
-            try {
-                const response = await fetchWithAuth(`/api/project/story-tags?projectName=${encodeURIComponent(nextProject)}`);
-                if (response.ok) {
-                    const data = await response.json();
-                    if (data.success && data.tags) {
-                        selectedGenres.value = data.tags.genres || [];
-                        selectedTones.value = data.tags.tones || [];
-                        selectedWorldviews.value = data.tags.worldviews || [];
-                        selectedPov.value = data.tags.pov || undefined;
-                        selectedLength.value = data.tags.length_hint || undefined;
-                    } else {
-                        // 如果没有 story tags，重置为空
-                        selectedGenres.value = [];
-                        selectedTones.value = [];
-                        selectedWorldviews.value = [];
-                        selectedPov.value = undefined;
-                        selectedLength.value = undefined;
-                    }
-                }
-            } catch (e) {
-                console.warn('加载项目 story tags 失败:', e);
-                // 失败时重置为空
-                selectedGenres.value = [];
-                selectedTones.value = [];
-                selectedWorldviews.value = [];
-                selectedPov.value = undefined;
-                selectedLength.value = undefined;
+            const boundInspiration = await projectStore.refreshCurrentProjectInspiration(nextProject);
+            if (boundInspiration) {
+                handleMuseHistorySelect(boundInspiration);
             }
-        } else {
-            // 没有项目时重置
-            selectedGenres.value = [];
-            selectedTones.value = [];
-            selectedWorldviews.value = [];
-            selectedPov.value = undefined;
-            selectedLength.value = undefined;
         }
         
         museHistoryRef.value?.refresh();
         bus.emit('lorebook-refresh');
-    });
+    }, { immediate: true });
 
     async function loadLatestInspiration({ force = false } = {}) {
         try {
@@ -175,6 +195,20 @@ export function useWorldLogic() {
     }
 
     async function handleIgnite() {
+        if (museResult.value.trim()) {
+            const shouldOverwrite = await new Promise<boolean>((resolve) => {
+                dialog.warning({
+                    title: '确认覆盖',
+                    content: '当前灵感工坊已有内容，重新点燃将覆盖现有结果。是否继续？',
+                    positiveText: '覆盖并点燃',
+                    negativeText: '取消',
+                    onPositiveClick: () => resolve(true),
+                    onNegativeClick: () => resolve(false),
+                    onClose: () => resolve(false),
+                });
+            });
+            if (!shouldOverwrite) return;
+        }
         museLoading.value = true;
         museResult.value = '';
         let cancelled = false;
@@ -251,6 +285,13 @@ export function useWorldLogic() {
                 }
             });
             if (cancelled || museTask.aborted) return;
+            if (projectStore.currentProject && currentInspirationId.value) {
+                projectStore.applyBoundInspiration({
+                    id: currentInspirationId.value,
+                    source: museInput.value,
+                    content: museResult.value,
+                });
+            }
             museHistoryRef.value?.refresh();
         } catch (e: unknown) {
             if (isAbortLikeError(e)) return;
@@ -286,7 +327,46 @@ export function useWorldLogic() {
         // 用户可能只是想查看，绑定应该在明确采纳时进行
     }
 
-    async function handleGenerateFromMuse() {
+    async function persistStoryTags(activeInspirationId: string | null = currentInspirationId.value) {
+        if (!projectStore.currentProject) return;
+        await fetchWithAuth('/api/project/story-tags', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({
+                projectName: projectStore.currentProject,
+                genres: selectedGenres.value,
+                tones: selectedTones.value,
+                worldviews: selectedWorldviews.value,
+                pov: selectedPov.value || null,
+                lengthHint: selectedLength.value || null,
+                activeInspirationId: activeInspirationId || null,
+            }),
+        });
+    }
+
+    async function ensureCurrentInspirationBound() {
+        if (!projectStore.currentProject) return false;
+        if (!museResult.value.trim()) return false;
+
+        if (currentInspirationId.value) {
+            const result = await bindInspiration(currentInspirationId.value, projectStore.currentProject, true) as any;
+            bus.emit('inspiration-bind-changed', {
+                boundId: currentInspirationId.value,
+                unboundIds: result?.unbound_ids || [],
+                projectName: projectStore.currentProject,
+            });
+            projectStore.applyBoundInspiration({
+                id: currentInspirationId.value,
+                source: museInput.value,
+                content: museResult.value,
+            });
+        }
+
+        await persistStoryTags(currentInspirationId.value || null);
+        return true;
+    }
+
+    async function handleGenerateFromMuse(options: { beforeGenerate?: () => void } = {}) {
         if (!museResult.value) return message.warning('请先生成灵感');
         if (!projectStore.currentProject) return message.warning('请先选择项目');
 
@@ -310,6 +390,7 @@ export function useWorldLogic() {
                                 dialogReactive?.destroy();
                                 await projectStore.createProject();
                                 if (!projectStore.currentProject) return;
+                                options.beforeGenerate?.();
                                 await startGenerateFromMuse();
                             }
                         }, { default: () => '新建项目并生成' }),
@@ -318,6 +399,7 @@ export function useWorldLogic() {
                             type: 'primary',
                             onClick: async () => {
                                 dialogReactive?.destroy();
+                                options.beforeGenerate?.();
                                 await startGenerateFromMuse();
                             }
                         }, { default: () => '确定覆盖并生成' })
@@ -333,6 +415,12 @@ export function useWorldLogic() {
             : '';
         if (!targetProjectName || targetProjectName === 'null' || targetProjectName === 'undefined') {
             message.error('当前项目无效，请重新选择项目后再试');
+            return;
+        }
+        try {
+            await ensureCurrentInspirationBound();
+        } catch (e) {
+            message.error('采纳当前灵感失败: ' + getErrorMessage(e));
             return;
         }
 
@@ -507,23 +595,46 @@ export function useWorldLogic() {
         }
     }
 
-    async function goToSynopsis() {
+    async function goToSynopsis(options: GoToSynopsisOptions = {}) {
         if (!museResult.value) return message.warning('请先生成灵感');
+        if (!projectStore.currentProject) return message.warning('请先选择项目');
 
-        // 检查是否已有梗概，如果有则提示覆盖
         try {
-            const existingSynopsis = await fetchWithAuth(`/api/story/synopsis?projectName=${encodeURIComponent(projectStore.currentProject)}`).then(res => res.json()) as SynopsisApiPayload;
-            if (existingSynopsis && (existingSynopsis.logline || existingSynopsis.synopsis_text)) {
+            const [existingSynopsis, existingBeatSheet] = await Promise.all([
+                fetchSynopsis(projectStore.currentProject),
+                fetchBeatSheet(projectStore.currentProject),
+            ]);
+            const hasSynopsis = !!existingSynopsis?.trim();
+            const hasBeatSheet = !!existingBeatSheet?.trim();
+            const shouldConfirmStepGeneration = options.autoGenerateSynopsis || options.autoGenerateBeats;
+
+            if (shouldConfirmStepGeneration && (hasSynopsis || hasBeatSheet)) {
+                return new Promise<void>((resolve) => {
+                    dialog.warning({
+                        title: '确认覆盖',
+                        content: '梗概或节奏表已有内容，继续将覆盖现有结果。是否继续？',
+                        positiveText: '覆盖并继续',
+                        negativeText: '取消',
+                        onPositiveClick: async () => {
+                            await proceedToSynopsis(options);
+                            resolve();
+                        },
+                        onClose: () => resolve(),
+                    });
+                });
+            }
+            if (!shouldConfirmStepGeneration && hasSynopsis) {
                 return new Promise<void>((resolve) => {
                     dialog.warning({
                         title: '确认覆盖',
                         content: '梗概页面已有内容，是否使用当前的灵感和核心概念覆盖它？',
                         positiveText: '确定覆盖',
                         negativeText: '取消',
-                        onPositiveClick: () => {
-                            proceedToSynopsis();
+                        onPositiveClick: async () => {
+                            await proceedToSynopsis(options);
                             resolve();
-                        }
+                        },
+                        onClose: () => resolve(),
                     });
                 });
             }
@@ -531,13 +642,12 @@ export function useWorldLogic() {
             console.warn('检查现有梗概失败:', e);
         }
 
-        proceedToSynopsis();
+        await proceedToSynopsis(options);
     }
 
     // 保存 story tags 到后端的函数（带 debounce）
     const saveStoryTags = debounce(async () => {
         if (!projectStore.currentProject) return;
-        
         try {
             const response = await fetchWithAuth('/api/project/story-tags', {
                 method: 'POST',
@@ -549,9 +659,9 @@ export function useWorldLogic() {
                     worldviews: selectedWorldviews.value,
                     pov: selectedPov.value || null,
                     lengthHint: selectedLength.value || null,
+                    activeInspirationId: projectStore.boundInspirationId || null,
                 }),
             });
-            
             if (!response.ok) {
                 console.warn('保存 story tags 失败:', response.status);
             }
@@ -577,32 +687,7 @@ export function useWorldLogic() {
         }
 
         try {
-            // 排他绑定当前灵感到项目
-            if (currentInspirationId.value) {
-                const result = await bindInspiration(currentInspirationId.value, projectStore.currentProject, true) as any;
-                // 通知 HistoryPanel 局部更新绑定状态
-                bus.emit('inspiration-bind-changed', {
-                    boundId: currentInspirationId.value,
-                    unboundIds: result?.unbound_ids || [],
-                    projectName: projectStore.currentProject,
-                });
-            }
-
-            // 立即保存 story tags
-            await fetchWithAuth('/api/project/story-tags', {
-                method: 'POST',
-                headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({
-                    projectName: projectStore.currentProject,
-                    genres: selectedGenres.value,
-                    tones: selectedTones.value,
-                    worldviews: selectedWorldviews.value,
-                    pov: selectedPov.value || null,
-                    lengthHint: selectedLength.value || null,
-                    activeInspirationId: currentInspirationId.value || null,
-                }),
-            });
-
+            await ensureCurrentInspirationBound();
             message.success('灵感已采纳到当前项目');
         } catch (e) {
             console.warn('采纳灵感失败:', e);
@@ -610,68 +695,13 @@ export function useWorldLogic() {
         }
     }
 
-    function proceedToSynopsis() {
-        // 提取 Logline
-        let logline = '';
-        const text = museResult.value;
-
-        // 优化后的提取策略
-        // 1. 尝试匹配明确的 "核心概念 (Logline)" 块，支持有无数字编号
-        // 匹配模式： (可选数字.) 核心概念 (Logline) (可选冒号) (内容) (直到下一个类似格式的标题或结尾)
-        const loglineMatch = text.match(/(?:(?:\d+\.)?\s*核心概念\s*\(Logline\)|Logline)\s*[:：]?\s*\n?([\s\S]+?)(?=\n+(?:\d+\.)?\s*[\u4e00-\u9fa5]+\s*\(|$)/i);
-
-        if (loglineMatch && loglineMatch[1].trim()) {
-            logline = loglineMatch[1].replace(/[\[\]]/g, '').trim();
-        } else {
-            // 2. 备选策略：寻找包含 "Logline" 或 "核心概念" 的行
-            const lines = text.split('\n').filter(l => l.trim());
-            const foundIndex = lines.findIndex(l => l.includes('Logline') || l.includes('核心概念'));
-
-            if (foundIndex !== -1) {
-                const foundLine = lines[foundIndex];
-                const parts = foundLine.split(/[:：]/);
-                if (parts.length > 1 && parts[1].trim()) {
-                    logline = parts[1].replace(/[\[\]]/g, '').trim();
-                } else if (foundIndex + 1 < lines.length) {
-                    // 如果当前行只有标题，尝试取下一行
-                    logline = lines[foundIndex + 1].replace(/[\[\]]/g, '').trim();
-                } else {
-                    logline = foundLine.trim();
-                }
-            } else {
-                // 3. 最后手段：取最后一段
-                logline = lines[lines.length - 1]?.replace(/[\[\]]/g, '').trim() || '';
-            }
-        }
-
-        // 立即保存 story tags（不等待 debounce）+ 兜底排他绑定灵感
+    async function proceedToSynopsis(options: GoToSynopsisOptions = {}) {
+        const logline = extractLoglineFromInspiration(museResult.value);
         if (projectStore.currentProject) {
-            fetchWithAuth('/api/project/story-tags', {
-                method: 'POST',
-                headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({
-                    projectName: projectStore.currentProject,
-                    genres: selectedGenres.value,
-                    tones: selectedTones.value,
-                    worldviews: selectedWorldviews.value,
-                    pov: selectedPov.value || null,
-                    lengthHint: selectedLength.value || null,
-                    activeInspirationId: currentInspirationId.value || null,
-                }),
-            }).catch(e => console.warn('保存 story tags 失败:', e));
-
-            // 兜底：确保当前灵感已排他绑定到项目（防止前序自动绑定因网络等原因失败）
-            if (currentInspirationId.value) {
-                bindInspiration(currentInspirationId.value, projectStore.currentProject, true)
-                    .then((result: any) => {
-                        // 通知 HistoryPanel 局部更新绑定状态
-                        bus.emit('inspiration-bind-changed', {
-                            boundId: currentInspirationId.value,
-                            unboundIds: result?.unbound_ids || [],
-                            projectName: projectStore.currentProject,
-                        });
-                    })
-                    .catch(e => console.warn('兜底绑定灵感失败:', e));
+            try {
+                await ensureCurrentInspirationBound();
+            } catch (e) {
+                console.warn('进入梗概页前绑定灵感失败:', e);
             }
         }
 
@@ -681,6 +711,8 @@ export function useWorldLogic() {
             inspiration: museResult.value,
             pov: selectedPov.value,
             lengthHint: selectedLength.value,
+            autoGenerateSynopsis: !!options.autoGenerateSynopsis,
+            autoGenerateBeats: !!options.autoGenerateBeats,
         };
 
         // 将灵感结果和 Logline 传递给下一个环节。
@@ -699,6 +731,15 @@ export function useWorldLogic() {
 
     onMounted(() => {
         bus.on('muse-refresh', refreshCurrentInspiration);
+        if (projectStore.currentProject) {
+            projectStore.refreshCurrentProjectInspiration(projectStore.currentProject)
+                .then((entry) => {
+                    if (entry) handleMuseHistorySelect(entry);
+                })
+                .catch((e) => console.warn('加载当前项目绑定灵感失败:', e));
+            loadProjectStoryTags(projectStore.currentProject);
+            return;
+        }
         loadLatestInspiration({ force: true });
     });
 
@@ -710,6 +751,7 @@ export function useWorldLogic() {
         isGenerating,
         isHistoryCollapsed,
         currentInspirationId,
+        isCurrentInspirationBound,
         unreadCount,
         toggleHistoryCollapse,
         handleUnreadChange,

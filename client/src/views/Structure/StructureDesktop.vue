@@ -128,7 +128,7 @@
                     :disabled="isLoading"
                     size="small"
                     class="ctrl-btn"
-                    @click="handleGenerateOutline"
+                    @click="handleGenerateOutlineClick"
                   >
                     <template #icon><n-icon :component="Zap" /></template>
                     {{ currentOutline ? t('views.structure.desktop.regenerate') : t('views.structure.mobile.generateOutline') }}
@@ -190,6 +190,10 @@ const outlineEditorRef = ref(null);
 
 function openAutoWrite() {
   outlineEditorRef.value?.openAutoWriteModal();
+}
+
+function handleGenerateOutlineClick() {
+  void handleGenerateOutline();
 }
 
 function goToScriptWriter() {

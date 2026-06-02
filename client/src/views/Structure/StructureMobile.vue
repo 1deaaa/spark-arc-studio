@@ -47,7 +47,7 @@
         size="medium"
         :loading="isLoading"
         :disabled="!context?.trim()"
-        @click="handleGenerateOutline"
+        @click="handleGenerateOutlineClick"
       >
         <template #icon><n-icon :component="Sparkles" /></template>
         {{ t('views.structure.mobile.generateOutline') }}
@@ -61,9 +61,9 @@
         <span>{{ t('views.structure.mobile.chapterOutline') }}</span>
         <SparkTag type="info" size="small">{{ t('views.structure.mobile.chapterCountLabel', { count: outlineChapters.length }) }}</SparkTag>
         <div class="header-actions">
-          <n-button size="tiny" type="primary" secondary @click="handleSaveOutline(currentOutline)">
-            <template #icon><n-icon :component="Save" /></template>
-            {{ t('views.common.save') }}
+          <n-button size="tiny" type="primary" secondary @click="openAutoWrite">
+            <template #icon><n-icon :component="ArrowRight" /></template>
+            {{ t('views.structure.desktop.startAutoWrite') }}
           </n-button>
         </div>
       </div>
@@ -144,14 +144,15 @@
 
 <script setup lang="ts">
 import { ref, computed } from 'vue';
-import { NButton, NIcon, NInput, NInputNumber, NEmpty, NDrawer, NDrawerContent, NSelect } from 'naive-ui';
+import { NButton, NIcon, NInputNumber, NEmpty, NDrawer, NDrawerContent, NSelect } from 'naive-ui';
 import { useI18n } from 'vue-i18n';
 import SparkTag from '../../components/share/SparkTag.vue';
 import GlobalLoading from '../../components/share/GlobalLoading.vue';
 import MobileTextArea from '../../components/share/MobileTextArea.vue';
-import { ChevronRight, Clock, Files, List, Save, Sparkles } from '@lucide/vue';
+import { ArrowRight, ChevronRight, Clock, Files, List, Sparkles } from '@lucide/vue';
 import HistoryPanel from '../../components/dlg-editor/HistoryPanel.vue';
 import { useStructureLogic } from '../../composables/useStructureLogic';
+import bus from '../../eventBus';
 
 const { t } = useI18n();
 
@@ -169,7 +170,6 @@ const {
   lengthType,
   lengthOptions,
   handleGenerateOutline,
-  handleSaveOutline,
   handleOutlineHistorySelect,
   handleOutlineRestore
 } = useStructureLogic();
@@ -178,8 +178,16 @@ const outlineChapters = computed(() => {
   return currentOutline?.value?.nodes || [];
 });
 
+function handleGenerateOutlineClick() {
+  void handleGenerateOutline();
+}
+
 function editChapter(chapter, idx) {
   showFullList.value = true;
+}
+
+function openAutoWrite() {
+  bus.emit('open-auto-write-setup');
 }
 </script>
 
@@ -212,6 +220,8 @@ function editChapter(chapter, idx) {
 .header-actions {
   display: flex;
   align-items: center;
+  flex-wrap: wrap;
+  justify-content: flex-end;
   gap: 6px;
   margin-left: auto;
 }

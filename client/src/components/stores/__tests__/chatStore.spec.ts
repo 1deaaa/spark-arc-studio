@@ -294,6 +294,36 @@ describe('chatStore tool-first stream handling', () => {
     expect(store.sessions[0].contextWindowStats?.agentId).toBe('agent_director');
   });
 
+  it('attaches streamed context window stats to assistant metadata even without llm usage', async () => {
+    mockedSendChatMessageStream.mockResolvedValueOnce(createNdjsonReader([
+      JSON.stringify({ event: 'assistant_delta', text: '这是最终回答。' }),
+      JSON.stringify({
+        event: 'context_window_stats',
+        agent_id: 'agent_director',
+        input_tokens: 2048,
+        output_tokens: 96,
+        original_tokens: 4096,
+        retained_messages: 6,
+        model: 'gpt-4o',
+        compacted: false,
+        reason: 'within_budget',
+      }),
+      JSON.stringify({
+        event: 'task_done',
+        status: 'completed',
+      }),
+    ]));
+
+    const store = useChatStore();
+    await store.sendSessionMessage(0, '请继续');
+
+    const assistantMessage = store.sessions[0].history.find((item) => item.role === 'assistant');
+    expect(assistantMessage?.metadata?.context_window_stats?.input_tokens).toBe(2048);
+    expect(assistantMessage?.metadata?.context_window_stats?.output_tokens).toBe(96);
+    expect(store.sessions[0].contextWindowStats?.inputTokens).toBe(2048);
+    expect(store.sessions[0].contextWindowStats?.outputTokens).toBe(96);
+  });
+
   it('stores context compaction stream events as assistant segments', async () => {
     mockedSendChatMessageStream.mockResolvedValueOnce(createNdjsonReader([
       JSON.stringify({ event: 'context_compaction_started', original_tokens: 12000, model: 'gpt-4o' }),
@@ -413,6 +443,51 @@ describe('chatStore tool-first stream handling', () => {
     expect(store.sessions[0].contextWindowStats?.inputTokens).toBe(280);
     expect(store.sessions[0].contextWindowStats?.outputTokens).toBe(66);
     expect(store.sessions[0].contextWindowStats?.originalTokens).toBe(1200);
+  });
+
+  it('clears displayed token stats when the whole session is cleared', async () => {
+    const store = useChatStore();
+    store.sessions[0].history = [
+      { id: 1, role: 'assistant', content: '历史回复', timestamp: 1, metadata: {} },
+    ];
+    store.sessions[0].attachments = [
+      {
+        attachmentId: 'att-1',
+        filename: '设定.txt',
+        sourceFormat: 'txt',
+        totalTokens: 120,
+        chunkTokens: 120,
+        isPartial: false,
+        warnings: [],
+        uploadedAt: Date.now(),
+      },
+    ];
+    store.sessions[0].importedContext = store.sessions[0].attachments[0];
+    store.sessions[0].contextTokenCount = 6400;
+    store.sessions[0].contextTokenUsage = {
+      promptTokens: 6200,
+      completionTokens: 200,
+      totalTokens: 6400,
+    };
+    store.sessions[0].contextWindowStats = {
+      agentId: 'agent_director',
+      inputTokens: 1600,
+      outputTokens: 80,
+      originalTokens: 4200,
+      retainedMessages: 5,
+      model: 'gpt-4o',
+      compacted: false,
+      reason: 'within_budget',
+    };
+
+    await store.clearSession(0);
+
+    expect(store.sessions[0].history).toEqual([]);
+    expect(store.sessions[0].attachments).toEqual([]);
+    expect(store.sessions[0].importedContext).toBeNull();
+    expect(store.sessions[0].contextTokenCount).toBeNull();
+    expect(store.sessions[0].contextTokenUsage).toBeNull();
+    expect(store.sessions[0].contextWindowStats).toBeNull();
   });
 
   it('keeps previous assistant message when next user message triggers a refresh gap', async () => {

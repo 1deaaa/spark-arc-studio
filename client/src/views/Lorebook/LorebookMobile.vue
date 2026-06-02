@@ -8,9 +8,9 @@
         <n-icon :component="Globe" size="18" />
         <span>{{ t('views.lorebook.mobile.worldview') }}</span>
         <div class="header-actions">
-          <n-button size="tiny" type="primary" @click="saveWorldview">
-            <template #icon><n-icon :component="Save" /></template>
-            {{ t('views.common.save') }}
+          <n-button size="tiny" type="primary" @click="goToSynopsisStep">
+            <template #icon><n-icon :component="ArrowRight" /></template>
+            {{ t('views.lorebook.mobile.writeSynopsisAndRhythm') }}
           </n-button>
         </div>
       </div>
@@ -152,17 +152,23 @@ import { useI18n } from 'vue-i18n';
 import bus from '../../eventBus';
 import { NButton, NIcon, NInput, NSpin, NEmpty, NDrawer, NDrawerContent, useMessage } from 'naive-ui';
 import SparkTag from '../../components/share/SparkTag.vue';
-import { Book, ChevronRight, CircleUser, Globe, Maximize2, Save, UserPlus, Users, Wrench } from '@lucide/vue';
+import { ArrowRight, ChevronRight, CircleUser, Globe, Save, UserPlus, Users, Wrench } from '@lucide/vue';
 import LorebookEditor from '../../components/lorebook/LorebookEditor.vue';
 import GlobalLoading from '../../components/share/GlobalLoading.vue';
 import CharacterGeneratorPanel from '../../components/lorebook/CharacterGeneratorPanel.vue';
 import WorldGeneratorPanel from '../../components/lorebook/WorldGeneratorPanel.vue';
 import MobileTextArea from '../../components/share/MobileTextArea.vue';
 import { fetchWithAuth, fetchCharacters, saveCharacter, deleteCharacter, createCharacter } from '../../services/api';
+import { useProjectStore } from '../../components/stores/projectStore';
+import { useViewStore } from '../../components/stores/viewStore';
+import { scrollToFlowStep } from '../../utils/mobileFlow';
+import { extractLoglineFromInspiration } from '../../utils/inspiration';
 
 const { t } = useI18n();
 const message = useMessage();
 const projectId = inject('projectId', ref(null));
+const projectStore = useProjectStore();
+const viewStore = useViewStore();
 
 const loading = ref(false);
 const showEditor = ref(false);
@@ -171,6 +177,8 @@ const showWorldGen = ref(false);
 const showSingleCharDrawer = ref(false);
 const worldview = ref('');
 const characters = ref([]);
+let suppressWorldviewAutoSave = false;
+let worldviewSaveTimer: ReturnType<typeof setTimeout> | null = null;
 
 // 编辑状态
 const editingChar = reactive({
@@ -185,6 +193,7 @@ async function loadWorldview() {
   const fileId = '世界观.txt';
   if (!pid) return;
   try {
+    suppressWorldviewAutoSave = true;
     const res = await fetchWithAuth(`/api/lorebooks/${pid}/${fileId}`);
     if (res.ok) {
       const data = await res.json();
@@ -192,11 +201,13 @@ async function loadWorldview() {
     } else if (res.status === 404) {
       worldview.value = '';
     }
-  } catch {}
+  } catch {} finally {
+    suppressWorldviewAutoSave = false;
+  }
 }
 
 // 保存世界观
-async function saveWorldview() {
+async function saveWorldview(silent = false) {
   const pid = projectId.value;
   const fileId = '世界观.txt';
   if (!pid) return;
@@ -208,11 +219,41 @@ async function saveWorldview() {
     });
     const result = await res.json();
     if (res.ok && result?.success !== false) {
-      message.success(t('views.lorebook.mobile.worldviewSaved'));
+      if (!silent) {
+        message.success(t('views.lorebook.mobile.worldviewSaved'));
+      }
     }
   } catch {
-    message.error(t('views.common.saveFailed'));
+    if (!silent) {
+      message.error(t('views.common.saveFailed'));
+    }
   }
+}
+
+watch(worldview, () => {
+  if (suppressWorldviewAutoSave) return;
+  if (worldviewSaveTimer) {
+    clearTimeout(worldviewSaveTimer);
+  }
+  worldviewSaveTimer = setTimeout(() => {
+    void saveWorldview(true);
+  }, 600);
+});
+
+async function goToSynopsisStep() {
+  await saveWorldview(true);
+  const inspiration = (projectStore.boundInspiration || '').trim();
+  const payload = {
+    projectName: projectStore.currentProject,
+    inspiration,
+    logline: extractLoglineFromInspiration(inspiration),
+    autoGenerateSynopsis: true,
+    autoGenerateBeats: true,
+  };
+  projectStore.setPendingSynopsisAdoption(payload);
+  viewStore.setView('synopsis');
+  bus.emit('adopt-inspiration', payload);
+  scrollToFlowStep(3);
 }
 
 // 加载角色
@@ -323,6 +364,10 @@ onMounted(() => {
 
 onBeforeUnmount(() => {
   bus.off('lorebook-refresh', onLorebookRefresh);
+  if (worldviewSaveTimer) {
+    clearTimeout(worldviewSaveTimer);
+    worldviewSaveTimer = null;
+  }
 });
 watch(projectId, loadData);
 </script>
@@ -396,6 +441,8 @@ watch(projectId, loadData);
 .header-actions {
   display: flex;
   align-items: center;
+  flex-wrap: wrap;
+  justify-content: flex-end;
   gap: 6px;
   margin-left: auto;
 }

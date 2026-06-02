@@ -32,7 +32,7 @@
           <SparkTag v-if="node.type === 'chapter' && node.chapter" type="primary" size="tiny">Ch.{{ node.chapter }}</SparkTag>
 
           <!-- 节拍映射标识 -->
-          <SparkTag v-if="node.mapped_beats?.length" type="info" size="tiny">Beats: {{ node.mapped_beats.join(', ') }}</SparkTag>
+          <SparkTag v-if="node.mapped_beats?.length" type="info" size="tiny">{{ t('components.outlineNode.linkedBeats') }}: {{ node.mapped_beats.join(', ') }}</SparkTag>
 
           <div class="tension-indicator" v-if="node.tension">
             <SparkTag :type="tensionType" size="tiny">{{ tensionLabel }}</SparkTag>
@@ -42,7 +42,7 @@
         
         <div class="node-description" v-if="!isEditing && node.description">
           <div class="mapped-beats" v-if="node.mapped_beats?.length">
-            <SparkTag v-for="bId in node.mapped_beats" :key="bId" size="tiny" type="info" :ghost="true">Beat #{{ bId }}</SparkTag>
+            <SparkTag v-for="bId in node.mapped_beats" :key="bId" size="tiny" type="info" :ghost="true">{{ t('components.outlineNode.linkedBeatItem', { id: bId }) }}</SparkTag>
           </div>
           <n-ellipsis :line-clamp="2">{{ node.description }}</n-ellipsis>
         </div>

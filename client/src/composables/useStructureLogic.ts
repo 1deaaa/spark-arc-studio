@@ -1,6 +1,6 @@
 
 import { ref, watch, onMounted, onBeforeUnmount } from 'vue';
-import { useMessage } from 'naive-ui';
+import { useMessage, useDialog } from 'naive-ui';
 import {
     generateOutline,
     getOutline,
@@ -9,11 +9,19 @@ import {
 } from '../services/api';
 import { getStyleProfile } from '../services/storyService';
 import { fetchBeatSheet } from '../services/aiService';
-import { parseSynopsisMarkup, parseBeatSheetMarkup, parseOutlineMarkup } from '../utils/markupSerializer';
+import { parseOutlineMarkup } from '../utils/markupSerializer';
 import { useProjectStore } from '../components/stores/projectStore';
 import bus from '../eventBus';
 import { createStreamingTask, isAbortLikeError } from '@/utils/streamingRuntime';
-import type { BeatSheetData, OutlineData } from '../services/aiContracts';
+import type { OutlineData } from '../services/aiContracts';
+
+type StructureAdoptionPayload = {
+    projectName?: string;
+    context?: string;
+    guidance?: string;
+    autoGenerateOutline?: boolean;
+    [key: string]: unknown;
+};
 
 function getErrorMessage(error: unknown): string {
     if (error instanceof Error) return error.message;
@@ -23,6 +31,7 @@ function getErrorMessage(error: unknown): string {
 export function useStructureLogic() {
     const projectStore = useProjectStore();
     const message = useMessage();
+    const dialog = useDialog();
 
     // Outline State
     const context = ref('');
@@ -71,12 +80,32 @@ export function useStructureLogic() {
         }
     }
 
-    async function handleGenerateOutline() {
-        if (!projectStore.currentProject) return;
+    async function handleGenerateOutline(options: { skipOverwriteConfirm?: boolean } = {}) {
+        if (!projectStore.currentProject) return false;
 
         if (!context.value && !guidance.value) {
             message.warning('请提供剧情上下文或导演意图');
-            return;
+            return false;
+        }
+
+        if (
+            currentOutline.value
+            && Array.isArray(currentOutline.value.nodes)
+            && currentOutline.value.nodes.length > 0
+            && !options.skipOverwriteConfirm
+        ) {
+            const shouldOverwrite = await new Promise<boolean>((resolve) => {
+                dialog.warning({
+                    title: '确认覆盖',
+                    content: '当前大纲已有内容，继续生成将覆盖现有大纲。是否继续？',
+                    positiveText: '覆盖并生成',
+                    negativeText: '取消',
+                    onPositiveClick: () => resolve(true),
+                    onNegativeClick: () => resolve(false),
+                    onClose: () => resolve(false),
+                });
+            });
+            if (!shouldOverwrite) return false;
         }
 
         isLoading.value = true;
@@ -112,16 +141,18 @@ export function useStructureLogic() {
                 }
             );
 
-            if (task.aborted) return;
+            if (task.aborted) return false;
             currentOutline.value = outline;
             message.success('大纲生成成功');
             outlineHistoryRef.value?.refresh?.();
+            return true;
         } catch (e: unknown) {
             if (isAbortLikeError(e)) {
                 message.info('已取消生成');
-                return;
+                return false;
             }
             message.error('生成大纲失败: ' + getErrorMessage(e));
+            return false;
         } finally {
             task.dispose();
             isLoading.value = false;
@@ -205,27 +236,49 @@ export function useStructureLogic() {
             } catch (e) {
                 console.warn('Failed to pre-load synopsis', e);
             }
+            void consumePendingStructureAdoption();
         }
     }, { immediate: true });
 
     // 监听梗概页面发来的 adopt-synopsis 事件，更新上下文
     function handleAdoptSynopsis(payload: unknown) {
-        const synopsisContext = payload && typeof payload === 'object' && 'context' in payload
-            ? (payload as { context?: unknown }).context
+        const data = payload && typeof payload === 'object'
+            ? payload as StructureAdoptionPayload
             : null;
+        if (data?.projectName && data.projectName !== projectStore.currentProject) return;
+        const synopsisContext = data?.context ?? null;
         if (synopsisContext) {
             context.value = String(synopsisContext);
+        }
+        if (typeof data?.guidance === 'string') {
+            guidance.value = data.guidance;
+        }
+    }
+
+    async function consumePendingStructureAdoption() {
+        const pending = projectStore.pendingStructureAdoption as StructureAdoptionPayload | null;
+        if (!pending) return;
+        if (pending.projectName && pending.projectName !== projectStore.currentProject) return;
+        projectStore.clearPendingStructureAdoption();
+        handleAdoptSynopsis(pending);
+        if (pending.autoGenerateOutline) {
+            await handleGenerateOutline({ skipOverwriteConfirm: true });
         }
     }
 
     onMounted(() => {
         bus.on('adopt-synopsis', handleAdoptSynopsis);
         bus.on('outline-refresh', handleOutlineRefresh);
+        void consumePendingStructureAdoption();
     });
 
     onBeforeUnmount(() => {
         bus.off('adopt-synopsis', handleAdoptSynopsis);
         bus.off('outline-refresh', handleOutlineRefresh);
+    });
+
+    watch(() => projectStore.pendingStructureAdoption, () => {
+        void consumePendingStructureAdoption();
     });
 
     return {

@@ -37,14 +37,16 @@
 
   <!-- 移动端：脱离按钮锚点，从标题栏下方居中弹出，自适应宽度 -->
   <template v-else>
-    <n-tooltip trigger="hover">
-      <template #trigger>
-        <n-button quaternary circle :size="buttonSize" @click="show = !show">
-          <template #icon><n-icon :component="Tags" /></template>
-        </n-button>
-      </template>
-      {{ t('components.storyTagsPanel.title') }}
-    </n-tooltip>
+    <n-button
+      quaternary
+      circle
+      :size="buttonSize"
+      :aria-label="t('components.storyTagsPanel.title')"
+      :title="t('components.storyTagsPanel.title')"
+      @click="show = !show"
+    >
+      <template #icon><n-icon :component="Tags" /></template>
+    </n-button>
 
     <Teleport to="body">
       <Transition name="story-tags-mobile">

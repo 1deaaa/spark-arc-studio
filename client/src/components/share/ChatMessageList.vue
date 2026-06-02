@@ -178,52 +178,60 @@
           </template>
           <!-- 助手操作按钮（始终在最后，发送时隐藏；纯上下文压缩通知不显示） -->
           <div v-if="!sending && getMessageSegments(m).some(s => s.type !== 'context_compaction' && s.type !== 'context_compaction_summary')" class="bubble-actions bubble-actions-assistant">
-            <n-tooltip trigger="hover">
+            <div class="bubble-action-buttons">
+              <n-tooltip trigger="hover">
+                <template #trigger>
+                  <n-button
+                    quaternary
+                    circle
+                    size="tiny"
+                    @click="retryMessage(idx)"
+                    :disabled="!canRetry(idx)"
+                  >
+                    <template #icon>
+                      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M1 4v6h6"/><path d="M3.51 15a9 9 0 1 0 2.13-9.36L1 10"/></svg>
+                    </template>
+                  </n-button>
+                </template>
+                {{ t('components.chatMessageList.retry') }}
+              </n-tooltip>
+              <n-tooltip trigger="hover">
+                <template #trigger>
+                  <n-button
+                    quaternary
+                    circle
+                    size="tiny"
+                    @click="copyMessageContent(m)"
+                  >
+                    <template #icon>
+                      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="9" y="9" width="13" height="13" rx="2" ry="2"></rect><path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"></path></svg>
+                    </template>
+                  </n-button>
+                </template>
+                {{ t('components.chatMessageList.copy') }}
+              </n-tooltip>
+              <n-tooltip trigger="hover">
+                <template #trigger>
+                  <n-button
+                    quaternary
+                    circle
+                    size="tiny"
+                    :disabled="!canMutateMessage(m)"
+                    @click="$emit('delete-msg', getMutableMessageId(m))"
+                  >
+                    <template #icon>
+                      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="3 6 5 6 21 6"></polyline><path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"></path><line x1="10" y1="11" x2="10" y2="17"></line><line x1="14" y1="11" x2="14" y2="17"></line></svg>
+                    </template>
+                  </n-button>
+                </template>
+                {{ canMutateMessage(m) ? t('common.delete') : t('components.chatMessageList.syncWaitDelete') }}
+              </n-tooltip>
+            </div>
+            <n-tooltip v-if="getMessageWindowTokenLabel(m)" trigger="hover">
               <template #trigger>
-                <n-button
-                  quaternary
-                  circle
-                  size="tiny"
-                  @click="retryMessage(idx)"
-                  :disabled="!canRetry(idx)"
-                >
-                  <template #icon>
-                    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M1 4v6h6"/><path d="M3.51 15a9 9 0 1 0 2.13-9.36L1 10"/></svg>
-                  </template>
-                </n-button>
+                <span class="context-window-pill">{{ getMessageWindowTokenLabel(m) }}</span>
               </template>
-              {{ t('components.chatMessageList.retry') }}
-            </n-tooltip>
-            <n-tooltip trigger="hover">
-              <template #trigger>
-                <n-button
-                  quaternary
-                  circle
-                  size="tiny"
-                  @click="copyMessageContent(m)"
-                >
-                  <template #icon>
-                    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="9" y="9" width="13" height="13" rx="2" ry="2"></rect><path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"></path></svg>
-                  </template>
-                </n-button>
-              </template>
-              {{ t('components.chatMessageList.copy') }}
-            </n-tooltip>
-            <n-tooltip trigger="hover">
-              <template #trigger>
-                <n-button
-                  quaternary
-                  circle
-                  size="tiny"
-                  :disabled="!canMutateMessage(m)"
-                  @click="$emit('delete-msg', getMutableMessageId(m))"
-                >
-                  <template #icon>
-                    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="3 6 5 6 21 6"></polyline><path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"></path><line x1="10" y1="11" x2="10" y2="17"></line><line x1="14" y1="11" x2="14" y2="17"></line></svg>
-                  </template>
-                </n-button>
-              </template>
-              {{ canMutateMessage(m) ? t('common.delete') : t('components.chatMessageList.syncWaitDelete') }}
+              {{ getMessageWindowTokenHint(m) }}
             </n-tooltip>
           </div>
         </template>
@@ -432,6 +440,21 @@ type LlmUsageMeta = {
   [key: string]: unknown;
 };
 
+type ContextWindowMeta = {
+  input_tokens?: number;
+  inputTokens?: number;
+  output_tokens?: number;
+  outputTokens?: number;
+  original_tokens?: number;
+  originalTokens?: number;
+  retained_messages?: number;
+  retainedMessages?: number;
+  model?: string;
+  compacted?: boolean;
+  reason?: string;
+  [key: string]: unknown;
+};
+
 type ChatMessageItem = ChatMessage & {
   id?: MessageId | null;
   clientId?: MessageId | null;
@@ -444,10 +467,14 @@ type ChatMessageItem = ChatMessage & {
     tool_traces?: unknown;
     llm_usage?: LlmUsageMeta;
     llmUsage?: LlmUsageMeta;
+    context_window_stats?: ContextWindowMeta;
+    contextWindowStats?: ContextWindowMeta;
     [key: string]: unknown;
   };
   llm_usage?: LlmUsageMeta;
   llmUsage?: LlmUsageMeta;
+  context_window_stats?: ContextWindowMeta;
+  contextWindowStats?: ContextWindowMeta;
   tool_traces?: unknown;
   segments?: MessageSegment[];
   agent_id?: string;
@@ -586,6 +613,39 @@ function formatTokenCount(value: number) {
   if (num >= 1000000) return `${(num / 1000000).toFixed(2)}M`;
   if (num >= 1000) return `${(num / 1000).toFixed(1)}K`;
   return `${num}`;
+}
+
+function getMessageContextWindowStats(message: ChatMessageItem) {
+  const raw = message?.metadata?.context_window_stats
+    || message?.metadata?.contextWindowStats
+    || message?.context_window_stats
+    || message?.contextWindowStats;
+  if (!raw || typeof raw !== 'object') return null;
+  const input = Number(raw.input_tokens ?? raw.inputTokens ?? 0) || 0;
+  const output = Number(raw.output_tokens ?? raw.outputTokens ?? 0) || 0;
+  const model = String(raw.model || '').trim();
+  if (input <= 0 && output <= 0) return null;
+  return {
+    input,
+    output,
+    model,
+  };
+}
+
+function getMessageWindowTokenLabel(message: ChatMessageItem) {
+  const stats = getMessageContextWindowStats(message);
+  if (!stats) return '';
+  return t('components.chatMessageList.windowTokenLabel', {
+    input: formatTokenCount(stats.input),
+    output: formatTokenCount(stats.output),
+  });
+}
+
+function getMessageWindowTokenHint(message: ChatMessageItem) {
+  const stats = getMessageContextWindowStats(message);
+  if (!stats) return '';
+  const modelSuffix = stats.model ? ` · ${stats.model}` : '';
+  return `${t('components.chatMessageList.windowTokenHint')}${modelSuffix}`;
 }
 
 function getContextCompactionStatus(seg: MessageSegment) {
@@ -1596,12 +1656,34 @@ defineExpose({ listRef });
 
 .bubble-actions {
   display: flex;
+  align-items: center;
   justify-content: flex-end;
+  gap: 8px;
   margin-top: 4px;
+  flex-wrap: wrap;
 }
 
 .bubble-actions-assistant {
   opacity: 1;
+}
+
+.bubble-action-buttons {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+}
+
+.context-window-pill {
+  display: inline-flex;
+  align-items: center;
+  padding: 3px 8px;
+  border-radius: 999px;
+  font-size: var(--spark-fs-xs);
+  line-height: 1;
+  color: var(--spark-text-secondary);
+  background: rgba(255, 255, 255, 0.04);
+  border: 1px solid rgba(255, 255, 255, 0.08);
+  white-space: nowrap;
 }
 
 .tool-trace-chip {

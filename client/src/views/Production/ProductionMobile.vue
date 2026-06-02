@@ -241,7 +241,7 @@
 
 <script setup lang="ts">
 import { ref, computed, onMounted, inject, watch, type Ref } from 'vue';
-import { NIcon, NSpin, NButton, NInput, NInputNumber, NSelect, NDrawer, NDrawerContent, NTabs, NTabPane, NSwitch } from 'naive-ui';
+import { NIcon, NSpin, NButton, NInput, NInputNumber, NSelect, NDrawer, NDrawerContent, NTabs, NTabPane, NSwitch, NText } from 'naive-ui';
 import { useI18n } from 'vue-i18n';
 import { ArrowLeft, BookOpen, Pencil, Save, Sparkles, SquarePen } from '@lucide/vue';
 import { useSceneStore, type SceneWithClientId } from '../../components/stores/sceneStore';
