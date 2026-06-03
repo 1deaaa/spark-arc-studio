@@ -3,7 +3,6 @@ from __future__ import annotations
 from agents.tools.attachment import read_attachment_chunk
 from agents.tools.automation import (
     check_scriptwriter_status,
-    read_project_story_tags,
     trigger_auto_write,
     update_project_story_tags,
     work_tracker,
@@ -84,7 +83,6 @@ DIRECTOR_TOOLS = SHARED_READ_TOOLS + [
     work_tracker,
     trigger_auto_write,
     check_scriptwriter_status,
-    read_project_story_tags,
     update_project_story_tags,
     search_project,
     semantic_search,
@@ -104,7 +102,6 @@ ALL_TOOLS = (
         delegate_task,
         trigger_auto_write,
         check_scriptwriter_status,
-        read_project_story_tags,
         update_project_story_tags,
         search_project,
         semantic_search,

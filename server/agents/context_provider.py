@@ -285,10 +285,11 @@ class AgentContextProvider:
         """
         parts: List[str] = []
 
-        # 所有 Agent 统一注入项目级 story tags（含 POV 醒目优化）
-        story_tags_block = self._build_story_tags_block()
-        if story_tags_block:
-            parts.append(story_tags_block)
+        # 所有 Agent 统一注入项目级 story tags（含 POV 醒目优化），除了风格和工具 Agent
+        if agent_id not in ("agent_style", "agent_utility"):
+            story_tags_block = self._build_story_tags_block()
+            if story_tags_block:
+                parts.append(story_tags_block)
 
         if agent_id == "agent_muse":
             # Muse: 灵感列表
