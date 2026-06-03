@@ -3,6 +3,8 @@
     v-if="isTauriDesktop && showTitleBar"
     class="spark-titlebar"
     :class="{ 'is-login': isLoginPage }"
+    data-tauri-drag-region
+    @mousedown="onTitlebarMousedown"
   >
     <!-- 左侧品牌 -->
     <a class="titlebar-brand" :href="SPARKARC_GITHUB_URL" target="_blank" rel="noopener">
@@ -25,8 +27,17 @@ import { SPARKARC_GITHUB_URL } from '@/config';
 import { useWindowControls } from '@/composables/useWindowControls';
 import WindowControls from './WindowControls.vue';
 
-const { isTauriDesktop } = useWindowControls();
+const { isTauriDesktop, startDragging } = useWindowControls();
 const route = useRoute();
+
+function onTitlebarMousedown(e: MouseEvent) {
+  if (e.button !== 0) return;
+  const target = e.target as HTMLElement;
+  if (target.closest('.titlebar-brand') || target.closest('.win-controls')) {
+    return;
+  }
+  void startDragging();
+}
 
 /** 有 HeaderToolbar 的页面（Editor / Synopsis / ProductHome）无需显示独立 TitleBar */
 const pagesWithHeader = ['Editor', 'Synopsis', 'ProductHome'];
@@ -51,7 +62,6 @@ const isLoginPage = computed(() => route.name === 'Login');
   align-items: center;
   user-select: none;
   -webkit-user-select: none;
-  -webkit-app-region: drag;
   position: fixed;
   background: transparent;
   padding-right: 6px;

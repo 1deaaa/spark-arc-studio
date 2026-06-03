@@ -45,6 +45,7 @@
       v-if="isTauriDesktop"
       class="launcher-titlebar"
       data-tauri-drag-region
+      @mousedown="onTitlebarMousedown"
     >
       <div class="launcher-titlebar__spacer" data-tauri-drag-region></div>
       <button
@@ -262,9 +263,21 @@ function cycleLocale() {
   setI18nLocale(next);
 }
 
-const { close, isMaximized, isTauriDesktop, minimize, toggleMaximize } = useWindowControls();
+const { close, isMaximized, isTauriDesktop, minimize, startDragging, toggleMaximize } = useWindowControls();
 const { bgCanvas, destroy: destroyBackground, init: initBackground, resetMouse, updateMouse } = useLoginBackground();
 const { destroy: destroyFx, fxCanvas, handleLeave, handleMouseMove, init: initFx } = useLoginFx();
+
+function onTitlebarMousedown(e: MouseEvent) {
+  if (e.button !== 0) return; // 仅左键拖拽
+  const target = e.target as HTMLElement;
+  if (
+    target.closest('.launcher-controls') ||
+    target.closest('.launcher-titlebar__locale')
+  ) {
+    return;
+  }
+  void startDragging();
+}
 
 const bgCanvasRef = bgCanvas;
 const fxCanvasRef = fxCanvas;
@@ -370,6 +383,22 @@ function resetServer() {
   serverPanelOpen.value = true;
 }
 
+async function detectLocalhandshake(): Promise<string | null> {
+  const localPorts = [6688, 7788];
+  for (const port of localPorts) {
+    const localUrl = `http://localhost:${port}`;
+    try {
+      const res = await checkHealth(localUrl, 1000);
+      if (res.ok) {
+        return localUrl;
+      }
+    } catch {
+      // 忽略
+    }
+  }
+  return null;
+}
+
 async function checkServerOnLauncherStartup() {
   const startupHints = consumeLauncherStartupHintsFromUrl();
   skipAutoConnectOnce.value = !!startupHints?.skipAutoConnect;
@@ -381,6 +410,12 @@ async function checkServerOnLauncherStartup() {
   if (startupHints?.serverBase) {
     setApiBaseUrl(startupHints.serverBase);
     serverInput.value = startupHints.serverBase;
+  } else {
+    const localDetected = await detectLocalhandshake();
+    if (localDetected) {
+      setApiBaseUrl(localDetected);
+      serverInput.value = localDetected;
+    }
   }
 
   const configured = normalizeApiBaseUrl(getApiBaseUrl()) || APP_DEFAULT_SERVER;
@@ -1231,12 +1266,10 @@ watch(autoEnterNextTime, (nextValue) => {
   display: flex;
   align-items: center;
   background: transparent;
-  -webkit-app-region: drag;
 }
 
 /* 标题栏内：语言切换按钮（Tauri 模式） */
 .launcher-titlebar__locale {
-  -webkit-app-region: no-drag;
   display: inline-flex;
   align-items: center;
   gap: 6px;
@@ -1341,7 +1374,6 @@ watch(autoEnterNextTime, (nextValue) => {
 
 .launcher-controls {
   display: flex;
-  -webkit-app-region: no-drag;
 }
 
 .launcher-controls__btn {
@@ -1389,15 +1421,24 @@ watch(autoEnterNextTime, (nextValue) => {
   position: relative;
 }
 
+.launcher-controls__square.is-maximized {
+  width: 10px;
+  height: 10px;
+  border: 1.5px solid currentColor;
+  position: relative;
+  transform: translate(-1px, 1px);
+}
+
 .launcher-controls__square.is-maximized::after {
   content: '';
   position: absolute;
-  top: -4px;
-  left: 3px;
-  width: 12px;
-  height: 12px;
-  border: 1.5px solid currentColor;
-  border-radius: 2px;
+  top: -3px;
+  right: -3px;
+  width: 10px;
+  height: 10px;
+  border-top: 1.5px solid currentColor;
+  border-right: 1.5px solid currentColor;
+  pointer-events: none;
 }
 
 .launcher-controls__cross {

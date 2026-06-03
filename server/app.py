@@ -46,7 +46,7 @@ import asyncio
 import httpx
 from fastapi import FastAPI, Request, Depends, HTTPException
 from fastapi.staticfiles import StaticFiles
-from fastapi.responses import FileResponse
+from fastapi.responses import FileResponse, PlainTextResponse
 from fastapi.middleware.cors import CORSMiddleware
 from contextlib import asynccontextmanager
 from starlette.datastructures import Headers
@@ -551,14 +551,9 @@ async def delete_existing_notice(notice_id: str, admin_user: dict = Depends(requ
         raise HTTPException(status_code=500, detail=str(e))
 
 # 健康检查
-@app.get("/health")
+@app.get("/health", response_class=PlainTextResponse)
 async def health_check():
-    return {
-        "status": "healthy",
-        "version": "2.0.0",
-        "framework": "FastAPI",
-        "message": "SparkArc API is running"
-    }
+    return "sparkarc-ok"
 
 # 挂载 MCP Server（带鉴权中间件）
 # 挂载到 /api/mcp/，确保尾部斜杠正确处理
@@ -577,26 +572,27 @@ async def mcp_redirect(request: Request):
     return RedirectResponse(url=str(url), status_code=307)
 
 async def warm_up():
-    """启动后预热，通过重试机制确保服务可用后再发请求"""
-    max_retries = 10
-    retry_delay = 0.1  # seconds
-    for attempt in range(max_retries):
-        try:
-            async with httpx.AsyncClient() as client:
-                response = await client.get("http://localhost:6688/health")
-                if response.status_code == 200:
-                    print(f"✅ 应用预热成功！(尝试 {attempt + 1}/{max_retries})")
-                    return
-                else:
-                    print(f"🟡 应用预热：服务返回状态码 {response.status_code}，将在 {retry_delay}s 后重试...")
-        except httpx.ConnectError:
-            print(f"🟡 应用预热：连接失败，将在 {retry_delay}s 后重试...")
-        except Exception as e:
-            print(f"❌ 应用预热请求异常: {e}，将在 {retry_delay}s 后重试...")
-        
-        await asyncio.sleep(retry_delay)
-    
-    print(f"❌ 应用预热失败：在 {max_retries} 次尝试后仍无法连接服务。")
+    """启动后预热，确保重依赖在后台预热完毕"""
+    # 延迟 0.1s 确保 lifespan complete
+    await asyncio.sleep(0.1)
+
+    # 1. 预热数据库
+    try:
+        from sqlalchemy import select
+        from core.auth import user_db
+        with user_db._session() as s:
+            s.execute(select(1)).scalar()
+        print("✅ 数据库预热完成 (连接池已建立)", flush=True)
+    except Exception as e:
+        print(f"⚠️ 数据库预热失败 (非致命): {e}", flush=True)
+
+    # 2. 预热分词器和模型估算
+    try:
+        from llm.agen_matchbox.estimate_tokens import estimate_tokens
+        estimate_tokens("warmup ping")
+        print("✅ 分词器预热完成", flush=True)
+    except Exception as e:
+        print(f"⚠️ 分词器预热失败 (非致命): {e}", flush=True)
 
 # 获取前端静态文件目录
 current_dir = os.path.dirname(os.path.abspath(__file__))

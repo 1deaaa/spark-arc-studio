@@ -1,5 +1,5 @@
 <template>
-  <header class="app-header no-select" @mousedown="onHeaderMousedown">
+  <header class="app-header no-select" data-tauri-drag-region @mousedown="onHeaderMousedown">
     <div class="header-left">
       <n-tooltip trigger="hover">
         <template #trigger>
@@ -170,12 +170,22 @@ import WindowControls from './WindowControls.vue';
 const { startDragging, isTauriDesktop: showWinControls } = useWindowControls();
 
 /** 仅在空白区域触发窗口拖拽，按钮/输入等交互元素不触发 */
-function onHeaderMousedown(e) {
-  if (!showWinControls.value) return;
-  const tag = e.target.tagName.toLowerCase();
-  const interactive = ['button', 'input', 'select', 'textarea', 'a', 'svg', 'path'];
-  if (interactive.includes(tag) || e.target.closest('button, a, input, .n-button, .n-switch, .n-dropdown, .window-controls, .header-buttons')) return;
-  startDragging();
+function onHeaderMousedown(e: MouseEvent) {
+  if (!showWinControls.value || e.button !== 0) return;
+  const target = e.target as HTMLElement;
+  const tag = target.tagName.toLowerCase();
+  const interactiveTags = ['button', 'input', 'select', 'textarea', 'a', 'svg', 'path'];
+  if (
+    interactiveTags.includes(tag) ||
+    target.closest(
+      'button, a, input, select, textarea, ' +
+      '.n-button, .n-switch, .n-dropdown, .n-popover, .n-tooltip, ' +
+      '.win-controls, .dock-bar, .user-info, .logo'
+    )
+  ) {
+    return;
+  }
+  void startDragging();
 }
 
 /** ── macOS Dock 放大推开效果（composable） ── */

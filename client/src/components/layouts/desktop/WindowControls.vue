@@ -103,7 +103,6 @@ const fillBg = computed(() =>
   height: 100%;
   padding-left: 0;
   padding-right: 0;
-  -webkit-app-region: no-drag;
 }
 
 .win-controls.header {
@@ -130,7 +129,6 @@ const fillBg = computed(() =>
     border-color 0.18s ease,
     color 0.18s ease,
     opacity 0.18s ease;
-  -webkit-app-region: no-drag;
 }
 
 .win-controls.titlebar .win-btn {

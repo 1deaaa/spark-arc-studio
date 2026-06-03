@@ -163,8 +163,11 @@ export async function checkHealth(inputBaseUrl: string, timeoutMs = 4000): Promi
   try {
     const res = await fetch(targetUrl, { method: 'GET', signal: controller.signal });
     if (!res.ok) return { ok: false, status: res.status };
-    const data = await res.json().catch(() => ({}));
-    return { ok: true, data };
+    const text = await res.text().catch(() => '');
+    if (text.trim() === 'sparkarc-ok') {
+      return { ok: true, data: text };
+    }
+    return { ok: false, error: 'invalid handshake' };
   } catch (err: unknown) {
     const message = err instanceof Error ? err.message : '连接失败';
     return { ok: false, error: message || '连接失败' };
