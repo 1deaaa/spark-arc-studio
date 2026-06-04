@@ -1,17 +1,20 @@
 <template>
-  <div
+  <component
+    :is="as"
+    ref="rootRef"
     class="agent-avatar"
     :class="{ 'is-active': active, 'is-disabled': disabled }"
     :style="avatarStyle"
     :aria-label="resolvedAriaLabel"
-    :role="role"
+    :role="resolvedRole"
+    :disabled="nativeDisabled"
   >
     <component
       :is="iconComponent"
       class="agent-avatar-icon"
       :stroke-width="strokeWidth"
     />
-  </div>
+  </component>
 </template>
 
 <script setup lang="ts">
@@ -26,7 +29,7 @@
  * 使用方式：
  *   <AgentAvatar :agent-id="seg.source_agent" :size="32" :active="isStreaming" />
  */
-import { computed, markRaw, type Component } from 'vue';
+import { computed, markRaw, ref, type Component } from 'vue';
 import {
   Compass, Wand2, ScrollText, Waypoints, Feather, ScanEye, Palette, Sparkles, Settings2,
 } from '@lucide/vue';
@@ -50,6 +53,8 @@ const LUCIDE_ICON_MAP: Record<string, Component> = {
 };
 
 const props = defineProps({
+  /** 根元素类型。默认是普通头像；需要交互时可渲染为原生 button */
+  as: { type: String, default: 'div' },
   /** Agent ID，对应 registry.py 的 key */
   agentId: { type: String, default: '' },
   /** 头像直径（px），默认 32 */
@@ -62,11 +67,12 @@ const props = defineProps({
   strokeWidth: { type: Number, default: 2 },
   /** ARIA 标签覆盖，默认使用 Agent name */
   ariaLabel: { type: String, default: '' },
-  /** ARIA role，默认 img */
-  role: { type: String, default: 'img' },
+  /** ARIA role，留空时普通头像默认 img，原生 button 不额外声明 role */
+  role: { type: String, default: '' },
 });
 
 const { getAgentIcon, getAgentColor, getAgentName } = useAgentRegistry();
+const rootRef = ref<HTMLElement | null>(null);
 
 const iconComponent = computed<Component>(() => {
   const iconName = getAgentIcon(props.agentId);
@@ -86,6 +92,13 @@ const avatarStyle = computed(() => ({
 }));
 
 const resolvedAriaLabel = computed(() => props.ariaLabel || getAgentName(props.agentId));
+const resolvedRole = computed(() => props.role || (props.as === 'button' ? undefined : 'img'));
+const nativeDisabled = computed(() => (props.as === 'button' ? props.disabled : undefined));
+
+defineExpose({
+  getElement: () => rootRef.value,
+  rootRef,
+});
 </script>
 
 <style scoped>

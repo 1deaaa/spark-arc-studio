@@ -821,7 +821,6 @@ const enUS = {
       switchAgent: 'Switch agent',
       rerun: 'Rerun',
       agentInUse: 'This agent is currently in use by another window',
-      dragHint: 'Drag or click to select',
     },
     fileExplorer: {
       newScene: 'New Scene',

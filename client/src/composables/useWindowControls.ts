@@ -22,6 +22,10 @@ export function useWindowControls() {
   let currentWindow: TauriWindowLike | null = null;
   let unlistenResize: ResizeUnlisten = null;
 
+  function reportWindowControlError(action: string, error: unknown) {
+    console.warn(`[SparkArc] Tauri 窗口操作失败：${action}`, error);
+  }
+
   async function getWindow() {
     if (currentWindow) return currentWindow;
     try {
@@ -34,23 +38,42 @@ export function useWindowControls() {
   }
 
   async function minimize() {
-    const win = await getWindow();
-    win?.minimize();
+    try {
+      const win = await getWindow();
+      await win?.minimize();
+    } catch (error) {
+      reportWindowControlError('minimize', error);
+    }
   }
 
   async function toggleMaximize() {
-    const win = await getWindow();
-    win?.toggleMaximize();
+    try {
+      const win = await getWindow();
+      await win?.toggleMaximize();
+      if (win) {
+        isMaximized.value = await win.isMaximized();
+      }
+    } catch (error) {
+      reportWindowControlError('toggleMaximize', error);
+    }
   }
 
   async function close() {
-    const win = await getWindow();
-    win?.close();
+    try {
+      const win = await getWindow();
+      await win?.close();
+    } catch (error) {
+      reportWindowControlError('close', error);
+    }
   }
 
   async function startDragging() {
-    const win = await getWindow();
-    win?.startDragging();
+    try {
+      const win = await getWindow();
+      await win?.startDragging();
+    } catch (error) {
+      reportWindowControlError('startDragging', error);
+    }
   }
 
   onMounted(async () => {

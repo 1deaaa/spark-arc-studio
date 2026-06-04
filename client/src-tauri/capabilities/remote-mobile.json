@@ -6,7 +6,7 @@
   "platforms": ["android", "iOS"],
   "local": false,
   "remote": {
-    "urls": ["http://*", "https://*"]
+    "urls": ["http://*:*/*", "https://*:*/*"]
   },
   "permissions": [
     "os:default",

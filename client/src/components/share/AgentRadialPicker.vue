@@ -1,10 +1,13 @@
 <template>
-  <!-- 触发器：纯圆形 Agent 头像（作为组件根元素，无外层容器） -->
-  <button
+  <!-- 触发器：AgentAvatar 自身就是原生按钮，不再额外包一层外壳 -->
+  <AgentAvatar
     ref="triggerRef"
+    as="button"
     type="button"
     class="picker-trigger"
     :class="[$attrs.class, { 'is-open': isOpen }]"
+    :agent-id="value"
+    :size="26"
     :disabled="disabled"
     :aria-haspopup="'listbox'"
     :aria-expanded="isOpen"
@@ -13,13 +16,7 @@
     @pointerdown="onTriggerPointerDown"
     @click="onTriggerClick"
     @keydown="onTriggerKeyDown"
-  >
-    <AgentAvatar
-      class="picker-trigger-avatar"
-      :agent-id="value"
-      :size="26"
-    />
-  </button>
+  />
 
   <!-- 轮盘 -->
   <Teleport to="body">
@@ -117,15 +114,6 @@
               />
             </svg>
 
-            <!-- 中央交互提示 -->
-            <div
-              class="agent-radial-hint"
-              :class="{ 'is-dragging': pointerDownOnTrigger || isPointerDragging }"
-              aria-hidden="true"
-            >
-              {{ t('components.agentRadialPicker.dragHint') }}
-            </div>
-
             <!-- 中央枢纽：当前选中的 Agent 头像（支持抓取拖拽，主题色呼吸光晕） -->
             <div
               class="agent-radial-hub"
@@ -216,6 +204,10 @@ const emit = defineEmits<{
   (e: 'rerun'): void;
 }>();
 
+type AgentAvatarExpose = {
+  getElement: () => HTMLElement | null;
+};
+
 const { t } = useI18n();
 const { getAgentName, getAgentColor } = useAgentRegistry();
 
@@ -225,7 +217,7 @@ const gradientId = computed(() => `beam-gradient-${instanceId}`);
 const glowId = computed(() => `radial-glow-${instanceId}`);
 
 const isOpen = ref(false);
-const triggerRef = ref<HTMLButtonElement | null>(null);
+const triggerRef = ref<AgentAvatarExpose | null>(null);
 const overlayRef = ref<HTMLDivElement | null>(null);
 const wheelRef = ref<HTMLDivElement | null>(null);
 const slotRefs = ref<Array<HTMLElement | null>>([]);
@@ -505,7 +497,7 @@ const wheelStyle = computed(() => ({
 }));
 
 function recalcWheelCenter(): void {
-  const trig = triggerRef.value;
+  const trig = getTriggerElement();
   if (!trig) return;
   const rect = trig.getBoundingClientRect();
   // 关键：不再钳制 cx/cy，wheel 中心严格对齐触发器按钮中心，按钮位置永远不漂移
@@ -520,6 +512,10 @@ function recalcWheelCenter(): void {
   } else {
     dynamicCenterDelta.value = 0;
   }
+}
+
+function getTriggerElement(): HTMLElement | null {
+  return triggerRef.value?.getElement() ?? null;
 }
 
 /**
@@ -707,7 +703,7 @@ function onWindowPointerUp(evt: PointerEvent): void {
      * 这造成点击 trigger 视觉中心时 evt.target === overlayRef 为真 → close()，出现“点一下立刻消失”。
      * 修复：按鼠标抬起的物理坐标是否仍在 trigger rect 内判断，是则保持轮盘打开。
      */
-    const trig = triggerRef.value;
+    const trig = getTriggerElement();
     let stillOnTrigger = false;
     if (trig) {
       const r = trig.getBoundingClientRect();
@@ -830,23 +826,20 @@ onBeforeUnmount(() => {
 </script>
 
 <style scoped>
-/* ============ 触发器：与 AgentAvatar “合二为一” ============ */
+/* ============ 触发器：AgentAvatar 自身就是按钮 ============ */
 /*
- * 设计原则：button 作为组件根仅保留无障碍/键盘交互，视觉上完全是 AgentAvatar 本身。
+ * 设计原则：AgentAvatar 根元素直接渲染为 button，避免 button 外壳 + avatar 内壳的双层圆形。
  * 必须彻底重置 button 的 user-agent 默认样式（特别是 iOS Safari/Chrome 移动端会给 button 默认加
  * 渐变背景、圆角、font/line-height 偏移、默认 padding 等），避免移动端出现 button “压变形”。
- * 高亮所有反馈都作用在内层 .picker-trigger-avatar 上，让头像本身亮起来。
+ * 高亮反馈直接作用在头像按钮本身。
  */
 .picker-trigger {
-  /* 彻底重置 button 的所有 user-agent 默认样式 */
+  /* 重置 button 默认盒模型，但保留 AgentAvatar 自己的背景、边框、颜色 */
   -webkit-appearance: none;
   appearance: none;
   margin: 0;
   padding: 0;
-  border: 0;
-  background: transparent;
   font: inherit;
-  color: inherit;
   line-height: 0; /* 除去 button 默认 baseline 间距，防止产生高度变形 */
 
   /* 仅保留 hit area 与交互反馈所需的样式 */
@@ -885,7 +878,7 @@ onBeforeUnmount(() => {
   transition-duration: 0.08s;
 }
 
-.picker-trigger:focus-visible .picker-trigger-avatar {
+.picker-trigger:focus-visible {
   /* focus ring 贴着圆形头像边缘，不在外面形成矩形 outline、避免破坏圆形视觉 */
   box-shadow:
     0 0 0 2px color-mix(in srgb, var(--spark-primary) 60%, transparent),
@@ -897,14 +890,8 @@ onBeforeUnmount(() => {
   cursor: not-allowed;
 }
 
-.picker-trigger-avatar {
-  flex-shrink: 0;
-  /* 根据父层 hover/open/focus 状态驱动内层光环 */
-  transition: box-shadow 0.2s ease;
-}
-
-.picker-trigger:hover:not(:disabled) .picker-trigger-avatar,
-.picker-trigger.is-open .picker-trigger-avatar {
+.picker-trigger:hover:not(:disabled),
+.picker-trigger.is-open {
   /* 高亮通过头像自身的光环表达——不是外层多一圈边框，而是头像本身“亮起来” */
   box-shadow:
     0 0 0 2px color-mix(in srgb, var(--spark-primary) 32%, transparent),
@@ -1074,64 +1061,6 @@ onBeforeUnmount(() => {
   transition: fill 0.15s ease;
 }
 
-/* ============ 中央交互提示徽章 ============ */
-.agent-radial-hint {
-  position: absolute;
-  left: 0;
-  top: -34px;
-  transform: translate(-50%, -50%);
-  padding: 5px 12px;
-  border-radius: 999px;
-  background: color-mix(in srgb, var(--spark-bg-soft, var(--spark-bg)) 90%, transparent);
-  border: 1px dashed color-mix(in srgb, var(--spark-primary) 45%, transparent);
-  color: var(--spark-text-muted);
-  font-size: var(--spark-fs-3xs, 10px);
-  font-weight: 600;
-  letter-spacing: 0.3px;
-  white-space: nowrap;
-  pointer-events: none;
-  z-index: 15;
-  /*
-   * 仅做 opacity 呼吸（GPU 合成）；放射光环移到 ::before 的 transform: scale 上，
-   * 取代旧版 box-shadow 0→8px 的 spread 动画——box-shadow 不能 GPU 加速，每帧都要 paint，
-   * 在打开瞬间叠加 backdrop-filter 会进一步拖慢首帧。
-   */
-  animation: agentRadialHintFade 2.4s ease-in-out infinite;
-}
-
-.agent-radial-hint::before {
-  content: '';
-  position: absolute;
-  inset: 0;
-  border-radius: inherit;
-  border: 1px solid color-mix(in srgb, var(--spark-primary) 28%, transparent);
-  pointer-events: none;
-  animation: agentRadialHintRing 2.4s ease-in-out infinite;
-  /* 关键：transform 触发 GPU 合成层而非 paint */
-  will-change: transform, opacity;
-}
-
-@keyframes agentRadialHintFade {
-  0%, 100% { opacity: 0.65; }
-  50% { opacity: 1; }
-}
-
-@keyframes agentRadialHintRing {
-  0%, 100% { transform: scale(1); opacity: 0.55; }
-  50% { transform: scale(1.22); opacity: 0; }
-}
-
-.agent-radial-hint.is-dragging {
-  animation: none;
-  opacity: 0;
-  transition: opacity 0.16s ease-out;
-}
-
-.agent-radial-hint.is-dragging::before {
-  animation: none;
-  opacity: 0;
-}
-
 /* ============ 扇片：圆形头像按钮 ============ */
 .agent-radial-slot {
   position: absolute;
@@ -1253,15 +1182,11 @@ onBeforeUnmount(() => {
     transition: none;
   }
 
-  .agent-radial-hint,
-  .agent-radial-hint::before {
-    animation: none;
-  }
 }
 
 @media (pointer: coarse) {
-  .picker-trigger {
-    padding: 5px 10px 5px 5px;
+  .picker-trigger::before {
+    inset: -8px;
   }
 }
 </style>

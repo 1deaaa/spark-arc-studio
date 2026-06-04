@@ -6,7 +6,7 @@
   "platforms": ["windows", "macOS", "linux"],
   "local": false,
   "remote": {
-    "urls": ["http://*", "https://*"]
+    "urls": ["http://*:*/*", "https://*:*/*"]
   },
   "permissions": [
     "core:event:allow-listen",

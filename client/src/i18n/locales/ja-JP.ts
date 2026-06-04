@@ -821,7 +821,6 @@ const jaJP = {
       switchAgent: 'Agent を切り替え',
       rerun: 'もう一度',
       agentInUse: 'この Agent は別のウィンドウで使用中です',
-      dragHint: 'ドラッグまたはクリックで選択',
     },
     fileExplorer: {
       newScene: '新規シーン',
