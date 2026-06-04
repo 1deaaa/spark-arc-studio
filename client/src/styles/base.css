@@ -140,19 +140,24 @@ html.viewport-tablet-down {
     --spark-tooltip-mobile-max-width: min(calc(100vw - 24px), 320px);
 }
 
-html.viewport-tablet-down .v-binder-follower-container .n-popover.n-tooltip,
-html.viewport-tablet-down .n-popover.n-tooltip {
-    /* Naive UI 的 tooltip 会挂到跟随层里，窄屏下统一限制最大宽度，避免贴边后溢出视口 */
-    max-inline-size: var(--spark-tooltip-mobile-max-width);
-    box-sizing: border-box;
+html.viewport-tablet-down .v-binder-follower-container .n-popover,
+html.viewport-tablet-down .n-popover {
+    /* 使用物理属性并配合 !important 彻底覆盖 Naive UI 内部或 inline 的 max-width */
+    max-width: var(--spark-tooltip-mobile-max-width) !important;
+    max-inline-size: var(--spark-tooltip-mobile-max-width) !important;
+    box-sizing: border-box !important;
 }
 
-html.viewport-tablet-down .v-binder-follower-container .n-popover.n-tooltip .n-popover__content,
-html.viewport-tablet-down .n-popover.n-tooltip .n-popover__content {
-    /* 允许提示文本在移动端自动换行，长串字符也能强制断开 */
-    max-inline-size: 100%;
-    min-inline-size: 0;
+html.viewport-tablet-down .v-binder-follower-container .n-popover .n-popover__content,
+html.viewport-tablet-down .n-popover .n-popover__content,
+html.viewport-tablet-down .v-binder-follower-container .n-popover .n-popconfirm__body,
+html.viewport-tablet-down .n-popover .n-popconfirm__body,
+html.viewport-tablet-down .v-binder-follower-container .n-popover .n-popconfirm__content,
+html.viewport-tablet-down .n-popover .n-popconfirm__content {
+    /* 允许提示/确认文本在移动端自动换行，长串字符也能强制断开，破除 flex 撑开限制 */
+    max-inline-size: 100% !important;
+    min-inline-size: 0 !important;
     white-space: normal !important;
-    overflow-wrap: anywhere;
-    word-break: break-word;
+    overflow-wrap: anywhere !important;
+    word-break: break-word !important;
 }

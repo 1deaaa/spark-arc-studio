@@ -1,7 +1,7 @@
 import { getViewportSnapshot } from './responsive';
 
 const TOOLTIP_FOLLOWER_SELECTOR = '.v-binder-follower-content';
-const TOOLTIP_SELECTOR = '.n-popover.n-tooltip';
+const TOOLTIP_SELECTOR = '.n-popover';
 const SHIFT_MARKER = ' translateX(var(--spark-tooltip-shift-x, 0px))';
 const VIEWPORT_MARGIN_PX = 12;
 

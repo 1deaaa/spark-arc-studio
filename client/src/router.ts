@@ -2,13 +2,12 @@ import { createRouter, createWebHashHistory, type RouteRecordRaw } from 'vue-rou
 import { getUserInfo } from './services/api';
 import { getSessionToken } from './services/apiClient';
 import { isLocalTauriShell } from './composables/usePlatform';
-import LoginPage from './components/user/LoginPage.vue';
-import ScriptWriterView from './views/ScriptWriter/ScriptWriterIndex.vue';
-import PlayerView from './views/Player/PlayerIndex.vue';
-import ShareManagerView from './views/ShareManager/ShareManagerIndex.vue';
-
-import SynopsisView from './views/Synopsis/SynopsisIndex.vue';
-import ProductHomeView from './views/ProductHome/ProductHomeIndex.vue';
+const LoginPage = () => import('./components/user/LoginPage.vue');
+const ScriptWriterView = () => import('./views/ScriptWriter/ScriptWriterIndex.vue');
+const PlayerView = () => import('./views/Player/PlayerIndex.vue');
+const ShareManagerView = () => import('./views/ShareManager/ShareManagerIndex.vue');
+const SynopsisView = () => import('./views/Synopsis/SynopsisIndex.vue');
+const ProductHomeView = () => import('./views/ProductHome/ProductHomeIndex.vue');
 
 const routes: RouteRecordRaw[] = [
   {

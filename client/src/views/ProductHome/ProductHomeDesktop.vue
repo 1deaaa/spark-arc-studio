@@ -31,8 +31,6 @@
 <script setup lang="ts">
 import { ref } from 'vue';
 
-// 字体本地打包
-import '@fontsource/ma-shan-zheng/400.css';
 
 // 视觉背景层
 import BlueprintGrid from './parts/visuals/BlueprintGrid.vue';
