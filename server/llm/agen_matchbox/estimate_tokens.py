@@ -775,11 +775,8 @@ def _warmup_job(models: Optional[List[str]] = None) -> Dict[str, dict]:
     # 汇总
     ok_count = sum(1 for v in results.values() if v.get("ok"))
     total_count = len(results)
-    new_loaded = sum(1 for v in results.values() if v.get("detail") == "loaded and tested")
-    if new_loaded > 0:
-        print(f"🔥 分词器预热完成: {ok_count}/{total_count} 可用（其中 {new_loaded} 个本次新加载）", flush=True)
-    else:
-        print(f"🔥 分词器预热完成: {ok_count}/{total_count} 可用（全部来自缓存）", flush=True)
+    cache_hits = sum(1 for v in results.values() if v.get("detail") == "already cached")
+    print(f"🔥 分词器预热完成: {ok_count}/{total_count} 可用", flush=True)
     return results
 
 

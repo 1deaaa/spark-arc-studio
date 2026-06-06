@@ -18,6 +18,21 @@
             "justMyCode": true
         },
         {
+            "name": "Server Tray",
+            "type": "debugpy",
+            "request": "launch",
+            "program": "${workspaceFolder}/server/app.py",
+            "args": [],
+            "cwd": "${workspaceFolder}/server",
+            "env": {
+                "WATCHFILES_IGNORE": "**/*.db;**/alembic/versions/**",
+                "SPARKARC_SERVER_TRAY": "1",
+                "SPARKARC_SERVER_RELOAD": "0"
+            },
+            "console": "integratedTerminal",
+            "justMyCode": true
+        },
+        {
             "name": "Web App Dev",
             "type": "node-terminal",
             "request": "launch",

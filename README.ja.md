@@ -453,7 +453,40 @@ Unity SDK（`SparkArc.Unity`）は `presenter/UnitySDK` に配置——極初期
 
 ## クイックスタート
 
-### A. Docker（推奨）
+### A. Windows ワンクリック起動（初心者向け推奨）
+
+Docker のリソース負荷や設定の手間を避けるため、Windows ユーザー向けのワンクリック起動スクリプトを用意しています。**Python の手動インストールも Conda もコマンド操作も不要** — ダブルクリックするだけ。
+
+**要件**: Windows 10 以降（64 ビット、初回リリースの 1507 以降なら可）。
+
+#### 使い方
+
+1. 本リポジトリを空フォルダに `git clone` でクローン（ダウンロードだけでは更新を受け取れないため）
+2. **プロジェクトルートの `start.bat` をダブルクリック**
+3. 初回実行時にポータブル Python（約 40MB）を自動ダウンロードし、依存関係をインストール — 操作不要
+4. インストール完了後、バックエンドが自動起動
+5. 次回以降はデプロイマーカーを検出し、**インストールをスキップして直接起動**
+
+アクセス先: **http://localhost:6688**、または GitHub Releases からクライアントをダウンロード（推奨）。
+スマートフォンからは **http://192.168.x.x（LAN 内 IP）:6688** へアクセス。
+リモートアクセスには、内ネットワーク穿透ツールをご利用ください（サーバーをお持ちなら、この方法は使わないでしょう~~~）。
+
+> 💡 **ゼロ汚染設計**: 生成物はすべて `server/python_env/` 内に留まり、このディレクトリを削除すればシステムに痕跡は残りません。
+> 💡 **べき等性**: スクリプトはバージョン検出とデプロイマーカーを内蔵し、繰り返し実行しても再ダウンロード・再インストールしません。
+> 💡 **pip キャッシュの例外**: pip のダウンロードキャッシュは `%LOCALAPPDATA%\pip\Cache\`（ユーザーレベル、システムレベルではない）に書き込まれ、システムに影響しません。`pip cache purge` で削除可能。
+
+#### 仕組み
+
+スクリプトは以下のフローを自動実行：
+
+1. **PowerShell 7**（`pwsh`）を優先使用。未インストール時は **Windows 組み込み PowerShell 5.x にフォールバック**
+2. ミラーから [python-build-standalone](https://github.com/astral-sh/python-build-standalone) ポータブル Python 3.13 をダウンロード
+3. .NET 組み込みの `GzipStream` + インライン C# tar デコーダーで `server/python_env/` に展開（**tar.exe 不要、外部依存なし**）
+4. `pip install --isolated --no-user` で依存関係をインストール — **パッケージはポータブル環境内に閉じる**
+5. 全工程成功後に `server/python_env/.deploy_complete` デプロイマーカーを書き込み
+6. ポータブル Python を使ってバックエンドを起動（VS Code F5 デバッグ構成と同等）
+
+### B. Docker（推奨）
 
 ```bash
 git clone https://github.com/your-repo/sparkarc.git
@@ -499,7 +532,7 @@ docker compose logs --tail=120 sparkarc
 
 理由: 新コードを確実に反映し、古いマウントファイルによる上書き事故を防ぐためです。
 
-### B. ローカル開発
+### C. ローカル開発
 
 1. Python 環境を作成し `server` 依存を導入
 2. `client` でフロントエンドをビルド

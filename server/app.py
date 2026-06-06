@@ -87,6 +87,9 @@ logging.getLogger("docket.worker").setLevel(logging.WARNING)
 logging.getLogger("mcp.server.streamable_http_manager").setLevel(logging.WARNING)
 logging.getLogger("httpx").setLevel(logging.WARNING)
 
+SERVER_HOST = "0.0.0.0"
+SERVER_PORT = 6688
+
 
 def _run_startup_migrations() -> None:
     from core.auto_migrate import run_auto_migrations
@@ -307,6 +310,15 @@ async def lifespan(app: FastAPI):
 
         # 应用启动后预热
         asyncio.create_task(warm_up())
+        try:
+            from core.system_tray import launch_tray_helper_after_health_check
+
+            server_root = os.path.dirname(os.path.abspath(__file__))
+            asyncio.create_task(
+                launch_tray_helper_after_health_check(server_root=server_root)
+            )
+        except Exception as e:
+            print(f"⚠️ 系统托盘助手提交失败（非致命）: {e}", flush=True)
         print("🚀 服务启动成功！", flush=True)
         
         yield  # ========== 应用运行中 ==========
@@ -657,28 +669,36 @@ else:
 
 if __name__ == '__main__':
     import uvicorn
-    uvicorn.run(
-        "app:app",
-        host='0.0.0.0',
-        port=6688,
-        reload=True,
-        log_config=UVICORN_LOG_CONFIG,
-        reload_excludes=[
-            "test",
-            "test/*",
-            "*.py[co]",
-            "__pycache__",
-            ".git",
-            "*.db",
-            "*.db-journal",
-            "*.db-wal",
-            "data/*",
-            "llm/agen_matchbox/*.db*",
-            "alembic/versions/*",
-            "alembic/versions/**",
-        ],
-        access_log=True,
-        log_level="info",
-        ws='wsproto'  # 切换到 wsproto 以避开 websockets 14.0+ 的弃用警告
-    )
+    from core.system_tray import read_bool_env, running_in_embedded_python
+
+    def _run_uvicorn_server(*, enable_reload: bool) -> None:
+        uvicorn.run(
+            "app:app",
+            host=SERVER_HOST,
+            port=SERVER_PORT,
+            reload=enable_reload,
+            log_config=UVICORN_LOG_CONFIG,
+            reload_excludes=[
+                "test",
+                "test/*",
+                "*.py[co]",
+                "__pycache__",
+                ".git",
+                "*.db",
+                "*.db-journal",
+                "*.db-wal",
+                "data/*",
+                "llm/agen_matchbox/*.db*",
+                "alembic/versions/*",
+                "alembic/versions/**",
+            ],
+            access_log=True,
+            log_level="info",
+            ws='wsproto'  # 切换到 wsproto 以避开 websockets 14.0+ 的弃用警告
+        )
+
+    default_reload = not running_in_embedded_python()
+    enable_reload = read_bool_env("SPARKARC_SERVER_RELOAD", default=default_reload)
+    os.environ["SPARKARC_SERVER_RELOAD_ACTIVE"] = "1" if enable_reload else "0"
+    _run_uvicorn_server(enable_reload=enable_reload)
 

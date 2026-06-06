@@ -9,11 +9,12 @@
 #
 # Deployment flow (generic for any Python project):
 #   Step 1: Download python-build-standalone archive
-#   Step 2: Extract to python_env/
+#   Step 2: Extract to python_env/ (pure .NET, no tar.exe needed)
 #   Step 3: Run init_env.py if exists (project-specific optional hook)
 #   Step 4: pip install -r requirements.txt if exists (standard packages)
 #   Then write .deploy_complete marker. Does NOT launch the app.
 #
+# Minimum: Windows 10 1507 (PowerShell 5.0, .NET 4.6)
 # Usage: Called from project-level BAT, or: pwsh -File bootstrap.ps1
 
 $ErrorActionPreference = "Stop"
@@ -27,6 +28,7 @@ $PythonMajorMinor = "3.13"
 $BasePath      = $PSScriptRoot
 $EnvDir        = Join-Path $BasePath "python_env"
 $MarkerFile    = Join-Path $EnvDir ".deploy_complete"
+$ReqHashFile   = Join-Path $EnvDir ".requirements.sha256"
 $PythonExe     = Join-Path $EnvDir "python.exe"
 $InitScript    = Join-Path $BasePath "init_env.py"
 $ReqFile       = Join-Path $BasePath "requirements.txt"
@@ -58,6 +60,19 @@ function Get-CurrentPythonVersion {
             return $null
         }
         return ($version | Select-Object -First 1).Trim()
+    }
+    catch {
+        return $null
+    }
+}
+
+function Get-RequirementsHash {
+    if (-not (Test-Path $ReqFile)) {
+        return $null
+    }
+
+    try {
+        return (Get-FileHash -Path $ReqFile -Algorithm SHA256).Hash
     }
     catch {
         return $null
@@ -145,17 +160,141 @@ function Download-ResolvedArchive {
     }
 }
 
+# ===== PURE .NET TAR EXTRACTOR (no tar.exe dependency) =====
+# Compiled once per process via Add-Type; works on any Windows with .NET 4.5+ (Win8+).
+if (-not ([System.Management.Automation.PSTypeName]'SparkArc.TarExtractor').Type) {
+    Add-Type -TypeDefinition @"
+using System;
+using System.IO;
+using System.Text;
+
+namespace SparkArc {
+    public class TarExtractor {
+        public static int Extract(string tarPath, string destDir) {
+            int count = 0;
+            using (var fs = File.OpenRead(tarPath)) {
+                byte[] header = new byte[512];
+                while (true) {
+                    int read = ReadFull(fs, header, 512);
+                    if (read < 512) break;
+
+                    bool allZero = true;
+                    for (int i = 0; i < 512; i++) { if (header[i] != 0) { allZero = false; break; } }
+                    if (allZero) break;
+
+                    StringBuilder sb = new StringBuilder(256);
+                    for (int i = 0; i < 100 && header[i] != 0; i++) sb.Append((char)header[i]);
+                    string name = sb.ToString();
+
+                    sb.Clear();
+                    for (int i = 124; i < 136 && header[i] != 0 && header[i] != 32; i++) sb.Append((char)header[i]);
+                    long fileSize = 0;
+                    string sizeStr = sb.ToString().Trim();
+                    if (sizeStr.Length > 0) {
+                        try { fileSize = Convert.ToInt64(sizeStr, 8); } catch { }
+                    }
+
+                    char typeFlag = (char)header[156];
+
+                    if (header[257] == 0x75 && header[258] == 0x73 && header[259] == 0x74 &&
+                        header[260] == 0x61 && header[261] == 0x72) {
+                        sb.Clear();
+                        for (int i = 345; i < 500 && header[i] != 0; i++) sb.Append((char)header[i]);
+                        string prefix = sb.ToString().Trim();
+                        if (prefix.Length > 0) name = prefix + "/" + name;
+                    }
+
+                    if (typeFlag == '5' || typeFlag == 'x' || typeFlag == 'g' || typeFlag == 'L') {
+                        fs.Seek(((fileSize + 511) / 512) * 512, SeekOrigin.Current);
+                        continue;
+                    }
+
+                    if (name.Length == 0 || name == "." || name == "./") {
+                        fs.Seek(((fileSize + 511) / 512) * 512, SeekOrigin.Current);
+                        continue;
+                    }
+
+                    name = name.Replace('\\', '/');
+                    while (name.StartsWith("/")) name = name.Substring(1);
+                    while (name.StartsWith("./")) name = name.Substring(2);
+                    if (name.Length == 0) {
+                        fs.Seek(((fileSize + 511) / 512) * 512, SeekOrigin.Current);
+                        continue;
+                    }
+
+                    string destPath = Path.Combine(destDir, name.Replace('/', Path.DirectorySeparatorChar));
+                    string parentDir = Path.GetDirectoryName(destPath);
+                    if (!string.IsNullOrEmpty(parentDir) && !Directory.Exists(parentDir))
+                        Directory.CreateDirectory(parentDir);
+
+                    if (fileSize > 0) {
+                        using (var outFs = File.Create(destPath)) {
+                            long remaining = fileSize;
+                            byte[] buf = new byte[65536];
+                            while (remaining > 0) {
+                                int toRead = (int)Math.Min(buf.Length, remaining);
+                                int n = fs.Read(buf, 0, toRead);
+                                if (n == 0) break;
+                                outFs.Write(buf, 0, n);
+                                remaining -= n;
+                            }
+                        }
+                        count++;
+                    }
+
+                    long padding = ((fileSize + 511) / 512 * 512) - fileSize;
+                    if (padding > 0) fs.Seek(padding, SeekOrigin.Current);
+                }
+            }
+            return count;
+        }
+
+        private static int ReadFull(Stream s, byte[] buf, int count) {
+            int offset = 0;
+            while (offset < count) {
+                int n = s.Read(buf, offset, count - offset);
+                if (n == 0) break;
+                offset += n;
+            }
+            return offset;
+        }
+    }
+}
+"@
+}
+
 # ---- Skip python deployment if already fully deployed ----
 $Resolved = Resolve-PythonArchive
 $CurrentVersion = Get-CurrentPythonVersion
+$CurrentReqHash = Get-RequirementsHash
+$StoredReqHash = $null
 
-if ((Test-Path $MarkerFile) -and $CurrentVersion -and $CurrentVersion.StartsWith("$PythonMajorMinor.")) {
+if (Test-Path $ReqHashFile) {
+    try {
+        $StoredReqHash = (Get-Content $ReqHashFile -ErrorAction Stop | Select-Object -First 1).Trim()
+    }
+    catch {
+        $StoredReqHash = $null
+    }
+}
+
+if (
+    (Test-Path $MarkerFile) -and
+    $CurrentVersion -and
+    $CurrentVersion.StartsWith("$PythonMajorMinor.") -and
+    (($null -eq $CurrentReqHash) -or ($CurrentReqHash -eq $StoredReqHash))
+) {
     Write-Host "[bootstrap] Already deployed with Python $CurrentVersion. Skipping python deployment." -ForegroundColor Green
     exit 0
 }
 
 if (Test-Path $MarkerFile) {
-    Write-Host "[bootstrap] Deployment marker exists, but Python version is not $PythonMajorMinor.x. Rebuilding environment." -ForegroundColor Yellow
+    if ($CurrentVersion -and $CurrentVersion.StartsWith("$PythonMajorMinor.") -and ($CurrentReqHash -ne $StoredReqHash)) {
+        Write-Host "[bootstrap] requirements.txt changed. Refreshing environment packages." -ForegroundColor Yellow
+    }
+    else {
+        Write-Host "[bootstrap] Deployment marker exists, but Python version is not $PythonMajorMinor.x. Rebuilding environment." -ForegroundColor Yellow
+    }
 }
 
 Write-Host "========================================"
@@ -187,14 +326,23 @@ if ($NeedsRebuild) {
     New-Item -ItemType Directory -Path $TempExtractDir | Out-Null
 
     try {
-        $tarExe = Join-Path $env:SystemRoot "System32\tar.exe"
-        if (-not (Test-Path $tarExe)) {
-            throw "tar.exe not found. Requires Windows 10 version 1803 or later."
-        }
-        & $tarExe -xzf $ArchiveLocal -C $TempExtractDir 2>&1 | Out-Null
-        if ($LASTEXITCODE -ne 0) { throw "tar extraction failed with exit code $LASTEXITCODE" }
+        $tarTempFile = Join-Path $BasePath "_temp_python.tar"
+
+        Write-Host "      Decompressing gzip..."
+        $inStream  = [System.IO.File]::OpenRead($ArchiveLocal)
+        $gzip      = New-Object System.IO.Compression.GzipStream($inStream, [System.IO.Compression.CompressionMode]::Decompress)
+        $outStream = [System.IO.File]::Create($tarTempFile)
+        $gzip.CopyTo($outStream)
+        $outStream.Close(); $gzip.Close(); $inStream.Close()
+
+        Write-Host "      Extracting tar..."
+        $fileCount = [SparkArc.TarExtractor]::Extract($tarTempFile, $TempExtractDir)
+        Write-Host "      Extracted $fileCount files."
+
+        if (Test-Path $tarTempFile) { Remove-Item $tarTempFile -Force }
     }
     catch {
+        if (Test-Path $tarTempFile)    { Remove-Item $tarTempFile -Force }
         if (Test-Path $TempExtractDir) { Remove-Item $TempExtractDir -Recurse -Force }
         Exit-WithError "Failed to extract archive: $($_.Exception.Message)"
     }
@@ -251,6 +399,13 @@ else {
 # ---- Mark deployment as complete ----
 $markerContent = "Deployed: $(Get-Date -Format 'yyyy-MM-dd HH:mm:ss') | Python $ResolvedPythonVersion (standalone, zero-registry) | Release $ResolvedReleaseTag"
 $markerContent | Set-Content -Path $MarkerFile -Encoding UTF8
+
+if ($CurrentReqHash) {
+    $CurrentReqHash | Set-Content -Path $ReqHashFile -Encoding UTF8
+}
+elseif (Test-Path $ReqHashFile) {
+    Remove-Item $ReqHashFile -Force
+}
 
 Write-Host ""
 Write-Host "========================================"

@@ -451,7 +451,40 @@ Data pipeline: **Create** (export `.arc` or `stories.db`) → **Assets** (place 
 
 ## Quick Start
 
-### Option A: Docker (recommended)
+### Option A: Windows One-Click (Recommended for Beginners)
+
+To avoid Docker resource overhead and configuration issues, we provide a one-click startup script for Windows users. **No manual Python installation, no Conda, no command-line operations needed** — just double-click.
+
+**Requirements**: Windows 10 or later (64-bit, any version since the original 1507 release).
+
+#### Usage
+
+1. Clone (not just download — cloning is needed to receive updates) this repository via `git clone` into an empty folder
+2. **Double-click `start.bat` in the project root**
+3. First run automatically downloads portable Python (~40MB) and installs dependencies — no intervention needed
+4. After installation completes, the backend starts automatically
+5. On subsequent runs, the script detects the deployment marker and **skips installation, starting directly**
+
+Access at: **http://localhost:6688**, or download a client from GitHub Releases (recommended).
+On mobile, just visit **http://192.168.x.x (your LAN IP):6688**.
+For remote access, look into intranet penetration tools (if you have a server, you probably wouldn't use this method anyway~~~).
+
+> 💡 **Zero-pollution design**: All artifacts stay inside `server/python_env/`; deleting that directory fully restores the system with no residue.
+> 💡 **Idempotent safety**: The script has built-in version detection and a deployment marker — repeated runs won't re-download or re-install.
+> 💡 **Pip cache exception**: pip's download cache defaults to `%LOCALAPPDATA%\pip\Cache\` (user-level, not system-level) and doesn't affect the system. Run `pip cache purge` to clean it.
+
+#### How It Works
+
+The script automatically completes the following flow:
+
+1. **Prefers PowerShell 7** (`pwsh`); if unavailable, **falls back to Windows built-in PowerShell 5.x**
+2. Downloads [python-build-standalone](https://github.com/astral-sh/python-build-standalone) portable Python 3.13 from a mirror
+3. Extracts to `server/python_env/` using .NET built-in `GzipStream` + inline C# tar decoder (**no tar.exe needed, zero external dependencies**)
+4. Installs dependencies with `pip install --isolated --no-user` — **packages are confined to the portable environment**
+5. Writes a `server/python_env/.deploy_complete` deployment marker only after full success
+6. Starts the backend using portable Python (equivalent to VS Code F5 debug configuration)
+
+### Option B: Docker (Recommended)
 
 ```bash
 git clone https://github.com/your-repo/sparkarc.git
@@ -513,7 +546,7 @@ This ensures:
 2. Git-managed files are synced back to mounted directories on startup, preventing stale persistent files from masking new behavior.
 3. User databases and personal data (`*.db`, `_userdata`, `.env`) remain persistent and are not overwritten.
 
-### Option B: Local development
+### Option C: Local Development
 
 1. **Initialize Python environment**
 
