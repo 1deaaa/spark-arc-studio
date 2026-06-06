@@ -77,7 +77,7 @@ class ModelPanelMixin:
         if not api_key or not api_key.strip():
             if not auto_start:
                 messagebox.showerror("错误", "请在 API Key 输入框中填写有效的密钥")
-            self.log("⚠ API Key 未填写，跳过自动探测。")
+            self.log("🔑 API Key 未填写，跳过自动探测。")
             return
 
         self.log(f"正在探测 {base_url} ...")

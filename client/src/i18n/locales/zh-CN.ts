@@ -431,7 +431,7 @@ const zhCN = {
       edit: '编辑',
       selectPlatform: '选择平台',
       selectModel: '选择模型',
-      apiKeyMissingTitle: '未配置 API Key',
+      apiKeyMissingTitle: '🔑 未配置 API Key',
       apiKeyMissingDesc: '当前选择的平台尚未配置 API Key，模型可能无法正常工作。',
       addUsage: '添加新用途',
       editUsage: '编辑用途',
@@ -720,7 +720,7 @@ const zhCN = {
       messages: {
         usingUserKey: '💳 当前使用您自己的 API Key',
         usingManagedKey: '🏠 当前使用站长托管 API Key',
-        noAvailableKey: '⚠️ 该平台需要配置 API Key，请设置您自己的 API Key，或联系站长配置托管密钥。',
+        noAvailableKey: '🔑 该平台需要配置 API Key，请设置您自己的 API Key，或联系站长配置托管密钥。',
         systemLockEnabled: '已开启强制系统配置模式',
         systemLockDisabled: '已关闭强制系统配置模式',
         configToggleFailed: '切换配置失败：{error}',
@@ -737,8 +737,8 @@ const zhCN = {
         masterKeyPending: '待设置主密钥',
         managedPending: '站长待配置',
         userConfigNeeded: '需个人配置',
-        reconfigureNeeded: '需要配置 Key',
-        keyMissing: '未配置 Key',
+        reconfigureNeeded: '🔑 需要配置 Key',
+        keyMissing: '🔑 未配置 Key',
       },
       alerts: {
         savedKeyNotReadableTitle: '当前还不能直接读取已保存密钥',

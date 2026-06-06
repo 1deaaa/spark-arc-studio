@@ -433,7 +433,7 @@ const jaJP = {
       edit: '編集',
       selectPlatform: 'プラットフォームを選択',
       selectModel: 'モデルを選択',
-      apiKeyMissingTitle: 'API Key 未設定',
+      apiKeyMissingTitle: '🔑 API Key 未設定',
       apiKeyMissingDesc: '選択中のプラットフォームに API Key が未設定のため、モデルが正常動作しない可能性があります。',
       addUsage: '用途を追加',
       editUsage: '用途を編集',
@@ -722,7 +722,7 @@ const jaJP = {
       messages: {
         usingUserKey: 'ユーザー自身の API Key を使用中',
         usingManagedKey: '管理者托管 API Key を使用中',
-        noAvailableKey: 'このプラットフォームには API Key の設定が必要です。ご自身の API Key を設定するか、管理者に托管キーの設定をご依頼ください。',
+        noAvailableKey: '🔑 このプラットフォームには API Key の設定が必要です。ご自身の API Key を設定するか、管理者に托管キーの設定をご依頼ください。',
         systemLockEnabled: 'システム設定ロックを有効にしました',
         systemLockDisabled: 'システム設定ロックを無効にしました',
         configToggleFailed: '設定切替に失敗しました：{error}',
@@ -739,8 +739,8 @@ const jaJP = {
         masterKeyPending: 'マスターキー待ち',
         managedPending: '管理者設定待ち',
         userConfigNeeded: 'ユーザー設定が必要',
-        reconfigureNeeded: 'キー設定が必要',
-        keyMissing: 'キー未設定',
+        reconfigureNeeded: '🔑 キー設定が必要',
+        keyMissing: '🔑 キー未設定',
       },
       alerts: {
         savedKeyNotReadableTitle: '保存済みキーを今は直接読み出せません',

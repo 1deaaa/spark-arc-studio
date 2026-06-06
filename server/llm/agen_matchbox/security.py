@@ -67,8 +67,8 @@ class SecurityManager:
         key = get_env_var("LLM_KEY")
 
         if not key:
-            print("⚠️ 警告: 未设置 LLM_KEY，将无法解密配置文件中的敏感信息。")
-            print(f"   请在 {get_env_path()} 文件中设置 LLM_KEY，或运行配置工具。")
+            print("🔑 未设置 LLM_KEY，若初次启动这是正常现象，并非错误。")
+            print(f"请在 {get_env_path()} 文件中设置 LLM_KEY，或运行配置cfg_gui。")
             self._fernet = None
         else:
             try:
@@ -181,11 +181,11 @@ class SecurityManager:
     def decrypt(self, text: str) -> SecretResolution:
         result = self._resolve_secret(text, self._fernet)
         if result.is_missing_key:
-            print("[密钥] 遇到托管密钥但当前未设置 LLM_KEY，该平台需要配置 API Key")
+            print("🔑 遇到托管密钥但当前未设置 LLM_KEY，该平台需要配置 API Key")
         elif result.is_failed:
             # 注意：此状态在仓库同步场景下是正常现象（上游密文用不同 LLM_KEY 加密），
             # 不应视为错误，而应引导用户为该平台配置自己的 API Key。
-            print(f"[密钥] 托管密钥与当前站点主密钥不匹配，该平台需要配置 API Key（原因: {result.error}）")
+            print(f"🔑 托管密钥与当前站点主密钥不匹配，该平台需要配置 API Key（原因: {result.error}）")
         return result
 
     def set_key(self, key: str, persist: bool = True):
@@ -212,7 +212,7 @@ class SecurityManager:
                 from .config import reload_default_platform_configs
                 reload_default_platform_configs()
             except Exception as e:
-                print(f"⚠️ 已设置 LLM_KEY，但刷新平台配置失败：{e}")
+                print(f"🔑 已设置 LLM_KEY，但刷新平台配置失败：{e}")
         except Exception as e:
             print(f"❌ SecurityManager: 密钥更新失败: {e}")
             self._fernet = None

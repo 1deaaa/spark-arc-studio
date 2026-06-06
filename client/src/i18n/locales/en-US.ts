@@ -433,7 +433,7 @@ const enUS = {
       edit: 'Edit',
       selectPlatform: 'Select platform',
       selectModel: 'Select model',
-      apiKeyMissingTitle: 'API key not configured',
+      apiKeyMissingTitle: '🔑 API key not configured',
       apiKeyMissingDesc: 'The selected platform has no API key configured, and the model may not work properly.',
       addUsage: 'Add Usage',
       editUsage: 'Edit Usage',
@@ -722,7 +722,7 @@ const enUS = {
       messages: {
         usingUserKey: 'Using your own API key',
         usingManagedKey: 'Using managed API key',
-        noAvailableKey: 'This platform needs an API Key configured. Please set your own API Key or ask the admin to configure a managed key.',
+        noAvailableKey: '🔑 This platform needs an API Key configured. Please set your own API Key or ask the admin to configure a managed key.',
         systemLockEnabled: 'System config lock enabled',
         systemLockDisabled: 'System config lock disabled',
         configToggleFailed: 'Failed to switch config: {error}',
@@ -739,8 +739,8 @@ const enUS = {
         masterKeyPending: 'Master key pending',
         managedPending: 'Admin pending config',
         userConfigNeeded: 'User config required',
-        reconfigureNeeded: 'Key configuration needed',
-        keyMissing: 'Key missing',
+        reconfigureNeeded: '🔑 Key configuration needed',
+        keyMissing: '🔑 Key missing',
       },
       alerts: {
         savedKeyNotReadableTitle: 'Saved key cannot be read directly right now',
