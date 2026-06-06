@@ -602,11 +602,11 @@
 
 :global(html.viewport-mobile .ai-manager .platform-actions) {
     width: auto;
-    flex-wrap: nowrap;
-    gap: 4px;
+    flex-wrap: wrap;
+    gap: 3px;
     justify-content: flex-end;
     flex-shrink: 0;
-    /* 操作按钮不缩小 */
+    max-width: 92px;
 }
 
 :global(html.viewport-mobile .ai-manager .platform-actions .n-button) {
@@ -653,16 +653,10 @@
 
 :global(html.viewport-mobile .ai-manager .model-actions) {
     width: 100%;
-    flex-wrap: nowrap;
-    /* 不换行，靠右对齐 */
-    gap: 8px;
+    flex-wrap: wrap;
+    gap: 4px;
     justify-content: flex-end;
-    overflow-x: auto;
-    /* 极小屏幕横向滑动，保证不破行 */
-}
-
-:global(html.viewport-mobile .ai-manager .model-actions::-webkit-scrollbar) {
-    display: none;
+    overflow-x: visible;
 }
 
 :global(html.viewport-mobile .ai-manager .extra-tag-desktop) {
@@ -682,13 +676,28 @@
 }
 
 :global(html.viewport-mobile .ai-manager .action-btn) {
-    min-width: 42px;
+    min-width: 28px;
     font-size: var(--spark-fs-xs);
-    padding: 0 8px;
+    padding: 0 5px;
+}
+
+:global(html.viewport-mobile .ai-manager .action-btn.icon-btn) {
+    min-width: 26px;
+    width: 26px;
+    height: 26px;
+    border-radius: 9px;
+}
+
+:global(html.viewport-mobile .ai-manager .action-btn.icon-btn :deep(.n-icon)) {
+    font-size: var(--spark-fs-base);
 }
 
 :global(html.viewport-mobile .ai-manager .speed-tag) {
     font-size: var(--spark-fs-2xs);
+    max-width: 96px;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
 }
 
 /* 弹窗响应式 */

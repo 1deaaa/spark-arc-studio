@@ -140,6 +140,14 @@ html.viewport-tablet-down {
     --spark-tooltip-mobile-max-width: min(calc(100vw - 24px), 320px);
 }
 
+html.viewport-tablet-down .v-binder-follower-container .v-binder-follower-content:has(.n-popover),
+html.viewport-tablet-down .v-binder-follower-container .spark-mobile-popover-follower {
+    /* 让 follower 外壳在首帧就按移动端宽度参与布局，避免弹出后再被挤压闪烁 */
+    max-width: var(--spark-tooltip-mobile-max-width) !important;
+    max-inline-size: var(--spark-tooltip-mobile-max-width) !important;
+    box-sizing: border-box !important;
+}
+
 html.viewport-tablet-down .v-binder-follower-container .n-popover,
 html.viewport-tablet-down .n-popover {
     /* 使用物理属性并配合 !important 彻底覆盖 Naive UI 内部或 inline 的 max-width */
