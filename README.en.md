@@ -522,8 +522,8 @@ This ensures:
    conda create -n sparkarc python=3.13 -y
    conda activate sparkarc
 
-   # 2. Install server dependencies (requirements at project root)
-   pip install -r requirements.txt
+   # 2. Install server dependencies (requirements in the server directory)
+   pip install -r server/requirements.txt
    ```
 
 2. **Configure model & keys (GUI)** — optional; can also be done in the frontend.

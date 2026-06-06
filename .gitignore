@@ -53,6 +53,14 @@ dist-ssr/
 /app-build/*
 !/app-build/**/.gitkeep
 
+# 便携 Python 部署产物
+/python_env/
+/.deploy_complete
+/_python_extract_temp/
+/server/python_env/
+/server/.deploy_complete
+/server/_python_extract_temp/
+
 # Editor directories and files
 .vscode/*
 !.vscode/extensions.json

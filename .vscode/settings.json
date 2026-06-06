@@ -4,5 +4,6 @@
     "dotnet.preferCSharpExtension": true,
     "python.languageServer": "None",
     "python.terminal.activateEnvironment": true,
-    "dotnet.defaultSolution": "disable"
+    "dotnet.defaultSolution": "disable",
+    "git.ignoreLimitWarning": true
 }

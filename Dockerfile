@@ -39,11 +39,11 @@ ENV PYTHONDONTWRITEBYTECODE=1
 ENV PYTHONUNBUFFERED=1
 
 # 安装后端依赖
-COPY requirements.txt .
+COPY server/requirements.txt ./server/requirements.txt
 # --mount=type=cache:利用 Docker 缓存挂载点，加速 pip 安装
 # 移除 --no-cache-dir 以允许 pip 使用挂载的缓存
 RUN --mount=type=cache,target=/root/.cache/pip \
-    pip install -r requirements.txt
+    pip install -r /app/server/requirements.txt
 
 # 复制后端代码
 COPY server/ ./server/

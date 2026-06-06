@@ -687,7 +687,7 @@ CrewAI 仍然高度兼容 LangChain 对象，但它也提供了原生 `LLM` 类�
 
 如果你想做一个完全不依赖 LangChain 的通用后端，推荐使用 **LiteLLM** 作为中间件：
 
-1. **修改依赖**：在 `requirements.txt` 中用 `litellm` 替换 `langchain-openai`。
+1. **修改依赖**：在 `server/requirements.txt` 中用 `litellm` 替换 `langchain-openai`。
 2. **重构适配层**：修改 [`tracked_model.py`](tracked_model.py) 中的 `LLMClient/UsageTrackingCallback`，使其改为直接包装 `litellm.completion` 方法（保留 `.usage` 查询能力）。
 3. **核心复用**：保留 [`manager.py`](manager.py) 和 [`usage_services.py`](usage_services.py)，它们负责的数据库和统计逻辑是 100% 通用的。
 
@@ -698,4 +698,3 @@ CrewAI 仍然高度兼容 LangChain 对象，但它也提供了原生 `LLM` 类�
 火柴 Agent 网关按本目录内 `LICENSE` 以 Apache License 2.0 单独授权，可作为独立组件复用。
 
 该授权仅适用于 `server/llm/agen_matchbox` 目录中明确受其覆盖的组件，不改变 SparkArc 主项目其他部分的 AGPL-3.0-only 授权。
-
