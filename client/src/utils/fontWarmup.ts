@@ -187,6 +187,8 @@ export function warmupCommonChineseCharacters(): void {
     return;
   }
 
+  const idleCallback = window.requestIdleCallback;
+
   const triggerWarmup = () => {
     void ensureAppFontReadyForText(COMMON_CHINESE_CHARS, {
       timeoutMs: 5000,
@@ -195,8 +197,8 @@ export function warmupCommonChineseCharacters(): void {
   };
 
   // 保证在浏览器完全空闲（Idle）时触发，支持 requestIdleCallback 时优先使用
-  if ('requestIdleCallback' in window) {
-    window.requestIdleCallback(() => triggerWarmup(), { timeout: 8000 });
+  if (typeof idleCallback === 'function') {
+    idleCallback(() => triggerWarmup(), { timeout: 8000 });
   } else {
     window.setTimeout(() => triggerWarmup(), 2500);
   }
