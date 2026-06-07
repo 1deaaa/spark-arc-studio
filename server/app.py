@@ -42,6 +42,7 @@ logging.getLogger().addFilter(_ThirdPartyLogFilter())
 # ═══════════════════════════════════════════════════════════════════════════
 # 以下为正常业务导入
 # ═══════════════════════════════════════════════════════════════════════════
+import wsproto
 import asyncio
 import httpx
 from fastapi import FastAPI, Request, Depends, HTTPException

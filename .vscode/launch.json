@@ -15,10 +15,13 @@
                 "WATCHFILES_IGNORE": "**/*.db;**/alembic/versions/**"
             },
             "console": "integratedTerminal",
-            "justMyCode": true
+            "justMyCode": true,
+            "presentation": {
+                "hidden": true
+            }
         },
         {
-            "name": "Server Tray",
+            "name": "Server Production",
             "type": "debugpy",
             "request": "launch",
             "program": "${workspaceFolder}/server/app.py",
@@ -30,43 +33,70 @@
                 "SPARKARC_SERVER_RELOAD": "0"
             },
             "console": "integratedTerminal",
-            "justMyCode": true
+            "justMyCode": true,
+            "presentation": {
+                "hidden": true
+            }
         },
         {
             "name": "Web App Dev",
             "type": "node-terminal",
             "request": "launch",
             "command": "npm run dev",
-            "cwd": "${workspaceFolder}/client"
+            "cwd": "${workspaceFolder}/client",
+            "presentation": {
+                "hidden": true
+            }
         },
         {
-            "name": "Tauri Dev",
+            "name": "Launcher Dev",
             "type": "node-terminal",
             "request": "launch",
             "command": "npm run tauri:dev",
-            "cwd": "${workspaceFolder}/client"
+            "cwd": "${workspaceFolder}/client",
+            "presentation": {
+                "hidden": true
+            }
         },
         {
-            "name": "Tauri Build Windows",
+            "name": "Launcher Build",
             "type": "node-terminal",
             "request": "launch",
             "command": "npm run tauri:build",
-            "cwd": "${workspaceFolder}/client"
+            "cwd": "${workspaceFolder}/client",
+            "presentation": {
+                "hidden": true
+            }
+        },
+        {
+            "name": "✅ GitHub Checks",
+            "type": "node-terminal",
+            "request": "launch",
+            "command": "Write-Host 'GitHub PR checks 已完成'",
+            "cwd": "${workspaceFolder}",
+            "preLaunchTask": "Client: GitHub 前端 Checks"
         }
     ],
     "compounds": [
         {
-            "name": "前后端Dev",
+            "name": "🌐 前后端 Web Dev",
             "configurations": [
                 "Server",
                 "Web App Dev"
             ]
         },
         {
-            "name": "前后端TauriDev",
+            "name": "🪟 前后端 Launcher Dev",
             "configurations": [
                 "Server",
-                "Tauri Dev"
+                "Launcher Dev"
+            ]
+        },
+        {
+            "name": "🏗️ 前端 Build + 后端生产",
+            "configurations": [
+                "Server Production",
+                "Launcher Build"
             ]
         }
     ]

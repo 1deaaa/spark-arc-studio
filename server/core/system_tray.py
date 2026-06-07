@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import asyncio
+import ctypes
 import importlib.util
 import json
 import os
@@ -17,6 +18,7 @@ DEFAULT_TRAY_TITLE = "SparkArc Server"
 DEFAULT_SERVER_URL = "http://localhost:6688"
 DEFAULT_HEALTH_URL = "http://127.0.0.1:6688/health"
 HELPER_STATE_FILENAME = "sparkarc_server_tray_helper.json"
+HELPER_LOG_FILENAME = "sparkarc_server_tray_helper.log"
 
 _TRUTHY_VALUES = {"1", "true", "yes", "on"}
 _FALSY_VALUES = {"0", "false", "no", "off"}
@@ -104,9 +106,30 @@ def get_helper_state_path(server_url: str = DEFAULT_SERVER_URL) -> Path:
     return temp_root / f"{safe_name}_{HELPER_STATE_FILENAME}"
 
 
+def get_helper_log_path(server_url: str = DEFAULT_SERVER_URL) -> Path:
+    temp_root = Path(tempfile.gettempdir()) / "sparkarc"
+    temp_root.mkdir(parents=True, exist_ok=True)
+    safe_name = server_url.replace("://", "_").replace(":", "_").replace("/", "_")
+    return temp_root / f"{safe_name}_{HELPER_LOG_FILENAME}"
+
+
 def is_process_alive(pid: int | None) -> bool:
     if not pid or pid <= 0:
         return False
+    if platform.system() == "Windows":
+        process_query_limited_information = 0x1000
+        still_active = 259
+        kernel32 = ctypes.windll.kernel32
+        handle = kernel32.OpenProcess(process_query_limited_information, False, int(pid))
+        if not handle:
+            return False
+        try:
+            exit_code = ctypes.c_ulong()
+            if not kernel32.GetExitCodeProcess(handle, ctypes.byref(exit_code)):
+                return False
+            return exit_code.value == still_active
+        finally:
+            kernel32.CloseHandle(handle)
     try:
         os.kill(pid, 0)
     except OSError:
@@ -153,6 +176,7 @@ def _build_helper_command(
     health_url: str,
     controller_pid: int,
     server_pid: int | None,
+    log_path: Path,
 ) -> list[str]:
     return [
         _choose_helper_python(),
@@ -174,6 +198,8 @@ def _build_helper_command(
         str(controller_pid),
         "--server-pid",
         str(server_pid or 0),
+        "--log-path",
+        str(log_path),
     ]
 
 
@@ -187,6 +213,7 @@ def ensure_tray_helper_process(
     server_pid: int | None,
 ) -> bool:
     state_path = get_helper_state_path(server_url)
+    log_path = get_helper_log_path(server_url)
     existing_state = _load_helper_state(state_path)
     existing_pid = None
     if existing_state:
@@ -213,18 +240,23 @@ def ensure_tray_helper_process(
         health_url=health_url,
         controller_pid=controller_pid,
         server_pid=server_pid,
+        log_path=log_path,
     )
+    log_file = log_path.open("a", encoding="utf-8")
     popen_kwargs: dict = {
         "cwd": str(server_root),
-        "stdout": subprocess.DEVNULL,
-        "stderr": subprocess.DEVNULL,
+        "stdout": log_file,
+        "stderr": subprocess.STDOUT,
         "stdin": subprocess.DEVNULL,
         "start_new_session": True,
     }
     if platform.system() == "Windows":
         popen_kwargs["creationflags"] = subprocess.CREATE_NEW_PROCESS_GROUP | subprocess.DETACHED_PROCESS  # type: ignore[attr-defined]
 
-    process = subprocess.Popen(command, **popen_kwargs)
+    try:
+        process = subprocess.Popen(command, **popen_kwargs)
+    finally:
+        log_file.close()
     _write_helper_state(
         state_path,
         {
@@ -268,7 +300,7 @@ async def launch_tray_helper_after_health_check(
                         server_pid=server_pid,
                     )
                     if launched:
-                        print("🖥️ 独立系统托盘助手已启动", flush=True)
+                        print("🖥️ 系统托盘助手已启动", flush=True)
                     return launched
             except Exception:
                 pass

@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import argparse
+import datetime
 import json
 import os
 import platform
@@ -12,8 +13,6 @@ import time
 import webbrowser
 from pathlib import Path
 from typing import Any
-
-import requests
 
 from core.system_tray import is_process_alive, resolve_tray_icon_path
 
@@ -27,7 +26,20 @@ def _parse_args() -> argparse.Namespace:
     parser.add_argument("--health-url", required=True)
     parser.add_argument("--controller-pid", type=int, required=True)
     parser.add_argument("--server-pid", type=int, default=0)
+    parser.add_argument("--log-path", default="")
     return parser.parse_args()
+
+
+def _log(log_path: Path | None, message: str) -> None:
+    if log_path is None:
+        return
+    timestamp = datetime.datetime.now().isoformat(timespec="seconds")
+    try:
+        log_path.parent.mkdir(parents=True, exist_ok=True)
+        with log_path.open("a", encoding="utf-8") as f:
+            f.write(f"[{timestamp}] {message}\n")
+    except OSError:
+        pass
 
 
 def _load_runtime():
@@ -84,23 +96,19 @@ def _terminate_targets(controller_pid: int, server_pid: int | None) -> None:
                 pass
 
 
-def _monitor_server(icon, health_url: str, controller_pid: int, server_pid: int | None, state_path: Path) -> None:
-    failures = 0
+def _monitor_server(
+    icon,
+    controller_pid: int,
+    server_pid: int | None,
+    state_path: Path,
+    log_path: Path | None,
+) -> None:
     while True:
         if not is_process_alive(controller_pid):
+            _log(log_path, f"控制进程已退出，停止托盘: {controller_pid}")
             break
         if server_pid and not is_process_alive(server_pid):
-            break
-        try:
-            response = requests.get(health_url, timeout=2.0)
-            if response.status_code == 200 and response.text.strip() == "sparkarc-ok":
-                failures = 0
-            else:
-                failures += 1
-        except Exception:
-            failures += 1
-
-        if failures >= 3:
+            _log(log_path, f"服务子进程已退出，停止托盘: {server_pid}")
             break
         time.sleep(2.0)
 
@@ -110,12 +118,16 @@ def _monitor_server(icon, health_url: str, controller_pid: int, server_pid: int 
 
 def main() -> int:
     args = _parse_args()
+    log_path = Path(args.log_path) if args.log_path else None
+    _log(log_path, "托盘助手进程启动")
     pystray, image_module = _load_runtime()
 
     state_path = Path(args.state_path)
     icon_path = resolve_tray_icon_path(args.server_root)
     if icon_path is None:
+        _log(log_path, f"未找到图标，server_root={args.server_root}")
         return 1
+    _log(log_path, f"使用图标: {icon_path}")
 
     with image_module.open(icon_path) as raw_icon:
         tray_image = raw_icon.copy()
@@ -153,6 +165,7 @@ def main() -> int:
 
     def _setup(_icon) -> None:
         _icon.visible = True
+        _log(log_path, "托盘图标已设为可见")
         _write_state_file(
             state_path,
             {
@@ -166,15 +179,20 @@ def main() -> int:
         )
         threading.Thread(
             target=_monitor_server,
-            args=(_icon, args.health_url, controller_pid, server_pid, state_path),
+            args=(_icon, controller_pid, server_pid, state_path, log_path),
             name="sparkarc-tray-server-monitor",
             daemon=True,
         ).start()
+        _log(log_path, "服务监控线程已启动")
 
     try:
         icon.run(setup=_setup)
+    except Exception as exc:
+        _log(log_path, f"托盘主循环异常: {exc!r}")
+        raise
     finally:
         _remove_state_file(state_path)
+        _log(log_path, "托盘助手进程结束")
 
     return 0
 
