@@ -1,66 +1,116 @@
 # SparkArc コントリビューションガイド（日本語）
 
-## 1. 目的
-本ガイドはメインプロジェクトへの貢献に適用されます。AGENTS.md と合わせて読み、まず統一パイプライン原則を優先してください。
+## 1. 目的と位置づけ
+本ガイドは、SparkArcメインプロジェクトにおける強制的かつ厳格な開発ガイドラインです。プロジェクトの規模が非常に大きく、複数のAgentが連携するシステムになっているため、すべてのコントリビューター（人間の開発者およびAIプログラミングアシスタントの両方）は、コードの記述や変更を開始する前に、**本ガイドを[AGENTS.md](file:///d:/Desktop/sparkarc/AGENTS.md)と併せて読まなければなりません**。
+私たちは**「統一された窓口での集約、二重実装の排除」**という根本的な原則に従います。新しい機能を開発する前に、該当するロジックを受け入れることができるFacade、Pipeline、または大統一された共通基盤がシステム内にすでに存在するかどうかを優先して確認し、並行した処理ラインや車輪の再発明を行うことを厳格に禁止します。
 
-## 2. アーキテクチャの必須ルール
-- チャット系: フロントは chatStore、バックエンドは server/agents/routes/chat.py + SparkBaseAgent.chat_stream を利用。
-- 業務ストリーム: フロントは createStreamingTask、バックエンドは stream_semantics + iterate_sync_iterable_in_thread を利用。
-- ツール拡張: server/agents/agent_tools.py を統一ファサードとして経由し、実装は server/agents/tools/* に分割し、登録は server/agents/tools/registry.py に集約すること。ルートや単独 Agent で独自プロトコル・並行レジストリ・ローカル専用ツール経路を作らないこと。
-- DB 変更: モデル変更 + server/gen_migration.py による生成のみ。手動 migration 禁止。
+## 2. 核心アーキテクチャと二重パイプラインプロトコル
+SparkArcのストリーミング応答システムは、責任の境界が明確に分かれた2つのパイプラインで構成されています。2つのパイプライン間でイベントプロトコルやコンシューマ状態を混用することは厳格に禁止されています。
 
-## 3. フロントエンド規約（必須）
-- ユーザー表示テキストのハードコード禁止。
-- 表示文言はすべて Vue I18n を使用。
-- 新機能は必ず zh-CN / en-US / ja-JP を同時追加。
-- チャット/ストリーム改修時は既存収束点を再利用:
-  - client/src/components/stores/chatStore.ts
-  - client/src/utils/streamingRuntime.ts
+### 2.1 チャットメインライン (Chat NDJSON)
+- **用途**：自由な対話、Agentの委譲（Handoff）やスケジューリングのやり取り、ツールの呼び出しプロセスの可視化。
+- **フロントエンド集約**：[chatStore.ts](file:///d:/Desktop/sparkarc/client/src/components/stores/chatStore.ts)（`_consumeStream`がストリーム解析を統一して処理し、時系列Segmentsを管理）。
+- **バックエンド集約**：[chat.py](file:///d:/Desktop/sparkarc/server/agents/routes/chat.py)ルート ＋ [communication.py](file:///d:/Desktop/sparkarc/server/agents/communication.py)（`SparkBaseAgent.chat_stream`）。
+- **重要な事実**：
+  - ストリームの伝送形式はNDJSONです（イベントには `task_snapshot`, `assistant_delta`, `reasoning_delta`, `tool_*`, `task_done` などが含まれます）。
+  - チャット状態と履歴はイベントログを用いたインクリメンタルCheckpointモデルによって復旧されます。再接続時やページリロード時の復旧には、必ず `task_snapshot` とカーソルベースのリプレイを使用する必要があります。リプレイにProgress Queueを使用したり、破壊的な読み出しを行う `get_nowait` などのインターフェースを使用することは**厳格に禁止**されています。
 
-## 4. Agent と Prompt 規約
-- Prompt はまず統一入口で管理: server/agents/agent_utils.py（load_prompt）と SparkBaseAgent の system prompt 組み立て。
-- 言語方針: Agent は既定で設定言語を最優先し、ユーザーが他言語を自発的に使用するか、明示的に切り替えを要求した場合のみ切り替える。
-- 同じ制約文を Agent ごとに重複実装しない。中央注入を優先。
+### 2.2 業務タスクメインライン (Business SSE / セマンティックストリーム)
+- **用途**：実行に時間がかかる業務タスク（例：文体クローン、Museインスピレーション生成、世界設定集生成、大綱の構成、プロット編集、脚本作成などの独立した業務ライン）。
+- **フロントエンド集約**：[streamingRuntime.ts](file:///d:/Desktop/sparkarc/client/src/utils/streamingRuntime.ts)（`createStreamingTask`を使用してタスクのライフサイクルとグローバルな読み込みマスク（Loading Mask）を統一管理）。
+- **バックエンド集約**：[streaming_utils.py](file:///d:/Desktop/sparkarc/server/agents/routes/streaming_utils.py)（`iterate_sync_iterable_in_thread`を使用して同期ジェネレータを非同期レスポンスにブリッジ）。
+- **重要な事実**：
+  - 標準的なセマンティックフレーム（Semantic Frame）プロトコルに従い、`onStart`, `onProgress`, `onDelta`, `onStats`, `onDone`, `onError`, `onCancelled` などのイベントフレームを統一して付与します。
+  - フロントエンドはコンポーネント内に独自の「キャンセル＋統計」状態マシンを実装してはならず、すべての業務ストリームは `createStreamingTask` を通してホストされる必要があります。
 
-### 4.1 Agent 三モーダル Prompt 規約（必須、詳細は AGENTS.md §4.5）
-各専門 Agent の `server/agents/prompts/<agent>.yaml` は、三つの呼び出しモードに対応する三つのトップレベルフィールドを同時に定義する必要があります：
+## 3. 大統一ツールとインフラ共通基盤
+プロジェクトの長期的な保守性を確保し、類似するコードブロックの重複を避けるため、SparkArcは以下の共通基盤を提供しています。類似する機能要件については、**必ずこれらのコンポーネントを再利用する**必要があり、ビジネスレイヤーやAgent内部で独自のローカルロジックを実装することは厳格に禁止されています：
 
-| モード | 呼び出し経路 | YAML フィールド | 受け手 |
-| :--- | :--- | :--- | :--- |
-| 専門作業（Specialized Work） | 業務ルート / パネルボタン → `agent.execute()` / 名前付きメソッド | `system` + `user` | 機械パーサ |
-| 対話モード（Chat Mode） | `chat_stream(skip_tool_confirmation=False)` | `chat_system` | 一般ユーザー |
-| 監督委譲モード（Pipeline Mode） | 監督 `delegate_task` → `sub_agent_node` → `chat_stream(skip_tool_confirmation=True)` | `pipeline_system` | 監督（上流 Agent） |
+1. **局所置換および差分修正 (Patch)**：
+   - [common.py](file:///d:/Desktop/sparkarc/server/agents/tools/common.py) の `_apply_patch` 関数に集約されています。脚本の書き換え、アウトラインの更新、世界観設定の変更など、テキストを特定して置換するロジックは、必ずこの関数を呼び出す必要があります。独自の正規表現や `.replace()` の使用は禁止されています。
+2. **インテリジェントテキスト分割 (Token Chunking)**：
+   - [chunking.py](file:///d:/Desktop/sparkarc/server/core/file_ingest/chunking.py) の `TokenTextSplitter` に集約されています。トークン数に基づくテキストの分割処理は、必ずこのコンポーネントを再利用してください。
+3. **セマンティックチャンカー (Semantic Chunker)**：
+   - [SemanticChunker](file:///d:/Desktop/sparkarc/server/story/semantic_chunker/) ディレクトリに集約されています。プロジェクトファイル、ナレッジグラフ、ベクトルインデックスのセマンティックチャンキング（Semantic Chunking）は、すべてこのエンジンを再利用する必要があります。
+4. **共通基盤の拡張原則**：
+   - 将来的に複数の場所で再利用される可能性のある低レイヤーインフラ（ベクトル検索、キャッシュ制御、ドキュメント解析など）は、最初に共通ツールレイヤーまたはコアサービスレイヤーに下げる必要があり、各ビジネスラインやAgent内部で車輪の再発明を行うことは厳格に禁止されています。
 
-`pipeline_system` の記述必須ルール：
-- **受け手宣言**：冒頭で「あなたの受け手は監督であってユーザーではない」と宣言。
-- **三件セット本体**：本文は「ツール呼出 + 一発完了 + 監督への報告」の三件セットのみ。
-- **フォーマット規格は tool reference で、複写しない**：構造化出力規格は `_get_tool_prompt_references()` で該当ツールの yaml `system` フィールドに紐付けるべきであり、`pipeline_system` 内に複写しない——二重保守になりドリフトしやすい。詳細は AGENTS.md §4.5.1。
-- **無効参照厳禁**：「通常生成と同じ / 形式は system と同一」等の参照表現は禁止。コード上、二つの system は**相互排他**であり、LLM は他方を見られません。
-- **ブレスト系の修飾語厳禁**：「発散思考 / 慣例を打破 / 情熱的に」など、構造化出力と衝突する語気修飾を書かない。
-- **例外 — 落とし先ツールのない Agent**（例: critic、出力が直接監督に渡る）：`pipeline_system` に出力規格の要点（フィールド一覧、評価基準など）を直接埋め込むこと。`system` を参照する書き方は禁止。
+## 4. バックエンド拡張と Agent 三モーダル規約
+新しいAgentの追加やツールの拡張は、厳密な登録および規約プロセスに従う必要があります：
 
-`chat_system` は対話モードの人格と語調のみを規定し、出力フォーマットを強制しません。`system` は最も厳格な構造化規範を担います。以上いずれかに違反するとモード混線が発生します（例: 監督委譲された Muse がインスピレーションではなく世界観を構築——これは tool reference 未登録により pipeline モードで 7 条フォーマット規格が欠落した実歴バグです）。
+### 4.1 新規 Agent 登録チェックリスト
+1. **ベースの再利用**：デフォルトで `SparkBaseAgent`（通信およびチャット）と `SparkAgentExecutor`（実行プロトコル）を継承する必要があります。
+2. **4大登録ポイント**：
+   - [registry.py](file:///d:/Desktop/sparkarc/server/agents/registry.py) ：Agentメタデータの登録。
+   - [runtime.py](file:///d:/Desktop/sparkarc/server/agents/routes/runtime.py) ：ロック戦略やルートシグナル（Beacon）の設定。
+   - [agent_tools.py](file:///d:/Desktop/sparkarc/server/agents/agent_tools.py) ＆ [tools/registry.py](file:///d:/Desktop/sparkarc/server/agents/tools/registry.py) ：ツールの登録とAgentへのバインド。
+   - [director_graph.py](file:///d:/Desktop/sparkarc/server/agents/director_graph.py) ：Directorによる委譲対象とするかどうかの設定。
 
-## 5. テストと検証
-チャット、多 Agent、ツール可視化、語義ストリームに関わる変更では最低限以下を回帰:
-- server/test/test_chat_stream_events.py
-- server/test/test_chat_history_segments.py
-- server/test/test_tool_event_ui_metadata.py
-- server/test/test_director_graph.py
-- server/test/test_stream_semantics_runtime.py
-- client/src/components/stores/__tests__/chatStore.spec.ts
-- client/src/utils/__tests__/streamingRuntime.spec.ts
+### 4.2 Agent 三モーダル Prompt 規約
+役割の混線を防ぐため、すべての専門Agentは必ず3つの呼び出しモードを実装する必要があります：
+- **専門作業モード (Specialized Work)**：`agent.execute()` からトリガー。YAML の `system` + `user` フィールドを使用。出力フォーマットは極めて厳格で、機械パーサによる解析またはファイル直接保存を前提とし、会話的な表現（挨拶など）は一切禁止されます。
+- **対話モード (Chat Mode)**：チャットルートからトリガー。YAML の `chat_system` フィールドを使用。エンドユーザー向けであり、自然な対話やインスピレーションのための提案を許容します。
+- **監督委譲モード (Pipeline Mode)**：Directorの委譲（Delegate）からトリガー。YAML の `pipeline_system` フィールドを使用。親（監督）Agent向け。
 
-## 6. PR 前チェック
-- 既存の統一パイプラインに接続できているか。
-- 変更範囲にハードコード文言が残っていないか。
-- zh-CN / en-US / ja-JP の翻訳が揃っているか。
-- 必要なテストと手動回帰を実施したか。
+#### Prompt構成と唯一の真実のソース（Truth Source）の制約
+1. **Tool Reference の自動注入**：
+   - `_get_tool_prompt_references()` を使用して、フォーマット仕様を対応する保存ツールの YAML `system` フィールドに紐付けます。`pipeline_system` プロンプトは極めてシンプル（受け手の宣言、ツールの呼び出し、および要約報告のみ）に保ち、フォーマット仕様を `pipeline_system` 内に複製することは厳格に禁止されています。
+2. **共有プロンプトベース (`base` フィールド)**：
+   - 共通のペルソナ設定や基本方針は、YAML の最上位 `base` フィールドに定義し、各モード内で `{base.xxx}` プレースホルダーを使用して参照することで、二重保守を避ける必要があります。
+3. **追加ツールルール (`tool_rules` フィールド)**：
+   - Agent特有のツール呼び出し順序、出力の純度、アンチインジェクションの要件などは、YAML の `tool_rules` フィールドに記述し、基底クラスが自動的に追加します。Pythonコード内で直接ツールルールをハードコードすることは禁止されています。
 
-## 7. 貢献の著作権とライセンス
-- 書面で別途合意がない限り、貢献者は自身の独自性ある貢献について法的に保有する権利を保持します。
-- Pull Request、パッチ、ドキュメント、デザイン素材、スクリプト、その他の貢献を本リポジトリへ提出することで、貢献者は当該内容を提出する権利を有することを確認し、本リポジトリの現在適用されるオープンソースライセンスに基づいて公開、マージ、再配布されることに同意したものとみなされます。
-- メインプロジェクトは現在 AGPL-3.0-only を既定とします。ファイルまたはサブディレクトリに別の明示的なライセンス表示がある場合、その表示が当該ファイルまたはサブディレクトリに適用されます。詳細は LEGAL/LicensePolicy.zh-CN.md を参照してください。
-- 本プロジェクトは現在 CLA の署名を要求しません。上流への貢献は歓迎しますが、AGPL-3.0 は第三者に上流リポジトリへの Pull Request 提出を義務付けるものではありません。
-- 許可のない第三者コード、素材、文書、その他制限付きの内容を提出しないでください。
-- 雇用、委託、共同開発、第三者ライセンス素材が関係する場合は、提出前に権利関係を確認してください。
+## 5. フロントエンド拡張と国際化 (I18n)
+1. **UIストリームイベントの同期**：
+   - ツールの実行UIメタデータ（`ui_scope` / `ui_target` / `ui_refresh_events`）は、必ずバックエンドの [communication.py](file:///d:/Desktop/sparkarc/server/agents/communication.py) の `build_tool_stream_event` を通して注入され、フロントエンドは `chatStore` から直接読み込む必要があります。フロントエンドのコンポーネント内でUIの更新トリガーをハードコードすることは厳格に禁止されています。
+2. **フロントエンドマッピング自己チェック checklist**：
+   - Agentを変更または追加する際、以下のUIマッピングが更新されているかを確認してください：
+     1. デフォルトアサイン先: [GlobalChatFloat.vue](file:///d:/Desktop/sparkarc/client/src/components/share/GlobalChatFloat.vue) (`viewAgentMap`)。
+     2. バブル表示: [useAgentRegistry.ts](file:///d:/Desktop/sparkarc/client/src/composables/useAgentRegistry.ts) (`agentIconMap`/`agentColorMap`/`agentNameMap`)。
+     3. フロー図（ブループリント）のレイアウト: [AgentFlowBlueprint.vue](file:///d:/Desktop/sparkarc/client/src/components/lorebook/AgentFlowBlueprint.vue)。
+     4. シミュレーション用データ: `agentRuntimeStore.ts`。
+     5. 設定パネル: `AiSettingsPanel.vue`。
+3. **Vue I18n の強制的制約**：
+   - ユーザーに見えるテキストの**ハードコードは禁止**されています。すべてのUI文言は、`zh-CN`, `en-US`, `ja-JP` のロケールファイルに同期して追加される必要があります。
+
+## 6. データベースと移行（Migration）のレッドライン
+1. **手動による Alembic 移行ファイルの編集禁止**：
+   - データベースの構造変更を行う場合は、まず [models.py](file:///d:/Desktop/sparkarc/server/core/models.py) のモデル定義を変更し、自動生成スクリプトを実行してください：
+     `python server/gen_migration.py`
+     アプリケーション起動時に [auto_migrate.py](file:///d:/Desktop/sparkarc/server/core/auto_migrate.py) を通して移行処理が自動的に実行されます。
+
+## 7. 典型的なアーキテクチャアンチパターン（禁止事項）
+SparkArcのコーディングにおいて、以下の行為は**重大なアーキテクチャ違反**とみなされます：
+1. **パイプラインの重複複製**：`streaming_utils.py` を使用せず、複数のルートでストリームのブリッジロジックをコピーすること。
+2. **読み込みマスクの迂回**：`createStreamingTask` を使用せずに、コンポーネント内で手動で読み込みマスクを制御したり、直接Loadingイベントを送信すること。
+3. **UIイベントの迂回**：`build_tool_stream_event` を使用せず、フロントエンドコンポーネントで直接ツール状態マシンや更新トリガーを処理すること。
+4. **ストリームプロトコルの混用**：`NDJSON` を直接SSEフレームに変換したり、SSEイベントを直接 `chatStore` にプッシュすること。
+5. **保存出口の迂回**：Agent内部でファイルの物理パスを直接指定して書き込み、統一された出力口である `write_result` を迂回すること。
+6. **ゴースト登録**：`registry.py` やFacadeを更新せずにAgentやツールを作成すること。
+7. **手動 DDL の実行**：スキーマの更新で移行スクリプトを生成せず、手動でDBを操作すること。
+8. **Gitリポジトリの汚染**：テスト、デバッグ、または検証の過程で生成された一時ファイル（キャッシュ、FAISSベクトル、pickleシリアライズファイル、中間JSONなど）を、Gitで追跡されているテストディレクトリ（例：`server/test/`）に直接保存し、不要なファイルでバージョン管理システムを汚染すること。
+9. **循環依存**：低レイヤーの共通サービスやツールクラスから、ルートレイヤー（`server/agents/routes/*`）のプライベート実装を逆参照すること。
+10. **並行処理の危険性**：実行に時間がかかる物理タスクに対して並行書き込みロックを使用しないこと、またはストリーム再接続時にフロントエンドから `clientId` を送信しないこと。
+
+## 8. 回帰テストと一時ファイル保存に関する制限
+チャットストリーム、Agentのコラボレーション、またはツールの連携の修正を行う際は、関連するテストをすべてパスし、かつ一時ファイルに関する制限を遵守する必要があります：
+
+### 8.1 一時ファイル sandbox ルール (極めて重要)
+- テスト、デバッグ、または検証スクリプトによって生成されるすべての一時キャッシュ、インデックス、グラフ、シリアライズファイルは、**必ずプロジェクトルートの `/.tmp/` ディレクトリ配下に保存されなければなりません**。
+- Gitリポジトリの清潔さを保つため、一時的なテスト出力を `server/test/` やその配下に直接保存することは厳格に禁止されています。
+
+### 8.2 推奨される回帰テストコマンド
+- **バックエンドテスト**：
+  ```bash
+  cd server
+  pytest test/test_chat_stream_events.py test/test_chat_history_segments.py test/test_tool_event_ui_metadata.py test/test_director_graph.py test/test_director_handoff_protocol.py test/test_director_skip_confirmation.py test/test_stream_semantics_runtime.py
+  ```
+- **フロントエンドテスト**：
+  ```bash
+  cd client
+  npm run test -- src/components/stores/__tests__/chatStore.spec.ts src/utils/__tests__/streamingRuntime.spec.ts
+  ```
+
+## 9. AI Agentの権限および安全対策
+1. ユーザーから**簡体字中国語**による明確な指示がない限り、AIアシスタントは読み取り専用のGitコマンドのみ使用が許可されます。`git commit` や `git push` などの書き込み操作は厳格に禁止されています。
+2. 自動承認（Auto-approval）ポリシーが有効になっている場合でも、AIアシスタントは安全対策を最優先し、自動承認をユーザーの意図と見なしてはならず、GitHub CLIなどでリモートリポジトリを操作することは厳格に禁止されています。
