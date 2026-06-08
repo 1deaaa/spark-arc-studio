@@ -9,7 +9,7 @@
 #
 # Deployment flow (generic for any Python project):
 #   Step 1: Download python-build-standalone archive
-#   Step 2: Extract to python_env/ (pure .NET, no tar.exe needed)
+#   Step 2: Extract to .runtime/python/ (pure .NET, no tar.exe needed)
 #   Step 3: Run init_env.py if exists (project-specific optional hook)
 #   Step 4: pip install -r requirements.txt if exists (standard packages)
 #   Then write .deploy_complete marker. Does NOT launch the app.
@@ -26,7 +26,8 @@ $PythonMajorMinor = "3.13"
 
 # ===== PATHS =====
 $BasePath      = $PSScriptRoot
-$EnvDir        = Join-Path $BasePath "python_env"
+$RuntimeRoot   = Join-Path $BasePath ".runtime"
+$EnvDir        = Join-Path $RuntimeRoot "python"
 $MarkerFile    = Join-Path $EnvDir ".deploy_complete"
 $ReqHashFile   = Join-Path $EnvDir ".requirements.sha256"
 $PythonExe     = Join-Path $EnvDir "python.exe"
@@ -307,7 +308,7 @@ $NeedsRebuild = (-not (Test-Path $PythonExe)) -or (-not $CurrentVersion) -or (-n
 
 if ($NeedsRebuild) {
     if (Test-Path $PythonExe) {
-        Write-Host "[1-2/4] Existing python_env is not Python $PythonMajorMinor.x. Rebuilding..." -ForegroundColor Yellow
+        Write-Host "[1-2/4] Existing .runtime/python is not Python $PythonMajorMinor.x. Rebuilding..." -ForegroundColor Yellow
         if (Test-Path $EnvDir) { Remove-Item $EnvDir -Recurse -Force }
         if (Test-Path $MarkerFile) { Remove-Item $MarkerFile -Force }
     }
@@ -319,7 +320,7 @@ if ($NeedsRebuild) {
         Write-Host "[1/4] Found local archive: $ArchiveName" -ForegroundColor Green
     }
 
-    Write-Host "[2/4] Extracting Python to python_env/ ..." -ForegroundColor Yellow
+    Write-Host "[2/4] Extracting Python to .runtime/python/ ..." -ForegroundColor Yellow
 
     $TempExtractDir = Join-Path $BasePath "_python_extract_temp"
     if (Test-Path $TempExtractDir) { Remove-Item $TempExtractDir -Recurse -Force }
@@ -358,16 +359,17 @@ if ($NeedsRebuild) {
         }
     }
 
+    if (-not (Test-Path $RuntimeRoot)) { New-Item -ItemType Directory -Path $RuntimeRoot | Out-Null }
     if (Test-Path $EnvDir) { Remove-Item $EnvDir -Recurse -Force }
     Move-Item -Path $ExtractedPythonDir -Destination $EnvDir
 
     if (Test-Path $TempExtractDir) { Remove-Item $TempExtractDir -Recurse -Force }
     if (Test-Path $ArchiveLocal)   { Remove-Item $ArchiveLocal -Force }
 
-    Write-Host "      Python extracted to python_env/" -ForegroundColor Green
+    Write-Host "      Python extracted to .runtime/python/" -ForegroundColor Green
 }
 else {
-    Write-Host "[1-2/4] Python $CurrentVersion already present in python_env/" -ForegroundColor Green
+    Write-Host "[1-2/4] Python $CurrentVersion already present in .runtime/python/" -ForegroundColor Green
 }
 
 # ***************---- Step 3: Run project-specific init script (if exists) ----****************

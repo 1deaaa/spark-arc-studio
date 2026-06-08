@@ -39,18 +39,10 @@ jobs:
       - name: Set version
         if: inputs.version != ''
         working-directory: client
+        env:
+          RELEASE_VERSION: ${{ inputs.version }}
         run: |
-          VERSION="${{ inputs.version }}"
-          echo "Setting version to $VERSION"
-          # package.json
-          npm pkg set version="$VERSION"
-          # tauri.conf.json
-          sed -i 's/"version": *"[^"]*"/"version": "'$VERSION'"/' src-tauri/tauri.conf.json
-          # Cargo.toml
-          sed -i 's/^version = "[^"]*"/version = "'$VERSION'"/' src-tauri/Cargo.toml
-          echo "Version set to $VERSION"
-          cat src-tauri/tauri.conf.json | grep version
-          cat src-tauri/Cargo.toml | head -5
+          node scripts/set-release-version.mjs
 
       - name: Install Linux system dependencies
         run: |

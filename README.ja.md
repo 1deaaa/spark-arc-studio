@@ -471,7 +471,7 @@ Docker のリソース負荷や設定の手間を避けるため、Windows ユ�
 スマートフォンからは **http://192.168.x.x（LAN 内 IP）:6688** へアクセス。
 リモートアクセスには、内ネットワーク穿透ツールをご利用ください（サーバーをお持ちなら、この方法は使わないでしょう~~~）。
 
-> 💡 **ゼロ汚染設計**: 生成物はすべて `server/python_env/` 内に留まり、このディレクトリを削除すればシステムに痕跡は残りません。
+> 💡 **ゼロ汚染設計**: 生成物はすべて `server/.runtime/python/` 内に留まり、このディレクトリを削除すればシステムに痕跡は残りません。
 > 💡 **べき等性**: スクリプトはバージョン検出とデプロイマーカーを内蔵し、繰り返し実行しても再ダウンロード・再インストールしません。
 > 💡 **pip キャッシュの例外**: pip のダウンロードキャッシュは `%LOCALAPPDATA%\pip\Cache\`（ユーザーレベル、システムレベルではない）に書き込まれ、システムに影響しません。`pip cache purge` で削除可能。
 
@@ -481,10 +481,10 @@ Docker のリソース負荷や設定の手間を避けるため、Windows ユ�
 
 1. **PowerShell 7**（`pwsh`）を優先使用。未インストール時は **Windows 組み込み PowerShell 5.x にフォールバック**
 2. ミラーから [python-build-standalone](https://github.com/astral-sh/python-build-standalone) ポータブル Python 3.13 をダウンロード
-3. .NET 組み込みの `GzipStream` + インライン C# tar デコーダーで `server/python_env/` に展開（**tar.exe 不要、外部依存なし**）
+3. .NET 組み込みの `GzipStream` + インライン C# tar デコーダーで `server/.runtime/python/` に展開（**tar.exe 不要、外部依存なし**）
 4. `pip install --isolated --no-user` で依存関係をインストール — **パッケージはポータブル環境内に閉じる**
-5. 全工程成功後に `server/python_env/.deploy_complete` デプロイマーカーを書き込み
-6. ポータブル Python を使ってバックエンドを起動（VS Code F5 デバッグ構成と同等）
+5. 全工程成功後に `server/.runtime/python/.deploy_complete` デプロイマーカーを書き込み
+6. ポータブル Python でバックエンドを起動（VS Code F5 は開発者向けワークフローであり、VS Code で選択したインタープリターを使用します）
 
 ### B. Docker（推奨）
 
@@ -654,5 +654,4 @@ SparkArc は本プロジェクトの公式名称および識別子です。
 本プロジェクトに基づくデプロイ、改変版または配布版は、オリジナルプロジェクトとの公式・授権・代理・提携関係を暗示してはなりません。
 
 Matchbox Agent ゲートウェイ（`server/llm/agen_matchbox`）は独立して再利用可能なコンポーネントであり、同ディレクトリ内の `LICENSE` に従って Apache-2.0 で個別にライセンスされています。特に明記がない限り、メインプロジェクトのその他の部分は AGPL-3.0-only でライセンスされています。
-
 

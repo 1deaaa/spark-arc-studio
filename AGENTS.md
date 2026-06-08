@@ -11,6 +11,12 @@
 - 任何新增能力都要做到“改一处，全链路受益”。
 - 任何短平快修补都不能以破坏长期可维护性为代价。
 
+### 1.1 Python 环境边界
+
+`server/.runtime/python/` 是 Windows 一键启动脚本生成的便携运行时环境，仅服务于 `start.bat` 这类免配置启动链路。它不是开发者默认 Python 环境，也不是 AI 运行开发测试时的首选解释器。
+
+开发 / 测试应优先使用 VSCode 当前选中的解释器、用户显式指定的 conda / venv / uv 环境。只有在验证 Windows 一键启动部署链路时，才使用 `server/.runtime/python/python.exe`。
+
 ## 2. 统一收口，不复制实现
 
 SparkArc 现有架构已经有清晰收口层。新增功能必须先判断是否能接入现有收口点，而不是新开平行管线。
@@ -377,6 +383,61 @@ YAML 顶层 `tool_rules` 字段用于存放 Agent 在聊天/委派模式下的�
 
 涉及聊天链路、工具事件、多 Agent 委派、流式语义时，必须执行回归测试。测试文件可能会随架构演进而动态变化，贡献者应遵循以下测试指导原则：
 
+### 10.0 基础建筑测试（长期护栏）
+
+项目已建立一组“基础建筑测试”，专门覆盖稳定协议与统一收口层，而不是覆盖大模型输出质量或具体业务文案。
+
+**强制原则**：
+
+- 基础建筑测试禁止调用真实大模型、联网搜索、远程 API、真实 token 鉴权或计费型上游服务。
+- 需要模型、流、网络或数据库行为时，必须使用 fake / monkeypatch / 内存对象 / 临时目录。
+- 测试目标是“统一管线是否仍成立”：Agent 三模态、工具注册真相源、Chat NDJSON 时序、业务流桥接、前端 reader、工具 UI 绑定、公共 patch / chunk / migration 基建。
+- 这类测试应保持低维护成本。新增 Agent 或工具时可以小幅扩展白名单/断言；不得把易变 prompt 文案或真实生成内容写成脆弱快照。
+
+**当前基础建筑测试位置**：
+
+- 后端：`server/test/architecture/`
+  - `test_agent_prompt_contracts.py`：Agent 三模态、pipeline 受众声明、tool reference 契约。
+  - `test_tool_registry_contracts.py`：工具注册表、工具门面、后端工具 UI 元数据。
+  - `test_chat_stream_contracts.py`：ChatTaskEntry / accumulator / observer / retry 契约。
+  - `test_streaming_bridge_contracts.py`：同步生成器到异步流桥接、业务语义帧。
+  - `test_common_infrastructure_contracts.py`：`_apply_patch`、`TokenTextSplitter`、迁移路径规格。
+- 前端：
+  - `client/src/utils/__tests__/streamingRuntime.architecture.spec.ts`
+  - `client/src/components/stores/chat/__tests__/toolUi.architecture.spec.ts`
+  - `client/src/components/stores/__tests__/chatStore.stream.architecture.spec.ts`
+
+### 10.0.1 AI 维护测试站协议（强制）
+
+长期测试不是业务实现的影子副本，而是统一协议和架构不变量的护栏。测试过时优先重审测试层级，禁止为了变绿而无解释地削弱契约。
+
+AI 新增或修改测试时必须遵守：
+
+1. **先说明守护对象**：每个长期测试文件顶部应能看出它守护的协议或收口层。新增测试前先判断它属于基础建筑测试、烟雾集成测试还是短期业务回归测试。
+2. **测协议，不测实现细节**：优先断言事件名、事件形状、状态机终态、注册表一致性、恢复/重连/回放能力、工具 UI 元数据、统一入口是否被使用。禁止把 prompt 完整文案、DOM 细碎层级、CSS class、临时变量名、LLM 生成正文写成长期断言。
+3. **测收口，不测每个使用点**：优先测试 `streamingRuntime.ts`、`chatStore.ts`、`streaming_utils.py`、`stream_semantics.py`、工具 registry / facade、`_apply_patch`、`TokenTextSplitter` 等统一底座。页面级测试只做少量烟雾覆盖。
+4. **测不变量，不滥用快照**：长期测试应断言“必须存在/必须完成/必须回放/必须走统一门面”这类不变量。除非用户明确要求，禁止新增整段 HTML、整段 prompt、整段生成结果的脆弱快照。
+5. **禁止真实上游依赖**：基础建筑与常规回归测试不得调用真实 LLM、消耗 token、依赖 API key、联网搜索、访问远程服务或读取用户真实项目数据。需要外部行为时使用 fake / monkeypatch / 临时目录 / 内存流。
+6. **失败先判因，再改测试**：测试失败时，AI 禁止直接改断言变绿。必须先判断是代码回归、架构契约有意变化、测试层级错误、fixture 过时，还是环境依赖问题。只有确认是“契约有意变化”或“测试测错层级”时，才允许修改测试；否则应修代码。
+7. **新增 bug 回归要下沉**：高速修 bug 时可以先补短期回归测试，但修完后要判断能否下沉为收口层不变量测试。若只能测试易变业务细节，应在汇报中说明它是短期回归，不应长期大量堆积。
+8. **维护成本红线**：如果某个测试在普通业务迭代中频繁大改，优先重构测试到更稳定的协议边界，或拆成“基础建筑测试 + 少量业务烟雾测试”。不要把大段业务规格复制进测试。
+
+推荐在长期测试文件顶部写明：
+
+```python
+"""
+守护对象：
+- Chat NDJSON 事件可重放
+- segments/tool_traces 时序不丢失
+- 中间错误不会污染最终 event_log
+
+本测试禁止：
+- 调用真实 LLM
+- 连接真实外部服务
+- 依赖具体 prompt 文案
+"""
+```
+
 ### 10.1 测试指导原则
 1. **后端测试原则**：
    - 任何涉及聊天流（Chat Stream）或 NDJSON 事件的改动，必须回归聊天事件流、历史时序分段（Segments）以及工具 UI 元数据的测试。
@@ -394,6 +455,9 @@ YAML 顶层 `tool_rules` 字段用于存放 Agent 在聊天/委派模式下的�
 - **后端测试**：进入 `server` 目录，使用 `pytest` 运行 `test/` 目录下对应的测试脚本。例如：
   ```bash
   cd server
+  # 运行基础建筑测试（不调用真实大模型或外部鉴权）
+  pytest test/architecture
+
   # 运行聊天与工具事件相关测试
   pytest test/test_chat_stream_events.py test/test_chat_history_segments.py test/test_tool_event_ui_metadata.py
   # 运行导演调度与委派协议相关测试
@@ -404,6 +468,9 @@ YAML 顶层 `tool_rules` 字段用于存放 Agent 在聊天/委派模式下的�
 - **前端测试**：进入 `client` 目录，使用 `npm run test` 运行对应的 `.spec.ts` 测试。例如：
   ```bash
   cd client
+  # 运行基础建筑测试（reader / toolUi / chatStore 最小流消费）
+  npm run test -- src/utils/__tests__/streamingRuntime.architecture.spec.ts src/components/stores/chat/__tests__/toolUi.architecture.spec.ts src/components/stores/__tests__/chatStore.stream.architecture.spec.ts
+
   # 运行 Store 与工具类测试
   npm run test -- src/components/stores/__tests__/chatStore.spec.ts src/utils/__tests__/streamingRuntime.spec.ts
   # 运行全局 UI 组件测试
@@ -433,4 +500,3 @@ YAML 顶层 `tool_rules` 字段用于存放 Agent 在聊天/委派模式下的�
 严禁执行任何git的提交、推送或者其他可能导致写入的行为！！！
 未经许可使用GitHubCLI等工具操作远程是绝对禁止的行为！！！
  
-

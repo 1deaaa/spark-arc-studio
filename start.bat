@@ -4,7 +4,7 @@ setlocal
 cd /d "%~dp0"
 
 set "SERVER_DIR=%~dp0server"
-set "PYTHON_ENV=%SERVER_DIR%\python_env"
+set "PYTHON_ENV=%SERVER_DIR%\.runtime\python"
 set "MARKER=%PYTHON_ENV%\.deploy_complete"
 set "PYTHON_EXE=%PYTHON_ENV%\python.exe"
 

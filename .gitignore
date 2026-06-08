@@ -57,13 +57,15 @@ dist-ssr/
 /python_env/
 /.deploy_complete
 /_python_extract_temp/
-/server/python_env/
+/server/.runtime/
 /server/.deploy_complete
 /server/_python_extract_temp/
 
 # Editor directories and files
 .vscode/*
 !.vscode/extensions.json
+!.vscode/launch.json
+!.vscode/tasks.json
 .idea
 .DS_Store
 *.suo

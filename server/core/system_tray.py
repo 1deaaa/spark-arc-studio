@@ -49,7 +49,8 @@ def read_bool_env(
 
 def running_in_embedded_python(executable: str | None = None) -> bool:
     target = Path(executable or sys.executable)
-    return any(part.lower() == "python_env" for part in target.parts)
+    normalized_parts = [part.lower() for part in target.parts]
+    return ".runtime" in normalized_parts and "python" in normalized_parts
 
 
 def resolve_tray_icon_path(server_root: str | Path | None = None) -> Path | None:

@@ -69,12 +69,12 @@
             }
         },
         {
-            "name": "✅ GitHub Checks",
+            "name": "✅ 本地快速 Checks（非 Docker）",
             "type": "node-terminal",
             "request": "launch",
-            "command": "Write-Host 'GitHub PR checks 已完成'",
+            "command": "echo Local fast checks completed",
             "cwd": "${workspaceFolder}",
-            "preLaunchTask": "Client: GitHub 前端 Checks"
+            "preLaunchTask": "PR: 本地 Checks"
         }
     ],
     "compounds": [

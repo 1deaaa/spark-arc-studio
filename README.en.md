@@ -469,7 +469,7 @@ Access at: **http://localhost:6688**, or download a client from GitHub Releases 
 On mobile, just visit **http://192.168.x.x (your LAN IP):6688**.
 For remote access, look into intranet penetration tools (if you have a server, you probably wouldn't use this method anyway~~~).
 
-> 💡 **Zero-pollution design**: All artifacts stay inside `server/python_env/`; deleting that directory fully restores the system with no residue.
+> 💡 **Zero-pollution design**: All artifacts stay inside `server/.runtime/python/`; deleting that directory fully restores the system with no residue.
 > 💡 **Idempotent safety**: The script has built-in version detection and a deployment marker — repeated runs won't re-download or re-install.
 > 💡 **Pip cache exception**: pip's download cache defaults to `%LOCALAPPDATA%\pip\Cache\` (user-level, not system-level) and doesn't affect the system. Run `pip cache purge` to clean it.
 
@@ -479,10 +479,10 @@ The script automatically completes the following flow:
 
 1. **Prefers PowerShell 7** (`pwsh`); if unavailable, **falls back to Windows built-in PowerShell 5.x**
 2. Downloads [python-build-standalone](https://github.com/astral-sh/python-build-standalone) portable Python 3.13 from a mirror
-3. Extracts to `server/python_env/` using .NET built-in `GzipStream` + inline C# tar decoder (**no tar.exe needed, zero external dependencies**)
+3. Extracts to `server/.runtime/python/` using .NET built-in `GzipStream` + inline C# tar decoder (**no tar.exe needed, zero external dependencies**)
 4. Installs dependencies with `pip install --isolated --no-user` — **packages are confined to the portable environment**
-5. Writes a `server/python_env/.deploy_complete` deployment marker only after full success
-6. Starts the backend using portable Python (equivalent to VS Code F5 debug configuration)
+5. Writes a `server/.runtime/python/.deploy_complete` deployment marker only after full success
+6. Starts the backend using portable Python. VS Code F5 remains a developer workflow and uses the interpreter selected in VS Code.
 
 ### Option B: Docker (Recommended)
 
@@ -702,5 +702,4 @@ This project's code is released under AGPL-3.0-only; however, **the "SparkArc" n
 Any deployment, modified version, or distribution based on this project must not imply official, authorized, agency, or partnership affiliation with the original project.
 
 The Matchbox Agent Gateway (`server/llm/agen_matchbox`) is a separately reusable component licensed under Apache-2.0 according to the `LICENSE` file in that directory. Unless otherwise stated, the rest of the main project is licensed under AGPL-3.0-only.
-
 

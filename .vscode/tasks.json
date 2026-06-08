@@ -1,0 +1,131 @@
+{
+  "version": "2.0.0",
+  "tasks": [
+    {
+      "label": "Client: 安装依赖",
+      "type": "shell",
+      "command": "npm",
+      "args": ["ci"],
+      "options": {
+        "cwd": "${workspaceFolder}/client"
+      },
+      "presentation": {
+        "reveal": "always",
+        "panel": "dedicated",
+        "clear": true
+      },
+      "problemMatcher": []
+    },
+    {
+      "label": "Client: i18n 严格检查",
+      "type": "shell",
+      "command": "npm",
+      "args": ["run", "i18n:check:strict"],
+      "options": {
+        "cwd": "${workspaceFolder}/client"
+      },
+      "presentation": {
+        "reveal": "always",
+        "panel": "shared",
+        "clear": true
+      },
+      "problemMatcher": []
+    },
+    {
+      "label": "Client: 类型检查",
+      "type": "shell",
+      "command": "npm",
+      "args": ["run", "typecheck"],
+      "options": {
+        "cwd": "${workspaceFolder}/client"
+      },
+      "presentation": {
+        "reveal": "always",
+        "panel": "shared",
+        "clear": true
+      },
+      "problemMatcher": ["$tsc"]
+    },
+    {
+      "label": "Client: 单元测试",
+      "type": "shell",
+      "command": "npm",
+      "args": ["run", "test"],
+      "options": {
+        "cwd": "${workspaceFolder}/client"
+      },
+      "presentation": {
+        "reveal": "always",
+        "panel": "shared",
+        "clear": true
+      },
+      "problemMatcher": []
+    },
+    {
+      "label": "Client: Web 构建",
+      "type": "shell",
+      "command": "npm",
+      "args": ["run", "build"],
+      "options": {
+        "cwd": "${workspaceFolder}/client"
+      },
+      "presentation": {
+        "reveal": "always",
+        "panel": "shared",
+        "clear": true
+      },
+      "problemMatcher": []
+    },
+    {
+      "label": "Client: Launcher 构建",
+      "type": "shell",
+      "command": "npm",
+      "args": ["run", "build:launcher"],
+      "options": {
+        "cwd": "${workspaceFolder}/client"
+      },
+      "presentation": {
+        "reveal": "always",
+        "panel": "shared",
+        "clear": true
+      },
+      "problemMatcher": []
+    },
+    {
+      "label": "Client: 本地快速前端 Checks",
+      "dependsOrder": "sequence",
+      "dependsOn": [
+        "Client: i18n 严格检查",
+        "Client: 类型检查",
+        "Client: 单元测试",
+        "Client: Web 构建",
+        "Client: Launcher 构建"
+      ],
+      "problemMatcher": []
+    },
+    {
+      "label": "Server: 本地快速后端 Checks",
+      "type": "process",
+      "command": "${command:python.interpreterPath}",
+      "args": ["-X", "utf8", "scripts/run_pytest_if_present.py"],
+      "options": {
+        "cwd": "${workspaceFolder}/server"
+      },
+      "presentation": {
+        "reveal": "always",
+        "panel": "shared",
+        "clear": true
+      },
+      "problemMatcher": []
+    },
+    {
+      "label": "PR: 本地 Checks",
+      "dependsOrder": "sequence",
+      "dependsOn": [
+        "Client: 本地快速前端 Checks",
+        "Server: 本地快速后端 Checks"
+      ],
+      "problemMatcher": []
+    }
+  ]
+}

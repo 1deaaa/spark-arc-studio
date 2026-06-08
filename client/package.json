@@ -13,7 +13,7 @@
     "i18n:scan:full": "node scripts/i18n-scan.mjs --full",
     "i18n:check": "node scripts/i18n-check.mjs",
     "i18n:check:strict": "node scripts/i18n-check.mjs --strict",
-    "test": "vitest run",
+    "test": "vitest run --passWithNoTests",
     "preview": "vite preview",
     "preview:launcher": "vite preview --config vite.launcher.config.ts",
     "tauri": "tauri",

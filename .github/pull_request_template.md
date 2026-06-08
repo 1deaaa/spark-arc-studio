@@ -2,6 +2,8 @@
 
 Describe the maintainer or user problem this pull request solves.
 
+> Branch target note: normal contribution PRs should target `dev` unless the maintainer explicitly asks for `main`.
+
 ## Scope
 
 - Area touched:
