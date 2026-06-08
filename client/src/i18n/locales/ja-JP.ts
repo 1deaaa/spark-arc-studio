@@ -15,6 +15,7 @@ const jaJP = {
     cancel: 'キャンセル',
     input: '入力',
     pleaseInput: '入力してください',
+    generating: '生成中...',
     delete: '削除',
     edit: '編集',
     close: '閉じる',
@@ -22,6 +23,7 @@ const jaJP = {
     maximize: '最大化',
     restore: '元に戻す',
     retry: '再試行',
+    selectProjectFirst: '先にプロジェクトを選択してください',
     unknownError: '不明なエラー',
   },
   app: {

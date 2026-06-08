@@ -15,6 +15,7 @@ const enUS = {
     cancel: 'Cancel',
     input: 'Input',
     pleaseInput: 'Please enter',
+    generating: 'Generating...',
     delete: 'Delete',
     edit: 'Edit',
     close: 'Close',
@@ -22,6 +23,7 @@ const enUS = {
     maximize: 'Maximize',
     restore: 'Restore',
     retry: 'Retry',
+    selectProjectFirst: 'Please select a project first',
     unknownError: 'Unknown error',
   },
   app: {

@@ -15,6 +15,7 @@ const koKR = {
     cancel: '취소',
     input: '입력',
     pleaseInput: '입력해 주세요',
+    generating: '생성 중...',
     delete: '삭제',
     edit: '편집',
     close: '닫기',
@@ -22,6 +23,7 @@ const koKR = {
     maximize: '최대화',
     restore: '이전 크기로 복원',
     retry: '재시도',
+    selectProjectFirst: '프로젝트를 먼저 선택해 주세요',
     unknownError: '알 수 없는 오류',
   },
   app: {

@@ -79,7 +79,7 @@
 │   ├── model_panel.py     # 模型管理 Mixin
 │   ├── dialogs.py         # 对话框 Mixin（添加/编辑模型、系统用途槽、用户配额）
 │   ├── key_manager.py     # 密钥管理 Mixin
-│   ├── testing.py         # 测试功能 Mixin
+│   ├── probe.py           # 探测功能 Mixin
 │   ├── dpi.py             # 高分屏适配与窗口尺寸策略
 │   └── theme.py           # GUI 主题、配色与表格样式
 ├── llm_config.db          # (自动生成) SQLite 数据库文件

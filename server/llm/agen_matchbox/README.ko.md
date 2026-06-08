@@ -78,7 +78,7 @@ NewAPI, LiteLLM 등 전용 외부 게이트웨이도 강력하지만, 복잡한 
 │   ├── model_panel.py     # 모델 추가 패널
 │   ├── dialogs.py         # 다이얼로그 모듈 (한도 설정, 역할 지정 등)
 │   ├── key_manager.py     # API Key 등록 제어부
-│   ├── testing.py         # 커넥션 확인 및 추론 성능 로깅 모듈
+│   ├── probe.py           # 커넥션 확인 및 추론 성능 로깅 모듈
 │   ├── dpi.py             # 운영체제 고해상도 DPI 폰트 및 윈도우 스냅 스케일링
 │   └── theme.py           # GUI 색상 팔레트 및 테이블 데코레이션
 ├── llm_config.db          # (자동 생성) SQLite 로컬 데이터베이스 파일

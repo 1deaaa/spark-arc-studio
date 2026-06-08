@@ -21,7 +21,7 @@ from .dpi import configure_tk_scaling, enable_high_dpi_awareness, prepare_root_w
 from .key_manager import KeyManagerMixin
 from .model_panel import ModelPanelMixin
 from .platform_panel import PlatformPanelMixin
-from .testing import TestingMixin
+from .probe import ProbeMixin
 from .theme import COLORS, apply_theme, style_listbox, style_text_widget
 
 
@@ -30,7 +30,7 @@ class LLMConfigGUI(
     ModelPanelMixin,
     DialogsMixin,
     KeyManagerMixin,
-    TestingMixin,
+    ProbeMixin,
 ):
     """LLM 配置管理器主窗口。"""
 

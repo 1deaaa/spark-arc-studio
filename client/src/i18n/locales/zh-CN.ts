@@ -15,6 +15,7 @@ const zhCN = {
     cancel: '取消',
     input: '输入',
     pleaseInput: '请输入',
+    generating: '生成中...',
     delete: '删除',
     edit: '编辑',
     close: '关闭',
@@ -22,6 +23,7 @@ const zhCN = {
     maximize: '最大化',
     restore: '还原',
     retry: '重试',
+    selectProjectFirst: '请先选择一个项目',
     unknownError: '未知错误',
   },
   app: {

@@ -1,5 +1,5 @@
 """
-模型测试 Mixin — 测试、Embedding 测试、测速
+模型探测 Mixin — 测试、Embedding 测试、测速
 """
 import os
 import sys
@@ -23,8 +23,8 @@ from ..utils import (
 )
 
 
-class TestingMixin:
-    """模型测试功能 Mixin，需与 LLMConfigGUI 混入使用。"""
+class ProbeMixin:
+    """模型探测与测试功能 Mixin，需与 LLMConfigGUI 混入使用。"""
 
     def test_model(self):
         """测试选中的模型是否可用。"""
