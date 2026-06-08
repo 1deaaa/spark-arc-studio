@@ -224,7 +224,7 @@ import { useFileStore } from '../stores/fileStore';
 import { useCharacterStore } from '../stores/characterStore';
 import { useActionBindingStore } from '../stores/actionBindingStore';
 import type { ArcDialogueNode, ArcOptionNode, ArcScene } from '../../services/arcParser';
-import MobileTextArea from '../share/MobileTextArea.vue';
+import MobileTextArea from '../editors/mobile/MobileTextArea.vue';
 import SparkTag from '../share/SparkTag.vue';
 import MarkdownRenderer from '../share/MarkdownRenderer.vue';
 import ConditionsEditor from './ConditionsEditor.vue';

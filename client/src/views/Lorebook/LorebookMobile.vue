@@ -157,7 +157,7 @@ import LorebookEditor from '../../components/lorebook/LorebookEditor.vue';
 import GlobalLoading from '../../components/share/GlobalLoading.vue';
 import CharacterGeneratorPanel from '../../components/lorebook/CharacterGeneratorPanel.vue';
 import WorldGeneratorPanel from '../../components/lorebook/WorldGeneratorPanel.vue';
-import MobileTextArea from '../../components/share/MobileTextArea.vue';
+import MobileTextArea from '../../components/editors/mobile/MobileTextArea.vue';
 import { fetchWithAuth, fetchCharacters, saveCharacter, deleteCharacter, createCharacter } from '../../services/api';
 import { useProjectStore } from '../../components/stores/projectStore';
 import { useViewStore } from '../../components/stores/viewStore';

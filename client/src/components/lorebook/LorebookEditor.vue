@@ -109,7 +109,7 @@ import { useI18n } from 'vue-i18n';
 import { useRoute } from 'vue-router';
 import { NCard, NInput, NButton, NIcon, NSpace, NPopconfirm } from 'naive-ui';
 import { Plus, Save, SquarePen, Trash } from '@lucide/vue';
-import StudioSeamlessTextarea from '../share/StudioSeamlessTextarea.vue';
+import StudioSeamlessTextarea from '../editors/StudioSeamlessTextarea.vue';
 import bus from '../../eventBus';
 import GlobalLoading from '../share/GlobalLoading.vue';
 import { useProjectStore } from '../stores/projectStore';

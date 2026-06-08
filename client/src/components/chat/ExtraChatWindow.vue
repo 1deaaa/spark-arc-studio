@@ -100,8 +100,8 @@
 import { computed, onMounted, onUnmounted, reactive, ref, watch, type PropType } from 'vue';
 import { useI18n } from 'vue-i18n';
 import { NButton, NCard, NTooltip } from 'naive-ui';
-import ChatPanel from '@/components/share/ChatPanel.vue';
-import ChatFileImportButton from '@/components/share/ChatFileImportButton.vue';
+import ChatPanel from '@/components/chat/ChatPanel.vue';
+import ChatFileImportButton from '@/components/chat/ChatFileImportButton.vue';
 import { useChatStore } from '@/components/stores/chatStore';
 import { useChatActions } from '@/composables/useChatActions';
 import { useResizable } from '@/composables/useResizable';

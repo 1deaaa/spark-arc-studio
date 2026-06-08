@@ -162,7 +162,7 @@ import SparkTag from '../../components/share/SparkTag.vue';
 import { Activity, ArrowRight, BookOpen, FileText, MessagesSquare, Sparkles, X } from '@lucide/vue';
 import { useSynopsisLogic } from '../../composables/useSynopsisLogic';
 import GlobalLoading from '../../components/share/GlobalLoading.vue';
-import MobileTextArea from '../../components/share/MobileTextArea.vue';
+import MobileTextArea from '../../components/editors/mobile/MobileTextArea.vue';
 import { scrollToFlowStep } from '../../utils/mobileFlow';
 
 const { t } = useI18n();

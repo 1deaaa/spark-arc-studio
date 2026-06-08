@@ -148,7 +148,7 @@ import { NButton, NIcon, NInputNumber, NEmpty, NDrawer, NDrawerContent, NSelect 
 import { useI18n } from 'vue-i18n';
 import SparkTag from '../../components/share/SparkTag.vue';
 import GlobalLoading from '../../components/share/GlobalLoading.vue';
-import MobileTextArea from '../../components/share/MobileTextArea.vue';
+import MobileTextArea from '../../components/editors/mobile/MobileTextArea.vue';
 import { ArrowRight, ChevronRight, Clock, Files, List, Sparkles } from '@lucide/vue';
 import HistoryPanel from '../../components/dlg-editor/HistoryPanel.vue';
 import { useStructureLogic } from '../../composables/useStructureLogic';

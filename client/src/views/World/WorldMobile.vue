@@ -121,7 +121,7 @@ import { ArrowRight, ChevronRight, Clock, Pin, Sparkles, Zap } from '@lucide/vue
 import HistoryPanel from '../../components/dlg-editor/HistoryPanel.vue';
 import GlobalLoading from '../../components/share/GlobalLoading.vue';
 import InspireTagSelector from '../../components/lorebook/InspireTagSelector.vue';
-import MobileTextArea from '../../components/share/MobileTextArea.vue';
+import MobileTextArea from '../../components/editors/mobile/MobileTextArea.vue';
 import { useWorldLogic } from '../../composables/useWorldLogic';
 import { scrollToFlowStep } from '../../utils/mobileFlow';
 

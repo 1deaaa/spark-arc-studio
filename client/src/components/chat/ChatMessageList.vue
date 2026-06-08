@@ -78,89 +78,20 @@
                 </div>
               </div>
             </div>
-            <div v-else-if="seg.type === 'context_compaction'" class="chat-bubble context-compaction-bubble">
-              <div class="context-compaction-card" :class="`is-${getContextCompactionStatus(seg)}`">
-                <div class="context-compaction-motion" aria-hidden="true">
-                  <span></span>
-                  <span></span>
-                  <span></span>
-                </div>
-                <div class="context-compaction-copy">
-                  <div class="context-compaction-title">{{ formatContextCompactionLabel(seg) }}</div>
-                  <div class="context-compaction-meta">{{ formatContextCompactionStats(seg) }}</div>
-                </div>
-              </div>
-            </div>
-            <div v-else-if="seg.type === 'context_compaction_summary'" class="chat-bubble context-compaction-bubble context-summary-bubble">
-              <div
-                class="context-compaction-card context-summary-card is-finished is-expandable"
-                @click="toggleContextSummary(getContextSummaryKey(m, idx, segIdx))"
-              >
-                <div class="context-summary-icon" aria-hidden="true">
-                  <svg viewBox="0 0 28 28" fill="none" xmlns="http://www.w3.org/2000/svg">
-                    <path d="M7 5.5h14c1.1 0 2 .9 2 2v13c0 1.1-.9 2-2 2H7c-1.1 0-2-.9-2-2v-13c0-1.1.9-2 2-2Z" stroke="currentColor" stroke-width="1.7" />
-                    <path d="M9 10h10M9 14h7M9 18h4.5" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" />
-                    <path d="M19.5 16.5 22 19l-2.5 2.5M22 19h-5.5" stroke="currentColor" stroke-width="1.55" stroke-linecap="round" stroke-linejoin="round" />
-                  </svg>
-                </div>
-                <div class="context-compaction-copy">
-                  <div class="context-compaction-title">
-                    {{ t('components.chatMessageList.contextCompactManualDone') }}
-                    <svg class="context-summary-chevron" :class="{ 'is-open': contextSummaryExpanded[getContextSummaryKey(m, idx, segIdx)] }" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.6">
-                      <polyline points="4 6 8 10 12 6"></polyline>
-                    </svg>
-                  </div>
-                  <div class="context-compaction-meta">{{ formatContextSummaryStats(seg) }}</div>
-                </div>
-              </div>
-              <SparkCollapseTransition :show="!!contextSummaryExpanded[getContextSummaryKey(m, idx, segIdx)]" no-opacity duration="0.2s">
-                <pre class="context-summary-text">{{ getContextSummaryText(seg) }}</pre>
-              </SparkCollapseTransition>
-            </div>
-            <div v-else-if="seg.type === 'tool_trace'" class="chat-bubble tool-trace-bubble" :class="{ 'is-expandable': isToolTraceExpandable(seg) }">
-              <div class="tool-trace-list">
-                <span
-                  class="tool-trace-chip"
-                  :class="[`is-${effectiveTraceStatus(idx, segIdx, getMessageSegments(m), seg)}`, { 'is-expandable': isToolTraceExpandable(seg), 'is-expanded': isToolTraceExpandable(seg) && toolTraceExpanded[getToolTraceKey(m, idx, segIdx)] }]"
-                  @click="isToolTraceExpandable(seg) && toggleToolTrace(getToolTraceKey(m, idx, segIdx))"
-                >
-                  <svg v-if="isToolTraceExpandable(seg) && effectiveTraceStatus(idx, segIdx, getMessageSegments(m), seg) === 'finished'" class="tool-trace-icon is-worktracker" viewBox="0 0 16 16" fill="none" xmlns="http://www.w3.org/2000/svg">
-                    <rect x="3" y="2" width="10" height="12" rx="1.5" stroke="currentColor" stroke-width="1.3" />
-                    <line x1="5.5" y1="5.5" x2="10.5" y2="5.5" stroke="currentColor" stroke-width="1.2" stroke-linecap="round" />
-                    <line x1="5.5" y1="8" x2="10.5" y2="8" stroke="currentColor" stroke-width="1.2" stroke-linecap="round" />
-                    <line x1="5.5" y1="10.5" x2="8.5" y2="10.5" stroke="currentColor" stroke-width="1.2" stroke-linecap="round" />
-                  </svg>
-                  <svg v-else-if="effectiveTraceStatus(idx, segIdx, getMessageSegments(m), seg) === 'finished'" class="tool-trace-icon is-success" viewBox="0 0 16 16" fill="none" xmlns="http://www.w3.org/2000/svg">
-                    <circle cx="8" cy="8" r="7" stroke="currentColor" stroke-width="1.5" />
-                    <path d="M4.5 8.5L7 11L11.5 5.5" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" />
-                  </svg>
-                  <svg v-else-if="effectiveTraceStatus(idx, segIdx, getMessageSegments(m), seg) === 'failed'" class="tool-trace-icon is-failed" viewBox="0 0 16 16" fill="none" xmlns="http://www.w3.org/2000/svg">
-                    <circle cx="8" cy="8" r="7" stroke="currentColor" stroke-width="1.5" />
-                    <path d="M5.5 5.5L10.5 10.5M10.5 5.5L5.5 10.5" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" />
-                  </svg>
-                  <svg v-else class="tool-trace-icon is-running" viewBox="0 0 16 16" fill="none" xmlns="http://www.w3.org/2000/svg">
-                    <circle cx="8" cy="8" r="7" stroke="currentColor" stroke-width="1.5" stroke-dasharray="8 6" class="spinner-ring" />
-                  </svg>
-                  {{ formatToolTraceLabel(seg, effectiveTraceStatus(idx, segIdx, getMessageSegments(m), seg)) }}
-                  <svg v-if="isToolTraceExpandable(seg)" class="tool-trace-expand-icon" :class="{ 'is-expanded': toolTraceExpanded[getToolTraceKey(m, idx, segIdx)] }" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5"><polyline points="4 6 8 10 12 6"></polyline></svg>
-                </span>
-              </div>
-              <SparkCollapseTransition v-if="isToolTraceExpandable(seg)" :show="toolTraceExpanded[getToolTraceKey(m, idx, segIdx)]" no-opacity duration="0.2s">
-                <div class="tool-trace-detail">
-                  <div v-if="parseWorkTrackerResult(seg.tool_result).summary" class="wt-summary">{{ parseWorkTrackerResult(seg.tool_result).summary }}</div>
-                  <div v-if="parseWorkTrackerResult(seg.tool_result).items.length" class="wt-items">
-                    <div v-for="(item, iIdx) in parseWorkTrackerResult(seg.tool_result).items" :key="iIdx" class="wt-item" :class="`is-${item.status}`">
-                      <span class="wt-item-dot" :class="`is-${item.status}`"></span>
-                      <span v-if="item.priority" class="wt-item-priority" :class="`is-${item.priority}`">{{ item.priority }}</span>
-                      <span class="wt-item-task">{{ item.task }}</span>
-                      <span v-if="item.notes" class="wt-item-notes">{{ item.notes }}</span>
-                    </div>
-                  </div>
-                  <div v-if="!parseWorkTrackerResult(seg.tool_result).summary && !parseWorkTrackerResult(seg.tool_result).items.length" class="wt-empty">{{ parseWorkTrackerResult(seg.tool_result).raw }}</div>
-                  <div v-if="parseWorkTrackerResult(seg.tool_result).updatedAt" class="wt-updated">{{ t('components.chatMessageList.workTrackerUpdatedAt', { time: formatRelativeTime(parseWorkTrackerResult(seg.tool_result).updatedAt, t) }) }}</div>
-                </div>
-              </SparkCollapseTransition>
-            </div>
+            <ContextCompactionSegment
+              v-else-if="seg.type === 'context_compaction' || seg.type === 'context_compaction_summary'"
+              :segment="seg"
+              :expanded="!!contextSummaryExpanded[getContextSummaryKey(m, idx, segIdx)]"
+              @toggle="toggleContextSummary(getContextSummaryKey(m, idx, segIdx))"
+            />
+            <ToolTraceSegment
+              v-else-if="seg.type === 'tool_trace'"
+              :segment="seg"
+              :status="effectiveTraceStatus(idx, segIdx, getMessageSegments(m), seg)"
+              :label="formatToolTraceLabel(seg, effectiveTraceStatus(idx, segIdx, getMessageSegments(m), seg))"
+              :expanded="!!toolTraceExpanded[getToolTraceKey(m, idx, segIdx)]"
+              @toggle="toggleToolTrace(getToolTraceKey(m, idx, segIdx))"
+            />
             <div v-else-if="seg.type === 'text' && seg.text && seg.text.trim()" class="chat-bubble" :class="{ 'has-agent-avatar': !!seg.source_agent }">
               <n-tooltip v-if="seg.source_agent" trigger="hover">
                 <template #trigger>
@@ -401,8 +332,9 @@ import { useI18n } from 'vue-i18n';
 import { NButton, NIcon, NInput, NPopover, NTooltip, useMessage } from 'naive-ui';
 import MarkdownRenderer from '@/components/share/MarkdownRenderer.vue';
 import SparkAlert from '@/components/share/SparkAlert.vue';
-import SparkCollapseTransition from '@/components/share/SparkCollapseTransition.vue';
 import AgentAvatar from '@/components/share/AgentAvatar.vue';
+import ContextCompactionSegment from '@/components/chat/message/ContextCompactionSegment.vue';
+import ToolTraceSegment from '@/components/chat/message/ToolTraceSegment.vue';
 import type { ChatMessage } from '@/services/chatService';
 import { useAgentRegistry } from '@/composables/useAgentRegistry';
 import {
@@ -415,8 +347,7 @@ import {
   type ChatMessageItem,
   type MessageId,
   type MessageSegment,
-} from './chatMessageRender';
-import { formatRelativeTime, parseWorkTrackerResult } from './workTrackerRender';
+} from './message/render';
 
 const { t } = useI18n();
 
@@ -577,34 +508,6 @@ function getMessageWindowTokenHint(message: ChatMessageItem) {
   return `${t('components.chatMessageList.windowTokenHint')}${modelSuffix}`;
 }
 
-function getContextCompactionStatus(seg: MessageSegment) {
-  const status = String(seg?.status || '').trim();
-  if (status === 'finished' || status === 'failed') return status;
-  return 'running';
-}
-
-function formatContextCompactionLabel(seg: MessageSegment) {
-  const status = getContextCompactionStatus(seg);
-  if (status === 'finished') return t('components.chatMessageList.contextCompacted');
-  if (status === 'failed') return t('components.chatMessageList.contextCompactFailed');
-  return t('components.chatMessageList.contextCompacting');
-}
-
-function formatContextCompactionStats(seg: MessageSegment) {
-  const original = Number(seg?.original_tokens ?? seg?.originalTokens ?? 0) || 0;
-  const compacted = Number(seg?.compacted_tokens ?? seg?.compactedTokens ?? 0) || 0;
-  const retained = Number(seg?.retained_messages ?? seg?.retainedMessages ?? 0) || 0;
-  const model = String(seg?.model || '').trim();
-  const tokenText = compacted > 0
-    ? `${formatTokenCount(original)} → ${formatTokenCount(compacted)}`
-    : formatTokenCount(original);
-  return t('components.chatMessageList.contextCompactStats', {
-    tokens: tokenText,
-    retained,
-    model,
-  });
-}
-
 function getContextSummaryKey(message: ChatMessageItem, messageIdx: number, segIdx: number) {
   return `summary-${getMessageKey(message, messageIdx)}-${segIdx}`;
 }
@@ -614,21 +517,6 @@ function toggleContextSummary(key: string) {
     ...contextSummaryExpanded.value,
     [key]: !contextSummaryExpanded.value[key],
   };
-}
-
-function getContextSummaryText(seg: MessageSegment) {
-  return String(seg?.summary_text ?? seg?.summaryText ?? '').trim();
-}
-
-function formatContextSummaryStats(seg: MessageSegment) {
-  const compacted = Number(seg?.compacted_tokens ?? seg?.compactedTokens ?? 0) || 0;
-  const originalMessages = Number(seg?.original_messages ?? seg?.originalMessages ?? 0) || 0;
-  const model = String(seg?.model || '').trim();
-  return t('components.chatMessageList.contextCompactManualStats', {
-    tokens: formatTokenCount(compacted),
-    messages: originalMessages,
-    model,
-  });
 }
 
 function getMessageKey(message, idx) {
@@ -747,13 +635,6 @@ function getToolTraceKey(message, idx, segIdx) {
 
 function toggleToolTrace(key: string) {
   toolTraceExpanded.value = { ...toolTraceExpanded.value, [key]: !toolTraceExpanded.value[key] };
-}
-
-/** 判断 tool_trace segment 是否可展开（目前仅 work_tracker 且有 tool_result 时可展开） */
-function isToolTraceExpandable(seg: any): boolean {
-  if (!seg) return false;
-  const toolName = String(seg.tool_name || '').trim();
-  return toolName === 'work_tracker' && !!seg.tool_result;
 }
 
 function setReasoningContentRef(key, el) {
@@ -1084,240 +965,7 @@ defineExpose({ listRef });
   max-width: min(100%, 420px);
 }
 
-.tool-trace-bubble {
-  background: linear-gradient(135deg, var(--spark-primary-soft) 0%, var(--spark-bg-alt) 100%) !important;
-  border: 1px solid var(--spark-primary-muted) !important;
-  padding: 8px 12px !important;
-}
 
-.context-compaction-bubble {
-  width: min(100%, 760px);
-  max-width: 100%;
-  background: transparent !important;
-  border: 1px solid rgba(var(--spark-primary-rgb), 0.22) !important;
-  border-radius: 16px !important;
-  box-shadow: none !important;
-  padding: 8px !important;
-}
-
-.context-summary-bubble {
-  width: min(90%, 1040px);
-  max-width: 90%;
-  padding: 10px !important;
-  border-color: color-mix(in srgb, var(--spark-border), var(--spark-primary) 18%) !important;
-  background: color-mix(in srgb, var(--spark-panel-bg), var(--spark-primary) 4%) !important;
-  box-shadow: var(--spark-shadow-sm) !important;
-}
-
-.context-compaction-card {
-  position: relative;
-  display: inline-flex;
-  align-items: center;
-  gap: 10px;
-  width: 100%;
-  max-width: 100%;
-  padding: 9px 12px;
-  border-radius: 14px;
-  border: 1px solid rgba(var(--spark-primary-rgb), 0.28);
-  background:
-    linear-gradient(135deg, rgba(var(--spark-primary-rgb), 0.08), rgba(var(--spark-primary-rgb), 0.03)),
-    var(--spark-panel-bg);
-  color: var(--spark-text);
-  overflow: hidden;
-}
-
-.context-summary-card {
-  display: flex;
-  align-items: stretch;
-  gap: 12px;
-  /* 去掉一层外壳：折叠头部不再单独绘制边框/背景/阴影，由外层 .context-summary-bubble 承担容器视觉 */
-  padding: 0;
-  border: none;
-  background: transparent;
-  box-shadow: none;
-  border-radius: 0;
-  user-select: none;
-}
-
-.context-summary-card:hover {
-  border-color: transparent;
-  background: transparent;
-}
-
-.context-compaction-card::before {
-  content: "";
-  position: absolute;
-  inset: 0;
-  background: linear-gradient(90deg, transparent, rgba(var(--spark-primary-rgb), 0.16), transparent);
-  transform: translateX(-100%);
-  animation: context-sweep 1.8s ease-in-out infinite;
-  pointer-events: none;
-}
-
-.context-compaction-card.is-finished::before,
-.context-compaction-card.is-failed::before {
-  display: none;
-}
-
-.context-compaction-card.is-failed {
-  border-color: rgba(208, 48, 80, 0.18);
-  background: linear-gradient(135deg, rgba(208, 48, 80, 0.08), rgba(208, 48, 80, 0.03)), var(--spark-panel-bg);
-}
-
-.context-compaction-card.is-expandable {
-  cursor: pointer;
-}
-
-.context-summary-icon {
-  width: 34px;
-  height: 34px;
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
-  flex: 0 0 auto;
-  border-radius: var(--spark-radius-sm);
-  color: var(--spark-primary);
-  border: 1px solid color-mix(in srgb, var(--spark-border), var(--spark-primary) 22%);
-  background: color-mix(in srgb, var(--spark-panel-bg), var(--spark-primary) 12%);
-}
-
-.context-summary-icon svg {
-  width: 21px;
-  height: 21px;
-}
-
-.context-compaction-motion {
-  width: 34px;
-  height: 22px;
-  display: grid;
-  gap: 3px;
-  flex-shrink: 0;
-}
-
-.context-compaction-motion span {
-  display: block;
-  height: 4px;
-  border-radius: 999px;
-  background: rgba(var(--spark-primary-rgb), 0.55);
-  transform-origin: left center;
-  animation: context-fold 1.2s ease-in-out infinite;
-}
-
-.context-compaction-motion span:nth-child(2) {
-  width: 75%;
-  animation-delay: 0.12s;
-}
-
-.context-compaction-motion span:nth-child(3) {
-  width: 52%;
-  animation-delay: 0.24s;
-}
-
-.context-compaction-card.is-finished .context-compaction-motion span {
-  animation: none;
-  background: rgba(var(--spark-primary-rgb), 0.7);
-}
-
-.context-compaction-card.is-failed .context-compaction-motion span {
-  animation: none;
-  background: rgba(208, 48, 80, 0.65);
-}
-
-.context-compaction-copy {
-  min-width: 0;
-  flex: 1 1 auto;
-  line-height: 1.35;
-}
-
-.context-compaction-title {
-  display: inline-flex;
-  align-items: center;
-  gap: 5px;
-  font-size: var(--spark-fs-xs);
-  font-weight: 700;
-  color: var(--spark-primary);
-}
-
-.context-summary-chevron {
-  width: 13px;
-  height: 13px;
-  transition: transform 0.18s ease;
-}
-
-.context-summary-chevron.is-open {
-  transform: rotate(180deg);
-}
-
-.context-compaction-card.is-failed .context-compaction-title {
-  color: var(--spark-danger, #d03050);
-}
-
-.context-compaction-meta {
-  margin-top: 2px;
-  font-size: var(--spark-fs-2xs);
-  color: var(--spark-text-muted);
-  white-space: nowrap;
-  overflow: hidden;
-  text-overflow: ellipsis;
-}
-
-.context-summary-card .context-compaction-meta {
-  white-space: normal;
-  overflow: visible;
-  text-overflow: clip;
-}
-
-@keyframes context-fold {
-  0%, 100% { transform: scaleX(1); opacity: 0.95; }
-  50% { transform: scaleX(0.48); opacity: 0.45; }
-}
-
-@keyframes context-sweep {
-  0% { transform: translateX(-100%); }
-  55%, 100% { transform: translateX(100%); }
-}
-
-:global(html.viewport-mobile .chat-list .context-compaction-card) {
-  align-items: flex-start;
-}
-
-:global(html.viewport-mobile .chat-list .context-summary-bubble) {
-  width: 100%;
-  max-width: 100%;
-}
-
-:global(html.viewport-mobile .chat-list .context-summary-card) {
-  gap: 10px;
-  padding: 11px 12px;
-}
-
-:global(html.viewport-mobile .chat-list .context-compaction-meta) {
-  white-space: normal;
-}
-
-.context-summary-text {
-  box-sizing: border-box;
-  width: 100%;
-  max-width: 100%;
-  margin: 10px 0 0;
-  padding: 14px 16px;
-  border: 1px solid color-mix(in srgb, var(--spark-border), var(--spark-primary) 12%);
-  border-radius: var(--spark-radius);
-  background: color-mix(in srgb, var(--spark-bg), var(--spark-panel-bg) 62%);
-  color: var(--spark-text);
-  font-family: inherit;
-  font-size: var(--spark-fs-xs);
-  line-height: 1.55;
-  white-space: pre-wrap;
-  word-break: break-word;
-  box-shadow: inset 0 0 0 1px color-mix(in srgb, var(--spark-panel-bg), transparent 45%);
-}
-
-.tool-trace-list {
-  display: flex;
-  flex-wrap: wrap;
-  gap: 6px;
-}
 
 .bubble-actions {
   display: flex;
@@ -1351,192 +999,7 @@ defineExpose({ listRef });
   white-space: nowrap;
 }
 
-.tool-trace-chip {
-  display: inline-flex;
-  align-items: center;
-  gap: 4px;
-  padding: 4px 8px;
-  border-radius: 999px;
-  font-size: var(--spark-fs-xs);
-  line-height: 1;
-  color: var(--spark-primary);
-  background: rgba(var(--spark-primary-rgb), 0.08);
-  border: 1px solid rgba(var(--spark-primary-rgb), 0.18);
-}
 
-.tool-trace-chip.is-failed {
-  color: var(--spark-danger, #d03050);
-  background: rgba(208, 48, 80, 0.08);
-  border-color: rgba(208, 48, 80, 0.18);
-}
-
-.tool-trace-icon {
-  width: 14px;
-  height: 14px;
-  flex-shrink: 0;
-}
-
-.tool-trace-icon.is-success {
-  color: var(--spark-primary);
-}
-
-.tool-trace-icon.is-worktracker {
-  color: var(--spark-primary);
-}
-
-.tool-trace-icon.is-failed {
-  color: var(--spark-danger, #d03050);
-}
-
-.tool-trace-icon.is-running {
-  color: var(--spark-primary);
-  animation: spin 1.2s linear infinite;
-}
-
-.tool-trace-chip.is-running,
-.tool-trace-chip.is-started {
-  opacity: 0.75;
-}
-
-/* 可展开的 tool_trace chip */
-.tool-trace-chip.is-expandable {
-  cursor: pointer;
-  transition: background 0.15s, border-color 0.15s;
-}
-.tool-trace-chip.is-expandable:hover {
-  background: rgba(var(--spark-primary-rgb), 0.14);
-  border-color: rgba(var(--spark-primary-rgb), 0.3);
-}
-.tool-trace-chip.is-expanded {
-  background: rgba(var(--spark-primary-rgb), 0.14);
-  border-color: rgba(var(--spark-primary-rgb), 0.3);
-}
-
-/* 展开箭头图标 */
-.tool-trace-expand-icon {
-  width: 12px;
-  height: 12px;
-  flex-shrink: 0;
-  transition: transform 0.2s ease;
-  opacity: 0.6;
-}
-.tool-trace-expand-icon.is-expanded {
-  transform: rotate(180deg);
-  opacity: 1;
-}
-
-/* 工具详情展开面板 - 动画由 SparkCollapseTransition 驱动 */
-.tool-trace-detail {
-  overflow: hidden;
-}
-
-/* work_tracker 详情内容 */
-.tool-trace-detail .wt-summary {
-  padding: 8px 10px 6px;
-  font-size: var(--spark-fs-xs);
-  font-weight: 600;
-  color: var(--spark-primary);
-  border-bottom: 1px solid var(--spark-primary-muted);
-  margin-bottom: 4px;
-}
-.tool-trace-detail .wt-items {
-  padding: 4px 10px 8px;
-}
-.tool-trace-detail .wt-item {
-  display: flex;
-  flex-wrap: wrap;
-  align-items: baseline;
-  gap: 4px 6px;
-  padding: 3px 0;
-  font-size: var(--spark-fs-xs);
-  line-height: 1.4;
-  color: var(--spark-text);
-}
-.tool-trace-detail .wt-item.is-completed {
-  opacity: 0.55;
-}
-.tool-trace-detail .wt-item.is-completed .wt-item-task {
-  text-decoration: line-through;
-}
-.tool-trace-detail .wt-item.is-blocked .wt-item-task {
-  color: var(--spark-danger, #d03050);
-}
-.tool-trace-detail .wt-item.is-in_progress .wt-item-task {
-  font-weight: 600;
-  color: var(--spark-primary);
-}
-.tool-trace-detail .wt-item-dot {
-  flex-shrink: 0;
-  width: 6px;
-  height: 6px;
-  border-radius: 50%;
-  background: var(--spark-text-muted);
-  margin-top: 5px;
-}
-.tool-trace-detail .wt-item-dot.is-completed {
-  background: var(--spark-success, #52c41a);
-}
-.tool-trace-detail .wt-item-dot.is-in_progress {
-  background: var(--spark-primary);
-  animation: wt-pulse 1.5s ease-in-out infinite;
-}
-.tool-trace-detail .wt-item-dot.is-blocked {
-  background: var(--spark-danger, #f5222d);
-}
-@keyframes wt-pulse {
-  0%, 100% { opacity: 1; }
-  50% { opacity: 0.4; }
-}
-.tool-trace-detail .wt-item-priority {
-  flex-shrink: 0;
-  font-size: var(--spark-fs-3xs);
-  padding: 0 4px;
-  border-radius: 4px;
-  font-weight: 600;
-  text-transform: uppercase;
-  letter-spacing: 0.5px;
-}
-.tool-trace-detail .wt-item-priority.is-high {
-  color: var(--spark-danger, #d03050);
-  background: rgba(208, 48, 80, 0.1);
-}
-.tool-trace-detail .wt-item-priority.is-medium {
-  color: var(--spark-warning, #e6a700);
-  background: rgba(230, 167, 0, 0.1);
-}
-.tool-trace-detail .wt-item-priority.is-low {
-  color: var(--spark-text-secondary);
-  background: rgba(128, 128, 128, 0.1);
-}
-.tool-trace-detail .wt-item-task {
-  flex: 1;
-  min-width: 0;
-  overflow-wrap: break-word;
-  word-break: break-word;
-}
-.tool-trace-detail .wt-item-notes {
-  flex-shrink: 1;
-  min-width: 0;
-  font-size: var(--spark-fs-2xs);
-  color: var(--spark-text-secondary);
-  opacity: 0.8;
-  overflow-wrap: break-word;
-}
-.tool-trace-detail .wt-empty {
-  padding: 8px 10px;
-  font-size: var(--spark-fs-xs);
-  color: var(--spark-text-secondary);
-  opacity: 0.7;
-  white-space: pre-wrap;
-}
-.tool-trace-detail .wt-updated {
-  padding: 4px 10px 6px;
-  font-size: var(--spark-fs-2xs);
-  color: var(--spark-text-secondary);
-  opacity: 0.6;
-  border-top: 1px solid var(--spark-primary-muted);
-  margin-top: 4px;
-}
 
 .message-actions {
   display: flex;

@@ -125,11 +125,11 @@
 import { computed, nextTick, onBeforeUnmount, onMounted, ref, watch } from 'vue';
 import { useRoute, useRouter } from 'vue-router';
 import { useI18n } from 'vue-i18n';
-import ZhOnlyTag from '@/components/share/ZhOnlyTag.vue';
-import BookNavButton from '@/components/share/BookNavButton.vue';
+import ZhOnlyTag from '@/components/player/shared/ZhOnlyTag.vue';
+import BookNavButton from '@/components/player/shared/BookNavButton.vue';
 import { NIcon, NTooltip } from 'naive-ui';
 import { ChevronLeft, ChevronRight, Settings, X } from '@lucide/vue';
-import type { NavItem } from '@/components/share/SceneNavPanel.vue';
+import type { NavItem } from '@/components/player/shared/SceneNavPanel.vue';
 import { fetchWithAuth } from '@/services/apiClient';
 import { useMobile } from '@/composables/useMobile';
 import { SPARKARC_GITHUB_URL } from '@/config';

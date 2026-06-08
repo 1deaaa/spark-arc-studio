@@ -88,7 +88,7 @@ import hljs from 'highlight.js/lib/core';
 import Toast from './components/share/Toast.vue';
 import ModalHost from './components/share/ModalHost.vue';
 import TitleBar from './components/layouts/desktop/TitleBar.vue';
-import DirectorAutoWriteOverlay from './components/share/DirectorAutoWriteOverlay.vue';
+import DirectorAutoWriteOverlay from './components/overlays/DirectorAutoWriteOverlay.vue';
 import { OnboardingOverlay, getOnboardingEngine, setupOnboarding } from './onboarding';
 import bus from './eventBus';
 

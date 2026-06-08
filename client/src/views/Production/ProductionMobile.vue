@@ -255,7 +255,7 @@ import DialogueTree from '../../components/dlg-editor/DialogueTree.vue';
 import NovelReader from '../../components/dlg-editor/NovelReader.vue';
 import MobileNodeEditor from '../../components/dlg-editor/MobileNodeEditor.vue';
 import SparkTag from '../../components/share/SparkTag.vue';
-import MobileTextArea from '../../components/share/MobileTextArea.vue';
+import MobileTextArea from '../../components/editors/mobile/MobileTextArea.vue';
 import ConditionsEditor from '../../components/dlg-editor/ConditionsEditor.vue';
 import EffectsEditor from '../../components/dlg-editor/EffectsEditor.vue';
 

@@ -106,7 +106,7 @@ import LorebookEditor from '../../components/lorebook/LorebookEditor.vue';
 import AiSettingsPanel from '../../components/lorebook/AiSettingsPanel.vue';
 import CharacterGeneratorPanel from '../../components/lorebook/CharacterGeneratorPanel.vue';
 import GlobalLoading from '../../components/share/GlobalLoading.vue';
-import GlobalChatFloat from '../../components/share/GlobalChatFloat.vue';
+import GlobalChatFloat from '../../components/chat/GlobalChatFloat.vue';
 import ActivityBar from '../../components/layouts/desktop/ActivityBar.vue';
 
 // 这里的 View 引用改为新的分发器路径

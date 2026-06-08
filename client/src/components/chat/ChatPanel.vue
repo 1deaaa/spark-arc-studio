@@ -156,8 +156,8 @@
 import { ref, computed, useSlots, type PropType } from 'vue';
 import { useI18n } from 'vue-i18n';
 import { NButton, NInput, NPopconfirm, NTooltip } from 'naive-ui';
-import ChatMessageList from '@/components/share/ChatMessageList.vue';
-import AgentRadialPicker from '@/components/share/AgentRadialPicker.vue';
+import ChatMessageList from '@/components/chat/ChatMessageList.vue';
+import AgentRadialPicker from '@/components/chat/AgentRadialPicker.vue';
 import GlobalLoading from '@/components/share/GlobalLoading.vue';
 import type { ChatMessage } from '@/services/chatService';
 

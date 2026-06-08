@@ -45,7 +45,7 @@
 
 <script setup lang="ts">
 import { ref, computed, watch, onMounted, nextTick, onBeforeUnmount } from 'vue';
-import NovelBackdrop from '@/components/share/NovelBackdrop.vue';
+import NovelBackdrop from '@/components/player/shared/NovelBackdrop.vue';
 import { useSceneStore } from '@/components/stores/sceneStore';
 
 const props = defineProps({

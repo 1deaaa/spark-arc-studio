@@ -1,5 +1,5 @@
 import { i18n } from '@/i18n';
-import { normalizeToolName } from './chatDomain';
+import { normalizeToolName } from '../chatDomain';
 
 export type ToolUiBinding = {
   scope: string;

@@ -251,10 +251,10 @@ import { useI18n } from 'vue-i18n';
 import { NButton, NCard, NInput, NSpace, NSelect, NDrawer, NDrawerContent, NIcon, NTooltip } from 'naive-ui';
 import { CircleUser } from '@lucide/vue';
 
-import ChatPanel from '@/components/share/ChatPanel.vue';
-import ChatFileImportButton from '@/components/share/ChatFileImportButton.vue';
-import ChatMessageList from '@/components/share/ChatMessageList.vue';
-import ExtraChatWindow from '@/components/share/ExtraChatWindow.vue';
+import ChatPanel from '@/components/chat/ChatPanel.vue';
+import ChatFileImportButton from '@/components/chat/ChatFileImportButton.vue';
+import ChatMessageList from '@/components/chat/ChatMessageList.vue';
+import ExtraChatWindow from '@/components/chat/ExtraChatWindow.vue';
 import { useAgentRegistry } from '@/composables/useAgentRegistry';
 import bus from '@/eventBus';
 import { useChatActions } from '@/composables/useChatActions';

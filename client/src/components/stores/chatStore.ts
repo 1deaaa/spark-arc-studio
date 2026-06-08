@@ -41,17 +41,22 @@ import {
   getToolProgressText,
   getToolUiTaskKey,
   resolveToolUiBinding,
-} from './chatToolUi';
+} from './chat/toolUi';
 import {
   applyPersistedTokenStats,
   extractContextWindowStats,
-  extractContextWindowStatsFromPayload,
-  extractLlmUsageStats,
   latestHistoryContextWindowStats,
   latestHistoryLlmUsageStats,
   type ContextWindowStats,
   type TokenUsageStats,
-} from './chatTokenStats';
+} from './chat/tokenStats';
+import {
+  buildContextCompactionSegmentPayload,
+  coerceStreamEventText,
+  extractContextWindowEventPatch,
+  extractTaskDoneMetadataPatch,
+  pickStreamEventText,
+} from './chat/streamEvents';
 import {
   buildUserMessageMetadata,
   extractImportedFilesMeta,
@@ -63,7 +68,7 @@ import {
   sameImportedFile,
   type ChatImportedContext,
   type ResolvedMessageContext,
-} from './chatAttachments';
+} from './chat/attachments';
 
 type AnyRecord = Record<string, any>;
 
@@ -1521,34 +1526,6 @@ export const useChatStore = defineStore('chat', {
 
       // ---------- 局部闭包 ----------
 
-      const coerceEventText = (value) => {
-        if (value == null) return '';
-        if (typeof value === 'string') return value;
-        if (Array.isArray(value)) {
-          return value.map(item => coerceEventText(item)).join('');
-        }
-        if (typeof value === 'object') {
-          if (typeof value.text === 'string') return value.text;
-          if (typeof value.content === 'string') return value.content;
-          if (typeof value.reasoning === 'string') return value.reasoning;
-          try {
-            return JSON.stringify(value);
-          } catch {
-            return String(value);
-          }
-        }
-        return String(value);
-      };
-
-      const pickEventText = (evt: AnyRecord, candidateKeys: string[] = []) => {
-        for (const key of candidateKeys) {
-          if (!evt || !(key in evt)) continue;
-          const text = coerceEventText(evt[key]);
-          if (text) return text;
-        }
-        return '';
-      };
-
       const ensureAssistantAdded = () => {
         if (!isStreamCurrent()) return;
         if (!assistantMsgAdded) {
@@ -1701,7 +1678,7 @@ export const useChatStore = defineStore('chat', {
       let currentTextSourceAgent = '';
 
       const appendAssistantDelta = (textDelta: unknown, sourceAgent = '') => {
-        const normalized = coerceEventText(textDelta);
+        const normalized = coerceStreamEventText(textDelta);
         if (!normalized) return;
         ensureAssistantAdded();
         assistantMsg.content += normalized;
@@ -1729,7 +1706,7 @@ export const useChatStore = defineStore('chat', {
       };
 
       const appendReasoningDelta = (textDelta: unknown, sourceAgent = '') => {
-        const normalized = coerceEventText(textDelta);
+        const normalized = coerceStreamEventText(textDelta);
         if (!normalized) return;
         ensureAssistantAdded();
         assistantMsg.reasoning += normalized;
@@ -1797,22 +1774,7 @@ export const useChatStore = defineStore('chat', {
       const appendContextCompactionSegment = (evt: AnyRecord) => {
         ensureAssistantAdded();
         const segs = assistantMsg.segments;
-        const eventType = String(evt.event || '');
-        const status = eventType === 'context_compaction_finished'
-          ? 'finished'
-          : eventType === 'context_compaction_failed'
-            ? 'failed'
-            : 'running';
-        const payload = {
-          type: 'context_compaction',
-          status,
-          original_tokens: Number(evt.original_tokens ?? evt.originalTokens ?? 0) || 0,
-          compacted_tokens: Number(evt.compacted_tokens ?? evt.compactedTokens ?? 0) || 0,
-          retained_messages: Number(evt.retained_messages ?? evt.retainedMessages ?? 0) || 0,
-          model: String(evt.model || ''),
-          reason: String(evt.reason || ''),
-          message: String(evt.message || ''),
-        };
+        const payload = buildContextCompactionSegmentPayload(evt);
         const existingIdx = segs.findIndex(seg => seg.type === 'context_compaction' && seg.status === 'running');
         if (existingIdx >= 0) {
           segs[existingIdx] = { ...segs[existingIdx], ...payload };
@@ -1887,8 +1849,8 @@ export const useChatStore = defineStore('chat', {
         }
         assistantMsg.task_id = evt.task_id || evt.taskId || assistantMsg.task_id || '';
         assistantMsg.streamSeq = Number(evt.seq ?? evt.lastSeq ?? assistantMsg.streamSeq ?? 0) || 0;
-        assistantMsg.content = coerceEventText(evt.content || '');
-        assistantMsg.reasoning = coerceEventText(evt.reasoning || '');
+        assistantMsg.content = coerceStreamEventText(evt.content || '');
+        assistantMsg.reasoning = coerceStreamEventText(evt.reasoning || '');
         assistantMsg.reasoning_duration = Number(evt.reasoning_duration ?? evt.reasoningDuration ?? assistantMsg.reasoning_duration ?? 0) || 0;
         assistantMsg.tool_traces = Array.isArray(evt.tool_traces) ? evt.tool_traces.map(item => ({ ...item })) : [];
         assistantMsg.segments = Array.isArray(evt.segments) ? evt.segments.map(item => ({ ...item })) : [];
@@ -1942,21 +1904,12 @@ export const useChatStore = defineStore('chat', {
           return;
         }
         if (eventType === 'context_window_stats') {
-          const nextWindowStats = extractContextWindowStats(evt);
+          const { stats: nextWindowStats, metadata } = extractContextWindowEventPatch(evt);
           session.contextWindowStats = nextWindowStats;
           ensureAssistantAdded();
           assistantMsg.metadata = {
             ...(assistantMsg.metadata || {}),
-            context_window_stats: {
-              agent_id: nextWindowStats.agentId,
-              input_tokens: nextWindowStats.inputTokens,
-              output_tokens: nextWindowStats.outputTokens,
-              original_tokens: nextWindowStats.originalTokens,
-              retained_messages: nextWindowStats.retainedMessages,
-              model: nextWindowStats.model,
-              compacted: nextWindowStats.compacted,
-              reason: nextWindowStats.reason,
-            },
+            context_window_stats: metadata,
           };
           syncAssistantSnapshot();
           return;
@@ -1965,34 +1918,13 @@ export const useChatStore = defineStore('chat', {
           streamState.receivedTaskDone = true;
           session.backgroundTaskStatus = null;
           session.sending = false;
-          const usageStats = extractLlmUsageStats(evt);
-          const taskWindowStats = extractContextWindowStatsFromPayload(evt);
+          const metadataPatch = extractTaskDoneMetadataPatch(evt);
           applyPersistedTokenStats(session, evt);
-          let metadataPatched = false;
-          if (usageStats != null) {
+          if (metadataPatch.changed) {
             assistantMsg.metadata = {
               ...(assistantMsg.metadata || {}),
-              llm_usage: evt.llm_usage || evt.llmUsage,
+              ...metadataPatch.metadata,
             };
-            metadataPatched = true;
-          }
-          if (taskWindowStats != null) {
-            assistantMsg.metadata = {
-              ...(assistantMsg.metadata || {}),
-              context_window_stats: evt.context_window_stats || evt.contextWindowStats || {
-                agent_id: taskWindowStats.agentId,
-                input_tokens: taskWindowStats.inputTokens,
-                output_tokens: taskWindowStats.outputTokens,
-                original_tokens: taskWindowStats.originalTokens,
-                retained_messages: taskWindowStats.retainedMessages,
-                model: taskWindowStats.model,
-                compacted: taskWindowStats.compacted,
-                reason: taskWindowStats.reason,
-              },
-            };
-            metadataPatched = true;
-          }
-          if (metadataPatched) {
             syncAssistantSnapshot();
           }
           if (evt.status === 'error') {
@@ -2016,7 +1948,7 @@ export const useChatStore = defineStore('chat', {
         }
         if (eventType === 'reasoning_delta') {
           assistantMsg.streamSeq = Number(evt.seq ?? assistantMsg.streamSeq ?? 0) || assistantMsg.streamSeq;
-          appendReasoningDelta(pickEventText(evt, ['text', 'reasoning', 'delta', 'content', 'message', 'data']), evt.source_agent || '');
+          appendReasoningDelta(pickStreamEventText(evt, ['text', 'reasoning', 'delta', 'content', 'message', 'data']), evt.source_agent || '');
           return;
         }
         if (eventType === 'assistant_delta') {
@@ -2027,7 +1959,7 @@ export const useChatStore = defineStore('chat', {
             session.retryErrorSummary = '';
           }
           const parsed = consumeThinkStreamChunk(
-            pickEventText(evt, ['text', 'delta', 'content', 'message', 'data']),
+            pickStreamEventText(evt, ['text', 'delta', 'content', 'message', 'data']),
             thinkStreamState,
           );
           if (parsed.reasoning) {
@@ -2207,7 +2139,7 @@ export const useChatStore = defineStore('chat', {
           //     —— 后端中间错误已统一被 _run_chat_stream_with_retry 静默拦截，前端能拿到的
           //     error 事件已经是"全部重试均失败"的最终结论。
           streamState.receivedTaskDone = true;
-          const errMsg = pickEventText(evt, ['message', 'data', 'text']);
+          const errMsg = pickStreamEventText(evt, ['message', 'data', 'text']);
           session.lastError = errMsg;
           session.retryAttempt = null;
           session.retryErrorSummary = '';

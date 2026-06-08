@@ -48,9 +48,9 @@
 
 <script setup lang="ts">
 import { ref, computed, onMounted, onActivated, nextTick, watch } from 'vue';
-import ChatPanel from '@/components/share/ChatPanel.vue';
-import ChatWelcomeScreen from '@/components/share/ChatWelcomeScreen.vue';
-import ChatFileImportButton from '@/components/share/ChatFileImportButton.vue';
+import ChatPanel from '@/components/chat/ChatPanel.vue';
+import ChatWelcomeScreen from '@/components/chat/ChatWelcomeScreen.vue';
+import ChatFileImportButton from '@/components/chat/ChatFileImportButton.vue';
 
 import { useChatStore } from '@/components/stores/chatStore';
 import { useProjectStore } from '@/components/stores/projectStore';

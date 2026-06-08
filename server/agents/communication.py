@@ -35,12 +35,12 @@ import uuid
 from typing import Dict, Any, Optional, List
 from .registry import get_agent_registry, _resolve_i18n_field
 from .language_policy import prepend_prompt_language_policy
-from .attachment_chunk_history import (
+from .attachment.chunk_history import (
     ATTACHMENT_CHUNK_COLLAPSED_PLACEHOLDER,
     ATTACHMENT_CHUNK_TOOL_NAME,
     collapse_attachment_chunk_history,
 )
-from .tool_stream_events import (
+from .tools.stream_events import (
     build_tool_stream_event,
     get_tool_ui_binding,
     normalize_tool_name,

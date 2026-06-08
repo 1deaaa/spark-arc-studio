@@ -187,7 +187,7 @@ import { useI18n } from 'vue-i18n';
 
 import FlowCard from './FlowCard.vue';
 import StepIndicator from './StepIndicator.vue';
-import GlobalChatFloat from '../../share/GlobalChatFloat.vue';
+import GlobalChatFloat from '../../chat/GlobalChatFloat.vue';
 
 // 核心工作流视图
 import WorldMobile from '../../../views/World/WorldIndex.vue';

@@ -177,9 +177,9 @@ import { useRoute, useRouter } from 'vue-router';
 import { useI18n } from 'vue-i18n';
 import { fetchWithAuth } from '@/services/apiClient';
 import PlayerAmbient from './PlayerAmbient.vue';
-import ZhOnlyTag from '@/components/share/ZhOnlyTag.vue';
-import BookNavButton from '@/components/share/BookNavButton.vue';
-import type { NavItem } from '@/components/share/SceneNavPanel.vue';
+import ZhOnlyTag from '@/components/player/shared/ZhOnlyTag.vue';
+import BookNavButton from '@/components/player/shared/BookNavButton.vue';
+import type { NavItem } from '@/components/player/shared/SceneNavPanel.vue';
 import { ensureAppFontReadyForText, warmupAppFontInBackground } from '@/utils/fontWarmup';
 import { SPARKARC_GITHUB_URL } from '@/config';
 

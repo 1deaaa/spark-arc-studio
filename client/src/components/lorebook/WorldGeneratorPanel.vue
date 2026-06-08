@@ -39,7 +39,7 @@
 import { ref } from 'vue';
 import { NCard, NForm, NButton, NIcon } from 'naive-ui';
 import { Zap } from '@lucide/vue';
-import StudioSeamlessTextarea from '@/components/share/StudioSeamlessTextarea.vue';
+import StudioSeamlessTextarea from '@/components/editors/StudioSeamlessTextarea.vue';
 import { fetchWithAuth } from '@/services/api';
 import { fetchCharacters } from '@/services/storyService';
 import { sendChatMessageStream } from '@/services/chatService';
