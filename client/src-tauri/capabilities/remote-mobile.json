@@ -13,7 +13,7 @@
     {
       "identifier": "opener:allow-open-url",
       "allow": [
-        { "url": "https://github.com/Mournight/SparkArc*" }
+        { "url": "https://github.com/1deaaa/SparkArc*" }
       ]
     }
   ]

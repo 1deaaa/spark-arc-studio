@@ -2,14 +2,14 @@
 
 Effective date: April 12, 2026
 
-Welcome to **SparkArc**. SparkArc is an Agent-cluster-driven intelligent creation platform developed by **Mournight (AIdeaStudio)** (the "Copyright Holder" or "Developer"), released under the **GNU Affero General Public License v3.0 (AGPL-3.0)**.
+Welcome to **SparkArc**. SparkArc is an Agent-cluster-driven intelligent creation platform developed by **1deaaa (AIdeaStudio)** (the "Copyright Holder" or "Developer"), released under the **GNU Affero General Public License v3.0 (AGPL-3.0)**.
 
 **Service Provider Notice:**
 SparkArc can be self-hosted or deployed by third-party operators to serve others.
 * If you self-host, you are both the service provider and the user.
 * If you use a third-party-hosted SparkArc instance, that operator is your direct service provider.
 * **The Copyright Holder only provides source code and is not responsible for any third-party operator's conduct, data security, or service quality. Third-party instances are independently operated and have no agency, joint venture, or cooperation relationship with the Copyright Holder.**
-* Only service endpoints expressly published and listed by Mournight / AIdeaStudio are official SparkArc instances. Third-party instances must not impersonate official services or imply official endorsement.
+* Only service endpoints expressly published and listed by 1deaaa / AIdeaStudio are official SparkArc instances. Third-party instances must not impersonate official services or imply official endorsement.
 
 By accessing, registering, or using SparkArc, you agree to these Terms. Please read them carefully, especially the bolded sections on liability, intellectual property, and governing law.
 
@@ -72,3 +72,4 @@ By accessing, registering, or using SparkArc, you agree to these Terms. Please r
 ## 8. Governing Law
 
 8.1 These Terms are governed by the laws of the jurisdiction in which the instance operates. For instances in China, the laws of the People's Republic of China (excluding Hong Kong, Macau, and Taiwan) apply.
+

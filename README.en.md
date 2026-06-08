@@ -662,7 +662,7 @@ SparkArc is built to make high-quality narrative production more accessible, rep
 
 ## Closing Remarks
 
-This project was designed, developed, and tested entirely by me (Mournight) alone, so imperfections are inevitable. My schedule is fairly tight, so maintenance may not always be immediate — community contributions are very welcome.
+This project was designed, developed, and tested entirely by me (1deaaa) alone, so imperfections are inevitable. My schedule is fairly tight, so maintenance may not always be immediate — community contributions are very welcome.
 
 The project originated as an internal tool for game narrative development at a studio.
 
@@ -680,7 +680,7 @@ SparkArc is released under AGPL-3.0-only. You may run, copy, modify, deploy, and
 
 I myself am bound by the same license, and I invite all contributors, deployers, and community members to help maintain SparkArc's open ecosystem together.
 
-The official SparkArc service is operated only by Mournight / AIdeaStudio. It may later be sustained through public-good access, sponsorship, paid credits, hosted services, or other official offerings.
+The official SparkArc service is operated only by 1deaaa / AIdeaStudio. It may later be sustained through public-good access, sponsorship, paid credits, hosted services, or other official offerings.
 
 I also encourage every contributor, deployer, and community member to stay aware of the rights AGPL protects. SparkArc is open so people can learn, self-host, build, and contribute — not so closed white-label copies can erase attribution and monetize the community one-way. Please help protect the basics: keep attribution and license notices, provide corresponding source code when required, identify modifications and source, and respect brand and official-instance boundaries. Compliant self-hosting, internal use, learning, research, and ecosystem contributions are welcome; AGPL evasion, misleading white-label operation, and shifting third-party operational risks onto the community are not.
 
@@ -705,3 +705,4 @@ This project's code is released under AGPL-3.0-only; however, **the "SparkArc" n
 Any deployment, modified version, or distribution based on this project must not imply official, authorized, agency, or partnership affiliation with the original project.
 
 The Matchbox Agent Gateway (`server/llm/agen_matchbox`) is a separately reusable component licensed under Apache-2.0 according to the `LICENSE` file in that directory. Unless otherwise stated, the rest of the main project is licensed under AGPL-3.0-only.
+

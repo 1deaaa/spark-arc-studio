@@ -103,7 +103,7 @@
 
             <div class="appearance-preview">
                 <n-text depth="3">{{ t('settings.appearance.preview') }}</n-text>
-                <div class="preview-text">三月秋分 · Mournight · 2026</div>
+                <div class="preview-text">三月秋分 · 1deaaa · 2026</div>
             </div>
         </n-form>
     </div>

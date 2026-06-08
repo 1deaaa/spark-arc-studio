@@ -404,7 +404,7 @@ export const finale = {
   ],
   ctaPrimary: { label: '写下你的第一句', to: '/login' },
   ctaSecondary: { label: '先在本地跑一遍试试', to: 'https://github.com/' },
-  micro: '项目基于 AGPL-3.0 开源 · 由 Mournight 独立开发 · 献给所有还在写的人。',
+  micro: '项目基于 AGPL-3.0 开源 · 由 1deaaa 独立开发 · 献给所有还在写的人。',
 };
 
 /* ========== Footer ========== */
