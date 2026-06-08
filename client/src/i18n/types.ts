@@ -1,4 +1,4 @@
-export const SUPPORTED_LOCALES = ['zh-CN', 'en-US', 'ja-JP'] as const;
+export const SUPPORTED_LOCALES = ['zh-CN', 'en-US', 'ja-JP', 'ko-KR'] as const;
 
 export type AppLocale = (typeof SUPPORTED_LOCALES)[number];
 
@@ -21,6 +21,7 @@ export function normalizeLocale(value: string | null | undefined): AppLocale {
   if (lower.startsWith('zh')) return 'zh-CN';
   if (lower.startsWith('ja')) return 'ja-JP';
   if (lower.startsWith('en')) return 'en-US';
+  if (lower.startsWith('ko')) return 'ko-KR';
 
   return DEFAULT_LOCALE;
 }

@@ -1301,3 +1301,33 @@ input[type="password"] {
     transform: none;
   }
 }
+
+/* ==========================================================================
+   语言切换器
+   ========================================================================== */
+
+.login-lang-select {
+  position: absolute;
+  top: 16px;
+  right: 16px;
+  z-index: 1000;
+}
+
+:global(.tauri-desktop) .login-lang-select {
+  top: 48px;
+}
+
+.lang-switch-btn {
+  background: color-mix(in srgb, var(--spark-panel-bg), transparent 30%) !important;
+  border: 1px solid color-mix(in srgb, var(--spark-border), transparent 60%) !important;
+  backdrop-filter: blur(8px);
+  -webkit-backdrop-filter: blur(8px);
+  font-size: var(--spark-fs-xs) !important;
+  transition: all 0.3s ease !important;
+}
+
+.lang-switch-btn:hover {
+  background: color-mix(in srgb, var(--spark-panel-bg), transparent 10%) !important;
+  border-color: var(--spark-primary) !important;
+}
+

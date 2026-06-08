@@ -126,6 +126,18 @@
           </n-tooltip>
         </span>
       </n-dropdown>
+      <n-dropdown trigger="hover" :options="localeOptions" @select="handleLocaleChange">
+        <span class="tooltip-dropdown-trigger">
+          <n-tooltip trigger="hover">
+            <template #trigger>
+              <n-button text style="font-size: var(--spark-fs-h1); margin-left: 8px;">
+                <n-icon :component="Languages" />
+              </n-button>
+            </template>
+            {{ t('settings.language.label') }}
+          </n-tooltip>
+        </span>
+      </n-dropdown>
       <div class="user-info">
         <n-text>{{ username || t('components.headerToolbar.loading') }}</n-text>
         <n-tooltip trigger="hover">
@@ -150,7 +162,9 @@
 import { onBeforeUnmount, onMounted, ref, computed, h } from 'vue';
 import { useI18n } from 'vue-i18n';
 import { NButton, NIcon, NText, NDropdown, NTooltip } from 'naive-ui';
-import { Archive, CircleCheck, CloudDownload, CloudUpload, FolderOpen, Laptop, LogOut, Maximize2, Minimize2, Moon, PaintBucket, Play, Save, SaveAll, SaveOff, Share2, Sun } from '@lucide/vue';
+import { Archive, CircleCheck, CloudDownload, CloudUpload, FolderOpen, Laptop, LogOut, Maximize2, Minimize2, Moon, PaintBucket, Play, Save, SaveAll, SaveOff, Share2, Sun, Languages } from '@lucide/vue';
+import { useLocaleStore } from '@/components/stores/localeStore';
+import type { AppLocale } from '@/i18n/types';
 import bus from '@/eventBus';
 import ProjectSelector from '../../user/ProjectSelector.vue';
 import { useSceneStore } from '@/components/stores/sceneStore';
@@ -290,6 +304,19 @@ const themeOptions = computed(() => [
 
 const handleThemeChange = (key) => {
   themeStore.setThemeMode(key);
+};
+
+const localeStore = useLocaleStore();
+
+const localeOptions = computed(() => [
+  { label: t('locale.zh-CN'), key: 'zh-CN' },
+  { label: t('locale.en-US'), key: 'en-US' },
+  { label: t('locale.ja-JP'), key: 'ja-JP' },
+  { label: t('locale.ko-KR'), key: 'ko-KR' },
+]);
+
+const handleLocaleChange = (key: AppLocale) => {
+  localeStore.setLocale(key);
 };
 
 const currentThemeIcon = computed(() => {

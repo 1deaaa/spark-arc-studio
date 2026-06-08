@@ -60,6 +60,8 @@ def normalize_response_locale(locale: Optional[str]) -> str:
         return 'ja-JP'
     if lower.startswith('en'):
         return 'en-US'
+    if lower.startswith('ko'):
+        return 'ko-KR'
 
     return 'zh-CN'
 

@@ -38,6 +38,7 @@ const localeOptions = computed(() => [
   { label: t('locale.zh-CN'), value: 'zh-CN' },
   { label: t('locale.en-US'), value: 'en-US' },
   { label: t('locale.ja-JP'), value: 'ja-JP' },
+  { label: t('locale.ko-KR'), value: 'ko-KR' },
 ]);
 </script>
 

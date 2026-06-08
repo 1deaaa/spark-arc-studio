@@ -2,9 +2,11 @@ import { createI18n } from 'vue-i18n';
 import zhCN from './locales/zh-CN';
 import enUS from './locales/en-US';
 import jaJP from './locales/ja-JP';
+import koKR from './locales/ko-KR';
 import onboardingZhCN from '../onboarding/i18n/onboarding.zh-CN';
 import onboardingEnUS from '../onboarding/i18n/onboarding.en-US';
 import onboardingJaJP from '../onboarding/i18n/onboarding.ja-JP';
+import onboardingKoKR from '../onboarding/i18n/onboarding.ko-KR';
 import {
   DEFAULT_LOCALE,
   LOCALE_STORAGE_KEY,
@@ -21,6 +23,8 @@ const localeMessages: Record<string, LocaleMessages> = {
   'en': enUS,    // BCP 47 语言标签回退别名
   'ja-JP': jaJP,
   'ja': jaJP,    // BCP 47 语言标签回退别名
+  'ko-KR': koKR,
+  'ko': koKR,    // BCP 47 语言标签回退别名
 };
 
 function resolveInitialLocale(): AppLocale {
@@ -44,11 +48,12 @@ function resolveInitialLocale(): AppLocale {
 export const i18n = createI18n({
   legacy: false,
   locale: resolveInitialLocale(),
-  // 保留显式回退决策：zh→zh-CN, ja→ja-JP, en→en-US
+  // 保留显式回退决策：zh→zh-CN, ja→ja-JP, en→en-US, ko→ko-KR
   fallbackLocale: {
     zh: ['zh-CN'],
     ja: ['ja-JP'],
     en: ['en-US'],
+    ko: ['ko-KR'],
     default: ['zh-CN'],
   },
   // 仅在开发环境启用告警，避免生产环境日志噪音
@@ -71,6 +76,8 @@ const onboardingMessages: Record<string, Record<string, unknown>> = {
   'en': onboardingEnUS,
   'ja-JP': onboardingJaJP,
   'ja': onboardingJaJP,
+  'ko-KR': onboardingKoKR,
+  'ko': onboardingKoKR,
 };
 for (const [locale, onboardingMsg] of Object.entries(onboardingMessages)) {
   const existing = i18n.global.getLocaleMessage(locale);

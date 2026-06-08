@@ -3,6 +3,7 @@ const jaJP = {
     'zh-CN': '简体中文',
     'en-US': 'English',
     'ja-JP': '日本語',
+    'ko-KR': '한국어',
   },
   seo: {
     title: 'SparkArc Studio - ひとつの閃きから世界を創る',
@@ -860,6 +861,9 @@ const jaJP = {
       thinking: '思考中',
       thinkingDeep: '深く思考中',
       thoughtDeep: '思考完了',
+      thinkingSeconds: '考え中 {seconds}s',
+      executingTool: 'ツール実行中...',
+      thinkingNotice: '一部のモデルは推論チェーンやツール呼び出し表示を省略します。送信ボタンがまだロック中であれば接続は継続しています。しばらくお待ちください。',
       charCount: '{count} 文字',
       retry: '再試行',
       copy: 'コピー',

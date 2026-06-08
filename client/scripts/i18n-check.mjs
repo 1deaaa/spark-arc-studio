@@ -30,6 +30,7 @@ const LOCALE_FILES = [
   { name: 'zh-CN', path: path.join(srcRoot, 'i18n', 'locales', 'zh-CN.ts') },
   { name: 'en-US', path: path.join(srcRoot, 'i18n', 'locales', 'en-US.ts') },
   { name: 'ja-JP', path: path.join(srcRoot, 'i18n', 'locales', 'ja-JP.ts') },
+  { name: 'ko-KR', path: path.join(srcRoot, 'i18n', 'locales', 'ko-KR.ts') },
 ];
 
 const REFERENCE_LOCALE = 'zh-CN';

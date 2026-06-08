@@ -393,7 +393,7 @@ function formatTime(isoString: string): string {
     if (!isoString) return '';
     try {
         const date = new Date(isoString);
-        const localeCode = ['zh-CN', 'en-US', 'ja-JP'].includes(locale.value) ? locale.value : 'zh-CN';
+        const localeCode = ['zh-CN', 'en-US', 'ja-JP', 'ko-KR'].includes(locale.value) ? locale.value : 'zh-CN';
         return date.toLocaleString(localeCode, {
             month: '2-digit',
             day: '2-digit',

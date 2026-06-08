@@ -636,7 +636,7 @@ function openLink(shareId: string | null | undefined) {
 
 function formatDate(isoStr?: string | null) {
   if (!isoStr) return '';
-  const localeCode = ['zh-CN', 'en-US', 'ja-JP'].includes(locale.value) ? locale.value : 'zh-CN';
+  const localeCode = ['zh-CN', 'en-US', 'ja-JP', 'ko-KR'].includes(locale.value) ? locale.value : 'zh-CN';
   return new Date(isoStr).toLocaleString(localeCode);
 }
 

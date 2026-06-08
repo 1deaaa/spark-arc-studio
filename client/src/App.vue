@@ -78,9 +78,11 @@ import {
   zhCN,
   enUS,
   jaJP,
+  koKR,
   dateZhCN,
   dateEnUS,
   dateJaJP,
+  dateKoKR,
 } from 'naive-ui';
 import hljs from 'highlight.js/lib/core';
 import Toast from './components/share/Toast.vue';
@@ -129,6 +131,8 @@ const naiveLocale = computed(() => {
       return enUS;
     case 'ja-JP':
       return jaJP;
+    case 'ko-KR':
+      return koKR;
     case 'zh-CN':
     default:
       return zhCN;
@@ -141,6 +145,8 @@ const naiveDateLocale = computed(() => {
       return dateEnUS;
     case 'ja-JP':
       return dateJaJP;
+    case 'ko-KR':
+      return dateKoKR;
     case 'zh-CN':
     default:
       return dateZhCN;

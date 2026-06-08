@@ -8,6 +8,18 @@
     <canvas ref="bgCanvasRef" class="bg-canvas" aria-hidden="true"></canvas>
     <canvas ref="fxCanvasRef" class="fx-canvas" aria-hidden="true"></canvas>
     
+    <!-- 语言切换器 -->
+    <div class="login-lang-select">
+      <n-dropdown trigger="hover" :options="localeOptions" @select="handleLocaleChange">
+        <n-button class="lang-switch-btn" secondary round>
+          <template #icon>
+            <n-icon :component="Languages" />
+          </template>
+          {{ currentLocaleLabel }}
+        </n-button>
+      </n-dropdown>
+    </div>
+
     <!-- 装饰性光弧 -->
     <div class="ambient-arc ambient-arc--1"></div>
     <div class="ambient-arc ambient-arc--2"></div>
@@ -277,8 +289,10 @@ import { buildLauncherReturnUrl, readLauncherOriginFromUrl } from '@/utils/launc
 import { SPARKARC_GITHUB_URL } from '@/config';
 
 import TermsModal from '@/components/user/TermsModal.vue';
-import { NIcon, NTooltip } from 'naive-ui';
-import { Server } from '@lucide/vue';
+import { NIcon, NTooltip, NDropdown, NButton } from 'naive-ui';
+import { Server, Languages } from '@lucide/vue';
+import { useLocaleStore } from '@/components/stores/localeStore';
+import type { AppLocale } from '@/i18n/types';
 
 type LoginMode = 'login' | 'register';
 
@@ -340,6 +354,33 @@ function getErrorMessage(error: unknown, fallback: string): string {
   if (error instanceof Error && error.message && error.message !== AUTH_FAILED_TOKEN) return error.message;
   if (typeof error === 'string' && error.trim()) return error;
   return fallback;
+}
+
+// =================================================================================
+// 多语言状态
+// =================================================================================
+const localeStore = useLocaleStore();
+
+const localeOptions = computed(() => [
+  { label: t('locale.zh-CN'), key: 'zh-CN' },
+  { label: t('locale.en-US'), key: 'en-US' },
+  { label: t('locale.ja-JP'), key: 'ja-JP' },
+  { label: t('locale.ko-KR'), key: 'ko-KR' },
+]);
+
+const currentLocaleLabel = computed(() => {
+  const loc = localeStore.locale;
+  switch (loc) {
+    case 'en-US': return t('locale.en-US');
+    case 'ja-JP': return t('locale.ja-JP');
+    case 'ko-KR': return t('locale.ko-KR');
+    case 'zh-CN':
+    default: return t('locale.zh-CN');
+  }
+});
+
+function handleLocaleChange(key: AppLocale) {
+  localeStore.setLocale(key);
 }
 
 // =================================================================================
@@ -421,6 +462,7 @@ function currentTurnstileLanguage() {
   const locale = getCurrentLocale();
   if (locale === 'zh-CN') return 'zh-CN';
   if (locale === 'ja-JP') return 'ja';
+  if (locale === 'ko-KR') return 'ko';
   return 'en-US';
 }
 

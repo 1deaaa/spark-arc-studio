@@ -61,7 +61,7 @@ const formattedTime = computed(() => {
   if (!notice.value?.timestamp) return '';
   try {
     const date = new Date(notice.value.timestamp);
-    const localeCode = ['zh-CN', 'en-US', 'ja-JP'].includes(i18nLocale.value) ? i18nLocale.value : 'zh-CN';
+    const localeCode = ['zh-CN', 'en-US', 'ja-JP', 'ko-KR'].includes(i18nLocale.value) ? i18nLocale.value : 'zh-CN';
     return date.toLocaleString(localeCode, {
       year: 'numeric',
       month: '2-digit',

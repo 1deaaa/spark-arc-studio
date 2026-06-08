@@ -3,6 +3,7 @@ const zhCN = {
     'zh-CN': '简体中文',
     'en-US': 'English',
     'ja-JP': '日本語',
+    'ko-KR': '한국어',
   },
   seo: {
     title: '引火AI工作台 - 一句话让灵感成为世界',
@@ -858,6 +859,9 @@ const zhCN = {
       thinking: '思考中',
       thinkingDeep: '深度思考中',
       thoughtDeep: '已完成思考',
+      thinkingSeconds: '思考中 {seconds}s',
+      executingTool: '正在执行工具...',
+      thinkingNotice: '部分模型不会显示推理链或工具调用标识，但只要发送键没解冻就说明连接并未中断，请耐心等待。',
       charCount: '{count} 字',
       retry: '重试',
       copy: '复制',

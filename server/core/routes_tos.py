@@ -8,7 +8,7 @@ import os
 tos_router = APIRouter()
 
 # 支持的语言列表，按优先级排列
-_SUPPORTED_LANGS = ('zh-CN', 'en-US', 'ja-JP')
+_SUPPORTED_LANGS = ('zh-CN', 'en-US', 'ja-JP', 'ko-KR')
 
 
 def _resolve_tos_path(lang: str = 'zh-CN') -> str:

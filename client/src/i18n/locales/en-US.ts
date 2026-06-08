@@ -3,6 +3,7 @@ const enUS = {
     'zh-CN': '简体中文',
     'en-US': 'English',
     'ja-JP': '日本語',
+    'ko-KR': '한국어',
   },
   seo: {
     title: 'SparkArc Studio - One Line of Inspiration, A Whole World',
@@ -860,6 +861,9 @@ const enUS = {
       thinking: 'Thinking',
       thinkingDeep: 'Thinking deeply',
       thoughtDeep: 'Finished thinking',
+      thinkingSeconds: 'Thinking {seconds}s',
+      executingTool: 'Executing tool...',
+      thinkingNotice: 'Some models may not display reasoning chains or tool call indicators. As long as the send button remains frozen, the connection is still active. Please be patient.',
       charCount: '{count} chars',
       retry: 'Retry',
       copy: 'Copy',
