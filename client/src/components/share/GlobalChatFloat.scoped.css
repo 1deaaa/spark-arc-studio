@@ -57,6 +57,12 @@
   contain: layout style;
 }
 
+.chat-float-launch-wrap {
+  grid-area: 1 / 1;
+  pointer-events: auto;
+  transform-origin: bottom right;
+}
+
 /* 关键：让 Naive UI Card 的内部容器也变成 flex 布局 */
 :deep(.n-card-content) {
   flex: 1;

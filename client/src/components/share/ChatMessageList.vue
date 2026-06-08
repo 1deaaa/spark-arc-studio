@@ -68,7 +68,11 @@
                 >
                   <div class="reasoning-content" :ref="(el) => setReasoningContentRef(getReasoningSegmentKey(m, idx, segIdx), el)">
                     <div class="reasoning-inner">
-                      <div class="reasoning-text">{{ getReasoningSegmentText(seg) }}</div>
+                      <MarkdownRenderer
+                        class="reasoning-markdown"
+                        :content="getReasoningSegmentText(seg)"
+                        :streaming="isReasoningSegmentThinking(m, idx, segIdx)"
+                      />
                     </div>
                   </div>
                 </div>
@@ -2174,16 +2178,10 @@ defineExpose({ listRef });
   overflow: hidden;
 }
 
-/* 深度思考纯文本展示器：
-   - 直接用 textNode + white-space: pre-wrap，零 markdown 解析、零 v-html 替换；
-   - 流式期间每次 delta 仅做 textContent 增量更新，浏览器对此场景有极致优化；
-   - 显式声明字号/行高/颜色，与原 MarkdownRenderer 视觉保持一致。 */
-.reasoning-text {
-  white-space: pre-wrap;
-  word-break: break-word;
+/* 深度思考块重新启用流式 Markdown，由 markstream-vue 做增量解析与批量渲染。 */
+.reasoning-markdown {
   font-size: var(--spark-fs-base);
   line-height: 1.32;
-  color: var(--spark-text);
 }
 
 /* 已完成的深度思考块：滚出视口时跳过其内部渲染，长聊天历史下显著降低主线程压力。

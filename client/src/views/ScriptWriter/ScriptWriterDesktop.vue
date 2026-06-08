@@ -211,6 +211,7 @@ const activeComponent = computed(() => {
 .container {
   height: 100vh;
   width: 100%;
+  max-width: none;
   min-width: 0;
   display: flex;
   flex-direction: column;

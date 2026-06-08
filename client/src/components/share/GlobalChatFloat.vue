@@ -2,27 +2,29 @@
   <div v-show="!isChatWorkspaceActive" ref="rootEl" class="chat-float-root" :class="{ expanded: chat.expanded && !isMobile, 'is-dragging': drag.isDragging, 'is-long-pressing': isLongPressing }" :style="rootStyle">
     <!-- Collapsed button -->
     <transition name="chat-float-btn">
-      <n-tooltip v-if="!chat.expanded" trigger="hover">
-        <template #trigger>
-          <button
-            class="chat-float-launch"
-            type="button"
-            @mousedown="startDrag"
-            @touchstart.passive="startDrag"
-            @click="onLaunchClick"
-          >
-            <div class="chat-float-icon">
-              <svg viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
-                <path class="spark-main" d="M12 2L14.5 9.5L22 12L14.5 14.5L12 22L9.5 14.5L2 12L9.5 9.5L12 2Z" fill="currentColor" />
-                <path class="spark-sub-1" d="M19 2L20 5L23 6L20 7L19 10L18 7L15 6L18 5L19 2Z" fill="currentColor" />
-                <path class="spark-sub-2" d="M5 17L6 19L8 20L6 21L5 23L4 21L2 20L4 19L5 17Z" fill="currentColor" />
-              </svg>
-            </div>
-            <div class="chat-float-glow"></div>
-          </button>
-        </template>
-        {{ t('components.chatPanel.launchHint') }}
-      </n-tooltip>
+      <div v-if="!chat.expanded" class="chat-float-launch-wrap">
+        <n-tooltip trigger="hover">
+          <template #trigger>
+            <button
+              class="chat-float-launch"
+              type="button"
+              @mousedown="startDrag"
+              @touchstart.passive="startDrag"
+              @click="onLaunchClick"
+            >
+              <div class="chat-float-icon">
+                <svg viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
+                  <path class="spark-main" d="M12 2L14.5 9.5L22 12L14.5 14.5L12 22L9.5 14.5L2 12L9.5 9.5L12 2Z" fill="currentColor" />
+                  <path class="spark-sub-1" d="M19 2L20 5L23 6L20 7L19 10L18 7L15 6L18 5L19 2Z" fill="currentColor" />
+                  <path class="spark-sub-2" d="M5 17L6 19L8 20L6 21L5 23L4 21L2 20L4 19L5 17Z" fill="currentColor" />
+                </svg>
+              </div>
+              <div class="chat-float-glow"></div>
+            </button>
+          </template>
+          {{ t('components.chatPanel.launchHint') }}
+        </n-tooltip>
+      </div>
     </transition>
 
     <!-- 桌面端: Expanded panel -->

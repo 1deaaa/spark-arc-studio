@@ -22,6 +22,7 @@
   display: flex;
   flex-direction: column;
   height: 100vh;
+  max-width: none;
   background-color: var(--spark-bg);
   background-image: radial-gradient(circle at 10% 10%, color-mix(in srgb, var(--spark-primary), transparent 97%) 0%, transparent 40%),
                     radial-gradient(circle at 90% 90%, color-mix(in srgb, var(--spark-accent), transparent 97%) 0%, transparent 40%);

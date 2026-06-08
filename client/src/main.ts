@@ -7,6 +7,7 @@ import './styles/theme.css'
 import './styles/components.css'
 import './styles/mobile.css'
 import './styles/studio.css'
+import 'markstream-vue/index.css'
 import 'katex/dist/katex.min.css'
 // 字体已改为 CDN 加载 LXGW WenKai Lite，见 index.html <link>
 import App from './App.vue'

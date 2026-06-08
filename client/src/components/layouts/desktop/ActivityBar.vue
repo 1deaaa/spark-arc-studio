@@ -1,29 +1,31 @@
 <template>
   <div class="activity-bar">
     <transition-group name="list" tag="div" class="activity-list">
-      <n-tooltip v-for="item in sortedItems" :key="item.id" trigger="hover" placement="right">
-        <template #trigger>
-          <div
-            class="activity-item"
-            :class="{
-              active: viewStore.currentView === item.view,
-              dragging: draggingId === item.id
-            }"
-            :data-view="item.view"
-            @click="viewStore.setView(item.view)"
-            draggable="true"
-            @dragstart="onDragStart($event, item)"
-            @dragenter.prevent="onDragEnter(item)"
-            @dragover.prevent
-            @dragend="onDragEnd"
-          >
-            <n-icon size="24">
-              <component :is="item.icon" />
-            </n-icon>
-          </div>
-        </template>
-        {{ item.title }}
-      </n-tooltip>
+      <div v-for="item in sortedItems" :key="item.id" class="activity-transition-item">
+        <n-tooltip trigger="hover" placement="right">
+          <template #trigger>
+            <div
+              class="activity-item"
+              :class="{
+                active: viewStore.currentView === item.view,
+                dragging: draggingId === item.id
+              }"
+              :data-view="item.view"
+              @click="viewStore.setView(item.view)"
+              draggable="true"
+              @dragstart="onDragStart($event, item)"
+              @dragenter.prevent="onDragEnter(item)"
+              @dragover.prevent
+              @dragend="onDragEnd"
+            >
+              <n-icon size="24">
+                <component :is="item.icon" />
+              </n-icon>
+            </div>
+          </template>
+          {{ item.title }}
+        </n-tooltip>
+      </div>
     </transition-group>
 
     <div style="flex: 1"></div>
@@ -191,6 +193,12 @@ watch(locale, () => {
   display: flex;
   flex-direction: column;
   align-items: center;
+  width: 100%;
+}
+
+.activity-transition-item {
+  display: flex;
+  justify-content: center;
   width: 100%;
 }
 

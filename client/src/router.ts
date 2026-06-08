@@ -58,14 +58,12 @@ const router = createRouter({
   routes,
 });
 
-router.beforeEach(async (to, from, next) => {
+router.beforeEach(async (to) => {
   if (isLocalTauriShell.value) {
     if (to.name !== 'Login') {
-      next('/login');
-      return;
+      return '/login';
     }
-    next();
-    return;
+    return true;
   }
 
   const requiresAuth = to.matched.some(record => record.meta.requiresAuth);
@@ -73,17 +71,14 @@ router.beforeEach(async (to, from, next) => {
   // 对于不需要认证的路由（如公开分享页面），直接放行，跳过认证检查
   // 这样可以避免未登录用户访问公开分享时被强制跳转到登录页
   if (!requiresAuth && to.name !== 'Login') {
-    next();
-    return;
+    return true;
   }
 
-  //  optimization: check local token first
+  // 优先检查本地 token，避免登录页做多余网络校验。
   const hasLocalToken = !!getSessionToken();
 
-  // If accessing login page and no local token, skip network validation
   if (to.name === 'Login' && !hasLocalToken) {
-    next();
-    return;
+    return true;
   }
 
   let isAuthenticated = false;
@@ -95,17 +90,16 @@ router.beforeEach(async (to, from, next) => {
   }
 
   if (requiresAuth && !isAuthenticated) {
-    // Save the intended destination before redirecting to login
+    // 跳转登录前记录原目标，登录后可回到用户本来想去的位置。
     if (to.fullPath !== '/') {
       localStorage.setItem('postLoginUrl', to.fullPath);
     }
-    next('/login');
-  } else if (to.name === 'Login' && isAuthenticated) {
-    // If user is logged in and tries to access login page, redirect to home
-    next('/');
-  } else {
-    next();
+    return '/login';
   }
+  if (to.name === 'Login' && isAuthenticated) {
+    return '/';
+  }
+  return true;
 });
 
 export default router;
