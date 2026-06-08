@@ -129,10 +129,11 @@ jobs:
           tagName: sparkarc-v__VERSION__
           releaseName: SparkArc Studio v__VERSION__
           releaseBody: |
-            SparkArc 的各平台客户端。
-            必须部署服务端使用（详见项目主页 README）。
+            SparkArc client builds for supported desktop platforms.
+            A working backend deployment is required. See the repository README for setup details.
 
-            仅测试尝鲜用途可以直接下载，默认会尝试连接到作者自己的服务端，但并不保证服务持续有效！
+            These release artifacts are intended for self-hosting, evaluation, and integration testing.
+            Default connectivity assumptions may change over time and should not be treated as a guaranteed hosted service.
           releaseDraft: ${{ inputs.draft }}
           prerelease: ${{ inputs.prerelease }}
           args: ${{ matrix.args }}

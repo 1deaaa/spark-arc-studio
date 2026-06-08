@@ -151,13 +151,13 @@ jobs:
       - name: Patch Android manifest and adaptive icon
         shell: bash
         run: |
-          # 1. 添加 roundIcon 到 AndroidManifest.xml
+          # 1. Add roundIcon to AndroidManifest.xml
           MANIFEST="client/src-tauri/gen/android/app/src/main/AndroidManifest.xml"
           if ! grep -q 'android:roundIcon' "$MANIFEST"; then
             sed -i 's|android:icon="@mipmap/ic_launcher"|android:icon="@mipmap/ic_launcher"\n        android:roundIcon="@mipmap/ic_launcher_round"|' "$MANIFEST"
           fi
 
-          # 2. 创建 ic_launcher_round.xml
+          # 2. Create ic_launcher_round.xml
           ROUND_XML="client/src-tauri/gen/android/app/src/main/res/mipmap-anydpi-v26/ic_launcher_round.xml"
           mkdir -p "$(dirname "$ROUND_XML")"
           printf '%s\n' '<?xml version="1.0" encoding="utf-8"?>' \
@@ -166,7 +166,7 @@ jobs:
             '  <background android:drawable="@color/ic_launcher_background"/>' \
             '</adaptive-icon>' > "$ROUND_XML"
 
-          # 3. 确保 ic_launcher_background 颜色为白色
+          # 3. Ensure the adaptive icon background stays white
           BG_XML="client/src-tauri/gen/android/app/src/main/res/values/ic_launcher_background.xml"
           mkdir -p "$(dirname "$BG_XML")"
           printf '%s\n' '<?xml version="1.0" encoding="utf-8"?>' \
@@ -248,14 +248,15 @@ jobs:
           TAG="sparkarc-v${VERSION}"
 
           NOTES=$(cat <<'EOF'
-          SparkArc 的各平台客户端。
-          必须部署服务端使用（详见项目主页 README）。
+          SparkArc Android client builds.
+          A working backend deployment is required. See the repository README for setup details.
 
-          仅测试尝鲜用途可以直接下载，默认会尝试连接到作者自己的服务端，但并不保证服务持续有效！
+          These artifacts are intended for self-hosting, evaluation, and integration testing.
+          Default connectivity assumptions may change over time and should not be treated as a guaranteed hosted service.
           EOF
           )
 
-          # 确保 Release 存在
+          # Ensure the GitHub Release exists
           gh release view "$TAG" --repo "$GITHUB_REPOSITORY" || \
             gh release create "$TAG" --repo "$GITHUB_REPOSITORY" \
               --title "SparkArc Studio v${VERSION}" \
@@ -263,7 +264,7 @@ jobs:
               --prerelease=${{ inputs.prerelease }} \
               ${{ inputs.draft == true && '--draft' || '' }}
 
-          # 查找并上传 APK
+          # Find and upload APK artifacts
           APK_FILES=$(find client/src-tauri/gen/android/app/build/outputs/apk -name '*.apk' -type f 2>/dev/null || \
                      find client/src-tauri/target -name '*.apk' -type f 2>/dev/null)
 
@@ -277,7 +278,7 @@ jobs:
           echo "$APK_FILES"
 
           for apk in $APK_FILES; do
-            # 重命名为 SparkArc-v{版本号}.apk
+            # Rename to SparkArc-v{version}.apk
             ext="${apk##*.}"
             renamed="SparkArc-v${VERSION}.${ext}"
             cp "$apk" "$renamed"

@@ -12,7 +12,7 @@ def build_foreground(size: tuple[int, int]) -> Image.Image:
     source = Image.open(SOURCE).convert("RGBA")
     bbox = source.getchannel("A").getbbox()
     if bbox is None:
-        raise RuntimeError(f"源图没有可用前景像素: {SOURCE}")
+        raise RuntimeError(f"Source image has no usable foreground pixels: {SOURCE}")
 
     content = source.crop(bbox)
     max_width = max(1, round(size[0] * FIT_RATIO))
@@ -34,17 +34,17 @@ def build_foreground(size: tuple[int, int]) -> Image.Image:
 
 def main() -> None:
     if not SOURCE.exists():
-        raise FileNotFoundError(f"缺少 Android 前景源图: {SOURCE}")
+        raise FileNotFoundError(f"Android foreground source image is missing: {SOURCE}")
 
     targets = sorted(RES_ROOT.glob("mipmap-*/ic_launcher_foreground.png"))
     if not targets:
-        raise FileNotFoundError(f"未找到 Android 前景图输出目录: {RES_ROOT}")
+        raise FileNotFoundError(f"Android foreground output directory was not found: {RES_ROOT}")
 
     for target in targets:
         with Image.open(target) as existing:
             output = build_foreground(existing.size)
         output.save(target, "PNG")
-        print(f"✅ Android adaptive foreground 已修正: {target.relative_to(ROOT)} ({output.width}x{output.height})")
+        print(f"✅ Android adaptive foreground updated: {target.relative_to(ROOT)} ({output.width}x{output.height})")
 
 
 if __name__ == "__main__":

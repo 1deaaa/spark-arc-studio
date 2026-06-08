@@ -576,10 +576,7 @@ GitHub Releases で配布されるクライアントは、便利なフロント�
 
 ## リポジトリガイド
 
-- メイン貢献ガイド:
-  - `CONTRIBUTING.zh-CN.md`
-  - `CONTRIBUTING.en.md`
-  - `CONTRIBUTING.ja.md`
+- メイン貢献ガイド: `.github/CONTRIBUTING.md`（英語）
 - Agent 制約と設計規約: `AGENTS.md`
 - Agent 言語方針: `agent.md`
 
@@ -657,4 +654,5 @@ SparkArc は本プロジェクトの公式名称および識別子です。
 本プロジェクトに基づくデプロイ、改変版または配布版は、オリジナルプロジェクトとの公式・授権・代理・提携関係を暗示してはなりません。
 
 Matchbox Agent ゲートウェイ（`server/llm/agen_matchbox`）は独立して再利用可能なコンポーネントであり、同ディレクトリ内の `LICENSE` に従って Apache-2.0 で個別にライセンスされています。特に明記がない限り、メインプロジェクトのその他の部分は AGPL-3.0-only でライセンスされています。
+
 

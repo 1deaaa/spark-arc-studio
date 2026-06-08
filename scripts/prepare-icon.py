@@ -1,30 +1,31 @@
 #!/usr/bin/env python3
-"""SparkArc 品牌图标预处理脚本
+"""SparkArc icon preprocessing script.
 
-从正方形源图自动生成各平台所需的圆角 PNG 图标：
-assets/sparkarc.jpg → client/src-tauri/icons/app-icon-source.png（30% 圆角，Tauri 图标源）
+Generates the rounded PNG source image used by platform packaging:
+assets/sparkarc.jpg → client/src-tauri/icons/app-icon-source.png
 
-UI Logo（sparkarc-light.png / sparkarc-dark.png）由用户直接维护在 client/src/assets/ 下，脚本不处理。
-圆角半径 30% 符合 Google Play 2026.3.31 强制标准。
-依赖：Pillow>=10.0.0
+UI logo assets (sparkarc-light.png / sparkarc-dark.png) are maintained
+manually under client/src/assets/ and are not modified by this script.
+The 30% corner radius follows the Google Play 2026-03-31 requirement.
+Dependency: Pillow>=10.0.0
 """
 
 from pathlib import Path
 from PIL import Image, ImageDraw
 
-# 项目根目录（脚本位于 scripts/ 下）
+# Project root (this script lives under scripts/).
 ROOT = Path(__file__).resolve().parent.parent
 
-# 圆角比例：30%，符合 Google Play 2026.3.31 强制标准
+# Rounded-corner ratio: 30%, matching the Google Play 2026-03-31 requirement.
 CORNER_RATIO = 0.30
 ICON_SIZE = 1024
 
 
 def apply_rounded_corners(img: Image.Image, ratio: float = CORNER_RATIO) -> Image.Image:
-    """为 PNG 图像添加圆角透明遮罩。"""
+    """Apply a rounded alpha mask to a PNG image."""
     size = img.width
     radius = int(size * ratio)
-    # 确保图像为 RGBA
+    # Ensure the image is in RGBA mode.
     img = img.convert("RGBA")
     mask = Image.new("L", (size, size), 0)
     draw = ImageDraw.Draw(mask)
@@ -34,12 +35,12 @@ def apply_rounded_corners(img: Image.Image, ratio: float = CORNER_RATIO) -> Imag
 
 
 def process_launcher_icon():
-    """从 sparkarc.jpg 生成圆角 app-icon-source.png。"""
+    """Generate the rounded app-icon-source.png from sparkarc.jpg."""
     src = ROOT / "assets" / "sparkarc.jpg"
     out = ROOT / "client" / "src-tauri" / "icons" / "app-icon-source.png"
 
     if not src.exists():
-        print(f"❌ 源图不存在: {src}")
+        print(f"❌ Source image not found: {src}")
         return False
 
     img = Image.open(src).convert("RGBA").resize((ICON_SIZE, ICON_SIZE), Image.LANCZOS)
@@ -47,25 +48,25 @@ def process_launcher_icon():
     out.parent.mkdir(parents=True, exist_ok=True)
     img.save(out, "PNG")
     radius_px = int(ICON_SIZE * CORNER_RATIO)
-    print(f"✅ 启动器图标: {src.name} → {out.relative_to(ROOT)} ({ICON_SIZE}x{ICON_SIZE}, 圆角 {radius_px}px = {CORNER_RATIO*100:.0f}%)")
+    print(f"✅ Launcher icon: {src.name} → {out.relative_to(ROOT)} ({ICON_SIZE}x{ICON_SIZE}, corner radius {radius_px}px = {CORNER_RATIO*100:.0f}%)")
     return True
 
 
 def main():
-    print("🎨 SparkArc 图标预处理")
-    print(f"   圆角比例: {CORNER_RATIO*100:.0f}% (Google Play 2026 标准)")
+    print("🎨 SparkArc icon preprocessing")
+    print(f"   Corner ratio: {CORNER_RATIO*100:.0f}% (Google Play 2026 requirement)")
     print()
 
     ok = process_launcher_icon()
 
     if ok:
         print()
-        print("🎉 全部完成！下一步运行:")
+        print("🎉 Done. Next run:")
         print("   npm run tauri icon src-tauri/icons/app-icon-source.png")
         print("   python scripts/patch-android-adaptive-foreground.py")
     else:
         print()
-        print("⚠️ 部分图标生成失败，请检查源文件")
+        print("⚠️ Some icon generation steps failed. Please check the source files.")
 
 
 if __name__ == "__main__":

@@ -1,0 +1,90 @@
+name: Bug report
+description: Report a reproducible defect in SparkArc
+title: "[Bug]: "
+labels:
+  - bug
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Thanks for reporting a bug. Please make this report specific to SparkArc itself.
+
+        Security issues or exploit details should not be filed publicly here. Use the process in `SECURITY.md` instead.
+  - type: dropdown
+    id: area
+    attributes:
+      label: Area
+      description: Which part of SparkArc is affected?
+      options:
+        - Frontend UI
+        - Chat streaming (NDJSON)
+        - Business task streaming (SSE / semantic stream)
+        - Agent orchestration / Director
+        - Tool execution / persistence
+        - Auto-Write / long-running jobs
+        - Packaging / desktop / Android
+        - Documentation
+        - Other
+    validations:
+      required: true
+  - type: textarea
+    id: summary
+    attributes:
+      label: Summary
+      description: What is broken, and what did you expect instead?
+      placeholder: A concise problem statement
+    validations:
+      required: true
+  - type: textarea
+    id: repro
+    attributes:
+      label: Steps to reproduce
+      description: Provide a minimal, reproducible sequence.
+      placeholder: |
+        1. Open ...
+        2. Trigger ...
+        3. Observe ...
+    validations:
+      required: true
+  - type: textarea
+    id: actual
+    attributes:
+      label: Actual behavior
+    validations:
+      required: true
+  - type: textarea
+    id: expected
+    attributes:
+      label: Expected behavior
+    validations:
+      required: true
+  - type: textarea
+    id: logs
+    attributes:
+      label: Logs, screenshots, or traces
+      description: Include relevant terminal logs, browser screenshots, stack traces, or stream output summaries.
+      render: shell
+  - type: textarea
+    id: environment
+    attributes:
+      label: Environment
+      description: Include what matters for reproducing the issue.
+      placeholder: |
+        - OS:
+        - Browser / desktop app:
+        - Deployment mode (local / self-hosted / official instance):
+        - Commit / branch / version:
+        - Model provider(s), if relevant:
+    validations:
+      required: true
+  - type: checkboxes
+    id: checks
+    attributes:
+      label: Pre-flight checks
+      options:
+        - label: I searched existing issues first
+          required: true
+        - label: This is a SparkArc bug report, not a general support request
+          required: true
+        - label: I removed secrets, API keys, and private data from logs and screenshots
+          required: true

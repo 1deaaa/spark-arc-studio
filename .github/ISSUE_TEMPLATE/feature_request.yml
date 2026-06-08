@@ -1,0 +1,64 @@
+name: Feature request
+description: Propose an improvement for SparkArc
+title: "[Feature]: "
+labels:
+  - enhancement
+body:
+  - type: markdown
+    attributes:
+      value: |
+        SparkArc has strong architectural constraints. Please frame requests around user value and integration points, not only around raw implementation ideas.
+  - type: dropdown
+    id: request_type
+    attributes:
+      label: Request type
+      options:
+        - Product feature
+        - Agent capability
+        - Tooling / developer experience
+        - Documentation
+        - CI / release / packaging
+        - Architecture / infrastructure
+        - Other
+    validations:
+      required: true
+  - type: textarea
+    id: problem
+    attributes:
+      label: Problem or workflow gap
+      description: What user or maintainer problem does this solve?
+      placeholder: Describe the current limitation or friction
+    validations:
+      required: true
+  - type: textarea
+    id: proposal
+    attributes:
+      label: Proposed direction
+      description: Describe the behavior you want, not only the code shape.
+    validations:
+      required: true
+  - type: textarea
+    id: architecture
+    attributes:
+      label: Relevant SparkArc touchpoints
+      description: If you already know them, mention affected pipelines, agents, tools, registries, routes, or docs.
+      placeholder: e.g. chatStore, streamingRuntime, Director delegation, tool registry, AGENTS modality rules
+  - type: textarea
+    id: alternatives
+    attributes:
+      label: Alternatives considered
+      description: What workarounds or alternative designs have you considered?
+  - type: textarea
+    id: examples
+    attributes:
+      label: Mockups, references, or examples
+      description: Link examples, screenshots, diagrams, or related repos if helpful.
+  - type: checkboxes
+    id: checks
+    attributes:
+      label: Pre-flight checks
+      options:
+        - label: I searched existing issues and discussions first
+          required: true
+        - label: I described the user or maintainer problem, not only an implementation preference
+          required: true

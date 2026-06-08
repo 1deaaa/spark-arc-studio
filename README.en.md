@@ -624,10 +624,7 @@ For frontend contributions: avoid hardcoded user-visible strings and use Vue I18
 
 ## Repository Guides
 
-- Main contribution guides:
-  - `CONTRIBUTING.zh-CN.md`
-  - `CONTRIBUTING.en.md`
-  - `CONTRIBUTING.ja.md`
+- Main contribution guide: `.github/CONTRIBUTING.md`
 - Agent constraints and architecture rules: `AGENTS.md`
 - Agent language policy note: `agent.md`
 
@@ -705,4 +702,5 @@ This project's code is released under AGPL-3.0-only; however, **the "SparkArc" n
 Any deployment, modified version, or distribution based on this project must not imply official, authorized, agency, or partnership affiliation with the original project.
 
 The Matchbox Agent Gateway (`server/llm/agen_matchbox`) is a separately reusable component licensed under Apache-2.0 according to the `LICENSE` file in that directory. Unless otherwise stated, the rest of the main project is licensed under AGPL-3.0-only.
+
 

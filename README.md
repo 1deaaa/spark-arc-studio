@@ -674,10 +674,7 @@ SparkArc 内置了完整的 CI/CD 流水线，支持代码推送后**全自动�
 
 ## 仓库指南
 
-- 主要贡献指南：
-  - `CONTRIBUTING.zh-CN.md`
-  - `CONTRIBUTING.en.md`
-  - `CONTRIBUTING.ja.md`
+- 主要贡献指南：`.github/CONTRIBUTING.md`（英文）
 - Agent 约束与架构规范：`AGENTS.md`
 - Agent 语言方针：`agent.md`
 
@@ -761,4 +758,5 @@ SparkArc 是本项目的官方名称与标识。
 任何基于本项目的部署、修改版或分发版，均不得暗示与原项目存在官方、授权、代理或合作关系。
 
 火柴 Agent 网关（`server/llm/agen_matchbox`）是独立可复用组件，按该目录内 `LICENSE` 以 Apache-2.0 单独授权；根项目其他部分除非另有说明，按 AGPL-3.0-only 授权。
+
 
