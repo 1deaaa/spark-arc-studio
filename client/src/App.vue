@@ -12,7 +12,7 @@
       <n-dialog-provider>
         <n-notification-provider>
           <router-view />
-          <DirectorAutoWriteOverlay />
+          <component :is="DirectorAutoWriteOverlayComponent" v-if="DirectorAutoWriteOverlayComponent" />
           <component :is="OnboardingOverlayComponent" v-if="OnboardingOverlayComponent" />
           <Toast ref="toastRef" />
 
@@ -88,7 +88,6 @@ import hljs from 'highlight.js/lib/core';
 import Toast from './components/share/Toast.vue';
 import ModalHost from './components/share/ModalHost.vue';
 import TitleBar from './components/layouts/desktop/TitleBar.vue';
-import DirectorAutoWriteOverlay from './components/overlays/DirectorAutoWriteOverlay.vue';
 import bus from './eventBus';
 
 import TermsModal from './components/user/TermsModal.vue';
@@ -98,6 +97,9 @@ import { useThemeStore } from './components/stores/themeStore';
 import { useLocaleStore } from './components/stores/localeStore';
 import { useNaiveTheme } from './styles/themeConfig';
 import { captureLauncherThemeSnapshot, persistLauncherThemeSnapshot } from './utils/launcherThemeSync';
+import { ensureFullAppFontCss } from './utils/fontAssets';
+import { warmupCommonChineseCharacters } from './utils/fontWarmup';
+import { preloadPostLoginCoreResources, preloadPostLoginFollowupResources } from './utils/postLoginPreload';
 import { isLocalTauriShell, isTauriDesktop } from './composables/usePlatform';
 import { useSeoMeta } from './composables/useSeoMeta';
 import { useI18n } from 'vue-i18n';
@@ -108,12 +110,28 @@ const { theme, themeOverrides } = useNaiveTheme(themeStore);
 const localeStore = useLocaleStore();
 const { t } = useI18n();
 useSeoMeta();
+const DirectorAutoWriteOverlayComponent = shallowRef<Component | null>(null);
 const OnboardingOverlayComponent = shallowRef<Component | null>(null);
+let directorOverlayModulePromise: Promise<typeof import('./components/overlays/DirectorAutoWriteOverlay.vue')> | null = null;
 let onboardingModulePromise: Promise<typeof import('./onboarding')> | null = null;
+
+async function loadDirectorOverlayModule() {
+  if (!directorOverlayModulePromise) {
+    directorOverlayModulePromise = preloadPostLoginCoreResources()
+      .then(() => import('./components/overlays/DirectorAutoWriteOverlay.vue'))
+      .then((mod) => {
+      DirectorAutoWriteOverlayComponent.value = mod.default;
+      return mod;
+    });
+  }
+  return directorOverlayModulePromise;
+}
 
 async function loadOnboardingModule() {
   if (!onboardingModulePromise) {
-    onboardingModulePromise = import('./onboarding').then((mod) => {
+    onboardingModulePromise = preloadPostLoginFollowupResources()
+      .then(() => import('./onboarding'))
+      .then((mod) => {
       mod.setupOnboarding();
       OnboardingOverlayComponent.value = mod.OnboardingOverlay;
       return mod;
@@ -277,22 +295,32 @@ async function runPostLoginGuards() {
   if (isLocalTauriShell.value) return;
   // 未登录时不应触发任何登录后逻辑（包括 onboarding）
   if (!getSessionToken()) return;
-  const needAccept = await checkTosStatus();
-  if (needAccept) {
+  const tosStatus = await checkTosStatus();
+  if (!tosStatus.ok) {
+    return;
+  }
+  if (tosStatus.needAccept) {
     // 需要接受条款时，不触发 post-login-ready，等用户同意后在 handleTosAccepted 中触发
     return;
   }
   await checkSystemConfig();
+  await loadDirectorOverlayModule();
   await loadOnboardingModule();
+  void ensureFullAppFontCss();
+  warmupCommonChineseCharacters();
   // 所有登录后检查完成，通知子组件可以安全触发 onboarding
   emitPostLoginReady();
   // onboarding 触发后再检查公告弹窗（避免多层弹窗叠加）
   checkAnnouncement();
 }
 
-async function checkTosStatus() {
+async function checkTosStatus(): Promise<{ ok: boolean; needAccept: boolean }> {
   try {
     const res = await fetchWithAuth('/api/user/tos-status');
+    if (!res.ok) {
+      showTosModal.value = false;
+      return { ok: false, needAccept: false };
+    }
     const data = await res.json();
     const needAccept = Boolean(data.success && data.need_accept);
     if (needAccept) {
@@ -300,21 +328,24 @@ async function checkTosStatus() {
       resetPostLoginReady();
     }
     showTosModal.value = needAccept;
-    return needAccept;
+    return { ok: true, needAccept };
   } catch (e: unknown) {
     const errorMessage = e instanceof Error ? e.message : String(e || '');
     showTosModal.value = false;
     if (errorMessage && !isAuthError(e)) {
       console.warn('Check TOS status failed:', e);
     }
-    return false;
+    return { ok: false, needAccept: false };
   }
 }
 
 async function handleTosAccepted() {
   showTosModal.value = false;
   await checkSystemConfig();
+  await loadDirectorOverlayModule();
   await loadOnboardingModule();
+  void ensureFullAppFontCss();
+  warmupCommonChineseCharacters();
   // TOS 接受后检查完成，通知子组件可以安全触发 onboarding
   emitPostLoginReady();
   // onboarding 触发后再检查公告弹窗

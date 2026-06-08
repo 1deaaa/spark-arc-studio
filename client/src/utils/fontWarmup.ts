@@ -5,6 +5,7 @@ const DEFAULT_TIMEOUT_MS = 1200;
 const LOGIN_FONT_SAMPLE = 'abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789•●·登录注册密码用户名记住忘记邮箱确认提交服务器连接进入中文日本語한국어';
 
 const pendingLoads = new Map<string, Promise<boolean>>();
+let commonChineseWarmupScheduled = false;
 
 export type FontWarmupOptions = {
   fontFamily?: string;
@@ -186,6 +187,10 @@ export function warmupCommonChineseCharacters(): void {
   if (typeof window === 'undefined') {
     return;
   }
+  if (commonChineseWarmupScheduled) {
+    return;
+  }
+  commonChineseWarmupScheduled = true;
 
   const idleCallback = window.requestIdleCallback;
 

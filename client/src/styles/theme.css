@@ -25,9 +25,9 @@
     --spark-danger: var(--seed-danger);
 
     /* --- 字体族 --- */
-    --spark-font: 'LXGW WenKai Screen', 'LXGW WenKai', '霞鹜文楷', sans-serif;
+    --spark-font: 'Microsoft YaHei', '微软雅黑', 'PingFang SC', 'Noto Sans SC', 'Segoe UI', Arial, sans-serif;
     --spark-mono: 'JetBrains Mono', 'Fira Code', 'Consolas', 'Monaco', ui-monospace, SFMono-Regular, Menlo, monospace;
-    --spark-font-logo: 'LXGW WenKai Screen', 'LXGW WenKai', '霞鹜文楷', sans-serif;
+    --spark-font-logo: 'Microsoft YaHei', '微软雅黑', 'PingFang SC', 'Noto Sans SC', 'Segoe UI', Arial, sans-serif;
 
     /* --- 排版字号 (Type Scale) --- */
     /* 基准：修改 --spark-fs-base 的 px 值即可全局等比缩放 */
@@ -134,6 +134,11 @@ body {
     color: var(--spark-text);
     font-family: var(--spark-font);
     transition: background-color 0.3s ease, color 0.3s ease;
+}
+
+body.app-font-ready {
+    --spark-font: 'LXGW WenKai Screen', 'LXGW WenKai', '霞鹜文楷', sans-serif;
+    --spark-font-logo: 'LXGW WenKai Screen', 'LXGW WenKai', '霞鹜文楷', sans-serif;
 }
 
 /* --- 亮色模式覆盖 --- */

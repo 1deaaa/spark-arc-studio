@@ -15,6 +15,7 @@ export type LauncherThemeSnapshot = {
 const LOCAL_CACHE_KEY = 'spark_launcher_theme_snapshot';
 const VALID_THEME_MODES = new Set<LauncherThemeMode>(['light', 'dark', 'system']);
 const VALID_FONT_KEYS = new Set(['theme', 'yahei', 'pingfang', 'notoSans']);
+const BASE_FALLBACK_STACK = "'Microsoft YaHei', '微软雅黑', 'PingFang SC', 'Noto Sans SC', 'Segoe UI', Arial, sans-serif";
 
 function isTauriRuntime(): boolean {
   if (typeof window === 'undefined') return false;
@@ -128,7 +129,7 @@ function normalizeFontFamily(raw: string): string {
   if (!value) return '';
   if (value.includes(',')) return value;
   const escaped = value.replace(/'/g, "\\'");
-  return `'${escaped}', 'LXGW WenKai Screen', 'LXGW WenKai', '霞鹜文楷', sans-serif`;
+  return `'${escaped}', ${BASE_FALLBACK_STACK}`;
 }
 
 function getPresetFontStack(key: string): string {

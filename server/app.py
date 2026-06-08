@@ -440,6 +440,8 @@ async def handle_credit_balance_exceeded(_: Request, exc: CreditBalanceExceededE
 # 3. 特别注意：本项目 Chat 主链路使用的 'application/x-ndjson' 属于非标准流式媒体类型，极易被 CDN/代理 误认为普通 JSON 响应而强行执行 Gzip 压缩。
 # 4. 推荐方案：生产环境推荐前置 Nginx 等反代服务，对静态资源配置 Gzip，但对 API 流式通道配置 gzip off; proxy_buffering off;
 #    且在后端的 StreamingResponse 中统一追加 "X-Accel-Buffering: no" 响应头，强制避开所有中介代理的缓冲拦截。
+# 5. 若直接裸 Uvicorn 暴露后端端口：Uvicorn/FastAPI 不会自动压缩静态资源；构建报告里的 gzip 体积仅代表“如果开启静态压缩后的估算传输量”。
+#    如需让裸 Uvicorn 用户也享受静态压缩，应只对 client/dist 静态文件做预压缩/编码协商，严禁复用到 /api 流式接口。
 
 # CORS 中间件
 app.add_middleware(

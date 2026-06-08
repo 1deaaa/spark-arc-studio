@@ -7,7 +7,6 @@ import './styles/theme.css'
 import './styles/components.css'
 import './styles/mobile.css'
 import './styles/studio.css'
-import 'cn-fontsource-lxgw-wen-kai-screen/font.css'
 import App from './App.vue'
 import router from './router'
 import { useThemeStore } from './components/stores/themeStore'
@@ -18,7 +17,7 @@ import { setupExternalLinkHandling } from './utils/externalLinks'
 import { setupMobileTooltipGuard } from './utils/mobileTooltipGuard'
 import './composables/useMobile' // 早期触发 safe-area 兜底检测
 import './composables/usePlatform' // 早期同步平台壳类名，供响应式样式复用
-import { warmupAppFontInBackground, warmupCommonChineseCharacters } from './utils/fontWarmup'
+import { warmupAppFontInBackground } from './utils/fontWarmup'
 
 const pinia = createPinia()
 const app = createApp(App)
@@ -38,10 +37,4 @@ setupTauriOfflineFallback()
 setupMobileTooltipGuard()
 warmupAppFontInBackground('', { timeoutMs: 1800, maxChars: 180 })
 
-// 页面完全加载 (onload) 且空闲后，在后台静默异步预加载 3500 常用中文字型分包 (可强缓存复用)
-if (typeof window !== 'undefined') {
-  window.addEventListener('load', () => {
-    warmupCommonChineseCharacters();
-  });
-}
 app.mount('#app')

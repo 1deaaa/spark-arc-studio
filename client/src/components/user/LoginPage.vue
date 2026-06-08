@@ -280,12 +280,12 @@ import { useRouter } from 'vue-router';
 import { useI18n } from 'vue-i18n';
 import { loginUser, registerUser, getUserInfo, getRegistrationVerificationConfig } from '@/services/api';
 import type { RegistrationVerificationConfig } from '@/services/api';
-import { redeemCode } from '@/services/adminService';
 import { getApiBaseUrl, normalizeApiBaseUrl, setUserId, isAuthError, isNetworkError, AUTH_FAILED_TOKEN, getCurrentLocale } from '@/services/apiClient';
 import { useLoginBackground } from '@/hooks/useLoginBackground';
 import { useLoginFx } from '@/hooks/useLoginFx';
 import { useThemeStore } from '@/components/stores/themeStore';
 import { buildLauncherReturnUrl, readLauncherOriginFromUrl } from '@/utils/launcherHandoff';
+import { schedulePostLoginResourcePreload } from '@/utils/postLoginPreload';
 import { SPARKARC_GITHUB_URL } from '@/config';
 
 import TermsModal from '@/components/user/TermsModal.vue';
@@ -633,7 +633,12 @@ async function onRegister() {
     // 静默兑换邀请码（失败不报错）
     const inviteCode = registerForm.value.inviteCode?.trim();
     if (inviteCode) {
-      try { await redeemCode(inviteCode); } catch { /* 静默忽略 */ }
+      try {
+        const { redeemCode } = await import('@/services/adminService');
+        await redeemCode(inviteCode);
+      } catch {
+        /* 静默忽略 */
+      }
     }
     
     const postLoginUrl = localStorage.getItem('postLoginUrl');
@@ -673,6 +678,7 @@ onMounted(() => {
   initFx();
   startResizeObserver();
   loadRegistrationVerificationConfig();
+  schedulePostLoginResourcePreload();
 });
 
 onBeforeUnmount(() => {
