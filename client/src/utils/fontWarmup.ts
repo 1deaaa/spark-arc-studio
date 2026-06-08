@@ -1,8 +1,8 @@
-const DEFAULT_FONT_FAMILY = 'LXGW WenKai Lite';
+const DEFAULT_FONT_FAMILY = 'LXGW WenKai Screen';
 const DEFAULT_FONT_SIZE = '16px';
 const DEFAULT_TIMEOUT_MS = 1200;
-// 登录界面预热字符：大小写字母 + 阿拉伯数字 + 密码遮盖符(•●·) + 登录页常用中文
-const DEFAULT_UI_SAMPLE = 'abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789•●·登录注册密码用户名记住忘记邮箱确认提交';
+// 登录界面预热字符：大小写字母 + 阿拉伯数字 + 密码遮盖符 + 登录页常用中文。
+const LOGIN_FONT_SAMPLE = 'abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789•●·登录注册密码用户名记住忘记邮箱确认提交服务器连接进入中文日本語한국어';
 
 const pendingLoads = new Map<string, Promise<boolean>>();
 
@@ -159,7 +159,7 @@ export function warmupAppFontInBackground(text: string, options: FontWarmupOptio
   if (typeof window === 'undefined') {
     return;
   }
-  const sample = compactSample(`${DEFAULT_UI_SAMPLE}${text || ''}`, options.maxChars ?? 160);
+  const sample = compactSample(`${LOGIN_FONT_SAMPLE}${text || ''}`, options.maxChars ?? 180);
   if (!sample) {
     return;
   }

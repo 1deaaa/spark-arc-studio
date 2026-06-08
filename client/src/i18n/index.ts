@@ -9,8 +9,12 @@ import onboardingJaJP from '../onboarding/i18n/onboarding.ja-JP';
 import onboardingKoKR from '../onboarding/i18n/onboarding.ko-KR';
 import {
   DEFAULT_LOCALE,
+  LOCALE_QUERY_PARAM,
+  LOCALE_SOURCE_STORAGE_KEY,
   LOCALE_STORAGE_KEY,
+  isPersistentLocaleSource,
   normalizeLocale,
+  type LocaleSource,
   type AppLocale,
 } from './types';
 
@@ -33,8 +37,17 @@ function resolveInitialLocale(): AppLocale {
   }
 
   try {
+    const fromQuery = new URL(window.location.href).searchParams.get(LOCALE_QUERY_PARAM);
+    if (fromQuery) {
+      const normalized = normalizeLocale(fromQuery);
+      localStorage.setItem(LOCALE_STORAGE_KEY, normalized);
+      localStorage.setItem(LOCALE_SOURCE_STORAGE_KEY, 'launcher');
+      return normalized;
+    }
+
+    const source = localStorage.getItem(LOCALE_SOURCE_STORAGE_KEY);
     const stored = localStorage.getItem(LOCALE_STORAGE_KEY);
-    if (stored) {
+    if (stored && isPersistentLocaleSource(source)) {
       return normalizeLocale(stored);
     }
   } catch {
@@ -84,7 +97,7 @@ for (const [locale, onboardingMsg] of Object.entries(onboardingMessages)) {
   i18n.global.setLocaleMessage(locale, { ...existing, ...onboardingMsg });
 }
 
-export function setI18nLocale(locale: AppLocale): void {
+export function setI18nLocale(locale: AppLocale, source: LocaleSource = 'manual'): void {
   i18n.global.locale.value = locale;
 
   if (typeof document !== 'undefined') {
@@ -94,6 +107,7 @@ export function setI18nLocale(locale: AppLocale): void {
   if (typeof window !== 'undefined') {
     try {
       localStorage.setItem(LOCALE_STORAGE_KEY, locale);
+      localStorage.setItem(LOCALE_SOURCE_STORAGE_KEY, source);
     } catch {
       // ignore
     }

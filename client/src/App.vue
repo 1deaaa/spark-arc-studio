@@ -13,7 +13,7 @@
         <n-notification-provider>
           <router-view />
           <DirectorAutoWriteOverlay />
-          <OnboardingOverlay />
+          <component :is="OnboardingOverlayComponent" v-if="OnboardingOverlayComponent" />
           <Toast ref="toastRef" />
 
           <ModalHost ref="modalRef" />
@@ -66,7 +66,7 @@
 </template>
 
 <script setup lang="ts">
-import { ref, reactive, onMounted, onBeforeUnmount, computed, watch, nextTick } from 'vue';
+import { ref, reactive, onMounted, onBeforeUnmount, computed, shallowRef, watch, nextTick, type Component } from 'vue';
 import {
   NConfigProvider,
   NGlobalStyle,
@@ -89,7 +89,6 @@ import Toast from './components/share/Toast.vue';
 import ModalHost from './components/share/ModalHost.vue';
 import TitleBar from './components/layouts/desktop/TitleBar.vue';
 import DirectorAutoWriteOverlay from './components/overlays/DirectorAutoWriteOverlay.vue';
-import { OnboardingOverlay, getOnboardingEngine, setupOnboarding } from './onboarding';
 import bus from './eventBus';
 
 import TermsModal from './components/user/TermsModal.vue';
@@ -109,6 +108,19 @@ const { theme, themeOverrides } = useNaiveTheme(themeStore);
 const localeStore = useLocaleStore();
 const { t } = useI18n();
 useSeoMeta();
+const OnboardingOverlayComponent = shallowRef<Component | null>(null);
+let onboardingModulePromise: Promise<typeof import('./onboarding')> | null = null;
+
+async function loadOnboardingModule() {
+  if (!onboardingModulePromise) {
+    onboardingModulePromise = import('./onboarding').then((mod) => {
+      mod.setupOnboarding();
+      OnboardingOverlayComponent.value = mod.OnboardingOverlay;
+      return mod;
+    });
+  }
+  return onboardingModulePromise;
+}
 
 watch(
   () => [
@@ -190,9 +202,6 @@ function setupGlobalEditorProofing() {
   editorProofingObserver.observe(document.body, { childList: true, subtree: true });
 }
 
-// 初始化引导引擎
-setupOnboarding();
-
 onMounted(() => {
   const mediaQuery = window.matchMedia('(prefers-color-scheme: dark)');
   
@@ -253,10 +262,13 @@ function emitPostLoginReady() {
 }
 
 function stopOnboarding() {
-  const onboardingEngine = getOnboardingEngine();
-  if (onboardingEngine.isActive.value) {
-    onboardingEngine.destroy();
-  }
+  if (!onboardingModulePromise) return;
+  void onboardingModulePromise.then((mod) => {
+    const onboardingEngine = mod.getOnboardingEngine();
+    if (onboardingEngine.isActive.value) {
+      onboardingEngine.destroy();
+    }
+  });
 }
 
 async function runPostLoginGuards() {
@@ -271,6 +283,7 @@ async function runPostLoginGuards() {
     return;
   }
   await checkSystemConfig();
+  await loadOnboardingModule();
   // 所有登录后检查完成，通知子组件可以安全触发 onboarding
   emitPostLoginReady();
   // onboarding 触发后再检查公告弹窗（避免多层弹窗叠加）
@@ -301,6 +314,7 @@ async function checkTosStatus() {
 async function handleTosAccepted() {
   showTosModal.value = false;
   await checkSystemConfig();
+  await loadOnboardingModule();
   // TOS 接受后检查完成，通知子组件可以安全触发 onboarding
   emitPostLoginReady();
   // onboarding 触发后再检查公告弹窗
@@ -332,14 +346,23 @@ async function checkAnnouncement() {
  * 如果正在运行则 watch isActive，变为 false 时 resolve。
  */
 function waitForOnboardingDone(): Promise<void> {
-  const engine = getOnboardingEngine();
-  if (!engine.isActive.value) return Promise.resolve();
   return new Promise<void>((resolve) => {
-    const stop = watch(engine.isActive, (active) => {
-      if (!active) {
-        stop();
+    if (!onboardingModulePromise) {
+      resolve();
+      return;
+    }
+    void onboardingModulePromise.then((mod) => {
+      const engine = mod.getOnboardingEngine();
+      if (!engine.isActive.value) {
         resolve();
+        return;
       }
+      const stop = watch(engine.isActive, (active) => {
+        if (!active) {
+          stop();
+          resolve();
+        }
+      });
     });
   });
 }

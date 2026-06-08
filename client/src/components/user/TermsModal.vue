@@ -48,10 +48,9 @@
 </template>
 
 <script setup lang="ts">
-import { ref, onMounted, watch } from 'vue';
+import { defineAsyncComponent, ref, watch } from 'vue';
 import { useI18n } from 'vue-i18n';
 import { NModal, NButton, NSpin, useMessage } from 'naive-ui';
-import MarkdownRenderer from '@/components/share/MarkdownRenderer.vue';
 import { fetchWithAuth } from '@/services/apiClient';
 import { logout } from '@/services/authService';
 import { useProjectStore } from '@/components/stores/projectStore';
@@ -78,6 +77,7 @@ const props = withDefaults(defineProps<TermsModalProps>(), {
 const emit = defineEmits(['update:visible', 'accepted']);
 
 const { t, locale } = useI18n();
+const MarkdownRenderer = defineAsyncComponent(() => import('@/components/share/MarkdownRenderer.vue'));
 
 const show = ref(props.visible);
 const loading = ref(true);

@@ -7,9 +7,7 @@ import './styles/theme.css'
 import './styles/components.css'
 import './styles/mobile.css'
 import './styles/studio.css'
-import 'markstream-vue/index.css'
-import 'katex/dist/katex.min.css'
-// 字体已改为 CDN 加载 LXGW WenKai Lite，见 index.html <link>
+import 'cn-fontsource-lxgw-wen-kai-screen/font.css'
 import App from './App.vue'
 import router from './router'
 import { useThemeStore } from './components/stores/themeStore'
@@ -38,7 +36,7 @@ app.use(router) // Use the router
 setupExternalLinkHandling()
 setupTauriOfflineFallback()
 setupMobileTooltipGuard()
-warmupAppFontInBackground('')
+warmupAppFontInBackground('', { timeoutMs: 1800, maxChars: 180 })
 
 // 页面完全加载 (onload) 且空闲后，在后台静默异步预加载 3500 常用中文字型分包 (可强缓存复用)
 if (typeof window !== 'undefined') {

@@ -1,5 +1,12 @@
 import { createI18n } from 'vue-i18n';
-import { DEFAULT_LOCALE, LOCALE_STORAGE_KEY, normalizeLocale, type AppLocale } from '@/i18n/types';
+import {
+  DEFAULT_LOCALE,
+  LOCALE_SOURCE_STORAGE_KEY,
+  LOCALE_STORAGE_KEY,
+  isPersistentLocaleSource,
+  normalizeLocale,
+  type AppLocale,
+} from '@/i18n/types';
 
 const messages = {
   'zh-CN': {
@@ -174,8 +181,9 @@ function resolveInitialLocale() {
   }
 
   try {
-    const stored = localStorage.getItem('spark_locale');
-    if (stored) return normalizeLocale(stored);
+    const source = localStorage.getItem(LOCALE_SOURCE_STORAGE_KEY);
+    const stored = localStorage.getItem(LOCALE_STORAGE_KEY);
+    if (stored && isPersistentLocaleSource(source)) return normalizeLocale(stored);
   } catch {
     // ignore
   }
@@ -221,6 +229,7 @@ export function setI18nLocale(next: string): void {
   if (typeof window !== 'undefined') {
     try {
       localStorage.setItem(LOCALE_STORAGE_KEY, normalized);
+      localStorage.setItem(LOCALE_SOURCE_STORAGE_KEY, 'manual');
     } catch {
       // ignore
     }

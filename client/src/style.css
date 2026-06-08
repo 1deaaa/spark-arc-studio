@@ -1,18 +1,1 @@
-/* 
-  This file is the entry point for all global styles.
-  It imports modularized CSS files from the /styles directory.
-  Please do not add component-specific styles here. Instead, add them
-  to the relevant file in /styles or within the component's <style scoped> tag.
-*/
-
-@import './styles/base.css';
-@import './styles/layout.css';
-@import './styles/theme.css';
-@import './styles/components.css';
-
-/* 
-  Note: Some component styles have been intentionally left in this global scope
-  because they are tightly coupled with the application's structure or are waiting
-  to be migrated to their respective .vue components. 
-  The goal is to eventually move all component-specific styles out of the global scope.
-*/
+/* 全局样式入口由 main.ts 显式分层导入，避免构建时重复收集同一批 CSS。 */

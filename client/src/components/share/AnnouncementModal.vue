@@ -24,10 +24,9 @@
 </template>
 
 <script setup lang="ts">
-import { ref, computed } from 'vue';
+import { defineAsyncComponent, ref, computed } from 'vue';
 import { NModal, NButton, useMessage } from 'naive-ui';
 import { useI18n } from 'vue-i18n';
-import MarkdownRenderer from './MarkdownRenderer.vue';
 import { fetchWithAuth } from '../../services/apiClient';
 
 export type NoticeItem = {
@@ -47,6 +46,7 @@ const emit = defineEmits<{
 
 const { t, locale: i18nLocale } = useI18n();
 const message = useMessage();
+const MarkdownRenderer = defineAsyncComponent(() => import('./MarkdownRenderer.vue'));
 
 const visible = ref(false);
 const loading = ref(false);

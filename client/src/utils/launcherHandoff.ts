@@ -1,4 +1,5 @@
 import { normalizeApiBaseUrl } from '@/services/apiClient';
+import { LOCALE_QUERY_PARAM, LOCALE_STORAGE_KEY, normalizeLocale } from '@/i18n/types';
 
 const LAUNCHER_ORIGIN_PARAM = 'spark_launcher_origin';
 const LAUNCHER_SERVER_PARAM = 'spark_server';
@@ -41,6 +42,15 @@ function getLocationOrigin(): string {
   return host ? `${protocol}//${host}` : '';
 }
 
+function readCurrentLocale(): string {
+  if (typeof window === 'undefined') return '';
+  try {
+    return normalizeLocale(localStorage.getItem(LOCALE_STORAGE_KEY) || navigator.languages?.[0] || navigator.language);
+  } catch {
+    return normalizeLocale(typeof navigator !== 'undefined' ? navigator.language : '');
+  }
+}
+
 export function getLocalLauncherOrigin(): string {
   return getLocationOrigin();
 }
@@ -66,6 +76,10 @@ export function attachLauncherOrigin(targetUrl: string, launcherOrigin: string):
     const url = new URL(absolute);
     if (normalizedOrigin) {
       url.searchParams.set(LAUNCHER_ORIGIN_PARAM, normalizedOrigin);
+    }
+    const locale = readCurrentLocale();
+    if (locale) {
+      url.searchParams.set(LOCALE_QUERY_PARAM, locale);
     }
     return url.toString();
   } catch {

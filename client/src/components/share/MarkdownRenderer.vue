@@ -22,6 +22,8 @@
 
 <script setup lang="ts">
 import { computed, onBeforeUnmount, onMounted, ref } from 'vue';
+import 'markstream-vue/index.css';
+import 'katex/dist/katex.min.css';
 import {
   MarkdownRender,
   enableKatex,
