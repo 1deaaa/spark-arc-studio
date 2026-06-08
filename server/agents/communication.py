@@ -35,6 +35,16 @@ import uuid
 from typing import Dict, Any, Optional, List
 from .registry import get_agent_registry, _resolve_i18n_field
 from .language_policy import prepend_prompt_language_policy
+from .attachment_chunk_history import (
+    ATTACHMENT_CHUNK_COLLAPSED_PLACEHOLDER,
+    ATTACHMENT_CHUNK_TOOL_NAME,
+    collapse_attachment_chunk_history,
+)
+from .tool_stream_events import (
+    build_tool_stream_event,
+    get_tool_ui_binding,
+    normalize_tool_name,
+)
 
 
 # ── ToolEventSink: 嵌套工具事件广播 ──────────────────────────────
@@ -66,172 +76,6 @@ def is_stop_event_set(stop_event: Any = None) -> bool:
         return bool(is_set())
     except Exception:
         return False
-
-
-# ── 附件分片滑动窗口（read_attachment_chunk 历史折叠）───────────────────
-ATTACHMENT_CHUNK_TOOL_NAME = "read_attachment_chunk"
-ATTACHMENT_CHUNK_COLLAPSED_PLACEHOLDER = (
-    "[附件分片原文已折叠 - AI 已在后续回复中提炼相关要点；如需重新阅读请再次调用 read_attachment_chunk]"
-)
-
-
-def collapse_attachment_chunk_history(messages: list, *, fresh_call_ids: set[str] | None = None) -> int:
-    """对 messages 中的 ``read_attachment_chunk`` ``ToolMessage`` 做"只保留最新一片"滑窗折叠。
-
-    LangChain 的 ToolMessage 必须与上游 AIMessage 的 tool_call_id 一一对应，
-    所以不能删除消息——只能把内容替换成短占位文本，保留 ``tool_call_id`` 与 ``name``。
-
-    - ``fresh_call_ids`` 中的 ToolMessage（本轮新追加的）保留完整正文。
-    - 其余 read_attachment_chunk 的 ToolMessage 内容替换为占位。
-    - 已折叠的不重复折叠；非 read_attachment_chunk 的工具结果一律不动。
-
-    返回本次折叠掉的条数（仅供测试和日志使用）。
-    """
-    from langchain_core.messages import ToolMessage as _ToolMessage
-
-    fresh = fresh_call_ids or set()
-    collapsed = 0
-    for i, m in enumerate(messages):
-        if not isinstance(m, _ToolMessage):
-            continue
-        if (getattr(m, "name", "") or "") != ATTACHMENT_CHUNK_TOOL_NAME:
-            continue
-        if getattr(m, "tool_call_id", None) in fresh:
-            continue
-        if str(m.content or "") == ATTACHMENT_CHUNK_COLLAPSED_PLACEHOLDER:
-            continue
-        messages[i] = _ToolMessage(
-            content=ATTACHMENT_CHUNK_COLLAPSED_PLACEHOLDER,
-            tool_call_id=m.tool_call_id,
-            name=m.name,
-        )
-        collapsed += 1
-    return collapsed
-
-
-def normalize_tool_name(raw_tool_name: str = "") -> str:
-    normalized = str(raw_tool_name or "").strip().lower()
-    if not normalized:
-        return ""
-    key = normalized.replace(" ", "").replace("_", "").replace("-", "")
-    aliases = {
-        "rewriteworldview": "rewrite_worldview",
-        "rewriteallcharacters": "rewrite_all_characters",
-        "rewritecharacters": "rewrite_all_characters",
-        "rewritecharacter": "update_character",
-        "updatecharacter": "update_character",
-    }
-    return aliases.get(key, normalized)
-
-
-def get_tool_ui_binding(tool_name: str) -> Dict[str, Any]:
-    normalized = normalize_tool_name(tool_name)
-    if normalized == "rewrite_inspiration":
-        return {
-            "scope": "muse",
-            "target": "",
-            "refresh_events": ["muse-refresh"],
-        }
-
-    if normalized in {"rewrite_worldview", "rewrite_all_characters", "update_character"}:
-        target = "worldview" if normalized == "rewrite_worldview" else "characters"
-        refresh_events = ["lorebook-refresh"]
-        if target == "worldview":
-            refresh_events.insert(0, "lorebook-refresh-worldview")
-        if target == "characters":
-            refresh_events.insert(0, "lorebook-refresh-characters")
-        return {
-            "scope": "world",
-            "target": target,
-            "refresh_events": refresh_events,
-        }
-
-    if normalized in {"rewrite_outline", "patch_outline"}:
-        return {
-            "scope": "outline",
-            "target": "",
-            "refresh_events": ["outline-refresh"],
-        }
-
-    if normalized == "read_chapter_outline_raw":
-        return {
-            "scope": "outline",
-            "target": "",
-            "refresh_events": [],
-        }
-
-    if normalized in {"rewrite_synopsis", "patch_synopsis"}:
-        return {
-            "scope": "synopsis",
-            "target": "content",
-            "refresh_events": ["synopsis-refresh"],
-        }
-
-    if normalized in {"rewrite_beat_sheet", "patch_beat_sheet"}:
-        return {
-            "scope": "synopsis",
-            "target": "beats",
-            "refresh_events": ["synopsis-refresh"],
-        }
-
-    if normalized in {"search_project", "semantic_search", "web_search"}:
-        return {
-            "scope": "",
-            "target": "",
-            "refresh_events": [],
-        }
-
-    if normalized == "replace_from_search":
-        return {
-            "scope": "",
-            "target": "",
-            "refresh_events": [
-                "outline-refresh",
-                "synopsis-refresh",
-                "lorebook-refresh",
-                "lorebook-refresh-worldview",
-                "lorebook-refresh-characters",
-            ],
-        }
-
-    return {
-        "scope": "",
-        "target": "",
-        "refresh_events": [],
-    }
-
-
-def build_tool_stream_event(
-    event_name: str,
-    tool_name: str,
-    *,
-    source_agent: str = "",
-    message: str = "",
-    tool_call_key: str = "",
-    **extra: Any,
-) -> Dict[str, Any]:
-    normalized_tool_name = normalize_tool_name(tool_name)
-    payload: Dict[str, Any] = {
-        "event": str(event_name or "").strip(),
-        "tool_name": normalized_tool_name,
-    }
-    if source_agent:
-        payload["source_agent"] = source_agent
-    if message:
-        payload["message"] = message
-    if tool_call_key:
-        payload["tool_call_key"] = tool_call_key
-
-    binding = get_tool_ui_binding(normalized_tool_name)
-    if binding.get("scope"):
-        payload["ui_scope"] = binding["scope"]
-    if binding.get("target"):
-        payload["ui_target"] = binding["target"]
-    if binding.get("refresh_events"):
-        payload["ui_refresh_events"] = list(binding["refresh_events"])
-
-    payload.update(extra)
-    return payload
 
 
 from llm.agen_matchbox.reasoning_compat import (
@@ -1683,13 +1527,7 @@ class SparkBaseAgent:
 
 class CommunicationContext:
     """
-    通讯上下文类。
-    
-    【形象理解：聊天室 / 同步通讯总线】
-    1. 你可以把它理解为一个大型的“工作聊天室”，每个用户在这个聊天室里都有一个专属的“私密频道（Namespace）”。
-    2. Agent 只有“入驻（register）”并“绑定（bind）”到这个聊天室，才能感知到同伴的存在。
-    3. 所有的沟通都是同步的，就像在聊天室里 @ 某人并等待对方立即回复。
-    4. 实现了多租户隔离，确保不同用户的 Agent 互不打扰。
+    通讯上下文管理器，负责在同一用户的不同 Agent 之间分发消息。
     """
     def __init__(self):
         # 存储结构：{ user_id: { agent_id: SparkBaseAgent } }

@@ -60,8 +60,11 @@ from core.auth import get_current_user
 from core.models import UserInfoSession, ChatMessage
 from core.request_context import (
     get_current_project_name,
+    get_current_locale,
     resolve_project_name,
+    reset_current_locale,
     set_current_inspiration_context,
+    set_current_locale,
     set_current_export_format,
     current_llm_usage_context,
 )
@@ -105,6 +108,28 @@ def _apply_request_runtime_meta(active_meta: Dict[str, Any] | None) -> None:
         export_format = active_meta.get('exportFormat') or active_meta.get('export_format')
     set_current_inspiration_context(str(inspiration_id) if inspiration_id else None)
     set_current_export_format(export_format)
+
+
+def _run_chat_background_context(
+    *,
+    user_id: str,
+    project_name: str,
+    locale: str,
+    llm_usage_context: str,
+    callback: Any,
+) -> Any:
+    """在聊天后台线程中恢复请求级上下文。"""
+    from core.request_context import current_user_id, current_project_name
+
+    current_user_id.set(str(user_id))
+    current_project_name.set(project_name)
+    locale_token = set_current_locale(locale)
+    usage_token = current_llm_usage_context.set(llm_usage_context)
+    try:
+        return callback()
+    finally:
+        current_llm_usage_context.reset(usage_token)
+        reset_current_locale(locale_token)
 
 
 def _as_stream_event(delta) -> dict:
@@ -979,19 +1004,15 @@ async def edit_chat_message_stream(request: Request, data: ChatMessageEditReques
     if history and history[-1].get('role') == 'user':
         history = history[:-1]
     agent_inst = create_agent_instance(data.agentId, user_id, project_name)
+    request_locale = get_current_locale()
 
     # ── 后台线程：执行 chat_stream 并写入进度队列 + 数据库 ──
     def _run_chat_background():
         import contextvars
-        from core.request_context import current_user_id, current_project_name
 
         ctx = contextvars.copy_context()
 
         def _in_context():
-            current_user_id.set(str(user_id))
-            current_project_name.set(project_name)
-            usage_token = current_llm_usage_context.set(_make_llm_usage_context(entry.task_id))
-
             terminated_early = False
             final_error_message = ''
             retry_count = 0
@@ -1008,45 +1029,50 @@ async def edit_chat_message_stream(request: Request, data: ChatMessageEditReques
                     stop_event=stop_event,
                 )
             finally:
-                try:
-                    if terminated_early:
-                        final_status = 'cancelled'
-                    elif final_error_message:
-                        final_status = 'error'
-                    else:
-                        final_status = 'completed'
+                if terminated_early:
+                    final_status = 'cancelled'
+                elif final_error_message:
+                    final_status = 'error'
+                else:
+                    final_status = 'completed'
 
-                    entry.llm_usage = _collect_chat_task_llm_usage(entry)
-                    if entry.accumulator is not None:
-                        entry.accumulator.context_window_stats = _merge_context_window_stats_with_usage(
-                            entry.accumulator.context_window_stats,
-                            entry.llm_usage,
-                        )
-                    reply = entry.accumulator.content if entry.accumulator is not None else ''
-                    metadata = entry.build_metadata(stream_status=final_status)
-                    _checkpoint_chat_task(cm, entry, force=True, stream_status=final_status)
-                    entry.append_control_event({
-                        "event": "task_done",
-                        "status": final_status,
-                        "assistant_message_id": entry.assistant_message_id,
-                        "result_message_id": entry.assistant_message_id,
-                        **({"llm_usage": entry.llm_usage} if entry.llm_usage else {}),
-                        **({"context_window_stats": entry.accumulator.context_window_stats} if entry.accumulator is not None and entry.accumulator.context_window_stats else {}),
-                        **({"error": final_error_message} if final_error_message else {}),
-                    })
-                    update_task_status(
-                        task_key, final_status,
-                        result_message_id=entry.assistant_message_id,
-                        result_content=reply,
-                        result_metadata=metadata,
-                        error_message=final_error_message,
-                        retry_count=retry_count,
+                entry.llm_usage = _collect_chat_task_llm_usage(entry)
+                if entry.accumulator is not None:
+                    entry.accumulator.context_window_stats = _merge_context_window_stats_with_usage(
+                        entry.accumulator.context_window_stats,
+                        entry.llm_usage,
                     )
-                    cleanup_task(task_key)
-                finally:
-                    current_llm_usage_context.reset(usage_token)
+                reply = entry.accumulator.content if entry.accumulator is not None else ''
+                metadata = entry.build_metadata(stream_status=final_status)
+                _checkpoint_chat_task(cm, entry, force=True, stream_status=final_status)
+                entry.append_control_event({
+                    "event": "task_done",
+                    "status": final_status,
+                    "assistant_message_id": entry.assistant_message_id,
+                    "result_message_id": entry.assistant_message_id,
+                    **({"llm_usage": entry.llm_usage} if entry.llm_usage else {}),
+                    **({"context_window_stats": entry.accumulator.context_window_stats} if entry.accumulator is not None and entry.accumulator.context_window_stats else {}),
+                    **({"error": final_error_message} if final_error_message else {}),
+                })
+                update_task_status(
+                    task_key, final_status,
+                    result_message_id=entry.assistant_message_id,
+                    result_content=reply,
+                    result_metadata=metadata,
+                    error_message=final_error_message,
+                    retry_count=retry_count,
+                )
+                cleanup_task(task_key)
 
-        ctx.run(_in_context)
+        ctx.run(
+            _run_chat_background_context,
+            user_id=str(user_id),
+            project_name=project_name,
+            locale=request_locale,
+            llm_usage_context=_make_llm_usage_context(entry.task_id),
+            callback=_in_context,
+        )
+
 
     thread = threading.Thread(target=_run_chat_background, daemon=True, name=f"chat_edit_bg_{task_key}")
     thread.start()
@@ -1200,20 +1226,16 @@ async def send_chat_message_stream(request: Request, data: ChatSendRequest, user
     _checkpoint_chat_task(cm, entry, force=True, stream_status='running')
 
     agent_inst = create_agent_instance(agent_id, user_id, project_name)
+    request_locale = get_current_locale()
 
     # ── 后台线程：执行 chat_stream 并写入进度队列 + 数据库 ──
     def _run_chat_background():
         import contextvars
-        from core.request_context import current_user_id, current_project_name
 
         # 复制请求级 ContextVar 到后台线程
         ctx = contextvars.copy_context()
 
         def _in_context():
-            current_user_id.set(str(user_id))
-            current_project_name.set(project_name)
-            usage_token = current_llm_usage_context.set(_make_llm_usage_context(entry.task_id))
-
             terminated_early = False
             final_error_message = ''
             retry_count = 0
@@ -1230,45 +1252,50 @@ async def send_chat_message_stream(request: Request, data: ChatSendRequest, user
                     stop_event=stop_event,
                 )
             finally:
-                try:
-                    if terminated_early:
-                        final_status = 'cancelled'
-                    elif final_error_message:
-                        final_status = 'error'
-                    else:
-                        final_status = 'completed'
+                if terminated_early:
+                    final_status = 'cancelled'
+                elif final_error_message:
+                    final_status = 'error'
+                else:
+                    final_status = 'completed'
 
-                    entry.llm_usage = _collect_chat_task_llm_usage(entry)
-                    if entry.accumulator is not None:
-                        entry.accumulator.context_window_stats = _merge_context_window_stats_with_usage(
-                            entry.accumulator.context_window_stats,
-                            entry.llm_usage,
-                        )
-                    reply = entry.accumulator.content if entry.accumulator is not None else ''
-                    metadata = entry.build_metadata(stream_status=final_status)
-                    _checkpoint_chat_task(cm, entry, force=True, stream_status=final_status)
-                    entry.append_control_event({
-                        "event": "task_done",
-                        "status": final_status,
-                        "assistant_message_id": entry.assistant_message_id,
-                        "result_message_id": entry.assistant_message_id,
-                        **({"llm_usage": entry.llm_usage} if entry.llm_usage else {}),
-                        **({"context_window_stats": entry.accumulator.context_window_stats} if entry.accumulator is not None and entry.accumulator.context_window_stats else {}),
-                        **({"error": final_error_message} if final_error_message else {}),
-                    })
-                    update_task_status(
-                        task_key, final_status,
-                        result_message_id=entry.assistant_message_id,
-                        result_content=reply,
-                        result_metadata=metadata,
-                        error_message=final_error_message,
-                        retry_count=retry_count,
+                entry.llm_usage = _collect_chat_task_llm_usage(entry)
+                if entry.accumulator is not None:
+                    entry.accumulator.context_window_stats = _merge_context_window_stats_with_usage(
+                        entry.accumulator.context_window_stats,
+                        entry.llm_usage,
                     )
-                    cleanup_task(task_key)
-                finally:
-                    current_llm_usage_context.reset(usage_token)
+                reply = entry.accumulator.content if entry.accumulator is not None else ''
+                metadata = entry.build_metadata(stream_status=final_status)
+                _checkpoint_chat_task(cm, entry, force=True, stream_status=final_status)
+                entry.append_control_event({
+                    "event": "task_done",
+                    "status": final_status,
+                    "assistant_message_id": entry.assistant_message_id,
+                    "result_message_id": entry.assistant_message_id,
+                    **({"llm_usage": entry.llm_usage} if entry.llm_usage else {}),
+                    **({"context_window_stats": entry.accumulator.context_window_stats} if entry.accumulator is not None and entry.accumulator.context_window_stats else {}),
+                    **({"error": final_error_message} if final_error_message else {}),
+                })
+                update_task_status(
+                    task_key, final_status,
+                    result_message_id=entry.assistant_message_id,
+                    result_content=reply,
+                    result_metadata=metadata,
+                    error_message=final_error_message,
+                    retry_count=retry_count,
+                )
+                cleanup_task(task_key)
 
-        ctx.run(_in_context)
+        ctx.run(
+            _run_chat_background_context,
+            user_id=str(user_id),
+            project_name=project_name,
+            locale=request_locale,
+            llm_usage_context=_make_llm_usage_context(entry.task_id),
+            callback=_in_context,
+        )
+
 
     thread = threading.Thread(target=_run_chat_background, daemon=True, name=f"chat_bg_{task_key}")
     thread.start()

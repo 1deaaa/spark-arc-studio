@@ -244,6 +244,28 @@ describe('ChatMessageList agent avatar rendering', () => {
     expect(wrapper.findAll('.chat-msg.assistant')).toHaveLength(1);
   });
 
+  it('updates pending thinking text when locale changes', async () => {
+    i18n.global.locale.value = 'zh-CN';
+    const wrapper = mountWithPinia({
+      props: {
+        sending: true,
+        thinkingSeconds: 7,
+        history: [
+          { id: 12, role: 'assistant', content: '', reasoning: '', segments: [] },
+        ],
+      },
+    });
+
+    expect(wrapper.text()).toContain('思考中 7s');
+
+    i18n.global.locale.value = 'en-US';
+    await nextTick();
+
+    expect(wrapper.text()).toContain('Thinking 7s');
+
+    i18n.global.locale.value = 'zh-CN';
+  });
+
   it('switches from pending thinking to deep thinking as soon as reasoning content exists', () => {
     const wrapper = mountWithPinia({
       props: {

@@ -45,23 +45,28 @@
           </svg>
         </div>
         
-        <div class="loading-text">{{ text }}</div>
-        <div v-if="toolName" class="tool-name">工具: {{ toolName }}</div>
+        <div class="loading-text">{{ displayText }}</div>
+        <div v-if="toolName" class="tool-name">{{ t('components.chatMessageList.toolNameLabel', { tool: toolName }) }}</div>
       </div>
     </div>
   </transition>
 </template>
 
 <script setup lang="ts">
-import { ref, computed } from 'vue';
+import { computed } from 'vue';
+import { useI18n } from 'vue-i18n';
 
 const props = defineProps({
   visible: { type: Boolean, default: false },
-  text: { type: String, default: '正在执行工具...' },
+  text: { type: String, default: '' },
   toolName: { type: String, default: '' }
 });
 
-function getParticleStyle(index) {
+const { t } = useI18n();
+
+const displayText = computed(() => props.text || t('components.chatMessageList.executingTool'));
+
+function getParticleStyle(index: number) {
   const size = 2 + Math.random() * 3;
   const left = Math.random() * 100;
   const top = Math.random() * 100;

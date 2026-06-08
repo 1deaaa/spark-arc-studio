@@ -157,7 +157,7 @@
                     </div>
                   </div>
                   <div v-if="!parseWorkTrackerResult(seg.tool_result).summary && !parseWorkTrackerResult(seg.tool_result).items.length" class="wt-empty">{{ parseWorkTrackerResult(seg.tool_result).raw }}</div>
-                  <div v-if="parseWorkTrackerResult(seg.tool_result).updatedAt" class="wt-updated">{{ t('components.chatMessageList.workTrackerUpdatedAt', { time: formatRelativeTime(parseWorkTrackerResult(seg.tool_result).updatedAt) }) }}</div>
+                  <div v-if="parseWorkTrackerResult(seg.tool_result).updatedAt" class="wt-updated">{{ t('components.chatMessageList.workTrackerUpdatedAt', { time: formatRelativeTime(parseWorkTrackerResult(seg.tool_result).updatedAt, t) }) }}</div>
                 </div>
               </SparkCollapseTransition>
             </div>
@@ -405,86 +405,18 @@ import SparkCollapseTransition from '@/components/share/SparkCollapseTransition.
 import AgentAvatar from '@/components/share/AgentAvatar.vue';
 import type { ChatMessage } from '@/services/chatService';
 import { useAgentRegistry } from '@/composables/useAgentRegistry';
-
-type MessageId = string | number;
-
-type MessageToolTrace = {
-  tool_name?: string;
-  toolName?: string;
-  status?: string;
-  duration?: number;
-  started_at?: number;
-  startedAt?: number;
-  finished_at?: number;
-  finishedAt?: number;
-  source_agent?: string;
-  [key: string]: unknown;
-};
-
-type MessageSegment = {
-  type?: string;
-  text?: string;
-  tool_name?: string;
-  tool_result?: unknown;
-  status?: string;
-  duration?: number;
-  source_agent?: string;
-  content?: unknown;
-  reasoning?: unknown;
-  [key: string]: unknown;
-};
-
-type LlmUsageMeta = {
-  prompt_tokens?: number;
-  promptTokens?: number;
-  completion_tokens?: number;
-  completionTokens?: number;
-  total_tokens?: number;
-  totalTokens?: number;
-  [key: string]: unknown;
-};
-
-type ContextWindowMeta = {
-  input_tokens?: number;
-  inputTokens?: number;
-  output_tokens?: number;
-  outputTokens?: number;
-  original_tokens?: number;
-  originalTokens?: number;
-  retained_messages?: number;
-  retainedMessages?: number;
-  model?: string;
-  compacted?: boolean;
-  reason?: string;
-  [key: string]: unknown;
-};
-
-type ChatMessageItem = ChatMessage & {
-  id?: MessageId | null;
-  clientId?: MessageId | null;
-  role?: string;
-  content?: unknown;
-  timestamp?: string | number;
-  reasoning?: unknown;
-  metadata?: {
-    reasoning?: unknown;
-    tool_traces?: unknown;
-    llm_usage?: LlmUsageMeta;
-    llmUsage?: LlmUsageMeta;
-    context_window_stats?: ContextWindowMeta;
-    contextWindowStats?: ContextWindowMeta;
-    [key: string]: unknown;
-  };
-  llm_usage?: LlmUsageMeta;
-  llmUsage?: LlmUsageMeta;
-  context_window_stats?: ContextWindowMeta;
-  contextWindowStats?: ContextWindowMeta;
-  tool_traces?: unknown;
-  segments?: MessageSegment[];
-  agent_id?: string;
-  agentId?: string;
-  [key: string]: unknown;
-};
+import {
+  formatTokenCount,
+  getDisplayContent,
+  getMessageSegments,
+  getReasoningSegmentText,
+  hasRenderableAssistantActivity,
+  shouldRenderMessage,
+  type ChatMessageItem,
+  type MessageId,
+  type MessageSegment,
+} from './chatMessageRender';
+import { formatRelativeTime, parseWorkTrackerResult } from './workTrackerRender';
 
 const { t } = useI18n();
 
@@ -557,12 +489,12 @@ const showPendingThinking = computed(() => {
 
 const thinkingDisplayText = computed(() => {
   if (props.toolCalling) {
-    return props.toolProgressText || '正在执行工具...';
+    return props.toolProgressText || t('components.chatMessageList.executingTool');
   }
-  return `思考中 ${props.thinkingSeconds}s`;
+  return t('components.chatMessageList.thinkingSeconds', { seconds: props.thinkingSeconds });
 });
 
-const thinkingNoticeText = '部分模型不会显示推理链或工具调用标识，但只要发送键没解冻就说明连接并未中断，请耐心等待。';
+const thinkingNoticeText = computed(() => t('components.chatMessageList.thinkingNotice'));
 const thinkingNoticeVisible = ref(false);
 
 const toolNameLabelKeyMap: Record<string, string> = {
@@ -610,13 +542,6 @@ function formatObject(v) {
   } catch {
     return String(v);
   }
-}
-
-function formatTokenCount(value: number) {
-  const num = Number(value) || 0;
-  if (num >= 1000000) return `${(num / 1000000).toFixed(2)}M`;
-  if (num >= 1000) return `${(num / 1000).toFixed(1)}K`;
-  return `${num}`;
 }
 
 function getMessageContextWindowStats(message: ChatMessageItem) {
@@ -733,206 +658,6 @@ function canMutateMessage(message) {
   return hasPersistedId || hasLocalClientId;
 }
 
-const THINK_TAG_RE = /<\s*(think|thinking)\s*>([\s\S]*?)<\s*\/\s*\1\s*>/gi;
-
-function splitThinkTaggedText(value) {
-  const text = typeof value === 'string' ? value : String(value || '');
-  if (!text) return { display: '', reasoning: '' };
-
-  let display = '';
-  let reasoning = '';
-  let lastIndex = 0;
-  let matched = false;
-
-  text.replace(THINK_TAG_RE, (full, _tag, inner, offset) => {
-    matched = true;
-    display += text.slice(lastIndex, offset);
-    reasoning += inner || '';
-    lastIndex = offset + full.length;
-    return full;
-  });
-
-  if (matched) {
-    display += text.slice(lastIndex);
-    return { display, reasoning };
-  }
-
-  return { display: text, reasoning: '' };
-}
-
-function extractReasoningText(value) {
-  if (value == null) return '';
-  if (typeof value === 'string') return splitThinkTaggedText(value).reasoning;
-  if (Array.isArray(value)) return value.map(item => extractReasoningText(item)).join('');
-  if (typeof value === 'object') {
-    const blockType = String(value.type || '').trim().toLowerCase();
-    if (blockType === 'reasoning' || blockType === 'think' || blockType === 'thinking') {
-      return extractReasoningText(value.reasoning ?? value.text ?? value.content ?? value.value ?? '');
-    }
-    const inline = [value.reasoning, value.think, value.thinking]
-      .map(item => extractReasoningText(item))
-      .join('');
-    if (Array.isArray(value.content) || (value.content && typeof value.content === 'object')) {
-      return inline + extractReasoningText(value.content);
-    }
-    return inline;
-  }
-  return '';
-}
-
-function normalizeReasoningText(value) {
-  if (value == null) return '';
-  if (typeof value === 'string') {
-    const { reasoning, display } = splitThinkTaggedText(value);
-    return reasoning || display;
-  }
-  if (Array.isArray(value)) return value.map(item => normalizeReasoningText(item)).join('');
-  if (typeof value === 'object') {
-    const blockType = String(value.type || '').trim().toLowerCase();
-    if (blockType === 'reasoning' || blockType === 'think' || blockType === 'thinking') {
-      return normalizeReasoningText(value.reasoning ?? value.text ?? value.content ?? value.value ?? '');
-    }
-    for (const candidate of [value.reasoning, value.think, value.thinking]) {
-      const text = normalizeReasoningText(candidate);
-      if (text) return text;
-    }
-    if (Array.isArray(value.content) || (value.content && typeof value.content === 'object')) {
-      return normalizeReasoningText(value.content);
-    }
-    if (typeof value.text === 'string') return normalizeReasoningText(value.text);
-  }
-  return '';
-}
-
-function normalizeTextLike(value) {
-  if (value == null) return '';
-  if (typeof value === 'string') return splitThinkTaggedText(value).display;
-  if (Array.isArray(value)) return value.map(item => normalizeTextLike(item)).join('');
-  if (typeof value === 'object') {
-    const blockType = String(value.type || '').trim().toLowerCase();
-    if (blockType === 'reasoning' || blockType === 'think' || blockType === 'thinking') return '';
-    if (typeof value.text === 'string') return normalizeTextLike(value.text);
-    if (typeof value.content === 'string' || Array.isArray(value.content) || (value.content && typeof value.content === 'object')) {
-      return normalizeTextLike(value.content);
-    }
-    if (typeof value.value === 'string') return normalizeTextLike(value.value);
-    try {
-      return JSON.stringify(value, null, 2);
-    } catch {
-      return String(value);
-    }
-  }
-  return String(value);
-}
-
-function getReasoningText(message) {
-  return normalizeTextLike(
-    normalizeReasoningText(message?.reasoning || '')
-    || normalizeReasoningText(message?.metadata?.reasoning || '')
-    || extractReasoningText(message?.content || '')
-  );
-}
-
-function hasReasoningContent(message) {
-  return !!getReasoningText(message).trim();
-}
-
-function getDisplayContent(message) {
-  return normalizeTextLike(message?.content || '');
-}
-
-function hasDisplayContent(message) {
-  return !!getDisplayContent(message).trim();
-}
-
-function normalizeToolTraceList(value) {
-  if (!Array.isArray(value)) return [];
-  return value
-    .map(item => {
-      if (!item || typeof item !== 'object') return null;
-      const toolName = String(item.tool_name || item.toolName || '').trim();
-      if (!toolName) return null;
-      const startedAt = Number(item.started_at ?? item.startedAt ?? 0) || 0;
-      const finishedAt = Number(item.finished_at ?? item.finishedAt ?? 0) || 0;
-      let duration = Number(item.duration ?? 0) || 0;
-      if (!duration && startedAt > 0 && finishedAt >= startedAt) {
-        duration = Number((finishedAt - startedAt).toFixed(2));
-      }
-      return {
-        ...item,
-        tool_name: toolName,
-        status: String(item.status || (finishedAt ? 'finished' : 'started') || 'finished').trim() || 'finished',
-        duration,
-      };
-    })
-    .filter(Boolean);
-}
-
-function getToolTraces(message) {
-  return normalizeToolTraceList(message?.tool_traces || message?.metadata?.tool_traces || []);
-}
-
-/**
- * 返回消息的有序分段数组。优先使用 segments 字段（流式），
- * 无 segments 时从 tool_traces + content 重建（确保刷新后正文和工具标记可见）。
- */
-function getMessageSegments(message): MessageSegment[] {
-  if (Array.isArray(message?.segments) && message.segments.length > 0) {
-    const existingSegments: MessageSegment[] = message.segments.map((s: MessageSegment) => ({ ...s }));
-    if (!existingSegments.some(s => s?.type === 'reasoning')) {
-      const reasoning = getReasoningText(message);
-      if (reasoning) {
-        existingSegments.unshift({ type: 'reasoning', text: reasoning });
-      }
-    }
-    return existingSegments;
-  }
-  if (Array.isArray(message?.metadata?.segments) && message.metadata.segments.length > 0) {
-    return message.metadata.segments.map((s: MessageSegment) => ({ ...s }));
-  }
-  const segments: MessageSegment[] = [];
-  const reasoning = getReasoningText(message);
-  if (typeof reasoning === 'string' && reasoning.trim()) {
-    segments.push({ type: 'reasoning', text: reasoning });
-  }
-  // 重建 tool_trace segments
-  const traces = getToolTraces(message);
-  for (const trace of traces) {
-    segments.push({
-      type: 'tool_trace',
-      tool_name: trace.tool_name,
-      status: trace.status || 'finished',
-      duration: trace.duration || 0,
-      source_agent: trace.source_agent || '',
-    });
-  }
-  // 重建 text segment
-  const content = getDisplayContent(message);
-  if (typeof content === 'string' && content.trim()) {
-    segments.push({ type: 'text', text: content });
-  } else if (message?.content && typeof message.content === 'object') {
-    segments.push({ type: 'json', content: message.content });
-  }
-  return segments;
-}
-
-function hasRenderableAssistantActivity(message) {
-  return getMessageSegments(message).some(seg => {
-    if (seg?.type === 'reasoning') return !!getReasoningSegmentText(seg).trim();
-    if (seg?.type === 'text') return !!String(seg?.text || '').trim();
-    if (seg?.type === 'tool_trace') return true;
-    if (seg?.type === 'context_compaction') return true;
-    if (seg?.type === 'context_compaction_summary') return true;
-    if (seg?.type === 'json') return true;
-    return false;
-  });
-}
-
-function shouldRenderMessage(message) {
-  if (!message || message.role !== 'assistant') return true;
-  return hasRenderableAssistantActivity(message);
-}
-
 const { getAgentName: _getAgentNameFromRegistry } = useAgentRegistry();
 
 function getAgentName(agentId?: string): string {
@@ -1031,63 +756,6 @@ function isToolTraceExpandable(seg: any): boolean {
   return toolName === 'work_tracker' && !!seg.tool_result;
 }
 
-
-/** 解析 work_tracker 返回的文本为结构化数据（带简单缓存避免模板重复调用） */
-interface WorkTrackerItem { task: string; status: string; priority: string; notes: string }
-interface WorkTrackerParsed { summary: string; items: WorkTrackerItem[]; updatedAt: string; raw: string }
-const _wtParseCache = new WeakMap<object, WorkTrackerParsed>();
-function parseWorkTrackerResult(raw: unknown): WorkTrackerParsed {
-  if (raw && typeof raw === 'object' && _wtParseCache.has(raw as object)) return _wtParseCache.get(raw as object)!;
-  const rawStr = raw == null ? '' : String(raw);
-  const empty: WorkTrackerParsed = { summary: '', items: [], updatedAt: '', raw: rawStr };
-  if (!rawStr) return empty;
-  const result: WorkTrackerParsed = { ...empty, raw: rawStr };
-
-  // 提取全局目标
-  const summaryMatch = rawStr.match(/^目标[：:]\s*(.+)$/m);
-  if (summaryMatch) result.summary = summaryMatch[1].trim();
-
-  // 提取任务条目：格式 "1. ✅ [high] 任务描述  → 备注"
-  const itemRegex = /^\d+\.\s+(✅|🔄|🚫|⬜)\s+(?:\[(\w+)\]\s+)?(.+?)(?:\s+→\s+(.+))?$/gm;
-  let match: RegExpExecArray | null;
-  while ((match = itemRegex.exec(rawStr)) !== null) {
-    const statusMap: Record<string, string> = { '✅': 'completed', '🔄': 'in_progress', '🚫': 'blocked', '⬜': 'pending' };
-    result.items.push({
-      status: statusMap[match[1]] || 'pending',
-      priority: match[2] || '',
-      task: match[3].trim(),
-      notes: match[4]?.trim() || '',
-    });
-  }
-
-  // 提取最后更新时间
-  const updatedMatch = rawStr.match(/最后更新[：:]\s*(.+)$/m);
-  if (updatedMatch) result.updatedAt = updatedMatch[1].trim();
-
-  if (raw && typeof raw === 'object') _wtParseCache.set(raw as object, result);
-  return result;
-}
-
-/** 将 ISO 时间字符串格式化为相对时间描述 */
-function formatRelativeTime(isoStr: string): string {
-  if (!isoStr) return '';
-  try {
-    const date = new Date(isoStr);
-    if (isNaN(date.getTime())) return isoStr;
-    const now = Date.now();
-    const diffMs = now - date.getTime();
-    const diffMin = Math.floor(diffMs / 60000);
-    if (diffMin < 1) return t('components.chatMessageList.justNow');
-    if (diffMin < 60) return t('components.chatMessageList.minutesAgo', { count: diffMin });
-    const diffH = Math.floor(diffMin / 60);
-    if (diffH < 24) return t('components.chatMessageList.hoursAgo', { count: diffH });
-    const diffD = Math.floor(diffH / 24);
-    return t('components.chatMessageList.daysAgo', { count: diffD });
-  } catch {
-    return isoStr;
-  }
-}
-
 function setReasoningContentRef(key, el) {
   if (el) {
     reasoningContentRefs.value[key] = el;
@@ -1107,13 +775,6 @@ function toggleReasoning(key) {
   if (reasoningExpanded.value[key]) {
     nextTick(() => scrollReasoningToBottom(key));
   }
-}
-
-function getReasoningSegmentText(segment) {
-  return normalizeTextLike(
-    normalizeReasoningText(segment?.text || segment?.reasoning || '')
-    || normalizeReasoningText(segment?.content || '')
-  );
 }
 
 function hasVisibleContentAfterSegment(message, segIdx) {

@@ -37,45 +37,37 @@ import {
   normalizeToolName,
   reconcileSessionHistory,
 } from './chatDomain';
+import {
+  getToolProgressText,
+  getToolUiTaskKey,
+  resolveToolUiBinding,
+} from './chatToolUi';
+import {
+  applyPersistedTokenStats,
+  extractContextWindowStats,
+  extractContextWindowStatsFromPayload,
+  extractLlmUsageStats,
+  latestHistoryContextWindowStats,
+  latestHistoryLlmUsageStats,
+  type ContextWindowStats,
+  type TokenUsageStats,
+} from './chatTokenStats';
+import {
+  buildUserMessageMetadata,
+  extractImportedFilesMeta,
+  findLatestImportedContexts,
+  getMessageImportedFile,
+  markSessionImportedFileDeleted,
+  resolveActiveContext,
+  resolveMessageContextForEdit,
+  sameImportedFile,
+  type ChatImportedContext,
+  type ResolvedMessageContext,
+} from './chatAttachments';
 
 type AnyRecord = Record<string, any>;
 
-type ResolvedMessageContext = {
-  activeContext: string;
-  activeMeta: AnyRecord | null;
-  messageMetadata: AnyRecord | null;
-};
-
 type ChatSessionKind = 'primary' | 'extra';
-
-type ChatImportedContext = {
-  /** 后端落盘后的附件 id（必填）；前端只持有引用，全文由后端按 id 从磁盘加载。 */
-  attachmentId: string;
-  filename: string;
-  sourceFormat: string;
-  totalTokens: number;
-  chunkTokens: number;
-  isPartial: boolean;
-  warnings: Array<{ code: string; message: string }>;
-  uploadedAt: number;
-};
-
-type ContextWindowStats = {
-  agentId: string;
-  inputTokens: number;
-  outputTokens: number;
-  originalTokens: number;
-  retainedMessages: number;
-  model: string;
-  compacted: boolean;
-  reason: string;
-};
-
-type TokenUsageStats = {
-  promptTokens: number;
-  completionTokens: number;
-  totalTokens: number;
-};
 
 type ChatSession = {
   id: number;
@@ -258,533 +250,6 @@ function _getAssistantStreamSeq(message: AnyRecord | null | undefined) {
 
 function _delay(ms: number) {
   return new Promise(resolve => setTimeout(resolve, ms));
-}
-
-function _extractLlmUsageTotal(payload: AnyRecord | null | undefined): number | null {
-  const usageStats = _extractLlmUsageStats(payload);
-  return usageStats?.totalTokens ?? null;
-}
-
-function _extractLlmUsageStats(payload: AnyRecord | null | undefined): TokenUsageStats | null {
-  if (!payload || typeof payload !== 'object') return null;
-  const usage = payload.llm_usage || payload.llmUsage || payload.metadata?.llm_usage || payload.metadata?.llmUsage;
-  if (!usage || typeof usage !== 'object') return null;
-  const promptTokens = Number(usage.prompt_tokens ?? usage.promptTokens ?? 0) || 0;
-  const completionTokens = Number(usage.completion_tokens ?? usage.completionTokens ?? 0) || 0;
-  const rawTotal = usage.total_tokens ?? usage.totalTokens;
-  const total = rawTotal != null
-    ? Number(rawTotal)
-    : promptTokens + completionTokens;
-  if (!Number.isFinite(total) || total < 0) return null;
-  return {
-    promptTokens: Math.max(0, promptTokens),
-    completionTokens: Math.max(0, completionTokens),
-    totalTokens: Math.max(0, total),
-  };
-}
-
-function _extractAgentCompletionTokens(payload: AnyRecord | null | undefined, agentId: string): number | null {
-  if (!payload || typeof payload !== 'object' || !agentId) return null;
-  const usage = payload.llm_usage || payload.llmUsage || payload.metadata?.llm_usage || payload.metadata?.llmUsage;
-  const byAgent = usage?.by_agent || usage?.byAgent;
-  const agentUsage = byAgent?.[agentId];
-  if (!agentUsage || typeof agentUsage !== 'object') return null;
-  const value = Number(agentUsage.completion_tokens ?? agentUsage.completionTokens ?? 0);
-  return Number.isFinite(value) && value >= 0 ? value : null;
-}
-
-function _extractContextWindowStats(evt: AnyRecord): ContextWindowStats {
-  return {
-    agentId: String(evt.agent_id || evt.agentId || evt.source_agent || evt.sourceAgent || ''),
-    inputTokens: Number(evt.input_tokens ?? evt.inputTokens ?? 0) || 0,
-    outputTokens: Number(evt.output_tokens ?? evt.outputTokens ?? 0) || 0,
-    originalTokens: Number(evt.original_tokens ?? evt.originalTokens ?? 0) || 0,
-    retainedMessages: Number(evt.retained_messages ?? evt.retainedMessages ?? 0) || 0,
-    model: String(evt.model || ''),
-    compacted: !!evt.compacted,
-    reason: String(evt.reason || ''),
-  };
-}
-
-function _extractContextWindowStatsFromPayload(payload: AnyRecord | null | undefined): ContextWindowStats | null {
-  if (!payload || typeof payload !== 'object') return null;
-
-  const nestedStats = payload.context_window_stats || payload.contextWindowStats || payload.metadata?.context_window_stats || payload.metadata?.contextWindowStats;
-  if (nestedStats && typeof nestedStats === 'object') {
-    return _extractContextWindowStats({
-      event: 'context_window_stats',
-      ...nestedStats,
-    });
-  }
-
-  const looksLikeStatsPayload = payload.event === 'context_window_stats'
-    || payload.input_tokens != null
-    || payload.inputTokens != null
-    || payload.original_tokens != null
-    || payload.originalTokens != null;
-  if (!looksLikeStatsPayload) return null;
-
-  return _extractContextWindowStats(payload);
-}
-
-function _mergeContextWindowStatsWithPayload(
-  stats: ContextWindowStats | null,
-  payload: AnyRecord | null | undefined,
-): ContextWindowStats | null {
-  if (!stats) return null;
-  const agentOutput = _extractAgentCompletionTokens(payload, stats.agentId);
-  if (agentOutput == null) return stats;
-  return {
-    ...stats,
-    outputTokens: agentOutput,
-  };
-}
-
-function _latestHistoryLlmUsageTotal(history: AnyRecord[] = []): number | null {
-  return _latestHistoryLlmUsageStats(history)?.totalTokens ?? null;
-}
-
-function _latestHistoryLlmUsageStats(history: AnyRecord[] = []): TokenUsageStats | null {
-  for (let i = history.length - 1; i >= 0; i -= 1) {
-    const message = history[i];
-    if (message?.role !== 'assistant') continue;
-    const usage = _extractLlmUsageStats(message);
-    if (usage != null) return usage;
-  }
-  return null;
-}
-
-function _latestHistoryContextWindowStats(history: AnyRecord[] = []): ContextWindowStats | null {
-  for (let i = history.length - 1; i >= 0; i -= 1) {
-    const message = history[i];
-    if (message?.role !== 'assistant') continue;
-    const stats = _extractContextWindowStatsFromPayload(message);
-    if (stats == null) continue;
-    return _mergeContextWindowStatsWithPayload(stats, message);
-  }
-  return null;
-}
-
-function _applyPersistedTokenStats(session: ChatSession, payload: AnyRecord | null | undefined) {
-  const usageStats = _extractLlmUsageStats(payload);
-  if (usageStats != null) {
-    session.contextTokenUsage = usageStats;
-    session.contextTokenCount = usageStats.totalTokens;
-  }
-
-  const nextWindowStats = _extractContextWindowStatsFromPayload(payload);
-  if (nextWindowStats != null) {
-    session.contextWindowStats = _mergeContextWindowStatsWithPayload(nextWindowStats, payload);
-    return;
-  }
-
-  if (session.contextWindowStats) {
-    session.contextWindowStats = _mergeContextWindowStatsWithPayload(session.contextWindowStats, payload);
-  }
-}
-
-function _serializeImportedContext(payload: ChatImportedContext): AnyRecord {
-  return {
-    attachmentId: payload.attachmentId,
-    filename: payload.filename,
-    sourceFormat: payload.sourceFormat,
-    totalTokens: payload.totalTokens,
-    chunkTokens: payload.chunkTokens,
-    isPartial: payload.isPartial,
-    warnings: (payload.warnings || []).map((item) => ({ ...item })),
-    uploadedAt: payload.uploadedAt,
-  };
-}
-
-function _resolveActiveContext(
-  provider: (() => string | { text?: unknown; meta?: unknown } | null | undefined) | null,
-  attachments: ChatImportedContext[] | null = null,
-) {
-  let activeContext = '';
-  let activeMeta: AnyRecord | null = null;
-
-  if (provider) {
-    try {
-      const providedContext = provider();
-      if (providedContext && typeof providedContext === 'object' && !Array.isArray(providedContext)) {
-        activeContext = 'text' in providedContext ? String(providedContext.text || '') : '';
-        const metaValue = 'meta' in providedContext ? providedContext.meta : null;
-        activeMeta = metaValue && typeof metaValue === 'object' ? metaValue as AnyRecord : null;
-      } else {
-        activeContext = String(providedContext || '');
-      }
-    } catch (e: unknown) {
-      console.warn('获取上下文失败', e);
-    }
-  }
-
-  // 引用制：activeContext 不带全文，仅在 activeMeta.importedFiles 列表上传 attachmentId 引用。
-  // 后端在调 LLM 前按 id 从磁盘加载正文动态注入；同时双写 importedFile=[0] 兼容老 reader。
-  const validAttachments = (attachments || []).filter(
-    (item) => item && String(item.attachmentId || '').trim() && String(item.filename || '').trim(),
-  );
-  if (validAttachments.length > 0) {
-    const importedFiles = validAttachments.map(_serializeImportedContext);
-    activeMeta = {
-      ...(activeMeta || {}),
-      importedFiles,
-      importedFile: { ...importedFiles[0] },
-    };
-  }
-
-  return { activeContext, activeMeta };
-}
-
-
-function _extractImportedFileMeta(activeMeta: AnyRecord | null = null) {
-  // 优先读多附件列表中的第一个；缺失再回落到老的 importedFile 单数。
-  const list = _extractImportedFilesMeta(activeMeta);
-  return list[0] || null;
-}
-
-function _normalizeRawImportedFile(raw: unknown): AnyRecord | null {
-  if (!raw || typeof raw !== 'object' || Array.isArray(raw)) return null;
-  const importedFile = raw as AnyRecord;
-  if (importedFile.deleted) return null;
-  const attachmentId = String(importedFile.attachmentId || importedFile.attachment_id || '').trim();
-  const filename = String(importedFile.filename || '').trim();
-  if (!attachmentId || !filename) return null;
-  return {
-    attachmentId,
-    filename,
-    sourceFormat: String(importedFile.sourceFormat || '').trim(),
-    totalTokens: Number(importedFile.totalTokens || 0) || 0,
-    chunkTokens: Number(importedFile.chunkTokens || 0) || 0,
-    isPartial: Boolean(importedFile.isPartial),
-    warnings: Array.isArray(importedFile.warnings)
-      ? importedFile.warnings.map((item: AnyRecord = {}) => ({
-          code: String(item.code || '').trim(),
-          message: String(item.message || '').trim(),
-        })).filter((item: AnyRecord) => item.code || item.message)
-      : [],
-    uploadedAt: Number(importedFile.uploadedAt || 0) || 0,
-  };
-}
-
-function _extractImportedFilesMeta(activeMeta: AnyRecord | null = null): AnyRecord[] {
-  if (!activeMeta || typeof activeMeta !== 'object') return [];
-  const importedFiles = (activeMeta as AnyRecord).importedFiles;
-  if (Array.isArray(importedFiles)) {
-    const seen = new Set<string>();
-    const result: AnyRecord[] = [];
-    for (const item of importedFiles) {
-      const normalized = _normalizeRawImportedFile(item);
-      if (!normalized) continue;
-      if (seen.has(normalized.attachmentId)) continue;
-      seen.add(normalized.attachmentId);
-      result.push(normalized);
-    }
-    return result;
-  }
-  // 老字段兜底
-  const single = _normalizeRawImportedFile((activeMeta as AnyRecord).importedFile);
-  return single ? [single] : [];
-}
-
-function _isDeletedAttachmentContext(value: unknown) {
-  return /^\[附件\s+".+"\s+已被删除\]$/.test(String(value || '').trim());
-}
-
-function _sameImportedFile(a: AnyRecord | null | undefined, b: AnyRecord | null | undefined) {
-  if (!a || !b) return false;
-  const aFilename = String(a.filename || '').trim();
-  const bFilename = String(b.filename || '').trim();
-  if (!aFilename || !bFilename || aFilename !== bFilename) return false;
-  const aUploadedAt = Number(a.uploadedAt || 0) || 0;
-  const bUploadedAt = Number(b.uploadedAt || 0) || 0;
-  if (aUploadedAt && bUploadedAt) return aUploadedAt === bUploadedAt;
-  return true;
-}
-
-function _getMessageImportedFile(message: AnyRecord | null | undefined) {
-  const importedFile = message?.metadata?.importedFile;
-  if (!importedFile || typeof importedFile !== 'object' || Array.isArray(importedFile)) return null;
-  const filename = String(importedFile.filename || '').trim();
-  return filename ? importedFile as AnyRecord : null;
-}
-
-function _markMessageImportedFileDeleted(message: AnyRecord | null | undefined, reference: AnyRecord | null | undefined, deletedAt = Math.floor(Date.now() / 1000)) {
-  if (!message) return false;
-  const metadata = message.metadata && typeof message.metadata === 'object' ? message.metadata as AnyRecord : null;
-  if (!metadata) return false;
-
-  // 多附件：同步标记 importedFiles 列表中匹配项；老 importedFile 单数字段也跟进。
-  const importedFiles = Array.isArray(metadata.importedFiles) ? metadata.importedFiles as AnyRecord[] : null;
-  let touched = false;
-  let matchedFilename = '';
-
-  if (importedFiles && importedFiles.length > 0) {
-    const nextList = importedFiles.map((entry) => {
-      if (!entry || typeof entry !== 'object') return entry;
-      const sameByRef = !reference || _sameImportedFile(entry as AnyRecord, reference);
-      if (!sameByRef) return entry;
-      touched = true;
-      matchedFilename = String((entry as AnyRecord).filename || '').trim() || matchedFilename;
-      return { ...(entry as AnyRecord), deleted: true, deletedAt };
-    });
-    if (touched) {
-      metadata.importedFiles = nextList;
-      const stillActive = nextList.find((entry) => entry && typeof entry === 'object' && !(entry as AnyRecord).deleted) as AnyRecord | undefined;
-      if (stillActive) {
-        metadata.importedFile = { ...stillActive };
-      } else if (nextList[0] && typeof nextList[0] === 'object') {
-        metadata.importedFile = { ...(nextList[0] as AnyRecord) };
-      }
-    }
-  }
-
-  // 兜底：若旧消息只有 importedFile 单数字段，单独处理。
-  if (!touched) {
-    const importedFile = _getMessageImportedFile(message);
-    if (!importedFile) return false;
-    if (reference && !_sameImportedFile(importedFile, reference)) return false;
-    metadata.importedFile = { ...importedFile, deleted: true, deletedAt };
-    matchedFilename = String(importedFile.filename || '').trim() || matchedFilename;
-    touched = true;
-  }
-
-  if (!touched) return false;
-  const filename = matchedFilename || '未知文件';
-  if (typeof metadata.active_context === 'string') {
-    metadata.active_context = `[附件 "${filename}" 已被删除]`;
-  }
-  return true;
-}
-
-function _markSessionImportedFileDeleted(session: ChatSession, reference: AnyRecord | null | undefined, deletedAt = Math.floor(Date.now() / 1000)) {
-  if (!session || !reference) return;
-  session.history = (session.history || []).map((message) => {
-    if (!_markMessageImportedFileDeleted(message, reference, deletedAt)) return message;
-    return { ...message, metadata: { ...(message.metadata || {}) } };
-  });
-}
-
-function _toChatImportedContext(payload: AnyRecord): ChatImportedContext {
-  return {
-    attachmentId: String(payload.attachmentId || '').trim(),
-    filename: String(payload.filename || '').trim(),
-    sourceFormat: String(payload.sourceFormat || '').trim(),
-    totalTokens: Number(payload.totalTokens || 0) || 0,
-    chunkTokens: Number(payload.chunkTokens || 0) || 0,
-    isPartial: Boolean(payload.isPartial),
-    warnings: Array.isArray(payload.warnings)
-      ? (payload.warnings as AnyRecord[]).map((item) => ({
-          code: String((item as AnyRecord)?.code || ''),
-          message: String((item as AnyRecord)?.message || ''),
-        }))
-      : [],
-    uploadedAt: Number(payload.uploadedAt || 0) || 0,
-  };
-}
-
-function _findLatestImportedContexts(history: AnyRecord[] = []): ChatImportedContext[] {
-  // 找最近一条 user 消息上挂的附件元数据：优先取 importedFiles 多列表，回落到老 importedFile。
-  for (let i = history.length - 1; i >= 0; i -= 1) {
-    const message = history[i];
-    if (message?.role !== 'user') continue;
-    const list = _extractImportedFilesMeta(message?.metadata || null);
-    if (list.length > 0) {
-      return list.map(_toChatImportedContext);
-    }
-  }
-  return [];
-}
-
-function _findLatestImportedContext(history: AnyRecord[] = []): ChatImportedContext | null {
-  return _findLatestImportedContexts(history)[0] || null;
-}
-
-function _buildUserMessageMetadata(activeContext: unknown, activeMeta: AnyRecord | null = null) {
-  const metadata: AnyRecord = {};
-  const normalizedContext = typeof activeContext === 'string' ? activeContext.trim() : String(activeContext || '').trim();
-  const importedFiles = _extractImportedFilesMeta(activeMeta);
-  if (normalizedContext) {
-    metadata.active_context = normalizedContext;
-  }
-  if (importedFiles.length > 0) {
-    // 多附件：列表为真相源；importedFile 双写以兼容老 reader / 老测试断言。
-    metadata.importedFiles = importedFiles.map((item) => ({ ...item }));
-    metadata.importedFile = { ...importedFiles[0] };
-  }
-  return Object.keys(metadata).length ? metadata : null;
-}
-
-function _resolveMessageContextForEdit(
-  provider: (() => string | { text?: unknown; meta?: unknown } | null | undefined) | null,
-  message: AnyRecord | null | undefined,
-): ResolvedMessageContext {
-  const { activeContext: providerContext, activeMeta: providerMeta } = _resolveActiveContext(provider, []);
-  const messageMetadata = message?.metadata && typeof message.metadata === 'object' ? message.metadata as AnyRecord : null;
-  const storedRawContext = typeof messageMetadata?.active_context === 'string' ? messageMetadata.active_context.trim() : '';
-  const storedContext = _isDeletedAttachmentContext(storedRawContext) ? '' : storedRawContext;
-  // 编辑场景：尊重该消息当时挂的附件列表（多附件也要恢复），后端按 attachmentId 动态注入。
-  const importedFiles = _extractImportedFilesMeta(messageMetadata);
-  const activeContext = storedContext || providerContext;
-  const activeMeta = importedFiles.length > 0
-    ? { ...(providerMeta || {}), importedFiles, importedFile: { ...importedFiles[0] } }
-    : (providerMeta || null);
-
-  return {
-    activeContext,
-    activeMeta,
-    messageMetadata: _buildUserMessageMetadata(activeContext, activeMeta),
-  };
-}
-
-// ==================== 流式通信工具函数（只维护一份） ====================
-
-/** 工具进度文本映射 */
-function _getToolProgressText(toolName: unknown, fallbackText = '') {
-  const normalizedToolName = normalizeToolName(toolName);
-  if (fallbackText && fallbackText.trim()) return fallbackText.trim();
-  const mapping: Record<string, string> = {
-    rewrite_inspiration: i18n.global.t('chatStore.toolProgress.rewriteInspiration'),
-    rewrite_worldview: i18n.global.t('chatStore.toolProgress.rewriteWorldview'),
-    rewrite_all_characters: i18n.global.t('chatStore.toolProgress.rewriteAllCharacters'),
-    update_character: i18n.global.t('chatStore.toolProgress.updateCharacter'),
-    rewrite_synopsis: i18n.global.t('chatStore.toolProgress.rewriteSynopsis'),
-    rewrite_beat_sheet: i18n.global.t('chatStore.toolProgress.rewriteBeatSheet'),
-    rewrite_outline: i18n.global.t('chatStore.toolProgress.rewriteOutline'),
-    patch_outline: i18n.global.t('chatStore.toolProgress.patchOutline'),
-    patch_synopsis: i18n.global.t('chatStore.toolProgress.patchSynopsis'),
-    patch_beat_sheet: i18n.global.t('chatStore.toolProgress.patchBeatSheet'),
-    patch_worldview: i18n.global.t('chatStore.toolProgress.patchWorldview'),
-    list_chapters: i18n.global.t('chatStore.toolProgress.listChapters'),
-    read_chapter_scene: i18n.global.t('chatStore.toolProgress.readChapterScene'),
-    read_chapter_outline_raw: i18n.global.t('chatStore.toolProgress.readChapterOutlineRaw'),
-    read_attachment_chunk: i18n.global.t('chatStore.toolProgress.readAttachmentChunk'),
-    read_worldview: i18n.global.t('chatStore.toolProgress.readWorldview'),
-    read_character: i18n.global.t('chatStore.toolProgress.readCharacter'),
-    read_synopsis: i18n.global.t('chatStore.toolProgress.readSynopsis'),
-    read_beat_sheet: i18n.global.t('chatStore.toolProgress.readBeatSheet'),
-    work_tracker: i18n.global.t('chatStore.toolProgress.workTracker'),
-    create_chapter: i18n.global.t('chatStore.toolProgress.createChapter'),
-    create_or_rewrite_script: i18n.global.t('chatStore.toolProgress.createOrRewriteScript'),
-    patch_script: i18n.global.t('chatStore.toolProgress.patchScript'),
-    trigger_auto_write: i18n.global.t('chatStore.toolProgress.triggerAutoWrite'),
-    check_scriptwriter_status: i18n.global.t('chatStore.toolProgress.checkScriptwriterStatus'),
-    search_project: i18n.global.t('chatStore.toolProgress.searchProject'),
-    semantic_search: i18n.global.t('chatStore.toolProgress.semanticSearch'),
-    replace_from_search: i18n.global.t('chatStore.toolProgress.replaceFromSearch'),
-    web_search: i18n.global.t('chatStore.toolProgress.webSearch'),
-    graph_rag_tool: i18n.global.t('chatStore.toolProgress.graphRagTool'),
-    delegate_task: i18n.global.t('chatStore.toolProgress.delegateTask'),
-    capture_inspiration: i18n.global.t('chatStore.toolProgress.captureInspiration'),
-  };
-  return mapping[normalizedToolName] || i18n.global.t('chatStore.toolProgress.executingTool', { tool: normalizedToolName || 'unknown' });
-}
-
-function _isLorebookRewriteTool(toolName: unknown) {
-  const normalizedToolName = normalizeToolName(toolName);
-  return normalizedToolName === 'rewrite_worldview' || normalizedToolName === 'rewrite_all_characters' || normalizedToolName === 'update_character';
-}
-
-function _isMuseRewriteTool(toolName: unknown) {
-  return normalizeToolName(toolName) === 'rewrite_inspiration';
-}
-
-function _isOutlineRewriteTool(toolName: unknown) {
-  const n = normalizeToolName(toolName);
-  return n === 'rewrite_outline' || n === 'patch_outline' || n === 'read_chapter_outline_raw';
-}
-
-function _isSynopsisTool(toolName: unknown) {
-  const normalizedToolName = normalizeToolName(toolName);
-  return normalizedToolName === 'rewrite_synopsis' || normalizedToolName === 'patch_synopsis';
-}
-
-function _isBeatSheetTool(toolName: unknown) {
-  const normalizedToolName = normalizeToolName(toolName);
-  return normalizedToolName === 'rewrite_beat_sheet' || normalizedToolName === 'patch_beat_sheet';
-}
-
-function _getLorebookRefreshTarget(toolName: unknown) {
-  const normalizedToolName = normalizeToolName(toolName);
-  if (normalizedToolName === 'rewrite_worldview') return 'worldview';
-  if (normalizedToolName === 'rewrite_all_characters' || normalizedToolName === 'update_character') return 'characters';
-  return '';
-}
-
-function _getToolUiBinding(toolName: unknown) {
-  if (_isMuseRewriteTool(toolName)) {
-    return {
-      scope: 'muse',
-      target: '',
-      refreshEvents: ['muse-refresh'],
-    };
-  }
-
-  if (_isLorebookRewriteTool(toolName)) {
-    return {
-      scope: 'world',
-      target: _getLorebookRefreshTarget(toolName),
-      refreshEvents: (() => {
-        const target = _getLorebookRefreshTarget(toolName);
-        const events = ['lorebook-refresh'];
-        if (target === 'worldview') events.unshift('lorebook-refresh-worldview');
-        if (target === 'characters') events.unshift('lorebook-refresh-characters');
-        return events;
-      })(),
-    };
-  }
-
-  if (_isOutlineRewriteTool(toolName)) {
-    return {
-      scope: 'outline',
-      target: '',
-      refreshEvents: ['outline-refresh'],
-    };
-  }
-
-  if (_isSynopsisTool(toolName)) {
-    return {
-      scope: 'synopsis',
-      target: 'content',
-      refreshEvents: ['synopsis-refresh'],
-    };
-  }
-
-  if (_isBeatSheetTool(toolName)) {
-    return {
-      scope: 'synopsis',
-      target: 'beats',
-      refreshEvents: ['synopsis-refresh'],
-    };
-  }
-
-  return {
-    scope: '',
-    target: '',
-    refreshEvents: [],
-  };
-}
-
-function _resolveToolUiBinding(toolName: unknown, evt: AnyRecord = {}) {
-  const base = _getToolUiBinding(toolName);
-  const uiScope = String(evt?.ui_scope || evt?.uiScope || '').trim();
-  const uiTarget = String(evt?.ui_target || evt?.uiTarget || '').trim();
-  const uiRefreshEvents = Array.isArray(evt?.ui_refresh_events)
-    ? evt.ui_refresh_events
-    : Array.isArray(evt?.uiRefreshEvents)
-      ? evt.uiRefreshEvents
-      : null;
-
-  return {
-    scope: uiScope || base.scope || '',
-    target: uiTarget || base.target || '',
-    refreshEvents: uiRefreshEvents?.filter(Boolean) || base.refreshEvents || [],
-  };
-}
-
-function _getToolUiTaskKey(binding: AnyRecord = {}) {
-  const scope = String(binding?.scope || '').trim();
-  const target = String(binding?.target || '').trim();
-  return scope ? `${scope}::${target}` : '';
 }
 
 // ==================== Store 定义 ====================
@@ -1013,12 +478,12 @@ export const useChatStore = defineStore('chat', {
       // 3. 找后端持久化的锚点消息以便落库标记 deleted。
       const persistedMessage = (session.history || []).find((message) => {
         if (message?.id == null || String(message.id).trim() === '') return false;
-        const list = _extractImportedFilesMeta(message?.metadata || null);
+        const list = extractImportedFilesMeta(message?.metadata || null);
         if (list.length > 0) {
           return list.some((entry) => entry.attachmentId === targetId);
         }
-        const legacy = _getMessageImportedFile(message);
-        return legacy && !legacy.deleted && _sameImportedFile(legacy, reference);
+        const legacy = getMessageImportedFile(message);
+        return legacy && !legacy.deleted && sameImportedFile(legacy, reference);
       });
 
       if (persistedMessage?.id != null) {
@@ -1027,7 +492,7 @@ export const useChatStore = defineStore('chat', {
       }
 
       // 没有持久化的锚点消息（用户上传后立刻删除）→ 仅本地标记历史消息 deleted。
-      _markSessionImportedFileDeleted(session, reference);
+      markSessionImportedFileDeleted(session, reference);
     },
 
     /** 获取指定会话（不存在时返回 null） */
@@ -1316,12 +781,12 @@ export const useChatStore = defineStore('chat', {
         const fallbackAssistant = authoritative ? null : preserveLocalTail;
         const localHistory = authoritative ? [] : session.history;
         session.history = reconcileSessionHistory(rawHistory || [], fallbackAssistant, localHistory);
-        session.contextTokenUsage = _latestHistoryLlmUsageStats(session.history);
+        session.contextTokenUsage = latestHistoryLlmUsageStats(session.history);
         session.contextTokenCount = session.contextTokenUsage?.totalTokens ?? null;
-        session.contextWindowStats = _latestHistoryContextWindowStats(session.history);
+        session.contextWindowStats = latestHistoryContextWindowStats(session.history);
         // 历史中存在附件且 session.attachments 为空时，恢复完整列表（多附件场景下也能正确还原）。
         if ((session.attachments?.length || 0) === 0) {
-          const restored = _findLatestImportedContexts(session.history);
+          const restored = findLatestImportedContexts(session.history);
           if (restored.length > 0) {
             session.attachments = restored;
             session.importedContext = restored[0] || null;
@@ -1374,11 +839,11 @@ export const useChatStore = defineStore('chat', {
       session.retryErrorSummary = '';
       try {
         const resolvedContext = contextOverride || (() => {
-          const { activeContext, activeMeta } = _resolveActiveContext(this._contextProvider, session.attachments);
+          const { activeContext, activeMeta } = resolveActiveContext(this._contextProvider, session.attachments);
           return {
             activeContext,
             activeMeta,
-            messageMetadata: _buildUserMessageMetadata(activeContext, activeMeta),
+            messageMetadata: buildUserMessageMetadata(activeContext, activeMeta),
           };
         })();
         const { activeContext, activeMeta, messageMetadata } = resolvedContext;
@@ -1507,7 +972,7 @@ export const useChatStore = defineStore('chat', {
         session.backgroundTaskStatus = 'running';
         session.sending = true;
         session.lastError = '';
-        _applyPersistedTokenStats(session, status);
+        applyPersistedTokenStats(session, status);
         await this._reconnectTaskStream(session, agentId, contextKey, Number(afterSeq || 0));
         return true;
       }
@@ -1515,7 +980,7 @@ export const useChatStore = defineStore('chat', {
       if (status.status === 'completed' || status.status === 'cancelled' || status.status === 'error') {
         session.backgroundTaskStatus = null;
         session.sending = false;
-        _applyPersistedTokenStats(session, status);
+        applyPersistedTokenStats(session, status);
         if (status.status === 'error') {
           session.lastError = String(status.error || _defaultBackgroundTaskError());
         }
@@ -1562,7 +1027,7 @@ export const useChatStore = defineStore('chat', {
             session.retryAttempt = null;
             session.retryMaxRetries = 3;
             session.retryErrorSummary = '';
-            _applyPersistedTokenStats(session, task as AnyRecord);
+            applyPersistedTokenStats(session, task as AnyRecord);
             hasRunning = true;
 
             if (!this.primaryExpanded || !this.primaryAgentId || this.primaryAgentId === 'agent_director') {
@@ -1578,7 +1043,7 @@ export const useChatStore = defineStore('chat', {
           } else if (status === 'completed' || status === 'cancelled' || status === 'error') {
             session.backgroundTaskStatus = null;
             session.sending = false;
-            _applyPersistedTokenStats(session, task as AnyRecord);
+            applyPersistedTokenStats(session, task as AnyRecord);
             if (status === 'error') {
               session.lastError = String(task.error || _defaultBackgroundTaskError());
             }
@@ -1625,7 +1090,7 @@ export const useChatStore = defineStore('chat', {
           if (status === 'completed' || status === 'cancelled' || status === 'error') {
             session.backgroundTaskStatus = null;
             session.sending = false;
-            _applyPersistedTokenStats(session, result as AnyRecord);
+            applyPersistedTokenStats(session, result as AnyRecord);
             if (status === 'error') {
               session.lastError = String((result as AnyRecord).error || _defaultBackgroundTaskError());
             }
@@ -1694,7 +1159,7 @@ export const useChatStore = defineStore('chat', {
           if (taskStatus?.status === 'running' && retryIndex < maxTransportRetries) {
             session.backgroundTaskStatus = 'running';
             session.sending = true;
-            _applyPersistedTokenStats(session, taskStatus);
+            applyPersistedTokenStats(session, taskStatus);
             const nextSeq = Math.max(Number(afterSeq || 0), _getAssistantStreamSeq(assistantMsg));
             await _delay(Math.min(2500, 500 * (retryIndex + 1)));
             await this._reconnectTaskStream(session, agentId, contextKey, nextSeq, {
@@ -1707,7 +1172,7 @@ export const useChatStore = defineStore('chat', {
           if (taskStatus?.status === 'running') {
             session.backgroundTaskStatus = 'running';
             session.sending = true;
-            _applyPersistedTokenStats(session, taskStatus);
+            applyPersistedTokenStats(session, taskStatus);
             keepBackgroundRunning = true;
             console.warn('聊天观察流重连失败，但后台任务仍在运行，保持运行态等待后续恢复。', e);
             return;
@@ -1716,7 +1181,7 @@ export const useChatStore = defineStore('chat', {
           if (taskStatus?.status === 'completed' || taskStatus?.status === 'cancelled' || taskStatus?.status === 'error') {
             session.backgroundTaskStatus = null;
             session.sending = false;
-            _applyPersistedTokenStats(session, taskStatus);
+            applyPersistedTokenStats(session, taskStatus);
             if (taskStatus.status === 'error') {
               session.lastError = String(taskStatus.error || _defaultBackgroundTaskError());
             }
@@ -1824,7 +1289,7 @@ export const useChatStore = defineStore('chat', {
         const result = await compactChatContext(projectName, session.agentId, session.contextKey, targetTokens) as AnyRecord;
         const nextStats = result.contextWindowStats || result.context_window_stats;
         if (nextStats && typeof nextStats === 'object') {
-          session.contextWindowStats = _extractContextWindowStats({
+          session.contextWindowStats = extractContextWindowStats({
             event: 'context_window_stats',
             agent_id: session.agentId,
             ...nextStats,
@@ -1862,10 +1327,10 @@ export const useChatStore = defineStore('chat', {
       // 解析 reference：传 attachmentId 时按 id 在 importedFiles 列表中找；否则取首个 importedFile（老语义）。
       let reference: AnyRecord | null = null;
       if (trimmedAttachmentId) {
-        const list = _extractImportedFilesMeta(targetMessage?.metadata || null);
+        const list = extractImportedFilesMeta(targetMessage?.metadata || null);
         reference = list.find((entry) => entry.attachmentId === trimmedAttachmentId) || null;
       } else {
-        reference = _getMessageImportedFile(targetMessage);
+        reference = getMessageImportedFile(targetMessage);
       }
 
       // 本地：从 session.attachments 中移除对应项（按 id 优先），并同步 importedContext。
@@ -1873,10 +1338,10 @@ export const useChatStore = defineStore('chat', {
         const refId = String(reference.attachmentId || '').trim();
         if (refId) {
           this.removeSessionAttachmentById(sessionId, refId);
-        } else if (_sameImportedFile(session.importedContext as AnyRecord | null, reference)) {
+        } else if (sameImportedFile(session.importedContext as AnyRecord | null, reference)) {
           session.importedContext = null;
           session.attachments = (session.attachments || []).filter(
-            (item) => !_sameImportedFile(item as AnyRecord, reference as AnyRecord),
+            (item) => !sameImportedFile(item as AnyRecord, reference as AnyRecord),
           );
         }
       }
@@ -1884,7 +1349,7 @@ export const useChatStore = defineStore('chat', {
       const hasPersistedId = targetMessage.id != null && String(targetMessage.id).trim() !== '';
       if (!hasPersistedId) {
         // 未持久化消息：直接本地标记同一会话里的同一附件。
-        _markSessionImportedFileDeleted(session, reference);
+        markSessionImportedFileDeleted(session, reference);
         return;
       }
 
@@ -1895,7 +1360,7 @@ export const useChatStore = defineStore('chat', {
       try {
         await removeChatMessageAttachment(projectName, targetMessage.id, trimmedAttachmentId || undefined);
         // 后端会按同一会话/同一文件批量失效；前端立即同步本地状态。
-        _markSessionImportedFileDeleted(session, reference);
+        markSessionImportedFileDeleted(session, reference);
       } catch (e: unknown) {
         bus.emit('toast', { type: 'error', message: _getErrorMessage(e, '移除附件失败') });
       }
@@ -1917,7 +1382,7 @@ export const useChatStore = defineStore('chat', {
       if (!hasPersistedId) {
         const normalizedContent = String(newContent || '').trim();
         if (!normalizedContent) return;
-        const resolvedContext = _resolveMessageContextForEdit(this._contextProvider, targetMessage);
+        const resolvedContext = resolveMessageContextForEdit(this._contextProvider, targetMessage);
         const nextHistory = session.history.slice(0, targetIndex + 1);
         nextHistory[targetIndex] = {
           ...nextHistory[targetIndex],
@@ -1962,7 +1427,7 @@ export const useChatStore = defineStore('chat', {
           session.history = nextHistory;
         }
 
-        const { activeContext, activeMeta, messageMetadata } = _resolveMessageContextForEdit(this._contextProvider, targetMessage);
+        const { activeContext, activeMeta, messageMetadata } = resolveMessageContextForEdit(this._contextProvider, targetMessage);
         if (index !== -1 && messageMetadata) {
           const nextHistory = session.history.slice();
           nextHistory[index] = { ...nextHistory[index], metadata: messageMetadata };
@@ -2144,9 +1609,9 @@ export const useChatStore = defineStore('chat', {
       };
 
       const startPanelToolTask = (toolName, progressText, evt: AnyRecord = {}) => {
-        const binding = _resolveToolUiBinding(toolName, evt);
+        const binding = resolveToolUiBinding(toolName, evt);
         const eventKey = String(evt?.tool_call_key || evt?.toolCallKey || '').trim();
-        let taskKey = _getToolUiTaskKey(binding);
+        let taskKey = getToolUiTaskKey(binding);
         if (eventKey) {
           const mappedTaskKey = panelToolEventKeyMap.get(eventKey);
           if (mappedTaskKey) {
@@ -2201,10 +1666,10 @@ export const useChatStore = defineStore('chat', {
 
       const finishPanelToolTask = (toolName, status = 'finished', evt: AnyRecord = {}) => {
         const eventKey = String(evt?.tool_call_key || evt?.toolCallKey || '').trim();
-        const binding = _resolveToolUiBinding(toolName, evt);
+        const binding = resolveToolUiBinding(toolName, evt);
         let taskKey = eventKey ? String(panelToolEventKeyMap.get(eventKey) || '') : '';
         if (!taskKey) {
-          taskKey = _getToolUiTaskKey(binding);
+          taskKey = getToolUiTaskKey(binding);
         }
         if (eventKey) {
           panelToolEventKeyMap.delete(eventKey);
@@ -2255,7 +1720,11 @@ export const useChatStore = defineStore('chat', {
         syncAssistantSnapshot();
         const toolStatsTask = toolLoadingStats as ToolLoadingStatsTask | null;
         if (toolStatsTask?.push && session.toolCalling && normalized) {
-          toolStatsTask.push(normalized, session.toolProgressText || '正在执行工具...', currentToolTarget ? { target: currentToolTarget } : {});
+          toolStatsTask.push(
+            normalized,
+            session.toolProgressText || i18n.global.t('components.chatMessageList.executingTool'),
+            currentToolTarget ? { target: currentToolTarget } : {},
+          );
         }
       };
 
@@ -2391,7 +1860,7 @@ export const useChatStore = defineStore('chat', {
         if (!isStreamCurrent()) return;
         const toolName = normalizeToolName(endedToolName || currentToolName);
         ensureAssistantAdded();
-        const { target } = _resolveToolUiBinding(toolName);
+        const { target } = resolveToolUiBinding(toolName);
         const finishedAt = Number((Date.now() / 1000).toFixed(3));
         upsertAssistantToolTrace(toolName, {
           status,
@@ -2426,7 +1895,7 @@ export const useChatStore = defineStore('chat', {
         if (evt.metadata && typeof evt.metadata === 'object') {
           assistantMsg.metadata = { ...(assistantMsg.metadata || {}), ...evt.metadata };
         }
-        _applyPersistedTokenStats(session, evt);
+        applyPersistedTokenStats(session, evt);
         ensureAssistantAdded();
         syncAssistantSnapshot();
 
@@ -2442,7 +1911,7 @@ export const useChatStore = defineStore('chat', {
         );
         if (activeToolSeg) {
           const activeToolName = normalizeToolName(activeToolSeg.tool_name || '');
-          const activeProgress = _getToolProgressText(activeToolName, activeToolSeg.message || activeToolSeg.text || '');
+          const activeProgress = getToolProgressText(activeToolName, activeToolSeg.message || activeToolSeg.text || '');
           currentToolName = activeToolName;
           currentToolSegId = activeToolSeg._seg_id || activeToolSeg.tool_call_key || '';
           const panelTaskState = startPanelToolTask(activeToolName, activeProgress, activeToolSeg);
@@ -2465,7 +1934,7 @@ export const useChatStore = defineStore('chat', {
           streamState.lastSeq = Math.max(Number(streamState.lastSeq || 0), eventSeq);
         }
         const toolName = normalizeToolName(evt.tool_name || evt.toolName || '');
-        const progressText = _getToolProgressText(toolName, evt.message || evt.text || '');
+        const progressText = getToolProgressText(toolName, evt.message || evt.text || '');
         const isNested = !!evt.nested;
 
         if (eventType === 'task_snapshot') {
@@ -2473,7 +1942,7 @@ export const useChatStore = defineStore('chat', {
           return;
         }
         if (eventType === 'context_window_stats') {
-          const nextWindowStats = _extractContextWindowStats(evt);
+          const nextWindowStats = extractContextWindowStats(evt);
           session.contextWindowStats = nextWindowStats;
           ensureAssistantAdded();
           assistantMsg.metadata = {
@@ -2496,9 +1965,9 @@ export const useChatStore = defineStore('chat', {
           streamState.receivedTaskDone = true;
           session.backgroundTaskStatus = null;
           session.sending = false;
-          const usageStats = _extractLlmUsageStats(evt);
-          const taskWindowStats = _extractContextWindowStatsFromPayload(evt);
-          _applyPersistedTokenStats(session, evt);
+          const usageStats = extractLlmUsageStats(evt);
+          const taskWindowStats = extractContextWindowStatsFromPayload(evt);
+          applyPersistedTokenStats(session, evt);
           let metadataPatched = false;
           if (usageStats != null) {
             assistantMsg.metadata = {
@@ -2572,7 +2041,7 @@ export const useChatStore = defineStore('chat', {
         if (eventType === 'tool_intent_started') {
           if (isNested) {
             const sourceAgent = evt.source_agent || '';
-            const nestedProgress = _getToolProgressText(toolName, evt.message || evt.text || '');
+            const nestedProgress = getToolProgressText(toolName, evt.message || evt.text || '');
             const panelTaskState = startPanelToolTask(toolName, nestedProgress, evt);
             setSessionToolState(toolName, nestedProgress, Date.now());
             if (panelTaskState.binding.scope) {
@@ -2601,7 +2070,7 @@ export const useChatStore = defineStore('chat', {
         if (eventType === 'tool_exec_started') {
           if (isNested) {
             const sourceAgent = evt.source_agent || '';
-            const nestedProgress = _getToolProgressText(toolName, evt.message || evt.text || '');
+            const nestedProgress = getToolProgressText(toolName, evt.message || evt.text || '');
             const panelTaskState = startPanelToolTask(toolName, nestedProgress, evt);
             setSessionToolState(toolName, nestedProgress, Date.now());
             if (panelTaskState.binding.scope) {
@@ -2627,7 +2096,7 @@ export const useChatStore = defineStore('chat', {
               syncAssistantSnapshot();
             } else {
               // 备用：万一只有 exec 没有 intent
-              const nestedProgress = _getToolProgressText(toolName, evt.message || evt.text || '');
+              const nestedProgress = getToolProgressText(toolName, evt.message || evt.text || '');
               setSessionToolState(toolName, nestedProgress, session.toolStateStartedAt || Date.now());
               const startedAt = Number((Date.now() / 1000).toFixed(3));
               const traceData = {
@@ -2717,7 +2186,7 @@ export const useChatStore = defineStore('chat', {
             finishPanelToolTask(toolName, 'finished', evt);
             toolLoadingStats = null;
             if (parentTool && parentTool !== toolName) {
-              setSessionToolState(parentTool, _getToolProgressText(parentTool, ''), session.toolStateStartedAt || Date.now());
+              setSessionToolState(parentTool, getToolProgressText(parentTool, ''), session.toolStateStartedAt || Date.now());
             } else {
               scheduleSessionToolClear();
             }

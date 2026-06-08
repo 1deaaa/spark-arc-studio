@@ -7,6 +7,7 @@ import { igniteMuse, fetchWithAuth, createInspiration, updateInspiration, getIns
 import bus from '../eventBus';
 import { createStreamingTask, consumeTextReader, createAbortableEventSource, isAbortLikeError } from '@/utils/streamingRuntime';
 import { extractLoglineFromInspiration } from '@/utils/inspiration';
+import { i18n } from '@/i18n';
 
 // 简单的 debounce 函数
 function debounce<T extends (...args: any[]) => any>(func: T, wait: number): (...args: Parameters<T>) => void {
@@ -198,10 +199,10 @@ export function useWorldLogic() {
         if (museResult.value.trim()) {
             const shouldOverwrite = await new Promise<boolean>((resolve) => {
                 dialog.warning({
-                    title: '确认覆盖',
-                    content: '当前灵感工坊已有内容，重新点燃将覆盖现有结果。是否继续？',
-                    positiveText: '覆盖并点燃',
-                    negativeText: '取消',
+                    title: i18n.global.t('views.world.museOverwriteTitle'),
+                    content: i18n.global.t('views.world.museOverwriteContent'),
+                    positiveText: i18n.global.t('views.world.museOverwriteConfirm'),
+                    negativeText: i18n.global.t('common.cancel'),
                     onPositiveClick: () => resolve(true),
                     onNegativeClick: () => resolve(false),
                     onClose: () => resolve(false),
@@ -213,12 +214,12 @@ export function useWorldLogic() {
         museResult.value = '';
         let cancelled = false;
         const museTask = createStreamingTask('muse', {
-            text: '正在开动脑筋\(￣︶￣*\))...',
+            text: i18n.global.t('views.world.museThinking'),
             canCancel: true,
             onCancel: () => {
                 cancelled = true;
                 museLoading.value = false;
-                message.info('已取消生成');
+                message.info(i18n.global.t('views.world.museCancelled'));
             },
         });
 
@@ -273,13 +274,14 @@ export function useWorldLogic() {
                     signal: museTask.signal,
                 }
             );
-            museResult.value = '*思考中...*';
+            const pendingMuseText = `*${i18n.global.t('common.generating')}*`;
+            museResult.value = pendingMuseText;
             await consumeTextReader(reader, {
                 signal: museTask.signal,
                 onChunk: (chunk) => {
-                    museTask.push(chunk || '', '正在开动脑筋\(￣︶￣*\))...');
+                    museTask.push(chunk || '', i18n.global.t('views.world.museThinking'));
                     if (chunk) {
-                        if (museResult.value === '*思考中...*') museResult.value = '';
+                        if (museResult.value === pendingMuseText) museResult.value = '';
                         museResult.value += chunk;
                     }
                 }
@@ -295,7 +297,7 @@ export function useWorldLogic() {
             museHistoryRef.value?.refresh();
         } catch (e: unknown) {
             if (isAbortLikeError(e)) return;
-            message.error('灵感生成失败: ' + getErrorMessage(e));
+            message.error(i18n.global.t('views.world.museGenerateFailed', { error: getErrorMessage(e) }));
             museResult.value = '';
         } finally {
             museLoading.value = false;
@@ -367,13 +369,13 @@ export function useWorldLogic() {
     }
 
     async function handleGenerateFromMuse(options: { beforeGenerate?: () => void } = {}) {
-        if (!museResult.value) return message.warning('请先生成灵感');
-        if (!projectStore.currentProject) return message.warning('请先选择项目');
+        if (!museResult.value) return message.warning(i18n.global.t('views.world.needInspiration'));
+        if (!projectStore.currentProject) return message.warning(i18n.global.t('common.selectProjectFirst'));
 
         let dialogReactive;
         dialogReactive = dialog.warning({
-            title: '覆盖确认',
-            content: '生成新的世界观和角色将覆盖当前项目的所有设定。如果需要保存当前世界观，请先新建一个项目。是否继续？',
+            title: i18n.global.t('views.world.worldOverwriteTitle'),
+            content: i18n.global.t('views.world.worldOverwriteContent'),
             action: () => h(
                 NSpace,
                 { justify: 'end' },
@@ -382,7 +384,7 @@ export function useWorldLogic() {
                         h(NButton, {
                             size: 'small',
                             onClick: () => dialogReactive?.destroy()
-                        }, { default: () => '取消' }),
+                        }, { default: () => i18n.global.t('common.cancel') }),
                         h(NButton, {
                             size: 'small',
                             class: 'btn-harmonious',
@@ -393,7 +395,7 @@ export function useWorldLogic() {
                                 options.beforeGenerate?.();
                                 await startGenerateFromMuse();
                             }
-                        }, { default: () => '新建项目并生成' }),
+                        }, { default: () => i18n.global.t('views.world.createProjectAndGenerate') }),
                         h(NButton, {
                             size: 'small',
                             type: 'primary',
@@ -402,7 +404,7 @@ export function useWorldLogic() {
                                 options.beforeGenerate?.();
                                 await startGenerateFromMuse();
                             }
-                        }, { default: () => '确定覆盖并生成' })
+                        }, { default: () => i18n.global.t('views.world.overwriteAndGenerate') })
                     ]
                 }
             )
@@ -414,13 +416,13 @@ export function useWorldLogic() {
             ? projectStore.currentProject.trim()
             : '';
         if (!targetProjectName || targetProjectName === 'null' || targetProjectName === 'undefined') {
-            message.error('当前项目无效，请重新选择项目后再试');
+            message.error(i18n.global.t('views.world.invalidProject'));
             return;
         }
         try {
             await ensureCurrentInspirationBound();
         } catch (e) {
-            message.error('采纳当前灵感失败: ' + getErrorMessage(e));
+            message.error(i18n.global.t('views.world.adoptInspirationFailed', { error: getErrorMessage(e) }));
             return;
         }
 
@@ -428,15 +430,15 @@ export function useWorldLogic() {
         let cancelled = false;
         let characterSource: StreamingHandle | null = null;
         const task = createStreamingTask('world', {
-            text: '正在生成世界观...',
-            progress: '步骤 1/2',
+            text: i18n.global.t('views.world.generatingWorld'),
+            progress: i18n.global.t('views.world.stepOne'),
             canCancel: true,
             onCancel: () => {
                 if (cancelled) return;
                 cancelled = true;
                 isGenerating.value = false;
                 characterSource?.close?.();
-                message.info('已取消生成');
+                message.info(i18n.global.t('views.world.museCancelled'));
             },
         });
 
@@ -447,7 +449,7 @@ export function useWorldLogic() {
                 headers: { 'Content-Type': 'application/json' },
                 body: JSON.stringify({ projectName: targetProjectName })
             });
-            if (!resetRes.ok) throw new Error('重置现有设定失败');
+            if (!resetRes.ok) throw new Error(i18n.global.t('views.world.resetSettingsFailed'));
 
             bus.emit('characters-cleared', { projectName: targetProjectName });
             bus.emit('lorebook-refresh');
@@ -460,14 +462,14 @@ export function useWorldLogic() {
                 signal: task.signal,
             });
 
-            if (!worldviewResponse.ok) throw new Error('世界观生成失败');
-            if (!worldviewResponse.body) throw new Error('世界观流无响应体');
+            if (!worldviewResponse.ok) throw new Error(i18n.global.t('views.world.worldviewGenerateFailed'));
+            if (!worldviewResponse.body) throw new Error(i18n.global.t('views.world.worldviewNoBody'));
 
             const worldviewReader = worldviewResponse.body.getReader();
             await consumeTextReader(worldviewReader, {
                 signal: task.signal,
                 onChunk: (chunk) => {
-                    task.push(chunk, '正在生成世界观...', { progress: '步骤 1/2' });
+                    task.push(chunk, i18n.global.t('views.world.generatingWorld'), { progress: i18n.global.t('views.world.stepOne') });
                     bus.emit('worldview-stream-chunk', {
                         projectName: targetProjectName,
                         text: chunk,
@@ -479,9 +481,9 @@ export function useWorldLogic() {
 
             if (cancelled || task.aborted) return;
 
-            task.setProgress('步骤 2/2');
+            task.setProgress(i18n.global.t('views.world.stepTwo'));
 
-            const url = `/api/ai/gen-characters/stream?projectName=${encodeURIComponent(targetProjectName)}&count=4&prompt=${encodeURIComponent('根据刚生成的世界观创建主要角色')}`;
+            const url = `/api/ai/gen-characters/stream?projectName=${encodeURIComponent(targetProjectName)}&count=4&prompt=${encodeURIComponent(i18n.global.t('views.world.characterPrompt'))}`;
             const esHandle = createAbortableEventSource(url, {
                 withCredentials: true,
                 signal: task.signal,
@@ -521,7 +523,7 @@ export function useWorldLogic() {
                 es.addEventListener('character-delta', (evt) => {
                     try {
                         const payload = JSON.parse((evt as MessageEvent).data || '{}') as { id?: number; delta?: string };
-                        task.push(payload.delta || '', '正在生成角色...', { progress: '步骤 2/2' });
+                        task.push(payload.delta || '', i18n.global.t('views.world.generatingCharacters'), { progress: i18n.global.t('views.world.stepTwo') });
                         bus.emit('character-streamed', {
                             projectName: targetProjectName,
                             character: {
@@ -554,7 +556,7 @@ export function useWorldLogic() {
                 });
                 es.addEventListener('error', () => {
                     esHandle.close();
-                    cancelled ? resolve() : reject(new Error('角色生成失败'));
+                    cancelled ? resolve() : reject(new Error(i18n.global.t('views.world.charactersGenerateFailed')));
                 });
                 const check = setInterval(() => {
                     if (cancelled || task.aborted) {
@@ -566,12 +568,12 @@ export function useWorldLogic() {
             });
 
             if (cancelled || task.aborted) return;
-            message.success('世界观和角色生成完成！');
+            message.success(i18n.global.t('views.world.worldGenerationSuccess'));
             bus.emit('saved');
             bus.emit('lorebook-refresh');
         } catch (e: unknown) {
             if (isAbortLikeError(e)) return;
-            if (!cancelled) message.error('生成失败: ' + getErrorMessage(e));
+            if (!cancelled) message.error(i18n.global.t('views.world.generateFailed', { error: getErrorMessage(e) }));
         } finally {
             characterSource?.close?.();
             task.dispose();
@@ -596,8 +598,8 @@ export function useWorldLogic() {
     }
 
     async function goToSynopsis(options: GoToSynopsisOptions = {}) {
-        if (!museResult.value) return message.warning('请先生成灵感');
-        if (!projectStore.currentProject) return message.warning('请先选择项目');
+        if (!museResult.value) return message.warning(i18n.global.t('views.world.needInspiration'));
+        if (!projectStore.currentProject) return message.warning(i18n.global.t('common.selectProjectFirst'));
 
         try {
             const [existingSynopsis, existingBeatSheet] = await Promise.all([
@@ -611,10 +613,10 @@ export function useWorldLogic() {
             if (shouldConfirmStepGeneration && (hasSynopsis || hasBeatSheet)) {
                 return new Promise<void>((resolve) => {
                     dialog.warning({
-                        title: '确认覆盖',
-                        content: '梗概或节奏表已有内容，继续将覆盖现有结果。是否继续？',
-                        positiveText: '覆盖并继续',
-                        negativeText: '取消',
+                        title: i18n.global.t('views.world.synopsisOverwriteTitle'),
+                        content: i18n.global.t('views.world.synopsisStepOverwriteContent'),
+                        positiveText: i18n.global.t('views.world.synopsisStepOverwriteConfirm'),
+                        negativeText: i18n.global.t('common.cancel'),
                         onPositiveClick: async () => {
                             await proceedToSynopsis(options);
                             resolve();
@@ -626,10 +628,10 @@ export function useWorldLogic() {
             if (!shouldConfirmStepGeneration && hasSynopsis) {
                 return new Promise<void>((resolve) => {
                     dialog.warning({
-                        title: '确认覆盖',
-                        content: '梗概页面已有内容，是否使用当前的灵感和核心概念覆盖它？',
-                        positiveText: '确定覆盖',
-                        negativeText: '取消',
+                        title: i18n.global.t('views.world.synopsisOverwriteTitle'),
+                        content: i18n.global.t('views.world.synopsisPageOverwriteContent'),
+                        positiveText: i18n.global.t('views.world.synopsisPageOverwriteConfirm'),
+                        negativeText: i18n.global.t('common.cancel'),
                         onPositiveClick: async () => {
                             await proceedToSynopsis(options);
                             resolve();
@@ -678,11 +680,11 @@ export function useWorldLogic() {
     // 手动采纳灵感：排他绑定 + 保存 story tags（不跳转页面）
     async function handlePinInspiration() {
         if (!museResult.value) {
-            message.warning('请先生成或选择一条灵感');
+            message.warning(i18n.global.t('views.world.needGeneratedOrSelectedInspiration'));
             return;
         }
         if (!projectStore.currentProject) {
-            message.warning('请先选择项目');
+            message.warning(i18n.global.t('common.selectProjectFirst'));
             return;
         }
 
