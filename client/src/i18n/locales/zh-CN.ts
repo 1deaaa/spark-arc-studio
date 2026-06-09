@@ -785,7 +785,7 @@ const zhCN = {
       windowTokenHint: '当前聊天面板最近一次实际塞入该 Agent 上下文窗口的 token。↑ 表示本次请求真正进入窗口的上下文输入，↓ 表示该 Agent 在本次任务中的真实输出。',
       stop: '停止',
       send: '发送',
-      inputPlaceholder: '输入消息或上传文件...',
+      inputPlaceholder: '输入消息，Ctrl/Shift+Enter 发送...',
       attachFile: '上传文件作为聊天上下文',
       removeImportedFile: '删除',
       replaceImportedFile: '更换',

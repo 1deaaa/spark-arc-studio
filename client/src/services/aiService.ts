@@ -28,7 +28,7 @@ type StreamRequestOptions = {
  * 将错误信息转换为用户友好的提示文本。
  *
  * 职责边界：
- * - 后端 format_ai_error 已负责 LLM 端点错误码的三语友好提示（401/400/429/404/500/503/context_length/insufficient_quota/connection 等），
+ * - 后端 format_ai_error 已负责 LLM 端点错误码的四语友好提示（401/400/429/404/500/503/context_length/insufficient_quota/connection 等），
  *   前端只做透传，不做重复映射。
  * - 本函数仅处理**后端未触及的纯 HTTP 层兜底**：
  *   Nginx/网关拦截、网络断连等场景（后端进程根本没机会 format）。

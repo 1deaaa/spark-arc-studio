@@ -787,7 +787,7 @@ const jaJP = {
       windowTokenHint: 'このチャットパネルの直近実コンテキストウィンドウです。↑ はこの Agent のウィンドウに実際に入った文脈/入力トークン、↓ はこのタスクでの実出力トークンです。',
       stop: '停止',
       send: '送信',
-      inputPlaceholder: 'メッセージを入力...',
+      inputPlaceholder: 'メッセージを入力、Ctrl/Shift+Enter で送信...',
       attachFile: 'ファイルをチャット文脈として添付',
       removeImportedFile: '削除',
       replaceImportedFile: '差し替え',

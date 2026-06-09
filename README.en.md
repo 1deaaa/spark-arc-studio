@@ -1,6 +1,6 @@
 # SparkArc: Cross-Platform Agent Studio for Story Creation
 
-[简体中文](README.md) | [English](README.en.md) | [日本語](README.ja.md)
+[简体中文](README.md) | [English](README.en.md) | [日本語](README.ja.md) | [한국어](README.ko.md)
 
 SparkArc is a production-grade creative studio powered by coordinated Agents.
 It helps creators turn a tiny spark into a complete story world and publishable output across:
@@ -120,7 +120,7 @@ Every specialist Agent's prompts are strictly separated into three invocation mo
 
 SparkArc builds a specialized agent cluster rather than relying on a single LLM. Each Agent has its own persona, prompt engineering, and model configuration.
 
-> 💡 **Internationalization**: Agent registry (`registry.py`) natively supports `zh-CN` / `en-US` / `ja-JP`. Frontend uses i18n mapping; backend uses `resolve_agent_i18n_field()` to extract fields by request locale.
+> 💡 **Internationalization**: Agent registry (`registry.py`) natively supports `zh-CN` / `en-US` / `ja-JP` / `ko-KR`. Frontend uses i18n mapping; backend uses `resolve_agent_i18n_field()` to extract fields by request locale.
 
 #### A. Orchestrator
 
@@ -611,7 +611,7 @@ For mobile or remote access to your private instance, you can deploy on a cloud 
 
 ## Localization and Language Policy
 
-- UI locales: `zh-CN`, `en-US`, `ja-JP`
+- UI locales: `zh-CN`, `en-US`, `ja-JP`, `ko-KR`
 - Frontend language is switchable in Settings
 - Agent system prompts apply a unified locale policy:
 

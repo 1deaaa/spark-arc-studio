@@ -787,7 +787,7 @@ const enUS = {
       windowTokenHint: 'The latest actual context window for this chat panel. ↑ means the context/input tokens that really entered this agent’s window, ↓ means this agent’s real output tokens for the task.',
       stop: 'Stop',
       send: 'Send',
-      inputPlaceholder: 'Type a message...',
+      inputPlaceholder: 'Type a message, Ctrl/Shift+Enter to send...',
       attachFile: 'Attach a file as chat context',
       removeImportedFile: 'Remove',
       replaceImportedFile: 'Replace',

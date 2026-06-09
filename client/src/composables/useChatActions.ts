@@ -197,7 +197,7 @@ export function useChatActions(adapter: ChatActionsAdapter, options: UseChatActi
     );
 
     function onDraftKeydown(e: KeyboardEvent) {
-        if (e.key === 'Enter' && !e.shiftKey && !e.ctrlKey && !e.altKey && !e.metaKey) {
+        if (e.key === 'Enter' && (e.shiftKey || e.ctrlKey) && !e.altKey && !e.metaKey) {
             e.preventDefault();
             send();
         }
@@ -242,7 +242,7 @@ export function useChatActions(adapter: ChatActionsAdapter, options: UseChatActi
     }
 
     function onEditKeydown(e: KeyboardEvent, id: MessageId | null | undefined) {
-        if (e.key === 'Enter' && !e.shiftKey && !e.ctrlKey && !e.altKey && !e.metaKey) {
+        if (e.key === 'Enter' && (e.shiftKey || e.ctrlKey) && !e.altKey && !e.metaKey) {
             e.preventDefault();
             void saveEdit(id);
         } else if (e.key === 'Escape') {

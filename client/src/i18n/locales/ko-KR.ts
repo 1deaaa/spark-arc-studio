@@ -785,7 +785,7 @@ const koKR = {
       windowTokenHint: '가장 최근 대화 응답 시점에 Agent의 기억 컨텍스트 윈도우 창크기 안에 들어간 실제 물리 토큰값입니다.',
       stop: '정지',
       send: '전송',
-      inputPlaceholder: '메시지를 작성하거나 문서를 드래그하세요...',
+      inputPlaceholder: '메시지를 입력하고 Ctrl/Shift+Enter로 전송...',
       attachFile: '참고용 자료를 대화 맥락에 연동하기',
       removeImportedFile: '제거',
       replaceImportedFile: '파일 교체',

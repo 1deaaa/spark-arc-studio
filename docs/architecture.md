@@ -350,7 +350,7 @@ SparkArc 前端有两条独立的流式消费链路，不可混淆：
 
 ## 5. Agent Registry 国际化
 
-Agent 注册表（`server/agents/registry.py`）采用多语言字典结构，每个 Agent 的 `name` / `display` / `description` 均包含 `zh-CN` / `en-US` / `ja-JP` 三种语言。
+Agent 注册表（`server/agents/registry.py`）采用多语言字典结构，每个 Agent 的 `name` / `display` / `description` 均包含 `zh-CN` / `en-US` / `ja-JP` / `ko-KR` 四种语言。
 
 - 前端通过 i18n 的 `components.agentNames` / `agentDescriptions` 做本地映射
 - 后端通过 `resolve_agent_i18n_field()` 按请求 locale 提取对应字段

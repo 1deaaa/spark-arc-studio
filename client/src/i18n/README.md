@@ -2,7 +2,7 @@
 
 ## 目标
 - 所有用户可见文本统一接入 i18n。
-- 任何新功能上线前，必须补齐 `zh-CN` / `en-US` / `ja-JP`。
+- 任何新功能上线前，必须补齐 `zh-CN` / `en-US` / `ja-JP` / `ko-KR`。
 
 ## 目录结构
 - `src/i18n/index.ts`: i18n 初始化与全局配置。
@@ -10,10 +10,11 @@
 - `src/i18n/locales/zh-CN.ts`: 中文词条。
 - `src/i18n/locales/en-US.ts`: 英文词条。
 - `src/i18n/locales/ja-JP.ts`: 日文词条。
+- `src/i18n/locales/ko-KR.ts`: 韩文词条。
 
 ## 新增文案流程
 1. 先在 `zh-CN.ts` 增加语义化 key。
-2. 同步在 `en-US.ts` 与 `ja-JP.ts` 填写翻译。
+2. 同步在 `en-US.ts`、`ja-JP.ts` 与 `ko-KR.ts` 填写翻译。
 3. 在组件里使用 `t('your.key.path')`，禁止硬编码文本。
 4. 运行 `npm run typecheck` 确认类型与模板无误。
 

@@ -250,7 +250,7 @@ const AUTO_ENTER_KEY = 'spark_launcher_auto_enter';
 const { t, locale } = useI18n();
 const themeStore = useThemeStore();
 
-// 当前 locale 对应的简短标签（中文/EN/日本語）。点击按钮循环 zh-CN → en-US → ja-JP。
+// 当前 locale 对应的简短标签（中文/EN/日本語/한국어）。点击按钮循环 zh-CN → en-US → ja-JP → ko-KR。
 const currentLocaleLabel = computed<string>(() => {
   const cur = normalizeLocale(locale.value);
   return t(`launcher.localeSwitcher.labels.${cur}`);

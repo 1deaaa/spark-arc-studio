@@ -32,7 +32,12 @@
         <!-- 助手消息：按 segments 顺序渲染 -->
         <template v-else-if="m.role === 'assistant'">
           <template v-for="(seg, segIdx) in getMessageSegments(m)" :key="`seg-${idx}-${segIdx}`">
-            <div v-if="seg.type === 'reasoning' && getReasoningSegmentText(seg)" class="chat-bubble" :class="{ 'has-agent-avatar': !!seg.source_agent }">
+            <div
+              v-if="seg.type === 'reasoning' && getReasoningSegmentText(seg)"
+              class="chat-bubble reasoning-bubble"
+              :class="{ 'has-agent-avatar': !!seg.source_agent }"
+              :style="getReasoningBlockStyle(getReasoningSegmentKey(m, idx, segIdx))"
+            >
               <n-tooltip v-if="seg.source_agent" trigger="hover">
                 <template #trigger>
                   <AgentAvatar
@@ -48,6 +53,7 @@
               <div
                 class="reasoning-block"
                 :class="{ 'is-finished': !isReasoningSegmentThinking(m, idx, segIdx) }"
+                :style="getReasoningBlockStyle(getReasoningSegmentKey(m, idx, segIdx))"
               >
                 <div class="reasoning-toggle" :class="{ 'is-thinking': isReasoningSegmentThinking(m, idx, segIdx) }" @click="toggleReasoning(getReasoningSegmentKey(m, idx, segIdx))">
                   <svg v-if="isReasoningSegmentThinking(m, idx, segIdx)" class="reasoning-thinking-icon" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
@@ -63,8 +69,12 @@
                   class="reasoning-content-wrapper"
                   :class="{
                     'is-expanded': reasoningExpanded[getReasoningSegmentKey(m, idx, segIdx)],
+                    'is-animating': reasoningHeightMeta[getReasoningSegmentKey(m, idx, segIdx)]?.animating,
+                    'is-opening': reasoningHeightMeta[getReasoningSegmentKey(m, idx, segIdx)]?.phase === 'opening',
+                    'is-closing': reasoningHeightMeta[getReasoningSegmentKey(m, idx, segIdx)]?.phase === 'closing',
                     'is-auto-streaming': autoExpandedMap[getReasoningSegmentKey(m, idx, segIdx)] && isReasoningSegmentThinking(m, idx, segIdx),
                   }"
+                  :style="getReasoningContentStyle(getReasoningSegmentKey(m, idx, segIdx))"
                 >
                   <div class="reasoning-content" :ref="(el) => setReasoningContentRef(getReasoningSegmentKey(m, idx, segIdx), el)">
                     <div class="reasoning-inner">
@@ -327,7 +337,7 @@
  * 从 GlobalChatFloat.vue 提取的桌面端/移动端共用消息渲染模板
  * 模板和对应的 scoped CSS 一同搬运，确保样式完整
  */
-import { ref, computed, nextTick, watch, type PropType } from 'vue';
+import { ref, computed, nextTick, watch, onBeforeUnmount, type PropType } from 'vue';
 import { useI18n } from 'vue-i18n';
 import { NButton, NIcon, NInput, NPopover, NTooltip, useMessage } from 'naive-ui';
 import MarkdownRenderer from '@/components/share/MarkdownRenderer.vue';
@@ -624,7 +634,257 @@ function toggleThinkingNotice() {
 const reasoningExpanded = ref({});
 const toolTraceExpanded = ref({});
 const contextSummaryExpanded = ref({});
-const reasoningContentRefs = ref({});
+const reasoningContentRefs = new Map<string, HTMLElement>();
+const reasoningHeightMeta = ref({});
+const reasoningAnimationTimers = new Map<string, number>();
+const STREAMING_REASONING_MAX_HEIGHT = 108;
+const REASONING_REVEAL_TIMER_MS = 360;
+
+function getReasoningMeta(key: string) {
+  return reasoningHeightMeta.value[key] || { height: 0, width: 0, animating: false, phase: '' };
+}
+
+function setReasoningMeta(key: string, patch: Record<string, unknown>) {
+  reasoningHeightMeta.value = {
+    ...reasoningHeightMeta.value,
+    [key]: {
+      ...getReasoningMeta(key),
+      ...patch,
+    },
+  };
+}
+
+function clearReasoningAnimationTimer(key: string) {
+  const timer = reasoningAnimationTimers.get(key);
+  if (timer) {
+    window.clearTimeout(timer);
+    reasoningAnimationTimers.delete(key);
+  }
+}
+
+function getReasoningWrapper(key: string) {
+  return reasoningContentRefs.get(key)?.closest('.reasoning-content-wrapper') as HTMLElement | null;
+}
+
+function getReasoningVisibleHeight(key: string) {
+  const wrapper = getReasoningWrapper(key);
+  if (!wrapper) return Number(getReasoningMeta(key).height || 0);
+  return Math.max(0, Math.round(wrapper.getBoundingClientRect().height));
+}
+
+function measureReasoningHeight(key: string, streaming = false) {
+  const el = reasoningContentRefs.get(key);
+  if (!el) return 0;
+  const wrapper = el.closest('.reasoning-content-wrapper') as HTMLElement | null;
+  const previous = wrapper ? {
+    height: wrapper.style.height,
+    maxHeight: wrapper.style.maxHeight,
+    overflow: wrapper.style.overflow,
+    clipPath: wrapper.style.clipPath,
+    transition: wrapper.style.transition,
+  } : null;
+  try {
+    if (wrapper) {
+      wrapper.style.transition = 'none';
+      wrapper.style.height = 'auto';
+      wrapper.style.maxHeight = 'none';
+      wrapper.style.overflow = 'hidden';
+      wrapper.style.clipPath = 'inset(0 0 100% 0)';
+      // 强制浏览器在最终宽度下完成一次布局，再读取 Markdown 的真实高度。
+      void wrapper.offsetHeight;
+    }
+    const contentEl = (el.querySelector('.reasoning-inner') as HTMLElement | null)
+      || (el.firstElementChild as HTMLElement | null)
+      || el;
+    const fullHeight = Math.ceil(Math.max(
+      contentEl.getBoundingClientRect().height || 0,
+      contentEl.scrollHeight || 0,
+    ));
+    if (!streaming) return fullHeight;
+    return Math.min(fullHeight, STREAMING_REASONING_MAX_HEIGHT);
+  } finally {
+    if (wrapper && previous) {
+      wrapper.style.height = previous.height;
+      wrapper.style.maxHeight = previous.maxHeight;
+      wrapper.style.overflow = previous.overflow;
+      wrapper.style.clipPath = previous.clipPath;
+      wrapper.style.transition = previous.transition;
+    }
+  }
+}
+
+function estimateReasoningHeight(key: string, streaming = false) {
+  const el = reasoningContentRefs.get(key);
+  if (!el) return 0;
+  const markdown = el.querySelector('.reasoning-markdown') as HTMLElement | null;
+  const inner = el.querySelector('.reasoning-inner') as HTMLElement | null;
+  const source = markdown || inner || el;
+  const style = window.getComputedStyle(markdown || source);
+  const lineHeight = Number.parseFloat(style.lineHeight || '') || 18.5;
+  const width = Math.max(1, source.getBoundingClientRect().width || el.getBoundingClientRect().width || 720);
+  const fontSize = Number.parseFloat(style.fontSize || '') || 14;
+  const averageCharWidth = fontSize * 0.65;
+  const charsPerLine = Math.max(18, Math.floor(width / averageCharWidth));
+  const blockNodes = markdown
+    ? Array.from(markdown.querySelectorAll('p, li, h1, h2, h3, h4, h5, h6, blockquote, pre'))
+      .filter(node => node.tagName.toLowerCase() === 'li' || !node.closest('li'))
+    : [];
+  const lines = blockNodes.length > 0
+    ? blockNodes.reduce((sum, node) => {
+      const text = (node.textContent || '').trim();
+      if (!text) return sum;
+      return sum + Math.max(1, Math.ceil(text.length / charsPerLine));
+    }, 0)
+    : (source.textContent || '').split(/\n/).reduce((sum, line) => {
+      const trimmed = line.trim();
+      if (!trimmed) return sum + 0.35;
+      return sum + Math.max(1, Math.ceil(trimmed.length / charsPerLine));
+    }, 0);
+  const innerStyle = inner ? window.getComputedStyle(inner) : null;
+  const verticalChrome = (innerStyle
+    ? Number.parseFloat(innerStyle.paddingTop || '0') + Number.parseFloat(innerStyle.paddingBottom || '0')
+    : 12) + 1;
+  const estimated = Math.ceil((lines + 1) * lineHeight + verticalChrome);
+  if (!streaming) return estimated;
+  return Math.min(estimated, STREAMING_REASONING_MAX_HEIGHT);
+}
+
+function getReasoningTargetHeight(key: string, streaming = false) {
+  const cached = Number(getReasoningMeta(key).measuredHeight || 0);
+  if (cached > 0) return streaming ? Math.min(cached, STREAMING_REASONING_MAX_HEIGHT) : cached;
+  return estimateReasoningHeight(key, streaming);
+}
+
+function measureReasoningWidth(key: string) {
+  const el = reasoningContentRefs.get(key);
+  const block = el?.closest('.reasoning-block') as HTMLElement | null;
+  if (!el || !block) return 0;
+
+  const container = block.closest('.chat-bubble-container') as HTMLElement | null;
+  const containerWidth = Math.floor(container?.getBoundingClientRect().width || document.documentElement.clientWidth || 0);
+  const clone = block.cloneNode(true) as HTMLElement;
+  try {
+    clone.style.position = 'fixed';
+    clone.style.left = '-10000px';
+    clone.style.top = '0';
+    clone.style.visibility = 'hidden';
+    clone.style.pointerEvents = 'none';
+    clone.style.width = 'max-content';
+    clone.style.minWidth = '0';
+    clone.style.maxWidth = containerWidth > 0 ? `${containerWidth}px` : 'none';
+    clone.style.height = 'auto';
+    const cloneWrapper = clone.querySelector('.reasoning-content-wrapper') as HTMLElement | null;
+    if (cloneWrapper) {
+      cloneWrapper.style.height = 'auto';
+      cloneWrapper.style.overflow = 'visible';
+    }
+    document.body.appendChild(clone);
+    const contentEl = (clone.querySelector('.reasoning-content') as HTMLElement | null) || clone;
+    const contentWidth = Math.ceil(Math.max(
+      contentEl.scrollWidth || 0,
+      clone.scrollWidth || 0,
+      contentEl.getBoundingClientRect().width || 0,
+      clone.getBoundingClientRect().width || 0,
+    ));
+    const blockStyle = window.getComputedStyle(clone);
+    const borderWidth = Number.parseFloat(blockStyle.borderLeftWidth || '0') + Number.parseFloat(blockStyle.borderRightWidth || '0');
+    const measuredWidth = contentWidth > 0 ? contentWidth + borderWidth : 0;
+    if (containerWidth > 0) return Math.min(measuredWidth, containerWidth);
+    return measuredWidth;
+  } finally {
+    clone.remove();
+  }
+}
+
+function getReasoningContentStyle(key: string) {
+  const meta = getReasoningMeta(key);
+  return {
+    '--reasoning-panel-height': `${Math.max(0, Number(meta.height || 0))}px`,
+  };
+}
+
+function getReasoningBlockStyle(key: string) {
+  const meta = getReasoningMeta(key);
+  const width = Math.max(0, Number(meta.width || 0));
+  return width > 0 ? { '--reasoning-block-width': `${width}px` } : {};
+}
+
+function finishReasoningRevealAnimation(key: string, patch: Record<string, unknown> = {}) {
+  clearReasoningAnimationTimer(key);
+  setReasoningMeta(key, { animating: false, phase: '', ...patch });
+}
+
+function animateReasoningReveal(
+  key: string,
+  phase: 'opening' | 'closing',
+  patch: Record<string, unknown>,
+  onDone?: () => void,
+) {
+  clearReasoningAnimationTimer(key);
+  setReasoningMeta(key, { ...patch, animating: true, phase });
+  reasoningAnimationTimers.set(key, window.setTimeout(() => {
+    if (onDone) {
+      onDone();
+    } else {
+      finishReasoningRevealAnimation(key);
+    }
+    reasoningAnimationTimers.delete(key);
+  }, REASONING_REVEAL_TIMER_MS));
+}
+
+function flushReasoningLayout(key: string) {
+  void getReasoningWrapper(key)?.offsetHeight;
+}
+
+function openReasoningPanel(key: string, streaming = false) {
+  clearReasoningAnimationTimer(key);
+  const wrapper = getReasoningWrapper(key);
+  if (wrapper) {
+    wrapper.style.height = '';
+    wrapper.style.overflow = '';
+    wrapper.style.clipPath = '';
+    wrapper.style.transition = '';
+  }
+  const currentHeight = getReasoningVisibleHeight(key);
+  const targetHeight = getReasoningTargetHeight(key, streaming);
+  reasoningExpanded.value = { ...reasoningExpanded.value, [key]: true };
+  setReasoningMeta(key, {
+    height: currentHeight,
+    width: measureReasoningWidth(key),
+    animating: false,
+    phase: '',
+    desiredExpanded: true,
+  });
+  flushReasoningLayout(key);
+  animateReasoningReveal(key, 'opening', { height: targetHeight }, () => {
+    const measuredHeight = measureReasoningHeight(key, streaming) || targetHeight;
+    finishReasoningRevealAnimation(key, {
+      height: targetHeight,
+      measuredHeight,
+      desiredExpanded: true,
+    });
+  });
+  scrollReasoningToBottom(key);
+}
+
+function closeReasoningPanel(key: string) {
+  clearReasoningAnimationTimer(key);
+  const currentHeight = getReasoningVisibleHeight(key);
+  reasoningExpanded.value = { ...reasoningExpanded.value, [key]: true };
+  setReasoningMeta(key, {
+    height: currentHeight,
+    width: measureReasoningWidth(key),
+    animating: false,
+    phase: '',
+    desiredExpanded: false,
+  });
+  flushReasoningLayout(key);
+  animateReasoningReveal(key, 'closing', { height: 0 }, () => {
+    reasoningExpanded.value = { ...reasoningExpanded.value, [key]: false };
+    finishReasoningRevealAnimation(key, { height: 0, desiredExpanded: false });
+  });
+}
+
 function getReasoningSegmentKey(message, idx, segIdx) {
   return `${getMessageKey(message, idx)}:reasoning:${segIdx}`;
 }
@@ -639,23 +899,34 @@ function toggleToolTrace(key: string) {
 
 function setReasoningContentRef(key, el) {
   if (el) {
-    reasoningContentRefs.value[key] = el;
+    reasoningContentRefs.set(key, el);
+    nextTick(() => {
+      const width = measureReasoningWidth(key);
+      if (width > 0 && Math.abs(width - Number(getReasoningMeta(key).width || 0)) > 1) {
+        setReasoningMeta(key, { width });
+      }
+    });
     return;
   }
-  delete reasoningContentRefs.value[key];
+  reasoningContentRefs.delete(key);
+  delete reasoningHeightMeta.value[key];
+  clearReasoningAnimationTimer(key);
 }
 
 function scrollReasoningToBottom(key) {
-  const el = reasoningContentRefs.value[key];
+  const el = reasoningContentRefs.get(key);
   if (!el) return;
   el.scrollTop = el.scrollHeight;
 }
 
 function toggleReasoning(key) {
-  reasoningExpanded.value = { ...reasoningExpanded.value, [key]: !reasoningExpanded.value[key] };
-  if (reasoningExpanded.value[key]) {
-    nextTick(() => scrollReasoningToBottom(key));
+  const meta = getReasoningMeta(key);
+  const currentlyOpening = meta.desiredExpanded ?? reasoningExpanded.value[key];
+  if (currentlyOpening) {
+    closeReasoningPanel(key);
+    return;
   }
+  openReasoningPanel(key);
 }
 
 function hasVisibleContentAfterSegment(message, segIdx) {
@@ -721,10 +992,13 @@ watch(
         if (!autoExpandedMap.value[reasoningKey]) {
           autoExpandedMap.value = { ...autoExpandedMap.value, [reasoningKey]: true };
           if (!reasoningExpanded.value[reasoningKey]) {
-            reasoningExpanded.value = { ...reasoningExpanded.value, [reasoningKey]: true };
+            openReasoningPanel(reasoningKey, true);
           }
         }
-        nextTick(() => scrollReasoningToBottom(reasoningKey));
+        nextTick(() => {
+          setReasoningMeta(reasoningKey, { height: measureReasoningHeight(reasoningKey, true) });
+          scrollReasoningToBottom(reasoningKey);
+        });
       } else {
         const oldMsg = oldHistory && oldHistory.length > lastIdx ? oldHistory[lastIdx] : null;
         const oldHasDisplayAfter = oldMsg ? (() => {
@@ -740,13 +1014,20 @@ watch(
         })() : false;
 
         if (!oldHasDisplayAfter && reasoningExpanded.value[reasoningKey]) {
-          reasoningExpanded.value = { ...reasoningExpanded.value, [reasoningKey]: false };
+          closeReasoningPanel(reasoningKey);
         }
       }
     }
   },
   { deep: true }
 );
+
+onBeforeUnmount(() => {
+  for (const timer of reasoningAnimationTimers.values()) {
+    window.clearTimeout(timer);
+  }
+  reasoningAnimationTimers.clear();
+});
 
 function startEdit(m) {
   emit('start-edit', m);
@@ -954,6 +1235,14 @@ defineExpose({ listRef });
 
 .chat-msg.assistant .chat-bubble {
   border-top-left-radius: 4px;
+}
+
+.chat-msg.assistant .chat-bubble.reasoning-bubble {
+  width: fit-content;
+  min-width: min(1100px, 100%);
+  max-width: 100%;
+  box-sizing: border-box;
+  align-self: flex-start;
 }
 
 .tool-inline-msg {
@@ -1186,6 +1475,9 @@ defineExpose({ listRef });
 /* 思考过程折叠块 */
 .reasoning-block {
   margin-bottom: 8px;
+  width: 100%;
+  max-width: 100%;
+  box-sizing: border-box;
   border: 1px solid var(--spark-border);
   border-radius: 8px;
   overflow: hidden;
@@ -1263,29 +1555,30 @@ defineExpose({ listRef });
   margin-left: auto;
 }
 
-/* 深度思考展开面板 - CSS Grid 0fr/1fr 折叠动画（移动端流畅，无 JS layout thrashing） */
+/* 深度思考展开面板：内容完整渲染在后方，外层窗口负责裁切展示。 */
 .reasoning-content-wrapper {
-  display: grid;
-  grid-template-rows: 0fr;
-  transition: grid-template-rows 0.2s cubic-bezier(0.4, 0, 1, 1);
-  /* 始终保留 layout/style 隔离：阻止 inner 高度变化冒泡到外层 chat-list；
-     无论展开/折叠都生效，避免流式期间用户手动展开时引发整列重排。
-     contain 不参与 transition 插值，只在 class 切换时离散变化，不影响动画曲线。 */
-  contain: layout style;
+  position: relative;
+  height: 0;
+  overflow: hidden;
+  contain: layout paint style;
+  transition: height 320ms cubic-bezier(0.22, 0.72, 0.16, 1);
+  will-change: height;
 }
 
 .reasoning-content-wrapper.is-expanded {
-  grid-template-rows: 1fr;
-  transition: grid-template-rows 0.2s cubic-bezier(0, 0, 0.2, 1);
+  height: var(--reasoning-panel-height, auto);
+}
+
+.reasoning-content-wrapper.is-closing {
+  height: 0;
 }
 
 .reasoning-content {
   overflow: hidden;
-  min-height: 0;
+  min-height: auto;
 }
 
 .reasoning-content-wrapper.is-auto-streaming .reasoning-content {
-  max-height: calc(1.5em * 5 + 12px);
   overflow-y: auto;
   overscroll-behavior: contain;
 }
@@ -1296,10 +1589,7 @@ defineExpose({ listRef });
   line-height: 1.5;
   color: var(--spark-text-secondary);
   border-top: 1px solid var(--spark-border);
-  /* 隔离内部布局变化对外层的影响，减少移动端重排范围 */
-  contain: content;
-  /* 流式期间允许内容溢出裁剪但不触发外层重排 */
-  overflow: hidden;
+  overflow: visible;
 }
 
 /* 深度思考块重新启用流式 Markdown，由 markstream-vue 做增量解析与批量渲染。 */

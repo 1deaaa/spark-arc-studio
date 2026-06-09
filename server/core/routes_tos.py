@@ -39,7 +39,7 @@ def _resolve_tos_path(lang: str = 'zh-CN') -> str:
 
 
 @tos_router.get('/api/tos')
-async def get_tos(lang: str = Query('zh-CN', description='语言代码，如 zh-CN / en-US / ja-JP')):
+async def get_tos(lang: str = Query('zh-CN', description='语言代码，如 zh-CN / en-US / ja-JP / ko-KR')):
     """获取服务条款内容，支持按语言返回对应版本"""
     try:
         tos_path = _resolve_tos_path(lang)

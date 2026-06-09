@@ -124,19 +124,25 @@
           class="chat-textarea"
         />
         <n-button
-          :type="sending ? 'error' : 'primary'"
           circle
           size="small"
           @click="sending ? $emit('stop') : $emit('send')"
-          class="send-btn"
+          class="send-btn spark-send-btn"
+          :class="{ 'is-working': sending }"
+          :aria-label="sending ? t('components.chatPanel.stop') : t('components.chatPanel.send')"
         >
           <template #icon>
-            <svg v-if="sending" viewBox="0 0 24 24" fill="currentColor" width="18" height="18">
-              <path d="M7 7h10v10H7z"/>
-            </svg>
-            <svg v-else viewBox="0 0 24 24" fill="currentColor" width="18" height="18">
-              <path d="M2.01 21L23 12 2.01 3 2 10l15 2-15 2z"/>
-            </svg>
+            <span class="send-icon-stage" aria-hidden="true">
+              <svg class="send-glyph send-glyph--ready" viewBox="0 0 24 24" fill="none">
+                <path class="send-spark" d="M12 3.5l1.5 4.6 4.6 1.5-4.6 1.5-1.5 4.6-1.5-4.6-4.6-1.5 4.6-1.5L12 3.5Z" />
+                <path class="send-arrow" d="M4 19.5 21 12 4 4.5l2.1 6.1L14 12l-7.9 1.4L4 19.5Z" />
+              </svg>
+              <svg class="send-glyph send-glyph--working" viewBox="0 0 24 24" fill="none">
+                <circle class="work-orbit" cx="12" cy="12" r="8.5" />
+                <path class="work-core" d="M9 9h6v6H9z" />
+                <path class="work-spark" d="M18.5 4.5 19.2 7l2.3.8-2.3.8-.7 2.4-.8-2.4-2.2-.8 2.2-.8.8-2.5Z" />
+              </svg>
+            </span>
           </template>
         </n-button>
       </div>
@@ -445,6 +451,141 @@ defineExpose({ listRef: chatListRef });
 .chat-input-wrapper .send-btn {
   flex-shrink: 0;
   align-self: flex-end;
+}
+
+.spark-send-btn {
+  --send-size: 34px;
+  width: var(--send-size) !important;
+  height: var(--send-size) !important;
+  min-width: var(--send-size) !important;
+  color: var(--spark-text-inverse) !important;
+  border: 1px solid rgba(var(--spark-primary-rgb), 0.3) !important;
+  background:
+    radial-gradient(circle at 68% 28%, rgba(255, 255, 255, 0.48), transparent 18px),
+    linear-gradient(135deg, var(--spark-primary-light), var(--spark-primary)) !important;
+  box-shadow:
+    0 8px 18px rgba(var(--spark-primary-rgb), 0.22),
+    inset 0 0 0 1px rgba(255, 255, 255, 0.2);
+  transition:
+    transform 0.18s ease,
+    box-shadow 0.22s ease,
+    background 0.22s ease,
+    border-color 0.22s ease;
+}
+
+.spark-send-btn:hover {
+  transform: translateY(-1px);
+  box-shadow:
+    0 10px 22px rgba(var(--spark-primary-rgb), 0.28),
+    inset 0 0 0 1px rgba(255, 255, 255, 0.22);
+}
+
+.spark-send-btn:active {
+  transform: translateY(0) scale(0.94);
+}
+
+.spark-send-btn.is-working {
+  border-color: color-mix(in srgb, var(--spark-primary), #ff4d4f 38%) !important;
+  background:
+    radial-gradient(circle at 35% 30%, rgba(255, 255, 255, 0.38), transparent 18px),
+    linear-gradient(135deg, color-mix(in srgb, var(--spark-primary), #ff4d4f 28%), var(--spark-primary)) !important;
+  box-shadow:
+    0 0 0 4px rgba(var(--spark-primary-rgb), 0.1),
+    0 8px 20px rgba(var(--spark-primary-rgb), 0.28);
+}
+
+.send-icon-stage {
+  position: relative;
+  display: inline-grid;
+  place-items: center;
+  width: 20px;
+  height: 20px;
+}
+
+.send-glyph {
+  grid-area: 1 / 1;
+  width: 20px;
+  height: 20px;
+  overflow: visible;
+  color: currentColor;
+  transform-origin: center;
+  transition: opacity 0.18s ease, transform 0.22s cubic-bezier(0.2, 0, 0.2, 1);
+}
+
+.send-glyph--ready {
+  opacity: 1;
+  transform: rotate(0deg) scale(1);
+}
+
+.send-glyph--working {
+  opacity: 0;
+  transform: rotate(-80deg) scale(0.65);
+}
+
+.spark-send-btn.is-working .send-glyph--ready {
+  opacity: 0;
+  transform: rotate(70deg) scale(0.58);
+}
+
+.spark-send-btn.is-working .send-glyph--working {
+  opacity: 1;
+  transform: rotate(0deg) scale(1);
+}
+
+.send-arrow {
+  fill: currentColor;
+  opacity: 0.95;
+}
+
+.send-spark {
+  fill: currentColor;
+  opacity: 0.32;
+  transform-origin: center;
+  animation: sendSparkRest 2.8s ease-in-out infinite;
+}
+
+.work-orbit {
+  stroke: currentColor;
+  stroke-width: 1.8;
+  stroke-linecap: round;
+  stroke-dasharray: 13 42;
+  opacity: 0.72;
+  transform-origin: center;
+  animation: sendWorkOrbit 1.15s linear infinite;
+}
+
+.work-core {
+  fill: currentColor;
+  rx: 1.5;
+  transform-origin: center;
+  animation: sendWorkCore 0.9s ease-in-out infinite;
+}
+
+.work-spark {
+  fill: currentColor;
+  opacity: 0.62;
+  transform-origin: center;
+  animation: sendWorkSpark 1.5s ease-in-out infinite;
+}
+
+@keyframes sendSparkRest {
+  0%, 100% { transform: scale(0.92); opacity: 0.22; }
+  45% { transform: scale(1.08); opacity: 0.4; }
+}
+
+@keyframes sendWorkOrbit {
+  from { transform: rotate(0deg); }
+  to { transform: rotate(360deg); }
+}
+
+@keyframes sendWorkCore {
+  0%, 100% { transform: scale(0.86); opacity: 0.82; }
+  50% { transform: scale(1.04); opacity: 1; }
+}
+
+@keyframes sendWorkSpark {
+  0%, 100% { transform: translate(-1px, 1px) scale(0.9); opacity: 0.38; }
+  50% { transform: translate(0, 0) scale(1.12); opacity: 0.75; }
 }
 
 /* 移动端输入样式 */

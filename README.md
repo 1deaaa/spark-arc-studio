@@ -1,6 +1,6 @@
 # 引火AI创作台
 
-[简体中文](README.md) | [English](README.en.md) | [日本語](README.ja.md)
+[简体中文](README.md) | [English](README.en.md) | [日本語](README.ja.md) | [한국어](README.ko.md)
 
 引火AI创作台（SparkArc Studio）是一个Agent自主智能集群驱动的创作平台，旨在通过专业创作流水线，将星星灵感之火扩展为完整的故事世界，创作小说、剧本，并驱动精美的WEB演出甚至游戏引擎演出。
 它打通了**灵感——设定——节奏——大纲——编写——验证——发布——分享——演出**的全链路，为创作者提供了一套强大的生产力工具。
@@ -264,7 +264,7 @@ GitHub Release 中提供的客户端只是一个更方便的外壳/前端入口�
 
 SparkArc 不依赖单一的大模型，而是构建了一个分工明确的智能体集群。每个 Agent 都有独立的人设、提示词工程和模型配置。
 
-> 💡 **国际化**：Agent 注册表（`registry.py`）原生支持 `zh-CN` / `en-US` / `ja-JP` 三语，前端通过 i18n 映射、后端通过 `resolve_agent_i18n_field()` 按请求 locale 提取对应字段。新增语言只需在每个 Agent 条目中加一组翻译。
+> 💡 **国际化**：Agent 注册表（`registry.py`）原生支持 `zh-CN` / `en-US` / `ja-JP` / `ko-KR` 四语，前端通过 i18n 映射、后端通过 `resolve_agent_i18n_field()` 按请求 locale 提取对应字段。新增语言只需在每个 Agent 条目中加一组翻译。
 
 #### A. 调度者
 
@@ -661,7 +661,7 @@ SparkArc 内置了完整的 CI/CD 流水线，支持代码推送后**全自动�
 
 ## 本地化与语言政策
 
-- UI 支持语言：`zh-CN`、`en-US`、`ja-JP`
+- UI 支持语言：`zh-CN`、`en-US`、`ja-JP`、`ko-KR`
 - 前端语言可在设置中即时切换
 - Agent 系统提示词的语言策略：
 

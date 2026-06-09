@@ -1,6 +1,6 @@
 # SparkArc: クロスプラットフォーム Agent 物語制作スタジオ
 
-[简体中文](README.md) | [English](README.en.md) | [日本語](README.ja.md)
+[简体中文](README.md) | [English](README.en.md) | [日本語](README.ja.md) | [한국어](README.ko.md)
 
 SparkArc は、複数 Agent の協調で創作を進める本格的な制作スタジオです。
 小さな着想を、公開可能な物語世界と実行可能なコンテンツ資産へ拡張します。
@@ -122,7 +122,7 @@ SparkArc は協調権限を以下で分離します。
 
 SparkArc は単一 LLM に依存せず、専門分化した Agent クラスタを構築します。各 Agent は独自のペルソナ・プロンプトエンジニアリング・モデル設定を持ちます。
 
-> 💡 **国際化**：Agent レジストリ（`registry.py`）は `zh-CN` / `en-US` / `ja-JP` の三言語をネイティブサポート。フロントエンドは i18n マッピング、バックエンドは `resolve_agent_i18n_field()` でロケール別フィールドを抽出。
+> 💡 **国際化**：Agent レジストリ（`registry.py`）は `zh-CN` / `en-US` / `ja-JP` / `ko-KR` の四言語をネイティブサポート。フロントエンドは i18n マッピング、バックエンドは `resolve_agent_i18n_field()` でロケール別フィールドを抽出。
 
 #### A. 調停者
 
@@ -563,7 +563,7 @@ GitHub Releases で配布されるクライアントは、便利なフロント�
 
 ## i18n と言語ポリシー
 
-- UI 対応言語: `zh-CN`, `en-US`, `ja-JP`
+- UI 対応言語: `zh-CN`, `en-US`, `ja-JP`, `ko-KR`
 - 設定画面で即時切替可能
 - Agent system prompt の言語ルール:
 

@@ -55,4 +55,4 @@
 - 对外提供服务的实例，应在登录页、页脚、帮助页或设置页显著位置链接本目录中的核心文件。
 - `server/core/routes_tos.py` 当前支持按 `?lang=` 参数返回对应语言版本的服务条款。优先读取 `LEGAL/TermsOfService.{lang}.md`，回退到 `server/data/TermsOfService.md`，最终兜底 `LEGAL/TermsOfService.zh-CN.md`。
 - 如后续新增官方域名、商标、软件著作权登记号、投诉邮箱、备案号，应优先更新本目录，再同步到页面。
-- 如后续调整许可证、引入 CLA/DCO、开放商业豁免或新增官方实例，应同步更新 `NOTICE`、`LicensePolicy.zh-CN.md`、`TrademarkPolicy.zh-CN.md`、`OfficialInstancePolicy.zh-CN.md` 与 README 三语版本。
+- 如后续调整许可证、引入 CLA/DCO、开放商业豁免或新增官方实例，应同步更新 `NOTICE`、`LicensePolicy.zh-CN.md`、`TrademarkPolicy.zh-CN.md`、`OfficialInstancePolicy.zh-CN.md` 与 README 四语版本。

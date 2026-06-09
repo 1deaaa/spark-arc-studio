@@ -378,14 +378,14 @@ def _save_project_beat_sheet(user_id: str, project_name: str, markup_text: str) 
     _save_project_markup(user_id, project_name, '节拍表.txt', markup_text)
 
 
-# ==================== LLM 错误码三语映射 ====================
+# ==================== LLM 错误码四语映射 ====================
 
 # 每条映射格式: (匹配函数, {locale: 友好提示})
 # 匹配函数接收原始错误消息(小写)，返回 True 表示命中
 
 
 def _llm_error_mappings() -> list:
-    """返回 LLM 常见错误码的三语友好提示映射表。"""
+    """返回 LLM 常见错误码的四语友好提示映射表。"""
     return [
         # 401 / authentication_error / auth_unavailable → 鉴权失败
         (
@@ -490,14 +490,14 @@ def _llm_error_mappings() -> list:
 
 
 def format_ai_error(e: Exception) -> str:
-    """将 AI 生成错误格式化为前端可直接展示的友好文本（三语），尾部附原始报错。"""
+    """将 AI 生成错误格式化为前端可直接展示的友好文本（四语），尾部附原始报错。"""
     from core.request_context import get_current_locale
 
     msg = " ".join(str(e).strip().split()) or e.__class__.__name__
     msg_lower = msg.lower()
     locale = get_current_locale()
 
-    # 遍历错误码映射表，命中则返回三语友好提示 + 原始报错
+    # 遍历错误码映射表，命中则返回四语友好提示 + 原始报错
     for matcher, translations, code_tag in _llm_error_mappings():
         if matcher(msg_lower):
             friendly = translations.get(locale, translations["zh-CN"])
