@@ -130,12 +130,12 @@ def _current_search_time_text() -> str:
         now = datetime.now(ZoneInfo("Asia/Shanghai"))
     except Exception:
         now = datetime.now().astimezone()
-    return now.strftime("%Y-%m-%d %H:%M:%S %z")
+    return now.strftime("%Y-%m-%d")
 
 
 def _build_time_anchored_query(query: str, searched_at: str) -> str:
     return (
-        f"Current real date/time for this search is {searched_at} (Asia/Shanghai). "
+        f"Current real date for this search is {searched_at}. "
         "When the user asks for latest/current/recent/news, prioritize information current to this date. "
         f"Search request: {query}"
     )

@@ -45,6 +45,7 @@ from core.utils import (
 from agents import ScriptwriterAgent, CriticAgent
 from agents.agent_style.utils import load_project_style_profile
 from agents.language_policy import prepend_prompt_language_policy
+from core.project_settings import get_project_story_tags
 from llm.agen_matchbox import matchbox
 from llm.agen_matchbox.reasoning_compat import PrefixReasoningStreamParser
 
@@ -55,6 +56,7 @@ from .schemas import (
 )
 from .context_builder import (
     build_scriptwriter_context,
+    build_story_tags_hint,
     load_all_roles,
     load_project_context_bundle,
 )
@@ -297,6 +299,10 @@ async def run_critic_review(
     effective_context = (data.activeContext or data.context or "").strip()
     review_target = data.sceneName or data.filePath or ("当前小说文本" if (data.exportFormat or "arc") == "novel" else "当前场景剧本")
 
+    # 读取项目级故事主题参数，注入审稿上下文
+    story_tags = get_project_story_tags(user_id, project_name)
+    story_tags_hint = build_story_tags_hint(story_tags)
+
     try:
         critic = CriticAgent(user_id)
     except ValueError as e:
@@ -315,6 +321,7 @@ async def run_critic_review(
         roles=bundle.get("roles", ""),
         style_profile=style_profile,
         review_target=review_target,
+        story_tags=story_tags_hint,
     )
 
     return {
@@ -346,6 +353,10 @@ async def scriptwriter_compose_stream(
 
     from core.request_context import set_current_export_format
     set_current_export_format(data.exportFormat or "arc")
+
+    # 读取项目级故事主题参数，注入专有工作模式上下文
+    story_tags = get_project_story_tags(user_id, project_name)
+    story_tags_hint = build_story_tags_hint(story_tags)
 
     context_pack = build_scriptwriter_context_pack(
         user_id=user_id,
@@ -416,6 +427,7 @@ async def scriptwriter_compose_stream(
                     mood=data.mood or "",
                     guidance=data.guidance or "",
                     style_profile=style_profile,
+                    story_tags=story_tags_hint,
                 )
                 async for chunk in iterate_sync_iterable_in_thread(
                     lambda: agent.execute(exec_context, stream=True),
@@ -580,6 +592,7 @@ async def scriptwriter_compose_stream(
                 chr_map=context_pack.get("chr_map") or None,
                 last_node_text=data.lastNodeText or "",
                 export_format=data.exportFormat or "arc",
+                story_tags=story_tags_hint,
             )
 
             full_arc_script = ""

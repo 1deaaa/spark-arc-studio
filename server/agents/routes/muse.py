@@ -12,6 +12,8 @@ import threading
 
 from core.auth import get_current_user
 from core.request_context import normalize_project_name
+from core.project_settings import get_project_story_tags
+from agents.routes.context_builder import build_story_tags_hint
 
 from agents.setup_agents import MuseAgent
 from llm.agen_matchbox.reasoning_compat import extract_text_content_from_message
@@ -263,12 +265,18 @@ async def muse_expand(request: Request, data: MuseRequest, user: dict = Depends(
     user_id = str(user['user_id'])
     inspiration_id = data.inspirationId
 
+    # 读取项目级故事主题参数，注入灵感扩展上下文
+    story_tags = get_project_story_tags(user_id, data.projectName or "")
+    story_tags_hint = build_story_tags_hint(story_tags)
+
     try:
         muse = MuseAgent(user_id)
     except ValueError as e:
         return JSONResponse(status_code=422, content={"error": str(e)})
     except Exception as e:
-        return JSONResponse(status_code=500, content={"error": f"AI 服务初始化失败: {e}"})
+        return JSONResponse(
+            status_code=500, content={"error": f"AI 服务初始化失败: {e}"}
+        )
 
     context = muse.build_context(
         operation="expand_inspiration",
@@ -278,6 +286,7 @@ async def muse_expand(request: Request, data: MuseRequest, user: dict = Depends(
         tones=data.tones,
         worldviews=data.worldviews,
         length_hint=data.lengthHint,
+        story_tags=story_tags_hint,
     )
     stop_event = threading.Event()
     

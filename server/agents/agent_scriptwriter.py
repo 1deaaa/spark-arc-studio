@@ -57,6 +57,7 @@ class ScriptwriterAgent(SparkBaseAgent, SparkAgentExecutor):
                     mood=context.get("mood") or "",
                     guidance=context.get("guidance") or "",
                     style_profile=context.get("style_profile"),
+                    story_tags=context.get("story_tags") or "",
                 )
             return self.bridge_scenes(
                 prev_scene=context.get("prev_scene") or {},
@@ -67,6 +68,7 @@ class ScriptwriterAgent(SparkBaseAgent, SparkAgentExecutor):
                 mood=context.get("mood") or "",
                 guidance=context.get("guidance") or "",
                 style_profile=context.get("style_profile"),
+                story_tags=context.get("story_tags") or "",
             )
 
         if stream:
@@ -83,6 +85,7 @@ class ScriptwriterAgent(SparkBaseAgent, SparkAgentExecutor):
                 chr_map=context.get("chr_map") or None,
                 last_node_text=context.get("last_node_text") or "",
                 export_format=context.get("export_format") or "arc",
+                story_tags=context.get("story_tags") or "",
             )
 
         return self.write_script(
@@ -98,6 +101,7 @@ class ScriptwriterAgent(SparkBaseAgent, SparkAgentExecutor):
             chr_map=context.get("chr_map") or None,
             last_node_text=context.get("last_node_text") or "",
             export_format=context.get("export_format") or "arc",
+            story_tags=context.get("story_tags") or "",
         )
 
     def write_result(self, result: Any, *args, **kwargs) -> None:
@@ -317,6 +321,7 @@ class ScriptwriterAgent(SparkBaseAgent, SparkAgentExecutor):
         chr_map: dict = None,
         last_node_text: str = "",
         export_format: str = "arc",
+        story_tags: str = "",
     ):
         """非流式版本的剧本生成。返回 (arc_script, thought)。"""
         chr_reference = ""
@@ -363,6 +368,7 @@ class ScriptwriterAgent(SparkBaseAgent, SparkAgentExecutor):
                 guidance=guidance + anchor_instruction,
                 style_profile=style_profile_text,
                 feedback=feedback if feedback else "None",
+                story_tags=story_tags or "",
             )
         else:
             prompts = load_prompt(
@@ -378,6 +384,7 @@ class ScriptwriterAgent(SparkBaseAgent, SparkAgentExecutor):
                 guidance=guidance + anchor_instruction,
                 style_profile=style_profile_text,
                 feedback=feedback if feedback else "None",
+                story_tags=story_tags or "",
             )
 
         system_prompt = prompts["system"]
@@ -426,6 +433,7 @@ class ScriptwriterAgent(SparkBaseAgent, SparkAgentExecutor):
         chr_map: dict = None,
         last_node_text: str = "",
         export_format: str = "arc",
+        story_tags: str = "",
     ):
         """
         流式版本的剧本生成。
@@ -480,6 +488,7 @@ class ScriptwriterAgent(SparkBaseAgent, SparkAgentExecutor):
                 guidance=guidance + anchor_instruction,
                 style_profile=style_profile_text,
                 feedback=feedback if feedback else "None",
+                story_tags=story_tags or "",
             )
         else:
             prompts = load_prompt(
@@ -495,6 +504,7 @@ class ScriptwriterAgent(SparkBaseAgent, SparkAgentExecutor):
                 guidance=guidance + anchor_instruction,
                 style_profile=style_profile_text,
                 feedback=feedback if feedback else "None",
+                story_tags=story_tags or "",
             )
 
         system_prompt = prompts["system"]
@@ -667,6 +677,7 @@ class ScriptwriterAgent(SparkBaseAgent, SparkAgentExecutor):
         mood: str = "",
         guidance: str = "",
         style_profile: object = None,
+        story_tags: str = "",
     ) -> dict:
         """生成两个场景之间的过渡对话节点（Bridge 能力并入 Scriptwriter）。"""
 
@@ -708,6 +719,7 @@ class ScriptwriterAgent(SparkBaseAgent, SparkAgentExecutor):
             pacing=pacing,
             mood=mood if mood else "自然过渡",
             guidance=guidance if guidance else "请生成自然的过渡对话",
+            story_tags=story_tags or "",
         )
 
         messages = [
@@ -740,6 +752,7 @@ class ScriptwriterAgent(SparkBaseAgent, SparkAgentExecutor):
         mood: str = "",
         guidance: str = "",
         style_profile: object = None,
+        story_tags: str = "",
     ):
         prev_text = self._extract_scene_text(prev_scene)
         next_text = self._extract_scene_text(next_scene)
@@ -779,6 +792,7 @@ class ScriptwriterAgent(SparkBaseAgent, SparkAgentExecutor):
             pacing=pacing,
             mood=mood if mood else "自然过渡",
             guidance=guidance if guidance else "请生成自然的过渡对话",
+            story_tags=story_tags or "",
         )
 
         messages = [

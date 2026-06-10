@@ -26,6 +26,8 @@ from agents.agent_lorebook import WorldviewAgent
 from agents.agent_utils import iter_text_output
 from agents.agent_style.utils import load_project_style_profile
 
+from .context_builder import build_story_tags_hint
+
 from .schemas import (
     WorldviewRequest,
     LorebookRequest,
@@ -247,8 +249,9 @@ async def generate_worldview(
         )
     style_profile = load_project_style_profile(user_id=user_id, project_name=project_name)
     
-    # 从 project_settings 读取 length_hint 作为 fallback
+    # 从 project_settings 读取故事主题参数
     story_tags = get_project_story_tags(user_id, project_name)
+    story_tags_hint = build_story_tags_hint(story_tags)
     length_hint = data.lengthHint or story_tags.get("length_hint")
 
     context = agent.build_context(
@@ -256,6 +259,7 @@ async def generate_worldview(
         seed=seed_text,
         style_profile=style_profile,
         length_hint=length_hint,
+        story_tags=story_tags_hint,
     )
     stop_event = threading.Event()
 

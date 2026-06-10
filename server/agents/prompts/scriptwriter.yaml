@@ -141,6 +141,7 @@ system: |
   {arc_example}
 
 user: |
+  {story_tags}
   {base.user_context}
 
   ---
@@ -160,6 +161,8 @@ bridge:
     直接输出符合 .arc 规范的文本（包含旁白和对话）。禁止输出 JSON，禁止输出代码块。
 
   user: |
+    {story_tags}
+
     ### 🎬 上一场景结尾：
     {prev_scene_text}
 
@@ -189,6 +192,8 @@ generate_novel:
     {base.conception_spec}
 
   user: |
+    {story_tags}
+
     ### 世界观背景：
     {worldview}
 

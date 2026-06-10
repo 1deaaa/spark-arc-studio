@@ -161,6 +161,8 @@ system: |
   - 不允许输出任何数字分数.
 
 user: |
+  {story_tags}
+
   ### 审阅目标：
   {review_target}
 

@@ -24,7 +24,7 @@ from .schemas import (
     BeatSheetSaveRequest,
     format_ai_error,
 )
-from .context_builder import load_project_context_bundle
+from .context_builder import load_project_context_bundle, build_story_tags_hint
 from .streaming_utils import iterate_sync_iterable_in_thread
 from .stream_semantics import semantic_sse_data, on_cancelled
 
@@ -103,8 +103,9 @@ async def generate_synopsis_stream_ai(
     bundle = load_project_context_bundle(user_id, project_name)
     project_style_profile = load_project_style_profile(user_id=user_id, project_name=project_name)
     
-    # 从 project_settings 读取 length_hint 作为 fallback
+    # 从 project_settings 读取故事主题参数
     story_tags = get_project_story_tags(user_id, project_name)
+    story_tags_hint = build_story_tags_hint(story_tags)
     length_hint = data.lengthHint or story_tags.get("length_hint")
 
     try:
@@ -124,6 +125,7 @@ async def generate_synopsis_stream_ai(
         guidance=data.guidance,
         style_profile=data.style_profile if data.style_profile is not None else project_style_profile,
         length_hint=length_hint,
+        story_tags=story_tags_hint,
     )
     stop_event = threading.Event()
 
@@ -203,8 +205,9 @@ async def generate_beat_sheet_stream_ai(
     bundle = load_project_context_bundle(user_id, project_name)
     project_style_profile = load_project_style_profile(user_id=user_id, project_name=project_name)
     
-    # 从 project_settings 读取 length_hint 作为 fallback
+    # 从 project_settings 读取故事主题参数
     story_tags = get_project_story_tags(user_id, project_name)
+    story_tags_hint = build_story_tags_hint(story_tags)
     length_hint = data.lengthHint or story_tags.get("length_hint")
 
     try:
@@ -224,6 +227,7 @@ async def generate_beat_sheet_stream_ai(
         guidance=data.guidance,
         style_profile=project_style_profile,
         length_hint=length_hint,
+        story_tags=story_tags_hint,
     )
     stop_event = threading.Event()
 
@@ -266,6 +270,11 @@ async def generate_outline_stream_ai(
     set_agent_context(user_id, project_name)
     bundle = load_project_context_bundle(user_id, project_name)
     project_style_profile = load_project_style_profile(user_id=user_id, project_name=project_name)
+
+    # 读取项目级故事主题参数，注入大纲生成上下文
+    story_tags = get_project_story_tags(user_id, project_name)
+    story_tags_hint = build_story_tags_hint(story_tags)
+
     try:
         showrunner = ShowrunnerAgent(user_id)
     except ValueError as e:
@@ -285,6 +294,7 @@ async def generate_outline_stream_ai(
         scene_count_per_chapter=scene_count_per_chapter,
         beat_sheet=beat_sheet,
         style_profile=style_profile if style_profile is not None else project_style_profile,
+        story_tags=story_tags_hint,
     )
     stop_event = threading.Event()
 

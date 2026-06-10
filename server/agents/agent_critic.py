@@ -218,6 +218,7 @@ class CriticAgent(SparkBaseAgent):
         roles: str = "",
         style_profile: object = None,
         review_target: str = "",
+        story_tags: str = "",
     ) -> Dict[str, Any]:
         """
         结构化评审当前文本。
@@ -238,6 +239,7 @@ class CriticAgent(SparkBaseAgent):
             style_profile=style_profile_text or "",
             script=serialized_script,
             review_target=review_target or "当前文本/场景",
+            story_tags=story_tags or "",
         )
 
         try:

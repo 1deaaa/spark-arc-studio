@@ -90,6 +90,8 @@ generate_synopsis:
     -   **格式**：保持纯文本 Markup 流，请勿使用 JSON 或代码块。
 
   user: |
+    {story_tags}
+
     ### 核心概念 (Logline):
     {logline}
 
@@ -156,6 +158,8 @@ generate_beat_sheet:
     - 结局/新世界：平衡重建，展示人物变化
 
   user: |
+    {story_tags}
+
     ### 故事梗概 (Synopsis):
     {synopsis}
 
@@ -230,6 +234,8 @@ generate_outline:
     -   **严禁省略/合并章节**：每一章都必须独立输出 `## Chapter N:` 头，严禁用"第5-14章：略"之类的占位符跳过章节。如果章节数量较多，宁可减少每章描述字数，也绝不能省略任何章节。
 
   user: |
+    {story_tags}
+
     ### 世界观设定 (Worldview)：
     {worldview}
 

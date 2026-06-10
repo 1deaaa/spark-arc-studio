@@ -89,6 +89,8 @@ system: |
       -   这个世界隐藏着什么不为人知的真相？
 
 user: |
+  {story_tags}
+
   ### 创意种子：
   {seed}
 

@@ -38,6 +38,56 @@ from core.utils import (
 from story.project_files import _coerce_character_name
 
 
+# ─────────────────────── Story Tags 共享构建器 ───────────────────────
+
+
+def build_story_tags_hint(story_tags: dict) -> str:
+    """从 story_tags 字典构建注入 LLM 上下文的提示文本块。
+
+    与 context_provider._build_story_tags_block 保持一致的格式，
+    包含 POV 醒目优化（三层锚定策略）。
+
+    Args:
+        story_tags: 从 get_project_story_tags 返回的字典
+
+    Returns:
+        格式化后的 story tags 文本块，若所有字段均为空则返回空字符串
+    """
+    if not story_tags:
+        return ""
+
+    parts = []
+
+    pov = story_tags.get("pov")
+    if pov:
+        parts.append(
+            f"⚠️⚠️⚠️ 【叙事人称锁定】本文严格使用「{pov}」叙事。"
+            f"所有描写、对话、心理活动必须符合此人称视角，禁止切换。⚠️⚠️⚠️"
+        )
+
+    tag_lines = []
+    style = story_tags.get("style")
+    if style:
+        tag_lines.append(f"风格：{style}")
+    genres = story_tags.get("genres", [])
+    if genres:
+        tag_lines.append(f"题材：{'、'.join(genres)}")
+    tones = story_tags.get("tones", [])
+    if tones:
+        tag_lines.append(f"基调：{'、'.join(tones)}")
+    worldviews = story_tags.get("worldviews", [])
+    if worldviews:
+        tag_lines.append(f"世界观：{'、'.join(worldviews)}")
+    length_hint = story_tags.get("length_hint")
+    if length_hint:
+        tag_lines.append(f"篇幅：{length_hint}")
+
+    if tag_lines:
+        parts.append("【创作参数】" + " | ".join(tag_lines))
+
+    return "\n".join(parts)
+
+
 # ─────────────────────────── 原子加载函数 ───────────────────────────
 
 

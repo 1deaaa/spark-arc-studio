@@ -76,6 +76,8 @@ system: |
   6. 请确保“核心概念 (Logline)”位于输出最末尾，不要在其后继续输出任何文本。
 
 user: |
+  {story_tags}
+
   ### 灵感碎片：
   {raw_input}
 
