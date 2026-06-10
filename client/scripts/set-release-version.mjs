@@ -2,15 +2,39 @@ import { readFile, writeFile } from 'node:fs/promises';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 
-const version = process.env.RELEASE_VERSION?.trim();
+const versionSources = [
+  process.env.RELEASE_VERSION,
+  process.env.RELEASE_TAG,
+  process.env.GITHUB_REF_NAME,
+  process.env.GITEA_REF_NAME,
+  process.env.GITHUB_REF,
+  process.env.GITEA_REF,
+  process.env.CI_COMMIT_TAG,
+];
 
-if (!version) {
-  console.error('RELEASE_VERSION is required');
-  process.exit(1);
+function normalizeVersion(input) {
+  if (!input) {
+    return null;
+  }
+
+  const value = input.trim();
+  if (!value) {
+    return null;
+  }
+
+  const directMatch = value.match(/^\d+\.\d+\.\d+(?:[-+][0-9A-Za-z.-]+)?$/);
+  if (directMatch) {
+    return directMatch[0];
+  }
+
+  const tagMatch = value.match(/(?:^|[^0-9A-Za-z])v?(\d+\.\d+\.\d+(?:[-+][0-9A-Za-z.-]+)?)(?:$|[^0-9A-Za-z.+-])/);
+  return tagMatch?.[1] ?? null;
 }
 
-if (!/^[0-9A-Za-z][0-9A-Za-z.+-]*$/.test(version)) {
-  console.error(`Invalid RELEASE_VERSION: ${version}`);
+const version = versionSources.map(normalizeVersion).find(Boolean);
+
+if (!version) {
+  console.error('未能从 RELEASE_VERSION、tag 或 CI 环境中解析版本号');
   process.exit(1);
 }
 
@@ -41,6 +65,13 @@ async function updateCargoVersion() {
 
 await updateJson('package.json', (data) => {
   data.version = version;
+});
+
+await updateJson('package-lock.json', (data) => {
+  data.version = version;
+  if (data.packages?.['']) {
+    data.packages[''].version = version;
+  }
 });
 
 await updateJson(

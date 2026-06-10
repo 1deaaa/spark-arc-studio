@@ -1,6 +1,6 @@
 [package]
 name = "sparkarc"
-version = "0.1.0"
+version = "0.0.0"
 description = "SparkArc Studio"
 authors = ["SparkArc"]
 edition = "2021"

@@ -1,6 +1,9 @@
 name: Publish Desktop Release
 
 on:
+  push:
+    tags:
+      - 'sparkarc-v*'
   workflow_dispatch:
     inputs:
       draft:
@@ -62,10 +65,10 @@ jobs:
           cache-dependency-path: client/package-lock.json
 
       - name: Set version
-        if: inputs.version != ''
+        if: inputs.version != '' || github.ref_type == 'tag'
         working-directory: client
         env:
-          RELEASE_VERSION: ${{ inputs.version }}
+          RELEASE_VERSION: ${{ inputs.version != '' && inputs.version || github.ref_name }}
         run: |
           node scripts/set-release-version.mjs
 
