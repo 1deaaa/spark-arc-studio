@@ -1,4 +1,4 @@
-# bootstrap.ps1 - Universal Portable Python Environment Deployer
+# pyloader.ps1 - Universal Portable Python Environment Deployer
 # Uses python-build-standalone (github.com/astral-sh/python-build-standalone)
 # for a truly portable Python with ZERO system impact:
 #   - Full stdlib including tkinter, sqlite3, ssl, etc.
@@ -15,12 +15,12 @@
 #   Then write .deploy_complete marker. Does NOT launch the app.
 #
 # Minimum: Windows 10 1507 (PowerShell 5.0, .NET 4.6)
-# Usage: Called from project-level BAT, or: pwsh -File bootstrap.ps1
+# Usage: Called from project-level BAT, or: pwsh -File pyloader.ps1
 
 $ErrorActionPreference = "Stop"
 
 # ===== PYTHON VERSION CONFIG =====
-# 目标：稳定获取任意可用的 Python 3.13.x，而不是锁死某个小版本或发布标签。
+# 目标：稳定获取任意可用的 Python 3.x.x，而不是锁死某个小版本或发布标签。
 $PythonMajorMinor = "3.13"
 # ============================================================
 
@@ -90,7 +90,8 @@ function Resolve-PythonArchive {
         Exit-WithError "Failed to query mirror index: $($_.Exception.Message)"
     }
 
-    $pattern = '^/github-release/astral-sh/python-build-standalone/LatestRelease/cpython-(3\.13\.\d+)%2B(\d+)-x86_64-pc-windows-msvc-install_only\.tar\.gz$'
+    $escaped = [regex]::Escape($PythonMajorMinor)
+    $pattern = "^/github-release/astral-sh/python-build-standalone/LatestRelease/cpython-($escaped\.\d+)%2B(\d+)-x86_64-pc-windows-msvc-install_only\.tar\.gz$"
     $candidates = @()
 
     foreach ($link in $resp.Links) {
@@ -122,7 +123,7 @@ function Resolve-PythonArchive {
     $script:ResolvedPythonVersion = $best.Version
     $script:ResolvedReleaseTag = $best.ReleaseTag
     $script:ArchiveName = "cpython-$ResolvedPythonVersion+$ResolvedReleaseTag-x86_64-pc-windows-msvc-install_only.tar.gz"
-    $script:ArchiveLocal = Join-Path $BasePath $ArchiveName
+    $script:ArchiveLocal = Join-Path $RuntimeRoot $ArchiveName
 
     return [pscustomobject]@{
         Version     = $ResolvedPythonVersion
@@ -187,12 +188,16 @@ namespace SparkArc {
                     for (int i = 0; i < 100 && header[i] != 0; i++) sb.Append((char)header[i]);
                     string name = sb.ToString();
 
-                    sb.Clear();
-                    for (int i = 124; i < 136 && header[i] != 0 && header[i] != 32; i++) sb.Append((char)header[i]);
                     long fileSize = 0;
-                    string sizeStr = sb.ToString().Trim();
-                    if (sizeStr.Length > 0) {
-                        try { fileSize = Convert.ToInt64(sizeStr, 8); } catch { }
+                    if (header[124] == 0x80) {
+                        for (int i = 125; i < 136; i++) fileSize = (fileSize << 8) | header[i];
+                    } else {
+                        sb.Clear();
+                        for (int i = 124; i < 136 && header[i] != 0 && header[i] != 32; i++) sb.Append((char)header[i]);
+                        string sizeStr = sb.ToString().Trim();
+                        if (sizeStr.Length > 0) {
+                            try { fileSize = Convert.ToInt64(sizeStr, 8); } catch { }
+                        }
                     }
 
                     char typeFlag = (char)header[156];
@@ -205,7 +210,7 @@ namespace SparkArc {
                         if (prefix.Length > 0) name = prefix + "/" + name;
                     }
 
-                    if (typeFlag == '5' || typeFlag == 'x' || typeFlag == 'g' || typeFlag == 'L') {
+                    if (typeFlag == '5' || typeFlag == 'x' || typeFlag == 'g' || typeFlag == 'L' || typeFlag == '2') {
                         fs.Seek(((fileSize + 511) / 512) * 512, SeekOrigin.Current);
                         continue;
                     }
@@ -265,7 +270,6 @@ namespace SparkArc {
 }
 
 # ---- Skip python deployment if already fully deployed ----
-$Resolved = Resolve-PythonArchive
 $CurrentVersion = Get-CurrentPythonVersion
 $CurrentReqHash = Get-RequirementsHash
 $StoredReqHash = $null
@@ -285,18 +289,20 @@ if (
     $CurrentVersion.StartsWith("$PythonMajorMinor.") -and
     (($null -eq $CurrentReqHash) -or ($CurrentReqHash -eq $StoredReqHash))
 ) {
-    Write-Host "[bootstrap] Already deployed with Python $CurrentVersion. Skipping python deployment." -ForegroundColor Green
+    Write-Host "[pyloader] Already deployed with Python $CurrentVersion. Skipping python deployment." -ForegroundColor Green
     exit 0
 }
 
 if (Test-Path $MarkerFile) {
     if ($CurrentVersion -and $CurrentVersion.StartsWith("$PythonMajorMinor.") -and ($CurrentReqHash -ne $StoredReqHash)) {
-        Write-Host "[bootstrap] requirements.txt changed. Refreshing environment packages." -ForegroundColor Yellow
+        Write-Host "[pyloader] requirements.txt changed. Refreshing environment packages." -ForegroundColor Yellow
     }
     else {
-        Write-Host "[bootstrap] Deployment marker exists, but Python version is not $PythonMajorMinor.x. Rebuilding environment." -ForegroundColor Yellow
+        Write-Host "[pyloader] Deployment marker exists, but Python version is not $PythonMajorMinor.x. Rebuilding environment." -ForegroundColor Yellow
     }
 }
+
+$Resolved = Resolve-PythonArchive
 
 Write-Host "========================================"
 Write-Host "  Portable Python Deployer (standalone)"
@@ -312,6 +318,8 @@ if ($NeedsRebuild) {
         if (Test-Path $EnvDir) { Remove-Item $EnvDir -Recurse -Force }
         if (Test-Path $MarkerFile) { Remove-Item $MarkerFile -Force }
     }
+
+    if (-not (Test-Path $RuntimeRoot)) { New-Item -ItemType Directory -Path $RuntimeRoot | Out-Null }
 
     if (-not (Test-Path $ArchiveLocal)) {
         Download-ResolvedArchive -ResolvedInfo $Resolved
@@ -330,11 +338,20 @@ if ($NeedsRebuild) {
         $tarTempFile = Join-Path $BasePath "_temp_python.tar"
 
         Write-Host "      Decompressing gzip..."
-        $inStream  = [System.IO.File]::OpenRead($ArchiveLocal)
-        $gzip      = New-Object System.IO.Compression.GzipStream($inStream, [System.IO.Compression.CompressionMode]::Decompress)
-        $outStream = [System.IO.File]::Create($tarTempFile)
-        $gzip.CopyTo($outStream)
-        $outStream.Close(); $gzip.Close(); $inStream.Close()
+        $inStream  = $null
+        $gzip      = $null
+        $outStream = $null
+        try {
+            $inStream  = [System.IO.File]::OpenRead($ArchiveLocal)
+            $gzip      = New-Object System.IO.Compression.GzipStream($inStream, [System.IO.Compression.CompressionMode]::Decompress)
+            $outStream = [System.IO.File]::Create($tarTempFile)
+            $gzip.CopyTo($outStream)
+        }
+        finally {
+            if ($outStream) { try { $outStream.Dispose() } catch {} }
+            if ($gzip)      { try { $gzip.Dispose() } catch {} }
+            if ($inStream)  { try { $inStream.Dispose() } catch {} }
+        }
 
         Write-Host "      Extracting tar..."
         $fileCount = [SparkArc.TarExtractor]::Extract($tarTempFile, $TempExtractDir)
@@ -411,6 +428,6 @@ elseif (Test-Path $ReqHashFile) {
 
 Write-Host ""
 Write-Host "========================================"
-Write-Host "[bootstrap] Deployment complete!" -ForegroundColor Green
+Write-Host "[pyloader] Deployment complete!" -ForegroundColor Green
 Write-Host "========================================"
 exit 0

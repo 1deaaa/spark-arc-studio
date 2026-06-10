@@ -296,10 +296,10 @@ async def lifespan(app: FastAPI):
         # 显式初始化 LLM Manager（确保 migration 已完成且释放了 DB 锁）
         try:
             from llm.agen_matchbox import initialize_matchbox
-            print("⚙️ 初始化火柴网关...", flush=True)
+            print("📦 初始化火柴网关...", flush=True)
             initialize_matchbox(ensure_defaults=True)
         except Exception as e:
-            print(f"⚠️ LLM Manager 初始化警告: {e}", flush=True)
+            print(f"⚠️ 火柴网关初始化提示: {e}", flush=True)
 
         # 异步预热分词器（后台线程，不阻塞启动）
         try:
