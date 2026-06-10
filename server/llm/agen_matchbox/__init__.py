@@ -25,6 +25,7 @@ LLM Manager Package
 from __future__ import annotations
 
 from importlib import import_module
+from concurrent.futures import Future, ThreadPoolExecutor
 import os
 import sys
 import threading
@@ -33,6 +34,9 @@ from typing import Any, Optional, Tuple
 
 _manager_instance = None
 _manager_lock = threading.Lock()
+_runtime_warmup_executor = ThreadPoolExecutor(max_workers=1, thread_name_prefix="matchbox-runtime-warmup")
+_runtime_warmup_future: Optional[Future] = None
+_runtime_warmup_lock = threading.Lock()
 
 _LAZY_EXPORTS: dict[str, Tuple[str, str]] = {
     "AIManager": (".manager", "AIManager"),
@@ -104,6 +108,59 @@ def initialize_matchbox(
         return _manager_instance
 
 
+def _warmup_matchbox_runtime_job() -> dict[str, str]:
+    """预热 Matchbox LLM 运行时重依赖。"""
+    modules = (
+        ".gateway",
+        ".tracked_model",
+    )
+    results: dict[str, str] = {}
+    for module_name in modules:
+        try:
+            import_module(module_name, __name__)
+            results[module_name] = "ok"
+        except Exception as exc:
+            results[module_name] = f"{type(exc).__name__}: {exc}"
+
+    ok_count = sum(1 for value in results.values() if value == "ok")
+    print(f"🔥 火柴运行时预热完成: {ok_count}/{len(results)} 模块可用", flush=True)
+    return results
+
+
+def warmup_matchbox_runtime(blocking: bool = False) -> Future | dict[str, str]:
+    """预热 LLM SDK/回调等运行时依赖。
+
+    - blocking=False: 后台线程预热，立即返回 Future。
+    - blocking=True: 当前线程等待预热完成，返回模块加载结果。
+
+    该入口不初始化全局 AIManager，也不访问远程平台。
+
+    设计约束（开源通用基础设施，禁止轻易改回去）：
+    1. initialize_matchbox() 必须保持“轻启动”，只做数据库/默认配置等硬依赖初始化。
+    2. gateway / tracked_model / langchain_openai 这类重运行时依赖，不得在 manager.py / builder.py 顶层导入。
+    3. 服务型宿主应在启动阶段显式调用 warmup_matchbox_runtime(blocking=False)，让预热与应用启动并行进行。
+
+    这不是“等首个真实请求到了再临时懒加载”的纯被动模式，而是“服务刚启动就后台预热”的主动模式。
+    若极少数请求恰好撞上预热窗口，Python 会等待同一轮导入完成，然后继续复用该运行时模块。
+    """
+    global _runtime_warmup_future
+
+    if blocking:
+        return _warmup_matchbox_runtime_job()
+
+    with _runtime_warmup_lock:
+        should_submit = _runtime_warmup_future is None
+        if _runtime_warmup_future is not None and _runtime_warmup_future.done():
+            try:
+                should_submit = _runtime_warmup_future.exception() is not None
+            except Exception:
+                should_submit = True
+
+        if should_submit:
+            _runtime_warmup_future = _runtime_warmup_executor.submit(_warmup_matchbox_runtime_job)
+        return _runtime_warmup_future
+
+
 def matchbox(*, required: bool = True) -> Optional[Any]:
     """获取全局 AIManager。
 
@@ -145,6 +202,7 @@ def __getattr__(name: str) -> Any:
 __all__ = [
     # 主要导出
     'initialize_matchbox',
+    'warmup_matchbox_runtime',
     'matchbox',
     'create_matchbox',
     'reset_matchbo',

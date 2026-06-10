@@ -16,9 +16,9 @@ get_user_llm() 和 get_spec_sys_llm() 均返回 LLMClient 对象：
   - 非流式：llm.invoke() / llm.ainvoke()
   - 流式：  llm.stream() / llm.astream() / llm.astream_events()
 """
-from typing import Optional, Dict, Any
+from __future__ import annotations
 
-from langchain_openai import OpenAIEmbeddings
+from typing import Optional, Dict, Any
 
 from .models import (
     LLMPlatform,
@@ -30,8 +30,14 @@ from .models import (
     DEFAULT_MAX_OUTPUT_TOKENS,
 )
 from .config import SYSTEM_USER_ID, DEFAULT_USAGE_KEY
-from .gateway import ChatUniversal, apply_sdk_request_compat
-from .tracked_model import UsageTrackingCallback, LLMUsage, LLMClient
+
+
+def _load_chat_runtime():
+    """延迟加载 LLM 运行时重依赖，避免阻塞服务启动。"""
+    from .gateway import ChatUniversal
+    from .tracked_model import UsageTrackingCallback, LLMUsage, LLMClient
+
+    return ChatUniversal, UsageTrackingCallback, LLMUsage, LLMClient
 
 
 class LLMBuilderMixin:
@@ -39,6 +45,8 @@ class LLMBuilderMixin:
 
     def _apply_sdk_request_compat(self, kwargs: Dict[str, Any]) -> Dict[str, Any]:
         """为 LangChain/OpenAI SDK 调用补充兼容参数。"""
+        from .gateway import apply_sdk_request_compat
+
         return apply_sdk_request_compat(kwargs)
 
     @staticmethod
@@ -224,6 +232,7 @@ class LLMBuilderMixin:
             usage = client.usage.get_usage_last_24h()
             print(f"过去24小时: {usage['total_tokens']} tokens, {usage['requests']} 次请求")
         """
+        ChatUniversal, UsageTrackingCallback, LLMUsage, LLMClient = _load_chat_runtime()
         effective_user_id = user_id if user_id is not None else SYSTEM_USER_ID
         
         direct_config = None
@@ -365,6 +374,8 @@ class LLMBuilderMixin:
         **kwargs: Any,
     ) -> OpenAIEmbeddings:
         """获取用户 Embedding 实例。优先使用用户选择，否则回退到首个可用 embedding。"""
+        from langchain_openai import OpenAIEmbeddings
+
         effective_user_id = user_id if user_id is not None else SYSTEM_USER_ID
 
         with self.Session() as session:
@@ -430,6 +441,7 @@ class LLMBuilderMixin:
           - 非流式：llm.invoke() / llm.ainvoke()
           - 流式：  llm.stream() / llm.astream()
         """
+        ChatUniversal, UsageTrackingCallback, LLMUsage, LLMClient = _load_chat_runtime()
         effective_user_id = user_id if user_id is not None else SYSTEM_USER_ID
 
         with self.Session() as session:

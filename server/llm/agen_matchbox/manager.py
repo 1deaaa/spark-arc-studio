@@ -52,7 +52,6 @@ from .credit_services import CreditServicesMixin
 from .quota_services import QuotaServicesMixin
 from .usage_services import UsageServicesMixin
 from .redeem_code_services import RedeemCodeServicesMixin
-from .utils import probe_platform_models, test_platform_chat, stream_speed_test, test_platform_embedding
 
 
 class MasterKeyMigrationRequiredError(RuntimeError):
@@ -1258,6 +1257,8 @@ class AIManagerBase:
         
         # 调用 utils 中的通用探测逻辑
         try:
+            from .utils import probe_platform_models
+
             models_data = probe_platform_models(base_url, api_key, raise_on_error=True)
             # 返回含 token 上限的富数据，供前端自动填充
             return [
@@ -1303,6 +1304,8 @@ class AIManagerBase:
         
         # 调用 utils 中的通用测试逻辑
         try:
+            from .utils import test_platform_chat
+
             return test_platform_chat(base_url, api_key, model_name, extra_body=extra_body)
         except Exception as e:
             raise ValueError(f"测试失败: {e}")
@@ -1336,6 +1339,8 @@ class AIManagerBase:
             if not api_key:
                 raise ValueError(f"平台 {plat.name} 未配置 API Key")
 
+        from .utils import stream_speed_test
+
         return stream_speed_test(base_url, api_key, model_name, extra_body=extra_body)
 
     def proxy_test_embedding(self, user_id: str, platform_id: int, model_name: str) -> Dict[str, Any]:
@@ -1359,6 +1364,8 @@ class AIManagerBase:
                 raise ValueError(f"平台 {plat.name} 未配置 API Key")
 
         try:
+            from .utils import test_platform_embedding
+
             return test_platform_embedding(base_url, api_key, model_name)
         except Exception as e:
             raise ValueError(f"测试失败: {e}")

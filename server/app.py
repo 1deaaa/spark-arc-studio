@@ -294,10 +294,17 @@ async def lifespan(app: FastAPI):
     async with _mcp_app.lifespan(app):
         print("✅ MCP Server 初始化完成", flush=True)
         # 显式初始化 LLM Manager（确保 migration 已完成且释放了 DB 锁）
+        # 关键说明：
+        # 1. 这里必须只做 Matchbox 的“轻启动”硬依赖初始化，目标是尽快放行 /health 与 startup complete。
+        # 2. Matchbox 的重运行时（gateway / tracked_model / langchain_openai）不应再阻塞这个同步阶段。
+        # 3. 这些重依赖会在 initialize_matchbox() 返回后立刻提交后台预热，也就是“启动同时异步预热”，
+        #    而不是等首个用户请求到了才开始加载。
         try:
-            from llm.agen_matchbox import initialize_matchbox
+            from llm.agen_matchbox import initialize_matchbox, warmup_matchbox_runtime
             print("📦 初始化火柴网关...", flush=True)
             initialize_matchbox(ensure_defaults=True)
+            warmup_matchbox_runtime(blocking=False)
+            print("⚙️ 火柴运行时后台预热已提交", flush=True)
         except Exception as e:
             print(f"⚠️ 火柴网关初始化提示: {e}", flush=True)
 
