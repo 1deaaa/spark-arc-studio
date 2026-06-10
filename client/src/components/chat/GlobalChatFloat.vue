@@ -169,69 +169,71 @@
     :height="drawerHeight"
     :trap-focus="true"
     :block-scroll="true"
-    class="chat-mobile-drawer"
+    :class="['chat-mobile-drawer', { 'chat-mobile-drawer--settling': mobileDrawerSettling }]"
     @after-leave="onDrawerClosed"
   >
     <n-drawer-content :native-scrollbar="false" body-content-style="padding: 0; display: flex; flex-direction: column; height: 100%;">
-      <ChatPanel
-        ref="mobileListRef"
-        :agent-id="chat.currentAgentId"
-        :agent-options="agentOptions"
-        :allow-agent-switch-while-sending="true"
-        :history="chat.history"
-        :loading="chat.loading"
-        :last-error="chat.lastError"
-        :sending="chat.sending"
-        :thinking-seconds="thinkingSeconds"
-        :tool-calling="chat.toolCalling"
-        :tool-name="chat.toolName"
-        :tool-progress-text="chat.toolProgressText"
-        :retry-attempt="chat.retryAttempt"
-        :retry-max-retries="chat.retryMaxRetries"
-        :retry-error-summary="chat.retryErrorSummary"
-        :context-token-count="chat.contextTokenCount"
-        :context-token-usage="chat.contextTokenUsage"
-        :context-window-stats="chat.contextWindowStats"
-        loading-target="chat-primary"
-        :editing-message-id="editingMessageId"
-        :editing-content="editingContent"
-        :draft="draft"
-        list-extra-class="mobile-chat-list"
-        input-wrapper-class="mobile-input-wrapper"
-        :hide-header-icon="true"
-        @update:agent-id="onAgentChanged"
-        @update:draft="draft = $event"
-        @update:editing-content="editingContent = $event"
-        @clear="clear"
-        @compact-context="compactContext"
-        @send="send"
-        @stop="stop"
-        @draft-keydown="onDraftKeydown"
-        @start-edit="startEdit"
-        @cancel-edit="cancelEdit"
-        @save-edit="saveEdit"
-        @edit-keydown="onEditKeydown"
-        @delete-msg="deleteMsg"
-        @retry="retryMsg"
-      >
-        <template #input-prefix>
-          <ChatFileImportButton :session-id="primarySessionId" :agent-id="chat.currentAgentId" />
-        </template>
-        <template #header-right>
-          <n-tooltip trigger="hover">
-            <template #trigger>
-              <n-button quaternary circle size="small" @click="close">
-                <template #icon>
-                  <svg viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
-                    <path d="M18 6L6 18M6 6l12 12" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>
-                  </svg>
-                </template>
-              </n-button>
-            </template>
-            {{ t('components.chatPanel.collapse') }}
-          </n-tooltip>
-        </template>
-      </ChatPanel>
+      <div class="chat-mobile-drawer-surface">
+        <ChatPanel
+          ref="mobileListRef"
+          :agent-id="chat.currentAgentId"
+          :agent-options="agentOptions"
+          :allow-agent-switch-while-sending="true"
+          :history="chat.history"
+          :loading="chat.loading"
+          :last-error="chat.lastError"
+          :sending="chat.sending"
+          :thinking-seconds="thinkingSeconds"
+          :tool-calling="chat.toolCalling"
+          :tool-name="chat.toolName"
+          :tool-progress-text="chat.toolProgressText"
+          :retry-attempt="chat.retryAttempt"
+          :retry-max-retries="chat.retryMaxRetries"
+          :retry-error-summary="chat.retryErrorSummary"
+          :context-token-count="chat.contextTokenCount"
+          :context-token-usage="chat.contextTokenUsage"
+          :context-window-stats="chat.contextWindowStats"
+          loading-target="chat-primary"
+          :editing-message-id="editingMessageId"
+          :editing-content="editingContent"
+          :draft="draft"
+          list-extra-class="mobile-chat-list"
+          input-wrapper-class="mobile-input-wrapper"
+          :hide-header-icon="true"
+          @update:agent-id="onAgentChanged"
+          @update:draft="draft = $event"
+          @update:editing-content="editingContent = $event"
+          @clear="clear"
+          @compact-context="compactContext"
+          @send="send"
+          @stop="stop"
+          @draft-keydown="onDraftKeydown"
+          @start-edit="startEdit"
+          @cancel-edit="cancelEdit"
+          @save-edit="saveEdit"
+          @edit-keydown="onEditKeydown"
+          @delete-msg="deleteMsg"
+          @retry="retryMsg"
+        >
+          <template #input-prefix>
+            <ChatFileImportButton :session-id="primarySessionId" :agent-id="chat.currentAgentId" />
+          </template>
+          <template #header-right>
+            <n-tooltip trigger="hover">
+              <template #trigger>
+                <n-button quaternary circle size="small" @click="close">
+                  <template #icon>
+                    <svg viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
+                      <path d="M18 6L6 18M6 6l12 12" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>
+                    </svg>
+                  </template>
+                </n-button>
+              </template>
+              {{ t('components.chatPanel.collapse') }}
+            </n-tooltip>
+          </template>
+        </ChatPanel>
+      </div>
     </n-drawer-content>
   </n-drawer>
 </template>
@@ -321,8 +323,10 @@ async function compactContext() {
 
 const mobileDrawerVisible = ref(false);
 
-// 抽屉高度：带补间动画的平滑过渡
+// 抽屉高度保持稳定，避免历史加载期间逐帧改 height 触发聊天列表重排。
 const drawerHeight = ref('50%');
+const mobileDrawerSettling = ref(false);
+let mobileDrawerSettleTimer: ReturnType<typeof setTimeout> | null = null;
 
 /** 移动端头部工具栏高度（56px + 安全区域） */
 function getMobileHeaderHeight() {
@@ -336,53 +340,28 @@ function getMobileMaxDrawerPx() {
   return window.innerHeight - getMobileHeaderHeight();
 }
 
-/** 根据对话数量计算目标高度 */
+/** 移动端抽屉打开后使用稳定目标高度，历史加载不再驱动高度动画。 */
 function getTargetDrawerHeight() {
-  const historyLen = (chat.history || []).length;
-  const baseHeight = 0.5; // 50%
-  const maxRatio = isMobile.value
-    ? getMobileMaxDrawerPx() / window.innerHeight
-    : 1.0;
-  const dynamicHeight = Math.min(baseHeight + historyLen * 0.1, maxRatio);
-  const targetPx = Math.round(window.innerHeight * dynamicHeight);
   const maxPx = isMobile.value ? getMobileMaxDrawerPx() : window.innerHeight;
-  if (targetPx >= maxPx) return `${maxPx}px`;
-  return `${targetPx}px`;
+  return `${Math.max(320, maxPx)}px`;
 }
 
-/** 将像素值字符串解析为数字 */
-function parseHeightPx(h) {
-  const maxPx = isMobile.value ? getMobileMaxDrawerPx() : window.innerHeight;
-  if (h === '100%') return maxPx;
-  return Math.min(parseInt(h, 10) || Math.round(window.innerHeight * 0.5), maxPx);
+function triggerMobileDrawerSettle() {
+  if (mobileDrawerSettleTimer) clearTimeout(mobileDrawerSettleTimer);
+  mobileDrawerSettling.value = true;
+  mobileDrawerSettleTimer = setTimeout(() => {
+    mobileDrawerSettling.value = false;
+    mobileDrawerSettleTimer = null;
+  }, 260);
 }
 
-/** 补间动画：从当前高度平滑过渡到目标高度 */
-let heightTweenRaf = 0;
-function animateDrawerHeight(target) {
-  if (heightTweenRaf) cancelAnimationFrame(heightTweenRaf);
-  const from = parseHeightPx(drawerHeight.value);
-  const to = parseHeightPx(target);
-  if (from === to) { drawerHeight.value = target; return; }
-  const duration = 200; // ms
-  const start = performance.now();
-  function tick(now) {
-    const t = Math.min((now - start) / duration, 1);
-    // ease-out cubic
-    const ease = 1 - Math.pow(1 - t, 3);
-    const current = Math.round(from + (to - from) * ease);
-    drawerHeight.value = t >= 1 ? target : `${current}px`;
-    if (t < 1) heightTweenRaf = requestAnimationFrame(tick);
+function syncMobileDrawerHeight() {
+  const target = getTargetDrawerHeight();
+  if (drawerHeight.value !== target) {
+    drawerHeight.value = target;
+    triggerMobileDrawerSettle();
   }
-  heightTweenRaf = requestAnimationFrame(tick);
 }
-
-// 监听历史记录变化，平滑过渡抽屉高度
-watch(() => (chat.history || []).length, () => {
-  if (isMobile.value && mobileDrawerVisible.value) {
-    animateDrawerHeight(getTargetDrawerHeight());
-  }
-});
 
 // 同步抽屉显示状态与 chat.expanded (移动端)
 watch(() => chat.expanded, (expanded) => {
@@ -397,7 +376,7 @@ watch(mobileDrawerVisible, (visible) => {
   }
   // 抽屉打开时同步初始高度 + push history state 供返回手势使用
   if (visible && isMobile.value) {
-    drawerHeight.value = getTargetDrawerHeight();
+    syncMobileDrawerHeight();
     if (!drawerHistoryPushed) {
       history.pushState({ chatDrawer: true }, '');
       drawerHistoryPushed = true;
@@ -1244,6 +1223,9 @@ onMounted(async () => {
 });
 
 function onResize() {
+  if (isMobile.value && mobileDrawerVisible.value) {
+    syncMobileDrawerHeight();
+  }
   clampIntoViewport();
   ensurePanelFitsViewport();
   persistPos();
@@ -1251,6 +1233,7 @@ function onResize() {
 
 onUnmounted(() => {
   if (ctxTimer) clearTimeout(ctxTimer);
+  if (mobileDrawerSettleTimer) clearTimeout(mobileDrawerSettleTimer);
   document.removeEventListener('mousemove', onDragMove);
   document.removeEventListener('mousemove', onResizeMove);
   window.removeEventListener('resize', onResize);

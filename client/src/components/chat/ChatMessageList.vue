@@ -1,6 +1,9 @@
 <template>
   <div ref="listRef" class="chat-list" :class="extraClass">
-    <div v-if="loading" class="chat-hint">{{ t('components.chatMessageList.loading') }}</div>
+    <div v-if="loading" class="chat-loading-state" role="status" aria-live="polite">
+      <SparkLoaderAnimation class="chat-list-loader-animation" />
+      <div class="chat-loading-text">{{ t('components.chatMessageList.loading') }}</div>
+    </div>
     <div v-else-if="(history || []).length === 0 && !lastError" class="chat-empty-state">
       <slot name="empty-state">
         <div class="chat-hint">{{ t('components.chatMessageList.noMessages') }}</div>
@@ -343,6 +346,7 @@ import { NButton, NIcon, NInput, NPopover, NTooltip, useMessage } from 'naive-ui
 import MarkdownRenderer from '@/components/share/MarkdownRenderer.vue';
 import SparkAlert from '@/components/share/SparkAlert.vue';
 import AgentAvatar from '@/components/share/AgentAvatar.vue';
+import SparkLoaderAnimation from '@/components/share/SparkLoaderAnimation.vue';
 import ContextCompactionSegment from '@/components/chat/message/ContextCompactionSegment.vue';
 import ToolTraceSegment from '@/components/chat/message/ToolTraceSegment.vue';
 import type { ChatMessage } from '@/services/chatService';
@@ -1128,6 +1132,35 @@ defineExpose({ listRef });
   color: var(--spark-text-muted);
   font-size: var(--spark-fs-xs);
   padding: 8px 2px;
+}
+
+.chat-loading-state {
+  min-height: 100%;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 10px;
+  color: var(--spark-text-muted);
+  text-align: center;
+}
+
+.chat-list-loader-animation {
+  width: 92px;
+  height: 92px;
+  display: grid;
+  place-items: center;
+}
+
+.chat-list-loader-animation :deep(.spark-loader) {
+  width: 76px;
+  height: 76px;
+  margin-bottom: 0;
+}
+
+.chat-loading-text {
+  font-size: var(--spark-fs-xs);
+  color: var(--spark-text-secondary);
 }
 
 .chat-empty-state {
