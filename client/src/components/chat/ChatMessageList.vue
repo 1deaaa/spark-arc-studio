@@ -55,7 +55,10 @@
               </n-tooltip>
               <div
                 class="reasoning-block"
-                :class="{ 'is-finished': !isReasoningSegmentThinking(m, idx, segIdx) }"
+                :class="{
+                  'is-finished': !isReasoningSegmentThinking(m, idx, segIdx),
+                  'is-revealing': reasoningExpanded[getReasoningSegmentKey(m, idx, segIdx)] || reasoningHeightMeta[getReasoningSegmentKey(m, idx, segIdx)]?.animating,
+                }"
                 :style="getReasoningBlockStyle(getReasoningSegmentKey(m, idx, segIdx))"
               >
                 <div class="reasoning-toggle" :class="{ 'is-thinking': isReasoningSegmentThinking(m, idx, segIdx) }" @click="toggleReasoning(getReasoningSegmentKey(m, idx, segIdx))">
@@ -1527,6 +1530,10 @@ defineExpose({ listRef });
   background: linear-gradient(135deg, color-mix(in srgb, var(--spark-primary), transparent 94%) 0%, transparent 100%);
 }
 
+.reasoning-block.is-revealing {
+  overflow-anchor: none;
+}
+
 .reasoning-toggle {
   display: flex;
   align-items: center;
@@ -1648,5 +1655,10 @@ defineExpose({ listRef });
 .reasoning-block.is-finished {
   content-visibility: auto;
   contain-intrinsic-size: auto 80px;
+}
+
+.reasoning-block.is-finished.is-revealing {
+  content-visibility: visible;
+  contain-intrinsic-size: none;
 }
 </style>
