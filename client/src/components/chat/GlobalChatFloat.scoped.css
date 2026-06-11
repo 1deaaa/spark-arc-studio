@@ -482,6 +482,14 @@
   --n-body-padding: 0 !important;
 }
 
+/* 抽屉高度变化时由 CSS 在合成层平滑过渡，替代逐帧 JS 写高度（消除卡顿主因）。
+   naive-ui 把高度作为内联 style 写在 .n-drawer（即 .chat-mobile-drawer）本身，
+   故过渡直接挂在该元素上；时长须与 DRAWER_HEIGHT_ANIM_MS 保持一致。 */
+.chat-mobile-drawer.chat-mobile-drawer--anim {
+  transition: height 320ms cubic-bezier(0.22, 0.72, 0.16, 1);
+  will-change: height;
+}
+
 /* 抽屉满高时顶部安全区域 */
 .chat-mobile-drawer :deep(.n-drawer-content) {
   padding-top: var(--sat, 0px);

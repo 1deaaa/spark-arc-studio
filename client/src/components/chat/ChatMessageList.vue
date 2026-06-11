@@ -680,6 +680,11 @@ function measureReasoningHeight(key: string, streaming = false) {
   const el = reasoningContentRefs.get(key);
   if (!el) return 0;
   const wrapper = el.closest('.reasoning-content-wrapper') as HTMLElement | null;
+  // 祖先 .reasoning-block.is-finished 带 content-visibility:auto，离屏/未首绘时会跳过子树布局，
+  // 导致此处读到的是占位 intrinsic 尺寸而非真实高度（首次展开空白的根因之一）。
+  // 测量期间临时强制其可见，量完还原。
+  const block = el.closest('.reasoning-block') as HTMLElement | null;
+  const prevBlockCV = block ? block.style.contentVisibility : '';
   const previous = wrapper ? {
     height: wrapper.style.height,
     maxHeight: wrapper.style.maxHeight,
@@ -688,6 +693,7 @@ function measureReasoningHeight(key: string, streaming = false) {
     transition: wrapper.style.transition,
   } : null;
   try {
+    if (block) block.style.contentVisibility = 'visible';
     if (wrapper) {
       wrapper.style.transition = 'none';
       wrapper.style.height = 'auto';
@@ -707,6 +713,7 @@ function measureReasoningHeight(key: string, streaming = false) {
     if (!streaming) return fullHeight;
     return Math.min(fullHeight, STREAMING_REASONING_MAX_HEIGHT);
   } finally {
+    if (block) block.style.contentVisibility = prevBlockCV;
     if (wrapper && previous) {
       wrapper.style.height = previous.height;
       wrapper.style.maxHeight = previous.maxHeight;
@@ -818,26 +825,35 @@ function openReasoningPanel(key: string, streaming = false) {
     wrapper.style.clipPath = '';
     wrapper.style.transition = '';
   }
-  const currentHeight = getReasoningVisibleHeight(key);
-  const targetHeight = getReasoningTargetHeight(key, streaming);
+  // 先把 is-expanded 提交到 DOM（高度从 0 起步），再在 nextTick 测量目标高度。
+  // 关键：折叠态下气泡为 fit-content、宽度收窄，此时同步测量会让 Markdown 多行折行而虚高
+  // （首展 613px 空白的真正根因）。必须等 is-expanded 落到 DOM、气泡恢复真实展开宽度后再测，
+  // 才能与动画结束时 onDone 的测量结果一致，从根本上消除"先撑大再回弹"。
   reasoningExpanded.value = { ...reasoningExpanded.value, [key]: true };
   setReasoningMeta(key, {
-    height: currentHeight,
+    height: 0,
     width: measureReasoningWidth(key),
     animating: false,
     phase: '',
     desiredExpanded: true,
   });
-  flushReasoningLayout(key);
-  animateReasoningReveal(key, 'opening', { height: targetHeight }, () => {
-    const measuredHeight = measureReasoningHeight(key, streaming) || targetHeight;
-    finishReasoningRevealAnimation(key, {
-      height: targetHeight,
-      measuredHeight,
-      desiredExpanded: true,
+  nextTick(() => {
+    // 若展开动画在 nextTick 前已被取消（用户快速点回收起），则不再启动开启动画。
+    if (!reasoningExpanded.value[key] || getReasoningMeta(key).desiredExpanded === false) return;
+    const targetHeight = getReasoningTargetHeight(key, streaming);
+    setReasoningMeta(key, { width: measureReasoningWidth(key) });
+    flushReasoningLayout(key);
+    animateReasoningReveal(key, 'opening', { height: targetHeight }, () => {
+      // 动画结束后以"动画后真实布局"重新测量并落定，作为二次校正兜底。
+      const measuredHeight = measureReasoningHeight(key, streaming) || targetHeight;
+      finishReasoningRevealAnimation(key, {
+        height: measuredHeight,
+        measuredHeight,
+        desiredExpanded: true,
+      });
     });
+    scrollReasoningToBottom(key);
   });
-  scrollReasoningToBottom(key);
 }
 
 function closeReasoningPanel(key: string) {

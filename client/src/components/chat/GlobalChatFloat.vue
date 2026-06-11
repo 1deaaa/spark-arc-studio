@@ -169,11 +169,11 @@
     :height="drawerHeight"
     :trap-focus="true"
     :block-scroll="true"
-    :class="['chat-mobile-drawer', { 'chat-mobile-drawer--settling': mobileDrawerSettling }]"
+    :class="['chat-mobile-drawer', { 'chat-mobile-drawer--settling': mobileDrawerSettling, 'chat-mobile-drawer--anim': drawerHeightAnimating }]"
     @after-leave="onDrawerClosed"
   >
     <n-drawer-content :native-scrollbar="false" body-content-style="padding: 0; display: flex; flex-direction: column; height: 100%;">
-      <div ref="drawerSurfaceEl" class="chat-mobile-drawer-surface">
+      <div ref="drawerSurfaceEl" class="chat-mobile-drawer-surface" :style="drawerSurfaceStyle">
         <ChatPanel
           ref="mobileListRef"
           :agent-id="chat.currentAgentId"
@@ -329,19 +329,34 @@ const drawerHeight = ref('50%');
 const mobileDrawerSettling = ref(false);
 let mobileDrawerSettleTimer: ReturnType<typeof setTimeout> | null = null;
 
+/** 高度过渡动画时长（须与 CSS 中 .chat-mobile-drawer 的 height transition 保持一致）。 */
+const DRAWER_HEIGHT_ANIM_MS = 320;
+
 /** 抽屉高度比例边界：内容不满时最低 50%；最高贴近顶栏下沿（见 getDrawerBounds）。 */
 const DRAWER_MIN_RATIO = 0.5;
 /** 抽屉满高时与顶栏之间保留的视觉间隙（px）。 */
 const DRAWER_TOP_GAP = 8;
 
-/** 当前抽屉像素高度（缓动动画的实时值） */
+/** 当前抽屉像素高度（动画的实时目标值） */
 let drawerCurrentPx = 0;
-/** 缓动目标像素高度 */
-let drawerTargetPx = 0;
-/** 高度缓动 RAF 句柄 */
-let drawerAnimRAF: number | null = null;
+/** 高度过渡动画结束的清理定时器 */
+let drawerAnimEndTimer: ReturnType<typeof setTimeout> | null = null;
 /** 自适应测量节流 RAF */
 let drawerMeasureRAF: number | null = null;
+/** 标记动画进行中：期间禁止重复触发，避免抖动 */
+const drawerHeightAnimating = ref(false);
+
+/**
+ * 抽屉内层 surface 样式。
+ * 动画期间把 surface 固定为目标像素高度：外层 n-drawer 容器由 CSS 过渡平滑改变高度并裁切，
+ * 内层聊天列表则保持稳定盒模型，不再随容器逐帧重排，从根本上消除卡顿。
+ */
+const drawerSurfaceStyle = computed(() => {
+  if (drawerHeightAnimating.value && drawerCurrentPx > 0) {
+    return { height: `${drawerCurrentPx}px`, flex: 'none' as const };
+  }
+  return {};
+});
 
 /** 移动端头部工具栏高度（56px + 安全区域） */
 function getMobileHeaderHeight() {
@@ -379,31 +394,32 @@ function measureDrawerNaturalPx(): number {
   return Math.min(max, Math.max(min, Math.round(contentNatural)));
 }
 
-/** 非线性缓动驱动抽屉高度，避免逐帧 reflow 的视觉抖动。 */
+/**
+ * 设置抽屉目标高度。
+ * 性能要点：不再用 RAF 逐帧写高度（那会让 n-drawer 每帧重排整棵聊天列表 +
+ * NScrollbar 每帧重算，造成可见卡顿）。改为一次性写入目标高度，由 CSS 的
+ * height transition 在合成层完成缓动；动画期间用 drawerHeightAnimating 标记，
+ * 让内层 surface 暂时固定为目标高度并冻结指针事件，避免子树跟随逐帧重排。
+ */
 function animateDrawerTo(targetPx: number) {
   const { min, max } = getDrawerBounds();
-  drawerTargetPx = Math.min(max, Math.max(min, Math.round(targetPx)));
+  const next = Math.min(max, Math.max(min, Math.round(targetPx)));
   if (drawerCurrentPx <= 0) {
     // 首次：直接落位，不做动画
-    drawerCurrentPx = drawerTargetPx;
-    drawerHeight.value = `${drawerCurrentPx}px`;
+    drawerCurrentPx = next;
+    drawerHeight.value = `${next}px`;
     return;
   }
-  if (drawerAnimRAF) return; // 已有动画在跑，仅更新目标值
-  const step = () => {
-    const diff = drawerTargetPx - drawerCurrentPx;
-    if (Math.abs(diff) < 0.5) {
-      drawerCurrentPx = drawerTargetPx;
-      drawerHeight.value = `${drawerCurrentPx}px`;
-      drawerAnimRAF = null;
-      return;
-    }
-    // 指数缓动（ease-out）：每帧逼近目标 22%，形成自然非线性减速
-    drawerCurrentPx += diff * 0.22;
-    drawerHeight.value = `${Math.round(drawerCurrentPx)}px`;
-    drawerAnimRAF = requestAnimationFrame(step);
-  };
-  drawerAnimRAF = requestAnimationFrame(step);
+  if (next === drawerCurrentPx) return; // 高度无变化，跳过
+  drawerCurrentPx = next;
+  drawerHeight.value = `${next}px`;
+  // 标记动画进行中，触发 CSS 过渡 + 子树固定
+  drawerHeightAnimating.value = true;
+  if (drawerAnimEndTimer) clearTimeout(drawerAnimEndTimer);
+  drawerAnimEndTimer = setTimeout(() => {
+    drawerHeightAnimating.value = false;
+    drawerAnimEndTimer = null;
+  }, DRAWER_HEIGHT_ANIM_MS + 40);
 }
 
 /** 根据内容自适应高度。 */
@@ -1312,7 +1328,7 @@ function onResize() {
 onUnmounted(() => {
   if (ctxTimer) clearTimeout(ctxTimer);
   if (mobileDrawerSettleTimer) clearTimeout(mobileDrawerSettleTimer);
-  if (drawerAnimRAF) cancelAnimationFrame(drawerAnimRAF);
+  if (drawerAnimEndTimer) clearTimeout(drawerAnimEndTimer);
   if (drawerMeasureRAF) cancelAnimationFrame(drawerMeasureRAF);
   document.removeEventListener('mousemove', onDragMove);
   document.removeEventListener('mousemove', onResizeMove);
