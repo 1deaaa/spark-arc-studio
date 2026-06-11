@@ -1,4 +1,4 @@
-import { describe, expect, it, vi } from 'vitest';
+import { afterEach, describe, expect, it, vi } from 'vitest';
 import { mount } from '@vue/test-utils';
 import { defineComponent, nextTick } from 'vue';
 import ChatMessageList from '../ChatMessageList.vue';
@@ -24,7 +24,7 @@ vi.mock('@/components/share/MarkdownRenderer.vue', () => ({
       content: { type: String, default: '' },
       streaming: { type: Boolean, default: false },
     },
-    template: '<div class="mock-markdown">{{ content }}</div>',
+    template: '<div class="mock-markdown"><div class="node-slot">{{ content }}</div></div>',
   }),
 }));
 
@@ -34,6 +34,11 @@ vi.mock('@/components/share/AgentAvatar.vue', () => ({
     template: '<span class="mock-agent-avatar" />',
   }),
 }));
+
+afterEach(() => {
+  vi.restoreAllMocks();
+  vi.useRealTimers();
+});
 
 describe('ChatMessageList 深度思考块展开性能契约', () => {
   it('长思考内容展开和收起不会触发递归渲染，并保留 Markdown 渲染', async () => {
@@ -147,5 +152,85 @@ describe('ChatMessageList 深度思考块展开性能契约', () => {
     vi.runOnlyPendingTimers();
     await nextTick();
     expect(wrapper.find('.reasoning-content-wrapper').classes()).not.toContain('is-expanded');
+  });
+
+  it('首次展开按实际渲染节点高度落定，且测量时不把真实面板改成 auto', async () => {
+    vi.useFakeTimers();
+    const rafCallbacks: FrameRequestCallback[] = [];
+    vi.spyOn(window, 'requestAnimationFrame').mockImplementation((callback: FrameRequestCallback) => {
+      rafCallbacks.push(callback);
+      return rafCallbacks.length;
+    });
+
+    let livePanel: HTMLElement | null = null;
+    let livePanelAutoSeen = false;
+
+    vi.spyOn(HTMLElement.prototype, 'getBoundingClientRect').mockImplementation(function getMockRect(this: HTMLElement) {
+      const el = this;
+      const panel = el.closest?.('.reasoning-content-wrapper') as HTMLElement | null;
+      if (livePanel && panel === livePanel && panel.style.height === 'auto') {
+        livePanelAutoSeen = true;
+      }
+      if (el.classList?.contains('reasoning-inner')) {
+        return { width: 420, height: 613, top: 0, left: 0, right: 420, bottom: 613, x: 0, y: 0, toJSON: () => ({}) } as DOMRect;
+      }
+      if (el.classList?.contains('node-slot')) {
+        return { width: 420, height: 314, top: 0, left: 0, right: 420, bottom: 314, x: 0, y: 0, toJSON: () => ({}) } as DOMRect;
+      }
+      return { width: 420, height: 0, top: 0, left: 0, right: 420, bottom: 0, x: 0, y: 0, toJSON: () => ({}) } as DOMRect;
+    });
+
+    const wrapper = mount(ChatMessageList, {
+      props: {
+        history: [
+          {
+            id: 'assistant-3',
+            role: 'assistant',
+            content: '',
+            segments: [
+              {
+                type: 'reasoning',
+                text: '第一段较长推理内容\n\n第二段较长推理内容',
+                source_agent: 'agent_director',
+              },
+            ],
+          },
+        ],
+        sending: false,
+      },
+      global: {
+        plugins: [i18n],
+        stubs: {
+          NButton: defineComponent({ template: '<button><slot /><slot name="icon" /></button>' }),
+          NTooltip: defineComponent({ template: '<span><slot name="trigger" /><slot /></span>' }),
+          NPopover: defineComponent({ template: '<span><slot name="trigger" /><slot /></span>' }),
+          NInput: defineComponent({ template: '<textarea />' }),
+          SparkAlert: defineComponent({ template: '<div><slot /></div>' }),
+          ContextCompactionSegment: true,
+          ToolTraceSegment: true,
+        },
+      },
+    });
+
+    livePanel = wrapper.find('.reasoning-content-wrapper').element as HTMLElement;
+
+    await wrapper.find('.reasoning-toggle').trigger('click');
+    await nextTick();
+    expect(livePanel.style.height).not.toBe('auto');
+
+    const callback = rafCallbacks.shift();
+    expect(callback).toBeTruthy();
+    callback?.(performance.now());
+    await Promise.resolve();
+    await Promise.resolve();
+    await nextTick();
+    await nextTick();
+
+    expect(livePanelAutoSeen).toBe(false);
+    expect(livePanel.getAttribute('style')).toContain('--reasoning-panel-height: 314px');
+
+    vi.runOnlyPendingTimers();
+    await nextTick();
+    expect(wrapper.find('.reasoning-content-wrapper').classes()).toContain('is-expanded');
   });
 });

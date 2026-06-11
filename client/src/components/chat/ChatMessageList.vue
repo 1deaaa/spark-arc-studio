@@ -641,8 +641,11 @@ const contextSummaryExpanded = ref({});
 const reasoningContentRefs = new Map<string, HTMLElement>();
 const reasoningHeightMeta = ref({});
 const reasoningAnimationTimers = new Map<string, number>();
+const reasoningLayoutVersions = new Map<string, number>();
 const STREAMING_REASONING_MAX_HEIGHT = 108;
 const REASONING_REVEAL_TIMER_MS = 360;
+const REASONING_HEIGHT_STABLE_FRAMES = 2;
+const REASONING_HEIGHT_MAX_SAMPLES = 5;
 
 function getReasoningMeta(key: string) {
   return reasoningHeightMeta.value[key] || { height: 0, width: 0, animating: false, phase: '' };
@@ -666,6 +669,16 @@ function clearReasoningAnimationTimer(key: string) {
   }
 }
 
+function bumpReasoningLayoutVersion(key: string) {
+  const nextVersion = (reasoningLayoutVersions.get(key) || 0) + 1;
+  reasoningLayoutVersions.set(key, nextVersion);
+  return nextVersion;
+}
+
+function isReasoningLayoutVersionCurrent(key: string, version: number) {
+  return reasoningLayoutVersions.get(key) === version;
+}
+
 function getReasoningWrapper(key: string) {
   return reasoningContentRefs.get(key)?.closest('.reasoning-content-wrapper') as HTMLElement | null;
 }
@@ -676,52 +689,37 @@ function getReasoningVisibleHeight(key: string) {
   return Math.max(0, Math.round(wrapper.getBoundingClientRect().height));
 }
 
+function measureReasoningRenderedContentHeight(root: HTMLElement | null) {
+  if (!root) return 0;
+  const inner = (root.querySelector('.reasoning-inner') as HTMLElement | null) || root;
+  const markdown = (inner.querySelector('.reasoning-markdown') as HTMLElement | null) || inner;
+  const innerRect = inner.getBoundingClientRect();
+  const innerStyle = window.getComputedStyle(inner);
+  const paddingBottom = Number.parseFloat(innerStyle.paddingBottom || '0') || 0;
+  const children = Array.from(markdown.children || []) as HTMLElement[];
+  let bottom = 0;
+
+  for (const child of children) {
+    const rect = child.getBoundingClientRect();
+    if (rect.width <= 0 && rect.height <= 0) continue;
+    bottom = Math.max(bottom, rect.bottom - innerRect.top);
+  }
+
+  if (bottom > 0) {
+    return Math.ceil(bottom + paddingBottom);
+  }
+
+  const innerRectHeight = innerRect.height || 0;
+  if (innerRectHeight > 0) return Math.ceil(innerRectHeight);
+  return Math.ceil(root.getBoundingClientRect().height || 0);
+}
+
 function measureReasoningHeight(key: string, streaming = false) {
   const el = reasoningContentRefs.get(key);
   if (!el) return 0;
-  const wrapper = el.closest('.reasoning-content-wrapper') as HTMLElement | null;
-  // 祖先 .reasoning-block.is-finished 带 content-visibility:auto，离屏/未首绘时会跳过子树布局，
-  // 导致此处读到的是占位 intrinsic 尺寸而非真实高度（首次展开空白的根因之一）。
-  // 测量期间临时强制其可见，量完还原。
-  const block = el.closest('.reasoning-block') as HTMLElement | null;
-  const prevBlockCV = block ? block.style.contentVisibility : '';
-  const previous = wrapper ? {
-    height: wrapper.style.height,
-    maxHeight: wrapper.style.maxHeight,
-    overflow: wrapper.style.overflow,
-    clipPath: wrapper.style.clipPath,
-    transition: wrapper.style.transition,
-  } : null;
-  try {
-    if (block) block.style.contentVisibility = 'visible';
-    if (wrapper) {
-      wrapper.style.transition = 'none';
-      wrapper.style.height = 'auto';
-      wrapper.style.maxHeight = 'none';
-      wrapper.style.overflow = 'hidden';
-      wrapper.style.clipPath = 'inset(0 0 100% 0)';
-      // 强制浏览器在最终宽度下完成一次布局，再读取 Markdown 的真实高度。
-      void wrapper.offsetHeight;
-    }
-    const contentEl = (el.querySelector('.reasoning-inner') as HTMLElement | null)
-      || (el.firstElementChild as HTMLElement | null)
-      || el;
-    const fullHeight = Math.ceil(Math.max(
-      contentEl.getBoundingClientRect().height || 0,
-      contentEl.scrollHeight || 0,
-    ));
-    if (!streaming) return fullHeight;
-    return Math.min(fullHeight, STREAMING_REASONING_MAX_HEIGHT);
-  } finally {
-    if (block) block.style.contentVisibility = prevBlockCV;
-    if (wrapper && previous) {
-      wrapper.style.height = previous.height;
-      wrapper.style.maxHeight = previous.maxHeight;
-      wrapper.style.overflow = previous.overflow;
-      wrapper.style.clipPath = previous.clipPath;
-      wrapper.style.transition = previous.transition;
-    }
-  }
+  const fullHeight = measureReasoningRenderedContentHeight(el);
+  if (!streaming) return fullHeight;
+  return Math.min(fullHeight, STREAMING_REASONING_MAX_HEIGHT);
 }
 
 function getReasoningTargetHeight(key: string, streaming = false) {
@@ -816,8 +814,43 @@ function flushReasoningLayout(key: string) {
   void getReasoningWrapper(key)?.offsetHeight;
 }
 
+function waitReasoningAnimationFrame() {
+  return new Promise<void>((resolve) => {
+    if (typeof window === 'undefined' || typeof window.requestAnimationFrame !== 'function') {
+      resolve();
+      return;
+    }
+    window.requestAnimationFrame(() => resolve());
+  });
+}
+
+async function measureStableReasoningTargetHeight(key: string, streaming = false, version: number) {
+  let lastHeight = getReasoningTargetHeight(key, streaming);
+  let stableFrames = 0;
+
+  for (let i = 0; i < REASONING_HEIGHT_MAX_SAMPLES; i += 1) {
+    await waitReasoningAnimationFrame();
+    if (!isReasoningLayoutVersionCurrent(key, version)) return 0;
+
+    const nextHeight = getReasoningTargetHeight(key, streaming);
+    if (nextHeight > 0 && Math.abs(nextHeight - lastHeight) <= 1) {
+      stableFrames += 1;
+    } else {
+      stableFrames = 0;
+    }
+    lastHeight = nextHeight;
+
+    if (stableFrames >= REASONING_HEIGHT_STABLE_FRAMES - 1) {
+      break;
+    }
+  }
+
+  return lastHeight;
+}
+
 function openReasoningPanel(key: string, streaming = false) {
   clearReasoningAnimationTimer(key);
+  const layoutVersion = bumpReasoningLayoutVersion(key);
   const wrapper = getReasoningWrapper(key);
   if (wrapper) {
     wrapper.style.height = '';
@@ -837,10 +870,11 @@ function openReasoningPanel(key: string, streaming = false) {
     phase: '',
     desiredExpanded: true,
   });
-  nextTick(() => {
+  nextTick(async () => {
     // 若展开动画在 nextTick 前已被取消（用户快速点回收起），则不再启动开启动画。
-    if (!reasoningExpanded.value[key] || getReasoningMeta(key).desiredExpanded === false) return;
-    const targetHeight = getReasoningTargetHeight(key, streaming);
+    if (!isReasoningLayoutVersionCurrent(key, layoutVersion) || !reasoningExpanded.value[key] || getReasoningMeta(key).desiredExpanded === false) return;
+    const targetHeight = await measureStableReasoningTargetHeight(key, streaming, layoutVersion);
+    if (!isReasoningLayoutVersionCurrent(key, layoutVersion) || !reasoningExpanded.value[key] || getReasoningMeta(key).desiredExpanded === false) return;
     setReasoningMeta(key, { width: measureReasoningWidth(key) });
     flushReasoningLayout(key);
     animateReasoningReveal(key, 'opening', { height: targetHeight }, () => {
@@ -858,6 +892,7 @@ function openReasoningPanel(key: string, streaming = false) {
 
 function closeReasoningPanel(key: string) {
   clearReasoningAnimationTimer(key);
+  bumpReasoningLayoutVersion(key);
   const currentHeight = getReasoningVisibleHeight(key);
   reasoningExpanded.value = { ...reasoningExpanded.value, [key]: true };
   setReasoningMeta(key, {
@@ -899,6 +934,7 @@ function setReasoningContentRef(key, el) {
   }
   reasoningContentRefs.delete(key);
   delete reasoningHeightMeta.value[key];
+  reasoningLayoutVersions.delete(key);
   clearReasoningAnimationTimer(key);
 }
 
@@ -989,20 +1025,8 @@ watch(
           scrollReasoningToBottom(reasoningKey);
         });
       } else {
-        const oldMsg = oldHistory && oldHistory.length > lastIdx ? oldHistory[lastIdx] : null;
-        const oldHasDisplayAfter = oldMsg ? (() => {
-          const oldSegments = getMessageSegments(oldMsg);
-          const oldReasoningIdx = (() => {
-            for (let i = oldSegments.length - 1; i >= 0; i -= 1) {
-              if (oldSegments[i]?.type === 'reasoning' && getReasoningSegmentText(oldSegments[i])) return i;
-            }
-            return -1;
-          })();
-          if (oldReasoningIdx < 0) return false;
-          return hasVisibleContentAfterSegment(oldMsg, oldReasoningIdx);
-        })() : false;
-
-        if (!oldHasDisplayAfter && reasoningExpanded.value[reasoningKey]) {
+        const meta = getReasoningMeta(reasoningKey);
+        if (autoExpandedMap.value[reasoningKey] && reasoningExpanded.value[reasoningKey] && meta.desiredExpanded !== false) {
           closeReasoningPanel(reasoningKey);
         }
       }
@@ -1016,6 +1040,7 @@ onBeforeUnmount(() => {
     window.clearTimeout(timer);
   }
   reasoningAnimationTimers.clear();
+  reasoningLayoutVersions.clear();
 });
 
 function startEdit(m) {
