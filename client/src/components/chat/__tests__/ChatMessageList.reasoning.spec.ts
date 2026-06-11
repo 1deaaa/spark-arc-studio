@@ -154,6 +154,78 @@ describe('ChatMessageList 深度思考块展开性能契约', () => {
     expect(wrapper.find('.reasoning-content-wrapper').classes()).not.toContain('is-expanded');
   });
 
+  it('流式思考首次自动展开，并在正文开始输出后自动收起', async () => {
+    vi.useFakeTimers();
+    vi.spyOn(window, 'requestAnimationFrame').mockImplementation((callback: FrameRequestCallback) => {
+      callback(performance.now());
+      return 1;
+    });
+
+    const reasoningSegment = {
+      type: 'reasoning',
+      text: '第一段流式推理\n第二段流式推理',
+      source_agent: 'agent_director',
+    };
+
+    const wrapper = mount(ChatMessageList, {
+      props: {
+        history: [
+          {
+            id: 'assistant-4',
+            role: 'assistant',
+            content: '',
+            segments: [reasoningSegment],
+          },
+        ],
+        sending: true,
+      },
+      global: {
+        plugins: [i18n],
+        stubs: {
+          NButton: defineComponent({ template: '<button><slot /><slot name="icon" /></button>' }),
+          NTooltip: defineComponent({ template: '<span><slot name="trigger" /><slot /></span>' }),
+          NPopover: defineComponent({ template: '<span><slot name="trigger" /><slot /></span>' }),
+          NInput: defineComponent({ template: '<textarea />' }),
+          SparkAlert: defineComponent({ template: '<div><slot /></div>' }),
+          ContextCompactionSegment: true,
+          ToolTraceSegment: true,
+        },
+      },
+    });
+
+    await nextTick();
+    await Promise.resolve();
+    await nextTick();
+    vi.runOnlyPendingTimers();
+    await nextTick();
+
+    expect(wrapper.find('.reasoning-content-wrapper').classes()).toContain('is-expanded');
+
+    await wrapper.setProps({
+      history: [
+        {
+          id: 'assistant-4',
+          role: 'assistant',
+          content: '正文已经开始输出。',
+          segments: [
+            reasoningSegment,
+            {
+              type: 'text',
+              text: '正文已经开始输出。',
+            },
+          ],
+        },
+      ],
+      sending: true,
+    });
+
+    await nextTick();
+    vi.runOnlyPendingTimers();
+    await nextTick();
+
+    expect(wrapper.find('.reasoning-content-wrapper').classes()).not.toContain('is-expanded');
+  });
+
   it('首次展开按实际渲染节点高度落定，且测量时不把真实面板改成 auto', async () => {
     vi.useFakeTimers();
     const rafCallbacks: FrameRequestCallback[] = [];
