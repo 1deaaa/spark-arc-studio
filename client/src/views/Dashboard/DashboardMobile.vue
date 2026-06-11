@@ -24,7 +24,7 @@
              </template>
              <n-space vertical>
                <n-statistic :label="usageRangeLabel">
-                 {{ formatTokenWithCredit(myUsage?.range_stats?.tokens || 0, myCreditStatus?.credit_used_from_usage || 0) }}<n-tooltip trigger="hover"><template #trigger><SparkIcon style="cursor:help" /></template>{{ t('views.dashboard.desktop.creditIconHint') }}</n-tooltip>
+                 {{ formatTokenWithCredit(myUsage?.range_stats?.tokens || 0, myUsage?.range_stats?.credit_cost || 0) }}<n-tooltip trigger="hover"><template #trigger><SparkIcon style="cursor:help" /></template>{{ t('views.dashboard.desktop.creditIconHint') }}</n-tooltip>
                </n-statistic>
                <n-grid :cols="2" x-gap="8" y-gap="8" style="margin-top: 12px">
                   <n-gi>

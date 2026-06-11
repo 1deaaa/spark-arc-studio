@@ -200,6 +200,7 @@ class UsageServicesMixin:
                 func.coalesce(func.sum(UsageLogEntry.prompt_tokens), 0).label("prompt_tokens"),
                 func.coalesce(func.sum(UsageLogEntry.completion_tokens), 0).label("completion_tokens"),
                 func.coalesce(func.sum(UsageLogEntry.cached_prompt_tokens), 0).label("cached_prompt_tokens"),
+                func.coalesce(func.sum(UsageLogEntry.credit_cost), 0).label("credit_cost"),
                 func.count(UsageLogEntry.id).label("requests"),
                 func.sum(1 - UsageLogEntry.success).label("errors"),
             ).filter(
@@ -219,6 +220,7 @@ class UsageServicesMixin:
                 "prompt_tokens": int(result.prompt_tokens or 0),
                 "completion_tokens": int(result.completion_tokens or 0),
                 "cached_prompt_tokens": int(result.cached_prompt_tokens or 0),
+                "credit_cost": float(result.credit_cost or 0.0),
                 "requests": int(result.requests or 0),
                 "errors": int(result.errors or 0),
             }

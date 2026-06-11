@@ -128,35 +128,40 @@
 
 ### 标准设计（推荐）
 
-为兼顾稳定性、可维护性和扩展自由度，火柴网关采用双通道标准设计：
+为兼顾稳定性、可维护性和扩展自由度，火柴网关采用**两阶段初始化 + 双通道**标准设计：
 
 1. **管理通道（默认）**：
-  - 启动阶段显式调用 `initialize_matchbox(ensure_defaults=True)`，统一完成默认配置同步。
+  - **阶段一（轻启动）**：启动阶段显式调用 `initialize_matchbox(ensure_defaults=True)`，仅完成数据库引擎初始化和默认配置同步。此阶段**不会**加载 `langchain_openai` 等重运行时依赖。
+  - **阶段二（异步预热）**：紧接着调用 `warmup_matchbox_runtime(blocking=False)`，在后台线程中预加载 `ChatUniversal`、`LLMClient` 等运行时模块，与应用启动并行执行，避免首个请求阻塞。
   - 请求阶段统一通过 `matchbox()` 获取管理器，再调用 `get_user_llm(...)` / `get_user_embedding(...)`。
   - 自动处理用户选型、密钥优先级、配额拦截与用量统计。
 2. **轻量通道（旁路）**：
   - 使用 `create_quick_llm(...)` / `create_quick_embedding(...)` 快速创建客户端。
   - 不依赖数据库，适合脚本、工具链、临时任务和外部接入。
 3. **生命周期约束**：
-  - 启动初始化，关闭阶段调用 `reset_matchbo()`，避免导入即初始化的副作用。
+  - 启动时初始化 + 预热，关闭阶段调用 `reset_matchbo()`，避免导入即初始化的副作用。
 4. **运行目录治理**：
   - 通过 `AGENT_MATCHBOX_HOME` 统一指定 DB/.env/YAML/state 的运行位置。
 
 ### 推荐链路（开发者实践）
 
 ```python
-from llm.agen_matchbox import initialize_matchbox, matchbox
+from llm.agen_matchbox import initialize_matchbox, warmup_matchbox_runtime, matchbox
 
-# 1) 在应用启动阶段执行一次
+# 1) 轻启动：数据库引擎 + 默认配置同步（毫秒级）
 initialize_matchbox(ensure_defaults=True)
 
-# 2) 在业务请求中按需获取（默认 required=True）
+# 2) 异步预热：后台线程加载 langchain_openai 等重运行时依赖
+#    blocking=False（默认）立即返回，与应用启动并行；首个请求到达时模块已就绪
+warmup_matchbox_runtime(blocking=False)
+
+# 3) 在业务请求中按需获取（默认 required=True）
 client = matchbox().get_user_llm(user_id="user_123", usage_key="main", agent_name="agent_director")
 
-# 3) 像普通 LLM 一样使用
+# 4) 像普通 LLM 一样使用
 result = client.invoke("请给我一个赛博朋克世界观种子")
 
-# 4) 流式同样可用，且会自动完成用量归档
+# 5) 流式同样可用，且会自动完成用量归档
 for chunk in client.stream("继续扩展成三幕结构"):
     print(chunk.content, end="")
 ```
@@ -314,13 +319,18 @@ python matchbox_cfg_gui.py
 
 大模型管理器现已重构为组件化结构，通过 Mixin 模式集成管理、构建和统计能力。
 
-推荐写法是：导入 `initialize_matchbox` 和 `matchbox`，并在应用启动阶段显式初始化一次（建议放到 lifespan / startup 钩子中）。
+推荐写法是：导入 `initialize_matchbox`、`warmup_matchbox_runtime` 和 `matchbox`，并在应用启动阶段显式执行两阶段初始化（建议放到 lifespan / startup 钩子中）。
 
 ```python
-from llm.agen_matchbox import initialize_matchbox, matchbox
+from llm.agen_matchbox import initialize_matchbox, warmup_matchbox_runtime, matchbox
 
-# 建议在应用启动时执行一次（进程级）
+# 建议在应用启动时执行（进程级，两阶段）
+# 阶段一：轻启动——数据库引擎、表结构、默认配置同步（不加载 langchain_openai）
 initialize_matchbox(ensure_defaults=True)
+
+# 阶段二：异步预热——后台线程加载 ChatUniversal / LLMClient 等重运行时模块
+# blocking=False（默认）立即返回，不阻塞应用启动
+warmup_matchbox_runtime(blocking=False)
 
 # --- 场景1: 获取指定用户的LLM ---
 # 管理器会自动处理该用户的模型选择、API Key等所有配置

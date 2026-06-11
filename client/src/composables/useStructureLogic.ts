@@ -14,6 +14,7 @@ import { useProjectStore } from '../components/stores/projectStore';
 import bus from '../eventBus';
 import { createStreamingTask, isAbortLikeError } from '@/utils/streamingRuntime';
 import type { OutlineData } from '../services/aiContracts';
+import { buildCreativeCacheKey, isCreativeCacheEqual, loadCreativeCache, saveCreativeCache } from '@/utils/creativeLocalCache';
 
 type StructureAdoptionPayload = {
     projectName?: string;
@@ -21,6 +22,15 @@ type StructureAdoptionPayload = {
     guidance?: string;
     autoGenerateOutline?: boolean;
     [key: string]: unknown;
+};
+
+type StructureCacheSnapshot = {
+    context: string;
+    guidance: string;
+    chapterCount: number;
+    sceneCount: number;
+    lengthType: string;
+    currentOutline: OutlineData | null;
 };
 
 function getErrorMessage(error: unknown): string {
@@ -51,6 +61,36 @@ export function useStructureLogic() {
         { label: '自定义', value: 'custom' }
     ];
 
+    function buildStructureCacheKey() {
+        return buildCreativeCacheKey('structure-workbench', projectStore.currentProject);
+    }
+
+    function getStructureSnapshot(): StructureCacheSnapshot {
+        return {
+            context: context.value,
+            guidance: guidance.value,
+            chapterCount: chapterCount.value,
+            sceneCount: sceneCount.value,
+            lengthType: lengthType.value,
+            currentOutline: currentOutline.value ? JSON.parse(JSON.stringify(currentOutline.value)) as OutlineData : null,
+        };
+    }
+
+    function applyStructureSnapshot(snapshot: StructureCacheSnapshot | null | undefined) {
+        if (!snapshot) return;
+        context.value = snapshot.context || '';
+        guidance.value = snapshot.guidance || '';
+        chapterCount.value = Number.isFinite(Number(snapshot.chapterCount)) ? Number(snapshot.chapterCount) : 5;
+        sceneCount.value = Number.isFinite(Number(snapshot.sceneCount)) ? Number(snapshot.sceneCount) : 3;
+        lengthType.value = snapshot.lengthType || 'short';
+        currentOutline.value = snapshot.currentOutline ? JSON.parse(JSON.stringify(snapshot.currentOutline)) as OutlineData : null;
+    }
+
+    function saveStructureSnapshot() {
+        if (!projectStore.currentProject) return;
+        saveCreativeCache(buildStructureCacheKey(), getStructureSnapshot());
+    }
+
     watch(lengthType, (newVal) => {
         if (newVal === 'short') {
             chapterCount.value = 5;
@@ -72,9 +112,10 @@ export function useStructureLogic() {
 
         try {
             const outline = await getOutline(projectStore.currentProject);
-            if (outline) {
+            if (outline && !isCreativeCacheEqual(currentOutline.value, outline)) {
                 currentOutline.value = outline;
             }
+            saveStructureSnapshot();
         } catch (e) {
             console.log('No existing outline found');
         }
@@ -143,6 +184,7 @@ export function useStructureLogic() {
 
             if (task.aborted) return false;
             currentOutline.value = outline;
+            saveStructureSnapshot();
             message.success('大纲生成成功');
             outlineHistoryRef.value?.refresh?.();
             return true;
@@ -161,6 +203,7 @@ export function useStructureLogic() {
 
     function handleOutlineUpdate(newOutline: OutlineData | null) {
         currentOutline.value = newOutline;
+        saveStructureSnapshot();
     }
 
     async function handleSaveOutline(outline?: unknown) {
@@ -171,6 +214,7 @@ export function useStructureLogic() {
                 return;
             }
             await saveOutline(projectStore.currentProject, payload, false);
+            saveStructureSnapshot();
             message.success('大纲已保存');
         } catch (e: unknown) {
             message.error('保存失败: ' + getErrorMessage(e));
@@ -184,6 +228,7 @@ export function useStructureLogic() {
                 return;
             }
             await saveOutline(projectStore.currentProject, outline, true);
+            saveStructureSnapshot();
             message.success('已存档到历史记录');
             outlineHistoryRef.value?.refresh?.();
         } catch (e: unknown) {
@@ -197,14 +242,17 @@ export function useStructureLogic() {
             const parsed = parseOutlineMarkup(item.markup);
             if (parsed.nodes.length > 0) {
                 currentOutline.value = parsed;
+                saveStructureSnapshot();
             }
         } else if (item?.outline) {
             currentOutline.value = item.outline;
+            saveStructureSnapshot();
         }
     }
 
     function handleOutlineRestore(outline: OutlineData | null) {
         currentOutline.value = outline;
+        saveStructureSnapshot();
         message.success('大纲已恢复');
     }
 
@@ -224,18 +272,20 @@ export function useStructureLogic() {
         sceneCount.value = 3;
 
         if (newProject) {
+            applyStructureSnapshot(loadCreativeCache<StructureCacheSnapshot>(buildStructureCacheKey()));
             await loadCurrentOutline();
 
             // 仅加载“详细梗概”为上下文，不再回退灵感
             try {
                 const synMarkup = await fetchSynopsis(newProject);
-                if (synMarkup && synMarkup.trim()) {
+                if (synMarkup && synMarkup.trim() && !context.value.trim()) {
                     // fetchSynopsis 现在返回 Markup 文本，直接用作上下文
                     context.value = synMarkup;
                 }
             } catch (e) {
                 console.warn('Failed to pre-load synopsis', e);
             }
+            saveStructureSnapshot();
             void consumePendingStructureAdoption();
         }
     }, { immediate: true });
@@ -253,6 +303,7 @@ export function useStructureLogic() {
         if (typeof data?.guidance === 'string') {
             guidance.value = data.guidance;
         }
+        saveStructureSnapshot();
     }
 
     async function consumePendingStructureAdoption() {
@@ -280,6 +331,14 @@ export function useStructureLogic() {
     watch(() => projectStore.pendingStructureAdoption, () => {
         void consumePendingStructureAdoption();
     });
+
+    watch([context, guidance, chapterCount, sceneCount, lengthType], () => {
+        saveStructureSnapshot();
+    });
+
+    watch(currentOutline, () => {
+        saveStructureSnapshot();
+    }, { deep: true });
 
     return {
         context,

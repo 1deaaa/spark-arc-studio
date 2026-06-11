@@ -366,7 +366,6 @@ import ActEditor from './ActEditor.vue';
 import { useSceneStore } from '@/components/stores/sceneStore';
 import { useProjectStore } from '@/components/stores/projectStore';
 import { useFileStore } from '@/components/stores/fileStore';
-import { saveStory } from '@/services/api';
 import { useCharacterStore } from '@/components/stores/characterStore';
 import { useActionBindingStore } from '@/components/stores/actionBindingStore';
 import MarkdownRenderer from '@/components/share/MarkdownRenderer.vue';
@@ -406,58 +405,11 @@ const sceneSelectOptions = computed(() =>
 );
 const vm = getCurrentInstance();
 
-function cleanStoryDataForSave(story) {
-  // Deep copy to avoid mutating the reactive state used by the UI
-  const storyCopy = JSON.parse(JSON.stringify(story));
-  
-  const allowedSceneKeys = new Set(['scene', 'guide', 'intro', 'dia', 'thought', 'button_text', 'conditions', 'effects', 'trigger_event', 'priority', 'once_key', 'hiden']);
-  const allowedDialogueKeys = new Set(['id', 'chr', 'txt', 'opt', 'act', 'next', 'thought']);
-  const allowedOptionKeys = new Set(['optn', 'dia']);
-
-  function cleanObject(obj, allowedKeys) {
-    if (typeof obj !== 'object' || obj === null) return;
-    Object.keys(obj).forEach(key => {
-      if (!allowedKeys.has(key)) {
-        delete obj[key];
-      }
-    });
-  }
-
-  function traverseDialogues(dialogues) {
-    if (!Array.isArray(dialogues)) return;
-    dialogues.forEach(dia => {
-      cleanObject(dia, allowedDialogueKeys);
-      if (dia.opt) {
-        dia.opt.forEach(option => {
-          cleanObject(option, allowedOptionKeys);
-          if (option.dia) {
-            traverseDialogues(option.dia);
-          }
-        });
-      }
-    });
-  }
-
-  if (Array.isArray(storyCopy)) {
-    storyCopy.forEach(scene => {
-      cleanObject(scene, allowedSceneKeys);
-      if (scene.dia) {
-        traverseDialogues(scene.dia);
-      }
-    });
-  }
-  
-  return storyCopy;
-}
-
 async function maybeAutoSave() {
   if (!autoSaveEnabled.value) return;
-  const path = fileStore.selectedFile?.path;
-  if (!path || !projectStore.currentProject) return;
+  if (!fileStore.selectedFile?.path || !projectStore.currentProject) return;
   try {
-    const cleanedData = cleanStoryDataForSave(sceneStore.scriptData);
-    await saveStory(projectStore.currentProject, path, cleanedData);
-    bus.emit('saved');
+    await sceneStore._saveStory();
   } catch (e) {
     console.error('Auto save failed:', e);
   }

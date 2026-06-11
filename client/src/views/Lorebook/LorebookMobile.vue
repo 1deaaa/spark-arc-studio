@@ -163,6 +163,7 @@ import { useProjectStore } from '../../components/stores/projectStore';
 import { useViewStore } from '../../components/stores/viewStore';
 import { scrollToFlowStep } from '../../utils/mobileFlow';
 import { extractLoglineFromInspiration } from '../../utils/inspiration';
+import { buildCreativeCacheKey, isCreativeCacheEqual, loadCreativeCache, saveCreativeCache } from '@/utils/creativeLocalCache';
 
 const { t } = useI18n();
 const message = useMessage();
@@ -181,11 +182,65 @@ let suppressWorldviewAutoSave = false;
 let worldviewSaveTimer: ReturnType<typeof setTimeout> | null = null;
 
 // 编辑状态
-const editingChar = reactive({
+const editingChar = reactive<{
+  id: number | string | null;
+  name: string;
+  content: string;
+}>({
   id: null,
   name: '',
   content: ''
 });
+
+type LorebookMobileCacheSnapshot = {
+  worldview: string;
+  characters: Array<{ id: number | string; name?: string; content?: string }>;
+  editingCharDraft?: {
+    id: number | string | null;
+    name: string;
+    content: string;
+  } | null;
+};
+
+function buildLorebookCacheKey() {
+  return buildCreativeCacheKey('lorebook-content', projectStore.currentProject);
+}
+
+function saveLorebookSnapshot() {
+  if (!projectStore.currentProject) return;
+  const payload: LorebookMobileCacheSnapshot = {
+    worldview: worldview.value,
+    characters: Array.isArray(characters.value)
+      ? characters.value.map((ch: any) => ({
+          id: ch.id,
+          name: ch.name || '',
+          content: ch.content || '',
+        }))
+      : [],
+    editingCharDraft: showSingleCharDrawer.value
+      ? {
+          id: editingChar.id,
+          name: editingChar.name,
+          content: editingChar.content,
+        }
+      : null,
+  };
+  saveCreativeCache(buildLorebookCacheKey(), payload);
+}
+
+function hydrateLorebookFromCache() {
+  const cached = loadCreativeCache<LorebookMobileCacheSnapshot>(buildLorebookCacheKey());
+  if (!cached) return;
+  worldview.value = cached.worldview || '';
+  if (Array.isArray(cached.characters)) {
+    characters.value = cached.characters.map((ch) => ({ ...ch }));
+  }
+  if (cached.editingCharDraft) {
+    editingChar.id = cached.editingCharDraft.id;
+    editingChar.name = cached.editingCharDraft.name || '';
+    editingChar.content = cached.editingCharDraft.content || '';
+  }
+}
 
 // 加载世界观
 async function loadWorldview() {
@@ -197,12 +252,16 @@ async function loadWorldview() {
     const res = await fetchWithAuth(`/api/lorebooks/${pid}/${fileId}`);
     if (res.ok) {
       const data = await res.json();
-      worldview.value = data?.content || '';
+      const remoteWorldview = data?.content || '';
+      if (!isCreativeCacheEqual(worldview.value, remoteWorldview)) {
+        worldview.value = remoteWorldview;
+      }
     } else if (res.status === 404) {
       worldview.value = '';
     }
   } catch {} finally {
     suppressWorldviewAutoSave = false;
+    saveLorebookSnapshot();
   }
 }
 
@@ -219,6 +278,7 @@ async function saveWorldview(silent = false) {
     });
     const result = await res.json();
     if (res.ok && result?.success !== false) {
+      saveLorebookSnapshot();
       if (!silent) {
         message.success(t('views.lorebook.mobile.worldviewSaved'));
       }
@@ -232,6 +292,7 @@ async function saveWorldview(silent = false) {
 
 watch(worldview, () => {
   if (suppressWorldviewAutoSave) return;
+  saveLorebookSnapshot();
   if (worldviewSaveTimer) {
     clearTimeout(worldviewSaveTimer);
   }
@@ -262,11 +323,15 @@ async function loadCharacters() {
   if (!pid) return;
   loading.value = true;
   try {
-    characters.value = await fetchCharacters(pid, true);
+    const remoteCharacters = await fetchCharacters(pid, true);
+    if (!isCreativeCacheEqual(characters.value, remoteCharacters)) {
+      characters.value = Array.isArray(remoteCharacters) ? remoteCharacters : [];
+    }
   } catch {
     characters.value = [];
   } finally {
     loading.value = false;
+    saveLorebookSnapshot();
   }
 }
 
@@ -282,6 +347,7 @@ function editCharacter(ch) {
   editingChar.name = ch.name;
   editingChar.content = ch.content;
   showSingleCharDrawer.value = true;
+  saveLorebookSnapshot();
 }
 
 // 需要引入 renameCharacter 和 createCharacter
@@ -329,6 +395,7 @@ async function saveSingleCharacter() {
     // 重新加载列表
     await loadCharacters();
     showSingleCharDrawer.value = false;
+    saveLorebookSnapshot();
     message.success(t('views.common.saveSuccess'));
   } catch (e) {
     message.error(t('views.common.saveFailed'));
@@ -339,9 +406,10 @@ async function saveSingleCharacter() {
 async function handleDeleteChar() {
     if (!editingChar.id) return;
     try {
-        await deleteCharacter(projectId.value, editingChar.id);
+        await deleteCharacter(projectId.value, Number(editingChar.id));
         await loadCharacters();
         showSingleCharDrawer.value = false;
+        saveLorebookSnapshot();
       message.success(t('views.common.deleted'));
     } catch {
       message.error(t('views.common.deleteFailed'));
@@ -357,7 +425,17 @@ function onLorebookRefresh() {
   loadData();
 }
 
-onMounted(loadData);
+watch(
+  [() => editingChar.id, () => editingChar.name, () => editingChar.content, showSingleCharDrawer],
+  () => {
+    saveLorebookSnapshot();
+  }
+);
+
+onMounted(() => {
+  hydrateLorebookFromCache();
+  loadData();
+});
 onMounted(() => {
   bus.on('lorebook-refresh', onLorebookRefresh);
 });
@@ -369,7 +447,10 @@ onBeforeUnmount(() => {
     worldviewSaveTimer = null;
   }
 });
-watch(projectId, loadData);
+watch(projectId, () => {
+  hydrateLorebookFromCache();
+  loadData();
+});
 </script>
 
 <style scoped>

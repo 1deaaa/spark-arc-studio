@@ -57,7 +57,6 @@ import { useSceneStore } from '@/components/stores/sceneStore';
 import Draggable from 'vuedraggable';
 import { useProjectStore } from '@/components/stores/projectStore';
 import { useFileStore } from '@/components/stores/fileStore';
-import { saveStory } from '@/services/api';
 import { autoSaveEnabled } from '@/utils/autoSaveState';
 import { useCharacterStore } from '@/components/stores/characterStore';
 import DialogueNode from './DialogueNode.vue';
@@ -109,7 +108,7 @@ async function saveAfterDrag(evt) {
   if (!fileStore.selectedFile?.path || !projectStore.currentProject) return;
   if (evt && evt.oldIndex === evt.newIndex) return;
   try {
-    await saveStory(projectStore.currentProject, fileStore.selectedFile.path, sceneStore.scriptData);
+    await sceneStore._saveStory();
     window.dispatchEvent(new CustomEvent('saved'));
   } catch {}
 }

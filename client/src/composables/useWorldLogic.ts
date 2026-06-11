@@ -8,6 +8,7 @@ import bus from '../eventBus';
 import { createStreamingTask, consumeTextReader, createAbortableEventSource, isAbortLikeError } from '@/utils/streamingRuntime';
 import { extractLoglineFromInspiration } from '@/utils/inspiration';
 import { i18n } from '@/i18n';
+import { buildCreativeCacheKey, loadCreativeCache, saveCreativeCache } from '@/utils/creativeLocalCache';
 
 // 简单的 debounce 函数
 function debounce<T extends (...args: any[]) => any>(func: T, wait: number): (...args: Parameters<T>) => void {
@@ -48,7 +49,18 @@ type GoToSynopsisOptions = {
 };
 
 type StreamingHandle = {
-    close?: () => void;
+  close?: () => void;
+};
+
+type WorldWorkbenchCacheSnapshot = {
+    museInput: string;
+    museResult: string;
+    currentInspirationId: string | null;
+    selectedGenres: string[];
+    selectedTones: string[];
+    selectedWorldviews: string[];
+    selectedPov?: string;
+    selectedLength?: string;
 };
 
 function getErrorMessage(error: unknown): string {
@@ -92,7 +104,54 @@ export function useWorldLogic() {
     const selectedPov = ref<string | undefined>(undefined);
     const selectedLength = ref<string | undefined>(undefined);
 
+    function buildWorldCacheKey(projectName: string | null | undefined = projectStore.currentProject) {
+        return buildCreativeCacheKey('world-workbench', projectName || 'global');
+    }
+
+    function getWorldSnapshot(): WorldWorkbenchCacheSnapshot {
+        return {
+            museInput: museInput.value,
+            museResult: museResult.value,
+            currentInspirationId: currentInspirationId.value,
+            selectedGenres: [...selectedGenres.value],
+            selectedTones: [...selectedTones.value],
+            selectedWorldviews: [...selectedWorldviews.value],
+            selectedPov: selectedPov.value,
+            selectedLength: selectedLength.value,
+        };
+    }
+
+    function applyWorldSnapshot(snapshot: WorldWorkbenchCacheSnapshot | null | undefined) {
+        const safe = snapshot || {
+            museInput: '',
+            museResult: '',
+            currentInspirationId: null,
+            selectedGenres: [],
+            selectedTones: [],
+            selectedWorldviews: [],
+            selectedPov: undefined,
+            selectedLength: undefined,
+        };
+        museInput.value = safe.museInput || '';
+        museResult.value = safe.museResult || '';
+        currentInspirationId.value = safe.currentInspirationId || null;
+        projectStore.currentInspirationId = safe.currentInspirationId || null;
+        selectedGenres.value = Array.isArray(safe.selectedGenres) ? [...safe.selectedGenres] : [];
+        selectedTones.value = Array.isArray(safe.selectedTones) ? [...safe.selectedTones] : [];
+        selectedWorldviews.value = Array.isArray(safe.selectedWorldviews) ? [...safe.selectedWorldviews] : [];
+        selectedPov.value = safe.selectedPov;
+        selectedLength.value = safe.selectedLength;
+    }
+
     watch(museResult, (val) => { projectStore.currentInspiration = val; });
+
+    watch(
+        [museInput, museResult, currentInspirationId, selectedGenres, selectedTones, selectedWorldviews, selectedPov, selectedLength],
+        () => {
+            saveCreativeCache(buildWorldCacheKey(), getWorldSnapshot());
+        },
+        { deep: true }
+    );
 
     watch([museInput, museResult, currentInspirationId, isCurrentInspirationBound], () => {
         if (!isCurrentInspirationBound.value || !currentInspirationId.value) return;
@@ -163,17 +222,15 @@ export function useWorldLogic() {
 
     watch(() => projectStore.currentProject, async (nextProject, prevProject) => {
         if (nextProject === prevProject) return;
-        museInput.value = '';
-        museResult.value = '';
-        currentInspirationId.value = null;
+        applyWorldSnapshot(loadCreativeCache<WorldWorkbenchCacheSnapshot>(buildWorldCacheKey(nextProject)));
         projectStore.currentInspiration = '';
-        projectStore.currentInspirationId = null;
         unreadCount.value = 0;
         await loadProjectStoryTags(nextProject);
         if (nextProject) {
             const boundInspiration = await projectStore.refreshCurrentProjectInspiration(nextProject);
             if (boundInspiration) {
                 handleMuseHistorySelect(boundInspiration);
+                saveCreativeCache(buildWorldCacheKey(nextProject), getWorldSnapshot());
             }
         }
         
@@ -190,6 +247,7 @@ export function useWorldLogic() {
             if (!force && (museInput.value || museResult.value)) return;
 
             handleMuseHistorySelect(latest);
+            saveCreativeCache(buildWorldCacheKey(), getWorldSnapshot());
         } catch (e: unknown) {
             console.warn('加载最新灵感失败:', e);
         }
@@ -294,6 +352,7 @@ export function useWorldLogic() {
                     content: museResult.value,
                 });
             }
+            saveCreativeCache(buildWorldCacheKey(), getWorldSnapshot());
             museHistoryRef.value?.refresh();
         } catch (e: unknown) {
             if (isAbortLikeError(e)) return;
@@ -327,6 +386,7 @@ export function useWorldLogic() {
         }
         // 注意：选择历史灵感时不自动绑定到项目
         // 用户可能只是想查看，绑定应该在明确采纳时进行
+        saveCreativeCache(buildWorldCacheKey(), getWorldSnapshot());
     }
 
     async function persistStoryTags(activeInspirationId: string | null = currentInspirationId.value) {
@@ -732,11 +792,15 @@ export function useWorldLogic() {
     });
 
     onMounted(() => {
+        applyWorldSnapshot(loadCreativeCache<WorldWorkbenchCacheSnapshot>(buildWorldCacheKey()));
         bus.on('muse-refresh', refreshCurrentInspiration);
         if (projectStore.currentProject) {
             projectStore.refreshCurrentProjectInspiration(projectStore.currentProject)
                 .then((entry) => {
-                    if (entry) handleMuseHistorySelect(entry);
+                    if (entry) {
+                        handleMuseHistorySelect(entry);
+                        saveCreativeCache(buildWorldCacheKey(), getWorldSnapshot());
+                    }
                 })
                 .catch((e) => console.warn('加载当前项目绑定灵感失败:', e));
             loadProjectStoryTags(projectStore.currentProject);

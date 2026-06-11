@@ -536,7 +536,7 @@
 }
 
 :global(html.viewport-mobile .ai-manager .status-bar) {
-    gap: 6px;
+    gap: 4px;
     padding: 6px 8px;
     flex-wrap: nowrap !important;
 }
@@ -557,6 +557,11 @@
 
 :global(html.viewport-mobile .ai-manager .status-text) {
     font-size: var(--spark-fs-2xs);
+}
+
+/* 超窄屏：状态栏文字隐藏，仅留图标，避免"托管/自由"等文字挤占横向空间 */
+:global(html.viewport-mobile .ai-manager .status-bar .status-item .status-text) {
+    display: none;
 }
 
 /* 优化拖动句柄以节省空间，而不是隐藏 */
@@ -591,8 +596,19 @@
     white-space: nowrap;
     overflow: hidden;
     text-overflow: ellipsis;
-    flex-shrink: 1;
+    flex: 1 1 auto;
+    min-width: 40px;
     /* 允许名称缩小以显示省略号 */
+}
+
+/* 平台级"剩余火柴"标签在窄屏冗余（每个模型已单独显示计费），隐藏以释放横向空间 */
+:global(html.viewport-mobile .ai-manager .platform-left .platform-credit-tag) {
+    display: none !important;
+}
+
+/* 平台标签收缩，避免挤占平台名 */
+:global(html.viewport-mobile .ai-manager .platform-left :deep(.spark-tag)) {
+    flex-shrink: 0;
 }
 
 :global(html.viewport-mobile .ai-manager .platform-url) {
@@ -644,8 +660,9 @@
 
 :global(html.viewport-mobile .ai-manager .model-display-name) {
     font-size: var(--spark-fs-base);
-    flex-shrink: 0;
-    max-width: 45%;
+    flex: 1 1 auto;
+    min-width: 0;
+    max-width: 100%;
     white-space: nowrap;
     overflow: hidden;
     text-overflow: ellipsis;

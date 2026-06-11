@@ -304,14 +304,9 @@ import { AUTO_SAVE_DEBOUNCE_TIME } from '../../config';
 
 async function maybeAutoSave() {
   if (!autoSaveEnabled.value) return;
-  const path = fileStore.selectedFile?.path;
-  if (!path || !projectStore.currentProject) return;
+  if (!fileStore.selectedFile?.path || !projectStore.currentProject) return;
   try {
-    const { saveStory } = await import('../../services/api');
-    const { serializeToArc } = await import('../../services/arcParser');
-    const dataToSave = serializeToArc(Array.isArray(sceneStore.scriptData) ? sceneStore.scriptData : []);
-    await saveStory(projectStore.currentProject, path, dataToSave);
-    bus.emit('saved');
+    await sceneStore._saveStory();
   } catch (e) {
     console.error('Auto save failed:', e);
   }

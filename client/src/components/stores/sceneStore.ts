@@ -3,6 +3,7 @@ import { fetchStoryFile, saveStory } from '@/services/api';
 import { useProjectStore } from './projectStore';
 import bus from '@/eventBus';
 import { parseArc, serializeToArc, type ActValue, type ArcDialogueNode, type ArcOptionNode, type ArcScene } from '@/services/arcParser';
+import { buildCreativeCacheKey, isCreativeCacheEqual, loadCreativeCache, saveCreativeCache } from '@/utils/creativeLocalCache';
 
 export type SceneSelectionType = '' | 'scene' | 'dialogue' | 'option' | 'novel';
 
@@ -42,6 +43,15 @@ type SceneStoreState = {
   lastScriptwriterThought: string;
 };
 
+type StoryCacheSnapshot = {
+  currentFilePath: string;
+  fileFormat: 'arc' | 'novel';
+  workspaceMode: 'script' | 'novel';
+  scriptData: SceneWithClientId[] | string;
+};
+
+const lastPersistedStoryPayload = new Map<string, string>();
+
 function getErrorMessage(error: unknown): string {
   if (error instanceof Error) return error.message;
   return String(error || '未知错误');
@@ -54,6 +64,57 @@ function assignSceneClientIds(scenes: ArcScene[] = []): SceneWithClientId[] {
       ? scene.__sid
       : `scene-${index}-${(scene?.scene || '').toString()}`
   }));
+}
+
+function buildStoryCacheKey(projectName: string | null | undefined, filePath: string): string {
+  return buildCreativeCacheKey('story-file', projectName, filePath);
+}
+
+function normalizeStoryResponse(filePath: string, data: unknown): StoryCacheSnapshot {
+  const isNovel = filePath.endsWith('.md');
+  if (isNovel) {
+    return {
+      currentFilePath: filePath,
+      fileFormat: 'novel',
+      workspaceMode: 'novel',
+      scriptData: typeof data === 'string'
+        ? data
+        : data && typeof data === 'object' && 'content' in (data as Record<string, unknown>) && typeof (data as Record<string, unknown>).content === 'string'
+          ? String((data as Record<string, unknown>).content || '')
+          : '',
+    };
+  }
+
+  const arcText = typeof data === 'string'
+    ? data
+    : data && typeof data === 'object' && 'content' in (data as Record<string, unknown>) && typeof (data as Record<string, unknown>).content === 'string'
+      ? String((data as Record<string, unknown>).content || '')
+      : '';
+
+  return {
+    currentFilePath: filePath,
+    fileFormat: 'arc',
+    workspaceMode: 'script',
+    scriptData: assignSceneClientIds(parseArc(arcText)),
+  };
+}
+
+function serializeStoryDataForSave(filePath: string, scriptData: SceneWithClientId[] | string): string {
+  if (filePath.endsWith('.md')) {
+    return String(scriptData ?? '');
+  }
+  return serializeToArc(Array.isArray(scriptData) ? scriptData : []);
+}
+
+function buildStorySnapshot(filePath: string, store: SceneStoreState): StoryCacheSnapshot {
+  return {
+    currentFilePath: filePath,
+    fileFormat: filePath.endsWith('.md') ? 'novel' : 'arc',
+    workspaceMode: filePath.endsWith('.md') ? 'novel' : 'script',
+    scriptData: filePath.endsWith('.md')
+      ? String(store.scriptData ?? '')
+      : assignSceneClientIds(Array.isArray(store.scriptData) ? store.scriptData : []),
+  };
 }
 
 export const useSceneStore = defineStore('scene', {
@@ -69,6 +130,42 @@ export const useSceneStore = defineStore('scene', {
     lastScriptwriterThought: '', // scriptwriter 的 thought（最近一次多段续写返回）
   }),
   actions: {
+    _applyStorySnapshot(snapshot: StoryCacheSnapshot) {
+      const previousSceneName = this.currentScene?.scene;
+      this.currentFilePath = snapshot.currentFilePath;
+      this.fileFormat = snapshot.fileFormat;
+      this.workspaceMode = snapshot.workspaceMode;
+
+      if (snapshot.fileFormat === 'novel') {
+        this.scriptData = String(snapshot.scriptData ?? '');
+        this.currentScene = null;
+        this.currentNode = null;
+        this.nodeParent = null;
+        this.selectionType = 'novel';
+        return;
+      }
+
+      const normalizedScenes = assignSceneClientIds(Array.isArray(snapshot.scriptData) ? snapshot.scriptData : []);
+      this.scriptData = normalizedScenes;
+      if (normalizedScenes.length > 0) {
+        const found = previousSceneName
+          ? normalizedScenes.find((scene) => scene.scene === previousSceneName)
+          : null;
+        this.currentScene = found || normalizedScenes[0];
+        this.selectionType = 'scene';
+      } else {
+        this.currentScene = null;
+        this.selectionType = '';
+      }
+      this.currentNode = null;
+      this.nodeParent = null;
+    },
+    _syncCurrentStoryCache() {
+      const projectStore = useProjectStore();
+      if (!projectStore.currentProject || !this.currentFilePath) return;
+      const cacheKey = buildStoryCacheKey(projectStore.currentProject, this.currentFilePath);
+      saveCreativeCache(cacheKey, buildStorySnapshot(this.currentFilePath, this));
+    },
     setWorkspaceMode(mode: string) {
       this.workspaceMode = mode === 'novel' ? 'novel' : 'script';
     },
@@ -104,57 +201,19 @@ export const useSceneStore = defineStore('scene', {
       }
       try {
         const projectStore = useProjectStore();
+        const cacheKey = buildStoryCacheKey(projectStore.currentProject, filePath);
+        const cached = loadCreativeCache<StoryCacheSnapshot>(cacheKey);
+        if (cached && cached.currentFilePath === filePath) {
+          this._applyStorySnapshot(cached);
+        }
+
         const data = await fetchStoryFile(String(projectStore.currentProject || ''), filePath);
-        
-        // 移除对旧 JSON 格式的支持，仅处理 .arc 和 .md 文本
-        let normalized: SceneWithClientId[] = [];
-        const isNovel = filePath.endsWith('.md');
-        
-        if (isNovel) {
-          this.fileFormat = 'novel';
-          this.workspaceMode = 'novel';
-          // 小说直接存文本内容
-          if (typeof data === 'string') {
-            this.scriptData = data;
-          } else if (data && typeof data.content === 'string') {
-            this.scriptData = data.content;
-          } else {
-            this.scriptData = "";
-          }
-        } else {
-          this.fileFormat = 'arc';
-          this.workspaceMode = 'script';
-          if (typeof data === 'string') {
-            normalized = assignSceneClientIds(parseArc(data));
-          } else if (data && typeof data.content === 'string') {
-            normalized = assignSceneClientIds(parseArc(data.content));
-          } else {
-            console.warn('收到不支持的剧本数据格式:', data);
-            normalized = [];
-          }
-          this.scriptData = normalized;
+        const remoteSnapshot = normalizeStoryResponse(filePath, data);
+        const localSnapshot = buildStorySnapshot(filePath, this);
+        if (!isCreativeCacheEqual(localSnapshot, remoteSnapshot)) {
+          this._applyStorySnapshot(remoteSnapshot);
         }
-        
-        this.currentFilePath = filePath;
-        
-        if (isNovel) {
-          this.currentScene = null;
-          this.currentNode = null;
-          this.nodeParent = null;
-          this.selectionType = 'novel';
-        } else if (Array.isArray(this.scriptData) && this.scriptData.length > 0) {
-          // 尽量恢复之前选中的场景，否则选中第一个
-          const prevSceneName = this.currentScene?.scene;
-          const found = this.scriptData.find((s) => s.scene === prevSceneName);
-          this.currentScene = found || this.scriptData[0];
-        } else {
-          this.currentScene = null;
-        }
-        if (!isNovel) {
-          this.currentNode = null;
-          this.nodeParent = null;
-          this.selectionType = this.currentScene ? 'scene' : '';
-        }
+        saveCreativeCache(cacheKey, remoteSnapshot);
       } catch (error: unknown) {
         console.error('加载剧本失败:', error);
         bus.emit('toast', { type: 'error', message: `加载剧本失败: ${getErrorMessage(error)}` });
@@ -167,13 +226,15 @@ export const useSceneStore = defineStore('scene', {
         return;
       }
       try {
-        const isNovel = typeof this.currentFilePath === 'string' && this.currentFilePath.endsWith('.md');
-        const dataToSave = isNovel
-          ? String(this.scriptData ?? '')
-          : serializeToArc(Array.isArray(this.scriptData) ? this.scriptData : []);
-        
+        const dataToSave = serializeStoryDataForSave(this.currentFilePath, this.scriptData);
+        const cacheKey = buildStoryCacheKey(projectStore.currentProject, this.currentFilePath);
+        saveCreativeCache(cacheKey, buildStorySnapshot(this.currentFilePath, this));
+        const persistKey = `${projectStore.currentProject}:${this.currentFilePath}`;
+        if (lastPersistedStoryPayload.get(persistKey) === dataToSave) {
+          return;
+        }
         await saveStory(projectStore.currentProject, this.currentFilePath, dataToSave);
-        
+        lastPersistedStoryPayload.set(persistKey, dataToSave);
         bus.emit('toast', { type: 'success', message: '已保存' });
         bus.emit('saved');
       } catch (error: unknown) {
@@ -200,17 +261,17 @@ export const useSceneStore = defineStore('scene', {
     updateCurrentScene(fields: Partial<SceneWithClientId>) {
       if (!this.currentScene) return;
       Object.assign(this.currentScene, fields);
-      void this._saveStory();
+      this._syncCurrentStoryCache();
     },
     updateCurrentDialogue(fields: Partial<ArcDialogueNode>) {
       if (!this.currentNode || this.selectionType !== 'dialogue') return;
       Object.assign(this.currentNode, fields);
-      void this._saveStory();
+      this._syncCurrentStoryCache();
     },
     updateCurrentOption(fields: Partial<ArcOptionNode>) {
       if (!this.currentNode || this.selectionType !== 'option') return;
       Object.assign(this.currentNode, fields);
-      void this._saveStory();
+      this._syncCurrentStoryCache();
     },
     async createNewScene() {
       const sceneName = await new Promise<unknown>((resolve) => {
@@ -241,6 +302,7 @@ export const useSceneStore = defineStore('scene', {
         }
         this.scriptData.push(newScene);
         this.selectScene(newScene);
+        this._syncCurrentStoryCache();
         await this._saveStory();
         return newScene; // Return the newly created scene object
       }
@@ -256,6 +318,7 @@ export const useSceneStore = defineStore('scene', {
         this.currentNode = null;
         this.nodeParent = null;
         this.selectionType = this.currentScene ? 'scene' : '';
+        this._syncCurrentStoryCache();
         await this._saveStory();
         bus.emit('toast', { type: 'success', message: '场景已删除' });
       }
@@ -271,6 +334,7 @@ export const useSceneStore = defineStore('scene', {
       this.currentNode = null;
       this.nodeParent = null;
       this.selectionType = 'novel';
+      this._syncCurrentStoryCache();
       await this._saveStory();
     }
   },

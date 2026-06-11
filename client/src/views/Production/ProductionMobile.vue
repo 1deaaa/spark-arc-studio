@@ -240,14 +240,14 @@
 </template>
 
 <script setup lang="ts">
-import { ref, computed, onMounted, inject, watch, type Ref } from 'vue';
+import { ref, computed, onMounted, onUnmounted, inject, watch, type Ref } from 'vue';
 import { NIcon, NSpin, NButton, NInput, NInputNumber, NSelect, NDrawer, NDrawerContent, NTabs, NTabPane, NSwitch, NText } from 'naive-ui';
 import { useI18n } from 'vue-i18n';
 import { ArrowLeft, BookOpen, Pencil, Save, Sparkles, SquarePen } from '@lucide/vue';
 import { useSceneStore, type SceneWithClientId } from '../../components/stores/sceneStore';
 import { useFileStore } from '../../components/stores/fileStore';
 import { getOutline } from '../../services/api';
-import type { OutlineData, StoryFileTreeNode } from '../../services/aiContracts';
+import type { OutlineData } from '../../services/aiContracts';
 import GlobalLoading from '../../components/share/GlobalLoading.vue';
 import AiPanel from '../../components/dlg-editor/AiPanel.vue';
 import ScriptGenerationModal from '../../components/dlg-editor/ScriptGenerationModal.vue';
@@ -258,6 +258,8 @@ import SparkTag from '../../components/share/SparkTag.vue';
 import MobileTextArea from '../../components/editors/mobile/MobileTextArea.vue';
 import ConditionsEditor from '../../components/dlg-editor/ConditionsEditor.vue';
 import EffectsEditor from '../../components/dlg-editor/EffectsEditor.vue';
+import { useStoryFileOptions } from '../../composables/useStoryFileOptions';
+import bus from '../../eventBus';
 
 const { t } = useI18n();
 
@@ -295,51 +297,13 @@ const sceneHidden = ref(false);
 const sceneConditions = ref<any>(null);
 const sceneEffects = ref<any>(null);
 
-const storyOptions = computed<SelectOption[]>(() => {
-  const flat: SelectOption[] = [];
-  function walk(list: StoryFileTreeNode[] = []) {
-    list.forEach(item => {
-      if (item.type === 'story') {
-        flat.push({ label: item.name || item.path, value: item.path });
-      } else if (Array.isArray(item.children)) {
-        walk(item.children);
-      }
-    });
-  }
-  walk(fileStore.fileTree || []);
-  return flat;
-});
+const { flatOptions: flatStoryOptions, groupedOptions } = useStoryFileOptions(
+  () => t('views.production.mobile.rootFiles')
+);
 
-const groupedStoryOptions = computed(() => {
-  const tree = fileStore.fileTree || [];
-  const groups: { type: string; label: string; key: string; children: SelectOption[] }[] = [];
-  function walkFolder(list: StoryFileTreeNode[], parentLabel: string) {
-    list.forEach(item => {
-      if (item.type === 'folder' && Array.isArray(item.children)) {
-        const folderLabel = item.name || parentLabel;
-        const children: SelectOption[] = [];
-        item.children.forEach(child => {
-          if (child.type === 'story') {
-            children.push({ label: child.name || child.path, value: child.path });
-          }
-        });
-        if (children.length > 0) {
-          groups.push({ type: 'group', label: folderLabel, key: `folder:${folderLabel}`, children });
-        }
-        walkFolder(item.children, folderLabel);
-      } else if (item.type === 'story') {
-        const rootChildren = groups.find(g => g.key === 'root');
-        if (!rootChildren) {
-          groups.push({ type: 'group', label: t('views.production.mobile.rootFiles'), key: 'root', children: [{ label: item.name || item.path, value: item.path }] });
-        } else {
-          rootChildren.children.push({ label: item.name || item.path, value: item.path });
-        }
-      }
-    });
-  }
-  walkFolder(tree, '');
-  return groups.length > 0 ? groups : storyOptions.value;
-});
+const storyOptions = computed<SelectOption[]>(() => flatStoryOptions.value);
+
+const groupedStoryOptions = computed(() => groupedOptions.value);
 
 function toggleWorkspaceMode() {
   sceneStore.workspaceMode = workspaceMode.value === 'script' ? 'novel' : 'script';
@@ -415,7 +379,7 @@ function hydrateSceneForm() {
   sceneEffects.value = (currentScene.value.effects != null) ? currentScene.value.effects : null;
 }
 
-function saveSceneMeta() {
+async function saveSceneMeta() {
   if (!currentScene.value) return;
   sceneStore.updateCurrentScene({
     scene: sceneTitle.value.trim() || currentScene.value.scene,
@@ -430,6 +394,7 @@ function saveSceneMeta() {
     conditions: sceneConditions.value,
     effects: sceneEffects.value,
   });
+  await sceneStore._saveStory();
   showSceneMetaDrawer.value = false;
 }
 
@@ -463,6 +428,16 @@ watch(() => fileStore.selectedFile?.path, (val) => {
 
 watch(currentScene, () => {
   hydrateSceneForm();
+});
+
+// 进入场景详情（沉浸阅读）时通知外层隐藏右侧步骤导航，避免下滑误触跳走工作流
+watch(viewMode, (mode) => {
+  bus.emit('mobile-flow-immersive', mode === 'detail');
+});
+
+onUnmounted(() => {
+  // 组件卸载时务必复位，防止离开创作页后导航仍处于隐藏态
+  bus.emit('mobile-flow-immersive', false);
 });
 </script>
 

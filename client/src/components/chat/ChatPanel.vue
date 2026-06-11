@@ -134,12 +134,17 @@
           <template #icon>
             <span class="send-icon-stage" aria-hidden="true">
               <svg class="send-glyph send-glyph--ready" viewBox="0 0 24 24" fill="none">
-                <path class="send-spark" d="M12 3.5l1.5 4.6 4.6 1.5-4.6 1.5-1.5 4.6-1.5-4.6-4.6-1.5 4.6-1.5L12 3.5Z" />
-                <path class="send-arrow" d="M4 19.5 21 12 4 4.5l2.1 6.1L14 12l-7.9 1.4L4 19.5Z" />
+                <!-- 上升能量拖尾：灵感被激发、向右上方送出的轨迹 -->
+                <circle class="send-trail send-trail-1" cx="4.5" cy="19.5" r="1" />
+                <circle class="send-trail send-trail-2" cx="8.2" cy="15.8" r="1.25" />
+                <!-- 主火花：四角星，灵感核心 -->
+                <path class="send-spark-core" d="M14.8 3.6l1.75 5.45 5.45 1.75-5.45 1.75L14.8 18.5l-1.75-5.45L7.6 11.3l5.45-1.75L14.8 3.6Z" />
+                <!-- 点缀小火花 -->
+                <path class="send-spark-mini" d="M19.6 14.4l.55 1.7 1.7.55-1.7.55-.55 1.7-.55-1.7-1.7-.55 1.7-.55.55-1.7Z" />
               </svg>
               <svg class="send-glyph send-glyph--working" viewBox="0 0 24 24" fill="none">
                 <circle class="work-orbit" cx="12" cy="12" r="8.5" />
-                <path class="work-core" d="M9 9h6v6H9z" />
+                <rect class="work-core" x="8.5" y="8.5" width="7" height="7" rx="2" />
                 <path class="work-spark" d="M18.5 4.5 19.2 7l2.3.8-2.3.8-.7 2.4-.8-2.4-2.2-.8 2.2-.8.8-2.5Z" />
               </svg>
             </span>
@@ -532,16 +537,39 @@ defineExpose({ listRef: chatListRef });
   transform: rotate(0deg) scale(1);
 }
 
-.send-arrow {
+/* ready 态：火花核心 + 上升拖尾，灵感被激发送出 */
+.send-spark-core {
   fill: currentColor;
-  opacity: 0.95;
+  opacity: 0.96;
+  transform-origin: 14.8px 11px;
+  animation: sendSparkBreathe 2.6s ease-in-out infinite;
 }
 
-.send-spark {
+.send-spark-mini {
   fill: currentColor;
-  opacity: 0.32;
+  opacity: 0.55;
+  transform-origin: 19.6px 16.7px;
+  animation: sendSparkTwinkle 2.2s ease-in-out infinite;
+}
+
+.send-trail {
+  fill: currentColor;
+  opacity: 0;
   transform-origin: center;
-  animation: sendSparkRest 2.8s ease-in-out infinite;
+  animation: sendTrailRise 2.4s ease-in-out infinite;
+}
+
+.send-trail-2 {
+  animation-delay: 0.28s;
+}
+
+/* hover 时火花更亮、拖尾节奏加快，呼应"准备点燃" */
+.spark-send-btn:hover .send-spark-core {
+  animation-duration: 1.6s;
+}
+
+.spark-send-btn:hover .send-trail {
+  animation-duration: 1.5s;
 }
 
 .work-orbit {
@@ -568,9 +596,23 @@ defineExpose({ listRef: chatListRef });
   animation: sendWorkSpark 1.5s ease-in-out infinite;
 }
 
-@keyframes sendSparkRest {
-  0%, 100% { transform: scale(0.92); opacity: 0.22; }
-  45% { transform: scale(1.08); opacity: 0.4; }
+/* 火花核心：轻微呼吸缩放，像蓄势待发的灵感 */
+@keyframes sendSparkBreathe {
+  0%, 100% { transform: scale(0.94) rotate(0deg); opacity: 0.9; }
+  50% { transform: scale(1.06) rotate(8deg); opacity: 1; }
+}
+
+@keyframes sendSparkTwinkle {
+  0%, 100% { transform: scale(0.7); opacity: 0.3; }
+  50% { transform: scale(1.05); opacity: 0.75; }
+}
+
+/* 拖尾光点：从左下向核心方向上升、淡入淡出，暗示"送出" */
+@keyframes sendTrailRise {
+  0% { transform: translate(0, 0) scale(0.6); opacity: 0; }
+  35% { opacity: 0.7; }
+  70% { transform: translate(2.4px, -2.4px) scale(1); opacity: 0.35; }
+  100% { transform: translate(4px, -4px) scale(0.5); opacity: 0; }
 }
 
 @keyframes sendWorkOrbit {

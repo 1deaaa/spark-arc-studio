@@ -36,7 +36,7 @@
 </template>
 
 <script setup lang="ts">
-import { ref } from 'vue';
+import { ref, watch } from 'vue';
 import { NCard, NForm, NButton, NIcon } from 'naive-ui';
 import { Zap } from '@lucide/vue';
 import StudioSeamlessTextarea from '@/components/editors/StudioSeamlessTextarea.vue';
@@ -47,6 +47,7 @@ import { useProjectStore } from '@/components/stores/projectStore';
 import bus from '@/eventBus';
 import { createStreamingTask, consumeNdjsonReader, isAbortLikeError, createThinkStreamParser } from '@/utils/streamingRuntime';
 import type { StoryCharacterDetail } from '@/services/aiContracts';
+import { buildCreativeCacheKey, loadCreativeCache, saveCreativeCache } from '@/utils/creativeLocalCache';
 
 type ChatStreamEvent = {
   event?: string;
@@ -64,6 +65,19 @@ const projectStore = useProjectStore();
 
 const suggestion = ref('');
 const generating = ref(false);
+
+function buildSuggestionCacheKey() {
+  return buildCreativeCacheKey('worldview-adjust-suggestion', projectStore.currentProject);
+}
+
+watch(suggestion, (value) => {
+  if (!projectStore.currentProject) return;
+  saveCreativeCache(buildSuggestionCacheKey(), value);
+});
+
+watch(() => projectStore.currentProject, (projectName) => {
+  suggestion.value = loadCreativeCache<string>(buildCreativeCacheKey('worldview-adjust-suggestion', projectName)) || '';
+}, { immediate: true });
 
 async function buildActiveContext(projectName: string): Promise<string> {
   let worldview = '';
@@ -194,6 +208,7 @@ async function handleAdjust() {
       bus.emit('lorebook-refresh');
       bus.emit('toast', { type: 'success', message: '世界观设定已更新' });
       suggestion.value = '';
+      saveCreativeCache(buildSuggestionCacheKey(), '');
     } else {
       bus.emit('toast', { type: 'warning', message: assistantText.trim() || '本次未执行世界观重写工具，请调整描述后重试' });
     }

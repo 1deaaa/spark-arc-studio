@@ -416,7 +416,9 @@ const verificationWidgetReady = ref(false);
 let turnstileWidgetId: string | number | null = null;
 
 const requiresHumanVerification = computed(() =>
-  registrationVerification.value.enabled && registrationVerification.value.provider === 'turnstile'
+  registrationVerification.value.enabled
+  && registrationVerification.value.provider === 'turnstile'
+  && !!registrationVerification.value.site_key
 );
 
 // form-stage 高度动画：ResizeObserver 驱动 CSS 变量
@@ -474,7 +476,8 @@ async function loadRegistrationVerificationConfig() {
       renderTurnstile();
     }
   } catch {
-    registrationVerification.value = { enabled: true, provider: 'turnstile' };
+    registrationVerification.value = { enabled: false, provider: 'none' };
+    removeTurnstile();
     verificationHint.value = t('login.verification.configFailed');
   } finally {
     nextTick(() => syncFormStageHeight());
@@ -528,6 +531,17 @@ async function renderTurnstile() {
   } finally {
     nextTick(() => syncFormStageHeight());
   }
+}
+
+function syncTurnstileTokenFromWidget() {
+  if (turnstileWidgetId === null || !window.turnstile?.getResponse) return verificationToken.value;
+  try {
+    const latestToken = window.turnstile.getResponse(turnstileWidgetId)?.trim() || '';
+    verificationToken.value = latestToken;
+  } catch {
+    // 忽略 widget 瞬时不可读，保留当前本地 token
+  }
+  return verificationToken.value;
 }
 
 function resetTurnstile() {
@@ -607,7 +621,15 @@ async function onLogin() {
 async function onRegister() {
   error.value = validateRegister();
   if (error.value) return;
-  if (requiresHumanVerification.value && !verificationToken.value) {
+
+  const verificationPayload = requiresHumanVerification.value
+    ? {
+        provider: registrationVerification.value.provider,
+        token: syncTurnstileTokenFromWidget(),
+      }
+    : undefined;
+
+  if (requiresHumanVerification.value && !verificationPayload?.token) {
     error.value = t('login.validation.completeHumanVerification');
     return;
   }
@@ -619,9 +641,7 @@ async function onRegister() {
     await registerUser(
       u,
       p,
-      requiresHumanVerification.value
-        ? { provider: registrationVerification.value.provider, token: verificationToken.value }
-        : undefined,
+      verificationPayload,
     );
     await loginUser(u, p);
     const userInfo = await getUserInfo();

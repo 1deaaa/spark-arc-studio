@@ -14,6 +14,7 @@ import { createStreamingTask, consumeTextReader, isAbortLikeError } from '@/util
 import type { BeatSheetBeat, BeatSheetData } from '@/services/aiContracts';
 import { parseSynopsisMarkup, parseBeatSheetMarkup, serializeSynopsisToMarkup, serializeBeatSheetToMarkup } from '../utils/markupSerializer';
 import { buildInspirationGuidance, extractLoglineFromInspiration } from '@/utils/inspiration';
+import { buildCreativeCacheKey, isCreativeCacheEqual, loadCreativeCache, saveCreativeCache } from '@/utils/creativeLocalCache';
 
 type SynopsisData = {
     title: string;
@@ -41,6 +42,11 @@ type GenerateOptions = {
     skipOverwriteConfirm?: boolean;
 };
 
+type SynopsisCacheSnapshot = {
+    synopsisData: SynopsisData;
+    beatSheet: BeatSheetData;
+};
+
 function getErrorMessage(error: unknown) {
     if (error instanceof Error) return error.message;
     return String(error || '未知错误');
@@ -66,6 +72,7 @@ export function useSynopsisLogic() {
     const isGenerating = ref(false);
     const isSaving = ref(false);
     const currentLengthHint = ref<unknown>(null); // 篇幅提示，来自世界页
+    let suppressAutoSave = false;
 
     // --- 节拍表数据 ---
     const beatSheet = reactive<BeatSheetData>({
@@ -73,6 +80,60 @@ export function useSynopsisLogic() {
         global_emotional_arc: ''
     });
     const isGeneratingBeats = ref(false);
+
+    function buildSynopsisCacheKey() {
+        return buildCreativeCacheKey('synopsis-workbench', projectStore.currentProject);
+    }
+
+    function getSynopsisSnapshot(): SynopsisCacheSnapshot {
+        return {
+            synopsisData: {
+                title: synopsisData.title,
+                logline: synopsisData.logline,
+                synopsis_text: synopsisData.synopsis_text,
+                guidance: synopsisData.guidance,
+                themes: [...synopsisData.themes],
+                pacing_guide: synopsisData.pacing_guide,
+                narrative_pov: synopsisData.narrative_pov,
+            },
+            beatSheet: {
+                beats: beatSheet.beats.map((beat) => ({ ...beat })),
+                global_emotional_arc: beatSheet.global_emotional_arc,
+            },
+        };
+    }
+
+    function applySynopsisSnapshot(snapshot: SynopsisCacheSnapshot) {
+        suppressAutoSave = true;
+        synopsisData.title = snapshot.synopsisData.title || '';
+        synopsisData.logline = snapshot.synopsisData.logline || '';
+        synopsisData.synopsis_text = snapshot.synopsisData.synopsis_text || '';
+        synopsisData.guidance = snapshot.synopsisData.guidance || '';
+        synopsisData.themes = Array.isArray(snapshot.synopsisData.themes) ? [...snapshot.synopsisData.themes] : [];
+        synopsisData.pacing_guide = snapshot.synopsisData.pacing_guide || '';
+        synopsisData.narrative_pov = snapshot.synopsisData.narrative_pov || '';
+        beatSheet.beats = Array.isArray(snapshot.beatSheet.beats) ? snapshot.beatSheet.beats.map((beat) => ({ ...beat })) : [];
+        beatSheet.global_emotional_arc = snapshot.beatSheet.global_emotional_arc || '';
+        suppressAutoSave = false;
+    }
+
+    function resetSynopsisState() {
+        applySynopsisSnapshot({
+            synopsisData: {
+                title: '',
+                logline: '',
+                synopsis_text: '',
+                guidance: '',
+                themes: [],
+                pacing_guide: '',
+                narrative_pov: '',
+            },
+            beatSheet: {
+                beats: [],
+                global_emotional_arc: '',
+            },
+        });
+    }
 
     const tensionOptions = [
         { label: '低', value: 'Low' },
@@ -154,35 +215,39 @@ export function useSynopsisLogic() {
     async function loadFromProject() {
         if (!projectStore.currentProject) return;
         try {
-            // fetchSynopsis 现在返回 Markup 文本
-            const synMarkup = await fetchSynopsis(projectStore.currentProject);
-            if (synMarkup && synMarkup.trim()) {
-                const parsed = parseSynopsisMarkup(synMarkup);
-                synopsisData.title = parsed.title || '';
-                synopsisData.logline = parsed.logline || '';
-                synopsisData.synopsis_text = parsed.synopsis_text || '';
-                synopsisData.themes = parsed.themes || [];
-                synopsisData.pacing_guide = parsed.pacing_guide || '';
-                synopsisData.narrative_pov = parsed.narrative_pov || '';
-            } else {
-                synopsisData.title = '';
-                synopsisData.logline = '';
-                synopsisData.guidance = '';
-                synopsisData.synopsis_text = '';
-                synopsisData.themes = [];
-                synopsisData.pacing_guide = '';
-                synopsisData.narrative_pov = '';
+            const cacheKey = buildSynopsisCacheKey();
+            const cached = loadCreativeCache<SynopsisCacheSnapshot>(cacheKey);
+            if (cached) {
+                applySynopsisSnapshot(cached);
             }
-            // fetchBeatSheet 现在返回 Markup 文本
-            const bMarkup = await fetchBeatSheet(projectStore.currentProject);
-            if (bMarkup && bMarkup.trim()) {
-                const bData = parseBeatSheetMarkup(bMarkup);
-                beatSheet.beats = bData.beats;
-                beatSheet.global_emotional_arc = bData.global_emotional_arc;
-            } else {
-                beatSheet.beats = [];
-                beatSheet.global_emotional_arc = '';
+
+            const [synMarkup, bMarkup] = await Promise.all([
+                fetchSynopsis(projectStore.currentProject),
+                fetchBeatSheet(projectStore.currentProject),
+            ]);
+            const remoteSnapshot: SynopsisCacheSnapshot = {
+                synopsisData: synMarkup && synMarkup.trim()
+                    ? {
+                        guidance: synopsisData.guidance || '',
+                        ...parseSynopsisMarkup(synMarkup),
+                    } as SynopsisData
+                    : {
+                        title: '',
+                        logline: '',
+                        synopsis_text: '',
+                        guidance: '',
+                        themes: [],
+                        pacing_guide: '',
+                        narrative_pov: '',
+                    },
+                beatSheet: bMarkup && bMarkup.trim()
+                    ? parseBeatSheetMarkup(bMarkup)
+                    : { beats: [], global_emotional_arc: '' },
+            };
+            if (!isCreativeCacheEqual(getSynopsisSnapshot(), remoteSnapshot)) {
+                applySynopsisSnapshot(remoteSnapshot);
             }
+            saveCreativeCache(cacheKey, remoteSnapshot);
             applyBoundInspirationIfNeeded();
         } catch (e) {
             console.error('Failed to load project data:', e);
@@ -208,6 +273,7 @@ export function useSynopsisLogic() {
                 saveSynopsis(projectStore.currentProject, synMarkup),
                 saveBeatSheet(projectStore.currentProject, bMarkup)
             ]);
+            saveCreativeCache(buildSynopsisCacheKey(), getSynopsisSnapshot());
             message.success('梗概与节奏表已保存');
         } catch (e: unknown) {
             message.error('保存失败: ' + getErrorMessage(e));
@@ -277,6 +343,7 @@ export function useSynopsisLogic() {
             } catch (parseError: unknown) {
                 console.warn('梗概 Markup 解析失败:', getErrorMessage(parseError));
             }
+            saveCreativeCache(buildSynopsisCacheKey(), getSynopsisSnapshot());
 
             message.success('梗概已生成');
             return true;
@@ -343,6 +410,7 @@ export function useSynopsisLogic() {
                 // 序列化为 Markup 保存
                 const bMarkup = serializeBeatSheetToMarkup(result);
                 await saveBeatSheet(projectStore.currentProject, bMarkup);
+                saveCreativeCache(buildSynopsisCacheKey(), getSynopsisSnapshot());
                 message.success('节奏表已生成');
                 return true;
             } else {
@@ -463,6 +531,7 @@ export function useSynopsisLogic() {
                 saveSynopsis(projectStore.currentProject, synMarkup),
                 saveBeatSheet(projectStore.currentProject, bMarkup)
             ]);
+            saveCreativeCache(buildSynopsisCacheKey(), getSynopsisSnapshot());
         } catch (e) {
             console.error('Auto-save failed:', e);
         } finally {
@@ -472,10 +541,18 @@ export function useSynopsisLogic() {
 
     // 监听数据变化以触发自动保存
     watch(synopsisData, () => {
+        if (suppressAutoSave) return;
+        if (projectStore.currentProject) {
+            saveCreativeCache(buildSynopsisCacheKey(), getSynopsisSnapshot());
+        }
         debouncedSave();
     }, { deep: true });
 
     watch(beatSheet, () => {
+        if (suppressAutoSave) return;
+        if (projectStore.currentProject) {
+            saveCreativeCache(buildSynopsisCacheKey(), getSynopsisSnapshot());
+        }
         debouncedSave();
     }, { deep: true });
 
@@ -484,7 +561,9 @@ export function useSynopsisLogic() {
         if (newProj) {
             await loadFromProject();
             void consumePendingSynopsisAdoption();
+            return;
         }
+        resetSynopsisState();
     }, { immediate: false });
 
     watch(() => projectStore.pendingSynopsisAdoption, () => {

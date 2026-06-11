@@ -130,7 +130,7 @@
     </main>
     
     <!-- 步骤指示器 -->
-    <StepIndicator :steps="flowSteps" :container-ref="containerRef" />
+    <StepIndicator v-show="!immersiveMode" :steps="flowSteps" :container-ref="containerRef" />
     
     <!-- AI 悬浮聊天（仅灵感/世界观步骤） -->
     <GlobalChatFloat v-if="showChatFloat" />
@@ -229,6 +229,8 @@ const currentStep = ref(0);
 const settingsDrawerVisible = ref(false);
 const publishDrawerVisible = ref(false);
 const previewing = ref(false);
+// 沉浸模式：创作页进入场景详情时隐藏右侧步骤导航，避免阅读下滑误触
+const immersiveMode = ref(false);
 
 const workspaceMode = computed(() => sceneStore.workspaceMode || 'script');
 
@@ -467,6 +469,11 @@ const onPostLoginReady = () => {
   nextTick(() => triggerIfFirst('mobile-workspace'));
 };
 
+// 监听子页面发出的沉浸模式信号（创作页进入/退出场景详情）
+const onImmersiveChange = (active: unknown) => {
+  immersiveMode.value = !!active;
+};
+
 onMounted(() => {
   setTimeout(setupObserver, 200);
 
@@ -476,6 +483,7 @@ onMounted(() => {
   }
 
   bus.on('post-login-ready', onPostLoginReady);
+  bus.on('mobile-flow-immersive', onImmersiveChange);
   // 如果 App.vue 已经发过 post-login-ready（竞态：子组件晚于 App mount），直接触发
   if ((bus as any).postLoginReadySent) onPostLoginReady();
 
@@ -500,6 +508,7 @@ onUnmounted(() => {
     observer.disconnect();
   }
   bus.off('post-login-ready', onPostLoginReady);
+  bus.off('mobile-flow-immersive', onImmersiveChange);
 });
 </script>
 
@@ -638,12 +647,17 @@ onUnmounted(() => {
 }
 
 :deep(.n-drawer-header) {
-  padding: 16px !important;
+  padding: 14px 12px !important;
   border-bottom: 1px solid var(--spark-border);
 }
 
+/* 抽屉内容区：收窄横向留白，保留少量边距维持美观 */
+:deep(.n-drawer-body-content-wrapper) {
+  padding: 0 8px !important;
+}
+
 :deep(.n-tabs-nav) {
-  padding: 0 16px;
+  padding: 0 4px;
 }
 
 /* 移动端移除选项卡滑动指示条阴影特效 */
@@ -651,8 +665,14 @@ onUnmounted(() => {
   box-shadow: none !important;
 }
 
+/* 标签页之间保持紧凑，避免标签左右过度留白 */
+:deep(.n-tabs .n-tabs-tab) {
+  padding-left: 10px;
+  padding-right: 10px;
+}
+
 :deep(.n-tab-pane) {
-  padding: 16px 0;
+  padding: 12px 0;
   padding-bottom: 100px;
 }
 </style>

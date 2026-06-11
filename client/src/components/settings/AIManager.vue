@@ -195,7 +195,7 @@
                                 <SparkTag v-else-if="!plat.is_sys" size="small" type="default">{{ t('components.aiManager.tags.custom') }}</SparkTag>
                                 <n-tooltip v-if="plat.is_sys" trigger="hover">
                                     <template #trigger>
-                                        <SparkTag size="small" :type="platformCreditTagType(plat)">
+                                        <SparkTag class="platform-credit-tag" size="small" :type="platformCreditTagType(plat)">
                                             {{ platformCreditText(plat) }}<SparkIcon />
                                         </SparkTag>
                                     </template>
@@ -1038,11 +1038,13 @@ function keyAlertMeta(plat: KeyAlertTarget | null | undefined): AlertMeta | null
     return null;
 }
 
-function formatCreditPriceTag(price) {
+function formatCreditPriceTag(price, withSuffix: boolean = true) {
     const num = Number(price);
     if (!Number.isFinite(num) || num < 0) return t('components.aiManager.pricing.unpriced');
-    if (Number.isInteger(num)) return `${num}/M`;
-    return `${num.toFixed(2).replace(/0+$/, '').replace(/\.$/, '')}/M`;
+    const formatted = Number.isInteger(num)
+        ? `${num}`
+        : num.toFixed(2).replace(/0+$/, '').replace(/\.$/, '');
+    return withSuffix ? `${formatted}/M` : formatted;
 }
 
 function modelCreditTagMeta(plat: AiPlatform, model: AiModelItem): CreditTagMeta {
@@ -1059,8 +1061,8 @@ function modelCreditTagMeta(plat: AiPlatform, model: AiModelItem): CreditTagMeta
         };
     }
 
-    const inputTag = formatCreditPriceTag(inputPrice);
-    const outputTag = formatCreditPriceTag(outputPrice);
+    const inputTag = formatCreditPriceTag(inputPrice, false);
+    const outputTag = formatCreditPriceTag(outputPrice, false);
     if (Number(inputPrice) === 0 && Number(outputPrice) === 0) {
         return {
             type: 'success',
@@ -1070,7 +1072,7 @@ function modelCreditTagMeta(plat: AiPlatform, model: AiModelItem): CreditTagMeta
     }
     return {
         type: 'warning',
-        text: `${t('components.aiManager.pricing.inputPrefix')}${inputTag} / ${t('components.aiManager.pricing.outputPrefix')}${outputTag}`,
+        text: `${t('components.aiManager.pricing.inputPrefix')}${inputTag}${t('components.aiManager.pricing.outputPrefix')}${outputTag} /M`,
         title: t('components.aiManager.pricing.modelOverrideTitle'),
     };
 }

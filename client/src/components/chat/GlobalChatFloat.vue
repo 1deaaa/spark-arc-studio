@@ -173,7 +173,7 @@
     @after-leave="onDrawerClosed"
   >
     <n-drawer-content :native-scrollbar="false" body-content-style="padding: 0; display: flex; flex-direction: column; height: 100%;">
-      <div class="chat-mobile-drawer-surface">
+      <div ref="drawerSurfaceEl" class="chat-mobile-drawer-surface">
         <ChatPanel
           ref="mobileListRef"
           :agent-id="chat.currentAgentId"
@@ -322,11 +322,26 @@ async function compactContext() {
 
 
 const mobileDrawerVisible = ref(false);
+const drawerSurfaceEl = ref<HTMLElement | null>(null);
 
-// 抽屉高度保持稳定，避免历史加载期间逐帧改 height 触发聊天列表重排。
+// 抽屉高度（像素字符串），由内容自适应驱动。
 const drawerHeight = ref('50%');
 const mobileDrawerSettling = ref(false);
 let mobileDrawerSettleTimer: ReturnType<typeof setTimeout> | null = null;
+
+/** 抽屉高度比例边界：内容不满时最低 50%；最高贴近顶栏下沿（见 getDrawerBounds）。 */
+const DRAWER_MIN_RATIO = 0.5;
+/** 抽屉满高时与顶栏之间保留的视觉间隙（px）。 */
+const DRAWER_TOP_GAP = 8;
+
+/** 当前抽屉像素高度（缓动动画的实时值） */
+let drawerCurrentPx = 0;
+/** 缓动目标像素高度 */
+let drawerTargetPx = 0;
+/** 高度缓动 RAF 句柄 */
+let drawerAnimRAF: number | null = null;
+/** 自适应测量节流 RAF */
+let drawerMeasureRAF: number | null = null;
 
 /** 移动端头部工具栏高度（56px + 安全区域） */
 function getMobileHeaderHeight() {
@@ -335,15 +350,70 @@ function getMobileHeaderHeight() {
   return 56 + sat;
 }
 
-/** 移动端抽屉允许的最大像素高度（视口高度 - 头部工具栏） */
-function getMobileMaxDrawerPx() {
-  return window.innerHeight - getMobileHeaderHeight();
+/**
+ * 抽屉允许的像素高度区间 [min, max]。
+ * usable 已扣除顶部操作栏高度；max 直接占满 usable（仅再留 DRAWER_TOP_GAP 间隙），
+ * 不再额外乘系数，避免高屏上顶部出现大片空白。
+ */
+function getDrawerBounds() {
+  const usable = window.innerHeight - getMobileHeaderHeight();
+  const min = Math.max(280, Math.round(usable * DRAWER_MIN_RATIO));
+  const max = Math.max(min, Math.round(usable - DRAWER_TOP_GAP));
+  return { min, max, usable };
 }
 
-/** 移动端抽屉打开后使用稳定目标高度，历史加载不再驱动高度动画。 */
-function getTargetDrawerHeight() {
-  const maxPx = isMobile.value ? getMobileMaxDrawerPx() : window.innerHeight;
-  return `${Math.max(320, maxPx)}px`;
+/**
+ * 测量"贴合内容"的自然高度。
+ * 关键：底部抽屉为全宽固定宽度，改变高度不会改变聊天列表的内容宽度，
+ * 因此 Markdown 不会重新折行，列表 scrollHeight 恒定 —— 不存在
+ * "改高度 → 内容重排 → 再改高度"的循环。可安全地一次性测量。
+ */
+function measureDrawerNaturalPx(): number {
+  const surface = drawerSurfaceEl.value;
+  const { min, max } = getDrawerBounds();
+  if (!surface) return min;
+  const list = surface.querySelector('.chat-list') as HTMLElement | null;
+  // 面板除消息列表外的固定结构（头部 / 输入框）高度
+  const chrome = surface.offsetHeight - (list?.clientHeight ?? 0);
+  const contentNatural = chrome + (list?.scrollHeight ?? 0) + 4;
+  return Math.min(max, Math.max(min, Math.round(contentNatural)));
+}
+
+/** 非线性缓动驱动抽屉高度，避免逐帧 reflow 的视觉抖动。 */
+function animateDrawerTo(targetPx: number) {
+  const { min, max } = getDrawerBounds();
+  drawerTargetPx = Math.min(max, Math.max(min, Math.round(targetPx)));
+  if (drawerCurrentPx <= 0) {
+    // 首次：直接落位，不做动画
+    drawerCurrentPx = drawerTargetPx;
+    drawerHeight.value = `${drawerCurrentPx}px`;
+    return;
+  }
+  if (drawerAnimRAF) return; // 已有动画在跑，仅更新目标值
+  const step = () => {
+    const diff = drawerTargetPx - drawerCurrentPx;
+    if (Math.abs(diff) < 0.5) {
+      drawerCurrentPx = drawerTargetPx;
+      drawerHeight.value = `${drawerCurrentPx}px`;
+      drawerAnimRAF = null;
+      return;
+    }
+    // 指数缓动（ease-out）：每帧逼近目标 22%，形成自然非线性减速
+    drawerCurrentPx += diff * 0.22;
+    drawerHeight.value = `${Math.round(drawerCurrentPx)}px`;
+    drawerAnimRAF = requestAnimationFrame(step);
+  };
+  drawerAnimRAF = requestAnimationFrame(step);
+}
+
+/** 根据内容自适应高度。 */
+function syncMobileDrawerHeight() {
+  if (!isMobile.value || !mobileDrawerVisible.value) return;
+  if (drawerMeasureRAF) cancelAnimationFrame(drawerMeasureRAF);
+  drawerMeasureRAF = requestAnimationFrame(() => {
+    drawerMeasureRAF = null;
+    animateDrawerTo(measureDrawerNaturalPx());
+  });
 }
 
 function triggerMobileDrawerSettle() {
@@ -353,14 +423,6 @@ function triggerMobileDrawerSettle() {
     mobileDrawerSettling.value = false;
     mobileDrawerSettleTimer = null;
   }, 260);
-}
-
-function syncMobileDrawerHeight() {
-  const target = getTargetDrawerHeight();
-  if (drawerHeight.value !== target) {
-    drawerHeight.value = target;
-    triggerMobileDrawerSettle();
-  }
 }
 
 // 同步抽屉显示状态与 chat.expanded (移动端)
@@ -376,13 +438,29 @@ watch(mobileDrawerVisible, (visible) => {
   }
   // 抽屉打开时同步初始高度 + push history state 供返回手势使用
   if (visible && isMobile.value) {
-    syncMobileDrawerHeight();
+    // 清零缓动起点确保首帧直接落位到自适应高度
+    drawerCurrentPx = 0;
+    nextTick(() => {
+      syncMobileDrawerHeight();
+      triggerMobileDrawerSettle();
+    });
     if (!drawerHistoryPushed) {
       history.pushState({ chatDrawer: true }, '');
       drawerHistoryPushed = true;
     }
   }
 });
+
+// 内容（历史 / 流式增量）变化时，自适应跟随高度（用户拖动后不再跟随）
+watch(
+  () => [chat.history, chat.history?.length, chat.sending],
+  () => {
+    if (isMobile.value && mobileDrawerVisible.value) {
+      syncMobileDrawerHeight();
+    }
+  },
+  { deep: false }
+);
 
 function onDrawerClosed() {
   // 抽屉关闭后的清理逻辑
@@ -1234,6 +1312,8 @@ function onResize() {
 onUnmounted(() => {
   if (ctxTimer) clearTimeout(ctxTimer);
   if (mobileDrawerSettleTimer) clearTimeout(mobileDrawerSettleTimer);
+  if (drawerAnimRAF) cancelAnimationFrame(drawerAnimRAF);
+  if (drawerMeasureRAF) cancelAnimationFrame(drawerMeasureRAF);
   document.removeEventListener('mousemove', onDragMove);
   document.removeEventListener('mousemove', onResizeMove);
   window.removeEventListener('resize', onResize);

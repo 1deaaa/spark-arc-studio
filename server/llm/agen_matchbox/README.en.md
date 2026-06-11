@@ -67,12 +67,19 @@ Matchbox uses two practical paths.
 
 ### Path A: Managed path (recommended)
 
-Use this for normal application traffic.
+Use this for normal application traffic. Initialization is split into two phases:
 
 ```python
-from llm.agen_matchbox import initialize_matchbox, matchbox
+from llm.agen_matchbox import initialize_matchbox, warmup_matchbox_runtime, matchbox
 
+# Phase 1 (light): DB engine + default config sync — does NOT load langchain_openai
 initialize_matchbox(ensure_defaults=True)
+
+# Phase 2 (warmup): preload heavy runtime deps in a background thread
+# blocking=False returns immediately; runs in parallel with app startup
+warmup_matchbox_runtime(blocking=False)
+
+# Phase 3 (request-time): get LLM client as usual
 client = matchbox().get_user_llm(user_id='user_123', usage_key='main', agent_name='agent_director')
 result = client.invoke('Generate a cyberpunk world seed')
 ```
@@ -83,6 +90,8 @@ What you get automatically:
 - Key priority resolution
 - Quota checks before provider call
 - Usage accounting
+
+> **Why two phases?** `initialize_matchbox()` stays lightweight so it never blocks server startup. `warmup_matchbox_runtime()` pre-imports `ChatUniversal`, `LLMClient`, `langchain_openai` etc. in the background; if you skip it, the first `get_user_llm()` call will lazy-load them (one-time cost). For production services, calling warmup explicitly is recommended.
 
 ### Path B: Quick path (bypass)
 
@@ -161,7 +170,9 @@ python matchbox_cfg_gui.py
 
 ## Operational Notes
 
-- Initialize Matchbox in app startup lifecycle
+- Initialize Matchbox in app startup lifecycle using the two-phase pattern:
+  1. `initialize_matchbox(ensure_defaults=True)` — lightweight, syncs DB/config
+  2. `warmup_matchbox_runtime(blocking=False)` — preloads heavy runtime deps in background
 - Call `reset_matchbo()` on shutdown when needed
 - Use `AGENT_MATCHBOX_HOME` to control runtime files (DB/.env/YAML/state) location
 - Rebuild containers after updates to avoid stale mounted runtime artifacts

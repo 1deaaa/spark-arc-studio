@@ -4,7 +4,7 @@
     <div class="file-selector-bar">
       <n-select
         v-model:value="selectedFilePath"
-        :options="storyOptions"
+        :options="groupedStoryOptions"
         :placeholder="t('views.blueprint.mobileNew.selectFile')"
         size="small"
         clearable
@@ -105,7 +105,7 @@ import { useSceneStore, type SceneWithClientId } from '../../components/stores/s
 import { useFileStore } from '../../components/stores/fileStore';
 import { useProjectStore } from '../../components/stores/projectStore';
 import SparkTag from '../../components/share/SparkTag.vue';
-import type { StoryFileTreeNode } from '../../services/aiContracts';
+import { useStoryFileOptions } from '../../composables/useStoryFileOptions';
 
 const { t } = useI18n();
 const sceneStore = useSceneStore();
@@ -124,20 +124,8 @@ type SelectOption = { label: string; value: string };
 
 const scenes = computed<SceneWithClientId[]>(() => Array.isArray(sceneStore.scriptData) ? sceneStore.scriptData : []);
 
-const storyOptions = computed<SelectOption[]>(() => {
-  const flat: SelectOption[] = [];
-  function walk(list: StoryFileTreeNode[] = []) {
-    list.forEach(item => {
-      if (item.type === 'story') {
-        flat.push({ label: item.name || item.path, value: item.path });
-      } else if (Array.isArray(item.children)) {
-        walk(item.children);
-      }
-    });
-  }
-  walk(fileStore.fileTree || []);
-  return flat;
-});
+const { groupedOptions } = useStoryFileOptions(() => t('views.production.mobile.rootFiles'));
+const groupedStoryOptions = computed(() => groupedOptions.value);
 
 const sceneNameOptions = computed<SelectOption[]>(() =>
   scenes.value.map(s => ({ label: s.scene || '', value: s.scene || '' }))

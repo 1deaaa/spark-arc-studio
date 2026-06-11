@@ -36,6 +36,7 @@ type UsageSummary = {
     tokens?: number;
     requests?: number;
     errors?: number;
+    credit_cost?: number;
     [key: string]: unknown;
 };
 

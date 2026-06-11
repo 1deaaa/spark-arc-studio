@@ -208,16 +208,16 @@ class StyleChatAgent(SparkBaseAgent):
 
                 reasoning, content = stream_reasoning_adapter.push_message(chunk)
                 if reasoning:
-                    yield {"event": "reasoning_delta", "text": reasoning}
+                    yield {"event": "reasoning_delta", "text": reasoning, "source_agent": self.agent_id}
                 if content:
-                    yield {"event": "assistant_delta", "text": content}
+                    yield {"event": "assistant_delta", "text": content, "source_agent": self.agent_id}
             trailing_reasoning, trailing_content = stream_reasoning_adapter.flush()
             if is_stop_event_set(stop_event):
                 return
             if trailing_reasoning:
-                yield {"event": "reasoning_delta", "text": trailing_reasoning}
+                yield {"event": "reasoning_delta", "text": trailing_reasoning, "source_agent": self.agent_id}
             if trailing_content:
-                yield {"event": "assistant_delta", "text": trailing_content}
+                yield {"event": "assistant_delta", "text": trailing_content, "source_agent": self.agent_id}
         except Exception as e:
             import traceback
             traceback.print_exc()

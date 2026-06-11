@@ -117,6 +117,7 @@ import { useFileStore } from '../stores/fileStore';
 import { fetchWithAuth, fetchCharacters, createCharacter, saveCharacter as saveCharacterApi, renameCharacter as renameCharacterApi, deleteCharacter as deleteCharacterApi } from '../../services/api';
 import { AUTO_SAVE_DEBOUNCE_TIME } from '../../config';
 import { autoSaveEnabled } from '@/utils/autoSaveState';
+import { buildCreativeCacheKey, isCreativeCacheEqual, loadCreativeCache, saveCreativeCache } from '@/utils/creativeLocalCache';
 
 const projectStore = useProjectStore();
 const fileStore = useFileStore();
@@ -139,6 +140,42 @@ const { t } = useI18n();
 
 const characters = ref([]); // [{id, name, content}]
 
+type LorebookCacheSnapshot = {
+  worldview: string;
+  characters: Array<{ id: number | string; name?: string; content?: string }>;
+};
+
+function buildLorebookCacheKey() {
+  return buildCreativeCacheKey('lorebook-content', projectStore.currentProject);
+}
+
+function getLorebookSnapshot(): LorebookCacheSnapshot {
+  return {
+    worldview: worldview.value,
+    characters: Array.isArray(characters.value)
+      ? characters.value.map((ch: any) => ({
+          id: ch.id,
+          name: ch.name || '',
+          content: ch.content || '',
+        }))
+      : [],
+  };
+}
+
+function saveLorebookSnapshot() {
+  if (!projectStore.currentProject) return;
+  saveCreativeCache(buildLorebookCacheKey(), getLorebookSnapshot());
+}
+
+function hydrateLorebookFromCache() {
+  const cached = loadCreativeCache<LorebookCacheSnapshot>(buildLorebookCacheKey());
+  if (!cached) return;
+  worldview.value = cached.worldview || '';
+  if (Array.isArray(cached.characters)) {
+    characters.value = cached.characters.map((ch) => ({ ...ch }));
+  }
+}
+
 // 加载世界观
 async function loadWorldview() {
   const projectId = projectStore.currentProject;
@@ -148,10 +185,14 @@ async function loadWorldview() {
     const res = await fetchWithAuth(`/api/lorebooks/${projectId}/${fileId}`);
     if (res.ok) {
       const data = await res.json();
-      worldview.value = data?.content || '';
+      const remoteWorldview = data?.content || '';
+      if (!isCreativeCacheEqual(worldview.value, remoteWorldview)) {
+        worldview.value = remoteWorldview;
+      }
     } else if (res.status === 404) {
       worldview.value = '';
     }
+    saveLorebookSnapshot();
   } catch {}
 }
 
@@ -168,11 +209,13 @@ async function saveWorldview() {
     });
     const result = await res.json();
     if (res.ok && result?.success !== false) bus.emit('toast', { message: t('components.lorebookEditor.saveSuccess'), type: 'success' });
+    saveLorebookSnapshot();
   } catch {}
 }
 
 let worldviewTimer: ReturnType<typeof setTimeout> | null = null;
 function onWorldviewInput() {
+  saveLorebookSnapshot();
   if (worldviewTimer) {
     clearTimeout(worldviewTimer);
   }
@@ -185,10 +228,14 @@ function onWorldviewInput() {
 async function loadCharacters() {
   if (!projectStore.currentProject) return;
   try {
-    characters.value = await fetchCharacters(projectStore.currentProject, true);
+    const remoteCharacters = await fetchCharacters(projectStore.currentProject, true);
+    if (!isCreativeCacheEqual(characters.value, remoteCharacters)) {
+      characters.value = Array.isArray(remoteCharacters) ? remoteCharacters : [];
+    }
   } catch {
     characters.value = [];
   }
+  saveLorebookSnapshot();
 }
 
 // 添加角色（通过弹窗输入名称）
@@ -213,6 +260,7 @@ async function handleAddCharacter() {
 async function saveCharacter(ch) {
   try {
     await saveCharacterApi(projectStore.currentProject, ch.id, ch.content || '');
+    saveLorebookSnapshot();
     window.dispatchEvent(new CustomEvent('saved'));
   } catch {}
 }
@@ -253,6 +301,7 @@ async function deleteCharacter(ch) {
 const timers = new Map();
 function onCharacterInput(ch) {
   const key = ch.id;
+  saveLorebookSnapshot();
   clearTimeout(timers.get(key));
   const timer = setTimeout(() => {
     if (autoSaveEnabled.value) saveCharacter(ch);
@@ -263,6 +312,7 @@ function onCharacterInput(ch) {
 // 当显示或项目变化时加载数据
 // 当显示或项目变化时加载数据
 onMounted(() => {
+  hydrateLorebookFromCache();
   loadWorldview();
   loadCharacters();
   bus.on('lorebook-refresh', onLorebookRefresh);
@@ -277,6 +327,7 @@ onMounted(() => {
 
 watch(() => projectStore.currentProject, (nextProject, prevProject) => {
   if (nextProject === prevProject) return;
+  hydrateLorebookFromCache();
   loadWorldview();
   loadCharacters();
 });

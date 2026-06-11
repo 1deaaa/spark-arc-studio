@@ -717,46 +717,15 @@ function measureReasoningHeight(key: string, streaming = false) {
   }
 }
 
-function estimateReasoningHeight(key: string, streaming = false) {
-  const el = reasoningContentRefs.get(key);
-  if (!el) return 0;
-  const markdown = el.querySelector('.reasoning-markdown') as HTMLElement | null;
-  const inner = el.querySelector('.reasoning-inner') as HTMLElement | null;
-  const source = markdown || inner || el;
-  const style = window.getComputedStyle(markdown || source);
-  const lineHeight = Number.parseFloat(style.lineHeight || '') || 18.5;
-  const width = Math.max(1, source.getBoundingClientRect().width || el.getBoundingClientRect().width || 720);
-  const fontSize = Number.parseFloat(style.fontSize || '') || 14;
-  const averageCharWidth = fontSize * 0.65;
-  const charsPerLine = Math.max(18, Math.floor(width / averageCharWidth));
-  const blockNodes = markdown
-    ? Array.from(markdown.querySelectorAll('p, li, h1, h2, h3, h4, h5, h6, blockquote, pre'))
-      .filter(node => node.tagName.toLowerCase() === 'li' || !node.closest('li'))
-    : [];
-  const lines = blockNodes.length > 0
-    ? blockNodes.reduce((sum, node) => {
-      const text = (node.textContent || '').trim();
-      if (!text) return sum;
-      return sum + Math.max(1, Math.ceil(text.length / charsPerLine));
-    }, 0)
-    : (source.textContent || '').split(/\n/).reduce((sum, line) => {
-      const trimmed = line.trim();
-      if (!trimmed) return sum + 0.35;
-      return sum + Math.max(1, Math.ceil(trimmed.length / charsPerLine));
-    }, 0);
-  const innerStyle = inner ? window.getComputedStyle(inner) : null;
-  const verticalChrome = (innerStyle
-    ? Number.parseFloat(innerStyle.paddingTop || '0') + Number.parseFloat(innerStyle.paddingBottom || '0')
-    : 12) + 1;
-  const estimated = Math.ceil((lines + 1) * lineHeight + verticalChrome);
-  if (!streaming) return estimated;
-  return Math.min(estimated, STREAMING_REASONING_MAX_HEIGHT);
-}
-
 function getReasoningTargetHeight(key: string, streaming = false) {
+  // 直接真实测量目标高度，不再依赖按字符数估算的预测算法（首展开空白的根因）。
+  // measureReasoningHeight 通过临时 height:auto 量出真高再还原，结果与最终渲染一致。
+  const measured = measureReasoningHeight(key, streaming);
+  if (measured > 0) return measured;
+  // 兜底：DOM 尚未就绪时回退到缓存值，仍不使用脆弱的字符估算。
   const cached = Number(getReasoningMeta(key).measuredHeight || 0);
   if (cached > 0) return streaming ? Math.min(cached, STREAMING_REASONING_MAX_HEIGHT) : cached;
-  return estimateReasoningHeight(key, streaming);
+  return streaming ? STREAMING_REASONING_MAX_HEIGHT : 0;
 }
 
 function measureReasoningWidth(key: string) {
