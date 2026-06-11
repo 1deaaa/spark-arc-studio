@@ -25,9 +25,14 @@
     --spark-danger: var(--seed-danger);
 
     /* --- 字体族 --- */
-    --spark-font: 'Microsoft YaHei', '微软雅黑', 'PingFang SC', 'Noto Sans SC', 'Segoe UI', Arial, sans-serif;
+    --spark-font-system-fallback: 'Microsoft YaHei', '微软雅黑', 'PingFang SC', 'Noto Sans SC', 'Segoe UI', Arial, sans-serif;
+    --spark-font-primary-stack: 'LXGW WenKai Screen', 'LXGW WenKai', '霞鹜文楷', var(--spark-font-system-fallback);
+    --spark-font-preset-yahei: 'Microsoft YaHei', '微软雅黑', 'Segoe UI', -apple-system, BlinkMacSystemFont, 'PingFang SC', 'Hiragino Sans GB', 'Noto Sans SC', Arial, sans-serif;
+    --spark-font-preset-pingfang: 'PingFang SC', 'Microsoft YaHei', '微软雅黑', -apple-system, BlinkMacSystemFont, 'Segoe UI', 'Hiragino Sans GB', 'Noto Sans SC', Arial, sans-serif;
+    --spark-font-preset-noto-sans: 'Noto Sans SC', 'Microsoft YaHei', '微软雅黑', 'PingFang SC', -apple-system, BlinkMacSystemFont, 'Segoe UI', Arial, sans-serif;
+    --spark-font: var(--spark-font-primary-stack);
     --spark-mono: 'JetBrains Mono', 'Fira Code', 'Consolas', 'Monaco', ui-monospace, SFMono-Regular, Menlo, monospace;
-    --spark-font-logo: 'Microsoft YaHei', '微软雅黑', 'PingFang SC', 'Noto Sans SC', 'Segoe UI', Arial, sans-serif;
+    --spark-font-logo: var(--spark-font-primary-stack);
 
     /* --- 排版字号 (Type Scale) --- */
     /* 基准：修改 --spark-fs-base 的 px 值即可全局等比缩放 */
@@ -137,8 +142,8 @@ body {
 }
 
 body.app-font-ready {
-    --spark-font: 'LXGW WenKai Screen', 'LXGW WenKai', '霞鹜文楷', sans-serif;
-    --spark-font-logo: 'LXGW WenKai Screen', 'LXGW WenKai', '霞鹜文楷', sans-serif;
+    --spark-font: var(--spark-font-primary-stack);
+    --spark-font-logo: var(--spark-font-primary-stack);
 }
 
 /* --- 亮色模式覆盖 --- */

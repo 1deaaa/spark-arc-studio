@@ -97,7 +97,7 @@ import { useThemeStore } from './components/stores/themeStore';
 import { useLocaleStore } from './components/stores/localeStore';
 import { useNaiveTheme } from './styles/themeConfig';
 import { captureLauncherThemeSnapshot, persistLauncherThemeSnapshot } from './utils/launcherThemeSync';
-import { ensureFullAppFontCss } from './utils/fontAssets';
+import { ensureFullAppFontCss, markAppFontWarmCacheHint } from './utils/fontAssets';
 import { warmupCommonChineseCharacters } from './utils/fontWarmup';
 import { preloadPostLoginCoreResources, preloadPostLoginFollowupResources } from './utils/postLoginPreload';
 import { isLocalTauriShell, isTauriDesktop } from './composables/usePlatform';
@@ -279,6 +279,21 @@ function emitPostLoginReady() {
   bus.emit('post-login-ready');
 }
 
+function primeAppFontCacheInBackground() {
+  void ensureFullAppFontCss()
+    .then((loaded) => {
+      if (!loaded) {
+        return false;
+      }
+      return warmupCommonChineseCharacters();
+    })
+    .then((warmed) => {
+      if (warmed) {
+        markAppFontWarmCacheHint(true);
+      }
+    });
+}
+
 function stopOnboarding() {
   if (!onboardingModulePromise) return;
   void onboardingModulePromise.then((mod) => {
@@ -306,8 +321,7 @@ async function runPostLoginGuards() {
   await checkSystemConfig();
   await loadDirectorOverlayModule();
   await loadOnboardingModule();
-  void ensureFullAppFontCss();
-  warmupCommonChineseCharacters();
+  primeAppFontCacheInBackground();
   // 所有登录后检查完成，通知子组件可以安全触发 onboarding
   emitPostLoginReady();
   // onboarding 触发后再检查公告弹窗（避免多层弹窗叠加）
@@ -344,8 +358,7 @@ async function handleTosAccepted() {
   await checkSystemConfig();
   await loadDirectorOverlayModule();
   await loadOnboardingModule();
-  void ensureFullAppFontCss();
-  warmupCommonChineseCharacters();
+  primeAppFontCacheInBackground();
   // TOS 接受后检查完成，通知子组件可以安全触发 onboarding
   emitPostLoginReady();
   // onboarding 触发后再检查公告弹窗

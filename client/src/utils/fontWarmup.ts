@@ -5,7 +5,7 @@ const DEFAULT_TIMEOUT_MS = 1200;
 const LOGIN_FONT_SAMPLE = 'abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789•●·登录注册密码用户名记住忘记邮箱确认提交服务器连接进入中文日本語한국어';
 
 const pendingLoads = new Map<string, Promise<boolean>>();
-let commonChineseWarmupScheduled = false;
+let commonChineseWarmupPromise: Promise<boolean> | null = null;
 
 export type FontWarmupOptions = {
   fontFamily?: string;
@@ -183,28 +183,31 @@ const COMMON_CHINESE_CHARS = '阿啊哎哀唉埃挨癌矮艾爱碍安氨俺岸�
  * 页面加载完毕且主线程空闲时，在后台静默预热 3500 常用中文字集
  * 一次性发起加载，利用浏览器和 CDN 的 HTTP/2 并发优势极速完成预热并写入强缓存
  */
-export function warmupCommonChineseCharacters(): void {
+export function warmupCommonChineseCharacters(): Promise<boolean> {
   if (typeof window === 'undefined') {
-    return;
+    return Promise.resolve(false);
   }
-  if (commonChineseWarmupScheduled) {
-    return;
+  if (commonChineseWarmupPromise) {
+    return commonChineseWarmupPromise;
   }
-  commonChineseWarmupScheduled = true;
 
-  const idleCallback = window.requestIdleCallback;
+  commonChineseWarmupPromise = new Promise((resolve) => {
+    const idleCallback = window.requestIdleCallback;
 
-  const triggerWarmup = () => {
-    void ensureAppFontReadyForText(COMMON_CHINESE_CHARS, {
-      timeoutMs: 5000,
-      maxChars: 4000,
-    });
-  };
+    const triggerWarmup = () => {
+      void ensureAppFontReadyForText(COMMON_CHINESE_CHARS, {
+        timeoutMs: 5000,
+        maxChars: 4000,
+      }).then(resolve).catch(() => resolve(false));
+    };
 
-  // 保证在浏览器完全空闲（Idle）时触发，支持 requestIdleCallback 时优先使用
-  if (typeof idleCallback === 'function') {
-    idleCallback(() => triggerWarmup(), { timeout: 8000 });
-  } else {
+    // 保证在浏览器完全空闲（Idle）时触发，支持 requestIdleCallback 时优先使用
+    if (typeof idleCallback === 'function') {
+      idleCallback(() => triggerWarmup(), { timeout: 8000 });
+      return;
+    }
     window.setTimeout(() => triggerWarmup(), 2500);
-  }
+  });
+
+  return commonChineseWarmupPromise;
 }

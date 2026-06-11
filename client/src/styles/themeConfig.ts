@@ -9,6 +9,7 @@ import {
   mixHex,
   rgbaFromHex
 } from './tokens';
+import { FONT_PRESET_STACKS, applyAppFontCssVars, normalizeUserFontFamily } from './fontStacks';
 
 const clamp01 = (n) => Math.max(0, Math.min(1, n));
 
@@ -58,27 +59,6 @@ const hslToHex = ({ h, s, l }) => {
   return `#${toHex(r)}${toHex(g)}${toHex(b)}`;
 };
 
-const fontStacks = {
-  theme: '',
-  yahei: "'Microsoft YaHei', '微软雅黑', 'Segoe UI', -apple-system, BlinkMacSystemFont, 'PingFang SC', 'Hiragino Sans GB', 'Noto Sans SC', Arial, sans-serif",
-  pingfang: "'PingFang SC', 'Microsoft YaHei', '微软雅黑', -apple-system, BlinkMacSystemFont, 'Segoe UI', 'Hiragino Sans GB', 'Noto Sans SC', Arial, sans-serif",
-  notoSans: "'Noto Sans SC', 'Microsoft YaHei', '微软雅黑', 'PingFang SC', -apple-system, BlinkMacSystemFont, 'Segoe UI', Arial, sans-serif",
-};
-
-const baseFallbackStack = "'Microsoft YaHei', '微软雅黑', 'PingFang SC', 'Noto Sans SC', 'Segoe UI', Arial, sans-serif";
-
-const normalizeFontFamily = (raw) => {
-  const v = (raw || '').toString().trim();
-  if (!v) return '';
-
-  // 如果用户输入的是 stack（包含逗号），直接使用
-  if (v.includes(',')) return v;
-
-  // 单个 family：自动补上引号与基础回退
-  const quoted = /\s/.test(v) ? `'${v.replace(/'/g, "\\'")}'` : `'${v.replace(/'/g, "\\'")}'`;
-  return `${quoted}, ${baseFallbackStack}`;
-};
-
 export const useNaiveTheme = (themeStore) => {
   const isDark = computed(() =>
     themeStore.themeMode === 'dark' || (themeStore.themeMode === 'system' && themeStore.prefersDark)
@@ -121,11 +101,10 @@ export const useNaiveTheme = (themeStore) => {
     const c = colors.value;
 
     // 字体：优先使用用户自定义字体；否则使用预设 key；都没有则让 theme.css 接管
-    const customFont = normalizeFontFamily(themeStore.fontFamily);
-    const preset = fontStacks[themeStore.fontKey] || '';
+    const customFont = normalizeUserFontFamily(themeStore.fontFamily);
+    const preset = FONT_PRESET_STACKS[themeStore.fontKey] || '';
     const fontStack = customFont || preset;
-    if (fontStack) body.style.setProperty('--spark-font', fontStack);
-    else body.style.removeProperty('--spark-font');
+    applyAppFontCssVars(body.style, fontStack);
 
     // 核心：将变量设置在 body 上，以覆盖 theme.css 中 body.light-mode/body.dark-mode 的定义
     body.style.setProperty('--spark-primary', c.primary);

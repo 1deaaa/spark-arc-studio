@@ -1,4 +1,5 @@
 import { getDerivedColors, mixHex, rgbaFromHex, tokens } from '@/styles/tokens';
+import { FONT_PRESET_STACKS, applyAppFontCssVars, normalizeUserFontFamily } from '@/styles/fontStacks';
 
 export type LauncherThemeMode = 'light' | 'dark' | 'system';
 
@@ -15,8 +16,6 @@ export type LauncherThemeSnapshot = {
 const LOCAL_CACHE_KEY = 'spark_launcher_theme_snapshot';
 const VALID_THEME_MODES = new Set<LauncherThemeMode>(['light', 'dark', 'system']);
 const VALID_FONT_KEYS = new Set(['theme', 'yahei', 'pingfang', 'notoSans']);
-const BASE_FALLBACK_STACK = "'Microsoft YaHei', '微软雅黑', 'PingFang SC', 'Noto Sans SC', 'Segoe UI', Arial, sans-serif";
-
 function isTauriRuntime(): boolean {
   if (typeof window === 'undefined') return false;
   return !!(window.__TAURI_INTERNALS__ || window.__TAURI__);
@@ -124,25 +123,8 @@ export function applyLauncherThemeSnapshotToStore(themeStore: any, snapshot: Lau
   themeStore.setFontFamily?.(normalized.fontFamily);
 }
 
-function normalizeFontFamily(raw: string): string {
-  const value = (raw || '').toString().trim();
-  if (!value) return '';
-  if (value.includes(',')) return value;
-  const escaped = value.replace(/'/g, "\\'");
-  return `'${escaped}', ${BASE_FALLBACK_STACK}`;
-}
-
 function getPresetFontStack(key: string): string {
-  switch (key) {
-    case 'yahei':
-      return "'Microsoft YaHei', '微软雅黑', 'Segoe UI', -apple-system, BlinkMacSystemFont, 'PingFang SC', 'Hiragino Sans GB', 'Noto Sans SC', Arial, sans-serif";
-    case 'pingfang':
-      return "'PingFang SC', 'Microsoft YaHei', '微软雅黑', -apple-system, BlinkMacSystemFont, 'Segoe UI', 'Hiragino Sans GB', 'Noto Sans SC', Arial, sans-serif";
-    case 'notoSans':
-      return "'Noto Sans SC', 'Microsoft YaHei', '微软雅黑', 'PingFang SC', -apple-system, BlinkMacSystemFont, 'Segoe UI', Arial, sans-serif";
-    default:
-      return '';
-  }
+  return FONT_PRESET_STACKS[key] || '';
 }
 
 export function applyLauncherThemeSnapshotToDocument(snapshot: LauncherThemeSnapshot): void {
@@ -162,9 +144,8 @@ export function applyLauncherThemeSnapshotToDocument(snapshot: LauncherThemeSnap
   colors.panel = isDark ? mixHex(tokens.bg.dark.main, primary, 0.06) : tokens.bg.light.panel;
   colors.border = isDark ? rgbaFromHex(primary, 0.2) : rgbaFromHex(primary, 0.15);
 
-  const fontStack = normalizeFontFamily(normalized.fontFamily) || getPresetFontStack(normalized.fontKey);
-  if (fontStack) body.style.setProperty('--spark-font', fontStack);
-  else body.style.removeProperty('--spark-font');
+  const fontStack = normalizeUserFontFamily(normalized.fontFamily) || getPresetFontStack(normalized.fontKey);
+  applyAppFontCssVars(body.style, fontStack);
 
   body.style.setProperty('--spark-primary', colors.primary);
   body.style.setProperty('--spark-primary-dim', colors.primaryHover);

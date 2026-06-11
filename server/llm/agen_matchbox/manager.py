@@ -832,6 +832,34 @@ class AIManagerBase:
 
         return {"action": "unresolved", "value": text, "changed": False, "summary": None}
 
+    def set_llm_key(self, key: str, persist: bool = True) -> None:
+        """设置主密钥 LLM_KEY 的原子操作。
+
+        更新进程内加密组件、环境变量、.env 文件（可选），并刷新平台配置缓存。
+        若 .env 文件不存在会自动创建。
+
+        调用场景：
+        - 首次部署，尚无 .env 和历史密文 → 直接调用本方法即可完成初始化。
+        - 外部服务层只需"写入 key 并立刻生效"，不涉及历史密钥迁移。
+
+        不适用场景：
+        - 已有 ENC: 密文存储在数据库或 YAML 中，需要更换主密钥 →
+          必须使用 rotate_master_key()，它会在全量迁移密文后内部调用本方法。
+
+        Args:
+            key: 新的主密钥，不能为空。
+            persist: 是否持久化到 .env 文件（默认 True）。
+
+        Raises:
+            ValueError: key 为空时抛出。
+        """
+        key = str(key or "").strip()
+        if not key:
+            raise ValueError("主密钥不能为空")
+
+        SecurityManager.get_instance().set_key(key, persist=persist)
+        self._invalidate_sys_platforms_cache()
+
     def rotate_master_key(
         self,
         new_key: str,
@@ -839,7 +867,31 @@ class AIManagerBase:
         persist: bool = True,
         allow_clear_unrecoverable: bool = False,
     ) -> Dict[str, int]:
-        """统一的主密钥设置/换密入口，负责 YAML 与数据库中的全部密钥迁移。"""
+        """统一的主密钥设置/换密入口，负责 YAML 与数据库中的全部密钥迁移。
+
+        调用场景：
+        - 已有 ENC: 密文存储在数据库或 YAML 中，需要更换主密钥 → 必须使用本方法。
+        - 不确定是否存在历史密文时，也应使用本方法（安全兜底）。
+        - 首次部署无历史密文时同样可用（全量扫描后直接落地，等价于 set_llm_key）。
+
+        与 set_llm_key() 的关系：
+        - 本方法是上层编排，完成全量密文迁移后内部调用 set_llm_key() 落地。
+        - set_llm_key() 是底层原子操作，不扫描不迁移，仅写入 key 并生效。
+
+        Args:
+            new_key: 新的主密钥，不能为空。
+            old_key: 旧主密钥，用于解密历史密文。省略时自动从 .env 读取当前值。
+            persist: 是否持久化到 .env 文件（默认 True）。
+            allow_clear_unrecoverable: 无法解密的历史密文是否允许直接清除（默认 False）。
+
+        Returns:
+            迁移统计摘要，各类型变更数量。
+
+        Raises:
+            ValueError: new_key 为空时抛出。
+            MasterKeyMigrationRequiredError: 存在无法解密的历史密文且未允许清除时抛出，
+                调用方可提示用户提供旧密钥或确认清除后重试。
+        """
         new_key = str(new_key or "").strip()
         old_key = str(old_key or "").strip() or None
         if not new_key:
@@ -933,8 +985,7 @@ class AIManagerBase:
 
             session.commit()
 
-        SecurityManager.get_instance().set_key(new_key, persist=persist)
-        self._invalidate_sys_platforms_cache()
+        self.set_llm_key(new_key, persist=persist)
         return summary
 
     def _invalidate_sys_platforms_cache(self):
