@@ -648,7 +648,7 @@ const jaJP = {
         clickToEditDisplayName: 'クリックして表示名を編集',
       },
       tags: {
-        system: 'システム',
+        system: 'S',
         custom: 'カスタム',
       },
       speed: {
@@ -705,6 +705,7 @@ const jaJP = {
         searchModelPlaceholder: 'キーワードでモデル一覧を絞り込み...',
         modelNamePlaceholder: '上の一覧から選択、またはモデル ID を直接入力',
         modelInputPrice: 'モデル入力価格（M tokens あたり）',
+        modelCachedInputPrice: 'モデルキャッシュ入力価格（M tokens あたり）',
         modelOutputPrice: 'モデル出力価格（M tokens あたり）',
         zeroIsFree: '0 は無料',
         enableBillingBeforePricing: 'モデルのマッチ価格を設定する前に課金システムを有効にしてください。',
@@ -714,7 +715,9 @@ const jaJP = {
         temperatureHint: '創造性の発散度を制御します。用途が不明な場合は無効のままを推奨します。',
         maxContextTokens: '最大コンテキスト',
         maxOutputTokens: '最大出力トークン',
-        maxTokensAutoHint: '空欄でデフォルト値を使用（200K / 64K）',
+        maxTokensAutoHint: '空欄でデフォルト値、K/M 対応（例: 200K、1.5M）',
+        tokenClampedMin: '許容最小値（{min}）に自動調整しました',
+        tokenClampedMax: '許容最大値（{max}）に自動調整しました',
         extraBodyModelPlaceholder: "JSON 例: {'{'}\"top_k\": 40{'}'}\nGemini 推論: {'{'}\"reasoning_effort\": \"low\"{'}'}\nDeepSeek 思考: {'{'}\"enable_thinking\": true{'}'}",
       },
       remoteModels: {
@@ -734,7 +737,7 @@ const jaJP = {
         billingDisabled: 'マッチ課金を無効にしました',
         billingToggleFailed: '課金切替に失敗しました：{error}',
         enableBillingBeforePricing: 'モデルのマッチ価格を設定する前に課金システムを有効にしてください',
-        modelPriceRequired: '課金が有効な場合、システムモデルには入力・出力価格が必要です。無料は 0 を入力してください。',
+        modelPriceRequired: '課金が有効な場合、システムモデルには入力・キャッシュ入力・出力価格が必要です。無料は 0 を入力してください。',
       },
       badges: {
         extraBodyBadge: '*',
@@ -753,8 +756,9 @@ const jaJP = {
       },
       pricing: {
         inputPrefix: '↑',
+        cachedInputPrefix: '↻',
         outputPrefix: '↓',
-        modelOverrideTitle: 'このモデルのマッチ消費：↑ 入力、↓ 出力',
+        modelOverrideTitle: 'このモデルのマッチ消費：↑ 入力、↻ キャッシュ入力、↓ 出力',
         unpriced: '未設定',
         unpricedBlockedHint: '課金が有効な場合、価格未設定モデルはブロックされます。',
         unpricedIgnoredHint: '課金が無効な間はモデル価格を無視します。',

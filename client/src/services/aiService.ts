@@ -900,6 +900,7 @@ export async function adminCreateSysModel(
   extraBody: string | null = null,
   temperature: number | undefined = undefined,
   inputPricePerMillion: number | undefined = undefined,
+  cachedInputPricePerMillion: number | undefined = undefined,
   outputPricePerMillion: number | undefined = undefined,
   maxContextTokens?: number | null,
   maxOutputTokens?: number | null,
@@ -915,6 +916,9 @@ export async function adminCreateSysModel(
   }
   if (inputPricePerMillion !== undefined) {
     payload.sys_credit_input_price_per_million = inputPricePerMillion;
+  }
+  if (cachedInputPricePerMillion !== undefined) {
+    payload.sys_credit_cached_input_price_per_million = cachedInputPricePerMillion;
   }
   if (outputPricePerMillion !== undefined) {
     payload.sys_credit_output_price_per_million = outputPricePerMillion;
@@ -944,6 +948,7 @@ export async function adminUpdateSysModel(modelId: ApiId, displayName: string | 
   temperature?: number | null;
   includeSysCreditPrices?: boolean;
   inputPricePerMillion?: number | null;
+  cachedInputPricePerMillion?: number | null;
   outputPricePerMillion?: number | null;
   includeMaxTokens?: boolean;
   maxContextTokens?: number | null;
@@ -959,6 +964,7 @@ export async function adminUpdateSysModel(modelId: ApiId, displayName: string | 
   }
   if (options?.includeSysCreditPrices) {
     payload.sys_credit_input_price_per_million = options.inputPricePerMillion ?? null;
+    payload.sys_credit_cached_input_price_per_million = options.cachedInputPricePerMillion ?? null;
     payload.sys_credit_output_price_per_million = options.outputPricePerMillion ?? null;
   }
   if (options?.includeMaxTokens) {

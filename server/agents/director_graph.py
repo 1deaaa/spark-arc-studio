@@ -31,6 +31,7 @@ from agents.communication import (
 from llm.agen_matchbox.reasoning_compat import extract_visible_text_from_plain_text
 
 from agents.agent_factory import create_agent_instance
+from agents.prompt_layout import build_current_user_message
 
 # ==================== State 定义 ====================
 
@@ -180,6 +181,14 @@ def director_node(state: DirectorState) -> Dict[str, Any]:
                 except Exception:
                     current_user_message = str(content)
             break
+
+    if active_context and messages_with_system and isinstance(messages_with_system[-1], HumanMessage):
+        messages_with_system[-1] = HumanMessage(
+            content=build_current_user_message(
+                user_message=current_user_message,
+                active_context=active_context,
+            )
+        )
 
     stream_events = []
     try:

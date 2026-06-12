@@ -53,6 +53,9 @@ def apply_sdk_request_compat(kwargs: Dict[str, Any]) -> Dict[str, Any]:
     compat_headers = build_sdk_compat_headers(kwargs.get("default_headers"))
     if compat_headers is not None:
         kwargs["default_headers"] = compat_headers
+    stream_usage_mode = str(get_env_var("SPARKARC_OPENAI_COMPAT_STREAM_USAGE", "auto") or "auto").strip().lower()
+    if stream_usage_mode in {"1", "true", "yes", "on", "auto"}:
+        kwargs.setdefault("stream_usage", True)
     return kwargs
 
 
@@ -107,6 +110,11 @@ class ChatUniversal(ChatOpenAI):
     def _create_chat_result(self, response, generation_info: dict | None = None):
         result = super()._create_chat_result(response, generation_info=generation_info)
         response_dict = response if isinstance(response, dict) else response.model_dump()
+        raw_usage = response_dict.get("usage")
+        if raw_usage:
+            llm_output = dict(result.llm_output or {})
+            llm_output["usage"] = raw_usage
+            result.llm_output = llm_output
         choices = response_dict.get("choices") or []
 
         for generation, raw_choice in zip(result.generations, choices):
@@ -128,6 +136,10 @@ class ChatUniversal(ChatOpenAI):
         )
         if result is None:
             return None
+
+        raw_usage = chunk.get("usage")
+        if raw_usage and hasattr(result.message, "response_metadata"):
+            result.message.response_metadata["usage"] = raw_usage
 
         choices = chunk.get("choices") or chunk.get("chunk", {}).get("choices") or []
         if choices:

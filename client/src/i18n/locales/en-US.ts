@@ -648,7 +648,7 @@ const enUS = {
         clickToEditDisplayName: 'Click to edit display name',
       },
       tags: {
-        system: 'System',
+        system: 'S',
         custom: 'Custom',
       },
       speed: {
@@ -705,6 +705,7 @@ const enUS = {
         searchModelPlaceholder: 'Filter model list by keyword...',
         modelNamePlaceholder: 'Choose from above list or enter model id manually',
         modelInputPrice: 'Model input price (per M tokens)',
+        modelCachedInputPrice: 'Model cached input price (per M tokens)',
         modelOutputPrice: 'Model output price (per M tokens)',
         zeroIsFree: '0 means free',
         enableBillingBeforePricing: 'Enable billing before setting model matchstick prices.',
@@ -714,7 +715,9 @@ const enUS = {
         temperatureHint: 'Controls creativity spread. Keep disabled unless you know the model usage.',
         maxContextTokens: 'Max Context Tokens',
         maxOutputTokens: 'Max Output Tokens',
-        maxTokensAutoHint: 'Leave empty for default (200K / 64K)',
+        maxTokensAutoHint: 'Leave empty for default; K/M supported (e.g. 200K, 1.5M)',
+        tokenClampedMin: 'Adjusted to minimum allowed ({min})',
+        tokenClampedMax: 'Adjusted to maximum allowed ({max})',
         extraBodyModelPlaceholder: "JSON, e.g. {'{'}\"top_k\": 40{'}'}\nGemini reasoning: {'{'}\"reasoning_effort\": \"low\"{'}'}\nDeepSeek thinking: {'{'}\"enable_thinking\": true{'}'}",
       },
       remoteModels: {
@@ -734,7 +737,7 @@ const enUS = {
         billingDisabled: 'Matchstick billing disabled',
         billingToggleFailed: 'Failed to switch billing: {error}',
         enableBillingBeforePricing: 'Enable billing before setting model matchstick prices',
-        modelPriceRequired: 'When billing is enabled, system models require both input and output prices. Use 0 for free.',
+        modelPriceRequired: 'When billing is enabled, system models require input, cached input, and output prices. Use 0 for free.',
       },
       badges: {
         extraBodyBadge: '*',
@@ -753,8 +756,9 @@ const enUS = {
       },
       pricing: {
         inputPrefix: '↑',
+        cachedInputPrefix: '↻',
         outputPrefix: '↓',
-        modelOverrideTitle: 'Matchstick consumption: ↑ input, ↓ output',
+        modelOverrideTitle: 'Matchstick consumption: ↑ input, ↻ cached input, ↓ output',
         unpriced: 'Not set',
         unpricedBlockedHint: 'When billing is enabled, unpriced models are blocked.',
         unpricedIgnoredHint: 'Model prices are ignored while billing is disabled.',

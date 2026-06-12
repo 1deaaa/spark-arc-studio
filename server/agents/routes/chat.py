@@ -356,6 +356,7 @@ def _collect_chat_task_llm_usage(entry: ChatTaskEntry) -> Dict[str, Any] | None:
                 func.coalesce(func.sum(UsageLogEntry.completion_tokens), 0).label("completion_tokens"),
                 func.coalesce(func.sum(UsageLogEntry.total_tokens), 0).label("total_tokens"),
                 func.coalesce(func.sum(UsageLogEntry.cached_prompt_tokens), 0).label("cached_prompt_tokens"),
+                func.coalesce(func.sum(UsageLogEntry.cache_miss_prompt_tokens), 0).label("cache_miss_prompt_tokens"),
                 func.count(UsageLogEntry.id).label("requests"),
                 func.coalesce(func.sum(1 - UsageLogEntry.success), 0).label("errors"),
             ).filter(
@@ -368,6 +369,7 @@ def _collect_chat_task_llm_usage(entry: ChatTaskEntry) -> Dict[str, Any] | None:
                 func.coalesce(func.sum(UsageLogEntry.completion_tokens), 0).label("completion_tokens"),
                 func.coalesce(func.sum(UsageLogEntry.total_tokens), 0).label("total_tokens"),
                 func.coalesce(func.sum(UsageLogEntry.cached_prompt_tokens), 0).label("cached_prompt_tokens"),
+                func.coalesce(func.sum(UsageLogEntry.cache_miss_prompt_tokens), 0).label("cache_miss_prompt_tokens"),
                 func.count(UsageLogEntry.id).label("requests"),
                 func.coalesce(func.sum(1 - UsageLogEntry.success), 0).label("errors"),
             ).filter(
@@ -388,6 +390,12 @@ def _collect_chat_task_llm_usage(entry: ChatTaskEntry) -> Dict[str, Any] | None:
             "completion_tokens": int(row.completion_tokens or 0),
             "total_tokens": int(row.total_tokens or 0),
             "cached_prompt_tokens": int(row.cached_prompt_tokens or 0),
+            "cache_miss_prompt_tokens": int(row.cache_miss_prompt_tokens or 0),
+            "cache_hit_rate": (
+                (int(row.cached_prompt_tokens or 0) / int(row.prompt_tokens or 1))
+                if int(row.prompt_tokens or 0) > 0
+                else None
+            ),
             "requests": int(row.requests or 0),
             "errors": int(row.errors or 0),
         }
@@ -397,6 +405,12 @@ def _collect_chat_task_llm_usage(entry: ChatTaskEntry) -> Dict[str, Any] | None:
         "completion_tokens": int(result.completion_tokens or 0),
         "total_tokens": int(result.total_tokens or 0),
         "cached_prompt_tokens": int(result.cached_prompt_tokens or 0),
+        "cache_miss_prompt_tokens": int(result.cache_miss_prompt_tokens or 0),
+        "cache_hit_rate": (
+            (int(result.cached_prompt_tokens or 0) / int(result.prompt_tokens or 1))
+            if int(result.prompt_tokens or 0) > 0
+            else None
+        ),
         "requests": requests,
         "errors": int(result.errors or 0),
         "by_agent": by_agent,

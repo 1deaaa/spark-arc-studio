@@ -8,10 +8,10 @@
 import json
 import os
 from typing import Any
-from langchain_core.messages import HumanMessage, SystemMessage
 from llm.agen_matchbox import matchbox
 from llm.agen_matchbox.reasoning_compat import PrefixReasoningStreamParser
 from agents.agent_utils import load_prompt, build_length_hint_str, SparkAgentExecutor
+from agents.prompt_layout import build_prompt_messages
 from story.outline_parser import parse_beat_sheet_markup, parse_outline_markup
 from .communication import SparkBaseAgent
 
@@ -105,10 +105,7 @@ class ShowrunnerAgent(SparkBaseAgent, SparkAgentExecutor):
             story_tags=story_tags or "",
         )
 
-        messages = [
-            SystemMessage(content=prompts['system']),
-            HumanMessage(content=prompts['user'])
-        ]
+        messages = build_prompt_messages(system_prompt=prompts['system'], user_prompt=prompts['user'])
 
         try:
             full_content = ""
@@ -150,10 +147,7 @@ class ShowrunnerAgent(SparkBaseAgent, SparkAgentExecutor):
             story_tags=story_tags or "",
         )
 
-        messages = [
-            SystemMessage(content=prompts['system']),
-            HumanMessage(content=prompts['user'])
-        ]
+        messages = build_prompt_messages(system_prompt=prompts['system'], user_prompt=prompts['user'])
 
         full_content = ""
         parser = PrefixReasoningStreamParser()
@@ -208,10 +202,7 @@ class ShowrunnerAgent(SparkBaseAgent, SparkAgentExecutor):
             story_tags=story_tags or "",
         )
 
-        messages = [
-            SystemMessage(content=prompts['system']),
-            HumanMessage(content=prompts['user'])
-        ]
+        messages = build_prompt_messages(system_prompt=prompts['system'], user_prompt=prompts['user'])
 
         try:
             full_content = ""
@@ -278,10 +269,7 @@ class ShowrunnerAgent(SparkBaseAgent, SparkAgentExecutor):
             story_tags=story_tags or "",
         )
 
-        messages = [
-            SystemMessage(content=prompts['system']),
-            HumanMessage(content=prompts['user'])
-        ]
+        messages = build_prompt_messages(system_prompt=prompts['system'], user_prompt=prompts['user'])
 
         try:
             full_content = ""
@@ -333,10 +321,7 @@ class ShowrunnerAgent(SparkBaseAgent, SparkAgentExecutor):
             story_tags=story_tags or "",
         )
 
-        messages = [
-            SystemMessage(content=prompts['system']),
-            HumanMessage(content=prompts['user'])
-        ]
+        messages = build_prompt_messages(system_prompt=prompts['system'], user_prompt=prompts['user'])
 
         full_content = ""
         parser = PrefixReasoningStreamParser()
@@ -404,10 +389,7 @@ class ShowrunnerAgent(SparkBaseAgent, SparkAgentExecutor):
             story_tags=story_tags or "",
         )
 
-        messages = [
-            SystemMessage(content=prompts['system']),
-            HumanMessage(content=prompts['user'])
-        ]
+        messages = build_prompt_messages(system_prompt=prompts['system'], user_prompt=prompts['user'])
 
         full_content = ""
         parser = PrefixReasoningStreamParser()

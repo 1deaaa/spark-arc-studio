@@ -391,7 +391,8 @@ class SparkBaseAgent:
 
     def _build_tool_system_prompt(self, base_prompt: str, active_context: str = None, skip_tool_confirmation: bool = False) -> str:
         """
-        构建系统提示词，注入工具使用规范和当前互动上下文。
+        构建系统提示词，注入工具使用规范。
+        active_context 参数仅为兼容旧调用签名保留，本轮动态上下文由 prompt_layout 放入最后 user。
         子类应当重写此方法以定制不同的提示词结构。
         """
         from agents.tools.registry import get_tools_for_agent
@@ -441,17 +442,6 @@ class SparkBaseAgent:
             tool_reference_block = self._build_tool_prompt_reference_block()
             if tool_reference_block:
                 system_instruction += tool_reference_block
-
-        if active_context:
-            interaction_prompt = f"""
-### 当前创作上下文
-以下是用户正在编辑的内容，由你之前生成，用户也可能做了自己的修改：
----
-{active_context}
----
-你当前处于【实时互动模式】。请结合上述内容回答用户的提问或执行修改。
-"""
-            system_instruction += interaction_prompt
 
         # 自动加载 yaml 中的 tool_rules（Agent 特定的工具使用补充规则）
         if tools:
@@ -1145,8 +1135,14 @@ class SparkBaseAgent:
         except Exception:
             system_prompt = f"你是一个专业的助手：{self.name}。你的职责是：{self.intro}"
 
-        # 1.1 注入互动模式与上下文与工具说明
+        # 1.1 注入互动模式与工具说明；动态上下文由 PromptLayout 放入最后 user
         system_instruction = self._build_tool_system_prompt(system_prompt, active_context, skip_tool_confirmation=skip_tool_confirmation)
+        from agents.prompt_layout import build_chat_prompt_layout
+        prompt_layout = build_chat_prompt_layout(
+            system_instruction=system_instruction,
+            user_message=user_message,
+            active_context=active_context,
+        )
 
         # 2. 调用 LLM（支持多轮工具调用）
         try:
@@ -1164,9 +1160,9 @@ class SparkBaseAgent:
                 user_id=self.user_id,
                 project_name=self.project_name,
                 agent_id=self.agent_id,
-                system_instruction=system_instruction,
+                system_instruction=prompt_layout.system_instruction,
                 history=history,
-                user_message=user_message,
+                user_message=prompt_layout.user_message,
                 llm_client=base_llm_client,
             ).messages
             tools = get_tools_for_agent(self.agent_id)
@@ -1265,6 +1261,12 @@ class SparkBaseAgent:
             system_prompt = f"你是一个专业的助手：{self.name}。你的职责是：{self.intro}"
 
         system_instruction = self._build_tool_system_prompt(system_prompt, active_context, skip_tool_confirmation=skip_tool_confirmation)
+        from agents.prompt_layout import build_chat_prompt_layout
+        prompt_layout = build_chat_prompt_layout(
+            system_instruction=system_instruction,
+            user_message=user_message,
+            active_context=active_context,
+        )
 
         from llm.agen_matchbox import matchbox
         from agents.tools.registry import get_tools_for_agent
@@ -1279,9 +1281,9 @@ class SparkBaseAgent:
             user_id=self.user_id,
             project_name=self.project_name,
             agent_id=self.agent_id,
-            system_instruction=system_instruction,
+            system_instruction=prompt_layout.system_instruction,
             history=history,
-            user_message=user_message,
+            user_message=prompt_layout.user_message,
             llm_client=base_stream_llm,
             emit_event=pending_budget_events.append,
         ).messages

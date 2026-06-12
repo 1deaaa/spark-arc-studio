@@ -37,6 +37,7 @@ type NewModelForm = {
     maxContextTokens: number | null;
     maxOutputTokens: number | null;
     inputPricePerMillion: number | null;
+    cachedInputPricePerMillion: number | null;
     outputPricePerMillion: number | null;
 };
 
@@ -50,6 +51,7 @@ type EditingModelForm = {
     maxContextTokens: number | null;
     maxOutputTokens: number | null;
     inputPricePerMillion: number | null;
+    cachedInputPricePerMillion: number | null;
     outputPricePerMillion: number | null;
 };
 
@@ -98,6 +100,7 @@ export function useAIModelManager(
         maxContextTokens: null,
         maxOutputTokens: null,
         inputPricePerMillion: null,
+        cachedInputPricePerMillion: null,
         outputPricePerMillion: null,
     });
     const editingModel = ref<EditingModelForm>({
@@ -110,6 +113,7 @@ export function useAIModelManager(
         maxContextTokens: null,
         maxOutputTokens: null,
         inputPricePerMillion: null,
+        cachedInputPricePerMillion: null,
         outputPricePerMillion: null,
     });
     const searchKeyword = ref('');
@@ -179,15 +183,15 @@ export function useAIModelManager(
         return Boolean(systemConfig?.value?.billing_enabled);
     }
 
-    function validateSystemModelPricing(inputPrice: number | null, outputPrice: number | null) {
+    function validateSystemModelPricing(inputPrice: number | null, cachedInputPrice: number | null, outputPrice: number | null) {
         if (!currentPlatform.value?.is_sys) return;
         if (!isBillingEnabled()) {
-            if (inputPrice !== null || outputPrice !== null) {
+            if (inputPrice !== null || cachedInputPrice !== null || outputPrice !== null) {
                 throw new Error(t('components.aiManager.messages.enableBillingBeforePricing'));
             }
             return;
         }
-        if (inputPrice === null || outputPrice === null) {
+        if (inputPrice === null || cachedInputPrice === null || outputPrice === null) {
             throw new Error(t('components.aiManager.messages.modelPriceRequired'));
         }
     }
@@ -205,6 +209,7 @@ export function useAIModelManager(
             maxContextTokens: null,
             maxOutputTokens: null,
             inputPricePerMillion: null,
+            cachedInputPricePerMillion: null,
             outputPricePerMillion: null,
         };
         searchKeyword.value = '';
@@ -292,6 +297,7 @@ export function useAIModelManager(
             maxContextTokens: model.max_context_tokens ?? null,
             maxOutputTokens: model.max_output_tokens ?? null,
             inputPricePerMillion: model.sys_credit_input_price_per_million ?? null,
+            cachedInputPricePerMillion: model.sys_credit_cached_input_price_per_million ?? null,
             outputPricePerMillion: model.sys_credit_output_price_per_million ?? null,
         };
         showEditModelModal.value = true;
@@ -505,9 +511,11 @@ export function useAIModelManager(
                 const temperature = buildTemperatureForNewModel();
                 validateSystemModelPricing(
                     newModel.value.inputPricePerMillion,
+                    newModel.value.cachedInputPricePerMillion,
                     newModel.value.outputPricePerMillion,
                 );
                 const inputPrice = isBillingEnabled() ? newModel.value.inputPricePerMillion ?? undefined : undefined;
+                const cachedInputPrice = isBillingEnabled() ? newModel.value.cachedInputPricePerMillion ?? undefined : undefined;
                 const outputPrice = isBillingEnabled() ? newModel.value.outputPricePerMillion ?? undefined : undefined;
                 let result;
                 if (currentPlatform.value.is_sys) {
@@ -518,6 +526,7 @@ export function useAIModelManager(
                         extraBodyPayload,
                         temperature,
                         inputPrice,
+                        cachedInputPrice,
                         outputPrice,
                         newModel.value.maxContextTokens,
                         newModel.value.maxOutputTokens,
@@ -543,6 +552,7 @@ export function useAIModelManager(
                     max_context_tokens: newModel.value.maxContextTokens ?? null,
                     max_output_tokens: newModel.value.maxOutputTokens ?? null,
                     sys_credit_input_price_per_million: newModel.value.inputPricePerMillion ?? null,
+                    sys_credit_cached_input_price_per_million: newModel.value.cachedInputPricePerMillion ?? null,
                     sys_credit_output_price_per_million: newModel.value.outputPricePerMillion ?? null,
                 });
             }
@@ -580,6 +590,7 @@ export function useAIModelManager(
             if (currentPlatform.value?.is_sys && isBillingEnabled()) {
                 validateSystemModelPricing(
                     editingModel.value.inputPricePerMillion,
+                    editingModel.value.cachedInputPricePerMillion,
                     editingModel.value.outputPricePerMillion,
                 );
             }
@@ -593,6 +604,7 @@ export function useAIModelManager(
                         temperature,
                         includeSysCreditPrices: isBillingEnabled(),
                         inputPricePerMillion: isBillingEnabled() ? editingModel.value.inputPricePerMillion ?? null : null,
+                        cachedInputPricePerMillion: isBillingEnabled() ? editingModel.value.cachedInputPricePerMillion ?? null : null,
                         outputPricePerMillion: isBillingEnabled() ? editingModel.value.outputPricePerMillion ?? null : null,
                         includeMaxTokens: true,
                         maxContextTokens: editingModel.value.maxContextTokens,
@@ -621,6 +633,7 @@ export function useAIModelManager(
                 model.max_context_tokens = editingModel.value.maxContextTokens ?? null;
                 model.max_output_tokens = editingModel.value.maxOutputTokens ?? null;
                 model.sys_credit_input_price_per_million = editingModel.value.inputPricePerMillion ?? null;
+                model.sys_credit_cached_input_price_per_million = editingModel.value.cachedInputPricePerMillion ?? null;
                 model.sys_credit_output_price_per_million = editingModel.value.outputPricePerMillion ?? null;
             }
             showEditModelModal.value = false;

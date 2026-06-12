@@ -6,11 +6,10 @@
 import json
 from typing import Any, Dict, List, Optional
 
-from langchain_core.messages import HumanMessage, SystemMessage
-
 from llm.agen_matchbox import matchbox
 from llm.agen_matchbox.reasoning_compat import extract_visible_text_from_plain_text
 from agents.agent_utils import load_prompt
+from agents.prompt_layout import build_prompt_messages
 from .communication import SparkBaseAgent
 
 
@@ -196,10 +195,7 @@ class CriticAgent(SparkBaseAgent):
         }
 
     def _invoke_prompt_json(self, prompts: Dict[str, Any]) -> Dict[str, Any]:
-        messages = [
-            SystemMessage(content=prompts["system"]),
-            HumanMessage(content=prompts["user"]),
-        ]
+        messages = build_prompt_messages(system_prompt=prompts["system"], user_prompt=prompts["user"])
 
         response = self.llm.invoke(messages)
         raw_content = response.content if isinstance(response.content, str) else str(response.content)

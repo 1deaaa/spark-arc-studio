@@ -601,9 +601,9 @@
     /* 允许名称缩小以显示省略号 */
 }
 
-/* 平台级"剩余火柴"标签在窄屏冗余（每个模型已单独显示计费），隐藏以释放横向空间 */
+/* 平台级"剩余火柴"标签在窄屏显示紧凑样式 */
 :global(html.viewport-mobile .ai-manager .platform-left .platform-credit-tag) {
-    display: none !important;
+    flex-shrink: 0;
 }
 
 /* 平台标签收缩，避免挤占平台名 */

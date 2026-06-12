@@ -506,6 +506,7 @@ class AdminMixin:
                             "max_context_tokens": int(m.max_context_tokens or DEFAULT_MAX_CONTEXT_TOKENS),
                             "max_output_tokens": int(m.max_output_tokens or DEFAULT_MAX_OUTPUT_TOKENS),
                             "sys_credit_input_price_per_million": m.sys_credit_input_price_per_million,
+                            "sys_credit_cached_input_price_per_million": m.sys_credit_cached_input_price_per_million,
                             "sys_credit_output_price_per_million": m.sys_credit_output_price_per_million,
                         }
                         for m in view["models"]
@@ -543,6 +544,9 @@ class AdminMixin:
                     "temperature": model.temperature,
                     "max_context_tokens": int(model.max_context_tokens or DEFAULT_MAX_CONTEXT_TOKENS),
                     "max_output_tokens": int(model.max_output_tokens or DEFAULT_MAX_OUTPUT_TOKENS),
+                    "sys_credit_input_price_per_million": model.sys_credit_input_price_per_million,
+                    "sys_credit_cached_input_price_per_million": model.sys_credit_cached_input_price_per_million,
+                    "sys_credit_output_price_per_million": model.sys_credit_output_price_per_million,
                 }
                 for view in views
                 if not view["disabled"]
@@ -604,6 +608,7 @@ class AdminMixin:
         extra_body: Optional[Dict[str, Any]] = None,
         temperature: Optional[float] = None,
         sys_credit_input_price_per_million: Optional[float] = None,
+        sys_credit_cached_input_price_per_million: Optional[float] = None,
         sys_credit_output_price_per_million: Optional[float] = None,
         admin_mode: bool = False,
         max_context_tokens: Optional[int] = DEFAULT_MAX_CONTEXT_TOKENS,
@@ -633,6 +638,7 @@ class AdminMixin:
             if admin_mode:
                 if not self.billing_enabled and (
                     sys_credit_input_price_per_million is not None
+                    or sys_credit_cached_input_price_per_million is not None
                     or sys_credit_output_price_per_million is not None
                 ):
                     raise ValueError("请先开启计费系统，再设置模型火柴价格")
@@ -670,6 +676,9 @@ class AdminMixin:
                         existing_display.sys_credit_input_price_per_million = (
                             None if sys_credit_input_price_per_million is None else max(float(sys_credit_input_price_per_million), 0)
                         )
+                        existing_display.sys_credit_cached_input_price_per_million = (
+                            None if sys_credit_cached_input_price_per_million is None else max(float(sys_credit_cached_input_price_per_million), 0)
+                        )
                         existing_display.sys_credit_output_price_per_million = (
                             None if sys_credit_output_price_per_million is None else max(float(sys_credit_output_price_per_million), 0)
                         )
@@ -694,6 +703,9 @@ class AdminMixin:
                 max_output_tokens=normalized_max_output_tokens,
                 sys_credit_input_price_per_million=(
                     None if sys_credit_input_price_per_million is None else max(float(sys_credit_input_price_per_million), 0)
+                ),
+                sys_credit_cached_input_price_per_million=(
+                    None if sys_credit_cached_input_price_per_million is None else max(float(sys_credit_cached_input_price_per_million), 0)
                 ),
                 sys_credit_output_price_per_million=(
                     None if sys_credit_output_price_per_million is None else max(float(sys_credit_output_price_per_million), 0)
@@ -810,6 +822,7 @@ class AdminMixin:
         new_extra_body: Optional[Dict[str, Any]] = None,
         new_temperature: Optional[float] = None,
         sys_credit_input_price_per_million: Optional[float] = None,
+        sys_credit_cached_input_price_per_million: Optional[float] = None,
         sys_credit_output_price_per_million: Optional[float] = None,
         update_credit_price: bool = False,
         update_temperature: bool = False,
@@ -882,6 +895,9 @@ class AdminMixin:
                     raise ValueError("请先开启计费系统，再设置模型火柴价格")
                 model.sys_credit_input_price_per_million = (
                     None if sys_credit_input_price_per_million is None else max(float(sys_credit_input_price_per_million), 0)
+                )
+                model.sys_credit_cached_input_price_per_million = (
+                    None if sys_credit_cached_input_price_per_million is None else max(float(sys_credit_cached_input_price_per_million), 0)
                 )
                 model.sys_credit_output_price_per_million = (
                     None if sys_credit_output_price_per_million is None else max(float(sys_credit_output_price_per_million), 0)
@@ -1106,6 +1122,7 @@ class AdminMixin:
                             "max_output_tokens": int(m.max_output_tokens or DEFAULT_MAX_OUTPUT_TOKENS),
                             "extra_body": extra_body,
                             "sys_credit_input_price_per_million": m.sys_credit_input_price_per_million,
+                            "sys_credit_cached_input_price_per_million": m.sys_credit_cached_input_price_per_million,
                             "sys_credit_output_price_per_million": m.sys_credit_output_price_per_million,
                             "sort_order": m.sort_order,
                         })
@@ -1356,6 +1373,7 @@ class AdminMixin:
                 "max_context_tokens": 200000,
                 "max_output_tokens": 64000,
                 "sys_credit_input_price_per_million": 100000 or None,
+                "sys_credit_cached_input_price_per_million": 25000 or None,
                 "sys_credit_output_price_per_million": 400000 or None,
                 "is_embedding": 0,
                 "sort_order": 0,
@@ -1393,9 +1411,11 @@ class AdminMixin:
                 sort_order = cfg.get("sort_order", idx)
                 # 兼容旧字段名 sys_credit_price_per_million_tokens（自动拆分为输入/输出同值）
                 has_input_price = "sys_credit_input_price_per_million" in cfg
+                has_cached_input_price = "sys_credit_cached_input_price_per_million" in cfg
                 has_output_price = "sys_credit_output_price_per_million" in cfg
                 has_legacy_price = "sys_credit_price_per_million_tokens" in cfg
                 model_input_price = cfg.get("sys_credit_input_price_per_million") if has_input_price else None
+                model_cached_input_price = cfg.get("sys_credit_cached_input_price_per_million") if has_cached_input_price else None
                 model_output_price = cfg.get("sys_credit_output_price_per_million") if has_output_price else None
                 if not has_input_price and not has_output_price and has_legacy_price:
                     legacy_val = cfg.get("sys_credit_price_per_million_tokens")
@@ -1416,9 +1436,12 @@ class AdminMixin:
                     existing.display_name = display_name
                     existing.extra_body = extra_body_json
                     existing.temperature = temperature
-                    if has_input_price or has_output_price or has_legacy_price:
+                    if has_input_price or has_cached_input_price or has_output_price or has_legacy_price:
                         existing.sys_credit_input_price_per_million = (
                             None if model_input_price is None else max(float(model_input_price), 0)
+                        )
+                        existing.sys_credit_cached_input_price_per_million = (
+                            None if model_cached_input_price is None else max(float(model_cached_input_price), 0)
                         )
                         existing.sys_credit_output_price_per_million = (
                             None if model_output_price is None else max(float(model_output_price), 0)
@@ -1447,6 +1470,9 @@ class AdminMixin:
                         temperature=temperature,
                         sys_credit_input_price_per_million=(
                             None if model_input_price is None else max(float(model_input_price), 0)
+                        ),
+                        sys_credit_cached_input_price_per_million=(
+                            None if model_cached_input_price is None else max(float(model_cached_input_price), 0)
                         ),
                         sys_credit_output_price_per_million=(
                             None if model_output_price is None else max(float(model_output_price), 0)
@@ -1487,6 +1513,7 @@ class AdminMixin:
         extra_body=None,
         temperature=None,
         sys_credit_input_price_per_million: Optional[float] = None,
+        sys_credit_cached_input_price_per_million: Optional[float] = None,
         sys_credit_output_price_per_million: Optional[float] = None,
         update_credit_price: bool = False,
         is_embedding: bool = False,
@@ -1529,6 +1556,7 @@ class AdminMixin:
                 max_context_tokens=max_context_tokens,
                 max_output_tokens=max_output_tokens,
                 sys_credit_input_price_per_million=sys_credit_input_price_per_million,
+                sys_credit_cached_input_price_per_million=sys_credit_cached_input_price_per_million,
                 sys_credit_output_price_per_million=sys_credit_output_price_per_million,
                 update_credit_price=update_credit_price,
                 update_temperature=update_temperature,

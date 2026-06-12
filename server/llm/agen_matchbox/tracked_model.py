@@ -52,6 +52,7 @@ from .models import UsageLogEntry, DEFAULT_MAX_CONTEXT_TOKENS, DEFAULT_MAX_OUTPU
 from .credit_services import settle_usage_entry_credit
 from .estimate_tokens import estimate_tokens
 from .reasoning_compat import extract_reasoning_text_from_message, extract_text_content_from_message
+from .usage_compat import extract_usage_from_llm_result, normalize_usage_payload
 
 
 @dataclass(frozen=True)
@@ -130,6 +131,10 @@ class UsageTrackingCallback(BaseCallbackHandler):
         self._stream_buffers: Dict[str, List[str]] = {}
         # 输入 token 缓存（按 run_id）
         self._prompt_tokens_cache: Dict[str, int] = {}
+        # 输入 prompt 文本缓存（按 run_id，用于本地 token 兜底）
+        self._prompt_text_cache: Dict[str, str] = {}
+        # 流式响应的最终 usage 往往只挂在最后一个 chunk 上，按 run_id 暂存真实上游统计。
+        self._stream_usage_cache: Dict[str, Dict[str, Any]] = {}
 
     # ==================== 内部工具方法 ====================
 
@@ -146,11 +151,17 @@ class UsageTrackingCallback(BaseCallbackHandler):
                         parts.append(block.get("text", ""))
         return "\n".join(parts)
 
+    @staticmethod
+    def _clamp_cached_prompt_tokens(cached_prompt_tokens: int, prompt_tokens: int) -> int:
+        """缓存命中 token 不能超过本次输入 token。"""
+        cached = max(int(cached_prompt_tokens or 0), 0)
+        prompt = max(int(prompt_tokens or 0), 0)
+        return min(cached, prompt) if prompt > 0 else cached
+
     def _extract_token_usage(self, response: LLMResult) -> Optional[Dict[str, int]]:
         """
         尝试从 API 响应中提取真实 token 用量。
-        优先读取 OpenAI 标准协议中通用的 prompt_tokens / completion_tokens，
-        并在可用时顺手提取 cached_tokens 这类缓存命中统计。
+        优先读取 OpenAI 兼容协议中的真实 usage，并兼容各家缓存字段。
         
         注意：不尝试从 completion_tokens_details 等非通用扩展字段中提取推理 token，
         因为各家 API 对这些字段的返回格式不一致。推理 token 的估算已通过
@@ -158,32 +169,53 @@ class UsageTrackingCallback(BaseCallbackHandler):
         
         返回 None 表示 API 未提供 usage，需要降级为本地估算。
         """
-        llm_output = response.llm_output or {}
-
-        # 标准 OpenAI 格式：token_usage 或 usage_metadata
-        usage = llm_output.get("token_usage") or llm_output.get("usage")
-        
-        if usage and isinstance(usage, dict):
-            prompt = usage.get("prompt_tokens") or usage.get("input_tokens", 0)
-            completion = usage.get("completion_tokens") or usage.get("output_tokens", 0)
-            prompt_details = usage.get("prompt_tokens_details")
-            if not isinstance(prompt_details, dict):
-                prompt_details = usage.get("input_tokens_details")
-            cached_prompt_tokens = 0
-            if isinstance(prompt_details, dict):
-                cached_prompt_tokens = int(
-                    prompt_details.get("cached_tokens")
-                    or prompt_details.get("cache_read_tokens")
-                    or 0
-                )
-            if prompt or completion:
-                return {
-                    "prompt_tokens": int(prompt or 0),
-                    "completion_tokens": int(completion or 0),
-                    "cached_prompt_tokens": cached_prompt_tokens,
-                }
+        normalized = extract_usage_from_llm_result(response)
+        if normalized is not None:
+            return normalized.to_dict()
 
         return None  # API 未返回 usage，触发本地估算
+
+    @staticmethod
+    def _usage_has_cache_stats(usage: Optional[Dict[str, Any]]) -> bool:
+        """判断 usage 是否包含真实缓存统计字段。"""
+        if not usage:
+            return False
+        return (
+            int(usage.get("cached_prompt_tokens") or 0) > 0
+            or usage.get("cache_miss_prompt_tokens") is not None
+            or usage.get("cache_source") == "upstream"
+        )
+
+    def _select_best_api_usage(self, run_key: str, response: LLMResult) -> Optional[Dict[str, Any]]:
+        """优先选择包含缓存统计的真实 usage，避免流式兜底覆盖更完整的最终结果。"""
+        stream_usage = self._stream_usage_cache.pop(run_key, None)
+        result_usage = self._extract_token_usage(response)
+
+        if self._usage_has_cache_stats(result_usage):
+            return result_usage
+        if self._usage_has_cache_stats(stream_usage):
+            return stream_usage
+        return result_usage or stream_usage
+
+    def _remember_stream_usage_from_chunk(self, run_key: str, chunk: Any) -> None:
+        """从流式 chunk 中暂存真实上游 usage，避免 LangChain 聚合时丢扩展字段。"""
+        if not chunk:
+            return
+
+        message = getattr(chunk, "message", None)
+        if message is None:
+            return
+
+        response_metadata = getattr(message, "response_metadata", None) or {}
+        if not isinstance(response_metadata, dict):
+            return
+
+        for key in ("usage", "token_usage", "usage_metadata"):
+            raw_usage = response_metadata.get(key)
+            normalized = normalize_usage_payload(raw_usage)
+            if normalized is not None:
+                self._stream_usage_cache[run_key] = normalized.to_dict()
+                return
 
     def _extract_completion_text(self, response: LLMResult) -> str:
         """从响应中提取 completion 文本，用于本地估算"""
@@ -220,6 +252,9 @@ class UsageTrackingCallback(BaseCallbackHandler):
         prompt_tokens: int,
         completion_tokens: int,
         cached_prompt_tokens: int = 0,
+        cache_miss_prompt_tokens: Optional[int] = None,
+        usage_source: Optional[str] = None,
+        cache_source: Optional[str] = None,
         success: bool = True,
     ) -> None:
         """写入用量日志到数据库"""
@@ -240,6 +275,9 @@ class UsageTrackingCallback(BaseCallbackHandler):
                 completion_tokens=completion_tokens,
                 total_tokens=total_tokens,
                 cached_prompt_tokens=max(int(cached_prompt_tokens or 0), 0),
+                cache_miss_prompt_tokens=cache_miss_prompt_tokens,
+                usage_source=str(usage_source) if usage_source else None,
+                cache_source=str(cache_source) if cache_source else None,
                 success=1 if success else 0,
                 agent_name=self.agent_name,
                 context_key=str(usage_context) if usage_context else None,
@@ -255,12 +293,23 @@ class UsageTrackingCallback(BaseCallbackHandler):
         prompt_tokens: int,
         completion_tokens: int,
         cached_prompt_tokens: int = 0,
+        cache_miss_prompt_tokens: Optional[int] = None,
+        usage_source: Optional[str] = None,
+        cache_source: Optional[str] = None,
         success: bool = True,
     ) -> None:
         """异步写入用量日志（在异步上下文中调用，避免阻塞事件循环）"""
         # SQLite 同步写入很快，直接调用同步版本即可
         # 如果未来切换到异步数据库驱动，在此处替换为 await session.commit()
-        self._record_usage(prompt_tokens, completion_tokens, cached_prompt_tokens, success)
+        self._record_usage(
+            prompt_tokens,
+            completion_tokens,
+            cached_prompt_tokens,
+            cache_miss_prompt_tokens,
+            usage_source,
+            cache_source,
+            success,
+        )
 
     # ==================== 同步 Callback 事件 ====================
 
@@ -276,6 +325,7 @@ class UsageTrackingCallback(BaseCallbackHandler):
         all_messages = [msg for msg_list in messages for msg in msg_list]
         prompt_text = self._messages_to_text(all_messages)
         self._prompt_tokens_cache[str(run_id)] = estimate_tokens(prompt_text, self.model_name)
+        self._prompt_text_cache[str(run_id)] = prompt_text
         self._stream_buffers[str(run_id)] = []
 
     def on_llm_end(
@@ -291,14 +341,22 @@ class UsageTrackingCallback(BaseCallbackHandler):
         """
         run_key = str(run_id)
         prompt_tokens = self._prompt_tokens_cache.pop(run_key, 0)
+        prompt_text = self._prompt_text_cache.pop(run_key, "")
         cached_prompt_tokens = 0
+        cache_miss_prompt_tokens = None
+        usage_source = None
+        cache_source = None
 
         # 优先读取 API 真实 usage
-        api_usage = self._extract_token_usage(response)
+        api_usage = self._select_best_api_usage(run_key, response)
         if api_usage:
             prompt_tokens = api_usage["prompt_tokens"] or prompt_tokens
             completion_tokens = api_usage["completion_tokens"]
             cached_prompt_tokens = int(api_usage.get("cached_prompt_tokens") or 0)
+            cache_miss_prompt_tokens = api_usage.get("cache_miss_prompt_tokens")
+            usage_source = api_usage.get("usage_source") or "upstream"
+            cache_source = api_usage.get("cache_source")
+            cached_prompt_tokens = self._clamp_cached_prompt_tokens(cached_prompt_tokens, prompt_tokens)
         else:
             # 降级：本地估算 completion
             completion_text = self._extract_completion_text(response)
@@ -309,12 +367,17 @@ class UsageTrackingCallback(BaseCallbackHandler):
                 completion_text = "".join(stream_buf)
 
             completion_tokens = estimate_tokens(completion_text, self.model_name)
+            usage_source = "estimated"
 
         self._stream_buffers.pop(run_key, None)
+        self._stream_usage_cache.pop(run_key, None)
         self._record_usage(
             prompt_tokens,
             completion_tokens,
             cached_prompt_tokens=cached_prompt_tokens,
+            cache_miss_prompt_tokens=cache_miss_prompt_tokens,
+            usage_source=usage_source,
+            cache_source=cache_source,
             success=True,
         )
 
@@ -334,6 +397,7 @@ class UsageTrackingCallback(BaseCallbackHandler):
         reasoning_text = ""
         
         if chunk and hasattr(chunk, "message"):
+            self._remember_stream_usage_from_chunk(run_key, chunk)
             msg = chunk.message
             reasoning_text = extract_reasoning_text_from_message(msg)
 
@@ -352,6 +416,8 @@ class UsageTrackingCallback(BaseCallbackHandler):
         """调用失败：记录失败用量（若已产生流式输出则按已输出内容估算 completion）"""
         run_key = str(run_id)
         prompt_tokens = self._prompt_tokens_cache.pop(run_key, 0)
+        self._prompt_text_cache.pop(run_key, None)
+        self._stream_usage_cache.pop(run_key, None)
         stream_buf = self._stream_buffers.pop(run_key, None) or []
         completion_tokens = 0
         if stream_buf:
@@ -378,6 +444,7 @@ class UsageTrackingCallback(BaseCallbackHandler):
         all_messages = [msg for msg_list in messages for msg in msg_list]
         prompt_text = self._messages_to_text(all_messages)
         self._prompt_tokens_cache[str(run_id)] = estimate_tokens(prompt_text, self.model_name)
+        self._prompt_text_cache[str(run_id)] = prompt_text
         self._stream_buffers[str(run_id)] = []
 
     async def on_llm_end(  # type: ignore[override]
@@ -390,13 +457,21 @@ class UsageTrackingCallback(BaseCallbackHandler):
         """异步版本：调用结束，记录用量"""
         run_key = str(run_id)
         prompt_tokens = self._prompt_tokens_cache.pop(run_key, 0)
+        prompt_text = self._prompt_text_cache.pop(run_key, "")
         cached_prompt_tokens = 0
+        cache_miss_prompt_tokens = None
+        usage_source = None
+        cache_source = None
 
-        api_usage = self._extract_token_usage(response)
+        api_usage = self._select_best_api_usage(run_key, response)
         if api_usage:
             prompt_tokens = api_usage["prompt_tokens"] or prompt_tokens
             completion_tokens = api_usage["completion_tokens"]
             cached_prompt_tokens = int(api_usage.get("cached_prompt_tokens") or 0)
+            cache_miss_prompt_tokens = api_usage.get("cache_miss_prompt_tokens")
+            usage_source = api_usage.get("usage_source") or "upstream"
+            cache_source = api_usage.get("cache_source")
+            cached_prompt_tokens = self._clamp_cached_prompt_tokens(cached_prompt_tokens, prompt_tokens)
         else:
             stream_buf = self._stream_buffers.pop(run_key, [])
             if stream_buf:
@@ -404,12 +479,17 @@ class UsageTrackingCallback(BaseCallbackHandler):
             else:
                 completion_text = self._extract_completion_text(response)
             completion_tokens = estimate_tokens(completion_text, self.model_name)
+            usage_source = "estimated"
 
         self._stream_buffers.pop(run_key, None)
+        self._stream_usage_cache.pop(run_key, None)
         await self._arecord_usage(
             prompt_tokens,
             completion_tokens,
             cached_prompt_tokens=cached_prompt_tokens,
+            cache_miss_prompt_tokens=cache_miss_prompt_tokens,
+            usage_source=usage_source,
+            cache_source=cache_source,
             success=True,
         )
 
@@ -429,6 +509,7 @@ class UsageTrackingCallback(BaseCallbackHandler):
         reasoning_text = ""
         
         if chunk and hasattr(chunk, "message"):
+            self._remember_stream_usage_from_chunk(run_key, chunk)
             msg = chunk.message
             reasoning_text = extract_reasoning_text_from_message(msg)
 
@@ -447,6 +528,8 @@ class UsageTrackingCallback(BaseCallbackHandler):
         """异步版本：调用失败，记录失败用量（若有已输出 token 则按已输出估算）"""
         run_key = str(run_id)
         prompt_tokens = self._prompt_tokens_cache.pop(run_key, 0)
+        self._prompt_text_cache.pop(run_key, None)
+        self._stream_usage_cache.pop(run_key, None)
         stream_buf = self._stream_buffers.pop(run_key, None) or []
         completion_tokens = 0
         if stream_buf:
@@ -540,6 +623,7 @@ class LLMUsage:
                 func.coalesce(func.sum(UsageLogEntry.prompt_tokens), 0).label("prompt_tokens"),
                 func.coalesce(func.sum(UsageLogEntry.completion_tokens), 0).label("completion_tokens"),
                 func.coalesce(func.sum(UsageLogEntry.cached_prompt_tokens), 0).label("cached_prompt_tokens"),
+                func.coalesce(func.sum(UsageLogEntry.cache_miss_prompt_tokens), 0).label("cache_miss_prompt_tokens"),
                 func.count(UsageLogEntry.id).label("requests"),
                 func.coalesce(func.sum(1 - UsageLogEntry.success), 0).label("errors"),
             ).filter(
@@ -563,6 +647,7 @@ class LLMUsage:
                 func.coalesce(func.sum(UsageLogEntry.prompt_tokens), 0).label("prompt_tokens"),
                 func.coalesce(func.sum(UsageLogEntry.completion_tokens), 0).label("completion_tokens"),
                 func.coalesce(func.sum(UsageLogEntry.cached_prompt_tokens), 0).label("cached_prompt_tokens"),
+                func.coalesce(func.sum(UsageLogEntry.cache_miss_prompt_tokens), 0).label("cache_miss_prompt_tokens"),
                 func.count(UsageLogEntry.id).label("requests"),
                 func.coalesce(func.sum(1 - UsageLogEntry.success), 0).label("errors"),
             ).filter(
@@ -584,6 +669,7 @@ class LLMUsage:
             "prompt_tokens": int(result.prompt_tokens or 0),
             "completion_tokens": int(result.completion_tokens or 0),
             "cached_prompt_tokens": int(result.cached_prompt_tokens or 0),
+            "cache_miss_prompt_tokens": int(result.cache_miss_prompt_tokens or 0),
             "requests": int(result.requests or 0),
             "errors": int(result.errors or 0),
         }

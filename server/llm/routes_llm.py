@@ -751,6 +751,7 @@ class AdminSysModelRequest(BaseModel):
     extra_body: Optional[str] = None
     temperature: Optional[float] = None
     sys_credit_input_price_per_million: Optional[float] = None
+    sys_credit_cached_input_price_per_million: Optional[float] = None
     sys_credit_output_price_per_million: Optional[float] = None
     max_context_tokens: Optional[int] = None
     max_output_tokens: Optional[int] = None
@@ -762,6 +763,7 @@ class AdminSysModelUpdateRequest(BaseModel):
     extra_body: Optional[str] = None
     temperature: Optional[float] = None
     sys_credit_input_price_per_million: Optional[float] = None
+    sys_credit_cached_input_price_per_million: Optional[float] = None
     sys_credit_output_price_per_million: Optional[float] = None
     max_context_tokens: Optional[int] = None
     max_output_tokens: Optional[int] = None
@@ -789,6 +791,7 @@ async def admin_create_sys_model(
             extra_body=extra_body_dict,
             temperature=temperature,
             sys_credit_input_price_per_million=data.sys_credit_input_price_per_million,
+            sys_credit_cached_input_price_per_million=data.sys_credit_cached_input_price_per_million,
             sys_credit_output_price_per_million=data.sys_credit_output_price_per_million,
             admin_mode=True,
             max_context_tokens=data.max_context_tokens,
@@ -811,7 +814,11 @@ async def admin_update_sys_model(
     display_name = data.display_name if 'display_name' in fields_set else None
     update_temperature = 'temperature' in fields_set
     new_temperature = validate_temperature_or_raise(data.temperature) if update_temperature else None
-    update_credit_price = 'sys_credit_input_price_per_million' in fields_set or 'sys_credit_output_price_per_million' in fields_set
+    update_credit_price = (
+        'sys_credit_input_price_per_million' in fields_set
+        or 'sys_credit_cached_input_price_per_million' in fields_set
+        or 'sys_credit_output_price_per_million' in fields_set
+    )
     
     extra_body_dict = None
     if 'extra_body' in fields_set:
@@ -835,6 +842,7 @@ async def admin_update_sys_model(
             new_extra_body=extra_body_dict,
             new_temperature=new_temperature,
             sys_credit_input_price_per_million=data.sys_credit_input_price_per_million,
+            sys_credit_cached_input_price_per_million=data.sys_credit_cached_input_price_per_million,
             sys_credit_output_price_per_million=data.sys_credit_output_price_per_million,
             update_credit_price=update_credit_price,
             update_temperature=update_temperature,

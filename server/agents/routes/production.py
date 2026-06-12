@@ -45,6 +45,7 @@ from core.utils import (
 from agents import ScriptwriterAgent, CriticAgent
 from agents.agent_style.utils import load_project_style_profile
 from agents.language_policy import prepend_prompt_language_policy
+from agents.prompt_layout import build_prompt_messages
 from core.project_settings import get_project_story_tags
 from llm.agen_matchbox import matchbox
 from llm.agen_matchbox.reasoning_compat import PrefixReasoningStreamParser
@@ -492,15 +493,11 @@ async def scriptwriter_compose_stream(
                 return
 
             if mode == "single-node":
-                from langchain_core.messages import SystemMessage, HumanMessage
-
                 prompt = f'''我的世界观是：\n"{context_pack.get("worldview", "")}"\n\n你可能需要用到的角色设定：\n"{context_pack.get("roles", "")}"\n\n我当前的上下文是：\n"{data.context or ""}"\n\n请根据以上信息，续写一句纯文本内容，续写长度约为 {data.length} 字。'''
-                messages = [
-                    SystemMessage(
-                        content=prepend_prompt_language_policy("你是一个专业的剧本创作助手。你只输出纯文本的对话内容。")
-                    ),
-                    HumanMessage(content=prompt),
-                ]
+                messages = build_prompt_messages(
+                    system_prompt=prepend_prompt_language_policy("你是一个专业的剧本创作助手。你只输出纯文本的对话内容。"),
+                    user_prompt=prompt,
+                )
                 chat = matchbox().get_user_llm(user_id, agent_name="agent_scriptwriter")
                 parser = PrefixReasoningStreamParser()
                 async for model_chunk in iterate_sync_iterable_in_thread(

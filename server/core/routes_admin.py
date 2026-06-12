@@ -51,6 +51,7 @@ class ModelCreditPricingUpdateRequest(BaseModel):
     platform_id: int
     model_id: int
     model_input_price_per_million: Optional[float] = None
+    model_cached_input_price_per_million: Optional[float] = None
     model_output_price_per_million: Optional[float] = None
     remark: Optional[str] = None
 
@@ -370,6 +371,7 @@ async def save_model_credit_pricing(
             data.platform_id,
             data.model_id,
             model_input_price_per_million=data.model_input_price_per_million,
+            model_cached_input_price_per_million=data.model_cached_input_price_per_million,
             model_output_price_per_million=data.model_output_price_per_million,
             remark=data.remark,
         )

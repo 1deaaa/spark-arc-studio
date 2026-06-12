@@ -16,13 +16,13 @@ import json
 import re
 import os
 from typing import Any
-from langchain_core.messages import HumanMessage, SystemMessage
 from llm.agen_matchbox import matchbox
 from llm.agen_matchbox.reasoning_compat import (
     PrefixReasoningStreamParser,
     extract_visible_text_from_plain_text,
 )
 from agents.agent_utils import load_prompt, SparkAgentExecutor
+from agents.prompt_layout import build_prompt_messages
 from .communication import SparkBaseAgent
 
 
@@ -236,7 +236,7 @@ class ScriptwriterAgent(SparkBaseAgent, SparkAgentExecutor):
         """
         from agents.tools.registry import SHARED_READ_TOOLS, TOOLS_BY_NAME
         from core.request_context import current_user_id, current_project_name
-        from langchain_core.messages import SystemMessage, HumanMessage, AIMessage, ToolMessage
+        from langchain_core.messages import AIMessage, ToolMessage
         from agents.language_policy import prepend_prompt_language_policy
         import uuid
 
@@ -268,10 +268,7 @@ class ScriptwriterAgent(SparkBaseAgent, SparkAgentExecutor):
             "请判断是否需要查阅远端场景原文，若需要请立即调用工具。"
         )
 
-        messages = [
-            SystemMessage(content=system_prompt),
-            HumanMessage(content=human_content),
-        ]
+        messages = build_prompt_messages(system_prompt=system_prompt, user_prompt=human_content)
 
         gathered_references: list[str] = []
         tool_rounds = 0
@@ -388,10 +385,7 @@ class ScriptwriterAgent(SparkBaseAgent, SparkAgentExecutor):
             )
 
         system_prompt = prompts["system"]
-        messages = [
-            SystemMessage(content=system_prompt),
-            HumanMessage(content=prompts["user"]),
-        ]
+        messages = build_prompt_messages(system_prompt=system_prompt, user_prompt=prompts["user"])
 
         try:
             full_content = ""
@@ -508,10 +502,7 @@ class ScriptwriterAgent(SparkBaseAgent, SparkAgentExecutor):
             )
 
         system_prompt = prompts["system"]
-        messages = [
-            SystemMessage(content=system_prompt),
-            HumanMessage(content=prompts["user"]),
-        ]
+        messages = build_prompt_messages(system_prompt=system_prompt, user_prompt=prompts["user"])
 
         full_content = ""
         parser = PrefixReasoningStreamParser()
@@ -573,16 +564,14 @@ class ScriptwriterAgent(SparkBaseAgent, SparkAgentExecutor):
             length_instruction="输出建议即可，无需生成完整剧本。",
         )
 
-        messages = [
-            SystemMessage(content=prompts["system"]),
-            HumanMessage(
-                content=(
-                    f"### 用户问题\n{user_input or '请分析当前写法并给出建议'}\n\n"
-                    f"### 最近内容\n{last_content or context or '（未提供）'}\n\n"
-                    "请以编剧搭档身份给出建议，不要直接改写文件。"
-                )
+        messages = build_prompt_messages(
+            system_prompt=prompts["system"],
+            user_prompt=(
+                f"### 用户问题\n{user_input or '请分析当前写法并给出建议'}\n\n"
+                f"### 最近内容\n{last_content or context or '（未提供）'}\n\n"
+                "请以编剧搭档身份给出建议，不要直接改写文件。"
             ),
-        ]
+        )
 
         parser = PrefixReasoningStreamParser()
         for chunk in self.llm.stream(messages):
@@ -617,16 +606,14 @@ class ScriptwriterAgent(SparkBaseAgent, SparkAgentExecutor):
             length_instruction="输出建议即可，无需生成完整剧本。",
         )
 
-        messages = [
-            SystemMessage(content=prompts["system"]),
-            HumanMessage(
-                content=(
-                    f"### 用户问题\n{user_input or '请分析当前写法并给出建议'}\n\n"
-                    f"### 最近内容\n{last_content or context or '（未提供）'}\n\n"
-                    "请以编剧搭档身份给出建议，不要直接改写文件。"
-                )
+        messages = build_prompt_messages(
+            system_prompt=prompts["system"],
+            user_prompt=(
+                f"### 用户问题\n{user_input or '请分析当前写法并给出建议'}\n\n"
+                f"### 最近内容\n{last_content or context or '（未提供）'}\n\n"
+                "请以编剧搭档身份给出建议，不要直接改写文件。"
             ),
-        ]
+        )
 
         response = self.llm.invoke(messages)
         content = getattr(response, "content", "")
@@ -722,10 +709,7 @@ class ScriptwriterAgent(SparkBaseAgent, SparkAgentExecutor):
             story_tags=story_tags or "",
         )
 
-        messages = [
-            SystemMessage(content=prompts["system"]),
-            HumanMessage(content=prompts["user"]),
-        ]
+        messages = build_prompt_messages(system_prompt=prompts["system"], user_prompt=prompts["user"])
 
         response = self._get_invoke_llm().invoke(messages)
         full_content = extract_visible_text_from_plain_text(
@@ -795,10 +779,7 @@ class ScriptwriterAgent(SparkBaseAgent, SparkAgentExecutor):
             story_tags=story_tags or "",
         )
 
-        messages = [
-            SystemMessage(content=prompts["system"]),
-            HumanMessage(content=prompts["user"]),
-        ]
+        messages = build_prompt_messages(system_prompt=prompts["system"], user_prompt=prompts["user"])
 
         full_content = ""
         parser = PrefixReasoningStreamParser()

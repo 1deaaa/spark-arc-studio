@@ -756,6 +756,9 @@
                             <span v-if="!systemConfig.billing_enabled" class="form-hint">{{ t('components.aiManager.form.enableBillingBeforePricing') }}</span>
                         </template>
                     </n-form-item>
+                    <n-form-item v-if="currentPlatform?.is_sys && !newModel.isEmbedding" :label="t('components.aiManager.form.modelCachedInputPrice')">
+                        <n-input-number v-model:value="newModel.cachedInputPricePerMillion" :min="0" :precision="2" :step="0.01" style="width: 100%" :placeholder="t('components.aiManager.form.zeroIsFree')" :disabled="!systemConfig.billing_enabled" />
+                    </n-form-item>
                     <n-form-item v-if="currentPlatform?.is_sys && !newModel.isEmbedding" :label="t('components.aiManager.form.modelOutputPrice')">
                         <n-input-number v-model:value="newModel.outputPricePerMillion" :min="0" :precision="2" :step="0.01" style="width: 100%" :placeholder="t('components.aiManager.form.zeroIsFree')" :disabled="!systemConfig.billing_enabled" />
                     </n-form-item>
@@ -788,10 +791,28 @@
                         </n-space>
                     </n-form-item>
                     <n-form-item v-if="!newModel.isEmbedding" :label="t('components.aiManager.form.maxContextTokens')">
-                        <n-input-number v-model:value="newModel.maxContextTokens" :min="0" :step="1000" style="width: 100%" :placeholder="t('components.aiManager.form.maxTokensAutoHint')" clearable />
+                        <n-input
+                            v-model:value="tokenTexts.addContext"
+                            style="width: 100%"
+                            :placeholder="t('components.aiManager.form.maxTokensAutoHint')"
+                            clearable
+                            @blur="onTokenBlur('addContext', newModel as any, 'maxContextTokens')"
+                            @clear="onTokenClear('addContext', newModel as any, 'maxContextTokens')"
+                        >
+                            <template #suffix><span style="opacity:0.45;font-size:11px">100K~2M</span></template>
+                        </n-input>
                     </n-form-item>
                     <n-form-item v-if="!newModel.isEmbedding" :label="t('components.aiManager.form.maxOutputTokens')">
-                        <n-input-number v-model:value="newModel.maxOutputTokens" :min="0" :step="1000" style="width: 100%" :placeholder="t('components.aiManager.form.maxTokensAutoHint')" clearable />
+                        <n-input
+                            v-model:value="tokenTexts.addOutput"
+                            style="width: 100%"
+                            :placeholder="t('components.aiManager.form.maxTokensAutoHint')"
+                            clearable
+                            @blur="onTokenBlur('addOutput', newModel as any, 'maxOutputTokens')"
+                            @clear="onTokenClear('addOutput', newModel as any, 'maxOutputTokens')"
+                        >
+                            <template #suffix><span style="opacity:0.45;font-size:11px">8K~256K</span></template>
+                        </n-input>
                     </n-form-item>
                     <n-form-item class="add-model-extra-body" :show-feedback="false" :label="t('components.aiManager.form.extraBodyOptional')">
                         <n-input 
@@ -830,6 +851,9 @@
                             <span v-if="!systemConfig.billing_enabled" class="form-hint">{{ t('components.aiManager.form.enableBillingBeforePricing') }}</span>
                         </template>
                     </n-form-item>
+                    <n-form-item v-if="currentPlatform?.is_sys" :label="t('components.aiManager.form.modelCachedInputPrice')">
+                        <n-input-number v-model:value="editingModel.cachedInputPricePerMillion" :min="0" :precision="2" :step="0.01" style="width: 100%" :placeholder="t('components.aiManager.form.zeroIsFree')" :disabled="!systemConfig.billing_enabled" />
+                    </n-form-item>
                     <n-form-item v-if="currentPlatform?.is_sys" :label="t('components.aiManager.form.modelOutputPrice')">
                         <n-input-number v-model:value="editingModel.outputPricePerMillion" :min="0" :precision="2" :step="0.01" style="width: 100%" :placeholder="t('components.aiManager.form.zeroIsFree')" :disabled="!systemConfig.billing_enabled" />
                     </n-form-item>
@@ -862,10 +886,28 @@
                         </n-space>
                     </n-form-item>
                     <n-form-item :label="t('components.aiManager.form.maxContextTokens')">
-                        <n-input-number v-model:value="editingModel.maxContextTokens" :min="0" :step="1000" style="width: 100%" :placeholder="t('components.aiManager.form.maxTokensAutoHint')" clearable />
+                        <n-input
+                            v-model:value="tokenTexts.editContext"
+                            style="width: 100%"
+                            :placeholder="t('components.aiManager.form.maxTokensAutoHint')"
+                            clearable
+                            @blur="onTokenBlur('editContext', editingModel as any, 'maxContextTokens')"
+                            @clear="onTokenClear('editContext', editingModel as any, 'maxContextTokens')"
+                        >
+                            <template #suffix><span style="opacity:0.45;font-size:11px">100K~2M</span></template>
+                        </n-input>
                     </n-form-item>
                     <n-form-item :label="t('components.aiManager.form.maxOutputTokens')">
-                        <n-input-number v-model:value="editingModel.maxOutputTokens" :min="0" :step="1000" style="width: 100%" :placeholder="t('components.aiManager.form.maxTokensAutoHint')" clearable />
+                        <n-input
+                            v-model:value="tokenTexts.editOutput"
+                            style="width: 100%"
+                            :placeholder="t('components.aiManager.form.maxTokensAutoHint')"
+                            clearable
+                            @blur="onTokenBlur('editOutput', editingModel as any, 'maxOutputTokens')"
+                            @clear="onTokenClear('editOutput', editingModel as any, 'maxOutputTokens')"
+                        >
+                            <template #suffix><span style="opacity:0.45;font-size:11px">8K~256K</span></template>
+                        </n-input>
                     </n-form-item>
                     <n-form-item :show-feedback="false" :label="t('components.aiManager.form.extraBody')">
                         <n-input 
@@ -896,7 +938,7 @@
  * - useAIModelManager: 模型 CRUD、测速、远程探测、内联编辑
  * - useAIEmbeddingManager: Embedding CRUD、选择管理
  */
-import { ref, onMounted, nextTick } from 'vue';
+import { ref, reactive, watch, onMounted, nextTick } from 'vue';
 import { useI18n } from 'vue-i18n';
 import {
     NSpin, NCollapse, NCollapseItem, NText, NSpace, NButton, NIcon, NModal, NCard,
@@ -946,6 +988,86 @@ type CreditTagMeta = {
     text: string;
     title: string;
 };
+
+// === Token 输入 K/M 单位支持 ===
+function formatTokenDisplay(value: number | null | undefined): string {
+    if (value == null) return '';
+    const num = Number(value);
+    if (!Number.isFinite(num) || num <= 0) return '';
+    if (num >= 1e6) {
+        const v = num / 1e6;
+        if (v >= 100) return `${Math.round(v)}M`;
+        if (v >= 10) return `${v.toFixed(1)}M`;
+        return `${v.toFixed(2)}M`;
+    }
+    if (num >= 1e3) {
+        const v = num / 1e3;
+        if (v >= 100) return `${Math.round(v)}K`;
+        if (v >= 10) return `${v.toFixed(1)}K`;
+        return `${v.toFixed(2)}K`;
+    }
+    return String(num);
+}
+
+function parseTokenInput(text: string): number | null {
+    if (!text || !text.trim()) return null;
+    const cleaned = text.trim().replace(/[,，\s]/g, '');
+    const match = cleaned.match(/^([0-9]*\.?[0-9]+)\s*([kKmMgG])?$/i);
+    if (!match) return null;
+    const num = parseFloat(match[1]);
+    if (!Number.isFinite(num) || num < 0) return null;
+    const suffix = (match[2] || '').toUpperCase();
+    const multiplier = suffix === 'K' ? 1e3 : suffix === 'M' ? 1e6 : suffix === 'G' ? 1e9 : 1;
+    return Math.round(num * multiplier);
+}
+
+const tokenTexts = reactive({
+    addContext: '',
+    addOutput: '',
+    editContext: '',
+    editOutput: '',
+});
+
+function syncAddTokenTexts() {
+    tokenTexts.addContext = formatTokenDisplay(newModel.value.maxContextTokens);
+    tokenTexts.addOutput = formatTokenDisplay(newModel.value.maxOutputTokens);
+}
+function syncEditTexts() {
+    tokenTexts.editContext = formatTokenDisplay(editingModel.value.maxContextTokens);
+    tokenTexts.editOutput = formatTokenDisplay(editingModel.value.maxOutputTokens);
+}
+
+const TOKEN_RANGE: Record<string, { min: number; max: number; label: string }> = {
+    maxContextTokens: { min: 1e5, max: 2e6, label: '100K ~ 2M' },
+    maxOutputTokens: { min: 8e3, max: 256e3, label: '8K ~ 256K' },
+};
+
+function onTokenBlur(key: keyof typeof tokenTexts, target: Record<string, unknown>, field: string) {
+    const parsed = parseTokenInput(tokenTexts[key]);
+    if (parsed != null) {
+        const range = TOKEN_RANGE[field];
+        if (range) {
+            if (parsed < range.min) {
+                target[field] = range.min;
+                tokenTexts[key] = formatTokenDisplay(range.min);
+                message.warning(t('components.aiManager.form.tokenClampedMin', { min: range.label }));
+                return;
+            }
+            if (parsed > range.max) {
+                target[field] = range.max;
+                tokenTexts[key] = formatTokenDisplay(range.max);
+                message.warning(t('components.aiManager.form.tokenClampedMax', { max: range.label }));
+                return;
+            }
+        }
+    }
+    target[field] = parsed;
+    tokenTexts[key] = formatTokenDisplay(parsed);
+}
+function onTokenClear(key: keyof typeof tokenTexts, target: Record<string, unknown>, field: string) {
+    target[field] = null;
+    tokenTexts[key] = '';
+}
 
 // === Header 提示 ===
 const showHeaderHint = ref(false);
@@ -1049,9 +1171,10 @@ function formatCreditPriceTag(price, withSuffix: boolean = true) {
 
 function modelCreditTagMeta(plat: AiPlatform, model: AiModelItem): CreditTagMeta {
     const inputPrice = model?.sys_credit_input_price_per_million;
+    const cachedInputPrice = model?.sys_credit_cached_input_price_per_million;
     const outputPrice = model?.sys_credit_output_price_per_million;
 
-    if (inputPrice == null || outputPrice == null) {
+    if (inputPrice == null || cachedInputPrice == null || outputPrice == null) {
         return {
             type: systemConfig.value.billing_enabled ? 'warning' : 'default',
             text: t('components.aiManager.pricing.unpriced'),
@@ -1062,8 +1185,9 @@ function modelCreditTagMeta(plat: AiPlatform, model: AiModelItem): CreditTagMeta
     }
 
     const inputTag = formatCreditPriceTag(inputPrice, false);
+    const cachedInputTag = formatCreditPriceTag(cachedInputPrice, false);
     const outputTag = formatCreditPriceTag(outputPrice, false);
-    if (Number(inputPrice) === 0 && Number(outputPrice) === 0) {
+    if (Number(inputPrice) === 0 && Number(cachedInputPrice) === 0 && Number(outputPrice) === 0) {
         return {
             type: 'success',
             text: t('components.aiManager.pricing.free'),
@@ -1072,16 +1196,32 @@ function modelCreditTagMeta(plat: AiPlatform, model: AiModelItem): CreditTagMeta
     }
     return {
         type: 'warning',
-        text: `${t('components.aiManager.pricing.inputPrefix')}${inputTag}${t('components.aiManager.pricing.outputPrefix')}${outputTag} /M`,
+        text: `${t('components.aiManager.pricing.inputPrefix')}${inputTag}${t('components.aiManager.pricing.cachedInputPrefix')}${cachedInputTag}${t('components.aiManager.pricing.outputPrefix')}${outputTag} /M`,
         title: t('components.aiManager.pricing.modelOverrideTitle'),
     };
 }
 
 function platformCreditText(plat: AiPlatform) {
     const balance = plat.sys_credit_balance;
-    if (balance === null || balance === undefined) return t('components.aiManager.pricing.unlimited');
+    if (balance === null || balance === undefined) return '∞';
     const num = Number(balance);
-    if (!Number.isFinite(num)) return t('components.aiManager.pricing.unlimited');
+    if (!Number.isFinite(num)) return '∞';
+    if (num >= 1e6) {
+        const v = num / 1e6;
+        if (v >= 100) return `${Math.round(v)}M`;
+        if (v >= 10) return `${v.toFixed(1)}M`;
+        return `${v.toFixed(2)}M`;
+    }
+    if (num >= 1e3) {
+        const v = num / 1e3;
+        if (v >= 100) {
+            const rounded = Math.round(v);
+            if (rounded >= 1000) return `${(rounded / 1000).toFixed(2)}M`;
+            return `${rounded}K`;
+        }
+        if (v >= 10) return `${v.toFixed(1)}K`;
+        return `${v.toFixed(2)}K`;
+    }
     if (Number.isInteger(num)) return String(num);
     return num.toFixed(2).replace(/0+$/, '').replace(/\.$/, '');
 }
@@ -1304,6 +1444,9 @@ const {
     cancelEditDisplayName,
     confirmEditDisplayName,
 } = useAIModelManager(platforms, syncAiStoreSilently, systemConfig);
+
+watch(() => showAddModelModal.value, (open) => { if (open) nextTick(syncAddTokenTexts); });
+watch(() => showEditModelModal.value, (open) => { if (open) nextTick(syncEditTexts); });
 
 // === Embedding 管理 ===
 const embedding = useAIEmbeddingManager(platforms, syncAiStoreSilently);

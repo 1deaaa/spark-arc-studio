@@ -102,6 +102,7 @@ export type AiModelItem = {
   max_context_tokens?: number | null;
   max_output_tokens?: number | null;
   sys_credit_input_price_per_million?: number | null;
+  sys_credit_cached_input_price_per_million?: number | null;
   sys_credit_output_price_per_million?: number | null;
 };
 

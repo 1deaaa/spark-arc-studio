@@ -42,15 +42,21 @@ def calculate_credit_cost(
     *,
     prompt_tokens: int = 0,
     completion_tokens: int = 0,
+    cached_prompt_tokens: int = 0,
+    cached_input_price_per_million: Optional[float] = None,
 ) -> float:
-    """分别按输入/输出价格精确计算点数消耗（float）。"""
+    """按未命中输入、缓存命中输入、输出三段价格精确计算点数消耗。"""
     input_price = max(float(input_price_per_million or 0), 0)
+    cached_input_price = input_price if cached_input_price_per_million is None else max(float(cached_input_price_per_million or 0), 0)
     output_price = max(float(output_price_per_million or 0), 0)
     p_tokens = max(int(prompt_tokens), 0)
+    cached_tokens = min(max(int(cached_prompt_tokens or 0), 0), p_tokens)
+    uncached_tokens = max(p_tokens - cached_tokens, 0)
     c_tokens = max(int(completion_tokens), 0)
-    input_cost = p_tokens * input_price / 1_000_000
+    input_cost = uncached_tokens * input_price / 1_000_000
+    cached_input_cost = cached_tokens * cached_input_price / 1_000_000
     output_cost = c_tokens * output_price / 1_000_000
-    return input_cost + output_cost
+    return input_cost + cached_input_cost + output_cost
 
 
 def resolve_input_price_per_million(model: Optional[LLModels]) -> float:
@@ -63,6 +69,14 @@ def resolve_output_price_per_million(model: Optional[LLModels]) -> float:
     """获取模型输出价格，None 视为 0（免费）。"""
     val = getattr(model, "sys_credit_output_price_per_million", None)
     return max(float(val), 0) if val is not None else 0.0
+
+
+def resolve_cached_input_price_per_million(model: Optional[LLModels], fallback_input_price: Optional[float] = None) -> float:
+    """获取模型缓存命中输入价格，未配置时回退到普通输入价格。"""
+    val = getattr(model, "sys_credit_cached_input_price_per_million", None)
+    if val is None:
+        return max(float(fallback_input_price or 0), 0)
+    return max(float(val), 0)
 
 
 def _settle_usage_entry_credit(session, usage_entry: UsageLogEntry, *, billing_enabled: bool) -> float:
@@ -89,8 +103,9 @@ def _settle_usage_entry_credit(session, usage_entry: UsageLogEntry, *, billing_e
         return 0
 
     input_price = resolve_input_price_per_million(model)
+    cached_input_price = resolve_cached_input_price_per_million(model, input_price)
     output_price = resolve_output_price_per_million(model)
-    if input_price == 0 and output_price == 0:
+    if input_price == 0 and cached_input_price == 0 and output_price == 0:
         usage_entry.credit_cost = 0
         return 0
 
@@ -99,6 +114,8 @@ def _settle_usage_entry_credit(session, usage_entry: UsageLogEntry, *, billing_e
         output_price,
         prompt_tokens=int(usage_entry.prompt_tokens or 0),
         completion_tokens=int(usage_entry.completion_tokens or 0),
+        cached_prompt_tokens=int(usage_entry.cached_prompt_tokens or 0),
+        cached_input_price_per_million=cached_input_price,
     )
     usage_entry.credit_cost = cost
 
@@ -177,6 +194,7 @@ class CreditServicesMixin:
                     "model_id": model.id,
                     "billing_scope": scope,
                     "model_input_price_per_million": model.sys_credit_input_price_per_million,
+                    "model_cached_input_price_per_million": model.sys_credit_cached_input_price_per_million,
                     "model_output_price_per_million": model.sys_credit_output_price_per_million,
                     "display_name": model.display_name,
                     "model_name": model.model_name,
@@ -191,6 +209,7 @@ class CreditServicesMixin:
         *,
         billing_scope: str = "sys_paid",
         model_input_price_per_million: Optional[int] = None,
+        model_cached_input_price_per_million: Optional[int] = None,
         model_output_price_per_million: Optional[int] = None,
         remark: Optional[str] = None,
     ) -> Dict[str, Any]:
@@ -208,6 +227,8 @@ class CreditServicesMixin:
 
             if model_input_price_per_million is not None:
                 model.sys_credit_input_price_per_million = max(float(model_input_price_per_million), 0)
+            if model_cached_input_price_per_million is not None:
+                model.sys_credit_cached_input_price_per_million = max(float(model_cached_input_price_per_million), 0)
             if model_output_price_per_million is not None:
                 model.sys_credit_output_price_per_million = max(float(model_output_price_per_million), 0)
             session.commit()
@@ -217,6 +238,7 @@ class CreditServicesMixin:
                 "model_id": model.id,
                 "billing_scope": scope,
                 "model_input_price_per_million": model.sys_credit_input_price_per_million,
+                "model_cached_input_price_per_million": model.sys_credit_cached_input_price_per_million,
                 "model_output_price_per_million": model.sys_credit_output_price_per_million,
                 "remark": remark,
             }

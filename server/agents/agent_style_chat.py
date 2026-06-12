@@ -31,6 +31,7 @@ from .agent_style import (
 from .communication import SparkBaseAgent, is_stop_event_set
 from .context_budget import prepare_chat_messages_with_budget
 from .language_policy import prepend_prompt_language_policy
+from .prompt_layout import build_current_user_message
 
 
 class StyleChatAgent(SparkBaseAgent):
@@ -149,14 +150,6 @@ class StyleChatAgent(SparkBaseAgent):
                 "如果用户要分析具体风格，请先提醒其在风格管理页将某个风格应用到当前项目，或先完成风格分析。",
             ])
 
-        if active_context:
-            lines.extend([
-                "以下是用户当前编辑中的实时内容，可作为风格建议时的参考输入：",
-                "---ACTIVE_CONTEXT_BEGIN---",
-                active_context,
-                "---ACTIVE_CONTEXT_END---",
-            ])
-
         return prepend_prompt_language_policy("\n\n".join(lines))
 
     def _build_messages(
@@ -169,9 +162,12 @@ class StyleChatAgent(SparkBaseAgent):
             user_id=self.user_id,
             project_name=self.project_name or "",
             agent_id=self.agent_id,
-            system_instruction=self._build_style_system_prompt(active_context=active_context, user_message=user_message),
+            system_instruction=self._build_style_system_prompt(active_context=None, user_message=user_message),
             history=history,
-            user_message=user_message,
+            user_message=build_current_user_message(
+                user_message=user_message,
+                active_context=active_context,
+            ),
             llm_client=self.llm,
         ).messages
 

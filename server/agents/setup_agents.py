@@ -1,8 +1,8 @@
 from typing import Any
-from langchain_core.messages import HumanMessage, SystemMessage
 from llm.agen_matchbox import matchbox
 from llm.agen_matchbox.reasoning_compat import PrefixReasoningStreamParser
 from agents.agent_utils import load_prompt, build_length_hint_str, SparkAgentExecutor
+from agents.prompt_layout import build_prompt_messages
 from .communication import SparkBaseAgent
 
 class MuseAgent(SparkBaseAgent, SparkAgentExecutor):
@@ -148,10 +148,7 @@ class MuseAgent(SparkBaseAgent, SparkAgentExecutor):
                               length_hint=length_hint_str,
                               story_tags=story_tags or "")
 
-        messages = [
-            SystemMessage(content=prompts['system']),
-            HumanMessage(content=prompts['user'])
-        ]
+        messages = build_prompt_messages(system_prompt=prompts['system'], user_prompt=prompts['user'])
 
         parser = PrefixReasoningStreamParser()
         for chunk in self.llm.stream(messages):

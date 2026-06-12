@@ -91,6 +91,8 @@ class LLModels(Base):
     )
     # 模型专属点数价格：输入/输出分别定价，每 1M token 消耗多少点。0 表示免费。
     sys_credit_input_price_per_million = Column(Float, nullable=True)
+    # 模型专属缓存命中输入点数价格：每 1M 命中缓存的输入 token 消耗多少点。
+    sys_credit_cached_input_price_per_million = Column(Float, nullable=True)
     sys_credit_output_price_per_million = Column(Float, nullable=True)
     disable = Column(Integer, default=0, index=True)
     is_embedding = Column(Integer, default=0, index=True)
@@ -297,6 +299,12 @@ class UsageLogEntry(Base):
     total_tokens = Column(Integer, default=0)
     # 输入侧命中的提示词缓存 token 数。0 表示未命中或上游未返回该统计。
     cached_prompt_tokens = Column(Integer, default=0)
+    # 输入侧未命中的提示词缓存 token 数；仅在上游提供真实缓存统计时记录。
+    cache_miss_prompt_tokens = Column(Integer, nullable=True)
+    # token 用量来源：upstream / mixed / estimated。
+    usage_source = Column(String(32), nullable=True)
+    # 缓存统计来源；当前仅记录 upstream，缺失时保持 NULL。
+    cache_source = Column(String(32), nullable=True)
     
     # 调用状态 (1=成功, 0=失败)
     success = Column(Integer, default=1)

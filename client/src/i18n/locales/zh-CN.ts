@@ -646,7 +646,7 @@ const zhCN = {
         clickToEditDisplayName: '点击编辑显示名称',
       },
       tags: {
-        system: '系统',
+        system: 'S',
         custom: '自定义',
       },
       speed: {
@@ -703,6 +703,7 @@ const zhCN = {
         searchModelPlaceholder: '输入关键词过滤模型列表...',
         modelNamePlaceholder: '点击上方列表选择，或直接输入模型ID',
         modelInputPrice: '模型每1M输入消耗火柴',
+        modelCachedInputPrice: '模型每1M缓存命中输入消耗火柴',
         modelOutputPrice: '模型每1M输出消耗火柴',
         zeroIsFree: '0 表示免费',
         enableBillingBeforePricing: '请先开启计费系统，再设置模型火柴价格。',
@@ -712,7 +713,9 @@ const zhCN = {
         temperatureHint: '控制创意发散程度；部分模型在温度设置错误时会直接报错，不清楚用途时请保持默认关闭。',
         maxContextTokens: '最大上下文',
         maxOutputTokens: '最大单次输出',
-        maxTokensAutoHint: '留空则使用默认值（200K / 64K）',
+        maxTokensAutoHint: '留空用默认值，支持 K/M（如 200K、1.5M）',
+        tokenClampedMin: '已自动调整为允许最小值（{min}）',
+        tokenClampedMax: '已自动调整为允许最大值（{max}）',
         extraBodyModelPlaceholder: "JSON 格式，如: {'{'}\"top_k\": 40{'}'}\n开启 Gemini 推理思考: {'{'}\"reasoning_effort\": \"low\"{'}'}\n开启 DeepSeek 思考: {'{'}\"enable_thinking\": true{'}'}",
       },
       remoteModels: {
@@ -732,7 +735,7 @@ const zhCN = {
         billingDisabled: '已关闭火柴计费系统',
         billingToggleFailed: '切换计费系统失败：{error}',
         enableBillingBeforePricing: '请先开启计费系统，再设置模型火柴价格',
-        modelPriceRequired: '计费系统开启时，系统模型必须设置输入和输出火柴价格；可填 0 表示免费。',
+        modelPriceRequired: '计费系统开启时，系统模型必须设置输入、缓存命中输入和输出火柴价格；可填 0 表示免费。',
       },
       badges: {
         extraBodyBadge: '*',
@@ -751,8 +754,9 @@ const zhCN = {
       },
       pricing: {
         inputPrefix: '↑',
+        cachedInputPrefix: '↻',
         outputPrefix: '↓',
-        modelOverrideTitle: '当前模型火柴消耗：↑ 输入，↓ 输出',
+        modelOverrideTitle: '当前模型火柴消耗：↑ 输入，↻ 缓存命中输入，↓ 输出',
         unpriced: '未设置',
         unpricedBlockedHint: '计费开启时，未设置价格的模型会被拦截。',
         unpricedIgnoredHint: '计费关闭时会忽略模型价格。',

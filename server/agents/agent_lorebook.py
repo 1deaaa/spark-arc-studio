@@ -5,10 +5,10 @@ import os
 import re
 from typing import List, Any
 
-from langchain_core.messages import HumanMessage, SystemMessage
 from llm.agen_matchbox import matchbox
 from llm.agen_matchbox.reasoning_compat import PrefixReasoningStreamParser
 from agents.agent_utils import load_prompt, build_length_hint_str, SparkAgentExecutor
+from agents.prompt_layout import build_prompt_messages
 
 from core.request_context import current_user_id, get_current_project_name, resolve_project_name
 from core.utils import (
@@ -119,10 +119,7 @@ class WorldviewAgent(SparkBaseAgent, SparkAgentExecutor):
             story_tags=story_tags or "",
         )
 
-        messages = [
-            SystemMessage(content=prompts["system"]),
-            HumanMessage(content=prompts["user"]),
-        ]
+        messages = build_prompt_messages(system_prompt=prompts["system"], user_prompt=prompts["user"])
 
         parser = PrefixReasoningStreamParser()
         for chunk in self.llm.stream(messages):
@@ -147,10 +144,7 @@ class WorldviewAgent(SparkBaseAgent, SparkAgentExecutor):
             extra_guidance=f"额外要求：{extra_guidance}" if extra_guidance else "",
         )
 
-        messages = [
-            SystemMessage(content=prompts["system"]),
-            HumanMessage(content=prompts["user"]),
-        ]
+        messages = build_prompt_messages(system_prompt=prompts["system"], user_prompt=prompts["user"])
 
         parser = PrefixReasoningStreamParser()
         for chunk in self.llm.stream(messages):

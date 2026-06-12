@@ -646,7 +646,7 @@ const koKR = {
         clickToEditDisplayName: '클릭하여 표시 이름 수정',
       },
       tags: {
-        system: '공용',
+        system: 'S',
         custom: '개인',
       },
       speed: {
@@ -703,6 +703,7 @@ const koKR = {
         searchModelPlaceholder: '모델명 또는 키워드 필터링...',
         modelNamePlaceholder: '검색된 위 리스트에서 고르거나 직접 원격 모델 코드 입력',
         modelInputPrice: '1M(백만) 입력 토큰당 성냥 가격',
+        modelCachedInputPrice: '1M(백만) 캐시 입력 토큰당 성냥 가격',
         modelOutputPrice: '1M(백만) 출력 토큰당 성냥 가격',
         zeroIsFree: '0을 입력하면 무료 호출 처리됩니다',
         enableBillingBeforePricing: '모델 단가 성냥 가격을 설정하기 전에 과금 시스템 옵션을 켜주세요.',
@@ -712,7 +713,9 @@ const koKR = {
         temperatureHint: '창작의 무작위성 비율을 조정합니다. 해당 설정을 과도하거나 잘못 주입하면 오류를 뿜는 모델이 있으니 주의하세요.',
         maxContextTokens: '최대 허용 입력 컨텍스트 토큰 한도',
         maxOutputTokens: '최대 1회 출력 토큰 한도',
-        maxTokensAutoHint: '비워두면 권장 기본값 (200K / 64K) 이 자동 지정됩니다',
+        maxTokensAutoHint: '비워두면 기본값, K/M 입력 가능 (예: 200K, 1.5M)',
+        tokenClampedMin: '허용 최소값({min})으로 자동 조정되었습니다',
+        tokenClampedMax: '허용 최대값({max})으로 자동 조정되었습니다',
         extraBodyModelPlaceholder: "JSON 형식, 예: {'{'}\"top_k\": 40{'}'}\nGemini 생각 옵션: {'{'}\"reasoning_effort\": \"low\"{'}'}\nDeepSeek 생각 옵션: {'{'}\"enable_thinking\": true{'}'}",
       },
       remoteModels: {
@@ -732,7 +735,7 @@ const koKR = {
         billingDisabled: '성냥 차감 결제 시스템이 꺼졌습니다',
         billingToggleFailed: '결제 시스템 상태 전환 실패: {error}',
         enableBillingBeforePricing: '가격을 입력하기 전에 먼저 성냥 결제 시스템 옵션을 켜주세요',
-        modelPriceRequired: '과금 시스템이 켜져 있는 도중에는, 반드시 각 모델의 입력/출력 1M당 소비 성냥 가격을 입력해 두어야 해당 모델의 호출 잠금이 풀립니다(0원 가능).',
+        modelPriceRequired: '과금 시스템이 켜져 있는 동안에는 각 시스템 모델의 입력/캐시 입력/출력 1M당 성냥 가격을 모두 입력해야 합니다(0 가능).',
       },
       badges: {
         extraBodyBadge: '*',
@@ -751,8 +754,9 @@ const koKR = {
       },
       pricing: {
         inputPrefix: '입력',
+        cachedInputPrefix: '캐시',
         outputPrefix: '출력',
-        modelOverrideTitle: '이 모델의 1M 토큰당 소모 성냥 가격 고지',
+        modelOverrideTitle: '이 모델의 1M 토큰당 입력/캐시 입력/출력 성냥 가격',
         unpriced: '가격 미입력',
         unpricedBlockedHint: '결제 시스템 작동 시점에는 단가가 등록되지 않은 모델의 호출을 원천 차단합니다.',
         unpricedIgnoredHint: '과금 정지 모드이므로 설정 단가는 무시됩니다.',
