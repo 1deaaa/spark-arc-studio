@@ -114,7 +114,7 @@
         </template>
         {{ isFullscreen ? t('components.headerToolbar.exitFullscreen') : t('components.headerToolbar.fullscreen') }}
       </n-tooltip>
-      <n-dropdown trigger="hover" :options="themeOptions" @select="handleThemeChange">
+      <n-dropdown trigger="click" :options="themeOptions" @select="handleThemeChange">
         <span class="tooltip-dropdown-trigger">
           <n-tooltip trigger="hover">
             <template #trigger>
@@ -126,7 +126,7 @@
           </n-tooltip>
         </span>
       </n-dropdown>
-      <n-dropdown trigger="hover" :options="localeOptions" @select="handleLocaleChange">
+      <n-dropdown trigger="click" :options="localeOptions" @select="handleLocaleChange">
         <span class="tooltip-dropdown-trigger">
           <n-tooltip trigger="hover">
             <template #trigger>

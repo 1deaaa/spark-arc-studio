@@ -1314,7 +1314,7 @@ input[type="password"] {
 }
 
 :global(.tauri-desktop) .login-lang-select {
-  top: 48px;
+  display: none;
 }
 
 .lang-switch-btn {

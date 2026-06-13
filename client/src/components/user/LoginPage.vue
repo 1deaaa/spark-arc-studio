@@ -10,7 +10,7 @@
     
     <!-- 语言切换器 -->
     <div class="login-lang-select">
-      <n-dropdown trigger="hover" :options="localeOptions" @select="handleLocaleChange">
+      <n-dropdown trigger="click" :options="localeOptions" @select="handleLocaleChange">
         <n-button class="lang-switch-btn" secondary round>
           <template #icon>
             <n-icon :component="Languages" />

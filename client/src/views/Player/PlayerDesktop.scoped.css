@@ -135,7 +135,7 @@
 /* --- 场景翻页按钮 --- */
 .scene-book-nav {
     position: absolute;
-    top: 16px;
+    top: calc(16px + var(--sat, 0px));
     left: 16px;
     z-index: 60;
     pointer-events: auto;

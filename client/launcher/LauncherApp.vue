@@ -112,12 +112,10 @@
     <div class="launcher-stage">
       <!-- Boot 状态 -->
       <main v-if="!bootReady" class="launcher-boot">
-        <div class="launcher-boot__brand">
-          <span class="launcher-brand__dot"></span>
-          <span class="launcher-brand__text">{{ t('launcher.brand') }}</span>
+        <div class="launcher-boot__loader">
+          <SparkLoaderAnimation />
         </div>
         <h1 class="launcher-boot__title">{{ t('launcher.bootCheckingTitle') }}</h1>
-        <div class="launcher-boot__track"></div>
       </main>
 
       <!-- 主就绪状态 -->
@@ -217,6 +215,7 @@
 <script setup lang="ts">
 import { computed, onBeforeUnmount, onMounted, ref, watch } from 'vue';
 import { useI18n } from 'vue-i18n';
+import SparkLoaderAnimation from '@/components/share/SparkLoaderAnimation.vue';
 import { useThemeStore } from '@/components/stores/themeStore';
 import { useWindowControls } from '@/composables/useWindowControls';
 import { useLoginBackground } from '@/hooks/useLoginBackground';
@@ -624,6 +623,13 @@ watch(autoEnterNextTime, (nextValue) => {
 
 /* --- Boot 状态 --- */
 .launcher-boot {
+  --loader-primary: var(--spark-primary);
+  --loader-core-bright: var(--spark-primary-light, var(--spark-primary));
+  --loader-glow: var(--spark-primary-glow, color-mix(in srgb, var(--spark-primary), transparent 55%));
+  --loader-orbit-outer: var(--spark-primary);
+  --loader-orbit-inner: var(--spark-harmonious-a, var(--spark-primary));
+  --loader-text: var(--spark-text);
+
   display: flex;
   flex-direction: column;
   align-items: center;
@@ -651,32 +657,20 @@ watch(autoEnterNextTime, (nextValue) => {
   font-weight: 500;
   color: var(--spark-text);
   opacity: 0.72;
+  animation: text-breathe 3s ease-in-out infinite;
 }
 
-.launcher-boot__track {
+@keyframes text-breathe {
+  0%, 100% { opacity: 0.55; }
+  50% { opacity: 0.85; }
+}
+
+.launcher-boot__loader {
   width: 120px;
-  height: 2px;
-  border-radius: 999px;
-  background: var(--spark-border);
-  position: relative;
-  overflow: hidden;
-}
-
-.launcher-boot__track::after {
-  content: '';
-  position: absolute;
-  left: -40%;
-  top: 0;
-  width: 40%;
-  height: 100%;
-  background: var(--spark-primary);
-  border-radius: 999px;
-  animation: track-shuttle 1.2s ease-in-out infinite;
-}
-
-@keyframes track-shuttle {
-  0% { left: -40%; }
-  100% { left: 100%; }
+  height: 120px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
 }
 
 /* --- 主就绪状态 --- */
@@ -1308,7 +1302,7 @@ watch(autoEnterNextTime, (nextValue) => {
 /* 非 Tauri 浮动语言切换 */
 .launcher-locale-floating {
   position: fixed;
-  top: 18px;
+  top: calc(18px + env(safe-area-inset-top, 0px));
   right: 18px;
   z-index: 16;
   display: inline-flex;
@@ -1505,8 +1499,11 @@ watch(autoEnterNextTime, (nextValue) => {
 /* --- 减少动画 --- */
 @media (prefers-reduced-motion: reduce) {
   .ambient-arc,
-  .launcher-boot__track::after,
   .launcher-cta__spinner {
+    animation: none;
+  }
+
+  .launcher-boot__loader {
     animation: none;
   }
 
