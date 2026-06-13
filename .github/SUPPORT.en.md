@@ -55,7 +55,8 @@ For companies looking to raise brand awareness among developers and creators:
 
 #### 4. Individual Backers
 For individuals wishing to support the creator:
-*   One-time or monthly donations via GitHub Sponsors, with your profile listed on our backer wall.
+*   We have not yet set up direct payment/donation channels for individuals (we plan to open them in the future).
+*   In the meantime, your **Star**, **Watch**, and any **contributions (like submitting Issues or PRs)** are the best encouragement and sponsorship we could ask for!
 
 ---
 

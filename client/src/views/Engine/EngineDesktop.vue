@@ -7,18 +7,15 @@
       </div>
     </div>
     <div class="content-area">
+      <div class="engine-guide">{{ t('views.engine.desktop.promptGuide') }}</div>
       <div class="engine-main">
         <AgentFlowBlueprint />
-      </div>
-      <div class="engine-right">
-        <BindingEditor />
       </div>
     </div>
   </div>
 </template>
 
 <script setup lang="ts">
-import BindingEditor from '../../components/lorebook/BindingEditor.vue';
 import AgentFlowBlueprint from '../../components/lorebook/AgentFlowBlueprint.vue';
 import { useI18n } from 'vue-i18n';
 
@@ -43,30 +40,30 @@ const { t } = useI18n();
   padding: var(--spark-panel-padding);
   overflow: hidden;
   display: flex;
+  flex-direction: column;
   gap: 16px;
 }
 
+.engine-guide {
+  flex: 0 0 auto;
+  padding: 10px 12px;
+  color: var(--spark-text-muted);
+  font-size: var(--spark-fs-sm);
+  background: color-mix(in srgb, var(--spark-primary-container), transparent 35%);
+  border: 1px solid color-mix(in srgb, var(--spark-primary), transparent 72%);
+  border-radius: 8px;
+}
+
 .engine-main {
-  flex: 1 1 85%;
+  flex: 1 1 auto;
   min-width: 0;
   height: 100%;
   overflow: hidden;
 }
 
-.engine-right {
-  flex: 0 0 260px;
-  min-width: 240px;
-  height: 100%;
-  overflow: auto;
-}
-
 @media (max-width: 1100px) {
   .content-area {
     flex-direction: column;
-  }
-
-  .engine-right {
-    flex: 0 0 auto;
   }
 }
 </style>

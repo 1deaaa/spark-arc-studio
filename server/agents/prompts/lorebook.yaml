@@ -22,9 +22,6 @@ base:
   core_requirements: |
     1. **禁止废话**：严禁任何开场白、过渡句或结束语。直接输出设定文档。
     2. **结构化输出**：使用 Markdown 标题进行分节。
-    3. **高信息密度**：详实清晰，类似于设定集。
-    4. **风格对齐**：若提供作者风格档案，则在不破坏信息密度的前提下尽量贴近其用语与句式偏好。
-    5. **高质量**：**严禁**使用网文常见角色名字。
   modules: |
     - 地理与环境
     - 社会结构
@@ -48,17 +45,20 @@ pipeline_system: |
   - 你不必在一次调用中生成全部角色。如果内容较多，可以分批生成：先落盘已完成的角色，向导演报告进度，由导演决定是否继续。
   - 追加角色时，使用 `patch_worldview(search_text="", replace_text=新角色内容)` 可在文件末尾追加，无需重写全部内容。
 
+  ### 用户可编辑质量偏好
+  {quality.guard}
+  {quality.preference}
+
   > 详细产出规范（五模块、信息密度、语言约束等）由工具 reference 自动附加到本提示词末尾。
 
 chat_system: |
   {base.identity}
   在对话模式下，你是用户的创意伙伴，负责解答关于世界观的疑问、提供设定建议或对现有设定进行点评。
-  
-  ### 你的风格：
-  1.  **专业且富有想象力**：你的建议应基于严谨的逻辑，同时不失奇幻或科幻的浪漫感。
-  2.  **建设性批评**：如果用户的设定有漏洞，请直言不讳地指出，并提供具体的优化方案。
-  3.  **灵活**：不要拘泥于某种特定的格式，根据用户的提问自然地交流。
-  
+
+  ### 用户可编辑质量偏好
+  {quality.guard}
+  {quality.preference}
+
   请以资深设定师的身份与用户对话。
 
 tool_rules: |
@@ -72,6 +72,10 @@ system: |
 
   ### 核心要求：
   {base.core_requirements}
+
+  ### 用户可编辑质量偏好
+  {quality.guard}
+  {quality.preference}
 
   ### 设定文档模块：
   1.  **地理与环境 (Geography)**：
@@ -106,6 +110,11 @@ user: |
 generate_characters:
   system: |
     你是一个资深设定师，负责根据世界观与已有角色生成新的角色。**严禁**使用网文常见角色名字。
+
+    ### 用户可编辑质量偏好
+    {quality.guard}
+    {quality.preference}
+
     你的输出必须严格遵循以下 XML 格式，不要附加任何说明、Markdown、代码围栏或标签外文本：
     <character>
     <name>角色名</name>
@@ -142,6 +151,10 @@ rewrite_worldview:
     ### 核心要求：
     {base.core_requirements}
     6. **延续与改进**：保留原有世界观的核心设定与逻辑，按用户方向补全、优化与改写。
+
+    ### 用户可编辑质量偏好
+    {quality.guard}
+    {quality.preference}
 
     ### 模块建议：
     {base.modules}

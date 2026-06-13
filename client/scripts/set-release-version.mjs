@@ -51,16 +51,40 @@ async function updateJson(relativePath, mutate, indent = 2) {
 async function updateCargoVersion() {
   const cargoPath = path.join(rootDir, 'src-tauri', 'Cargo.toml');
   const source = await readFile(cargoPath, 'utf8');
-  const next = source.replace(
-    /(^\[package\][\s\S]*?^version = ")([^"]+)(")/m,
-    `$1${version}$3`,
-  );
+  const eol = source.includes('\r\n') ? '\r\n' : '\n';
+  const lines = source.split(/\r?\n/);
 
-  if (next === source) {
-    throw new Error('Failed to update version in src-tauri/Cargo.toml');
+  let inPackageSection = false;
+  let updated = false;
+
+  for (let index = 0; index < lines.length; index += 1) {
+    const rawLine = lines[index];
+    const trimmed = rawLine.trim();
+
+    if (trimmed === '[package]') {
+      inPackageSection = true;
+      continue;
+    }
+
+    if (inPackageSection && trimmed.startsWith('[') && trimmed.endsWith(']')) {
+      break;
+    }
+
+    if (inPackageSection && /^version\s*=/.test(trimmed)) {
+      lines[index] = rawLine.replace(
+        /^(\s*version\s*=\s*")[^"]+(".*)$/,
+        `$1${version}$2`,
+      );
+      updated = lines[index] !== rawLine;
+      break;
+    }
   }
 
-  await writeFile(cargoPath, next, 'utf8');
+  if (!updated) {
+    throw new Error('未能更新 src-tauri/Cargo.toml 中的版本号');
+  }
+
+  await writeFile(cargoPath, lines.join(eol), 'utf8');
 }
 
 await updateJson('package.json', (data) => {

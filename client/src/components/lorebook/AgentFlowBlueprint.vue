@@ -56,6 +56,22 @@
         <!-- 允许自由拖拽卡片 -->
         <div class="agent-node-header" style="cursor: grab;">
           <div class="agent-node-toprow">
+            <n-tooltip trigger="hover">
+              <template #trigger>
+                <n-button
+                  size="tiny"
+                  secondary
+                  circle
+                  class="prompt-entry-btn"
+                  :class="{ customized: promptCustomizedByAgent[node.id] }"
+                  @mousedown.stop
+                  @click.stop="openPromptPreferenceModal(node)"
+                >
+                  <template #icon><n-icon :component="FilePenLine" /></template>
+                </n-button>
+              </template>
+              {{ t('components.agentModelCard.promptPreferences') }}
+            </n-tooltip>
             <div class="agent-node-title">{{ node.name }}</div>
             <div class="indicators" v-if="shouldShowIndicators(node.id)">
               <BatonIndicator :agent-id="node.id" />
@@ -130,14 +146,21 @@
       <div v-if="loading" class="loading-mask">{{ t('components.agentFlowBlueprint.loading') }}</div>
       <div v-else-if="error" class="error-mask">{{ error }}</div>
     </div>
+
+    <AgentPromptPreferenceModal
+      v-model:show="promptModalVisible"
+      :agent-id="promptModalAgentId"
+      :agent-name="promptModalAgentName"
+      @changed="handlePromptPreferenceChanged"
+    />
   </div>
 </template>
 
 <script setup lang="ts">
 import { ref, computed, onMounted, onBeforeUnmount, nextTick, watch } from 'vue';
 import { useI18n } from 'vue-i18n';
-import { NIcon, NTabs, NTabPane, NFormItem, NSelect, NTooltip } from 'naive-ui';
-import { Link } from '@lucide/vue';
+import { NButton, NIcon, NTabs, NTabPane, NFormItem, NSelect, NTooltip } from 'naive-ui';
+import { FilePenLine, Link } from '@lucide/vue';
 import { fetchAgentUsageBindings, saveAgentBinding } from '@/services/agentUsage';
 import { useAgentRegistry } from '@/composables/useAgentRegistry';
 import { useAiStore } from '@/components/stores/aiStore';
@@ -146,6 +169,11 @@ import { useBlueprintCanvas } from '@/hooks/useBlueprintCanvas';
 import BeaconIndicator from './BeaconIndicator.vue';
 import BatonIndicator from './BatonIndicator.vue';
 import HornIndicator from './HornIndicator.vue';
+import AgentPromptPreferenceModal from '@/components/settings/AgentPromptPreferenceModal.vue';
+import {
+  fetchAgentPromptPreferences,
+  type PromptPreferenceState,
+} from '@/services/agentPromptPreferences';
 
 type AgentNode = {
   id: string;
@@ -235,6 +263,10 @@ const dynamicConnections = computed<AgentConnection[]>(() => {
 
 const connections = dynamicConnections;
 const selectedNode = ref<string | null>(null);
+const promptModalVisible = ref(false);
+const promptModalAgentId = ref<string | null>(null);
+const promptModalAgentName = ref<string | null>(null);
+const promptCustomizedByAgent = ref<Record<string, boolean>>({});
 
 const agentBindings = ref<Record<string, AgentBinding>>({});
 const directSelections = ref<Record<string, { platformId?: string | null; modelId?: string | null }>>({});
@@ -249,6 +281,36 @@ function selectNode(node: AgentNode) {
 
 function onCanvasClick() {
   selectedNode.value = null;
+}
+
+function openPromptPreferenceModal(node: AgentNode) {
+  promptModalAgentId.value = node.id;
+  promptModalAgentName.value = node.name;
+  promptModalVisible.value = true;
+}
+
+function handlePromptPreferenceChanged(state: PromptPreferenceState) {
+  promptCustomizedByAgent.value = {
+    ...promptCustomizedByAgent.value,
+    [state.agent_id]: state.customized,
+  };
+}
+
+async function loadPromptPreferenceBadges(agentIds: string[]) {
+  const entries = await Promise.allSettled(
+    agentIds.map(async (agentId) => {
+      const state = await fetchAgentPromptPreferences(agentId);
+      return [agentId, state.customized] as const;
+    }),
+  );
+  const next = { ...promptCustomizedByAgent.value };
+  for (const entry of entries) {
+    if (entry.status === 'fulfilled') {
+      const [agentId, customized] = entry.value;
+      next[agentId] = customized;
+    }
+  }
+  promptCustomizedByAgent.value = next;
 }
 
 // 使用 composable 提供的拖拽处理器
@@ -555,6 +617,8 @@ async function init() {
       };
     });
 
+    loadPromptPreferenceBadges(nodes.value.map(node => node.id));
+
     await nextTick();
   } catch (e: unknown) {
     const errorMessage = e instanceof Error ? e.message : '';
@@ -670,14 +734,30 @@ onBeforeUnmount(() => {
 }
 
 .agent-node-title {
+  flex: 1 1 auto;
+  min-width: 0;
   font-size: var(--spark-fs-lg);
   font-weight: 750;
   color: var(--spark-text);
   line-height: 1.2;
 }
 
+.prompt-entry-btn {
+  flex: 0 0 auto;
+  color: var(--spark-text-muted);
+  background: color-mix(in srgb, var(--spark-panel-bg), transparent 20%);
+  border-color: var(--spark-border);
+}
+
+.prompt-entry-btn:hover,
+.prompt-entry-btn.customized {
+  color: var(--spark-primary);
+  background: color-mix(in srgb, var(--spark-primary-container), transparent 12%);
+  border-color: color-mix(in srgb, var(--spark-primary), transparent 36%);
+}
+
 .agent-node-key {
-  margin-left: auto;
+  flex: 0 0 auto;
   font-family: inherit;
   font-size: var(--spark-fs-sm);
   color: var(--spark-text-muted);

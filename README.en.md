@@ -3,6 +3,8 @@
 [简体中文](README.md) | [English](README.en.md) | [日本語](README.ja.md) | [한국어](README.ko.md)
 
 > 📢 **Support & Follow**: If SparkArc has been helpful to you, please consider giving us a **Star** (bookmark the project to prevent losing it) and a **Watch** (select Custom -> Releases to subscribe to new updates). As an independent open-source project, every Star and Watch significantly improves our visibility in the community, which is crucial for our continuous iteration and long-term development. Thank you for your support!
+> 
+> 💖 **Sponsorship & Partnership**: If you are an API proxy provider, aggregator, or GPU supplier, please check our [**Sponsorship & Partnership Guide**](.github/SUPPORT.en.md). We offer high-value promotion channels including **default configuration push** for our self-hosted users in exchange for development & testing API credits. **We highly need sponsorships to maintain our high-speed iterations.**
 
 SparkArc is a production-grade creative studio powered by coordinated Agents.
 It helps creators turn a tiny spark into a complete story world and publishable output across:

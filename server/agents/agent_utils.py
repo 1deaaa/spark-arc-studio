@@ -32,7 +32,7 @@ import json
 import yaml
 from typing import Optional, Union, Dict, Any
 from collections.abc import Iterable
-from core.utils import USERDATA_ROOT
+from core.request_context import current_user_id
 from .language_policy import prepend_prompt_language_policy
 
 
@@ -145,6 +145,22 @@ def _flatten_base(base_data: dict, target: dict) -> None:
     _walk("base", base_data)
 
 
+def _flatten_namespace(namespace: str, data: dict, target: dict) -> None:
+    """把顶层命名空间字典展平为 namespace.xxx 键值对。"""
+    if not isinstance(data, dict):
+        return
+
+    def _walk(prefix: str, node: dict) -> None:
+        for key, value in node.items():
+            flat_key = f"{prefix}.{key}" if prefix else key
+            if isinstance(value, dict):
+                _walk(flat_key, value)
+            elif isinstance(value, str):
+                target.setdefault(flat_key, value)
+
+    _walk(namespace, data)
+
+
 def _load_full_yaml_for_base(agent_name: str) -> dict:
     """加载完整 yaml（含顶层 base 字段），供子 prompt 访问 base。"""
     global _prompt_cache
@@ -221,7 +237,19 @@ def load_prompt(agent_name: str, prompt_key: Optional[str] = None, **kwargs) -> 
             base_data = template.get('base')
         if isinstance(base_data, dict):
             _flatten_base(base_data, kwargs)
-    
+
+    # 展平质量偏好层：仓库默认质量配置 + 用户自定义覆盖。
+    # 质量层是单一共享偏好，不能承载格式、工具或解析协议。
+    if isinstance(template, dict):
+        from .prompt_preferences import build_quality_placeholder_values
+
+        user_id = current_user_id.get()
+        quality_values = build_quality_placeholder_values(
+            agent_name,
+            user_id=user_id,
+        )
+        kwargs.update({k: v for k, v in quality_values.items() if k not in kwargs})
+
     # 处理结构：可能是 {'system': ..., 'user': ...} 或直接字符串
     result = {}
     

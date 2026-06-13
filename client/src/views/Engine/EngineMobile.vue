@@ -9,6 +9,7 @@
     </div>
     
     <!-- Agent 模型配置 -->
+    <div class="prompt-guide">{{ t('views.engine.mobile.promptGuide') }}</div>
     <AgentModelCard />
     
     <!-- 状态展示 -->
@@ -89,6 +90,17 @@ function copyDesktopUrl() {
   font-size: var(--spark-fs-sm);
   color: var(--spark-text-muted);
   margin: 0;
+}
+
+.prompt-guide {
+  margin-bottom: 12px;
+  padding: 10px 12px;
+  color: var(--spark-text-muted);
+  font-size: var(--spark-fs-xs);
+  line-height: 1.5;
+  background: color-mix(in srgb, var(--spark-primary-container), transparent 35%);
+  border: 1px solid color-mix(in srgb, var(--spark-primary), transparent 72%);
+  border-radius: 8px;
 }
 
 .feature-grid {

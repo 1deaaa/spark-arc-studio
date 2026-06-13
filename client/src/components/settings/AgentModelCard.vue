@@ -27,7 +27,24 @@
 
       <!-- 配置内容 -->
       <div v-if="selectedAgentKey" class="config-content">
-        <div class="agent-desc">{{ currentAgentDesc }}</div>
+        <div class="agent-desc-block">
+          <div class="agent-desc-header">
+            <n-button
+              size="small"
+              secondary
+              circle
+              class="prompt-entry-btn"
+              :class="{ customized: promptCustomized }"
+              @click="openPromptModal"
+            >
+              <template #icon><n-icon :component="FilePenLine" /></template>
+            </n-button>
+            <div class="agent-desc-copy">
+              <div class="agent-desc-title">{{ t('components.agentModelCard.promptPreferences') }}</div>
+              <div class="agent-desc">{{ currentAgentDesc }}</div>
+            </div>
+          </div>
+        </div>
 
         <n-tabs
           type="segment"
@@ -84,6 +101,7 @@
               </div>
             </div>
           </n-tab-pane>
+
         </n-tabs>
       </div>
 
@@ -91,6 +109,13 @@
         {{ t('components.agentModelCard.pleaseSelectAgent') }}
       </div>
     </n-spin>
+
+    <AgentPromptPreferenceModal
+      v-model:show="promptModalVisible"
+      :agent-id="selectedAgentKey"
+      :agent-name="currentAgentName"
+      @changed="handlePromptPreferenceChanged"
+    />
   </n-card>
 </template>
 
@@ -98,10 +123,15 @@
 import { ref, computed, onMounted, watch } from 'vue';
 import { useI18n } from 'vue-i18n';
 import { NCard, NButton, NIcon, NSelect, NFormItem, NTabs, NTabPane, NSpin } from 'naive-ui';
-import { Link, RefreshCw, Rocket } from '@lucide/vue';
+import { FilePenLine, Link, RefreshCw, Rocket } from '@lucide/vue';
 import { fetchAgentUsageBindings, saveAgentBinding } from '../../services/agentUsage';
+import {
+  fetchAgentPromptPreferences,
+  type PromptPreferenceState,
+} from '@/services/agentPromptPreferences';
 import { useAgentRegistry } from '@/composables/useAgentRegistry';
 import { useAiStore } from '../stores/aiStore';
+import AgentPromptPreferenceModal from './AgentPromptPreferenceModal.vue';
 
 const { t } = useI18n();
 
@@ -114,6 +144,8 @@ const { registry: agentRegistry, load: loadAgentRegistry } = useAgentRegistry();
 const agentBindings = ref({});
 const selectedAgentKey = ref(null);
 const directSelections = ref({});
+const promptModalVisible = ref(false);
+const promptCustomized = ref(false);
 
 // 加载数据
 const loadData = async () => {
@@ -148,6 +180,35 @@ const currentAgentDesc = computed(() => {
   const agent = agentRegistry.value.find(a => a.key === selectedAgentKey.value);
   return agent?.display || '';
 });
+
+const currentAgentName = computed(() => {
+  const agent = agentRegistry.value.find(a => a.key === selectedAgentKey.value);
+  return agent?.name || selectedAgentKey.value || '';
+});
+
+function openPromptModal() {
+  if (!selectedAgentKey.value) return;
+  promptModalVisible.value = true;
+}
+
+function handlePromptPreferenceChanged(state: PromptPreferenceState) {
+  if (state.agent_id === selectedAgentKey.value) {
+    promptCustomized.value = state.customized;
+  }
+}
+
+async function loadPromptPreferenceBadge(agentId) {
+  if (!agentId) {
+    promptCustomized.value = false;
+    return;
+  }
+  try {
+    const state = await fetchAgentPromptPreferences(agentId);
+    promptCustomized.value = state.customized;
+  } catch {
+    promptCustomized.value = false;
+  }
+}
 
 // 用途选项
 const usageOptions = computed(() =>
@@ -317,6 +378,10 @@ const updateDirectModel = async (modelId) => {
 onMounted(() => {
   loadData();
 });
+
+watch(selectedAgentKey, (agentId) => {
+  loadPromptPreferenceBadge(agentId);
+});
 </script>
 
 <style scoped>
@@ -348,13 +413,48 @@ onMounted(() => {
   margin-top: 12px;
 }
 
+.agent-desc-block {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  margin-bottom: 12px;
+}
+
+.agent-desc-header {
+  display: flex;
+  align-items: flex-start;
+  gap: 10px;
+  padding: 10px;
+  background: var(--spark-bg);
+  border: 1px solid var(--spark-border);
+  border-radius: 8px;
+}
+
+.agent-desc-copy {
+  min-width: 0;
+  flex: 1 1 auto;
+}
+
+.agent-desc-title {
+  font-size: var(--spark-fs-sm);
+  color: var(--spark-primary);
+  font-weight: 700;
+  margin-bottom: 4px;
+}
+
 .agent-desc {
   font-size: var(--spark-fs-xs);
   color: var(--spark-text-muted);
-  margin-bottom: 12px;
-  padding: 8px;
-  background: var(--spark-bg);
-  border-radius: 6px;
+  line-height: 1.5;
+}
+
+.prompt-entry-btn {
+  flex: 0 0 auto;
+  color: var(--spark-text-muted);
+}
+
+.prompt-entry-btn.customized {
+  color: var(--spark-primary);
 }
 
 .tab-content {

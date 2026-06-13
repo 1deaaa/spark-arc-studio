@@ -16,6 +16,12 @@
         </SparkTag>
     </div>
 
+    <n-collapse class="runtime-collapse">
+      <n-collapse-item :title="t('views.style.desktop.runtimeBindings')" name="runtime-bindings">
+        <BindingEditor />
+      </n-collapse-item>
+    </n-collapse>
+
     <!-- Content -->
     <div class="style-list-mobile">
         <n-spin v-if="isLoadingList" />
@@ -141,9 +147,10 @@
 <script setup lang="ts">
 import { computed } from 'vue';
 import { useI18n } from 'vue-i18n';
-import { NIcon, NSpin, NButton, NInput, NEmpty, NDrawer, NDrawerContent, NModal, NFormItem } from 'naive-ui';
+import { NIcon, NSpin, NButton, NInput, NEmpty, NDrawer, NDrawerContent, NModal, NFormItem, NCollapse, NCollapseItem } from 'naive-ui';
 import SparkTag from '../../components/share/SparkTag.vue';
 import DocumentImportPicker from '../../components/import/DocumentImportPicker.vue';
+import BindingEditor from '../../components/lorebook/BindingEditor.vue';
 import { ChevronRight, Plus, RefreshCw } from '@lucide/vue';
 import GlobalLoading from '../../components/share/GlobalLoading.vue';
 import { useStyleLogic } from '../../composables/useStyleLogic';
@@ -229,6 +236,13 @@ const profileSections = computed(() => {
 .status-summary {
   display: flex;
   justify-content: center;
+}
+
+.runtime-collapse {
+  background: var(--spark-panel-bg);
+  border: 1px solid var(--spark-border);
+  border-radius: 10px;
+  padding: 0 8px;
 }
 
 .style-list-mobile {

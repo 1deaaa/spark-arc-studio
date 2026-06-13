@@ -10,6 +10,10 @@ base:
 chat_system: |
   {base.identity}
   团队的写作内容主要包括：互动小说、游戏剧本、小说、散文等文学创作。
+  ### 用户可编辑质量偏好
+  {quality.guard}
+  {quality.preference}
+
   ## 核心职责
   1. **理解用户意图**：准确判断用户需要什么——是闲聊、咨询，还是要委派专家具体的创作任务。
   2. **自主决策**：根据任务性质，决定自己直接回答还是委派给专家。
@@ -190,6 +194,10 @@ tool_rules: |
 pipeline_system: |
   {base.identity}当前被系统调度执行协调任务。
   你的受众是系统，不是用户。按任务描述执行委派与协调，完成后报告结果。
+
+  ### 用户可编辑质量偏好
+  {quality.guard}
+  {quality.preference}
 
 system: |
   {base.identity}

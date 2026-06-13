@@ -36,6 +36,14 @@
         </SparkAlert>
       </div>
 
+      <div class="runtime-panel">
+        <n-collapse>
+          <n-collapse-item :title="t('views.style.desktop.runtimeBindings')" name="runtime-bindings">
+            <BindingEditor />
+          </n-collapse-item>
+        </n-collapse>
+      </div>
+
       <div v-if="isLoadingList" class="loading-state">
         <n-spin size="large" :description="t('views.style.desktop.loadingStyles')" />
       </div>
@@ -186,12 +194,13 @@
 import { computed } from 'vue';
 import { useI18n } from 'vue-i18n';
 import {
-  NIcon, NSpin, NButton, NInput, NPopconfirm, NEmpty, NModal, NDrawer, NDrawerContent
+  NIcon, NSpin, NButton, NInput, NPopconfirm, NEmpty, NModal, NDrawer, NDrawerContent, NCollapse, NCollapseItem
 } from 'naive-ui';
 import SparkAlert from '../../components/share/SparkAlert.vue';
 import DocumentImportPicker from '../../components/import/DocumentImportPicker.vue';
 import { Bookmark, Palette, Plus, RefreshCw, Trash } from '@lucide/vue';
 import AiSettingsPanel from '../../components/lorebook/AiSettingsPanel.vue';
+import BindingEditor from '../../components/lorebook/BindingEditor.vue';
 import GlobalLoading from '../../components/share/GlobalLoading.vue';
 import { useStyleLogic } from '../../composables/useStyleLogic';
 
@@ -303,6 +312,15 @@ const profileSections = computed(() => {
 .status-bar {
   max-width: 1600px;
   margin: 0 auto 24px;
+}
+
+.runtime-panel {
+  max-width: 1600px;
+  margin: 0 auto 24px;
+  padding: 4px 12px;
+  background: var(--panel-bg);
+  border: 1px solid var(--border-color);
+  border-radius: 8px;
 }
 
 .status-title {
