@@ -14,7 +14,7 @@ class NarrativeAgent(StyleAnalysisAgent):
     
     def analyze(self, vector_store: Any, author_id: str) -> AgentAnalysisResult:
         try:
-            print(f"[{self.name}] 开始分析...")
+            print(f"[{self.name}] Starting analysis...")
             
             # 从配置文件加载查询
             queries = self.get_queries()
@@ -60,7 +60,7 @@ class NarrativeAgent(StyleAnalysisAgent):
             content = extract_json_from_response(response.content)
             analysis = json.loads(content)
             
-            print(f"[{self.name}] ✓ 分析完成")
+            print(f"[{self.name}] ✓ Analysis complete")
             
             return AgentAnalysisResult(
                 agent_name=self.name,
@@ -71,7 +71,7 @@ class NarrativeAgent(StyleAnalysisAgent):
             )
             
         except Exception as e:
-            print(f"[{self.name}] ✗ 分析失败: {e}")
+            print(f"[{self.name}] ✗ Analysis failed: {e}")
             return AgentAnalysisResult(
                 agent_name=self.name,
                 dimensions=self.dimensions,

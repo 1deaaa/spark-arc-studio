@@ -67,14 +67,14 @@ class SecurityManager:
         key = get_env_var("LLM_KEY")
 
         if not key:
-            print("🔑 未设置 LLM_KEY，若初次启动这是正常现象，并非错误。")
-            print(f"请在 {get_env_path()} 文件中设置 LLM_KEY，或运行配置cfg_gui。")
+            print("🔑 LLM_KEY not set. This is normal on first startup and is not an error.")
+            print(f"Please set LLM_KEY in {get_env_path()} or run the config cfg_gui.")
             self._fernet = None
         else:
             try:
                 self._fernet = self._build_fernet(key)
             except Exception as e:
-                print(f"❌ 初始化加密组件失败: {e}")
+                print(f"❌ Failed to initialize encryption component: {e}")
                 self._fernet = None
 
     @staticmethod
@@ -175,17 +175,17 @@ class SecurityManager:
         try:
             return "ENC:" + self._fernet.encrypt(text.encode()).decode()
         except Exception as e:
-            print(f"❌ 加密失败: {e}")
+            print(f"❌ Encryption failed: {e}")
             raise ValueError(f"API Key 加密失败: {e}") from e
         
     def decrypt(self, text: str) -> SecretResolution:
         result = self._resolve_secret(text, self._fernet)
         if result.is_missing_key:
-            print("🔑 遇到托管密钥但当前未设置 LLM_KEY，该平台需要配置 API Key")
+            print("🔑 Managed key found but LLM_KEY is not set; this platform needs API Key configuration")
         elif result.is_failed:
             # 注意：此状态在仓库同步场景下是正常现象（上游密文用不同 LLM_KEY 加密），
             # 不应视为错误，而应引导用户为该平台配置自己的 API Key。
-            print(f"🔑 托管密钥与当前站点主密钥不匹配，该平台需要配置 API Key（原因: {result.error}）")
+            print(f"🔑 Managed key does not match current site master key; platform needs API Key configuration (reason: {result.error}）")
         return result
 
     def set_key(self, key: str, persist: bool = True):
@@ -212,8 +212,8 @@ class SecurityManager:
                 from .config import reload_default_platform_configs
                 reload_default_platform_configs()
             except Exception as e:
-                print(f"🔑 已设置 LLM_KEY，但刷新平台配置失败：{e}")
+                print(f"🔑 LLM_KEY is set, but refreshing platform config failed: {e}")
         except Exception as e:
-            print(f"❌ SecurityManager: 密钥更新失败: {e}")
+            print(f"❌ SecurityManager: Key update failed: {e}")
             self._fernet = None
 

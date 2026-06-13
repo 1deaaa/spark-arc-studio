@@ -717,7 +717,7 @@ def _warmup_job(models: Optional[List[str]] = None) -> Dict[str, dict]:
                     "ok": False,
                     "detail": f"cached counter unusable: {e}",
                 }
-                print(f"  ⚠️ [{rule['name']}] 缓存分词器不可用: {e}", flush=True)
+                print(f"  ⚠️ [{rule['name']}] Cached tokenizer unusable: {e}", flush=True)
             results[model] = data
             _set_warmup_status(model, data)
             continue
@@ -750,7 +750,7 @@ def _warmup_job(models: Optional[List[str]] = None) -> Dict[str, dict]:
                     "ok": False,
                     "detail": "loader returned None, will fallback at runtime",
                 }
-                print(f"  ⚠️ [{rule['name']}] 分词器加载返回空，运行时将使用 fallback", flush=True)
+                print(f"  ⚠️ [{rule['name']}] Tokenizer returned None, will use fallback at runtime", flush=True)
             else:
                 _cache_set_counter(cache_key, counter)
                 _ = counter("warmup")
@@ -767,7 +767,7 @@ def _warmup_job(models: Optional[List[str]] = None) -> Dict[str, dict]:
                 "ok": False,
                 "detail": f"warmup failed: {e}",
             }
-            print(f"  ❌ [{rule['name']}] 分词器加载失败: {e}", flush=True)
+            print(f"  ❌ [{rule['name']}] Tokenizer load failed: {e}", flush=True)
 
         results[model] = data
         _set_warmup_status(model, data)
@@ -776,7 +776,7 @@ def _warmup_job(models: Optional[List[str]] = None) -> Dict[str, dict]:
     ok_count = sum(1 for v in results.values() if v.get("ok"))
     total_count = len(results)
     cache_hits = sum(1 for v in results.values() if v.get("detail") == "already cached")
-    print(f"🔥 分词器预热完成: {ok_count}/{total_count} 可用", flush=True)
+    print(f"🔥 Tokenizer warm-up complete: {ok_count}/{total_count} available", flush=True)
     return results
 
 

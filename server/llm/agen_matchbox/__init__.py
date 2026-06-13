@@ -123,7 +123,7 @@ def _warmup_matchbox_runtime_job() -> dict[str, str]:
             results[module_name] = f"{type(exc).__name__}: {exc}"
 
     ok_count = sum(1 for value in results.values() if value == "ok")
-    print(f"🔥 火柴运行时预热完成: {ok_count}/{len(results)} 模块可用", flush=True)
+    print(f"\ud83d\udd25 Matchbox runtime warm-up complete: {ok_count}/{len(results)} modules available", flush=True)
     return results
 
 

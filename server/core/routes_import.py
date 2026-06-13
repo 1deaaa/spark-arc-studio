@@ -170,12 +170,12 @@ async def parse_import_file(
                             check_freshness=True
                         )
                     except Exception as exc:
-                        print(f"[import] 附件后台索引触发失败: {exc}")
+                        print(f"[import] Background attachment indexing failed: {exc}")
 
                 await run_in_threadpool(_kick_off_attachment_refresh)
         except Exception as exc:
             # 任何意外都不影响附件上传成功的响应。
-            print(f"[import] 触发附件语义索引时异常: {exc}")
+            print(f"[import] Exception triggering attachment semantic index: {exc}")
 
         return {
             "success": True,

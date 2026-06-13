@@ -13,7 +13,7 @@ class ValidatorAgent(StyleAnalysisAgent):
         )
         
     def validate_and_refine(self, style_profile: Dict, test_text: str) -> Dict:
-        print("\n[ValidatorAgent] 开始回测验证...")
+        print("\n[ValidatorAgent] Starting backtesting validation...")
         
         # 1. 提取原文大意
         summary_prompt = self.get_prompt(
@@ -54,7 +54,7 @@ class ValidatorAgent(StyleAnalysisAgent):
         if not eval_prompt:
             # 回退逻辑
             eval_prompt = f"""
-你是文学风格鉴赏家与数据分析师。请基于【评级标准】对模仿文进行严格的图灵测试。
+你是文学风格鉴赏家与数据分析师。请基于[评级标准]对模仿文进行严格的图灵测试。
 ...
 """
         
@@ -65,8 +65,8 @@ class ValidatorAgent(StyleAnalysisAgent):
             response = content # alias for backward compatibility in error handling
             eval_result = json.loads(response)
             level = eval_result["similarity_level"].upper() # 确保大写
-            print(f"  📊 模仿相似度评级: 【{level}】")
-            print(f"  📝 评级理由: {eval_result.get('reason', '无')}")
+            print(f"  📊 Imitation similarity grade: [{level}]")
+            print(f"  📝 Grade rationale: {eval_result.get('reason', 'N/A')}")
             
             # 定义需要修正的阈值，比如 B, C, D 级都需要修正
             # 作为独立游戏开发者，你肯定熟悉这种 Tier 设计
@@ -74,7 +74,7 @@ class ValidatorAgent(StyleAnalysisAgent):
             
             if level in needs_refinement_tiers:
                 suggestion = eval_result['refinement_suggestions']
-                print(f"  ⚠ 评级未达标 (目标 S/A)，正在注入修正建议: {suggestion}")
+                print(f"  ⚠ Grade below target (S/A), injecting correction suggestion: {suggestion}")
                 
                 # 注入修正建议
                 if "_meta" not in style_profile: style_profile["_meta"] = {}
@@ -88,7 +88,7 @@ class ValidatorAgent(StyleAnalysisAgent):
                 
             return style_profile
         except Exception as e:
-            print(f"  ⚠ 验证解析失败: {e}")
+            print(f"  ⚠ Validation parse failed: {e}")
             # 打印原始返回以便调试
-            print(f"  原始返回: {response}")
+            print(f"  Raw response: {response}")
             return style_profile

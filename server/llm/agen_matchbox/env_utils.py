@@ -110,5 +110,5 @@ def set_env_var(key: str, value: str) -> bool:
         _refresh_env_cache(force=True)
         return True
     except Exception as e:
-        print(f"❌ 写入 .env 失败: {e}")
+        print(f"\u274c Failed to write .env: {e}")
         return False

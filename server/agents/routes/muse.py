@@ -310,7 +310,7 @@ async def muse_expand(request: Request, data: MuseRequest, user: dict = Depends(
         except Exception as e:
             if stop_event.is_set():
                 return
-            print(f"Muse Agent 灵感扩展失败: {e}")
+            print(f"Muse Agent inspiration expansion failed: {e}")
             yield format_ai_error(e)
         finally:
             if output_collector and not cancelled_event.is_set():
@@ -372,7 +372,7 @@ async def muse_generate_and_save(request: Request, data: MuseRequest, user: dict
         except Exception as e:
             if stop_event.is_set():
                 return
-            print(f"Muse Agent 灵感扩展失败: {e}")
+            print(f"Muse Agent inspiration expansion failed: {e}")
             yield format_ai_error(e)
         finally:
             if output_collector and not stop_event.is_set():

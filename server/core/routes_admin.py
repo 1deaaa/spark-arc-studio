@@ -792,6 +792,6 @@ def check_user_quota(user_id: str, platform_id: int, model_id: int) -> tuple[boo
             
     except Exception as e:
         # 出错时默认允许，但记录错误
-        print(f"检查限额时出错: {e}")
+        print(f"Error checking quota: {e}")
         return True, f"限额检查出错: {e}"
 

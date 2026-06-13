@@ -555,7 +555,7 @@ class LLMUsage:
         client = manager.get_user_llm(user_id)
         result = client.invoke(messages)
         usage = client.usage.get_usage_last_24h()
-        print(f"过去24小时: {usage['total_tokens']} tokens, {usage['requests']} 次请求")
+        print(f"Last 24h: {usage['total_tokens']} tokens, {usage['requests']} requests")
     """
 
     def __init__(

@@ -125,7 +125,7 @@ def _get_target_metadata(db_name: str):
     try:
         return load_metadata(db_name)
     except ImportError as e:
-        logger.warning(f"⚠️ 无法加载 [{db_name}] 模型元数据: {e}")
+        logger.warning(f"⚠️ Unable to load [{db_name}] model metadata: {e}")
         return None
 
 
@@ -292,13 +292,13 @@ def _heal_orphan_revision(db_name: str, db_path: str, base_dir: str) -> None:
     from alembic.runtime.migration import MigrationContext
     from alembic.operations import Operations
 
-    logger.warning(f"⚕️  [{db_name}] 检测到孤儿版本，启动结构自愈流程...")
+    logger.warning(f"⚕️  [{db_name}] Orphaned revision detected, starting structural self-heal...")
 
     target_metadata = _get_target_metadata(db_name)
     if target_metadata is None:
         raise RuntimeError(
-            f"[{db_name}] 无法加载模型元数据，无法自动修复孤儿版本。"
-            "请检查模型导入是否正常。"
+            f"[{db_name}] Unable to load model metadata, cannot auto-fix orphaned revision. "
+            "Please check if model imports are working correctly."
         )
 
     # 规范化为 SQLite URL（处理 Windows 反斜杠）
@@ -327,7 +327,7 @@ def _heal_orphan_revision(db_name: str, db_path: str, base_dir: str) -> None:
             if table_name not in existing_tables:
                 table.create(engine)
                 added_tables.append(table_name)
-                logger.info(f"   ➕ 创建缺失的表: {table_name}")
+                logger.info(f"   ➕ Creating missing table: {table_name}")
 
         # ── 第二轮：补全缺失的列（重新 inspect，反映第一轮刚建的表）──
         inspector = sa_inspect(engine)
@@ -360,8 +360,8 @@ def _heal_orphan_revision(db_name: str, db_path: str, base_dir: str) -> None:
 
                         if not nullable and server_default is None and col.default is None:
                             logger.warning(
-                                f"   ⚠️ {table_name}.{col.name}: NOT NULL 且无默认值，"
-                                f"自愈时以 nullable 方式添加（现有行将为 NULL）"
+                                f"   \u26a0\ufe0f {table_name}.{col.name}: NOT NULL with no default value, "
+                                f"adding as nullable during self-heal (existing rows will be NULL)"
                             )
                             nullable = True
 
@@ -369,7 +369,7 @@ def _heal_orphan_revision(db_name: str, db_path: str, base_dir: str) -> None:
                             sa.Column(col.name, col.type, nullable=nullable, server_default=server_default)
                         )
                         added_columns.append(f"{table_name}.{col.name}")
-                        logger.info(f"   ➕ 补全缺失的列: {table_name}.{col.name}")
+                        logger.info(f"   ➕ Filling missing column: {table_name}.{col.name}")
 
             conn.commit()
 
@@ -399,9 +399,9 @@ def _heal_orphan_revision(db_name: str, db_path: str, base_dir: str) -> None:
                 if not allow_drops:
                     kept_columns.extend(f"{table_name}.{col_name}" for col_name in sorted(ghost_cols))
                     logger.warning(
-                        f"   ⚠️ 保留幽灵列: "
+                        f"   ⚠️ Retaining ghost columns: "
                         f"{', '.join(f'{table_name}.{col_name}' for col_name in sorted(ghost_cols))} "
-                        f"(设置 SPARKARC_AUTO_MIGRATE_ALLOW_DROPS=1 才会删除)"
+                        f"(set SPARKARC_AUTO_MIGRATE_ALLOW_DROPS=1 to remove them)"
                     )
                     continue
 
@@ -409,7 +409,7 @@ def _heal_orphan_revision(db_name: str, db_path: str, base_dir: str) -> None:
                     for col_name in ghost_cols:
                         batch_op.drop_column(col_name)
                         dropped_columns.append(f"{table_name}.{col_name}")
-                        logger.info(f"   🗑️ 清理幽灵列: {table_name}.{col_name}")
+                        logger.info(f"   🗑️ Dropping ghost column: {table_name}.{col_name}")
 
             conn.commit()
 
@@ -426,8 +426,8 @@ def _heal_orphan_revision(db_name: str, db_path: str, base_dir: str) -> None:
         if ghost_tables and not allow_drops:
             kept_tables.extend(sorted(ghost_tables))
             logger.warning(
-                f"   ⚠️ 保留幽灵表: {', '.join(sorted(ghost_tables))} "
-                f"(设置 SPARKARC_AUTO_MIGRATE_ALLOW_DROPS=1 才会删除)"
+                f"   ⚠️ Retaining ghost tables: {', '.join(sorted(ghost_tables))} "
+                f"(set SPARKARC_AUTO_MIGRATE_ALLOW_DROPS=1 to remove them)"
             )
         else:
             for table_name in ghost_tables:
@@ -435,28 +435,28 @@ def _heal_orphan_revision(db_name: str, db_path: str, base_dir: str) -> None:
                     conn.execute(sa.text(f'DROP TABLE IF EXISTS "{table_name}"'))
                     conn.commit()
                 dropped_tables.append(table_name)
-                logger.info(f"   🗑️ 清理幽灵表: {table_name}")
+                logger.info(f"   🗑️ Dropping ghost table: {table_name}")
 
         # ── 清除孤儿版本号，stamp 到当前 head ──────────────────
         _stamp_head(db_name, db_path, base_dir)
 
         # ── 汇报自愈结果 ────────────────────────────────────────
         if added_tables or added_columns or dropped_columns or dropped_tables or kept_columns or kept_tables:
-            logger.info(f"✅ [{db_name}] 结构自愈完成。")
+            logger.info(f"✅ [{db_name}] Structural self-heal complete.")
             if added_tables:
-                logger.info(f"   新建的表: {', '.join(added_tables)}")
+                logger.info(f"   Tables created: {', '.join(added_tables)}")
             if added_columns:
-                logger.info(f"   补全的列: {', '.join(added_columns)}")
+                logger.info(f"   Columns filled: {', '.join(added_columns)}")
             if dropped_columns:
-                logger.info(f"   清理的幽灵列: {', '.join(dropped_columns)}")
+                logger.info(f"   Ghost columns dropped: {', '.join(dropped_columns)}")
             if dropped_tables:
-                logger.info(f"   清理的幽灵表: {', '.join(dropped_tables)}")
+                logger.info(f"   Ghost tables dropped: {', '.join(dropped_tables)}")
             if kept_columns:
-                logger.info(f"   已保留的幽灵列: {', '.join(kept_columns)}")
+                logger.info(f"   Ghost columns retained: {', '.join(kept_columns)}")
             if kept_tables:
-                logger.info(f"   已保留的幽灵表: {', '.join(kept_tables)}")
+                logger.info(f"   Ghost tables retained: {', '.join(kept_tables)}")
         else:
-            logger.info(f"✅ [{db_name}] DB 结构与模型完全一致，仅更新了版本号。")
+            logger.info(f"✅ [{db_name}] DB structure fully consistent with model, version number updated.")
 
     finally:
         engine.dispose()
@@ -475,7 +475,7 @@ def run_db_upgrade(db_name: str, base_dir: str) -> None:
     head_rev = _get_head_revision(base_dir, db_name)
 
     if not head_rev:
-        logger.warning(f"⚠️ [{db_name}] 未检测到迁移脚本 (head 为空)。跳过自动升级。")
+        logger.warning(f"⚠️ [{db_name}] No migration scripts detected (head is empty). Skipping auto-upgrade.")
         return
 
     if current_rev and current_rev == head_rev:
@@ -483,8 +483,8 @@ def run_db_upgrade(db_name: str, base_dir: str) -> None:
         if _has_missing_model_objects(drift):
             if os.environ.get("SPARKARC_AUTO_MIGRATE_REPAIR_HEAD_DRIFT") == "1":
                 logger.warning(
-                    f"⚠️ [{db_name}] 版本号已是 head ({current_rev})，但检测到缺失对象；"
-                    f"按环境变量要求执行救急自愈: {_format_schema_drift(drift)}"
+                    f"⚠️ [{db_name}] Version is already head ({current_rev}), but missing objects detected; "
+                    f"running emergency self-heal as requested by env var: {_format_schema_drift(drift)}"
                 )
                 _heal_orphan_revision(db_name, db_path, base_dir)
                 return
@@ -499,19 +499,19 @@ def run_db_upgrade(db_name: str, base_dir: str) -> None:
 
         if drift.get("extra_tables") or drift.get("extra_columns"):
             logger.warning(
-                f"⚠️ [{db_name}] 版本号已是 head ({current_rev})，但 DB 中存在模型未定义的额外结构；"
-                f"已保留并继续启动: {_format_schema_drift(drift)}"
+                f"⚠️ [{db_name}] Version is already head ({current_rev}), but DB contains extra structures not in model; "
+                f"retaining and continuing startup: {_format_schema_drift(drift)}"
             )
             return
 
-        logger.info(f"✨ [{db_name}] 数据库已是最新 ({current_rev}). 跳过自动升级。")
+        logger.info(f"✨ [{db_name}] Database is up to date ({current_rev}). Skipping auto-upgrade.")
         return
 
     # 旧库未纳管：有业务表但没有版本号
     if current_rev is None and _has_user_tables(db_path):
         logger.warning(
-            f"⚠️ [{db_name}] 检测到旧库未纳管（有业务表但无版本号），"
-            f"将执行结构自愈并对齐到 head。"
+            f"⚠️ [{db_name}] Unmanaged legacy database detected (has user tables but no version), "
+            f"running structural self-heal to align to head."
         )
         _heal_orphan_revision(db_name, db_path, base_dir)
         return
@@ -530,7 +530,7 @@ def run_db_upgrade(db_name: str, base_dir: str) -> None:
         if "Can't locate revision identified by" in err_msg:
             #遗留版本：迁移链被重置导致 DB 中记录的 revision 在迁移文件里找不到。
             # 触发结构自愈，无需人工干预。
-            logger.warning(f"⚠️  [{db_name}] 迁移链断裂（迁移可能已被重置）: {err_msg}")
+            logger.warning(f"⚠️  [{db_name}] Migration chain broken (migration may have been reset): {err_msg}")
             # 先还原 CWD，再进入自愈（自愈函数内部自管 CWD）
             os.chdir(original_cwd)
             _heal_orphan_revision(db_name, db_path, base_dir)
@@ -538,8 +538,8 @@ def run_db_upgrade(db_name: str, base_dir: str) -> None:
             # 迁移引用了不存在的列/表（如幽灵列残留导致 drop_column 失败），
             # 降级到结构自愈，重建 DB 结构与 Model 的一致性。
             logger.warning(
-                f"⚠️  [{db_name}] 迁移引用了不存在的数据库对象，"
-                f"触发结构自愈: {err_msg}"
+                f"⚠️  [{db_name}] Migration references a non-existent database object, "
+                f"triggering structural self-heal: {err_msg}"
             )
             os.chdir(original_cwd)
             _heal_orphan_revision(db_name, db_path, base_dir)
@@ -563,10 +563,10 @@ def run_auto_migrations():
     alembic_ini_path = os.path.join(base_dir, "alembic.ini")
 
     if not os.path.exists(alembic_ini_path):
-        logger.warning(f"⚠️ Alembic 配置文件未找到: {alembic_ini_path}，跳过自动迁移。")
+        logger.warning(f"⚠️ Alembic config file not found: {alembic_ini_path}, skipping auto-migration.")
         return
 
-    logger.info("🛠️  正在检查数据库迁移状态...")
+    logger.info("🛠️  Checking database migration status...")
 
     try:
         # 1) 迁移 Users 数据库
@@ -577,6 +577,6 @@ def run_auto_migrations():
 
     except Exception as e:
         # 启动期迁移失败直接阻断启动，避免运行在不一致的结构上
-        logger.error(f"❌ 自动迁移流程发生错误: {e}")
+        logger.error(f"❌ Auto-migration process encountered an error: {e}")
         raise e
 

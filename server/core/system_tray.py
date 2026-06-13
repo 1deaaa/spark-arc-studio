@@ -230,7 +230,7 @@ def ensure_tray_helper_process(
         except OSError:
             pass
     if not _tray_runtime_ready():
-        print("⚠️ 当前 Python 环境缺少 pystray 或 Pillow，已跳过托盘助手启动。", flush=True)
+        print("⚠️ pystray or Pillow not found in current Python environment, skipping tray assistant.", flush=True)
         return False
 
     command = _build_helper_command(
@@ -301,10 +301,10 @@ async def launch_tray_helper_after_health_check(
                         server_pid=server_pid,
                     )
                     if launched:
-                        print("🖥️ 系统托盘助手已启动", flush=True)
+                        print("🖥️ System tray assistant started", flush=True)
                     return launched
             except Exception:
                 pass
             await asyncio.sleep(0.5)
-    print("⚠️ 系统托盘助手等待健康握手超时，已跳过启动。", flush=True)
+    print("⚠️ System tray assistant health check timed out, skipping launch.", flush=True)
     return False

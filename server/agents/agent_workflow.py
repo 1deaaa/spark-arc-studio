@@ -43,7 +43,7 @@ def scriptwriter_node(state: StoryGenerationState):
     """
     Scriptwriter: 撰写剧本
     """
-    print("\n[LangGraph] 1. Scriptwriter: 正在撰写草稿...")
+    print("\n[LangGraph] 1. Scriptwriter: Drafting script...")
     
     try:
         writer = ScriptwriterAgent(state["user_id"])
@@ -149,7 +149,7 @@ def run_story_generation_workflow(
         "error": None
     }
     
-    print(f"\n🚀 [LangGraph] 启动故事生成工作流 (Project: {project_name})...")
+    print(f"\n🚀 [LangGraph] Starting story generation workflow (Project: {project_name})...")
     
     final_state = app.invoke(initial_state)
     

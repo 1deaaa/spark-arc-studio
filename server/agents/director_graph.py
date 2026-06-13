@@ -400,13 +400,13 @@ def director_node(state: DirectorState) -> Dict[str, Any]:
                     )
                     if transfer_result.get("status") != "ok":
                         pending_delegate = None
-                        tool_results.append((call_id, tool_name, transfer_result.get("message", "委派失败")))
+                        tool_results.append((call_id, tool_name, transfer_result.get("message", "Delegation failed")))
                         if writer:
                             writer(build_tool_stream_event(
                                 "tool_exec_failed",
                                 tool_name,
                                 source_agent="agent_director",
-                                message=transfer_result.get("message", "委派失败"),
+                                message=transfer_result.get("message", "Delegation failed"),
                                 tool_call_key=tool_call_key,
                             ))
                         continue
@@ -429,7 +429,7 @@ def director_node(state: DirectorState) -> Dict[str, Any]:
                         tool_name,
                         source_agent="agent_director",
                         tool_call_key=tool_call_key,
-                        message="模型使用了错误的调用格式，正在尝试修正",
+                        message="Model used an incorrect call format, attempting correction",
                     )
                 else:
                     _extra_done_director: dict = {}
@@ -447,20 +447,20 @@ def director_node(state: DirectorState) -> Dict[str, Any]:
                 # 旁路检测：导演执行 trigger_auto_write → 推送 director_auto_write_started 给前端
                 _SIDEBAND_MARKER = "__director_auto_write_started__:"
                 if isinstance(tool_result, str) and tool_result.startswith(_SIDEBAND_MARKER):
-                    print(f"[DirectorGraph] 检测到 Auto-Write 旁路标记，tool_name={tool_name}")
+                    print(f"[DirectorGraph] Detected Auto-Write sideband marker, tool_name={tool_name}")
                     _nl = tool_result.find("\n")
                     _meta_str = tool_result[len(_SIDEBAND_MARKER):_nl] if _nl != -1 else tool_result[len(_SIDEBAND_MARKER):]
                     try:
                         _meta = json.loads(_meta_str.strip())
                         _sideband_evt = {"event": "director_auto_write_started", **_meta}
-                        print(f"[DirectorGraph] 推送事件: {_sideband_evt}")
+                        print(f"[DirectorGraph] Pushing event: {_sideband_evt}")
                         if writer:
                             writer(_sideband_evt)
-                            print(f"[DirectorGraph] writer 调用成功")
+                            print(f"[DirectorGraph] Writer called successfully")
                         else:
-                            print(f"[DirectorGraph] 警告：writer 为 None，事件未推送！")
+                            print(f"[DirectorGraph] Warning: writer is None, event not pushed!")
                     except Exception as e:
-                        print(f"[DirectorGraph] 旁路事件解析失败: {e}")
+                        print(f"[DirectorGraph] Sideband event parse failed: {e}")
 
 
                 tool_results.append((call_id, tool_name, tool_result))
@@ -515,22 +515,22 @@ def sub_agent_node(state: DirectorState) -> Dict[str, Any]:
     set_current_export_format(delegate.get("export_format"))
     
     if not target_agent or not task_description:
-        return {"sub_agent_result": "委派任务失败：缺少目标 Agent 或任务描述"}
+        return {"sub_agent_result": "Delegation failed: missing target agent or task description"}
 
     if is_stop_event_set(stop_event):
         return {
-            "sub_agent_result": f"[{target_agent}] 委派任务已取消",
+            "sub_agent_result": f"[{target_agent}] Delegation cancelled",
             "stream_events": [],
             "pending_delegate": None,
             "baton_holder": baton_holder,
         }
 
     if baton_holder != target_agent:
-        return {"sub_agent_result": f"委派任务失败：当前旗帜持有者为 {baton_holder}，不是目标专家 {target_agent}"}
+        return {"sub_agent_result": f"Delegation failed: current baton holder is {baton_holder}, not target agent {target_agent}"}
     
     if writer:
         writer({"event": "agent_turn_started", "source_agent": target_agent,
-                "message": f"🤖 委派给 {target_agent} 执行任务..."})
+                "message": f"🤖 Delegating to {target_agent}..."})
     
     inherited_active_context = (state.get("active_context") or "").strip()
     active_context = get_agent_context(
@@ -550,9 +550,9 @@ def sub_agent_node(state: DirectorState) -> Dict[str, Any]:
     merged_active_context = "\n\n".join([part for part in [active_context, "\n".join(collaboration_context)] if part])
     sub_agent = _ensure_graph_agent_registered(target_agent, user_id, project_name)
     if hasattr(sub_agent, "signals") and not sub_agent.signals.is_beacon_open:
-        return {"sub_agent_result": f"委派任务失败：目标专家 {target_agent} 的信标未开启"}
+        return {"sub_agent_result": f"Delegation failed: target agent {target_agent} beacon is not open"}
     if hasattr(sub_agent, "signals") and not sub_agent.signals.has_baton:
-        return {"sub_agent_result": f"委派任务失败：目标专家 {target_agent} 当前未持有旗帜"}
+        return {"sub_agent_result": f"Delegation failed: target agent {target_agent} does not hold the baton"}
     
     buf = []
     event_sink = queue.Queue()
@@ -623,7 +623,7 @@ def sub_agent_node(state: DirectorState) -> Dict[str, Any]:
         if writer:
             writer({"event": "agent_turn_finished", "source_agent": target_agent, "status": "cancelled"})
         return {
-            "sub_agent_result": f"[{target_agent}] 委派任务已取消",
+            "sub_agent_result": f"[{target_agent}] Delegation cancelled",
             "stream_events": [],
             "pending_delegate": None,
             "baton_holder": baton_holder,
@@ -638,9 +638,9 @@ def sub_agent_node(state: DirectorState) -> Dict[str, Any]:
     if completion_mode == HANDOFF_COMPLETION_REPORT_TO_USER:
         sub_agent_result = result
     elif completion_mode == HANDOFF_COMPLETION_SILENT_CONTINUE:
-        sub_agent_result = f"[{target_agent}] 静默执行结果:\n{result}"
+        sub_agent_result = f"[{target_agent}] Silent execution result:\n{result}"
     else:
-        sub_agent_result = f"[{target_agent}] 执行结果:\n{result}"
+        sub_agent_result = f"[{target_agent}] Execution result:\n{result}"
     
     updates = {
         "sub_agent_result": sub_agent_result,
@@ -665,7 +665,7 @@ def sub_agent_node(state: DirectorState) -> Dict[str, Any]:
         if transfer_result.get("status") == "ok":
             updates["baton_holder"] = transfer_result.get("baton_holder") or return_to
         else:
-            updates["sub_agent_result"] = f"[{target_agent}] 执行完成，但回交旗帜失败：{transfer_result.get('message', '未知错误')}\n\n{result}"
+            updates["sub_agent_result"] = f"[{target_agent}] Execution complete, but baton handback failed: {transfer_result.get('message', 'unknown error')}\n\n{result}"
 
     return updates
 

@@ -104,9 +104,9 @@ def _verify_chain_matches_models(db_name: str, db_path: Path) -> None:
     drift = _describe_schema_drift(db_name, str(db_path))
     if any(drift.values()):
         raise RuntimeError(
-            f"[{db_name}] 迁移链升级出的临时库与当前 Models 不一致: "
-            f"{_format_schema_drift(drift)}。"
-            "请检查刚生成的 migration 是否遗漏字段，或是否存在旧迁移链中的幽灵结构。"
+            f"[{db_name}] Temporary DB built from migration chain does not match current Models: "
+            f"{_format_schema_drift(drift)}. "
+            "Please check if the generated migration is missing fields, or if there are ghost structures in the old chain."
         )
 
 
@@ -117,7 +117,7 @@ def run_gen(db_name: str, message: str) -> bool:
     version_dir = get_version_dir(db_name)
     version_dir.mkdir(parents=True, exist_ok=True)
 
-    print(f"\n🔄 [Alembic] 正在为 [{db_name}] 构造临时 head 数据库...")
+    print(f"\n🔄 [Alembic] Building temporary head database for [{db_name}]...")
     try:
         with tempfile.TemporaryDirectory(prefix=f"sparkarc_{db_name}_migration_") as temp_dir:
             temp_root = Path(temp_dir)
@@ -129,7 +129,7 @@ def run_gen(db_name: str, message: str) -> bool:
             before_files = {p.resolve() for p in version_dir.glob("*.py")}
             revision_head = "head" if _current_script_head(db_name) else "base"
 
-            print(f"🔄 [Alembic] 正在为 [{db_name}] 检测模型变更...")
+            print(f"🔄 [Alembic] Detecting model changes for [{db_name}]...")
             with _alembic_db_override(db_name, autogen_db), _server_cwd():
                 command.revision(
                     _build_config(db_name),
@@ -141,20 +141,20 @@ def run_gen(db_name: str, message: str) -> bool:
             after_files = {p.resolve() for p in version_dir.glob("*.py")}
             new_files = sorted(after_files - before_files)
 
-            print(f"🧪 [Alembic] 正在验证 [{db_name}] 迁移链可从零升级到当前 Models...")
+            print(f"🧪 [Alembic] Verifying [{db_name}] migration chain can upgrade from scratch to current Models...")
             _verify_chain_matches_models(db_name, verify_db)
 
             if new_files:
                 rel_files = [str(p.relative_to(server_dir)) for p in new_files]
-                print(f"✅ [{db_name}] 已生成迁移: {', '.join(rel_files)}")
+                print(f"✅ [{db_name}] Migration generated: {', '.join(rel_files)}")
             else:
-                print(f"ℹ️  [{db_name}] 未检测到模型变更，未生成迁移文件。")
+                print(f"ℹ️  [{db_name}] No model changes detected, no migration file generated.")
             return True
     except KeyboardInterrupt:
-        print("\n⛔ 用户中断")
+        print("\n⛔ Operation cancelled by user")
         return False
     except Exception as exc:
-        print(f"❌ [{db_name}] 生成/验证失败: {exc}")
+        print(f"❌ [{db_name}] Generation/verification failed: {exc}")
         return False
 
 
@@ -176,14 +176,14 @@ def main() -> None:
             target_dbs = list(VALID_DBS)
             message = args[0]
 
-    print("🚀 开始运行迁移生成脚本（临时库隔离模式）...")
+    print("🚀 Starting migration generation script (isolated temp DB mode)...")
 
     for db_name in target_dbs:
         db_msg = message if message else _default_message(db_name)
         if not run_gen(db_name, db_msg):
             sys.exit(1)
 
-    print("\n✨ 所有操作已完成。")
+    print("\n✨ All operations complete.")
 
 
 if __name__ == "__main__":

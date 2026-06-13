@@ -15,13 +15,13 @@ class CoordinatorAgent(StyleAnalysisAgent):
     
     def integrate_results(self, results: List[AgentAnalysisResult]) -> Dict:
         """整合多个Agent的分析结果"""
-        print("\n[CoordinatorAgent] 开始整合分析结果...")
+        print("\n[CoordinatorAgent] Aggregating analysis results...")
         
         # 收集所有成功的分析
         successful_analyses = [r for r in results if r.success]
         
         if not successful_analyses:
-            print("✗ 所有Agent均分析失败")
+            print("✗ All agents failed to analyze")
             return {}
         
         # 合并所有分析结果
@@ -57,12 +57,12 @@ class CoordinatorAgent(StyleAnalysisAgent):
             integrated["writing_style_analysis_framework"]["global_negative_constraints"] = list(set(all_constraints))
         
         # 生成distinctive_features（总结性分析）
-        print("\n[CoordinatorAgent] 生成总结性特征分析...")
+        print("\n[CoordinatorAgent] Generating summary feature analysis...")
         distinctive_features = self._synthesize_distinctive_features(results, integrated)
         if distinctive_features:
             integrated["writing_style_analysis_framework"]["distinctive_features"] = distinctive_features
         
-        print(f"✓ 整合完成，包含 {len(successful_analyses)}/{len(results)} 个Agent的分析")
+        print(f"✓ Aggregation complete, includes {len(successful_analyses)}/{len(results)} agent analyses")
         
         return integrated
     
@@ -121,10 +121,10 @@ class CoordinatorAgent(StyleAnalysisAgent):
             content = extract_json_from_response(response.content)
             distinctive = json.loads(content)
             
-            print(f"[CoordinatorAgent] ✓ 独特特征分析完成")
+            print(f"[CoordinatorAgent] ✓ Unique feature analysis complete")
             
             return distinctive
             
         except Exception as e:
-            print(f"[CoordinatorAgent] ⚠ 独特特征分析失败: {e}")
+            print(f"[CoordinatorAgent] ⚠ Unique feature analysis failed: {e}")
             return None

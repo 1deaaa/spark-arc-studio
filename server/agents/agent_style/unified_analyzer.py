@@ -136,7 +136,7 @@ class UnifiedStyleAnalyzer:
                 )
             
             # 调用LLM
-            print(f"  📝 分析第 {chunk.index + 1}/{chunk.total} 块 ({chunk.estimated_tokens} tokens)...")
+            print(f"  📝 Analyzing chunk {chunk.index + 1}/{chunk.total} ({chunk.estimated_tokens} tokens)...")
             response = self.llm.invoke(prompt)
             content = extract_json_from_response(response.content)
             result = json.loads(content)
@@ -145,7 +145,7 @@ class UnifiedStyleAnalyzer:
             analysis = result.get("style_analysis", result)
             context_summary = result.get("context_summary", "")
             
-            print(f"  ✓ 第 {chunk.index + 1}/{chunk.total} 块分析完成")
+            print(f"  ✓ chunk {chunk.index + 1}/{chunk.total} analysis complete")
             
             return ChunkAnalysisResult(
                 chunk_index=chunk.index,
@@ -156,7 +156,7 @@ class UnifiedStyleAnalyzer:
             )
             
         except Exception as e:
-            print(f"  ✗ 第 {chunk.index + 1}/{chunk.total} 块分析失败: {e}")
+            print(f"  ✗ chunk {chunk.index + 1}/{chunk.total} analysis failed: {e}")
             return ChunkAnalysisResult(
                 chunk_index=chunk.index,
                 total_chunks=chunk.total,

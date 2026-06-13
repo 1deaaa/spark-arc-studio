@@ -97,7 +97,7 @@ def _run_startup_migrations() -> None:
     try:
         run_auto_migrations()
     except Exception as e:
-        print(f"❌ 数据库迁移失败，禁止在外部修改数据库的表结构。具体报错: {e}")
+        print(f"❌ Database migration failed. Do not modify the database schema externally. Error: {e}")
         raise e
 
 
@@ -119,14 +119,14 @@ def _repair_stale_auto_write_states() -> None:
                 state = json.load(f)
             if state.get("status") in stale_statuses:
                 state["status"] = "interrupted"
-                state["lastError"] = "进程意外退出（服务重启），写作线程已终止"
+                state["lastError"] = "Process exited unexpectedly (server restart), writing thread terminated"
                 import datetime
                 state["updatedAt"] = datetime.datetime.now(datetime.timezone.utc).isoformat()
                 with open(state_path, "w", encoding="utf-8") as f:
                     json.dump(state, f, ensure_ascii=False, indent=2)
-                print(f"  [auto-write] 已修正孤儿状态: {state_path}", flush=True)
+                print(f"  [auto-write] Corrected stale state: {state_path}", flush=True)
         except Exception as e:
-            print(f"  [auto-write] 修正失败 {state_path}: {e}", flush=True)
+            print(f"  [auto-write] Failed to correct state {state_path}: {e}", flush=True)
 
 
 
@@ -267,9 +267,9 @@ async def lifespan(app: FastAPI):
     """
     # ========== 启动阶段 ==========
     # 启动即完成数据库迁移，避免后续逻辑持锁或延迟初始化
-    print("🛠️  正在检查并执行数据库迁移...", flush=True)
+    print("🛠️  Checking and running database migrations...", flush=True)
     _run_startup_migrations()
-    print("✅ 数据库迁移完成", flush=True)
+    print("✅ Database migration complete", flush=True)
 
     # 清理因进程意外退出而遗留的孤儿 running 状态
     # 若 auto_write_state.json 中记录 status=running/chapter_paused，
@@ -278,7 +278,7 @@ async def lifespan(app: FastAPI):
     try:
         _repair_stale_auto_write_states()
     except Exception as _e:
-        print(f"⚠️遗留写作状态清理失败（非致命）: {_e}", flush=True)
+        print(f"⚠️ Failed to clean up stale auto-write states (non-fatal): {_e}", flush=True)
 
     # 检查必要组件
     server_root = os.path.dirname(os.path.abspath(__file__))
@@ -292,7 +292,7 @@ async def lifespan(app: FastAPI):
     # 嵌套 MCP 的 lifespan（初始化 session manager）
     # 使用 http_app 返回的 StarletteWithLifespan 的 lifespan 管理生命周期
     async with _mcp_app.lifespan(app):
-        print("✅ MCP Server 初始化完成", flush=True)
+        print("✅ MCP Server initialized", flush=True)
         # 显式初始化 LLM Manager（确保 migration 已完成且释放了 DB 锁）
         # 关键说明：
         # 1. 这里必须只做 Matchbox 的“轻启动”硬依赖初始化，目标是尽快放行 /health 与 startup complete。
@@ -301,20 +301,20 @@ async def lifespan(app: FastAPI):
         #    而不是等首个用户请求到了才开始加载。
         try:
             from llm.agen_matchbox import initialize_matchbox, warmup_matchbox_runtime
-            print("📦 初始化火柴网关...", flush=True)
+            print("📦 Initializing Matchbox gateway...", flush=True)
             initialize_matchbox(ensure_defaults=True)
             warmup_matchbox_runtime(blocking=False)
-            print("⚙️ 火柴运行时后台预热已提交", flush=True)
+            print("⚙️ Matchbox runtime warm-up submitted in background", flush=True)
         except Exception as e:
-            print(f"⚠️ 火柴网关初始化提示: {e}", flush=True)
+            print(f"⚠️ Matchbox gateway init notice: {e}", flush=True)
 
         # 异步预热分词器（后台线程，不阻塞启动）
         try:
             from llm.agen_matchbox.estimate_tokens import warmup_tokenizers
             warmup_tokenizers(blocking=False)
-            print("⚙️ 分词器后台预热已提交", flush=True)
+            print("⚙️ Tokenizer warm-up submitted in background", flush=True)
         except Exception as e:
-            print(f"⚠️ 分词器预热提交失败（非致命）: {e}", flush=True)
+            print(f"⚠️ Tokenizer warm-up submission failed (non-fatal): {e}", flush=True)
 
         # 应用启动后预热
         asyncio.create_task(warm_up())
@@ -326,8 +326,8 @@ async def lifespan(app: FastAPI):
                 launch_tray_helper_after_health_check(server_root=server_root)
             )
         except Exception as e:
-            print(f"⚠️ 系统托盘助手提交失败（非致命）: {e}", flush=True)
-        print("🚀 服务启动成功！", flush=True)
+            print(f"⚠️ System tray assistant launch failed (non-fatal): {e}", flush=True)
+        print("🚀 Server started successfully!", flush=True)
         
         yield  # ========== 应用运行中 ==========
     
@@ -337,7 +337,7 @@ async def lifespan(app: FastAPI):
         reset_matchbo()
     except Exception:
         pass
-    print("🛑 服务正在关闭...", flush=True)
+    print("🛑 Shutting down server...", flush=True)
 
 
 # ============================================
@@ -613,17 +613,17 @@ async def warm_up():
         from core.auth import user_db
         with user_db._session() as s:
             s.execute(select(1)).scalar()
-        print("✅ 数据库预热完成 (连接池已建立)", flush=True)
+        print("✅ Database warm-up complete (connection pool established)", flush=True)
     except Exception as e:
-        print(f"⚠️ 数据库预热失败 (非致命): {e}", flush=True)
+        print(f"⚠️ Database warm-up failed (non-fatal): {e}", flush=True)
 
     # 2. 预热分词器和模型估算
     try:
         from llm.agen_matchbox.estimate_tokens import estimate_tokens
         estimate_tokens("warmup ping")
-        print("✅ 分词器预热完成", flush=True)
+        print("✅ Tokenizer warm-up complete", flush=True)
     except Exception as e:
-        print(f"⚠️ 分词器预热失败 (非致命): {e}", flush=True)
+        print(f"⚠️ Tokenizer warm-up failed (non-fatal): {e}", flush=True)
 
 # 获取前端静态文件目录
 current_dir = os.path.dirname(os.path.abspath(__file__))

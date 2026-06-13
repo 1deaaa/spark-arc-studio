@@ -191,10 +191,10 @@ if __name__ == "__main__":
 
     if not args.fix:
         ok, info = check_arc_file(args.file)
-        print("合格" if ok else f"不合格: {info}")
+        print("Pass" if ok else f"Fail: {info}")
     else:
         ok, msg = repair_arc_file(args.file)
         if ok:
-            print(f"修复完成: {msg}")
+            print(f"Fix applied: {msg}")
         else:
-            print(f"修复失败: {msg}")
+            print(f"Fix failed: {msg}")

@@ -25,23 +25,23 @@ malformed_arc = r'''
 '''
 
 ok, result = repair_arc_text(malformed_arc, max_iters=3, debug=True)
-print("修复是否成功:", ok)
+print("Fix succeeded:", ok)
 if ok:
     fixed_text = result if isinstance(result, str) else str(result)
     # 写出便于人工查看
     out_path = os.path.join("server", "_tmp_fixed.arc")
     with open(out_path, "w", encoding="utf-8") as f:
         f.write(fixed_text)
-    print("已写出:", out_path)
+    print("Written to:", out_path)
 
     try:
         data = parse_arc(fixed_text)
     except Exception as e:
-        print("修复输出 ARC 解析失败:", e)
+        print("Fix output ARC parse failed:", e)
         raise SystemExit(1)
 
     ok2, errs2 = check_arc_data(data)
-    print("修复后再次校验:", "合格" if ok2 else "不合格")
+    print("Post-fix re-check:", "Pass" if ok2 else "Fail")
     if not ok2:
         for e in errs2[:20]:
             print(" -", e)

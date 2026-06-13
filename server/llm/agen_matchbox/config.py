@@ -166,13 +166,13 @@ def _ensure_env_setup():
         gui_path = os.path.join(os.path.dirname(__file__), "matchbox_cfg_gui.py")
         if os.path.exists(gui_path):
             print("\n" + "!"*80)
-            print("🔑【重要提示】检测到系统未配置 LLM_KEY (API 密钥主密码)")
-            print("🔒若初次启动这是正常现象，并非错误。安全起见，所有 API Key 均需主密码加解密，否则将无法使用。")
+            print("🔑 [IMPORTANT] LLM_KEY (API master password) is not configured")
+            print("🔒 This is normal on first startup and is not an error. For security, all API Keys require a master password for encryption/decryption; without it, they cannot be used.")
             print("-" * 80)
-            print(f"方法一 (推荐): 运行配置工具\n   python \"{os.path.normpath(gui_path)}\"")
+            print(f"Option 1 (Recommended): Run the configuration tool\n   python \"{os.path.normpath(gui_path)}\"")
             print("-" * 80)
-            print("方法二: 通过 /api/admin/config/llm-key 接口或管理页设置 LLM_KEY")
-            print("方法三: 在程序页面初始化向导中设置")
+            print("Option 2: Set LLM_KEY via the /api/admin/config/llm-key endpoint or the admin page")
+            print("Option 3: Set it through the app initialization wizard")
             print("!"*80 + "\n")
             return
 

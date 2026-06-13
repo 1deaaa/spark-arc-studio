@@ -78,11 +78,11 @@ def _server_cwd():
 def _confirm(force: bool) -> None:
     if force:
         return
-    print("\n⚠️  该操作会清空全部迁移历史，仅保留新的基线迁移。")
-    print("⚠️  建议先备份数据库文件与迁移脚本。\n")
-    text = input("输入 YES 继续: ").strip()
+    print("\n⚠️  This operation will clear all migration history, keeping only the new baseline migration.")
+    print("⚠️  It is recommended to back up your database files and migration scripts first.\n")
+    text = input("Type YES to continue: ").strip()
     if text != "YES":
-        raise SystemExit("已取消。")
+        raise SystemExit("Cancelled.")
 
 
 def _backup_or_delete(version_dir: str, backup_root: str, keep_backup: bool) -> None:
@@ -105,7 +105,7 @@ def _upgrade_to_head(server_dir: str, db_name: str) -> None:
             command.upgrade(_build_config(db_name), "head")
         return True
     except Exception as exc:
-        print(f"   ❌ [{db_name}] 升级到 head 失败: {exc}")
+        print(f"   ❌ [{db_name}] Upgrade to head failed: {exc}")
         return False
 
 
@@ -163,7 +163,7 @@ def _clean_ghost_structure(db_name: str) -> None:
     try:
         target_metadata = load_metadata(db_name)
     except ImportError:
-        print(f"   ⚠️ [{db_name}] 无法加载模型元数据，跳过幽灵清理。")
+        print(f"   ⚠️ [{db_name}] Unable to load model metadata, skipping ghost cleanup.")
         return
 
     normalized_path = db_path.replace("\\", "/")
@@ -201,7 +201,7 @@ def _clean_ghost_structure(db_name: str) -> None:
                     for col_name in extra_cols:
                         conn.execute(text(f'ALTER TABLE "{table_name}" DROP COLUMN "{col_name}"'))
                     conn.commit()
-                print(f"   🗑️ [{db_name}] 清理幽灵列: {', '.join(f'{table_name}.{c}' for c in extra_cols)}")
+                print(f"   🗑️ [{db_name}] Dropping ghost columns: {', '.join(f'{table_name}.{c}' for c in extra_cols)}")
 
         # 2) 清理幽灵表
         ghost_tables = existing_tables - model_table_names - {"alembic_version", "sqlite_sequence"}
@@ -211,13 +211,13 @@ def _clean_ghost_structure(db_name: str) -> None:
                 for table_name in ghost_tables:
                     conn.execute(text(f'DROP TABLE IF EXISTS "{table_name}"'))
                 conn.commit()
-            print(f"   🗑️ [{db_name}] 清理幽灵表: {', '.join(ghost_tables)}")
+            print(f"   🗑️ [{db_name}] Dropping ghost tables: {', '.join(ghost_tables)}")
 
         if not ghost_cols and not ghost_tables:
-            print(f"   ✅ [{db_name}] DB 物理结构与 Model 完全一致，无幽灵结构。")
+            print(f"   ✅ [{db_name}] DB physical structure fully matches model, no ghost structures.")
 
     except Exception as e:
-        print(f"   ⚠️ [{db_name}] 幽灵清理异常（非致命）: {e}")
+        print(f"   ⚠️ [{db_name}] Ghost cleanup encountered an error (non-fatal): {e}")
     finally:
         engine.dispose()
 
@@ -231,17 +231,17 @@ def _post_clear_autogen(ts: str) -> None:
     表达当前模型结构。
     """
     # 清理真实 DB 幽灵结构，避免 reset 后本地运行库长期携带陈旧列/表。
-    print("\n🧹 正在清理幽灵结构（DB 中存在但 Model 未定义的列/表）...")
+    print("\n🧹 Cleaning ghost structures (columns/tables in DB not defined in Model)...")
     for db in VALID_DBS:
         _clean_ghost_structure(db)
 
     from gen_migration import run_gen
 
-    print("\n🧪 正在执行 reset 后的自动迁移检测...")
+    print("\n🧪 Running post-reset automatic migration check...")
     for db in VALID_DBS:
         message = f"post_clear_{db}_{ts}"
         if not run_gen(db, message):
-            raise SystemExit(f"❌ [{db}] reset 后自动生成迁移失败。")
+            raise SystemExit(f"❌ [{db}] Post-reset automatic migration generation failed.")
 
 
 def main():
@@ -254,7 +254,7 @@ def main():
 
     _confirm(force)
 
-    print("\n🔄 正在同步数据库到最新迁移...")
+    print("\n🔄 Syncing databases to latest migration...")
     failed_upgrades = []
     for db in VALID_DBS:
         if not _upgrade_to_head(server_dir, db):
@@ -263,14 +263,14 @@ def main():
     if failed_upgrades:
         failed_text = ", ".join(failed_upgrades)
         raise SystemExit(
-            f"❌ 以下数据库无法先升级到当前 head：{failed_text}。"
-            "为避免在结构未同步时被错误 stamp，请先修复对应迁移，再执行 clear_migration。"
+            f"❌ The following databases could not be upgraded to current head: {failed_text}. "
+            "To prevent incorrect stamping before structure sync, please fix the corresponding migrations first, then run clear_migration."
         )
 
     ts = datetime.now().strftime("%Y%m%d_%H%M%S")
     backup_root = os.path.join(server_dir, ".backup_migrations", ts)
 
-    print("🧹 正在清理迁移历史...")
+    print("🧹 Clearing migration history...")
     for db in VALID_DBS:
         version_dir = os.path.join(versions_root, db)
         backup_dir = os.path.join(backup_root, db)
@@ -279,7 +279,7 @@ def main():
     temp_root = os.path.join(server_dir, ".migration_reset_tmp")
     os.makedirs(temp_root, exist_ok=True)
 
-    print("🧱 正在生成新的基线迁移...")
+    print("🧱 Generating new baseline migration...")
     for db in VALID_DBS:
         temp_db = os.path.join(temp_root, f"{db}_empty_{ts}.db")
         if os.path.exists(temp_db):
@@ -289,16 +289,16 @@ def main():
         if os.path.exists(temp_db):
             os.remove(temp_db)
 
-    print("🏷️  正在标记数据库为新基线...\n")
+    print("🏷️  Stamping databases to new baseline...\n")
     for db in VALID_DBS:
         _clear_version_table(db)
         _stamp_head(server_dir, db)
 
     _post_clear_autogen(ts)
 
-    print("✅ 清理完成。新的迁移基线已生成，并已自动执行一次常规迁移检测。")
+    print("✅ Cleanup complete. New migration baseline generated, and a post-reset migration check has been run automatically.")
     if keep_backup:
-        print(f"📦 旧迁移已备份到: {backup_root}")
+        print(f"📦 Old migrations backed up to: {backup_root}")
 
 
 if __name__ == "__main__":

@@ -358,7 +358,7 @@ def get_all_characters() -> List[str]:
         id_to_name = load_character_id_name_map(user_id, project_name)
         return list(id_to_name.values())
     except Exception as exc:  # pragma: no cover - 调试日志
-        print(f"获取角色列表失败: {exc}")
+        print(f"Failed to fetch character list: {exc}")
         return [f"获取角色列表时出错: {exc}"]
 
 
@@ -390,6 +390,6 @@ def get_character_info(character_name: str) -> str:
         with open(char_file_path, "r", encoding="utf-8") as file:
             return file.read()
     except Exception as exc:  # pragma: no cover - 调试日志
-        print(f"获取角色 '{character_name}' 信息失败: {exc}")
-        return f"获取角色 '{character_name}' 信息时发生错误。"
+        print(f"Failed to fetch character '{character_name}': {exc}")
+        return f"Failed to fetch character '{character_name}' 信息时发生错误。"
 

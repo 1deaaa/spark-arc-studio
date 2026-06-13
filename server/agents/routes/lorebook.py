@@ -555,7 +555,7 @@ async def gen_characters_stream(
                     ),
                 }
                 return
-            print(f"AI 生成角色(SSE)失败: {e}")
+            print(f"AI character generation (SSE) failed: {e}")
             from .schemas import format_ai_error
             yield {
                 "event": "error",

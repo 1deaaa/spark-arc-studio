@@ -418,7 +418,7 @@ async def generate_script_stream(
                     )
             except Exception as preflight_err:
                 # pre-flight 失败不影响正式写作，仅记录日志
-                print(f"[AutoWrite] Pre-flight research_references 异常（已忽略）: {preflight_err}")
+                print(f"[AutoWrite] Pre-flight research_references exception (ignored): {preflight_err}")
 
             try:
 

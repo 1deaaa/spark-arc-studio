@@ -209,7 +209,7 @@ def _load_attachment_payload(
     except AttachmentNotFoundError:
         return '', 0, 'cache_missing'
     except Exception as exc:
-        print(f"[chat] 加载附件 {attachment_id} 失败: {exc}")
+        print(f"[chat] Failed to load attachment {attachment_id}: {exc}")
         return '', 0, 'load_failed'
 
 
@@ -284,7 +284,7 @@ def _build_multi_attachment_manifest(
             )
             meta = get_attachment_meta(user_id, project_name, attachment_id)
         except Exception as exc:
-            print(f"[chat] 读取附件 meta {attachment_id} 失败: {exc}")
+            print(f"[chat] Failed to read attachment meta {attachment_id}: {exc}")
             continue
 
         if meta is None:

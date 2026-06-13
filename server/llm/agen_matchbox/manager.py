@@ -128,7 +128,7 @@ class AIManagerBase:
 
     def _repair_sys_platform_keys_unique_constraint(self, conn) -> None:
         """修复历史数据库中 llm_sys_platform_keys 缺失复合唯一约束的问题。"""
-        print("[启动修复] 检测到 llm_sys_platform_keys 缺少(user_id, platform_id)唯一约束，开始自动修复")
+        print("[startup-fix] Detected missing (user_id, platform_id) unique constraint on llm_sys_platform_keys, starting auto-fix")
 
         rows = conn.execute(
             text(
@@ -208,7 +208,7 @@ class AIManagerBase:
                 "ON llm_sys_platform_keys (platform_id)"
             )
         )
-        print("[启动修复] llm_sys_platform_keys 约束修复完成")
+        print("[startup-fix] llm_sys_platform_keys constraint fix complete")
 
     def _ensure_sys_platform_keys_unique_constraint(self, force: bool = False) -> None:
         """确保系统平台用户密钥表具备 (user_id, platform_id) 复合唯一约束。"""
@@ -256,7 +256,7 @@ class AIManagerBase:
                     if "billing_enabled" in state:
                         self.billing_enabled = bool(state["billing_enabled"])
             except Exception as e:
-                print(f"加载状态失败: {e}")
+                print(f"Failed to load state: {e}")
 
     def _save_state(self):
         """保存运行时状态"""
@@ -269,7 +269,7 @@ class AIManagerBase:
             with open(self.state_file, 'w', encoding='utf-8') as f:
                 json.dump(state, f, indent=2)
         except Exception as e:
-            print(f"保存状态失败: {e}")
+            print(f"Failed to save state: {e}")
 
     def ensure_database_schema(self):
         """显式创建缺失的数据表。"""
@@ -371,7 +371,7 @@ class AIManagerBase:
                     plain_result = sec_mgr.decrypt(raw_value)
                     if plain_result.has_plaintext:
                         return sec_mgr.encrypt(plain_result.value)
-                print("[初始化] YAML 托管 Key 与当前站点主密钥不匹配，该平台需要配置 API Key（将保留平台/模型结构但不导入 Key）")
+                print("[init] YAML-managed key does not match current site master key; platform needs API Key configuration (structure preserved, key not imported)")
                 return None
 
             if not sec_mgr.has_active_key():
@@ -412,7 +412,7 @@ class AIManagerBase:
                 # 强制重置模式：禁用所有不在 YAML 中的平台（软禁用，不硬删除）
                 for plat in all_sys_platforms:
                     if plat.base_url not in config_base_urls:
-                        print(f"[YAML重置] 禁用已移除的系统平台: {plat.name} ({plat.base_url})")
+                        print(f"[yaml-reset] Disabling removed system platform: {plat.name} ({plat.base_url})")
                         plat.disable = 1
                 session.flush()
             
@@ -435,7 +435,7 @@ class AIManagerBase:
                     )
                     session.add(plat)
                     session.flush()
-                    print(f"[初始化] 添加新系统平台: {name}")
+                    print(f"[init] Adding new system platform: {name}")
 
                     # 新平台：添加所有模型
                     for model_idx, (display_name, model_config) in enumerate(cfg.get("models", {}).items()):
@@ -468,7 +468,7 @@ class AIManagerBase:
                 elif force_reset or is_first_init:
                     # 强制重置或首次初始化：更新平台名称和同步模型
                     if plat.name != name:
-                        print(f"[YAML重置] 恢复系统平台名称: {plat.name} -> {name}")
+                        print(f"[yaml-reset] Restoring system platform name: {plat.name} -> {name}")
                         plat.name = name
 
                     # 按 YAML 顺序同步 sort_order
@@ -594,7 +594,7 @@ class AIManagerBase:
                         if idx in matched_pairs:
                             model_to_update = matched_pairs[idx]
                             if model_to_update.display_name != display_name:
-                                print(f"[YAML重置] 平台 {name} 模型显示名称变更: {model_to_update.display_name} -> {display_name}")
+                                print(f"[yaml-reset] Platform {name} model display name changed: {model_to_update.display_name} -> {display_name}")
                                 model_to_update.display_name = display_name
                             if model_to_update.extra_body != extra_body_json:
                                 model_to_update.extra_body = extra_body_json
@@ -618,19 +618,19 @@ class AIManagerBase:
                                 sort_order=model_idx,
                             )
                             session.add(new_model)
-                            print(f"[YAML重置] 平台 {name} 新增模型: {display_name} ({model_name})")
+                            print(f"[yaml-reset] Platform {name} added model: {display_name} ({model_name})")
 
                     # 删除已在 YAML 中废弃（未匹配到）的系统模型
                     for db_m in db_models_pool:
                         if db_m.id not in matched_db_ids:
                             session.delete(db_m)
-                            print(f"[YAML重置] 平台 {name} 删除已废弃模型: {db_m.display_name}")
+                            print(f"[yaml-reset] Platform {name} removed deprecated model: {db_m.display_name}")
                 
                 else:
                     # 正常启动增量更新模式：
                     # 自动同步平台名称（若有变动）
                     if plat.name != name:
-                        print(f"[增量同步] 更新系统平台名称: {plat.name} -> {name}")
+                        print(f"[incremental-sync] Updating system platform name: {plat.name} -> {name}")
                         plat.name = name
 
                     # 1. 解析 YAML 中该平台的所有模型配置
@@ -749,7 +749,7 @@ class AIManagerBase:
                         if idx in matched_pairs:
                             model_to_update = matched_pairs[idx]
                             if model_to_update.display_name != display_name:
-                                print(f"[增量同步] 平台 {name} 模型显示名称自动更新: {model_to_update.display_name} -> {display_name}")
+                                print(f"[incremental-sync] Platform {name} model display name auto-updated: {model_to_update.display_name} -> {display_name}")
                                 model_to_update.display_name = display_name
                             if model_to_update.extra_body != extra_body_json:
                                 model_to_update.extra_body = extra_body_json
@@ -773,7 +773,7 @@ class AIManagerBase:
                                 sort_order=max_sort,
                             )
                             session.add(new_model)
-                            print(f"[增量同步] 平台 {name} 添加新模型: {display_name}")
+                            print(f"[incremental-sync] Platform {name} added new model: {display_name}")
 
             session.commit()
             self._invalidate_sys_platforms_cache()

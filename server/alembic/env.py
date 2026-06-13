@@ -153,8 +153,8 @@ def process_revision_directives(context, revision, directives):
     # 1. 检查是否为空迁移
     # 如果没有 upgrade ops，或者 ops 为空，说明没有变更
     if script.upgrade_ops.is_empty():
-        print(f"\nℹ️  未检测到数据库模型变更 (No changes detected).")
-        directives[:] = [] # 清空指令列表，阻止生成文件
+        print(f"\nℹ️  No database model changes detected.")
+        directives[:] = [] # Clear directive list to prevent file generation
         return
 
     ops_list = script.upgrade_ops.ops
@@ -223,20 +223,20 @@ def process_revision_directives(context, revision, directives):
                 
                 if current_table == target_table:
                    # 发现同表一删一增
-                    print(f"\n🔍 [重命名检测] 在表 '{current_table}' 中发现：")
-                    print(f"   - 待删除: {drop_op.column_name}")
-                    print(f"   - 待新增: {add_op.column.name} (类型: {add_op.column.type})")
+                    print(f"\n🔍 [Rename Detection] Found in table '{current_table}':")
+                    print(f"   - To drop: {drop_op.column_name}")
+                    print(f"   - To add: {add_op.column.name} (type: {add_op.column.type})")
                     
                     force_rename = os.environ.get("SPARKARC_AUTOGEN_FORCE_RENAME") == "1"
                     
                     if force_rename:
-                        print(f"   🤖 [自动模式] 强制认定为重命名。")
+                        print(f"   🤖 [Auto mode] Treating as rename.")
                         user_input = 'y'
                     elif os.environ.get("SPARKARC_AUTOGEN_NO_INTERACTIVE") == "1":
                          pass # Skip interactive
                          user_input = 'n'
                     else:
-                        user_input = input("   👉 这是否是【重命名】操作? (y/n, 默认 n): ").lower().strip()
+                        user_input = input("   👉 Is this a [RENAME] operation? (y/n, default n): ").lower().strip()
                         
                     if user_input == 'y':
                         # Make AlterColumnOp
@@ -255,7 +255,7 @@ def process_revision_directives(context, revision, directives):
                         handled_drops.add(drop_op) # Use object identity
                         handled_adds.add(add_op)
                         replacements.append(rename_op)
-                        print(f"   ✅ 已转换为重命名操作。")
+                        print(f"   ✅ Converted to rename operation.")
                         break
         
         # Reconstruct ops_collection IN PLACE
@@ -296,17 +296,17 @@ def process_revision_directives(context, revision, directives):
                 danger.extend(check_dangerous(op.ops))
             elif isinstance(op, ops.DropColumnOp):
                 if not _is_internal_table(op.table_name):
-                    danger.append(f"❌ 删除列: {op.table_name}.{op.column_name}")
+                    danger.append(f"❌ Drop column: {op.table_name}.{op.column_name}")
             elif isinstance(op, ops.DropTableOp):
                 if not _is_internal_table(op.table_name):
-                    danger.append(f"❌ 删除表: {op.table_name}")
+                    danger.append(f"❌ Drop table: {op.table_name}")
         return danger
 
     dangerous_ops = check_dangerous(script.upgrade_ops.ops)
             
     if dangerous_ops:
         print("\n" + "!"*60)
-        print("⚠️  警告：生成的迁移包含以下【危险操作】：")
+        print("⚠️  WARNING: Generated migration contains the following [DANGEROUS OPERATIONS]:")
         for msg in dangerous_ops:
             print("   " + msg)
         print("!"*60)
@@ -315,11 +315,11 @@ def process_revision_directives(context, revision, directives):
         if auto_yes:
             confirm = "y"
         else:
-            confirm = input("\n👉 确认要包含这些删除操作吗? (y/n): ").lower().strip()
+            confirm = input("\n👉 Confirm you want to include these drop operations? (y/n): ").lower().strip()
             
         if confirm != 'y':
-            print("\n⛔ 用户取消。已清空所有迁移操作。")
-            directives[:] = [] # 清空指令，不生成文件
+            print("\n⛔ Cancelled. All migration operations cleared.")
+            directives[:] = [] # Clear directives, do not generate file
             return
 
     # 4. 最终确认

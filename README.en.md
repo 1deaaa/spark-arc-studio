@@ -92,15 +92,15 @@ This model reduces multi-agent chaos and keeps large flows maintainable.
 
 ## Agent Pipeline (Production View)
 
-| Stage | Industry Parallel | Agent / Tool | What it does |
+| Stage | Role | Agent | What it does |
 | :-- | :-- | :-- | :-- |
-| 0. Orchestration | Director Room | `Director` | LangGraph-based multi-turn tool-call orchestration, task delegation, auto-write triggering, progress tracking, interaction entry |
-| 1. Ideation | High Concept | `Muse` | Captures seed ideas and expands them into creative directions |
-| 2. Worldbuilding | Story Bible | `Lorebook` | Builds world rules, settings, and character foundations |
-| 3. Structure | Beat Sheet | `Showrunner` | Generates beats and chapter/scene skeletons |
-| 4. Drafting | Screenplay Draft | `Scriptwriter` | Produces scene-level script; supports dual output (.arc interactive script & novel prose). Built-in Conception Chain |
-| 5. QA | Script Doctor | `Critic` + `Style` | Detects weak spots, AI flavor residue, and continuity issues. GraphRAG available as optional add-on |
-| 6. Delivery | Runtime Assets | Web Player / Unity SDK | Converts script output into interactive, runnable experiences |
+| 0. Orchestration | Director | **Director** | LangGraph-based multi-turn tool-call orchestration, task delegation, auto-write triggering, progress tracking, interaction entry |
+| 1. Ideation | Logline / High Concept | **Muse** | Captures seed ideas and expands them into creative directions |
+| 2. Worldbuilding | Story Bible / World Guide | **Lorebook** | Builds world rules, settings, and character foundations |
+| 3. Structure | Beat Sheet / Treatment | **Showrunner** | Generates beats and chapter/scene skeletons |
+| 4. Drafting | Screenplay / Script | **Scriptwriter** | Produces scene-level script; supports interactive script & novel dual output. |
+| 5. QA | Script Doctor / Coverage | **Critic + Style** | Detects weak spots, AI flavor residue, and continuity issues. GraphRAG available as optional add-on |
+| 6. Publishing | Implementation / Assets | **Web Player / Unity SDK** | Compiles scripts into high-performance runtime, driving in-game dialogue, performance scheduling, and quest triggers |
 
 ### Agent Tri-Mode Invocation Protocol
 
@@ -201,7 +201,7 @@ graph TD
     Finalizer --> FinalScript["Final Script (.arc / Novel)"]
 ```
 
-### 2. Style Clone Cluster
+#### Style Clone Cluster
 
 SparkArc's most technically deep module — **UnifiedStyleAnalyzer** serial analysis + **ValidatorAgent** Turing-test loop, capturing subtle human writing style and generating style profiles to constrain subsequent generation.
 
@@ -242,11 +242,11 @@ graph TD
 
 > 📘 Full serial analysis details and negative constraint mechanism: [Architecture Deep Dive §7](docs/architecture.md#7-风格克隆集群完整版)
 
-### 3. Beacon Bus Communication
+### 2. Beacon Bus Communication
 
 SparkArc implements a **Beacon Bus** — a permission-controlled message routing architecture using "Beacon / Horn / Baton" to model real-world collaboration visibility, proactive communication, and task ownership.
 
-> ⚠️ **Current status**: Full infrastructure (class definitions, REST API, frontend panel) is implemented, but inter-Agent horizontal communication is a **reserved capability** — all current collaboration goes through Director scheduling.
+> ⚠️ **Current status**: Full infrastructure is implemented and accessible via UI, but inter-Agent horizontal communication is a **reserved capability** — evaluation has found that **mainstream models are not yet fully capable of handling multi-turn, multi-role, long-context interactions**. When mainstream models achieve sufficient complex reasoning and attention capabilities, this mechanism will be officially enabled, **unlocking a second leap in creative efficiency and quality through horizontal interaction**.
 
 #### Core Mechanism: Beacon / Horn / Baton
 
@@ -281,7 +281,7 @@ graph TB
 
 > 📘 Full triple definitions and application scenarios: [Architecture Deep Dive §8](docs/architecture.md#8-信标总线核心机制完整版)
 
-#### Director Scheduling vs Beacon Collaboration
+#### Director Scheduling vs Beacon Collaboration (Vertical & Horizontal Collaboration)
 
 SparkArc has **two independent communication mechanisms**:
 
@@ -331,16 +331,15 @@ Grandpa... candy...
 
 Server-side `arc_parser.py` uses layered parsing: scene splitting → metadata extraction → `<conception>` chain-of-thought filtering → regex + custom tag hybrid parsing (dialogue lines / `<choice>` branches / `@act` directives / `@next` jumps).
 
-> 📘 Full four-step parsing strategy: [Architecture Deep Dive §9](docs/architecture.md#9-arc-格式解析策略)
+> 📘 Full parsing strategy details: [Architecture Deep Dive §9](docs/architecture.md#9-arc-格式解析策略)
 
-### Novel Pure Literary Mode
+### Novel Mode
 
-Besides interactive script format, SparkArc supports **pure literary novel** output:
+Besides interactive script format, SparkArc supports **pure literary novel** output mode. When a project switches to novel mode:
 
-- Scriptwriter Agent auto-loads `generate_novel` prompts, producing Markdown prose
-- Scene files stored as `.md`, aggregated by `novel_parser.py` following outline order
-- Version snapshots support both `.arc` and `novel` export/restore
-- Script editor auto-switches to novel editing view
+- Experts adopt a more literary style suited to novels
+- The performance terminal automatically switches to a clean, focused novel reader
+- The script editor automatically switches to novel view
 
 Both modes share the same worldview, characters, outline, and beat sheet — only the final output format diverges.
 
@@ -491,8 +490,8 @@ The script automatically completes the following flow:
 ### Option B: Docker (Recommended)
 
 ```bash
-git clone https://github.com/your-repo/sparkarc.git
-cd sparkarc
+git clone https://github.com/1deaaa/spark-arc-studio
+cd spark-arc-studio
 docker compose up -d --build
 ```
 
@@ -661,6 +660,24 @@ SparkArc is built to make high-quality narrative production more accessible, rep
 
 ---
 
+## Legal & Operational Statements
+
+For licensing posture, official instances, third-party deployment, content governance, privacy, and IP boundaries, see [`NOTICE`](NOTICE) and [`LEGAL/README.md`](LEGAL/README.md) as the unified entries.
+
+---
+
+## Brand & Trademark Notice
+
+SparkArc is the official name and identity of this project.
+
+This project's code is released under AGPL-3.0-only; however, **the "SparkArc" name, Logo, brand visuals, and associated identifiers are not included in the code license**.
+
+Any deployment, modified version, or distribution based on this project must not imply official, authorized, agency, or partnership affiliation with the original project.
+
+The Matchbox Agent Gateway (`server/llm/agen_matchbox`) is a separately reusable component licensed under Apache-2.0 according to the `LICENSE` file in that directory. Unless otherwise stated, the rest of the main project is licensed under AGPL-3.0-only.
+
+---
+
 ## Closing Remarks
 
 This project was designed, developed, and tested entirely by me (1deaaa) alone, so imperfections are inevitable. My schedule is fairly tight, so maintenance may not always be immediate — community contributions are very welcome.
@@ -688,22 +705,4 @@ I also encourage every contributor, deployer, and community member to stay aware
 Unless expressly stated in writing, the maintainer does not grant third parties any proprietary relicensing, white-label operation, brand agency, official partnership, trademark use, or AGPL exemption. Any third-party deployment, modification, distribution, or operation of SparkArc must comply with AGPL-3.0, and the operator is solely responsible for its users, content, model providers, payments, points, redeem codes, support, compliance, and legal obligations.
 
 **Compliance issues arising from actual operators and their users are not my responsibility.** Public-service operators should handle anonymous sharing, content moderation, identity requirements, log retention, and model compliance with care.
-
----
-
-## Legal & Operational Statements
-
-For licensing posture, official instances, third-party deployment, content governance, privacy, and IP boundaries, see [`NOTICE`](NOTICE) and [`LEGAL/README.md`](LEGAL/README.md) as the unified entries.
-
----
-
-## Brand & Trademark Notice
-
-SparkArc is the official name and identity of this project.
-
-This project's code is released under AGPL-3.0-only; however, **the "SparkArc" name, Logo, brand visuals, and associated identifiers are not included in the code license**.
-
-Any deployment, modified version, or distribution based on this project must not imply official, authorized, agency, or partnership affiliation with the original project.
-
-The Matchbox Agent Gateway (`server/llm/agen_matchbox`) is a separately reusable component licensed under Apache-2.0 according to the `LICENSE` file in that directory. Unless otherwise stated, the rest of the main project is licensed under AGPL-3.0-only.
 

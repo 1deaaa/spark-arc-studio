@@ -230,7 +230,7 @@ class LLMBuilderMixin:
 
             # 查询用量
             usage = client.usage.get_usage_last_24h()
-            print(f"过去24小时: {usage['total_tokens']} tokens, {usage['requests']} 次请求")
+            print(f"Last 24h: {usage['total_tokens']} tokens, {usage['requests']} requests")
         """
         ChatUniversal, UsageTrackingCallback, LLMUsage, LLMClient = _load_chat_runtime()
         effective_user_id = user_id if user_id is not None else SYSTEM_USER_ID

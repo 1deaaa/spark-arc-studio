@@ -445,9 +445,9 @@ async def register(data: AuthRequest, request: Request):
             target_name = build_story_filename('示例剧本', file_format='arc', group='example', order=1, free=True)
             shutil.copy2(source_script_path, os.path.join(stories_path, target_name))
         else:
-            print(f"警告: 示例剧本文件未找到于 {source_script_path}")
+            print(f"Warning: sample script file not found at {source_script_path}")
     except Exception as e:  # pragma: no cover
-        print(f"创建示例剧本文件失败: {e}")
+        print(f"Failed to create sample script file: {e}")
 
     # 2. 复制示例世界观
     try:
@@ -457,9 +457,9 @@ async def register(data: AuthRequest, request: Request):
         if os.path.exists(source_lorebook_path):
             shutil.copy2(source_lorebook_path, dest_lorebook_path)
         else:
-            print(f"警告: 示例世界观文件未找到于 {source_lorebook_path}")
+            print(f"Warning: sample worldview file not found at {source_lorebook_path}")
     except Exception as e:
-        print(f"创建示例世界观文件失败: {e}")
+        print(f"Failed to create sample worldview file: {e}")
 
     # 3. 初始化默认角色 "旁白" (ID: -1)
     # 注意：旁白角色的ID必须是-1，名字在chr.bind中存储为空格（用于显示时为空）
@@ -469,7 +469,7 @@ async def register(data: AuthRequest, request: Request):
         # ensure_project_characters_directory 已经会创建 id=-1 的旁白角色
         # 这里不需要额外操作，因为 utils.py 中的函数已经处理了
     except Exception as e: # pragma: no cover
-        print(f"初始化角色目录失败: {e}")
+        print(f"Failed to initialize character directory: {e}")
             
     return {"success": True, "message": "注册成功！请登录"}
 

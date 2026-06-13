@@ -154,7 +154,7 @@ class ChatManager:
                         ChatMessage.timestamp > dt
                     )
                 else:
-                    print("delete_after: 必须提供 message_id 或 timestamp")
+                    print("delete_after: must provide message_id or timestamp")
                     return False
                 session.execute(stmt)
                 session.commit()

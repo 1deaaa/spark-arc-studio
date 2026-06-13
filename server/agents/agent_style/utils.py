@@ -179,10 +179,10 @@ class SmartTextChunker:
                     }
                 ))
         
-        print(f"✓ 语义分块完成: {len(chunks)} 个chunks")
+        print(f"✓ Semantic chunking complete: {len(chunks)} chunks")
         if chunks:
-            print(f"  - 平均chunk大小: {sum(c.metadata['char_count'] for c in chunks) // len(chunks)} 字符")
-            print(f"  - 平均句子数: {sum(c.metadata['sentence_count'] for c in chunks) / len(chunks):.1f} 句/chunk")
+            print(f"  - Avg chunk size: {sum(c.metadata['char_count'] for c in chunks) // len(chunks)} chars")
+            print(f"  - Avg sentence count: {sum(c.metadata['sentence_count'] for c in chunks) / len(chunks):.1f} sentences/chunk")
         
         return chunks
 
@@ -226,7 +226,7 @@ def load_project_style_binding(user_id: str, project_name: str) -> str | None:
         style_name = str(payload.get("style_name") or "").strip()
         return style_name or None
     except Exception as e:
-        print(f"读取项目风格绑定失败: {e}")
+        print(f"Failed to read project style binding: {e}")
         return None
 
 
@@ -298,7 +298,7 @@ def load_user_default_style_binding(user_id: str) -> str | None:
         style_name = str(payload.get("style_name") or "").strip()
         return style_name or None
     except Exception as e:
-        print(f"读取用户默认风格绑定失败: {e}")
+        print(f"Failed to read user default style binding: {e}")
         return None
 
 def load_style_profile_from_file(author_id: str, user_id: str = None) -> Dict | None:
@@ -312,10 +312,10 @@ def load_style_profile_from_file(author_id: str, user_id: str = None) -> Dict | 
                  print(f"Found style in legacy path: {legacy_path}")
                  filepath = legacy_path
              else:
-                 print(f"风格文件不存在: {filepath}")
+                 print(f"Style file not found: {filepath}")
                  return None
         else:
-            print(f"风格文件不存在: {filepath}")
+            print(f"Style file not found: {filepath}")
             
             # Check if user has other styles available and give a hint
             if user_id:
@@ -323,8 +323,8 @@ def load_style_profile_from_file(author_id: str, user_id: str = None) -> Dict | 
                 if style_dir.exists():
                     others = [f.stem for f in style_dir.glob("*.json") if f.name != filepath.name]
                     if others:
-                        print(f"提示: 当前项目未绑定风格。您现有可用风格: {', '.join(others)}")
-                        print(f"请在 Style Agent 界面选择一个风格并点击'应用到当前项目'。")
+                        print(f"Tip: No style bound to current project. Available styles: {', '.join(others)}")
+                        print(f"Please select a style in the Style Agent UI and click 'Apply to Current Project'.")
 
             return None
             
@@ -332,7 +332,7 @@ def load_style_profile_from_file(author_id: str, user_id: str = None) -> Dict | 
         with open(filepath, 'r', encoding='utf-8') as f:
             return json.load(f)
     except Exception as e:
-        print(f"从文件 {filepath} 加载风格失败: {e}")
+        print(f"Failed to load style from {filepath}: {e}")
         return None
 
 def list_all_authors(user_id: str = None) -> List[str]:
@@ -347,12 +347,12 @@ def list_all_authors(user_id: str = None) -> List[str]:
             authors.append(file.stem)
     
     if authors:
-        print(f"\n已保存的作者列表:")
+        print(f"\nSaved author style list:")
         for i, author_id in enumerate(authors, 1):
             print(f"  {i}. {author_id}")
         print()
     else:
-        print("暂无已保存的作者风格")
+        print("No saved author styles")
     
     return authors
 
@@ -367,9 +367,9 @@ def delete_author_style(author_id: str, user_id: str = None) -> bool:
     if style_file.exists():
         try:
             os.remove(style_file)
-            print(f"✓ 已删除风格文件: {style_file}")
+            print(f"✓ Deleted style file: {style_file}")
         except Exception as e:
-            print(f"✗ 删除风格文件失败: {e}")
+            print(f"✗ Failed to delete style file: {e}")
             success = False
     
     return success
