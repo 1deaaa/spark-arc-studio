@@ -564,7 +564,7 @@ export function useAIPlatformManager(options: { syncAiStoreSilently?: () => void
             const url = window.URL.createObjectURL(blob);
             const a = document.createElement('a');
             a.href = url;
-            a.download = 'matchbox_config.zip';
+            a.download = 'matchbox_config.matchbox';
             document.body.appendChild(a);
             a.click();
             a.remove();

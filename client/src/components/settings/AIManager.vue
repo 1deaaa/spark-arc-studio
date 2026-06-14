@@ -131,7 +131,7 @@
                     <input
                         ref="importYamlInput"
                         type="file"
-                        accept=".yaml,.yml"
+                        accept=".yaml,.yml,.matchbox"
                         style="display: none;"
                         @change="handleImportYamlSelected"
                     />

@@ -136,7 +136,7 @@ Matchbox uses a dual-source model with clear authority.
 - Runtime source of truth: `llm_config.db`
 - Bootstrap/incremental sync/export:
   - `matchbox_cfg.yaml` for platform/model structures
-  - `matchbox_key.yaml` for platform API keys (must be gitignored)
+  - `matchbox_key.yaml` for platform API keys (uses `base_url` as unique key, must be gitignored)
 
 Important:
 

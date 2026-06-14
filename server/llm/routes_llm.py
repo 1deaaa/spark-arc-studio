@@ -2147,55 +2147,77 @@ async def admin_import_from_yaml(
 
     """
 
-    管理员：上传 YAML 配置文件并即时覆盖系统平台配置。
+    管理员：上传配置文件并即时覆盖系统平台配置。
+
+
+
+    支持两种格式：
+
+    - .yaml / .yml：仅导入结构，密钥从服务器本地 matchbox_key.yaml 获取
+
+    - .matchbox：ZIP 压缩包（含 matchbox_cfg.yaml + matchbox_key.yaml），同时导入结构与密钥
 
 
 
     ⚠️ 警告：此操作会覆盖数据库中的系统平台配置。
 
-    - 删除上传文件中不存在的平台
-
-    - 更新已存在平台的名称和模型
-
-    - 用户为系统平台设置的自定义 API Key 会被保留
-
-    - 上传文件中包含的 api_key 会按当前 LLM_KEY 加密写入数据库
-
-    - 若上传文件未提供某平台 api_key，但 matchbox_key.yaml 中存在，则优先使用 matchbox_key.yaml
-
-
-
-    💡 用途：在管理界面直接导入本地 matchbox_cfg.yaml，立即生效，无需重启服务。
-
     """
 
     import yaml
 
+    import io
+
+    import zipfile
+
     try:
 
-        if not file.filename or not (file.filename.endswith('.yaml') or file.filename.endswith('.yml')):
+        filename = file.filename or ""
 
-            raise HTTPException(status_code=400, detail="请上传 .yaml 或 .yml 文件")
+        is_matchbox = filename.endswith('.matchbox')
+        is_yaml = filename.endswith('.yaml') or filename.endswith('.yml')
+
+        if not (is_matchbox or is_yaml):
+            raise HTTPException(status_code=400, detail="请上传 .yaml / .yml 或 .matchbox 文件")
 
 
 
         content = await file.read()
 
-        text = content.decode('utf-8')
+        uploaded_key_data = None
 
-        configs = yaml.safe_load(text) or {}
+        configs = None
+
+        if is_matchbox:
+
+            with zipfile.ZipFile(io.BytesIO(content), "r") as zf:
+
+                names = zf.namelist()
+
+                cfg_name = next((n for n in names if n.endswith('matchbox_cfg.yaml')), None)
+
+                key_name = next((n for n in names if n.endswith('matchbox_key.yaml')), None)
+
+                if cfg_name:
+
+                    configs = yaml.safe_load(zf.read(cfg_name).decode('utf-8')) or {}
+
+                if key_name:
+
+                    uploaded_key_data = yaml.safe_load(zf.read(key_name).decode('utf-8')) or {}
+
+        else:
+
+            configs = yaml.safe_load(content.decode('utf-8')) or {}
 
 
 
         if not isinstance(configs, dict):
 
-            raise HTTPException(status_code=400, detail="YAML 顶层结构必须是字典")
+            raise HTTPException(status_code=400, detail="配置文件顶层结构必须是字典")
 
 
 
-        result = matchbox().admin_import_from_yaml(configs)
-
-
+        result = matchbox().admin_import_from_yaml(configs, uploaded_key_data=uploaded_key_data)
 
         return result
 
@@ -2397,7 +2419,7 @@ async def admin_export_and_download_yaml(
 
             media_type="application/zip",
 
-            headers={"Content-Disposition": 'attachment; filename="matchbox_config.zip"'},
+            headers={"Content-Disposition": 'attachment; filename="matchbox_config.matchbox"'},
 
         )
 

@@ -6,8 +6,8 @@ This guide applies to the `server/llm/agen_matchbox` subproject. The goal is to 
 
 ## 2. Core Principles
 
-- **DB is the runtime authority.** `matchbox_cfg.yaml` (structures) + `matchbox_key.yaml` (keys) are only used for bootstrap/incremental sync/export. All business reads go to `llm_config.db`.
-- **Preserve the unified call chain:** `initialize_matchbox()` -> `matchbox()` -> `get_user_llm(...)` / `get_spec_sys_llm(...)`.
+- **DB is the runtime authority.** `matchbox_cfg.yaml` (structures) + `matchbox_key.yaml` (keys, keyed by `base_url`) are only used for bootstrap/incremental sync/export. All business reads go to `llm_config.db`.
+- **Preserve the unified call chain:** `initialize_matchbox()` -> `matchbox()` -> `get_user_llm(...)` (production) / `get_spec_sys_llm(...)` (lightweight testing).
 - **Light init, heavy warmup:** `initialize_matchbox()` must remain lightweight (DB schema + default config sync only). Heavy runtime deps (`langchain_openai`, `ChatUniversal`, `LLMClient`) are loaded via `warmup_matchbox_runtime()` or lazy-loaded inside `_load_chat_runtime()` at first use.
 - **Keep quota scopes separated:** `sys_paid` (hosted key) and `self_paid` (user key) must remain independent tracks.
 - **Never commit secrets:** No plaintext API keys, `matchbox_key.yaml`, `.env` files, or private config material in commits.

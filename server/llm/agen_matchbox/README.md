@@ -95,7 +95,7 @@
 
 ## 🛠️ 第一次配置流程 (新手必读)
 
-**注意：** 项目自带的配置文件 (`matchbox_cfg.yaml`) 适用于快速迁移或者分享自己模型配置的。API Key 单独存放在 `matchbox_key.yaml` 中（被 `.gitignore` 忽略，禁止提交到版本库），仓库分发的 `matchbox_key.yaml` 中的加密 Key 仅用于占位，通常无法在你的站点解密。
+**注意：** 项目自带的配置文件 (`matchbox_cfg.yaml`) 适用于快速迁移或者分享自己模型配置的。API Key 单独存放在 `matchbox_key.yaml` 中（使用 `base_url` 作为唯一键，比显示名称更稳定），被 `.gitignore` 忽略，禁止提交到版本库。仓库分发的 `matchbox_key.yaml` 中的加密 Key 仅用于占位，通常无法在你的站点解密。
 
 首次使用时，你需要运行配置工具，填入你自己的 API Key。
 
@@ -355,8 +355,8 @@ except ValueError as e:
     print(f"获取系统LLM失败: {e}")
 
 
-# --- 场景3: 强制使用某个特定的系统内置模型 ---
-# 名字必须与 matchbox_cfg.yaml 中的显示名完全一致
+# --- 场景3: 轻量入口，直接指定系统模型（适用于本地测试/调试脚本）---
+# 显示名称必须与配置中完全一致，调用期间不可修改
 try:
     qwen_llm = matchbox().get_spec_sys_llm(
         platform_name="阿里云百炼",

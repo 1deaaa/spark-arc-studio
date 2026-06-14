@@ -9,6 +9,9 @@ get_user_llm() 和 get_spec_sys_llm() 均返回 LLMClient 对象：
     - usage：轻量句柄，提供 get_usage_last_24h() 等用量查询方法
     - max_context_tokens / max_output_tokens：当前模型的上下文上限与单次输出上限
 
+get_user_llm()：生产环境首选，自动解析用户绑定/默认模型。
+get_spec_sys_llm()：轻量入口，按显示名称直接指定系统模型，适用于本地测试、调试脚本、无需用户系统的一次性调用。
+
 关于 streaming 参数
 -------------------
 ⚠️ 不要传入 streaming 参数。
@@ -434,12 +437,17 @@ class LLMBuilderMixin:
         **kwargs: Any
     ) -> LLMClient:
         """
-        获取特定的系统预设模型，返回 LLMClient 对象。
+        按显示名称直接获取指定系统模型的轻量入口，适用于：
+        - 本地快速测试、调试脚本
+        - 不需要用户系统的一次性调用
+        - 明确知道目标平台/模型显示名的场景
 
-        ⚠️ 警告：此方法依赖平台显示名称定位模型，禁止修改对应平台的显示名，否则会报错。
+        ⚠️ 此方法通过显示名称定位平台与模型，调用期间对应显示名不可修改。
+        生产环境或需要动态模型选择时，请优先使用 get_user_llm()。
+
         注意：支持传入 user_id 以便使用用户自定义的 API Key 覆盖。
 
-        ⚠️ 关于 streaming 参数：
+        关于 streaming 参数：
         不要传入 streaming 参数，流式/非流式由调用方式决定：
           - 非流式：llm.invoke() / llm.ainvoke()
           - 流式：  llm.stream() / llm.astream()

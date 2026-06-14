@@ -103,14 +103,14 @@ def load_default_platform_configs_raw() -> Dict[str, Any]:
 def load_key_yaml_raw() -> Dict[str, Any]:
     """从 matchbox_key.yaml 加载原始密钥配置。
 
-    结构示例：
-        平台名称:
+    结构示例（使用 base_url 作为唯一键）：
+        https://api.example.com/v1:
           api_key: sk-xxx
-        另一平台:
+        https://other.example.com/v1:
           api_key: ENC:...
 
     也兼容简写形式：
-        平台名称: sk-xxx
+        https://api.example.com/v1: sk-xxx
 
     文件不存在时返回空字典，表示没有外部密钥文件。
     """
@@ -143,6 +143,7 @@ def _extract_api_key_from_key_entry(key_entry: Any) -> Optional[str]:
 def merge_key_yaml_into_configs(configs: Dict[str, Any]) -> Dict[str, Any]:
     """将 matchbox_key.yaml 中的 api_key 合并到平台配置字典中（原地修改）。
 
+    匹配逻辑：使用平台的 base_url 作为唯一键从 matchbox_key.yaml 中查找密钥。
     合并后会清除平台配置中内嵌的 api_key，确保运行时密钥唯一来源是 matchbox_key.yaml。
     """
     key_data = load_key_yaml_raw()
@@ -151,7 +152,10 @@ def merge_key_yaml_into_configs(configs: Dict[str, Any]) -> Dict[str, Any]:
             continue
         # 平台结构配置文件中不应再包含 api_key；若存在则忽略。
         cfg.pop("api_key", None)
-        key_entry = key_data.get(name)
+        base_url = cfg.get("base_url")
+        if not base_url:
+            continue
+        key_entry = key_data.get(base_url)
         key_val = _extract_api_key_from_key_entry(key_entry)
         if key_val is not None:
             cfg["api_key"] = key_val
@@ -171,7 +175,7 @@ def save_key_yaml_raw(key_data: Dict[str, Any]) -> str:
 def load_default_platform_configs() -> Dict[str, Any]:
     """从配置文件加载并解析平台配置（缺少 LLM_KEY 也不中断）。
 
-    密钥唯一来源：matchbox_key.yaml 中对应平台名的 api_key。
+    密钥唯一来源：matchbox_key.yaml 中对应平台 base_url 的 api_key。
     matchbox_cfg.yaml 中内嵌的 api_key 已被废弃，不再读取。
     """
     configs = deepcopy(load_default_platform_configs_raw())

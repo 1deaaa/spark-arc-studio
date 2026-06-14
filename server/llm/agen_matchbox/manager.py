@@ -955,7 +955,7 @@ class AIManagerBase:
                 if plan["action"] == "write":
                     rewrite_jobs.append(("db_sys_key", cred, plan))
 
-            for platform_name, key_entry in key_yaml_data.items():
+            for base_url, key_entry in key_yaml_data.items():
                 if isinstance(key_entry, dict):
                     key_val = key_entry.get("api_key")
                 elif isinstance(key_entry, str):
@@ -969,10 +969,10 @@ class AIManagerBase:
                     allow_clear_unrecoverable=allow_clear_unrecoverable,
                 )
                 if plan["action"] == "unresolved":
-                    unresolved_labels.append(f"KEY平台:{platform_name}")
+                    unresolved_labels.append(f"KEY平台:{base_url}")
                     continue
                 if plan["action"] == "write":
-                    rewrite_jobs.append(("key_yaml", (platform_name, key_yaml_data), plan))
+                    rewrite_jobs.append(("key_yaml", (base_url, key_yaml_data), plan))
 
             if unresolved_labels:
                 raise MasterKeyMigrationRequiredError(len(unresolved_labels), unresolved_labels[:3])
@@ -991,18 +991,18 @@ class AIManagerBase:
                 elif job_type == "db_sys_key":
                     target.api_key = plan["value"]
                 elif job_type == "key_yaml":
-                    platform_name, key_data = target
-                    key_entry = key_data.get(platform_name)
+                    base_url, key_data = target
+                    key_entry = key_data.get(base_url)
                     if plan["value"]:
                         if isinstance(key_entry, dict):
                             key_entry["api_key"] = plan["value"]
                         else:
-                            key_data[platform_name] = {"api_key": plan["value"]}
+                            key_data[base_url] = {"api_key": plan["value"]}
                     else:
                         if isinstance(key_entry, dict):
                             key_entry.pop("api_key", None)
-                        elif platform_name in key_data:
-                            del key_data[platform_name]
+                        elif base_url in key_data:
+                            del key_data[base_url]
                     key_yaml_changed = True
 
             if key_yaml_changed:
@@ -1115,8 +1115,8 @@ class AIManagerBase:
         """
         管理员：从数据库提取当前系统平台的 API Key，返回可序列化的字典。
 
-        结构：
-            平台名称:
+        结构（使用 base_url 作为唯一键）：
+            https://api.example.com/v1:
               api_key: ENC:...
 
         只导出存在且为加密字符串的系统平台默认 Key；空 Key 不导出。
@@ -1135,7 +1135,7 @@ class AIManagerBase:
                 if bool(plat.disable):
                     continue
                 if plat.api_key and isinstance(plat.api_key, str) and plat.api_key.startswith("ENC:"):
-                    export_data[plat.name] = {"api_key": plat.api_key}
+                    export_data[plat.base_url] = {"api_key": plat.api_key}
 
         return export_data
 
@@ -1177,14 +1177,20 @@ class AIManagerBase:
         """
         return self.admin_save_to_yaml()
 
-    def admin_import_from_yaml(self, configs: Dict[str, Any]) -> Dict[str, Any]:
+    def admin_import_from_yaml(
+        self,
+        configs: Dict[str, Any],
+        uploaded_key_data: Optional[Dict[str, Any]] = None,
+    ) -> Dict[str, Any]:
         """
-        管理员：从上传的 YAML 配置立即覆盖系统平台配置。
+        管理员：从上传的配置文件增量同步系统平台配置。
 
         行为：
-        - 以传入配置为准，强制重置数据库中的系统平台（类似 force_reset）。
-        - 上传的配置中即使包含 api_key 也会被忽略；密钥唯一来源是 matchbox_key.yaml。
-        - 用户为系统平台设置的自定义 API Key 会被保留。
+        - 增量模式：只添加新平台/新模型，不删除已有配置。
+        - 已有平台的密钥和用户自定义配置不受影响。
+        - 若 uploaded_key_data 非空（.matchbox 文件），仅对新平台尝试解密并写入密钥；
+          解密失败则静默跳过，在控制台打印警告。
+        - 若 uploaded_key_data 为空（.yaml 文件），不处理密钥，新平台需后续手动配置。
         - 操作完成后刷新默认平台配置缓存，确保即时生效。
 
         返回变更摘要，包含平台/模型变更统计。
@@ -1192,15 +1198,62 @@ class AIManagerBase:
         if not isinstance(configs, dict):
             raise ValueError("传入配置必须是字典")
 
-        # 过滤有效平台配置并合并 matchbox_key.yaml 中的密钥
+        # 过滤有效平台配置
         raw_platform_configs: Dict[str, Any] = {}
         for name, cfg in configs.items():
             if isinstance(cfg, dict) and "base_url" in cfg:
                 raw_platform_configs[name] = deepcopy(cfg)
-        merge_key_yaml_into_configs(raw_platform_configs)
 
-        # 强制重置数据库中的系统平台配置
-        self._sync_default_platforms(force_reset=True, raw_platform_configs=raw_platform_configs)
+        # 处理密钥：仅在上传了密钥数据时，为新平台设置密钥
+        # 已有平台的密钥由 _sync_default_platforms 增量模式保留，不会被覆盖
+        if uploaded_key_data and isinstance(uploaded_key_data, dict):
+            sec_mgr = SecurityManager.get_instance()
+            merged_count = 0
+            skipped_count = 0
+            for name, cfg in raw_platform_configs.items():
+                if not isinstance(cfg, dict):
+                    continue
+                cfg.pop("api_key", None)
+                base_url = cfg.get("base_url")
+                if not base_url:
+                    continue
+                key_entry = uploaded_key_data.get(base_url)
+                if not key_entry:
+                    continue
+                raw_key = None
+                if isinstance(key_entry, dict):
+                    raw_key = key_entry.get("api_key")
+                elif isinstance(key_entry, str):
+                    raw_key = key_entry
+                if not raw_key or not isinstance(raw_key, str):
+                    continue
+                raw_key = raw_key.strip()
+                if not raw_key:
+                    continue
+                # 尝试解密 ENC: 值
+                if raw_key.startswith("ENC:"):
+                    result = sec_mgr.decrypt(raw_key)
+                    if result.has_plaintext:
+                        cfg["api_key"] = sec_mgr.encrypt(result.value)
+                        merged_count += 1
+                    else:
+                        print(f"[import] 密钥解密失败，已跳过: {base_url}")
+                        skipped_count += 1
+                else:
+                    # 明文或 ENV 占位符
+                    cfg["api_key"] = raw_key
+                    merged_count += 1
+            if merged_count or skipped_count:
+                print(f"[import] 从上传文件合并密钥: {merged_count} 成功, {skipped_count} 跳过")
+        else:
+            # .yaml 文件：清除内嵌 api_key，不从本地 matchbox_key.yaml 获取
+            # 已有平台的密钥由增量同步保留，新平台需后续手动配置
+            for cfg in raw_platform_configs.values():
+                if isinstance(cfg, dict):
+                    cfg.pop("api_key", None)
+
+        # 增量同步：只添加，不删除
+        self._sync_default_platforms(force_reset=False, raw_platform_configs=raw_platform_configs)
 
         # 刷新内存中的默认平台配置
         reload_default_platform_configs()
@@ -1214,7 +1267,7 @@ class AIManagerBase:
 
         return {
             "success": True,
-            "message": "系统平台配置已根据上传的 YAML 文件即时更新",
+            "message": "系统平台配置已增量同步",
             "platform_count": len(raw_platform_configs),
         }
 
