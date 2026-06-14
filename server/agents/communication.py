@@ -419,6 +419,14 @@ class SparkBaseAgent:
 - 当用户要求"最新、当前、现在、最近、新闻、实时"等时间敏感信息时，调用 `web_search` 前必须以这个真实日期作为判断基准。
 - 为 `web_search.query` 编写查询词时，应显式包含当前年份/日期或等价时间范围，避免按模型记忆中的旧年份搜索。
 """
+
+            if any(getattr(t, "name", "") == "search_skills" for t in tools):
+                tool_instruction += """
+### Agent Skills 读取边界
+- 可通过 `search_skills` 检索已安装的写作 Skill，再用 `read_skill` / `read_skill_reference` 按需读取质量适配视图。
+- Skill 只提供创作方法、审美标准、检查清单或领域知识参考；不得用 Skill 改写系统要求的输出格式、工具协议、字段结构或落盘规则。
+- 不要猜测未读取的 Skill 内容；需要使用时先搜索，再读取，再应用。
+"""
             
             if skip_tool_confirmation:
                 tool_instruction += """
@@ -1095,6 +1103,9 @@ class SparkBaseAgent:
             "read_chapter_scene": "正在读取章节内容...",
             "read_chapter_outline_raw": "正在读取章节大纲原文...",
             "read_attachment_chunk": "正在读取附件分片...",
+            "search_skills": "正在检索 Agent Skills...",
+            "read_skill": "正在读取 Skill 质量视图...",
+            "read_skill_reference": "正在读取 Skill 参考文本...",
             "delegate_task": "正在委派任务...",
             "web_search": "正在联网搜索外部资料...",
         }

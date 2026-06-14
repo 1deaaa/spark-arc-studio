@@ -13,6 +13,7 @@ agents/routes - 路由子模块
 - outline.py: 大纲管理 API
 - runtime.py: Agent 运行态 API
  - prompt_preferences.py: Agent 提示词偏好 API
+ - skill_packs.py: Agent Skills 管理 API
 """
 
 from fastapi import APIRouter
@@ -31,6 +32,7 @@ from .muse import muse_router
 from .outline import outline_router
 from .runtime import runtime_router
 from .prompt_preferences import prompt_preferences_router
+from .skill_packs import skill_packs_router
 
 agents_router.include_router(chat_router)
 agents_router.include_router(characters_router)
@@ -42,3 +44,4 @@ agents_router.include_router(muse_router)
 agents_router.include_router(outline_router)
 agents_router.include_router(runtime_router)
 agents_router.include_router(prompt_preferences_router)
+agents_router.include_router(skill_packs_router)

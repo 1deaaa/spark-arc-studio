@@ -11,6 +11,9 @@
     <!-- Agent 模型配置 -->
     <div class="prompt-guide">{{ t('views.engine.mobile.promptGuide') }}</div>
     <AgentModelCard />
+    <div class="mobile-skill-manager">
+      <AgentSkillManager />
+    </div>
     
     <!-- 状态展示 -->
     <div class="status-section">
@@ -50,6 +53,7 @@ import { useI18n } from 'vue-i18n';
 import SparkTag from '../../components/share/SparkTag.vue';
 import { Copy, Gamepad2, Monitor } from '@lucide/vue';
 import AgentModelCard from '../../components/settings/AgentModelCard.vue';
+import AgentSkillManager from '../../components/settings/AgentSkillManager.vue';
 
 const { t } = useI18n();
 const message = useMessage();
@@ -101,6 +105,10 @@ function copyDesktopUrl() {
   background: color-mix(in srgb, var(--spark-primary-container), transparent 35%);
   border: 1px solid color-mix(in srgb, var(--spark-primary), transparent 72%);
   border-radius: 8px;
+}
+
+.mobile-skill-manager {
+  margin: 14px 0 24px;
 }
 
 .feature-grid {

@@ -37,6 +37,8 @@ def test_core_agent_tool_boundaries() -> None:
     assert {"create_chapter", "create_or_rewrite_script", "patch_script"} <= tool_names("agent_scriptwriter")
     assert "delegate_task" not in tool_names("agent_scriptwriter")
     assert "delegate_task" not in tool_names("agent_critic")
+    for agent_id in {"agent_director", "agent_muse", "agent_lorebook", "agent_showrunner", "agent_scriptwriter", "agent_critic"}:
+        assert {"search_skills", "read_skill", "read_skill_reference"} <= tool_names(agent_id)
     assert tool_names("agent_style") == set()
 
 

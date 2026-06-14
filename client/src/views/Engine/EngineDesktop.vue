@@ -8,8 +8,13 @@
     </div>
     <div class="content-area">
       <div class="engine-guide">{{ t('views.engine.desktop.promptGuide') }}</div>
-      <div class="engine-main">
-        <AgentFlowBlueprint />
+      <div class="engine-workspace">
+        <div class="engine-main">
+          <AgentFlowBlueprint />
+        </div>
+        <aside class="engine-side">
+          <AgentSkillManager />
+        </aside>
       </div>
     </div>
   </div>
@@ -17,6 +22,7 @@
 
 <script setup lang="ts">
 import AgentFlowBlueprint from '../../components/lorebook/AgentFlowBlueprint.vue';
+import AgentSkillManager from '../../components/settings/AgentSkillManager.vue';
 import { useI18n } from 'vue-i18n';
 
 const { t } = useI18n();
@@ -54,16 +60,36 @@ const { t } = useI18n();
   border-radius: 8px;
 }
 
-.engine-main {
+.engine-workspace {
   flex: 1 1 auto;
   min-width: 0;
-  height: 100%;
+  min-height: 0;
+  overflow: hidden;
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) 360px;
+  gap: 16px;
+}
+
+.engine-main {
+  min-width: 0;
+  min-height: 0;
+  overflow: hidden;
+}
+
+.engine-side {
+  min-width: 0;
+  min-height: 0;
   overflow: hidden;
 }
 
 @media (max-width: 1100px) {
-  .content-area {
-    flex-direction: column;
+  .engine-workspace {
+    grid-template-columns: 1fr;
+    overflow: auto;
+  }
+
+  .engine-main {
+    min-height: 680px;
   }
 }
 </style>

@@ -29,6 +29,7 @@ from agents.tools.scriptwriter import (
 )
 from agents.tools.search import replace_from_search, search_project, semantic_search
 from agents.tools.shared_read import list_chapters, read_chapter_outline_raw, read_chapter_scene
+from agents.tools.skill_packs import read_skill, read_skill_reference, search_skills
 from agents.tools.showrunner import (
     patch_beat_sheet,
     patch_outline,
@@ -42,18 +43,21 @@ from agents.tools.web_search import web_search
 MCP_ONLY_TOOLS = [capture_inspiration]
 EXTERNAL_SEARCH_TOOLS = [web_search]
 OPTIONAL_RESEARCH_TOOLS = [graph_rag_tool]
+SHARED_SKILL_TOOLS = [search_skills, read_skill, read_skill_reference]
 MUSE_TOOLS = [
     rewrite_inspiration,
     list_inspirations,
     read_inspiration,
     bind_inspiration_to_current_project,
     web_search,
+    *SHARED_SKILL_TOOLS,
 ]
 LOREBOOK_TOOLS = [
     rewrite_worldview,
     rewrite_all_characters,
     update_character,
     patch_worldview,
+    *SHARED_SKILL_TOOLS,
 ]
 SHOWRUNNER_TOOLS = [
     rewrite_synopsis,
@@ -63,6 +67,7 @@ SHOWRUNNER_TOOLS = [
     patch_beat_sheet,
     patch_outline,
     read_chapter_outline_raw,
+    *SHARED_SKILL_TOOLS,
 ]
 SCRIPTWRITER_TOOLS = [
     create_chapter,
@@ -75,6 +80,7 @@ SCRIPTWRITER_TOOLS = [
     read_beat_sheet,
     work_tracker,
     *OPTIONAL_RESEARCH_TOOLS,
+    *SHARED_SKILL_TOOLS,
 ]
 SHARED_READ_TOOLS = [list_chapters, read_chapter_scene, read_chapter_outline_raw]
 DIRECTOR_TOOLS = SHARED_READ_TOOLS + [
@@ -90,8 +96,9 @@ DIRECTOR_TOOLS = SHARED_READ_TOOLS + [
     *OPTIONAL_RESEARCH_TOOLS,
     web_search,
     read_attachment_chunk,
+    *SHARED_SKILL_TOOLS,
 ]
-CRITIC_TOOLS = SHARED_READ_TOOLS + OPTIONAL_RESEARCH_TOOLS
+CRITIC_TOOLS = SHARED_READ_TOOLS + OPTIONAL_RESEARCH_TOOLS + SHARED_SKILL_TOOLS
 ALL_TOOLS = (
     MUSE_TOOLS
     + LOREBOOK_TOOLS
@@ -108,6 +115,7 @@ ALL_TOOLS = (
         replace_from_search,
         read_attachment_chunk,
     ]
+    + SHARED_SKILL_TOOLS
     + EXTERNAL_SEARCH_TOOLS
     + OPTIONAL_RESEARCH_TOOLS
 )
