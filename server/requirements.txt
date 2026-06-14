@@ -32,6 +32,7 @@ langgraph~=1.2
 openai~=2.38
 google-genai~=2.7
 fastmcp~=3.3
+huggingface-hub~=1.2
 tiktoken~=0.13
 transformers~=5.9
 sentencepiece~=0.2

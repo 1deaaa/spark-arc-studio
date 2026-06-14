@@ -7,6 +7,7 @@
 
 import hashlib
 import json
+import math
 import os
 import shutil
 import threading
@@ -21,6 +22,12 @@ from core.utils import get_project_path
 from llm.agen_matchbox import matchbox
 from story.project_files import collect_project_files
 from story.semantic_chunker import SemanticChunker, SemanticChunk
+from .embedding_contract import (
+    QWEN3_EMBEDDING_BATCH_SIZE,
+    build_query_text,
+    embedding_contract_metadata,
+    embedding_extra_body,
+)
 
 
 _build_state_registry: dict[str, dict] = {}
@@ -97,8 +104,30 @@ class VectorIndexService:
     # ==================== Embedding ====================
 
     def _get_embeddings(self) -> OpenAIEmbeddings:
-        """通过 matchbox 获取用户配置的云端 embedding 模型"""
-        return matchbox().get_user_embedding(self.user_id)
+        """通过 matchbox 获取用户配置的 embedding 模型。"""
+        try:
+            from core.system_settings import get_local_embedding_enabled
+            from agents.vector_index.local_embedding import (
+                LOCAL_EMBEDDING_API_KEY,
+                LOCAL_EMBEDDING_BASE_URL,
+                is_local_embedding_alive,
+            )
+
+            if get_local_embedding_enabled() and is_local_embedding_alive(timeout=1.0):
+                return OpenAIEmbeddings(
+                    model=embedding_contract_metadata()["model"],
+                    api_key=LOCAL_EMBEDDING_API_KEY,
+                    base_url=LOCAL_EMBEDDING_BASE_URL,
+                    check_embedding_ctx_length=False,
+                    extra_body=embedding_extra_body(),
+                )
+        except Exception:
+            pass
+
+        return matchbox().get_user_embedding(
+            self.user_id,
+            extra_body=embedding_extra_body(),
+        )
 
     def _connect_db(self):
         """连接当前项目的 LanceDB 本地库。"""
@@ -161,11 +190,30 @@ class VectorIndexService:
     @staticmethod
     def _embed_documents(embeddings: OpenAIEmbeddings, documents: list[Document]) -> list[list[float]]:
         texts = [doc.page_content for doc in documents]
-        return embeddings.embed_documents(texts)
+        return [VectorIndexService._normalize_vector(vector) for vector in embeddings.embed_documents(texts)]
 
     @staticmethod
     def _embed_query(embeddings: OpenAIEmbeddings, query_text: str) -> list[float]:
-        return embeddings.embed_query(query_text)
+        return VectorIndexService._normalize_vector(embeddings.embed_query(build_query_text(query_text)))
+
+    @staticmethod
+    def _normalize_vector(vector: list[float]) -> list[float]:
+        """把嵌入向量归一化到单位长度。"""
+        values = [float(value) for value in vector]
+        norm = math.sqrt(sum(value * value for value in values))
+        if norm <= 0:
+            return values
+        return [value / norm for value in values]
+
+    @staticmethod
+    def _is_embedding_contract_compatible(metadata: dict) -> bool:
+        """判断已有索引是否符合当前嵌入契约。"""
+        expected = embedding_contract_metadata()
+        stored = metadata.get("embedding") if isinstance(metadata, dict) else None
+        if not isinstance(stored, dict):
+            return False
+        keys = ("version", "model", "dimensions", "metric", "query_instruction")
+        return all(stored.get(key) == expected.get(key) for key in keys)
 
     def _documents_to_rows(
         self,
@@ -464,10 +512,12 @@ class VectorIndexService:
             total_files = len(current_hashes)
             delta = self._compute_index_delta(metadata, current_hashes)
             metadata_supported = self._supports_incremental_meta(metadata)
+            embedding_supported = self._is_embedding_contract_compatible(metadata)
             full_rebuild = (
                 force_rebuild
                 or not self._table_exists()
                 or not metadata_supported
+                or not embedding_supported
             )
             file_doc_ids = self._normalize_file_doc_ids(metadata.get("file_doc_ids", {}))
 
@@ -517,7 +567,7 @@ class VectorIndexService:
                 },
             )
 
-            batch_size = 50
+            batch_size = QWEN3_EMBEDDING_BATCH_SIZE
             if full_rebuild:
                 if os.path.isdir(self._persist_dir):
                     shutil.rmtree(self._persist_dir)
@@ -695,6 +745,7 @@ class VectorIndexService:
                     "removed_files": len(delta["removed_files"]),
                     "reused_files": max(0, total_files - len(target_files)),
                 },
+                "embedding": embedding_contract_metadata(),
                 "reused": False,
             }
             self._check_cancelled()
@@ -806,6 +857,14 @@ class VectorIndexService:
                     **build_state,
                     "status": "stale",
                     "stage": "reindex",
+                }
+        elif exists and metadata and not self._is_embedding_contract_compatible(metadata):
+            needs_rebuild = True
+            if build_state.get("status") not in (_ACTIVE_BUILD_STATUSES | {"error"}):
+                build_state = {
+                    **build_state,
+                    "status": "stale",
+                    "stage": "embedding_contract",
                 }
         elif check_freshness and exists and metadata and build_state.get("status") not in (_ACTIVE_BUILD_STATUSES | {"error"}):
             try:

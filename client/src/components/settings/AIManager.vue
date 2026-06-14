@@ -122,12 +122,19 @@
                     </n-tooltip>
                     <n-tooltip v-if="isAdmin" trigger="hover">
                         <template #trigger>
-                            <n-button size="small" quaternary class="action-btn icon-btn" style="color: var(--spark-text) !important;" @click="confirmSaveToYaml">
-                                <template #icon><n-icon><CloudUpload /></n-icon></template>
+                            <n-button size="small" quaternary class="action-btn icon-btn" style="color: var(--spark-text) !important;" @click="openImportYaml">
+                                <template #icon><n-icon><Upload /></n-icon></template>
                             </n-button>
                         </template>
-                        {{ t('components.aiManager.actions.overwriteConfigHint') }}
+                        {{ t('components.aiManager.actions.importConfigHint') }}
                     </n-tooltip>
+                    <input
+                        ref="importYamlInput"
+                        type="file"
+                        accept=".yaml,.yml"
+                        style="display: none;"
+                        @change="handleImportYamlSelected"
+                    />
                     <n-tooltip v-if="systemConfig.use_sys_llm_config && !isAdmin" trigger="hover">
                         <template #trigger>
                             <n-button size="small" quaternary class="action-btn icon-btn btn-gray" disabled>
@@ -947,7 +954,7 @@ import {
 } from 'naive-ui';
 import SparkAlert from '@/components/share/SparkAlert.vue';
 import SparkCollapseTransition from '@/components/share/SparkCollapseTransition.vue';
-import { Activity, CircleAlert, CircleCheck, CloudUpload, Download, Info, Key, Lock, Menu, Plus, Server, SquarePen, Trash, Unlock, User, X, Zap } from '@lucide/vue';
+import { Activity, CircleAlert, CircleCheck, Download, Info, Key, Lock, Menu, Plus, Server, SquarePen, Trash, Unlock, Upload, User, X, Zap } from '@lucide/vue';
 import SparkTag from '@/components/share/SparkTag.vue';
 import SparkIcon from '@/components/share/CreditIcon.vue';
 import SparkLoaderAnimation from '@/components/share/SparkLoaderAnimation.vue';
@@ -1268,7 +1275,7 @@ const {
     confirmDeletePlatform,
     doDeletePlatform,
     downloadSysConfig,
-    saveSysConfigToYaml,
+    uploadSysConfigFromYaml,
     reorderPlatforms,
     reorderModels
 } = useAIPlatformManager({ syncAiStoreSilently });
@@ -1328,15 +1335,34 @@ async function confirmEditPlatformName(plat: AiPlatform) {
 }
 
 const dialog = useDialog();
+const importYamlInput = ref<HTMLInputElement | null>(null);
 
-function confirmSaveToYaml() {
+function openImportYaml() {
+    importYamlInput.value?.click();
+}
+
+async function handleImportYamlSelected(event: Event) {
+    const target = event.target as HTMLInputElement;
+    const file = target.files?.[0];
+    if (!file) return;
+
+    // 选择后重置 input，允许重复选择同一文件
+    target.value = '';
+
     dialog.warning({
-        title: t('components.aiManager.confirm.overwriteTitle'),
-        content: t('components.aiManager.confirm.overwriteContent'),
-        positiveText: t('components.aiManager.confirm.overwriteConfirm'),
+        title: t('components.aiManager.confirm.importConfigTitle'),
+        content: t('components.aiManager.confirm.importConfigContent'),
+        positiveText: t('components.aiManager.confirm.importConfigConfirm'),
         negativeText: t('views.common.cancel'),
         maskClosable: false,
-        onPositiveClick: () => { saveSysConfigToYaml(); },
+        onPositiveClick: async () => {
+            try {
+                await uploadSysConfigFromYaml(file);
+                await loadPlatforms();
+            } catch {
+                // 错误已由 uploadSysConfigFromYaml 提示
+            }
+        },
     });
 }
 

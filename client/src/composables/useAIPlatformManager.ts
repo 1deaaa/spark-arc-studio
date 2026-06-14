@@ -564,27 +564,33 @@ export function useAIPlatformManager(options: { syncAiStoreSilently?: () => void
             const url = window.URL.createObjectURL(blob);
             const a = document.createElement('a');
             a.href = url;
-            a.download = 'matchbox_cfg.yaml';
+            a.download = 'matchbox_config.zip';
             document.body.appendChild(a);
             a.click();
             a.remove();
             window.URL.revokeObjectURL(url);
-            message.success('系统平台配置已导出并下载');
+            message.success('系统平台配置与密钥文件已打包下载');
         } catch (e: unknown) {
             message.error('导出系统配置失败: ' + getErrorMessage(e));
         }
     }
 
-    async function saveSysConfigToYaml() {
+    async function uploadSysConfigFromYaml(file: File) {
+        const formData = new FormData();
+        formData.append('file', file);
         try {
-            const res = await fetchWithAuth('/api/ai/admin/save-to-yaml', { method: 'POST' });
+            const res = await fetchWithAuth('/api/ai/admin/import-from-yaml', {
+                method: 'POST',
+                body: formData,
+            });
             if (!res.ok) {
                 const err = asDetailPayload(await res.json());
-                throw new Error(err.detail || '覆盖写入失败');
+                throw new Error(err.detail || '导入配置失败');
             }
-            message.success('系统平台配置已成功覆盖写入 matchbox_cfg.yaml');
+            message.success('系统平台配置已导入并即时生效');
         } catch (e: unknown) {
-            message.error('覆盖配置文件失败: ' + getErrorMessage(e));
+            message.error('导入配置文件失败: ' + getErrorMessage(e));
+            throw e;
         }
     }
 
@@ -627,7 +633,7 @@ export function useAIPlatformManager(options: { syncAiStoreSilently?: () => void
         confirmDeletePlatform,
         doDeletePlatform,
         downloadSysConfig,
-        saveSysConfigToYaml,
+        uploadSysConfigFromYaml,
         // 管理员排序
         reorderPlatforms,
         reorderModels,

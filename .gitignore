@@ -6,6 +6,8 @@
 .env
 .env.local
 .env.*.local
+# Matchbox 平台 API 密钥独立配置文件，包含敏感密钥
+matchbox_key.yaml
 # ⚠️⚠️⚠️⚠️⚠️⚠️⚠️⚠️⚠️⚠️⚠️⚠️⚠️⚠️⚠️⚠️⚠️⚠️⚠️
 # 数据库迁移备份
 .backup_migrations/

@@ -324,7 +324,7 @@ def test_platform_embedding(
 
     kwargs: Dict[str, Any] = {}
     if extra_body and isinstance(extra_body, dict):
-        kwargs["default_query"] = extra_body
+        kwargs["extra_body"] = extra_body
 
     embeddings = OpenAIEmbeddings(
         model=model_name,

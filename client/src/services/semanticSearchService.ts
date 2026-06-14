@@ -35,6 +35,7 @@ export interface SemanticSearchStatusResponse {
   embedding_ready: boolean;
   embedding_model_name: string;
   default_enabled: boolean;
+  embedding_contract?: EmbeddingContract;
 }
 
 export interface SemanticSearchSingleStatusResponse extends SemanticSearchProjectStatus {
@@ -52,6 +53,36 @@ export interface EmbeddingTestResult {
   dims?: number;
   model_name?: string;
   platform_name?: string;
+  embedding_contract?: EmbeddingContract;
+  error?: string;
+}
+
+export interface EmbeddingContract {
+  version: string;
+  model: string;
+  dimensions: number;
+  metric: string;
+  normalize: boolean;
+  query_instruction: string;
+  max_context_tokens: number;
+}
+
+export interface LocalEmbeddingStatus {
+  configured: boolean;
+  running: boolean;
+  alive: boolean;
+  pid?: number | null;
+  base_url?: string;
+  model?: string;
+  dimensions?: number;
+  command?: string[];
+}
+
+export interface LocalEmbeddingResponse {
+  success: boolean;
+  status: LocalEmbeddingStatus;
+  enabled?: boolean;
+  embedding_contract?: EmbeddingContract;
   error?: string;
 }
 
@@ -218,5 +249,23 @@ export async function setSemanticSearchDefaults(defaultEnabled: boolean): Promis
   });
   const result = await response.json();
   if (!response.ok) throw new Error(result.detail || '设置默认配置失败');
+  return result;
+}
+
+export async function fetchLocalEmbeddingStatus(): Promise<LocalEmbeddingResponse> {
+  const response = await fetchWithAuth('/api/semantic-search/local-embedding');
+  const result = await response.json() as LocalEmbeddingResponse & { detail?: string };
+  if (!response.ok) throw new Error(result.detail || result.error || '获取本地嵌入状态失败');
+  return result;
+}
+
+export async function setLocalEmbeddingEnabled(enabled: boolean): Promise<LocalEmbeddingResponse> {
+  const response = await fetchWithAuth('/api/semantic-search/local-embedding', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ enabled }),
+  });
+  const result = await response.json() as LocalEmbeddingResponse & { detail?: string };
+  if (!response.ok) throw new Error(result.detail || result.error || '更新本地嵌入状态失败');
   return result;
 }

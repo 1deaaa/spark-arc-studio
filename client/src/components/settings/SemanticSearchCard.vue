@@ -28,6 +28,21 @@
                 </n-button>
             </div>
 
+            <div class="local-embedding-bar">
+                <div class="embedding-info">
+                    <span class="dot" :class="localEmbeddingStatus?.alive ? 'dot-ok' : 'dot-off'" />
+                    <span class="embedding-label">{{ t('components.semanticSearchCard.localEmbedding') }}</span>
+                    <span class="embedding-value">{{ localEmbeddingLabel }}</span>
+                </div>
+                <n-switch
+                    :value="localEmbeddingEnabled"
+                    :loading="togglingLocalEmbedding"
+                    :disabled="!isAdmin"
+                    size="small"
+                    @update:value="handleLocalEmbeddingToggle"
+                />
+            </div>
+
             <div class="project-summary" v-if="projects.length > 0">
                 <div class="summary-pill summary-pill-enabled">
                     <span class="summary-number">{{ semanticEnabledCount }}</span>
@@ -171,6 +186,8 @@ import {
     refreshSemanticSearchProject,
     testSemanticEmbedding,
     setSemanticSearchDefaults,
+    fetchLocalEmbeddingStatus,
+    setLocalEmbeddingEnabled,
     fetchGraphRAGStatus,
     enableGraphRAG,
     disableGraphRAG,
@@ -178,7 +195,9 @@ import {
     setGraphRAGDefaults,
     type SemanticSearchProjectStatus,
     type GraphRAGProjectStatus,
+    type LocalEmbeddingStatus,
 } from '../../services/api';
+import { getUserInfo } from '../../services/authService';
 
 const { t } = useI18n();
 const message = useMessage();
@@ -192,8 +211,12 @@ const POLL_INTERVAL_MS = 2500;
 
 const loading = ref(true);
 const testingEmbedding = ref(false);
+const togglingLocalEmbedding = ref(false);
 const embeddingReady = ref<boolean | null>(null);
 const embeddingModelName = ref('');
+const isAdmin = ref(false);
+const localEmbeddingStatus = ref<LocalEmbeddingStatus | null>(null);
+const localEmbeddingEnabled = ref(false);
 const defaultEnabledSemantic = ref(false);
 const defaultEnabledGraphRAG = ref(false);
 const searchKeyword = ref('');
@@ -215,6 +238,23 @@ const filteredProjects = computed(() => {
         return projects.value;
     }
     return projects.value.filter((project) => project.projectName.toLowerCase().includes(keyword));
+});
+
+const localEmbeddingLabel = computed(() => {
+    const status = localEmbeddingStatus.value;
+    if (!status) {
+        return t('components.semanticSearchCard.localEmbeddingUnknown');
+    }
+    if (status.alive) {
+        return t('components.semanticSearchCard.localEmbeddingAlive', { url: status.base_url || '' });
+    }
+    if (status.running) {
+        return t('components.semanticSearchCard.localEmbeddingStarting');
+    }
+    if (!status.configured) {
+        return t('components.semanticSearchCard.localEmbeddingNotConfigured');
+    }
+    return t('components.semanticSearchCard.localEmbeddingStopped');
 });
 
 function getGraphRAG(projectName: string): GraphRAGRow | undefined {
@@ -400,15 +440,18 @@ async function loadData(options: { silent?: boolean } = {}) {
         loading.value = true;
     }
     try {
-        const [semanticStatus, graphragStatus] = await Promise.all([
+        const [semanticStatus, graphragStatus, localStatus] = await Promise.all([
             fetchSemanticSearchStatus(),
             fetchGraphRAGStatus(),
+            fetchLocalEmbeddingStatus().catch(() => null),
         ]);
 
         embeddingReady.value = semanticStatus.embedding_ready;
         embeddingModelName.value = semanticStatus.embedding_model_name || '';
         defaultEnabledSemantic.value = semanticStatus.default_enabled ?? false;
         defaultEnabledGraphRAG.value = graphragStatus.default_enabled ?? false;
+        localEmbeddingStatus.value = localStatus?.status ?? null;
+        localEmbeddingEnabled.value = Boolean(localStatus?.enabled);
 
         const semanticLoadingMap = new Map(projects.value.map((project) => [project.projectName, Boolean(project._loading)]));
         const semanticRefreshingMap = new Map(projects.value.map((project) => [project.projectName, Boolean(project._refreshing)]));
@@ -633,6 +676,34 @@ async function handleTestEmbedding() {
     }
 }
 
+async function handleLocalEmbeddingToggle(enabled: boolean) {
+    if (!isAdmin.value) {
+        message.warning(t('components.semanticSearchCard.localEmbeddingAdminOnly'));
+        return;
+    }
+    togglingLocalEmbedding.value = true;
+    try {
+        const result = await setLocalEmbeddingEnabled(enabled);
+        localEmbeddingStatus.value = result.status;
+        localEmbeddingEnabled.value = Boolean(result.enabled);
+        message.success(
+            enabled
+                ? t('components.semanticSearchCard.localEmbeddingStartTriggered')
+                : t('components.semanticSearchCard.localEmbeddingStoppedSuccess'),
+        );
+    } catch (e: unknown) {
+        const msg = e instanceof Error ? e.message : String(e);
+        dialog.error({
+            title: t('components.semanticSearchCard.localEmbeddingToggleFailed'),
+            content: msg,
+            positiveText: t('common.confirm'),
+        });
+    } finally {
+        togglingLocalEmbedding.value = false;
+        await loadData({ silent: true });
+    }
+}
+
 async function handleDefaultSemanticToggle(val: boolean) {
     try {
         const result = await setSemanticSearchDefaults(val);
@@ -654,6 +725,13 @@ async function handleDefaultGraphRAGToggle(val: boolean) {
 }
 
 onMounted(() => {
+    getUserInfo()
+        .then((user) => {
+            isAdmin.value = Boolean(user?.is_admin);
+        })
+        .catch(() => {
+            isAdmin.value = false;
+        });
     loadData();
 });
 
@@ -711,6 +789,16 @@ onBeforeUnmount(() => {
     justify-content: space-between;
     gap: 12px;
     padding: 8px 0 12px;
+    border-bottom: 1px solid color-mix(in srgb, var(--spark-border), transparent 10%);
+    margin-bottom: 6px;
+}
+
+.local-embedding-bar {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 12px;
+    padding: 8px 0 10px;
     border-bottom: 1px solid color-mix(in srgb, var(--spark-border), transparent 10%);
     margin-bottom: 6px;
 }

@@ -1031,9 +1031,11 @@ class AdminMixin:
     #
     # ⚠️ 重要说明：系统平台的两种数据源
     #
-    # 1. YAML 文件 (matchbox_cfg.yaml)
+    # 1. YAML 文件
+    #    - matchbox_cfg.yaml：平台结构配置（base_url、models），可进入版本控制
+    #    - matchbox_key.yaml：平台 API Key，应被 git 忽略；与结构文件同目录
     #    - 作用：初始化模板、配置分享、备份迁移
-    #    - 特点：修改后需重启服务才生效；便于版本控制和分享（不含密钥）
+    #    - 特点：修改后需重启服务才生效（或通过 admin_import_from_yaml 即时导入）
     #    - 适用场景：无前端环境、快速部署、配置模板分发
     #
     # 2. 数据库 (llm_config.db)
@@ -1042,9 +1044,10 @@ class AdminMixin:
     #    - 适用场景：生产环境、需要动态修改配置
     #
     # 同步策略：
-    #    - 首次启动时，YAML 配置初始化到数据库
+    #    - 首次启动时，YAML 配置（含 matchbox_key.yaml 中的密钥）初始化到数据库
     #    - 后续启动时，仅添加 YAML 中新增的平台，不覆盖已有配置
-    #    - 提供 admin_reload_from_yaml() 方法手动重置为 YAML 配置
+    #    - 提供 admin_reload_from_yaml() 方法手动重置为本地 YAML 配置
+    #    - 提供 admin_import_from_yaml() 方法从上传文件即时覆盖系统配置
     #
 
     def admin_get_sys_platforms(

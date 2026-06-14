@@ -17,6 +17,7 @@ SETTINGS_PATH = os.path.join(BASE_DIR, "data", "system_settings.json")
 _DEFAULT_SETTINGS: Dict[str, Any] = {
     "disable_public_share": True,
     "force_public_share_review": True,
+    "local_embedding_enabled": False,
 }
 
 _lock = threading.Lock()
@@ -31,6 +32,7 @@ def _normalize(raw: Dict[str, Any] | None) -> Dict[str, Any]:
     if isinstance(raw, dict):
         data["disable_public_share"] = bool(raw.get("disable_public_share", _DEFAULT_SETTINGS["disable_public_share"]))
         data["force_public_share_review"] = bool(raw.get("force_public_share_review", _DEFAULT_SETTINGS["force_public_share_review"]))
+        data["local_embedding_enabled"] = bool(raw.get("local_embedding_enabled", _DEFAULT_SETTINGS["local_embedding_enabled"]))
     return data
 
 
@@ -70,6 +72,12 @@ def get_force_public_share_review() -> bool:
         return bool(_load_settings().get("force_public_share_review", _DEFAULT_SETTINGS["force_public_share_review"]))
 
 
+def get_local_embedding_enabled() -> bool:
+    """读取“优先使用本地嵌入服务”开关。"""
+    with _lock:
+        return bool(_load_settings().get("local_embedding_enabled", _DEFAULT_SETTINGS["local_embedding_enabled"]))
+
+
 def set_disable_public_share(disabled: bool) -> Dict[str, Any]:
     """更新“禁用公开分享”开关并持久化。"""
     with _lock:
@@ -84,5 +92,14 @@ def set_force_public_share_review(enabled: bool) -> Dict[str, Any]:
     with _lock:
         current = _load_settings()
         current["force_public_share_review"] = bool(enabled)
+        _save_settings(current)
+        return dict(current)
+
+
+def set_local_embedding_enabled(enabled: bool) -> Dict[str, Any]:
+    """更新“优先使用本地嵌入服务”开关并持久化。"""
+    with _lock:
+        current = _load_settings()
+        current["local_embedding_enabled"] = bool(enabled)
         _save_settings(current)
         return dict(current)

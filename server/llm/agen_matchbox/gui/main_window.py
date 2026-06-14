@@ -765,14 +765,18 @@ class LLMConfigGUI(
         """导出数据库配置到 YAML（调用后端 admin_export_to_yaml）。"""
         if not messagebox.askyesno(
             "确认导出",
-            "这将覆盖当前的 matchbox_cfg.yaml 文件。\n确定要导出数据库配置吗？"
+            "这将覆盖当前的 matchbox_cfg.yaml 和 matchbox_key.yaml 文件。\n确定要导出数据库配置吗？"
         ):
             return
 
         try:
-            path = self.ai_manager.admin_export_to_yaml()
-            self.log(f"✓ 已导出配置到 {path}", tag="success")
-            messagebox.showinfo("成功", f"已导出到 {path}")
+            paths = self.ai_manager.admin_export_to_yaml()
+            config_path = paths.get("config_path", paths) if isinstance(paths, dict) else paths
+            key_path = paths.get("key_path", "") if isinstance(paths, dict) else ""
+            self.log(f"✓ 已导出配置到 {config_path}", tag="success")
+            if key_path:
+                self.log(f"✓ 已导出密钥到 {key_path}", tag="success")
+            messagebox.showinfo("成功", f"已导出到 {config_path}")
         except Exception as e:
             messagebox.showerror("错误", f"导出失败: {e}")
             self.log(f"✗ 导出失败: {e}")

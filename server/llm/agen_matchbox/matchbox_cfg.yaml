@@ -1,4 +1,4 @@
-Google AIStudio:
+1dea AIStudio:
   base_url: https://ai.1dea.top/v1
   models:
     gemini-3.5-flash-high:
@@ -19,15 +19,13 @@ Google AIStudio:
         reasoning_effort: high
       max_context_tokens: 1048576
       max_output_tokens: 65536
-  api_key: ENC:gAAAAABp10vXCF1zOf2dETLaj04qxVd-wan1WhFMDBkFqtE-pTOeuI7YtcfWPVOSKjaDzxrHuMDOih-vdBar96P5LiLnKamwKWVy7mt7-lllWHSiAAIs38M=
-Gemini快速:
+1dea Gemini Fast:
   base_url: https://api.1dea.top/v1
   models:
-    gemini-3.5-flash-high:
-      model_name: gemini-3.5-flash
-      extra_body:
-        reasoning_effort: high
-  api_key: ENC:gAAAAABp4JM0nIPlU41tn60aQ0XWDSF2usymEhxgsd_PcbImxvzGERZuo4X3PIV0x6xDn5ux4DUm_pLGCpgKNU7I_i3eEpMXUWwEfr04yTdxeJ-RPQSbWCI=
+    gemini-3-flash-preview:
+      model_name: gemini-3-flash-preview
+      max_context_tokens: 1048576
+      max_output_tokens: 65536
 DeepSeek:
   base_url: https://api.deepseek.com/v1
   models:
@@ -37,8 +35,26 @@ DeepSeek:
         reasoning_effort: high
       sys_credit_input_price_per_million: 1.0
       sys_credit_output_price_per_million: 2.0
-  api_key: ENC:gAAAAABp7bvEBYi_twxQ6jS3-WviBgZEtLAOhtMHoDHxs98eREeqv5CV6d9m-G6z8xQfugWVgR-tfAoquq_u2FHrOLP534y2rRtvlOo-fkcalyMi6pGW8tDubRaVm5M1Hdnc2FjlMGNe
-阿里云百炼:
+Mimo Token Plan:
+  base_url: https://token-plan-cn.xiaomimimo.com/v1
+  models:
+    mimo-v2.5-pro:
+      model_name: mimo-v2.5-pro
+      max_context_tokens: 256000
+      max_output_tokens: 64000
+    mimo-v2.5: mimo-v2.5
+Siliconflow:
+  base_url: https://api.siliconflow.cn/v1
+  models:
+    Qwen/Qwen3-Embedding-0.6B:
+      model_name: Qwen/Qwen3-Embedding-0.6B
+      is_embedding: true
+      extra_body:
+        dimensions: 1024
+        encoding_format: float
+      max_context_tokens: 32768
+      max_output_tokens: 0
+Alibaba Dashscope:
   base_url: https://dashscope.aliyuncs.com/compatible-mode/v1
   models:
     通义向量-v4:
@@ -56,4 +72,3 @@ DeepSeek:
       model_name: qwen3.5-plus
       extra_body:
         enable_thinking: false
-  api_key: ENC:gAAAAABp10vXRCFQh_7XwVQm2b9TrWp8Y0iARSrUAnsOTUkwz7GaDsxlD5lz6lepZalNhlJvvjDCBKZlF9enEgb-k-JyuHemsXECnJWB8k0lRU3BeMzpE6hmr4rb0Udi-GT6yRzZLOtM

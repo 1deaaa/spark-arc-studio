@@ -12,7 +12,7 @@ import yaml
 from typing import Dict, Any, Optional
 
 from .env_utils import load_env, get_env_var
-from .paths import get_config_file_path, get_packaged_config_template_path, ensure_mgr_home_exists
+from .paths import get_config_file_path, get_key_file_path, get_packaged_config_template_path, ensure_mgr_home_exists
 from .security import SecurityManager
 
 
@@ -79,7 +79,7 @@ def resolve_api_key_reference(value: Any) -> Optional[str]:
 
 
 def load_default_platform_configs_raw() -> Dict[str, Any]:
-    """从配置文件加载原始平台配置，保留 api_key 的原始形态。"""
+    """从 matchbox_cfg.yaml 加载原始平台配置（不合并 matchbox_key.yaml）。"""
     ensure_mgr_home_exists()
     config_path: Path = get_config_file_path()
 
@@ -100,19 +100,82 @@ def load_default_platform_configs_raw() -> Dict[str, Any]:
     return configs
 
 
-def save_default_platform_configs_raw(configs: Dict[str, Any]) -> str:
-    """将平台配置原样写回 YAML 文件。"""
+def load_key_yaml_raw() -> Dict[str, Any]:
+    """从 matchbox_key.yaml 加载原始密钥配置。
+
+    结构示例：
+        平台名称:
+          api_key: sk-xxx
+        另一平台:
+          api_key: ENC:...
+
+    也兼容简写形式：
+        平台名称: sk-xxx
+
+    文件不存在时返回空字典，表示没有外部密钥文件。
+    """
+    key_path: Path = get_key_file_path()
+    if not key_path.exists():
+        return {}
+
+    with key_path.open("r", encoding="utf-8") as f:
+        data = yaml.safe_load(f) or {}
+
+    if not isinstance(data, dict):
+        raise ValueError("matchbox_key.yaml 顶层结构必须是字典")
+
+    return data
+
+
+def _extract_api_key_from_key_entry(key_entry: Any) -> Optional[str]:
+    """从 matchbox_key.yaml 中单个平台的条目提取 api_key 原始字符串。"""
+    if isinstance(key_entry, str):
+        raw = key_entry.strip()
+        return raw or None
+    if isinstance(key_entry, dict):
+        raw = key_entry.get("api_key")
+        if isinstance(raw, str):
+            raw = raw.strip()
+            return raw or None
+    return None
+
+
+def merge_key_yaml_into_configs(configs: Dict[str, Any]) -> Dict[str, Any]:
+    """将 matchbox_key.yaml 中的 api_key 合并到平台配置字典中（原地修改）。
+
+    合并后会清除平台配置中内嵌的 api_key，确保运行时密钥唯一来源是 matchbox_key.yaml。
+    """
+    key_data = load_key_yaml_raw()
+    for name, cfg in configs.items():
+        if not isinstance(cfg, dict):
+            continue
+        # 平台结构配置文件中不应再包含 api_key；若存在则忽略。
+        cfg.pop("api_key", None)
+        key_entry = key_data.get(name)
+        key_val = _extract_api_key_from_key_entry(key_entry)
+        if key_val is not None:
+            cfg["api_key"] = key_val
+    return configs
+
+
+def save_key_yaml_raw(key_data: Dict[str, Any]) -> str:
+    """将密钥配置写回 matchbox_key.yaml 文件。"""
     ensure_mgr_home_exists()
-    config_path = get_config_file_path()
-    config_path.parent.mkdir(parents=True, exist_ok=True)
-    with config_path.open("w", encoding="utf-8") as f:
-        yaml.safe_dump(configs, f, allow_unicode=True, sort_keys=False, default_flow_style=False)
-    return str(config_path)
+    key_path = get_key_file_path()
+    key_path.parent.mkdir(parents=True, exist_ok=True)
+    with key_path.open("w", encoding="utf-8") as f:
+        yaml.safe_dump(key_data, f, allow_unicode=True, sort_keys=False, default_flow_style=False)
+    return str(key_path)
 
 
 def load_default_platform_configs() -> Dict[str, Any]:
-    """从配置文件加载并解析平台配置（缺少 LLM_KEY 也不中断）。"""
+    """从配置文件加载并解析平台配置（缺少 LLM_KEY 也不中断）。
+
+    密钥唯一来源：matchbox_key.yaml 中对应平台名的 api_key。
+    matchbox_cfg.yaml 中内嵌的 api_key 已被废弃，不再读取。
+    """
     configs = deepcopy(load_default_platform_configs_raw())
+    merge_key_yaml_into_configs(configs)
 
     sec_mgr = SecurityManager.get_instance()
 

@@ -9,12 +9,22 @@ from starlette.concurrency import run_in_threadpool
 from typing import Annotated
 
 from core.auth import get_current_user
+from core.auth import require_admin
 from core.project_settings import (
     get_project_settings,
     set_project_setting,
     list_projects_semantic_status,
     get_default_semantic_enabled,
     set_default_semantic_enabled,
+)
+from core.system_settings import (
+    get_local_embedding_enabled,
+    set_local_embedding_enabled,
+)
+from agents.vector_index.embedding_contract import (
+    QWEN3_EMBEDDING_DIMENSIONS,
+    embedding_contract_metadata,
+    embedding_extra_body,
 )
 
 semantic_search_router = APIRouter(prefix="/api/semantic-search", tags=["semantic_search"])
@@ -176,6 +186,10 @@ class ProjectNameRequest(BaseModel):
     project_name: Annotated[str, Field(alias="projectName")]
 
 
+class LocalEmbeddingToggleRequest(BaseModel):
+    enabled: bool
+
+
 # ==================== API 端点 ====================
 
 @semantic_search_router.get('/status')
@@ -252,6 +266,7 @@ async def get_semantic_search_status(
             "projects": project_items,
             "embedding_ready": embedding_ready,
             "embedding_model_name": embedding_model_name,
+            "embedding_contract": embedding_contract_metadata(),
             "default_enabled": get_default_semantic_enabled(user_id),
         }
 
@@ -272,7 +287,7 @@ async def enable_semantic_search(data: ProjectNameRequest, user: dict = Depends(
         mb = matchbox()
 
         # 获取用户选择的嵌入模型
-        emb = mb.get_user_embedding(user_id)
+        emb = mb.get_user_embedding(user_id, extra_body=embedding_extra_body())
         model_name = emb.model
 
         # 获取平台信息
@@ -284,10 +299,17 @@ async def enable_semantic_search(data: ProjectNameRequest, user: dict = Depends(
                 if plat:
                     api_key = mb._get_effective_api_key(session, user_id, plat)
                     if api_key:
-                        result = test_platform_embedding(plat.base_url, api_key, model_name)
+                        result = test_platform_embedding(
+                            plat.base_url,
+                            api_key,
+                            model_name,
+                            extra_body=embedding_extra_body(),
+                        )
                         dims = result.get("dims", 0)
-                        if dims == 0:
-                            raise ValueError("嵌入模型返回了零维度向量，请检查模型配置")
+                        if dims != QWEN3_EMBEDDING_DIMENSIONS:
+                            raise ValueError(
+                                f"嵌入模型维度为 {dims}，但当前索引契约要求 {QWEN3_EMBEDDING_DIMENSIONS} 维。"
+                            )
                     else:
                         raise ValueError("嵌入模型所在平台未配置 API Key")
                 else:
@@ -379,7 +401,7 @@ async def test_semantic_embedding(user: dict = Depends(get_current_user)):
         mb = matchbox()
 
         # 获取用户嵌入模型
-        emb = mb.get_user_embedding(user_id)
+        emb = mb.get_user_embedding(user_id, extra_body=embedding_extra_body())
         model_name = emb.model
 
         # 获取平台信息做精确测试
@@ -394,23 +416,38 @@ async def test_semantic_embedding(user: dict = Depends(get_current_user)):
                     api_key = mb._get_effective_api_key(session, user_id, plat)
                     if api_key:
                         from llm.agen_matchbox.utils import test_platform_embedding
-                        result = test_platform_embedding(plat.base_url, api_key, model_name)
+                        result = test_platform_embedding(
+                            plat.base_url,
+                            api_key,
+                            model_name,
+                            extra_body=embedding_extra_body(),
+                        )
                         dims = result.get("dims", 0)
+                        if dims != QWEN3_EMBEDDING_DIMENSIONS:
+                            raise ValueError(
+                                f"嵌入模型维度为 {dims}，但当前索引契约要求 {QWEN3_EMBEDDING_DIMENSIONS} 维。"
+                            )
                         return {
                             "success": True,
                             "dims": dims,
                             "model_name": model_name,
                             "platform_name": platform_name,
+                            "embedding_contract": embedding_contract_metadata(),
                         }
 
         # 回退：直接 embed_query
         test_vector = emb.embed_query("测试")
         dims = len(test_vector) if test_vector else 0
+        if dims != QWEN3_EMBEDDING_DIMENSIONS:
+            raise ValueError(
+                f"嵌入模型维度为 {dims}，但当前索引契约要求 {QWEN3_EMBEDDING_DIMENSIONS} 维。"
+            )
         return {
             "success": True,
             "dims": dims,
             "model_name": model_name,
             "platform_name": platform_name,
+            "embedding_contract": embedding_contract_metadata(),
         }
 
     except ValueError as e:
@@ -424,6 +461,59 @@ async def test_semantic_embedding(user: dict = Depends(get_current_user)):
     except Exception as e:
         error_msg = str(e)
         return {"success": False, "error": f"嵌入模型测试失败：{error_msg}"}
+
+
+@semantic_search_router.get('/local-embedding')
+async def get_local_embedding(user: dict = Depends(get_current_user)):
+    """查看本地嵌入服务状态。"""
+    try:
+        from agents.vector_index.local_embedding import get_local_embedding_status
+
+        status = await run_in_threadpool(get_local_embedding_status)
+        return {
+            "success": True,
+            "status": status,
+            "enabled": get_local_embedding_enabled(),
+            "embedding_contract": embedding_contract_metadata(),
+        }
+    except Exception as e:
+        return {
+            "success": False,
+            "error": str(e),
+            "status": {
+                "configured": False,
+                "running": False,
+                "alive": False,
+            },
+            "enabled": get_local_embedding_enabled(),
+            "embedding_contract": embedding_contract_metadata(),
+        }
+
+
+@semantic_search_router.post('/local-embedding')
+async def set_local_embedding(
+    data: LocalEmbeddingToggleRequest,
+    admin_user: dict = Depends(require_admin),
+):
+    """管理员手动启动或停止本地嵌入服务。"""
+    try:
+        from agents.vector_index.local_embedding import (
+            start_local_embedding_service,
+            stop_local_embedding_service,
+        )
+
+        action = start_local_embedding_service if data.enabled else stop_local_embedding_service
+        status = await run_in_threadpool(action)
+        enabled = bool(data.enabled and status.get("alive"))
+        set_local_embedding_enabled(enabled)
+        return {
+            "success": True,
+            "status": status,
+            "enabled": enabled,
+            "embedding_contract": embedding_contract_metadata(),
+        }
+    except Exception as e:
+        raise HTTPException(status_code=400, detail=str(e))
 
 
 class DefaultEnabledRequest(BaseModel):

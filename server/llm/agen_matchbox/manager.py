@@ -36,13 +36,14 @@ from .config import (
     BUILTIN_USAGE_SLOTS, USE_SYS_LLM_CONFIG, LLM_AUTO_KEY,
     get_decrypted_api_key,  # Still kept for backwards compatibility / internal CLI scripts if needed
     load_default_platform_configs_raw,
-    save_default_platform_configs_raw,
+    load_key_yaml_raw,
+    merge_key_yaml_into_configs,
     reload_default_platform_configs,
     resolve_api_key_reference,
     is_api_key_placeholder,
 )
 from .env_utils import get_env_var
-from .paths import get_db_file_path, get_state_file_path, get_config_file_path
+from .paths import get_db_file_path, get_state_file_path, get_config_file_path, get_key_file_path, get_mgr_home
 from .security import SecurityManager
 from core.db_engine import create_configured_engine, normalize_database_url
 
@@ -330,30 +331,35 @@ class AIManagerBase:
         with self.Session() as session:
             self.ensure_user_has_config(session, SYSTEM_USER_ID)
 
-    def _sync_default_platforms(self, force_reset: bool = False):
+    def _sync_default_platforms(
+        self,
+        force_reset: bool = False,
+        raw_platform_configs: Optional[Dict[str, Any]] = None,
+    ):
         """
         同步系统平台配置（仅初始化模式）
-        
+
         ⚠️ 数据源说明：
         - YAML 文件 (matchbox_cfg.yaml): 初始化模板，便于配置分享和版本控制
         - 数据库 (llm_config.db): 运行时权威数据源 (Authority)，修改即时生效。
-        
+
         同步策略 (三种触发时机):
         1. 首次启动 (First Initialization):
            - 触发：数据库为空。
            - 行为：YAML 配置完整初始化到数据库。
-        
+
         2. 增量同步 (Incremental Sync):
            - 触发：后续启动 (默认)。
            - 行为：仅添加 YAML 中新增的平台和模型，**不覆盖、不删除**数据库中已有的配置。
            - 目的：保护管理员在数据库模式下所做的自定义修改。
-           
+
         3. 强制重置 (Force Reset):
            - 触发：GUI "从配置文件重置" 或 API 调用。
            - 行为：以 YAML 为准覆盖数据库（保留用户 API Key）。
-        
+
         参数:
             force_reset: 是否强制从配置文件重置（会覆盖数据库中的所有系统平台配置）
+            raw_platform_configs: 可选的外部传入配置；未提供时读取 matchbox_cfg.yaml + matchbox_key.yaml。
         """
         sec_mgr = SecurityManager.get_instance()
 
@@ -401,7 +407,10 @@ class AIManagerBase:
                         max_output = DEFAULT_MAX_OUTPUT_TOKENS
             return max_context, max_output
 
-        raw_platform_configs = load_default_platform_configs_raw()
+        if raw_platform_configs is None:
+            raw_platform_configs = load_default_platform_configs_raw()
+            # 从 matchbox_key.yaml 合并各平台 api_key；上传/结构配置文件中的内嵌 api_key 会被忽略。
+            merge_key_yaml_into_configs(raw_platform_configs)
 
         with self.Session() as session:
             config_base_urls = {cfg["base_url"] for cfg in raw_platform_configs.values() if isinstance(cfg, dict) and "base_url" in cfg}
@@ -432,7 +441,7 @@ class AIManagerBase:
                     plat = LLMPlatform(
                         name=name,
                         base_url=base_url,
-                        api_key=encrypted_key,  # YAML 中若有密钥则加密写入
+                        api_key=encrypted_key,  # matchbox_key.yaml 中若有密钥则加密写入
                         user_id=SYSTEM_USER_ID,
                         is_sys=1,
                         sort_order=plat_idx,
@@ -478,7 +487,7 @@ class AIManagerBase:
                     # 按 YAML 顺序同步 sort_order
                     plat.sort_order = plat_idx
 
-                    # 若 YAML 提供 API Key，则更新平台默认 Key（加密写入）
+                    # 若 matchbox_key.yaml 提供 API Key，则更新平台默认 Key（加密写入）
                     encrypted_key = _prepare_seed_api_key(cfg.get("api_key"))
                     if encrypted_key:
                         plat.api_key = encrypted_key
@@ -908,7 +917,8 @@ class AIManagerBase:
 
         self.ensure_database_schema()
 
-        raw_platform_configs = load_default_platform_configs_raw()
+        # 平台结构来自 matchbox_cfg.yaml，密钥独立存放在 matchbox_key.yaml。
+        key_yaml_data = load_key_yaml_raw()
         rewrite_jobs = []
         unresolved_labels: List[str] = []
         summary: Dict[str, int] = {
@@ -945,25 +955,29 @@ class AIManagerBase:
                 if plan["action"] == "write":
                     rewrite_jobs.append(("db_sys_key", cred, plan))
 
-            for platform_name, cfg in raw_platform_configs.items():
-                if not isinstance(cfg, dict):
+            for platform_name, key_entry in key_yaml_data.items():
+                if isinstance(key_entry, dict):
+                    key_val = key_entry.get("api_key")
+                elif isinstance(key_entry, str):
+                    key_val = key_entry
+                else:
                     continue
                 plan = self._plan_secret_rewrite(
-                    raw_value=cfg.get("api_key"),
+                    raw_value=key_val,
                     new_key=new_key,
                     old_key=old_key,
                     allow_clear_unrecoverable=allow_clear_unrecoverable,
                 )
                 if plan["action"] == "unresolved":
-                    unresolved_labels.append(f"YAML平台:{platform_name}")
+                    unresolved_labels.append(f"KEY平台:{platform_name}")
                     continue
                 if plan["action"] == "write":
-                    rewrite_jobs.append(("yaml_platform", (platform_name, cfg), plan))
+                    rewrite_jobs.append(("key_yaml", (platform_name, key_yaml_data), plan))
 
             if unresolved_labels:
                 raise MasterKeyMigrationRequiredError(len(unresolved_labels), unresolved_labels[:3])
 
-            yaml_changed = False
+            key_yaml_changed = False
             for job_type, target, plan in rewrite_jobs:
                 if not plan.get("changed"):
                     continue
@@ -976,16 +990,24 @@ class AIManagerBase:
                     target.api_key = plan["value"]
                 elif job_type == "db_sys_key":
                     target.api_key = plan["value"]
-                elif job_type == "yaml_platform":
-                    _, cfg = target
+                elif job_type == "key_yaml":
+                    platform_name, key_data = target
+                    key_entry = key_data.get(platform_name)
                     if plan["value"]:
-                        cfg["api_key"] = plan["value"]
+                        if isinstance(key_entry, dict):
+                            key_entry["api_key"] = plan["value"]
+                        else:
+                            key_data[platform_name] = {"api_key": plan["value"]}
                     else:
-                        cfg.pop("api_key", None)
-                    yaml_changed = True
+                        if isinstance(key_entry, dict):
+                            key_entry.pop("api_key", None)
+                        elif platform_name in key_data:
+                            del key_data[platform_name]
+                    key_yaml_changed = True
 
-            if yaml_changed:
-                save_default_platform_configs_raw(raw_platform_configs)
+            if key_yaml_changed:
+                from .config import save_key_yaml_raw
+                save_key_yaml_raw(key_yaml_data)
 
             session.commit()
 
@@ -1048,9 +1070,8 @@ class AIManagerBase:
                     "models": {}
                 }
 
-                # 导出 API Key（若存在且已加密，保持加密字符串原样导出）
-                if plat.api_key:
-                    plat_config["api_key"] = plat.api_key
+                # matchbox_cfg.yaml 不再存放 api_key；密钥统一由 matchbox_key.yaml 管理。
+                # 导出时仅保留平台结构，便于安全分享与版本控制。
 
                 for model in sorted(plat.models, key=lambda m: m.sort_order):
                     if self._is_model_disabled(model):
@@ -1090,26 +1111,64 @@ class AIManagerBase:
 
         return export_data
 
-    def admin_save_to_yaml(self) -> str:
+    def admin_build_key_export_data(self) -> Dict[str, Any]:
         """
-        管理员：将当前系统平台配置写入（覆盖） matchbox_cfg.yaml，返回写入路径。
+        管理员：从数据库提取当前系统平台的 API Key，返回可序列化的字典。
 
-        ⚠️ 破坏性操作：会完整覆盖现有配置文件。
+        结构：
+            平台名称:
+              api_key: ENC:...
+
+        只导出存在且为加密字符串的系统平台默认 Key；空 Key 不导出。
+        """
+        export_data: Dict[str, Any] = {}
+
+        with self.Session() as session:
+            platforms = (
+                session.query(LLMPlatform)
+                .filter_by(is_sys=1)
+                .order_by(LLMPlatform.sort_order)
+                .all()
+            )
+
+            for plat in platforms:
+                if bool(plat.disable):
+                    continue
+                if plat.api_key and isinstance(plat.api_key, str) and plat.api_key.startswith("ENC:"):
+                    export_data[plat.name] = {"api_key": plat.api_key}
+
+        return export_data
+
+    def admin_save_to_yaml(self) -> Dict[str, str]:
+        """
+        管理员：将当前系统平台配置写入（覆盖） matchbox_cfg.yaml，
+        同时将系统平台默认 API Key 写入 matchbox_key.yaml。
+
+        ⚠️ 破坏性操作：会完整覆盖两个配置文件。
+
+        返回包含两个文件路径的字典。
         """
         import yaml
 
+        mgr_home = get_mgr_home()
+        mgr_home.mkdir(parents=True, exist_ok=True)
+
         config_path = get_config_file_path()
-        config_path.parent.mkdir(parents=True, exist_ok=True)
+        key_path = get_key_file_path()
 
         export_data = self.admin_build_export_data()
+        key_data = self.admin_build_key_export_data()
 
         # allow_unicode=True 确保中文正常显示，不转义为 \uXXXX
         with config_path.open("w", encoding="utf-8") as f:
             yaml.dump(export_data, f, allow_unicode=True, sort_keys=False, default_flow_style=False)
 
-        return str(config_path)
+        with key_path.open("w", encoding="utf-8") as f:
+            yaml.dump(key_data, f, allow_unicode=True, sort_keys=False, default_flow_style=False)
 
-    def admin_export_to_yaml(self) -> str:
+        return {"config_path": str(config_path), "key_path": str(key_path)}
+
+    def admin_export_to_yaml(self) -> Dict[str, str]:
         """
         向后兼容别名：等同于 admin_save_to_yaml()。
 
@@ -1117,6 +1176,47 @@ class AIManagerBase:
         新代码请直接调用语义更明确的 admin_save_to_yaml()。
         """
         return self.admin_save_to_yaml()
+
+    def admin_import_from_yaml(self, configs: Dict[str, Any]) -> Dict[str, Any]:
+        """
+        管理员：从上传的 YAML 配置立即覆盖系统平台配置。
+
+        行为：
+        - 以传入配置为准，强制重置数据库中的系统平台（类似 force_reset）。
+        - 上传的配置中即使包含 api_key 也会被忽略；密钥唯一来源是 matchbox_key.yaml。
+        - 用户为系统平台设置的自定义 API Key 会被保留。
+        - 操作完成后刷新默认平台配置缓存，确保即时生效。
+
+        返回变更摘要，包含平台/模型变更统计。
+        """
+        if not isinstance(configs, dict):
+            raise ValueError("传入配置必须是字典")
+
+        # 过滤有效平台配置并合并 matchbox_key.yaml 中的密钥
+        raw_platform_configs: Dict[str, Any] = {}
+        for name, cfg in configs.items():
+            if isinstance(cfg, dict) and "base_url" in cfg:
+                raw_platform_configs[name] = deepcopy(cfg)
+        merge_key_yaml_into_configs(raw_platform_configs)
+
+        # 强制重置数据库中的系统平台配置
+        self._sync_default_platforms(force_reset=True, raw_platform_configs=raw_platform_configs)
+
+        # 刷新内存中的默认平台配置
+        reload_default_platform_configs()
+
+        # 使系统平台缓存失效
+        self._invalidate_sys_platforms_cache()
+
+        # 重新解析默认平台/模型 ID
+        with self.Session() as session:
+            self._resolve_default_ids_from_db(session)
+
+        return {
+            "success": True,
+            "message": "系统平台配置已根据上传的 YAML 文件即时更新",
+            "platform_count": len(raw_platform_configs),
+        }
 
     def _get_sys_config(self, session):
         if self._is_sys_platforms_cache_expired():

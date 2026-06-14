@@ -6,11 +6,11 @@ This guide applies to the `server/llm/agen_matchbox` subproject. The goal is to 
 
 ## 2. Core Principles
 
-- **DB is the runtime authority.** YAML (`matchbox_cfg.yaml`) is only used for bootstrap/incremental sync/export. All business reads go to `llm_config.db`.
+- **DB is the runtime authority.** `matchbox_cfg.yaml` (structures) + `matchbox_key.yaml` (keys) are only used for bootstrap/incremental sync/export. All business reads go to `llm_config.db`.
 - **Preserve the unified call chain:** `initialize_matchbox()` -> `matchbox()` -> `get_user_llm(...)` / `get_spec_sys_llm(...)`.
 - **Light init, heavy warmup:** `initialize_matchbox()` must remain lightweight (DB schema + default config sync only). Heavy runtime deps (`langchain_openai`, `ChatUniversal`, `LLMClient`) are loaded via `warmup_matchbox_runtime()` or lazy-loaded inside `_load_chat_runtime()` at first use.
 - **Keep quota scopes separated:** `sys_paid` (hosted key) and `self_paid` (user key) must remain independent tracks.
-- **Never commit secrets:** No plaintext API keys, `.env` files, or private config material in commits.
+- **Never commit secrets:** No plaintext API keys, `matchbox_key.yaml`, `.env` files, or private config material in commits.
 
 ## 3. Initialization Architecture
 
@@ -49,7 +49,7 @@ Pre-imports `.gateway` and `.tracked_model` in a background thread so that the f
 |------|---------------|
 | `__init__.py` | Package entry: `initialize_matchbox`, `warmup_matchbox_runtime`, `matchbox`, lazy exports |
 | `manager.py` | `AIManager` core class (all mixins composed) |
-| `config.py` | Constants (`USE_SYS_LLM_CONFIG`, `LLM_AUTO_KEY`, `SYSTEM_USER_ID`), YAML/env loading |
+| `config.py` | Constants (`USE_SYS_LLM_CONFIG`, `LLM_AUTO_KEY`, `SYSTEM_USER_ID`), YAML/key file/env loading |
 | `builder.py` | `LLMBuilderMixin` — resolves user choice, builds `LLMClient` |
 | `gateway.py` | `ChatUniversal` (reasoning-aware ChatOpenAI subclass), `create_quick_llm/embedding` |
 | `tracked_model.py` | `LLMClient`, `LLMUsage`, `UsageTrackingCallback` |
