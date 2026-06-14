@@ -33,7 +33,7 @@ sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
 # Import models lazily to avoid heavy imports for unrelated DBs
 from core.models import SqliteJSONB
-from core.migration_specs import get_db_path, load_metadata, sqlite_url
+from core.migration_specs import get_database_url, load_metadata
 
 # Alembic Config object
 config = context.config
@@ -49,11 +49,11 @@ BASE_DIR = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 
 DATABASES = {
     "users": {
-        "url": sqlite_url(get_db_path("users")),
+        "url": get_database_url("users"),
         "metadata": None,
     },
     "llm": {
-        "url": sqlite_url(get_db_path("llm")),
+        "url": get_database_url("llm"),
         "metadata": None,
     },
 }
@@ -371,34 +371,30 @@ def run_migrations_online() -> None:
     url = db_config["url"]
     target_meta = db_config["metadata"]
     
-    # 使用 NullPool 避免 SQLite锁定问题，并确保每次都用新连接
+    is_sqlite = url.startswith("sqlite:")
+    # SQLite 迁移使用 NullPool 避免文件锁残留；PostgreSQL 也保持短连接，迁移完成即释放。
     connectable = create_engine(url, poolclass=pool.NullPool)
 
     with connectable.connect() as connection:
-        # DEBUG: Check actual database file
-        try:
+        if is_sqlite:
             from sqlalchemy import text
             db_list = connection.execute(text("PRAGMA database_list")).fetchall()
             print(f"DEBUG: Connected databases: {db_list}")
-        except Exception:
-            pass
 
         # Clean up leftover temp tables from interrupted batch operations.
-        try:
+        if is_sqlite:
             from sqlalchemy import text
             temp_tables = connection.execute(
                 text("SELECT name FROM sqlite_master WHERE type='table' AND name LIKE '_alembic_tmp_%'")
             ).fetchall()
             for (name,) in temp_tables:
                 connection.execute(text(f"DROP TABLE IF EXISTS {name}"))
-        except Exception:
-            pass
 
         context.configure(
             connection=connection,
             target_metadata=target_meta,
-            # Enable batch mode, required for SQLite ALTER TABLE support
-            render_as_batch=True,
+            # SQLite 的 ALTER TABLE 能力有限，只有 SQLite 需要 batch mode。
+            render_as_batch=is_sqlite,
             # Compare type differences
             compare_type=True,
             include_object=_include_object,

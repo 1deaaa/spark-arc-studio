@@ -316,15 +316,15 @@ def semantic_search(query: str, scope: list[str] | None = None, k: int = 8) -> s
 
     service = VectorIndexService(user_id, project_name)
 
-    chroma_filter = None
+    vector_filter = None
     if scope:
         if len(scope) == 1:
-            chroma_filter = {"format_key": scope[0]}
+            vector_filter = {"format_key": scope[0]}
         else:
-            chroma_filter = {"format_key": {"$in": scope}}
+            vector_filter = {"format_key": {"$in": scope}}
 
     try:
-        hits = service.query(query, k=k, filter=chroma_filter)
+        hits = service.query(query, k=k, filter=vector_filter)
     except IndexBuildNotReadyError as e:
         build_state = (e.status_payload or {}).get("build_state", {})
         progress = build_state.get("progress", {})

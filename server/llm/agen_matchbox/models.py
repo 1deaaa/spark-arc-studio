@@ -8,6 +8,7 @@ from sqlalchemy import (
     DateTime,
     ForeignKey,
     Integer,
+    Index,
     Float,
     String,
     UniqueConstraint,
@@ -283,6 +284,12 @@ class UsageLogEntry(Base):
     用于支持时间范围查询，如"过去24小时的用量"。
     """
     __tablename__ = "usage_log_entries"
+    __table_args__ = (
+        Index("idx_usage_user_context", "user_id", "context_key"),
+        Index("idx_usage_user_created", "user_id", "created_at"),
+        Index("idx_usage_user_model_created", "user_id", "model_id", "created_at"),
+        Index("idx_usage_user_scope_created", "user_id", "quota_scope", "created_at"),
+    )
 
     id = Column(Integer, primary_key=True)
     user_id = Column(String(255), nullable=False, index=True)

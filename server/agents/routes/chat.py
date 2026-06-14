@@ -336,7 +336,7 @@ def _extract_director_sideband(text: str):
     return meta_str.strip(), rest
 
 
-_CHAT_CHECKPOINT_INTERVAL = 0.5
+_CHAT_CHECKPOINT_INTERVAL = 3.0
 
 
 def _make_llm_usage_context(task_id: str) -> str:

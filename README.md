@@ -585,11 +585,11 @@ graph TB
 
 #### 技术架构
 
-- **向量化管线**：基于 LangChain + Chroma 构建，通过火柴网关获取用户配置的 Embedding 模型，支持任意 OpenAI 兼容嵌入 API
+- **向量化管线**：基于 LanceDB 本地向量库构建，通过火柴网关获取用户配置的 Embedding 模型，支持任意 OpenAI 兼容嵌入 API
 - **懒构建 + 哈希增量**：首次搜索时自动构建索引，后续通过 MD5 文件哈希比对检测变更，未变更时复用已有索引
 - **分块策略**：`SemanticChunker` 按语义边界切分项目文本，保留叙事定位（`narrative_ref`）、行号范围等元数据
-- **中文项目名兼容**：Chroma collection name 通过 MD5 哈希转换，解决中文项目名不符合命名规范的问题
-- **批量向量化**：按 batch_size=10 分批调用嵌入 API，适配主流模型的批量限制
+- **中文项目名兼容**：LanceDB 表名通过 MD5 哈希转换，解决中文项目名不符合命名规范的问题
+- **批量向量化**：按 batch_size=50 分批调用嵌入 API，适配主流模型的批量限制
 
 ---
 
@@ -691,7 +691,7 @@ graph TB
 | [数据库自动迁移指南](docs/database-migration.md) | 开发者工作流、迁移接入指南、清理历史风险 |
 | [CI/CD 部署指南](docs/cicd-deployment.md) | Runner 配置、CI Secret、GitHub Actions 迁移 |
 | [AGENTS.md](AGENTS.md) | Agent 开发规范、新增 Agent 自检清单、提示词协议 |
-| [语义检索引擎](#4-语义检索引擎) | 双模式检索、项目级开关、懒构建+哈希增量、Chroma 向量存储 |
+| [语义检索引擎](#4-语义检索引擎) | 双模式检索、项目级开关、懒构建+哈希增量、LanceDB 向量存储 |
 | [LEGAL/README.md](LEGAL/README.md) | 法律与运营声明统一入口 |
 
 ---

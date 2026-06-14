@@ -1,7 +1,7 @@
 """
 项目级向量索引服务
 
-使用 Chroma 持久化向量库 + matchbox 云端 embedding。
+使用 LanceDB 持久化向量库 + matchbox 云端 embedding。
 支持懒构建、哈希增量更新、元数据过滤查询。
 """
 
@@ -10,12 +10,10 @@ import json
 import os
 import shutil
 import threading
-import gc
 from dataclasses import dataclass
 from datetime import datetime, timezone
 from typing import Any, Optional
 
-from langchain_chroma import Chroma
 from langchain_core.documents import Document
 from langchain_openai import OpenAIEmbeddings
 
@@ -32,9 +30,9 @@ _build_state_lock = threading.Lock()
 # ==================== 辅助函数 ====================
 
 def _safe_collection_name(user_id: str, project_name: str) -> str:
-    """生成 Chroma 合法的 collection name。
+    """生成 LanceDB 合法的表名。
 
-    Chroma 要求 name 仅含 [a-zA-Z0-9._-]，长度 3-512。
+    LanceDB 表名保持 ASCII，中文项目名通过 MD5 哈希转换为稳定标识符。
     中文项目名通过 MD5 哈希转换为合法标识符。
     """
     import re
@@ -86,15 +84,14 @@ _ACTIVE_BUILD_STATUSES = {"queued", "building", "cancelling"}
 # ==================== 向量索引服务 ====================
 
 class VectorIndexService:
-    """项目级向量索引服务（Chroma + matchbox embedding）"""
+    """项目级向量索引服务（LanceDB + matchbox embedding）"""
 
     def __init__(self, user_id: str, project_name: str):
         self.user_id = str(user_id)
         self.project_name = project_name
         self._project_path = get_project_path(user_id, project_name)
-        self._persist_dir = os.path.join(self._project_path, ".vector_index")
+        self._persist_dir = os.path.join(self._project_path, ".vector_index_lancedb")
         self._meta_path = os.path.join(self._persist_dir, "meta.json")
-        # Chroma collection name 仅允许 [a-zA-Z0-9._-]，中文项目名需哈希化
         self._collection_name = _safe_collection_name(user_id, project_name)
 
     # ==================== Embedding ====================
@@ -102,6 +99,118 @@ class VectorIndexService:
     def _get_embeddings(self) -> OpenAIEmbeddings:
         """通过 matchbox 获取用户配置的云端 embedding 模型"""
         return matchbox().get_user_embedding(self.user_id)
+
+    def _connect_db(self):
+        """连接当前项目的 LanceDB 本地库。"""
+        import lancedb
+
+        os.makedirs(self._persist_dir, exist_ok=True)
+        return lancedb.connect(self._persist_dir)
+
+    @staticmethod
+    def _list_tables(db: Any) -> set[str]:
+        """读取 LanceDB 表名，兼容新旧 Python API。"""
+        list_tables = getattr(db, "list_tables", None)
+        if callable(list_tables):
+            response = list_tables()
+            tables = getattr(response, "tables", response)
+            return {str(name) for name in tables}
+        table_names = getattr(db, "table_names", None)
+        if callable(table_names):
+            return {str(name) for name in table_names()}
+        return set()
+
+    def _open_table(self):
+        db = self._connect_db()
+        try:
+            return db.open_table(self._collection_name)
+        except Exception as exc:
+            raise IndexBuildNotReadyError(self.get_status(check_freshness=False)) from exc
+
+    def _table_exists(self) -> bool:
+        if not os.path.isdir(self._persist_dir):
+            return False
+        try:
+            db = self._connect_db()
+            return self._collection_name in self._list_tables(db)
+        except Exception:
+            return False
+
+    @staticmethod
+    def _escape_lance_sql(value: str) -> str:
+        return str(value).replace("'", "''")
+
+    @staticmethod
+    def _build_filter_expression(filter_payload: Optional[dict]) -> str | None:
+        """把工具层的简单 metadata filter 转成 LanceDB where 表达式。"""
+        if not filter_payload:
+            return None
+        format_value = filter_payload.get("format_key")
+        if isinstance(format_value, str):
+            return f"format_key = '{VectorIndexService._escape_lance_sql(format_value)}'"
+        if isinstance(format_value, dict) and "$in" in format_value:
+            values = [
+                f"'{VectorIndexService._escape_lance_sql(str(item))}'"
+                for item in (format_value.get("$in") or [])
+                if str(item)
+            ]
+            if values:
+                return f"format_key IN ({', '.join(values)})"
+        return None
+
+    @staticmethod
+    def _embed_documents(embeddings: OpenAIEmbeddings, documents: list[Document]) -> list[list[float]]:
+        texts = [doc.page_content for doc in documents]
+        return embeddings.embed_documents(texts)
+
+    @staticmethod
+    def _embed_query(embeddings: OpenAIEmbeddings, query_text: str) -> list[float]:
+        return embeddings.embed_query(query_text)
+
+    def _documents_to_rows(
+        self,
+        ids: list[str],
+        documents: list[Document],
+        vectors: list[list[float]],
+    ) -> list[dict[str, Any]]:
+        rows: list[dict[str, Any]] = []
+        for doc_id, doc, vector in zip(ids, documents, vectors):
+            meta = dict(doc.metadata or {})
+            rows.append({
+                "id": str(doc_id),
+                "vector": [float(value) for value in vector],
+                "text": doc.page_content,
+                "source": str(meta.get("source") or ""),
+                "format_key": str(meta.get("format_key") or ""),
+                "source_type": str(meta.get("source_type") or "project"),
+                "start_line": int(meta.get("start_line") or 0),
+                "end_line": int(meta.get("end_line") or 0),
+                "narrative_ref": str(meta.get("narrative_ref") or ""),
+                "attachment_id": str(meta.get("attachment_id") or ""),
+                "attachment_filename": str(meta.get("attachment_filename") or ""),
+                "attachment_chunk_index": int(meta.get("attachment_chunk_index") or 0),
+                "metadata_json": json.dumps(meta, ensure_ascii=False),
+            })
+        return rows
+
+    def _create_or_add_rows(self, rows: list[dict[str, Any]], *, overwrite: bool = False) -> None:
+        if not rows:
+            return
+        db = self._connect_db()
+        if overwrite or self._collection_name not in self._list_tables(db):
+            db.create_table(self._collection_name, data=rows, mode="overwrite")
+            return
+        table = db.open_table(self._collection_name)
+        table.add(rows)
+
+    def _delete_ids(self, ids: list[str]) -> None:
+        if not ids or not self._table_exists():
+            return
+        quoted = ", ".join(f"'{self._escape_lance_sql(item)}'" for item in ids if item)
+        if not quoted:
+            return
+        table = self._open_table()
+        table.delete(f"id IN ({quoted})")
 
     def _public_build_state(self, payload: dict | None) -> dict:
         state = {
@@ -204,8 +313,9 @@ class VectorIndexService:
             stored = dict(_build_state_registry.get(task_key) or {})
         if stored:
             return self._public_build_state(stored)
-        metadata = self._load_meta() if os.path.isdir(self._persist_dir) else {}
-        if os.path.isdir(self._persist_dir):
+        exists = self._table_exists()
+        metadata = self._load_meta() if exists else {}
+        if exists:
             return {
                 "status": "ready",
                 "stage": "ready",
@@ -255,36 +365,9 @@ class VectorIndexService:
             raise IndexBuildCancelledError("向量索引构建已取消")
 
     @staticmethod
-    def _release_vector_store(vector_store: Any | None) -> None:
-        """尽量释放 Chroma 持有的底层句柄，避免 Windows 删除目录失败。"""
-        if vector_store is None:
-            return
-        try:
-            client = getattr(vector_store, "_client", None)
-            system = getattr(client, "_system", None)
-            stop = getattr(system, "stop", None)
-            if callable(stop):
-                stop()
-        except Exception:
-            pass
-        try:
-            del vector_store
-        except Exception:
-            pass
-        gc.collect()
-
-    @staticmethod
     def release_process_resources() -> None:
-        """清理 Chroma 进程级缓存，删除项目时用于释放遗留文件句柄。"""
-        try:
-            from chromadb.api.client import SharedSystemClient
-
-            clear_cache = getattr(SharedSystemClient, "clear_system_cache", None)
-            if callable(clear_cache):
-                clear_cache()
-        except Exception:
-            pass
-        gc.collect()
+        """保留资源释放入口，供删除项目流程调用。"""
+        return None
 
     def cancel_background_build(self, wait_timeout: float = 5.0) -> dict:
         """请求取消后台索引构建，并在限定时间内等待线程主动退出。"""
@@ -345,10 +428,9 @@ class VectorIndexService:
             },
         )
 
-        vector_store: Chroma | None = None
         try:
             self._check_cancelled()
-            metadata = self._load_meta() if os.path.isdir(self._persist_dir) else {}
+            metadata = self._load_meta() if self._table_exists() else {}
             chunker = SemanticChunker()
             chunk_state = chunker.chunk_project_state(self.user_id, self.project_name, use_cache=True)
             self._check_cancelled()
@@ -384,7 +466,7 @@ class VectorIndexService:
             metadata_supported = self._supports_incremental_meta(metadata)
             full_rebuild = (
                 force_rebuild
-                or not os.path.isdir(self._persist_dir)
+                or not self._table_exists()
                 or not metadata_supported
             )
             file_doc_ids = self._normalize_file_doc_ids(metadata.get("file_doc_ids", {}))
@@ -435,7 +517,7 @@ class VectorIndexService:
                 },
             )
 
-            batch_size = 10
+            batch_size = 50
             if full_rebuild:
                 if os.path.isdir(self._persist_dir):
                     shutil.rmtree(self._persist_dir)
@@ -450,30 +532,17 @@ class VectorIndexService:
                     rebuilt_doc_ids[rel_path] = ids
 
                     if documents:
-                        if vector_store is None:
-                            first_batch = documents[:batch_size]
-                            first_ids = ids[:batch_size]
-                            vector_store = Chroma.from_documents(
-                                documents=first_batch,
-                                embedding=embeddings,
-                                ids=first_ids,
-                                collection_name=self._collection_name,
-                                persist_directory=self._persist_dir,
+                        for i in range(0, len(documents), batch_size):
+                            self._check_cancelled()
+                            batch_documents = documents[i:i + batch_size]
+                            batch_ids = ids[i:i + batch_size]
+                            vectors = self._embed_documents(embeddings, batch_documents)
+                            rows = self._documents_to_rows(batch_ids, batch_documents, vectors)
+                            self._create_or_add_rows(
+                                rows,
+                                overwrite=(embedded_chunks == 0 and processed_files == 0),
                             )
-                            embedded_chunks += len(first_batch)
-                            for i in range(batch_size, len(documents), batch_size):
-                                self._check_cancelled()
-                                batch_documents = documents[i:i + batch_size]
-                                batch_ids = ids[i:i + batch_size]
-                                vector_store.add_documents(batch_documents, ids=batch_ids)
-                                embedded_chunks += len(batch_documents)
-                        else:
-                            for i in range(0, len(documents), batch_size):
-                                self._check_cancelled()
-                                batch_documents = documents[i:i + batch_size]
-                                batch_ids = ids[i:i + batch_size]
-                                vector_store.add_documents(batch_documents, ids=batch_ids)
-                                embedded_chunks += len(batch_documents)
+                            embedded_chunks += len(batch_documents)
 
                     processed_files += 1
                     self._set_build_state(
@@ -490,16 +559,8 @@ class VectorIndexService:
                         },
                     )
 
-                if vector_store is None:
-                    raise RuntimeError("未找到可用于构建向量索引的项目文本。")
-
                 file_doc_ids = rebuilt_doc_ids
             else:
-                vector_store = Chroma(
-                    collection_name=self._collection_name,
-                    embedding_function=embeddings,
-                    persist_directory=self._persist_dir,
-                )
                 # ---- chunk 级增量：基于 chunk_id 做 diff ----
                 # _build_chunk_id 已把 chunk 文本的 MD5 编码进 id，
                 # 所以「id 相同」就等价于「分块文本完全一致」，可以原样复用旧向量。
@@ -548,7 +609,7 @@ class VectorIndexService:
 
                 if delete_ids:
                     self._check_cancelled()
-                    vector_store.delete(ids=delete_ids)
+                    self._delete_ids(delete_ids)
 
                 # 同步元数据中的 file_doc_ids：删除文件清掉条目，其他覆盖为最新完整 id 列表
                 for rel_path in removed_files:
@@ -588,7 +649,9 @@ class VectorIndexService:
                             self._check_cancelled()
                             batch_documents = documents[i:i + batch_size]
                             batch_ids = chunk_ids[i:i + batch_size]
-                            vector_store.add_documents(batch_documents, ids=batch_ids)
+                            vectors = self._embed_documents(embeddings, batch_documents)
+                            rows = self._documents_to_rows(batch_ids, batch_documents, vectors)
+                            self._create_or_add_rows(rows)
                             embedded_chunks += len(batch_documents)
                             self._set_build_state(
                                 status="building",
@@ -669,8 +732,6 @@ class VectorIndexService:
                 finished_at=datetime.now(timezone.utc).isoformat(),
             )
             raise
-        finally:
-            self._release_vector_store(vector_store)
 
     # ==================== 查询 ====================
 
@@ -687,53 +748,45 @@ class VectorIndexService:
         Args:
             query_text: 自然语言查询
             k: 返回结果数量
-            filter: Chroma 元数据过滤条件，如 {"format_key": "arc"}
-            score_threshold: 最低相似度分数阈值（0.0 = 不过滤）
+            filter: 元数据过滤条件，如 {"format_key": "arc"}
+            score_threshold: 最大向量距离阈值（0.0 = 不过滤）
         """
         status = self.get_status(check_freshness=True)
         if not status.get("exists"):
             raise IndexBuildNotReadyError(status)
 
         embeddings = self._get_embeddings()
-        vector_store = None
-        try:
-            vector_store = Chroma(
-                collection_name=self._collection_name,
-                embedding_function=embeddings,
-                persist_directory=self._persist_dir,
-            )
-
-            # 执行搜索
-            search_kwargs = {"k": k}
-            if filter:
-                search_kwargs["filter"] = filter
-
-            results = vector_store.similarity_search_with_score(query_text, **search_kwargs)
-        finally:
-            self._release_vector_store(vector_store)
+        table = self._open_table()
+        query_vector = self._embed_query(embeddings, query_text)
+        query = table.search(query_vector)
+        where_expr = self._build_filter_expression(filter)
+        if where_expr:
+            query = query.where(where_expr, prefilter=True)
+        results = query.limit(k).to_list()
 
         # 组装 SearchHit
         hits: list[SearchHit] = []
-        for idx, (doc, score) in enumerate(results):
-            if score_threshold > 0 and score < score_threshold:
+        for idx, row in enumerate(results):
+            score = row.get("_distance", row.get("_score", 0.0))
+            if score_threshold > 0 and score > score_threshold:
                 continue
-            source = doc.metadata.get("source", "")
+            source = str(row.get("source") or "")
             abs_path = os.path.join(self._project_path, source) if source else ""
-            source_type = str(doc.metadata.get("source_type") or "project")
+            source_type = str(row.get("source_type") or "project")
             hits.append(SearchHit(
                 index=idx,
                 file_path=abs_path,
                 rel_path=source,
-                format_key=doc.metadata.get("format_key", ""),
-                start_line=doc.metadata.get("start_line", 0),
-                end_line=doc.metadata.get("end_line", 0),
-                narrative_ref=doc.metadata.get("narrative_ref", ""),
-                match_text=doc.page_content,
+                format_key=str(row.get("format_key") or ""),
+                start_line=int(row.get("start_line") or 0),
+                end_line=int(row.get("end_line") or 0),
+                narrative_ref=str(row.get("narrative_ref") or ""),
+                match_text=str(row.get("text") or ""),
                 score=float(score),
                 source_type=source_type,
-                attachment_id=str(doc.metadata.get("attachment_id") or ""),
-                attachment_filename=str(doc.metadata.get("attachment_filename") or ""),
-                attachment_chunk_index=int(doc.metadata.get("attachment_chunk_index") or 0),
+                attachment_id=str(row.get("attachment_id") or ""),
+                attachment_filename=str(row.get("attachment_filename") or ""),
+                attachment_chunk_index=int(row.get("attachment_chunk_index") or 0),
             ))
 
         return hits
@@ -742,7 +795,7 @@ class VectorIndexService:
 
     def get_status(self, check_freshness: bool = True) -> dict:
         """索引状态"""
-        exists = os.path.isdir(self._persist_dir)
+        exists = self._table_exists()
         metadata = self._load_meta() if exists else {}
         build_state = self.get_build_state()
         needs_rebuild = False
@@ -770,6 +823,7 @@ class VectorIndexService:
             "user_id": self.user_id,
             "exists": exists,
             "persist_dir": self._persist_dir,
+            "backend": "lancedb",
             "metadata": metadata,
             "needs_rebuild": needs_rebuild,
             "build_state": build_state,
@@ -789,6 +843,7 @@ class VectorIndexService:
             "project": self.project_name,
             "user_id": self.user_id,
             "removed": removed,
+            "backend": "lancedb",
         }
 
     # ==================== 内部方法 ====================

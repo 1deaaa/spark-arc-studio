@@ -17,25 +17,34 @@ from sqlalchemy import (
 	JSON,
 	UniqueConstraint,
 	Index,
-	create_engine,
 	ForeignKey,
-    Text,
+	Text,
 )
 from sqlalchemy.orm import declarative_base, relationship, sessionmaker
 from sqlalchemy.types import TypeDecorator, BLOB
+from sqlalchemy.dialects.postgresql import JSONB as PG_JSONB
 import json
+
+from core.db_engine import create_engine_from_env
 
 UserInfo = declarative_base()
 StoryData = declarative_base()
 
 class SqliteJSONB(TypeDecorator):
-    """自定义 SQLite JSONB 类型，使用 BLOB 存储并支持原生 jsonb() 优化。"""
+    """跨数据库 JSON 类型，兼容历史 SQLite BLOB，并在 PostgreSQL 下使用 JSONB。"""
     impl = BLOB
     cache_ok = True
+
+    def load_dialect_impl(self, dialect):
+        if dialect.name == "postgresql":
+            return dialect.type_descriptor(PG_JSONB())
+        return dialect.type_descriptor(BLOB())
 
     def process_bind_param(self, value, dialect):
         if value is None:
             return None
+        if dialect.name == "postgresql":
+            return value
         # 在写入时，我们返回字节串。如果需要利用 SQLite 的 jsonb() 函数，
         # 可以在 SQL 层面使用 func.jsonb()。
         return json.dumps(value, ensure_ascii=False).encode('utf-8')
@@ -43,7 +52,13 @@ class SqliteJSONB(TypeDecorator):
     def process_result_value(self, value, dialect):
         if value is None:
             return None
-        return json.loads(value.decode('utf-8'))
+        if dialect.name == "postgresql":
+            return value
+        if isinstance(value, bytes):
+            return json.loads(value.decode('utf-8'))
+        if isinstance(value, str):
+            return json.loads(value)
+        return value
 
 ###系统用户相关###
 class User(UserInfo):
@@ -105,6 +120,8 @@ class ChatMessage(UserInfo):
 
 	__table_args__ = (
 		Index("idx_chat_session", "user_id", "project_name", "agent_id", "context_key"),
+		Index("idx_chat_session_timestamp", "user_id", "project_name", "agent_id", "context_key", "timestamp"),
+		Index("idx_chat_session_id", "user_id", "project_name", "agent_id", "context_key", "id"),
 	)
 
 	def __repr__(self):
@@ -283,7 +300,12 @@ import os
 BASE_DIR = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 user_db_path = os.path.join(BASE_DIR, 'data', 'users.db')
 
-user_engine = create_engine(f'sqlite:///{user_db_path}', echo=False, future=True)
+user_engine = create_engine_from_env(
+    env_key="SPARKARC_USERS_DATABASE_URL",
+    default_sqlite_path=user_db_path,
+    echo=False,
+    future=True,
+)
 UserInfoSession = sessionmaker(bind=user_engine, expire_on_commit=False, future=True)
 #expire_on_commit参数指的是在提交事务后，是否立即过期会话中的对象 设为false一般用于绑定的对象只读的情况
 

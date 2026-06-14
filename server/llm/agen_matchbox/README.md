@@ -49,7 +49,7 @@
 - **动态模型探测**：内置独立的模型探测工具 (`probe_platform_models`)，可以探测任何兼容OpenAI接口的平台所支持的模型列表。
   - **推理内容/计费字段可视化（平台测试）**：GUI 的“测试模型”会展示原始响应 JSON，部分平台会返回 `reasoning_content`、`usage` 或 `billing` 相关字段，可直接在日志中查看。
   - **图形化配置工具**：提供一个基于 `Tkinter` 的 GUI 工具（`matchbox_cfg_gui.py`），完全无需依赖前端配置，**直接操作数据库**，支持添加/编辑/删除平台与模型、加密存储 API Key、探测和测试模型，以及从配置文件重置数据库或将数据库导出到 YAML。
-- **数据库持久化**：使用 SQLite 存储用户配置、平台和模型信息，数据持久可靠。
+- **数据库持久化**：默认使用 SQLite 存储用户配置、平台和模型信息；生产环境可通过 `AGENT_MATCHBOX_DATABASE_URL` 切换到 PostgreSQL。
 - **自动配置修正**：当用户的配置失效（如模型或平台被删除），系统会自动回退到第一个可用的默认平台，保证服务的可用性。
 
 ## 📂 文件结构
@@ -82,7 +82,7 @@
 │   ├── probe.py           # 探测功能 Mixin
 │   ├── dpi.py             # 高分屏适配与窗口尺寸策略
 │   └── theme.py           # GUI 主题、配色与表格样式
-├── llm_config.db          # (自动生成) SQLite 数据库文件
+├── llm_config.db          # (自动生成) 默认 SQLite 数据库文件
 └── README.md              # 本文档
 ```
 
@@ -428,8 +428,8 @@ POST   /api/ai/admin/reload-from-yaml       # 从配置文件强制重置数据�
     - **最佳实践**：始终使用环境变量。GUI 工具可以帮你轻松实现这一点。
 
 3. **数据库文件**
-    - 默认会在同目录下生成 `llm_config.db`。这是一个SQLite文件，包含了所有用户数据和同步后的系统平台数据。请妥善保管。
-    - 如果需要更换数据库，可以修改 `AIManager` 类中的 `create_engine` 部分。
+    - 默认会在同目录下生成 `llm_config.db`。这是一个 SQLite 文件，包含了所有用户数据和同步后的系统平台数据。请妥善保管。
+    - 如需使用 PostgreSQL，设置 `AGENT_MATCHBOX_DATABASE_URL=postgresql+psycopg://user:password@host:5432/dbname`。该变量属于 Agent Matchbox 组件本身，方便在不同项目中复用。
 
 4. **模型探测失败？**
     - **检查`base_url`**：确保URL正确，并且末尾是否需要 `/v1`。

@@ -23,7 +23,7 @@ import threading
 import time
 from typing import Dict, Any, Optional, List
 
-from sqlalchemy import create_engine, text
+from sqlalchemy import text
 from sqlalchemy.orm import sessionmaker, selectinload
 
 from .models import (
@@ -44,6 +44,7 @@ from .config import (
 from .env_utils import get_env_var
 from .paths import get_db_file_path, get_state_file_path, get_config_file_path
 from .security import SecurityManager
+from core.db_engine import create_configured_engine, normalize_database_url
 
 from .admin import AdminMixin
 from .user_services import UserServicesMixin
@@ -81,8 +82,11 @@ class AIManagerBase:
     def __init__(self, db_name: str = "llm_config.db"):
         db_path = get_db_file_path(db_name)
         db_path.parent.mkdir(parents=True, exist_ok=True)
-        db_url = f"sqlite:///{db_path.as_posix()}"
-        self.engine = create_engine(db_url)
+        db_url = normalize_database_url(
+            env_key="AGENT_MATCHBOX_DATABASE_URL",
+            default_sqlite_path=db_path,
+        )
+        self.engine = create_configured_engine(db_url, future=True)
         # 注意：表创建现由 Alembic 迁移管理
         # 首次部署时运行: cd server && alembic upgrade head -x db=llm
         # 保留 create_all 以确保向后兼容（无 Alembic 环境时自动创建表）

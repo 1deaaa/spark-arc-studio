@@ -9,6 +9,7 @@ from alembic.script import ScriptDirectory
 
 from core.migration_specs import (
     BASE_DIR as MIGRATION_BASE_DIR,
+    get_database_url,
     get_db_path,
     get_version_dir,
     load_metadata,
@@ -468,6 +469,26 @@ def _heal_orphan_revision(db_name: str, db_path: str, base_dir: str) -> None:
 
 def run_db_upgrade(db_name: str, base_dir: str) -> None:
     """对指定数据库执行 upgrade head（进程内调用）。"""
+    database_url = get_database_url(db_name)
+    if not database_url.startswith("sqlite:"):
+        head_rev = _get_head_revision(base_dir, db_name)
+        if not head_rev:
+            logger.warning(f"⚠️ [{db_name}] No migration scripts detected (head is empty). Skipping auto-upgrade.")
+            return
+        logger.info(f"🔄 Upgrading [{db_name}] PostgreSQL database to head.")
+        original_cwd = os.getcwd()
+        try:
+            os.chdir(base_dir)
+            alembic_cfg = _build_alembic_config(base_dir, db_name)
+            command.upgrade(alembic_cfg, "head")
+            logger.info(f"✅ [{db_name}] PostgreSQL upgrade completed.")
+        finally:
+            try:
+                os.chdir(original_cwd)
+            except Exception:
+                pass
+        return
+
     db_path = _get_db_path(db_name)
 
     # 1) 快速检查：已是 head 直接跳过

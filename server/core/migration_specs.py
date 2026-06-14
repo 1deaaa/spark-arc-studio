@@ -83,6 +83,30 @@ def get_db_path(db_name: str) -> Path:
     return _resolve_path(spec.default_relative_path)
 
 
+def get_database_url(db_name: str) -> str:
+    """返回迁移目标数据库 URL。
+
+    默认仍使用 SQLite 文件；配置 PostgreSQL URL 后，Alembic 与运行时共用同一目标。
+    """
+
+    spec = get_db_spec(db_name)
+    alembic_override = (os.environ.get(spec.env_key) or "").strip()
+    if alembic_override:
+        if "://" in alembic_override or alembic_override.startswith("sqlite:"):
+            return alembic_override
+        return sqlite_url(_resolve_path(alembic_override))
+
+    if db_name == "users":
+        raw = (os.environ.get("SPARKARC_USERS_DATABASE_URL") or "").strip()
+        if raw:
+            return raw
+    elif db_name == "llm":
+        raw = (os.environ.get("AGENT_MATCHBOX_DATABASE_URL") or "").strip()
+        if raw:
+            return raw
+    return sqlite_url(get_db_path(db_name))
+
+
 def get_version_dir(db_name: str, *, base_dir: Path | str | None = None) -> Path:
     spec = get_db_spec(db_name)
     root = Path(base_dir).resolve() if base_dir is not None else BASE_DIR

@@ -45,6 +45,8 @@
 - `SPARKARC_AUTO_MIGRATE_REPAIR_HEAD_DRIFT=1`：当 `alembic_version` 已是 head 但 DB 缺表/缺列时，允许启动期按 Models 补缺失对象。默认关闭，避免开发机悄悄修库后吞掉 migration。
 - `SPARKARC_AUTO_MIGRATE_ALLOW_DROPS=1`：孤儿版本自愈时允许删除 Models 未定义的额外列/表。默认关闭；除非已备份数据库且确认这些结构无用，否则不要开启。
 - `SPARKARC_ALEMBIC_USERS_DB` / `SPARKARC_ALEMBIC_LLM_DB`：覆盖 Alembic 目标 DB 路径。未设置时，LLM DB 会跟随 `AGENT_MATCHBOX_HOME`，保证迁移目标和运行时 manager 使用同一个文件。
+- `SPARKARC_USERS_DATABASE_URL`：覆盖 SparkArc 用户主库连接串。未设置时使用 `server/data/users.db`。
+- `AGENT_MATCHBOX_DATABASE_URL`：覆盖 Agent Matchbox 组件数据库连接串。未设置时使用组件目录下的 `llm_config.db`。
 
 ---
 
@@ -129,23 +131,38 @@ python clear_migration.py --yes
 
 ---
 
-## 5. PostgreSQL 迁移路径
+## 5. SQLite / PostgreSQL 双模式
 
-### 5.1 为什么现在不需要迁移
+SparkArc 默认保持 SQLite 零部署；生产部署可把平台主库切到 PostgreSQL。
 
-SparkArc 当前使用 SQLite，对项目定位而言并非瓶颈：
+### 5.1 连接串
 
-- **非大规模运营场景**：SQLite 单机并发足以覆盖目标用户规模，无需分布式 DB
-- **零运维部署**：单文件 `users.db` + 每项目 `stories.db`，无需安装/配置/备份外部数据库
-- **快速迭代**：改模型 → `gen_migration.py` → 启动自动升级，全链路无外部依赖
+```bash
+# SparkArc 用户、聊天、分享、反馈等平台主库
+SPARKARC_USERS_DATABASE_URL=postgresql+psycopg://user:password@localhost:5432/sparkarc
 
-**结论：除非出现明确的 SQLite 性能天花板（如并发写入 > 50 QPS 或单库 > 10GB），否则不建议迁移。**
+# Agent Matchbox 独立组件库：平台、模型、密钥、用量日志、兑换码等
+AGENT_MATCHBOX_DATABASE_URL=postgresql+psycopg://user:password@localhost:5432/sparkarc
+```
 
-### 5.2 如果将来需要迁移，调查结论
+两个变量都不设置时，系统继续使用默认 SQLite 文件。Agent Matchbox 是可复用的大模型配置组件，必须使用组件级 `AGENT_MATCHBOX_DATABASE_URL`，不要依赖 SparkArc 专属变量。
+
+### 5.2 不迁移的项目级数据库
+
+每个项目的 `stories.db` 继续使用 SQLite。它是用户私有、轻量、几乎无并发的项目快照/导出格式，仍服务于版本、分享、试玩和下载链路，不纳入 PostgreSQL 主线。
+
+项目级语义索引也不使用 PostgreSQL/pgvector。默认后端是每项目本地 LanceDB 目录 `.vector_index_lancedb`，适合单人写作项目的文本规模，旧 Chroma 索引无需迁移，重建即可。
+
+### 5.3 当前类型策略
 
 #### 现状：`SqliteJSONB` 自定义类型
 
-`core/models.py` 中的 `SqliteJSONB` 是一个 `TypeDecorator`，底层 `impl = BLOB`，实际存储方式为：
+`core/models.py` 中的 `SqliteJSONB` 是一个 dialect-aware `TypeDecorator`：
+
+- SQLite：继续兼容历史 BLOB JSON，避免破坏既有本地数据。
+- PostgreSQL：映射为原生 `JSONB`。
+
+历史 SQLite 存储方式为：
 
 ```
 Python dict → json.dumps → UTF-8 bytes → BLOB 列
@@ -153,52 +170,15 @@ Python dict → json.dumps → UTF-8 bytes → BLOB 列
 
 这不是 SQLite 3.45+ 的原生 JSONB 格式，只是在 BLOB 里存了 UTF-8 编码的 JSON 文本。
 
-#### 迁移路径
-
-**第一步：替换 `SqliteJSONB` 为 dialect-aware 的 `PortableJSON`**
-
-```python
-# core/models.py
-from sqlalchemy.types import TypeDecorator, JSON
-from sqlalchemy.dialects.postgresql import JSONB as PG_JSONB
-
-class PortableJSON(TypeDecorator):
-    """跨 dialect JSON 类型：SQLite → JSON(TEXT)，PostgreSQL → JSONB"""
-    impl = JSON
-    cache_ok = True
-
-    def load_dialect_impl(self, dialect):
-        if dialect.name == 'postgresql':
-            return dialect.type_descriptor(PG_JSONB)
-        return dialect.type_descriptor(JSON)
-```
-
-Python 侧读写代码**完全不变**——仍然是 `dict` 进 `dict` 出。
-
-**第二步：SQLite 端数据迁移（BLOB → TEXT）**
-
-写一次 Alembic migration，把现有 `BLOB` 列中的 UTF-8 JSON 字节串转为 `TEXT`，让 SQLAlchemy `JSON` 类型接管。此步在 SQLite 内完成，PG 尚未介入。
-
-**第三步：引擎连接配置化**
-
-将 `core/models.py` 中硬编码的 `sqlite:///data/users.db` 改为从环境变量/配置文件读取，支持 `postgresql://` 连接串。
-
-**第四步：PG 端建表**
-
-`PortableJSON` 在 PG 下自动映射为 `jsonb`，Alembic 会生成正确的 `CREATE TABLE` 语句。`stories.db`（每项目独立）的迁移策略相同，需逐项目处理。
-
 #### 受影响范围
 
 | 数据库 | 表 | 需改字段 |
 |---|---|---|
 | users.db | `chat_messages` | `content`, `metadata_json` |
-| stories.db | `stories` | `conditions`, `effects`, `dlg_json` |
-| stories.db | `binding_act` | `act_args` |
-| stories.db | `registry` | `value` |
 
-其余 8 张表（`users`、`user_sessions`、`shares`、`project_versions`、`system_platform_quotas`、`user_feedbacks`、`binding_chr`、`characters`）均为纯标量字段，无需任何改动。
+`stories.db` 中也存在 JSON 字段，但它继续作为项目级 SQLite 文件保留，不属于 PostgreSQL 双模式主线。其余平台表（`users`、`user_sessions`、`shares`、`project_versions`、`system_platform_quotas`、`user_feedbacks` 等）均为纯标量字段，无需任何改动。
 
 #### 额外注意
 
-- `chat_manager.py` 中的 `datetime.utcfromtimestamp()` 在 Python 3.12+ 已弃用，迁移时应同步改为 `datetime.fromtimestamp(..., tz=timezone.utc)`
 - SQLite 的 `BOOLEAN` 实际存储为 `INTEGER`，PG 有原生 `BOOLEAN`，SQLAlchemy 会自动处理差异
+- PostgreSQL 模式下启动期直接运行 Alembic upgrade，不执行 SQLite 专属的文件级自愈逻辑。

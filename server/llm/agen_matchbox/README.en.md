@@ -44,7 +44,7 @@ Each scope can have independent window limits and total limits.
 ### 4. Lower Ops Overhead
 
 - No extra Redis/OneAPI stack required
-- SQLite + SQLAlchemy persistence
+- SQLite + SQLAlchemy persistence by default; PostgreSQL can be enabled with `AGENT_MATCHBOX_DATABASE_URL`
 - GUI management tool included
 
 ---
