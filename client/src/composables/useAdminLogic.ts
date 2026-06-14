@@ -1,7 +1,8 @@
 
 import { ref, computed, onMounted, h } from 'vue';
+import { useI18n } from 'vue-i18n';
 import { useMessage, NTag, NButton, NIcon, NPopconfirm, NSpace, NTooltip } from 'naive-ui';
-import { Trash, Ban, Unlock } from '@lucide/vue';
+import { Trash, Ban, Unlock, UserCog } from '@lucide/vue';
 import {
     getMyUsage,
     getMyQuotaStatus,
@@ -175,6 +176,7 @@ function createEmptyPricingForm(): PricingForm {
 }
 
 export function useAdminLogic() {
+    const { t } = useI18n();
     const message = useMessage();
 
     const loading = ref(false);
@@ -331,41 +333,55 @@ export function useAdminLogic() {
             {
                 title: '操作',
                 key: 'actions',
-                width: 280,
+                width: 120,
                 align: 'center' as const,
                 render: (row: UserItem) => {
                     const isSelf = myId !== null && row.user_id === myId;
                     const isInitialAdmin = row.user_id === 1;
                     const protectedFromBan = isSelf || isInitialAdmin;
                     const protectedFromDelete = isSelf || isInitialAdmin;
-                    const protectReason = isInitialAdmin ? '初始管理员受保护' : '不能对自己执行此操作';
+                    const protectReason = isInitialAdmin
+                        ? t('views.dashboard.desktop.protectedInitialAdmin')
+                        : t('views.dashboard.desktop.protectedSelf');
 
-                    const adminBtn = h(NButton, {
+                    const adminBtnRaw = h(NButton, {
                         size: 'tiny',
                         type: row.is_admin ? 'warning' : 'primary',
                         secondary: true,
                         disabled: isInitialAdmin && row.is_admin,
+                        circle: true,
                         onClick: () => toggleAdmin(row),
-                    }, () => row.is_admin ? '取消管理员' : '设为管理员');
+                    }, {
+                        icon: () => h(NIcon, null, () => h(UserCog)),
+                    });
+                    const adminBtn = h(NTooltip, null, {
+                        trigger: () => h('span', { style: 'display:inline-flex' }, [adminBtnRaw]),
+                        default: () => row.is_admin
+                            ? t('views.dashboard.desktop.cancelAdmin')
+                            : t('views.dashboard.desktop.setAdmin'),
+                    });
 
                     const banBtnRaw = h(NButton, {
                         size: 'tiny',
                         type: row.is_active ? 'error' : 'success',
                         secondary: true,
                         disabled: protectedFromBan,
+                        circle: true,
                     }, {
                         icon: () => h(NIcon, null, () => h(row.is_active ? Ban : Unlock)),
-                        default: () => row.is_active ? '封禁' : '解封',
+                    });
+                    const banTooltip = h(NTooltip, null, {
+                        trigger: () => h('span', { style: 'display:inline-flex' }, [banBtnRaw]),
+                        default: () => protectedFromBan
+                            ? protectReason
+                            : (row.is_active ? t('views.dashboard.desktop.banUser') : t('views.dashboard.desktop.unbanUser')),
                     });
                     const banBtn = protectedFromBan
-                        ? h(NTooltip, null, {
-                            trigger: () => h('span', { style: 'display:inline-flex' }, [banBtnRaw]),
-                            default: () => protectReason,
-                        })
+                        ? banTooltip
                         : h(NPopconfirm, {
                             onPositiveClick: () => toggleUserActive(row),
                         }, {
-                            trigger: () => banBtnRaw,
+                            trigger: () => banTooltip,
                             default: () => row.is_active
                                 ? `确定封禁用户「${row.username}」？封禁后该用户将无法登录`
                                 : `确定解封用户「${row.username}」？`,
@@ -376,19 +392,22 @@ export function useAdminLogic() {
                         type: 'error',
                         tertiary: true,
                         disabled: protectedFromDelete,
+                        circle: true,
                     }, {
                         icon: () => h(NIcon, null, () => h(Trash)),
-                        default: () => '删除',
+                    });
+                    const delTooltip = h(NTooltip, null, {
+                        trigger: () => h('span', { style: 'display:inline-flex' }, [delBtnRaw]),
+                        default: () => protectedFromDelete
+                            ? protectReason
+                            : t('views.dashboard.desktop.deleteUser'),
                     });
                     const delBtn = protectedFromDelete
-                        ? h(NTooltip, null, {
-                            trigger: () => h('span', { style: 'display:inline-flex' }, [delBtnRaw]),
-                            default: () => protectReason,
-                        })
+                        ? delTooltip
                         : h(NPopconfirm, {
                             onPositiveClick: () => deleteUser(row),
                         }, {
-                            trigger: () => delBtnRaw,
+                            trigger: () => delTooltip,
                             default: () => `确定删除用户「${row.username}」？此操作不可恢复`,
                         });
 

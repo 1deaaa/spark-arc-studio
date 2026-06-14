@@ -400,7 +400,7 @@ async function quickPreview() {
 
   previewing.value = true;
   try {
-    const contentFormat = sceneStore.workspaceMode === 'novel' ? 'novel' : 'script';
+    const contentFormat = sceneStore.fileFormat === 'novel' || sceneStore.workspaceMode === 'novel' ? 'novel' : 'script';
     const res = await fetchWithAuth(`/api/versions/${projectStore.currentProject}/preview`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },

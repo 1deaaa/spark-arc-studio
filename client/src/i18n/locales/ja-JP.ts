@@ -1979,6 +1979,13 @@ const jaJP = {
         changePasswordButton: 'パスワード変更',
         passwordChangeSuccess: 'パスワードを変更しました',
         passwordChangeFailed: 'パスワードの変更に失敗しました',
+        setAdmin: '管理者に設定',
+        cancelAdmin: '管理者を解除',
+        banUser: '停止',
+        unbanUser: '停止解除',
+        deleteUser: '削除',
+        protectedInitialAdmin: '初期管理者は保護されています',
+        protectedSelf: '自分自身には実行できません',
       },
       mobile: {
         usageOverview: '利用概要',

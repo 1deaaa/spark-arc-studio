@@ -1974,6 +1974,13 @@ const koKR = {
         changePasswordButton: '비밀번호 갱신',
         passwordChangeSuccess: '비밀번호가 안전하게 변경되었습니다',
         passwordChangeFailed: '비밀번호 변경 처리 실패',
+        setAdmin: '관리자 지정',
+        cancelAdmin: '관리자 해제',
+        banUser: '차단',
+        unbanUser: '차단 해제',
+        deleteUser: '삭제',
+        protectedInitialAdmin: '초기 관리자는 보호됩니다',
+        protectedSelf: '자기 자신에게는 실행할 수 없습니다',
       },
       mobile: {
         usageOverview: '사용 현황 요약',

@@ -325,46 +325,61 @@ const startDrag = createDragHandler({
     return true;
   }
 });
+function getResponsiveLayout() {
+  const width = window.innerWidth || 1920;
+  if (width < 1500) {
+    return {
+      colX: [36, 360, 684, 1008],
+      rowHeight: 260,
+      startY: 60,
+      nodeWidth: 300,
+    };
+  }
+  return {
+    colX: [60, 560, 1060, 1560],
+    rowHeight: 300,
+    startY: 80,
+    nodeWidth: 372,
+  };
+}
+
 function buildDefaultPositions(registry: ReadonlyArray<{ key: string }>) {
   // 根据 Agent 的数据流向固定位置
   // Col 1: Director & Style
   // Col 2: Muse & Lorebook
   // Col 3: Showrunner & Scriptwriter
   // Col 4: Quality Review & Router
-  
+
   const positions: Record<string, { x: number; y: number }> = {};
-  const colX = [60, 560, 1060, 1560];
-  
+  const layout = getResponsiveLayout();
+
   // 定义每个 Agent 的固定位置 (基于 key)
   const manualMap = {
     // Col 1: Director & Style
     'agent_director':      { col: 0, row: 0.5 },
     'agent_style':         { col: 0, row: 1.5 },
-    
+
     // Col 2: Muse & Lorebook
     'agent_muse':          { col: 1, row: 0.5 },
     'agent_lorebook':      { col: 1, row: 1.5 },
-    
+
     // Col 3: Showrunner & Scriptwriter
     'agent_showrunner':    { col: 2, row: 0.5 },
     'agent_scriptwriter':  { col: 2, row: 1.5 },
-    
+
     'agent_critic':        { col: 3, row: 0.5 },
   };
-
-  const rowHeight = 300;
-  const startY = 80;
 
   for (const a of registry) {
     const config = manualMap[a.key];
     if (config) {
       positions[a.key] = {
-        x: colX[config.col],
-        y: startY + config.row * rowHeight
+        x: layout.colX[config.col],
+        y: layout.startY + config.row * layout.rowHeight
       };
     } else {
       // 兜底位置：放在第一列下方
-      positions[a.key] = { x: colX[0], y: startY + 3 * rowHeight };
+      positions[a.key] = { x: layout.colX[0], y: layout.startY + 3 * layout.rowHeight };
     }
   }
   return positions;
@@ -630,8 +645,22 @@ async function init() {
   }
 }
 
+function updateLayoutOnResize() {
+  if (!nodes.value.length) return;
+  const defaults = buildDefaultPositions(nodes.value.map(n => ({ key: n.id })));
+  for (const node of nodes.value) {
+    const pos = defaults[node.id];
+    if (pos) {
+      node.x = pos.x;
+      node.y = pos.y;
+    }
+  }
+  layoutTick.value++;
+}
+
 onMounted(async () => {
   await init();
+  window.addEventListener('resize', updateLayoutOnResize);
 });
 
 watch(
@@ -650,6 +679,7 @@ watch(
 
 onBeforeUnmount(() => {
   if (layoutRaf) cancelAnimationFrame(layoutRaf);
+  window.removeEventListener('resize', updateLayoutOnResize);
 });
 </script>
 
@@ -854,5 +884,27 @@ onBeforeUnmount(() => {
 
 .error-mask {
   color: var(--spark-danger);
+}
+
+@media (max-width: 1500px) {
+  .agent-node {
+    width: 300px;
+  }
+
+  .agent-node-title {
+    font-size: var(--spark-fs-base);
+  }
+
+  .agent-node-desc {
+    font-size: var(--spark-fs-2xs);
+  }
+
+  .agent-node-body {
+    padding: 8px 10px 10px;
+  }
+
+  .inline-fields {
+    gap: 6px;
+  }
 }
 </style>

@@ -413,6 +413,8 @@ class LLMBuilderMixin:
                 raise ValueError(f"平台 '{plat.name}' 的 API Key 未设置。")
 
             kwargs = self._apply_sdk_request_compat(kwargs)
+            # Embedding 接口不支持 stream_usage，避免 OpenAI SDK 报错
+            kwargs.pop("stream_usage", None)
 
             return OpenAIEmbeddings(
                 model=model.model_name,

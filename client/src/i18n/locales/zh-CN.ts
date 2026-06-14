@@ -1977,6 +1977,13 @@ const zhCN = {
         changePasswordButton: '修改密码',
         passwordChangeSuccess: '密码修改成功',
         passwordChangeFailed: '密码修改失败',
+        setAdmin: '设为管理员',
+        cancelAdmin: '取消管理员',
+        banUser: '封禁',
+        unbanUser: '解封',
+        deleteUser: '删除用户',
+        protectedInitialAdmin: '初始管理员受保护',
+        protectedSelf: '不能对自己执行此操作',
       },
       mobile: {
         usageOverview: '使用概览',

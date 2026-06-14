@@ -1047,6 +1047,7 @@ async function handleMultiNode() {
       sceneName: sceneStore.currentScene?.scene || '',
       nodeId: sceneStore.currentNode?.id || 0,
       lastNodeText,
+      exportFormat: isNovelMode.value ? 'novel' : 'arc',
     };
 
     let firstPass = await streamComposeRequest(payload, {

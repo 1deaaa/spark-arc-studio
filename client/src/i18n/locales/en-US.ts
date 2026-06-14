@@ -1979,6 +1979,13 @@ const enUS = {
         changePasswordButton: 'Change Password',
         passwordChangeSuccess: 'Password changed successfully',
         passwordChangeFailed: 'Failed to change password',
+        setAdmin: 'Set Admin',
+        cancelAdmin: 'Remove Admin',
+        banUser: 'Ban',
+        unbanUser: 'Unban',
+        deleteUser: 'Delete User',
+        protectedInitialAdmin: 'Initial admin is protected',
+        protectedSelf: 'Cannot perform this action on yourself',
       },
       mobile: {
         usageOverview: 'Usage Overview',

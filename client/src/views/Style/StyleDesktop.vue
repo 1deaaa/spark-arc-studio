@@ -36,14 +36,6 @@
         </SparkAlert>
       </div>
 
-      <div class="runtime-panel">
-        <n-collapse>
-          <n-collapse-item :title="t('views.style.desktop.runtimeBindings')" name="runtime-bindings">
-            <BindingEditor />
-          </n-collapse-item>
-        </n-collapse>
-      </div>
-
       <div v-if="isLoadingList" class="loading-state">
         <n-spin size="large" :description="t('views.style.desktop.loadingStyles')" />
       </div>
@@ -107,6 +99,14 @@
             </div>
           </div>
         </div>
+      </div>
+
+      <div class="runtime-panel">
+        <n-collapse>
+          <n-collapse-item :title="t('views.style.desktop.runtimeBindings')" name="runtime-bindings">
+            <BindingEditor />
+          </n-collapse-item>
+        </n-collapse>
       </div>
     </div>
 

@@ -420,23 +420,31 @@ function formatTokenWithCredit(tokens, credit, noCredit = false) {
   width: 100%;
   min-width: 0;
   overflow-y: auto;
+  overflow-x: hidden;
   padding: var(--spark-panel-padding);
 }
 
 .admin-container {
   display: grid;
-  grid-template-columns: 0.74fr 1.06fr 1fr;
-  gap: 24px;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 16px;
   max-width: 100%;
 }
 
 .admin-container--compact {
-  grid-template-columns: 1fr 1fr;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
 }
 
 .admin-column {
   display: flex;
   flex-direction: column;
+  min-width: 0;
+  gap: 16px;
+}
+
+.admin-column > * {
+  min-width: 0;
+  max-width: 100%;
 }
 
 .usage-model-table {
@@ -445,11 +453,11 @@ function formatTokenWithCredit(tokens, credit, noCredit = false) {
 
 .usage-model-table :deep(.n-data-table-th),
 .usage-model-table :deep(.n-data-table-td) {
-  white-space: nowrap;
+  white-space: normal;
 }
 
 .usage-model-table :deep(.n-data-table-td__ellipsis) {
-  white-space: nowrap;
+  white-space: normal;
 }
 
 @media (max-width: 1200px) {

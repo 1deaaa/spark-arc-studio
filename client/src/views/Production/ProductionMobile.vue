@@ -60,13 +60,13 @@
           />
           <n-button
             size="small"
-            quaternary
+            secondary
             @click="toggleWorkspaceMode"
-            :title="workspaceMode === 'script' ? t('views.production.mobile.switchToNovel') : t('views.production.mobile.switchToScript')"
           >
             <template #icon>
               <n-icon :component="workspaceMode === 'script' ? BookOpen : SquarePen" />
             </template>
+            {{ workspaceMode === 'script' ? t('views.production.mobile.switchToNovel') : t('views.production.mobile.switchToScript') }}
           </n-button>
         </div>
 
@@ -305,8 +305,23 @@ const storyOptions = computed<SelectOption[]>(() => flatStoryOptions.value);
 
 const groupedStoryOptions = computed(() => groupedOptions.value);
 
-function toggleWorkspaceMode() {
-  sceneStore.workspaceMode = workspaceMode.value === 'script' ? 'novel' : 'script';
+async function toggleWorkspaceMode() {
+  const nextMode = workspaceMode.value === 'script' ? 'novel' : 'script';
+  sceneStore.workspaceMode = nextMode;
+  sceneStore.fileFormat = nextMode === 'novel' ? 'novel' : 'arc';
+  if (projectId.value) {
+    await fileStore.loadFileTree(projectId.value, nextMode);
+  }
+  // 如果当前选中文件格式与新模式不符，清空选择避免以旧格式加载
+  const selectedPath = fileStore.selectedFile?.path || '';
+  if (selectedPath) {
+    const isMd = selectedPath.toLowerCase().endsWith('.md');
+    if ((nextMode === 'novel' && !isMd) || (nextMode === 'script' && isMd)) {
+      fileStore.selectedFile = null;
+      selectedFilePath.value = '';
+      sceneStore.resetForWorkspaceMode(nextMode);
+    }
+  }
 }
 
 const outlineReady = computed(() => !!outlineData.value?.nodes?.length);

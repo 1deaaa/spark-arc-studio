@@ -16,12 +16,6 @@
         </SparkTag>
     </div>
 
-    <n-collapse class="runtime-collapse">
-      <n-collapse-item :title="t('views.style.desktop.runtimeBindings')" name="runtime-bindings">
-        <BindingEditor />
-      </n-collapse-item>
-    </n-collapse>
-
     <!-- Content -->
     <div class="style-list-mobile">
         <n-spin v-if="isLoadingList" />
@@ -61,6 +55,12 @@
            <n-icon class="chevron"><ChevronRight /></n-icon>
         </div>
     </div>
+
+    <n-collapse class="runtime-collapse">
+      <n-collapse-item :title="t('views.style.desktop.runtimeBindings')" name="runtime-bindings">
+        <BindingEditor />
+      </n-collapse-item>
+    </n-collapse>
 
     <div class="mobile-footer-actions">
        <n-button

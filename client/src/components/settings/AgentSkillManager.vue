@@ -186,6 +186,15 @@ onMounted(loadSkills);
 .agent-skill-manager {
   height: 100%;
   min-height: 0;
+  display: flex;
+  flex-direction: column;
+}
+
+.agent-skill-manager :deep(.n-card__content) {
+  flex: 1 1 auto;
+  min-height: 0;
+  display: flex;
+  flex-direction: column;
 }
 
 .skill-header {
@@ -219,7 +228,8 @@ onMounted(loadSkills);
   display: flex;
   flex-direction: column;
   gap: 8px;
-  max-height: 420px;
+  flex: 1 1 auto;
+  min-height: 0;
   overflow: auto;
 }
 

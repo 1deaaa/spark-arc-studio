@@ -48,14 +48,22 @@ def build_sdk_compat_headers(
     return headers
 
 
-def apply_sdk_request_compat(kwargs: Dict[str, Any]) -> Dict[str, Any]:
-    """统一注入 SDK 兼容参数。"""
+def apply_sdk_request_compat(kwargs: Dict[str, Any], *, include_stream_usage: bool = True) -> Dict[str, Any]:
+    """统一注入 SDK 兼容参数。
+
+    Args:
+        kwargs: 待注入的 SDK 参数。
+        include_stream_usage: 是否注入 ``stream_usage``。
+            Embedding 接口（如 ``OpenAIEmbeddings.embed_documents``）不支持该参数，
+            需要显式传 ``False`` 避免 ``Embeddings.create()`` 报错。
+    """
     compat_headers = build_sdk_compat_headers(kwargs.get("default_headers"))
     if compat_headers is not None:
         kwargs["default_headers"] = compat_headers
-    stream_usage_mode = str(get_env_var("SPARKARC_OPENAI_COMPAT_STREAM_USAGE", "auto") or "auto").strip().lower()
-    if stream_usage_mode in {"1", "true", "yes", "on", "auto"}:
-        kwargs.setdefault("stream_usage", True)
+    if include_stream_usage:
+        stream_usage_mode = str(get_env_var("SPARKARC_OPENAI_COMPAT_STREAM_USAGE", "auto") or "auto").strip().lower()
+        if stream_usage_mode in {"1", "true", "yes", "on", "auto"}:
+            kwargs.setdefault("stream_usage", True)
     return kwargs
 
 
@@ -181,7 +189,7 @@ def create_quick_embedding(
 ) -> OpenAIEmbeddings:
     """创建轻量 Embedding 客户端，不触发 AIManager/数据库逻辑。"""
     payload = dict(kwargs)
-    payload = apply_sdk_request_compat(payload)
+    payload = apply_sdk_request_compat(payload, include_stream_usage=False)
     return OpenAIEmbeddings(
         model=model_name,
         api_key=api_key,

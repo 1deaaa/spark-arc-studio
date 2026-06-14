@@ -7,9 +7,27 @@
       </div>
     </template>
     <template #header-extra>
-      <n-button text size="tiny" @click="loadData" :loading="loading">
-        <template #icon><n-icon :component="RefreshCw" /></template>
-      </n-button>
+      <n-space align="center" :size="4">
+        <n-tooltip trigger="hover">
+          <template #trigger>
+            <n-button
+              text
+              size="tiny"
+              circle
+              class="prompt-entry-btn"
+              :class="{ customized: promptCustomized }"
+              :disabled="!selectedAgentKey"
+              @click="openPromptModal"
+            >
+              <template #icon><n-icon :component="FilePenLine" /></template>
+            </n-button>
+          </template>
+          {{ t('components.agentModelCard.promptPreferences') }}
+        </n-tooltip>
+        <n-button text size="tiny" @click="loadData" :loading="loading">
+          <template #icon><n-icon :component="RefreshCw" /></template>
+        </n-button>
+      </n-space>
     </template>
 
     <n-spin :show="loading">
@@ -29,16 +47,6 @@
       <div v-if="selectedAgentKey" class="config-content">
         <div class="agent-desc-block">
           <div class="agent-desc-header">
-            <n-button
-              size="small"
-              secondary
-              circle
-              class="prompt-entry-btn"
-              :class="{ customized: promptCustomized }"
-              @click="openPromptModal"
-            >
-              <template #icon><n-icon :component="FilePenLine" /></template>
-            </n-button>
             <div class="agent-desc-copy">
               <div class="agent-desc-title">{{ t('components.agentModelCard.promptPreferences') }}</div>
               <div class="agent-desc">{{ currentAgentDesc }}</div>
@@ -122,7 +130,7 @@
 <script setup lang="ts">
 import { ref, computed, onMounted, watch } from 'vue';
 import { useI18n } from 'vue-i18n';
-import { NCard, NButton, NIcon, NSelect, NFormItem, NTabs, NTabPane, NSpin } from 'naive-ui';
+import { NCard, NButton, NIcon, NSelect, NFormItem, NTabs, NTabPane, NSpin, NSpace, NTooltip } from 'naive-ui';
 import { FilePenLine, Link, RefreshCw, Rocket } from '@lucide/vue';
 import { fetchAgentUsageBindings, saveAgentBinding } from '../../services/agentUsage';
 import {

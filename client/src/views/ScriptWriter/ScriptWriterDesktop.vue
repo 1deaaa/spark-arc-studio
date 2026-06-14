@@ -24,12 +24,15 @@
             <div class="sidebar-section file-section">
               <div class="file-section-header">
                 <span class="file-section-title">{{ t('views.scriptWriter.desktop.workspaceManager') }}</span>
-                <SparkSegment
-                  :model-value="workspaceMode"
-                  :options="workspaceModeOptions"
-                  size="tiny"
-                  @update:model-value="handleWorkspaceModeChange"
-                />
+                <div class="workspace-mode-switch">
+                  <span class="mode-label">{{ isNovelWorkspace ? t('views.scriptWriter.desktop.modeNovel') : t('views.scriptWriter.desktop.modeScript') }}</span>
+                  <SparkSegment
+                    :model-value="workspaceMode"
+                    :options="workspaceModeOptions"
+                    size="small"
+                    @update:model-value="handleWorkspaceModeChange"
+                  />
+                </div>
               </div>
               <FileTree :key="workspaceMode" />
             </div>
@@ -361,6 +364,18 @@ h2 {
   font-size: var(--spark-fs-base);
   padding: 0;
   margin: 0;
+}
+
+.workspace-mode-switch {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.mode-label {
+  font-size: var(--spark-fs-xs);
+  color: var(--spark-text-muted);
+  white-space: nowrap;
 }
 
 .workspace-mode-enter-from,

@@ -199,6 +199,7 @@ import SparkAlert from '../share/SparkAlert.vue';
 import SparkSegment from '../share/SparkSegment.vue';
 import { Pause, Play, SkipForward, TriangleAlert } from '@lucide/vue';
 import { useProjectStore } from '../stores/projectStore';
+import { useSceneStore } from '../stores/sceneStore';
 import { fetchEventSource } from '@microsoft/fetch-event-source';
 import { fetchWithAuth, resolveApiUrl } from '@/services/apiClient';
 import { useMobile } from '@/composables/useMobile';
@@ -216,6 +217,7 @@ const emit = defineEmits(['update:show', 'refresh-files']);
 const { t } = useI18n();
 
 const projectStore = useProjectStore();
+const sceneStore = useSceneStore();
 const dialog = useDialog();
 const message = useMessage();
 const consoleRef = ref<HTMLElement | null>(null);
@@ -243,7 +245,7 @@ const loadingRemoteState = ref(false);
 const config = ref({
   mode: 'chapter_by_chapter',
   startChapterIndex: 0,
-  exportFormat: 'arc'
+  exportFormat: sceneStore.fileFormat === 'novel' ? 'novel' : 'arc'
 });
 
 // Computed properties for UI
@@ -686,6 +688,12 @@ function closeModal() {
 watch(() => visible.value, (show) => {
   if (show) {
     refreshGenerationState();
+  }
+});
+
+watch(() => sceneStore.fileFormat, (fmt) => {
+  if (fmt === 'novel' || fmt === 'arc') {
+    config.value.exportFormat = fmt;
   }
 });
 
