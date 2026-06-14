@@ -5,5 +5,7 @@
 __pycache__/
 .vscode/
 *.db
+*.db-wal
+*.db-shm
 matchbox_state.json
 .sparkarc_managed_manifest

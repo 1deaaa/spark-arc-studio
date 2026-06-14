@@ -13,6 +13,8 @@
 shares_data/
 __pycache__/
 *.db
+*.db-wal
+*.db-shm
 _userdata/
 server/data/notices.json
 server/llm/agen_matchbox/matchbox_state.json
