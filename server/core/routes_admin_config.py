@@ -18,7 +18,6 @@ from .verification import (
     update_registration_verification_settings,
 )
 from llm.agen_matchbox.config import LLM_AUTO_KEY, USE_SYS_LLM_CONFIG
-from llm.agen_matchbox.security import SecurityManager
 from llm.agen_matchbox.env_utils import has_env_file_var
 import os
 
@@ -41,6 +40,8 @@ class AdminConfigUpdate(BaseModel):
 
 class LLMKeyUpdate(BaseModel):
     key: str
+    old_key: Optional[str] = None
+    allow_clear_unrecoverable: bool = False
 
 @admin_config_router.get("/global")
 async def get_global_config(admin_user: dict = Depends(require_admin)):
@@ -113,15 +114,37 @@ async def update_global_config(data: AdminConfigUpdate, admin_user: dict = Depen
 @admin_config_router.post("/llm-key")
 async def set_llm_key(data: LLMKeyUpdate, admin_user: dict = Depends(require_admin)):
     """设置 LLM_KEY (主密码)"""
+    from llm.agen_matchbox import matchbox
+    from llm.agen_matchbox.manager import MasterKeyMigrationRequiredError
+
     key = data.key.strip()
     if not key:
         raise HTTPException(status_code=400, detail="密钥不能为空")
         
     try:
-        # 更新 SecurityManager（会自动设置环境变量、写入 .env 并刷新平台配置）
-        SecurityManager.get_instance().set_key(key, persist=True)
+        # 统一走 AIManager 的主密钥迁移入口：首次设置、换密、历史密文清理都在同一条管线内完成。
+        summary = matchbox().rotate_master_key(
+            new_key=key,
+            old_key=(data.old_key or None),
+            persist=True,
+            allow_clear_unrecoverable=bool(data.allow_clear_unrecoverable),
+        )
         
-        return {"success": True, "message": "LLM_KEY 已设置并保存到 .env 文件"}
+        return {
+            "success": True,
+            "message": "LLM_KEY 已设置并保存到 .env 文件",
+            "migration": summary,
+        }
+    except MasterKeyMigrationRequiredError as e:
+        raise HTTPException(
+            status_code=409,
+            detail={
+                "code": "master_key_migration_required",
+                "message": str(e),
+                "unresolved_count": e.unresolved_count,
+                "sample_labels": e.sample_labels,
+            },
+        )
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))
 

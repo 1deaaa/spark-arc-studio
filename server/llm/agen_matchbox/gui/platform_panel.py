@@ -216,7 +216,7 @@ class PlatformPanelMixin:
                 messagebox.showwarning("警告", "请先选择一个有效的平台")
                 return
 
-        if not messagebox.askyesno("确认删除", f"确定要删除平台 '{platform_name}' 吗？\n该平台及其模型将从列表中移除。"):
+        if not messagebox.askyesno("确认禁用", f"确定要禁用平台 '{platform_name}' 吗？\n该平台及其模型会从默认列表中隐藏，但不会被硬删除。"):
             return
 
         try:
@@ -226,10 +226,10 @@ class PlatformPanelMixin:
             self.ai_manager.disable_platform(db_id, admin_mode=True)
             self._invalidate_probe_cache(platform_name)
             self.load_config_from_db()
-            self.log(f"✓ 平台 '{platform_name}' 已删除", tag="success")
+            self.log(f"✓ 平台 '{platform_name}' 已禁用", tag="success")
         except Exception as e:
-            self.log(f"✗ 删除平台失败: {e}")
-            messagebox.showerror("错误", f"删除平台失败: {e}")
+            self.log(f"✗ 禁用平台失败: {e}")
+            messagebox.showerror("错误", f"禁用平台失败: {e}")
 
     def save_platform_url(self):
         """保存平台的 base_url（调用后端 admin_update_sys_platform）。"""

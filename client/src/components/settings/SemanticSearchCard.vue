@@ -28,7 +28,7 @@
                 </n-button>
             </div>
 
-            <div class="local-embedding-bar">
+            <div v-if="isAdmin" class="local-embedding-bar">
                 <div class="embedding-info">
                     <span class="dot" :class="localEmbeddingStatus?.alive ? 'dot-ok' : 'dot-off'" />
                     <span class="embedding-label">{{ t('components.semanticSearchCard.localEmbedding') }}</span>
@@ -248,6 +248,14 @@ const localEmbeddingLabel = computed(() => {
     if (status.alive) {
         return t('components.semanticSearchCard.localEmbeddingAlive', { url: status.base_url || '' });
     }
+    const startup = status.startup;
+    if (startup && ['starting', 'downloading_model', 'model_ready', 'downloading_server', 'server_ready', 'loading'].includes(startup.phase)) {
+        const progress = typeof startup.progress === 'number' ? `${startup.progress}%` : '';
+        return [startup.message || t('components.semanticSearchCard.localEmbeddingStarting'), progress].filter(Boolean).join(' ');
+    }
+    if (startup?.phase === 'error' && startup.error) {
+        return startup.error;
+    }
     if (status.running) {
         return t('components.semanticSearchCard.localEmbeddingStarting');
     }
@@ -284,6 +292,10 @@ function hasAnyBuilding(): boolean {
     graphragMap.value.forEach((row) => {
         if (isGraphRAGBuilding(row)) busy = true;
     });
+    const localPhase = localEmbeddingStatus.value?.startup?.phase;
+    if (isAdmin.value && localEmbeddingEnabled.value && localPhase && !['ready', 'error', 'idle'].includes(localPhase)) {
+        busy = true;
+    }
     return busy;
 }
 
@@ -443,7 +455,7 @@ async function loadData(options: { silent?: boolean } = {}) {
         const [semanticStatus, graphragStatus, localStatus] = await Promise.all([
             fetchSemanticSearchStatus(),
             fetchGraphRAGStatus(),
-            fetchLocalEmbeddingStatus().catch(() => null),
+            isAdmin.value ? fetchLocalEmbeddingStatus().catch(() => null) : Promise.resolve(null),
         ]);
 
         embeddingReady.value = semanticStatus.embedding_ready;
@@ -701,6 +713,7 @@ async function handleLocalEmbeddingToggle(enabled: boolean) {
     } finally {
         togglingLocalEmbedding.value = false;
         await loadData({ silent: true });
+        syncStatusPolling();
     }
 }
 
@@ -724,14 +737,13 @@ async function handleDefaultGraphRAGToggle(val: boolean) {
     }
 }
 
-onMounted(() => {
-    getUserInfo()
-        .then((user) => {
-            isAdmin.value = Boolean(user?.is_admin);
-        })
-        .catch(() => {
-            isAdmin.value = false;
-        });
+onMounted(async () => {
+    try {
+        const user = await getUserInfo();
+        isAdmin.value = Boolean(user?.is_admin);
+    } catch {
+        isAdmin.value = false;
+    }
     loadData();
 });
 

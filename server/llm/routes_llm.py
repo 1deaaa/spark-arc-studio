@@ -932,7 +932,7 @@ async def delete_platform(
 
 ):
 
-    """删除平台"""
+    """软禁用平台"""
 
     user_id = str(user['user_id'])
 
@@ -944,7 +944,7 @@ async def delete_platform(
 
     except Exception as e:
 
-        print(f"Failed to delete platform: {e}")
+        print(f"Failed to disable platform: {e}")
 
         raise HTTPException(status_code=400, detail=str(e))
 
@@ -2113,7 +2113,7 @@ async def admin_delete_sys_platform(
 
     """
 
-    管理员：删除系统平台（软禁用）
+    管理员：软禁用系统平台
 
     平台及其模型不会被硬删除，仅标记为 disable=1
 
@@ -2147,7 +2147,7 @@ async def admin_import_from_yaml(
 
     """
 
-    管理员：上传配置文件并即时覆盖系统平台配置。
+    管理员：上传配置文件并增量同步系统平台配置。
 
 
 
@@ -2159,7 +2159,7 @@ async def admin_import_from_yaml(
 
 
 
-    ⚠️ 警告：此操作会覆盖数据库中的系统平台配置。
+    说明：此操作只增量添加/更新上传文件中的系统平台与模型，不删除已有平台，不覆盖已有密钥。
 
     """
 
@@ -2249,9 +2249,9 @@ async def admin_reload_from_yaml(
 
     
 
-    ⚠️ 警告：此操作会覆盖数据库中的系统平台配置
+    ⚠️ 警告：此操作会重置数据库中的系统平台配置
 
-    - 删除 YAML 中不存在的平台
+    - 软禁用 YAML 中不存在的平台
 
     - 更新已存在平台的名称和模型
 
@@ -2353,7 +2353,7 @@ async def admin_save_to_yaml(
 
     except Exception as e:
 
-        print(f"Failed to overwrite YAML: {e}")
+        print(f"Failed to save YAML: {e}")
 
         raise HTTPException(status_code=500, detail=str(e))
 

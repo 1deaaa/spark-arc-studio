@@ -159,6 +159,7 @@ Run the checks that match your change surface. For anything that touches streams
 ### Architecture contract tests
 
 SparkArc keeps a small set of architecture contract tests for stable infrastructure. They must not call real LLMs, consume tokens, require API keys, or depend on external services. Use fakes, monkeypatching, temporary directories, and in-memory streams instead.
+This is a stable-contract subset of backend tests, not a catch-all backend test directory; ordinary feature regression or short-lived bug regression should live closer to the behavior being exercised.
 
 Prefer tests that protect stable contracts: event shapes, state-machine outcomes, registry consistency, replay/reconnect behavior, and shared runtime entrypoints. Avoid long-lived tests that snapshot full prompts, generated model text, fragile DOM structure, or incidental implementation details. If a test repeatedly needs large edits during normal bug fixing, move it closer to the stable protocol boundary or keep it as a short-lived business regression test.
 

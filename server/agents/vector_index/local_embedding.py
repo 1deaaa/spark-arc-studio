@@ -10,10 +10,12 @@ import os
 import platform
 import shutil
 import subprocess
+import tarfile
 import threading
 import time
 import urllib.request
 import zipfile
+from dataclasses import dataclass
 from pathlib import Path
 from typing import Any
 
@@ -38,10 +40,11 @@ LOCAL_EMBEDDING_UBATCH = int(os.getenv("SPARKARC_LOCAL_EMBEDDING_UBATCH", "256")
 LOCAL_EMBEDDING_STARTUP_TIMEOUT = float(os.getenv("SPARKARC_LOCAL_EMBEDDING_STARTUP_TIMEOUT", "120") or "120")
 LOCAL_EMBEDDING_AUTO_DOWNLOAD_SERVER = os.getenv("SPARKARC_LOCAL_EMBEDDING_AUTO_DOWNLOAD_SERVER", "1").lower() not in {"0", "false", "no"}
 LLAMA_CPP_RELEASE_TAG = os.getenv("SPARKARC_LLAMA_CPP_RELEASE_TAG", "b9632")
-LLAMA_CPP_RELEASE_BASE_URL = os.getenv(
-    "SPARKARC_LLAMA_CPP_RELEASE_BASE_URL",
-    "https://github.com/ggml-org/llama.cpp/releases/download",
-)
+DOWNLOAD_ENDPOINT_PROBE_TIMEOUT = 1.5
+HF_OFFICIAL_ENDPOINT = "https://huggingface.co"
+HF_MIRROR_ENDPOINT = "https://hf-mirror.com"
+GITHUB_RELEASE_BASE_URL = "https://github.com/ggml-org/llama.cpp/releases/download"
+GITHUB_RELEASE_PROXY_PREFIX = "https://gh-proxy.com/"
 QWEN3_GGUF_REPO_ID = "Qwen/Qwen3-Embedding-0.6B-GGUF"
 QWEN3_GGUF_FILENAME = "Qwen3-Embedding-0.6B-Q8_0.gguf"
 QWEN3_GGUF_MIN_BYTES = 600 * 1024 * 1024
@@ -49,6 +52,73 @@ QWEN3_GGUF_MIN_BYTES = 600 * 1024 * 1024
 _lock = threading.Lock()
 _process: subprocess.Popen | None = None
 _alive_cache: tuple[float, bool] = (0.0, False)
+_hf_endpoint_cache: tuple[float, str | None] = (0.0, None)
+_startup_state: dict[str, Any] = {
+    "phase": "idle",
+    "message": "",
+    "progress": 0,
+    "error": "",
+    "updated_at": "",
+}
+
+
+@dataclass(frozen=True)
+class _ReleaseAsset:
+    name: str
+    archive_type: str
+
+
+def _now_state_ts() -> str:
+    return time.strftime("%Y-%m-%dT%H:%M:%SZ", time.gmtime())
+
+
+def _set_startup_state(phase: str, message: str = "", *, progress: int | None = None, error: str = "") -> None:
+    with _lock:
+        _startup_state.update({
+            "phase": phase,
+            "message": message,
+            "error": error,
+            "updated_at": _now_state_ts(),
+        })
+        if progress is not None:
+            _startup_state["progress"] = max(0, min(100, int(progress)))
+
+
+def _get_startup_state() -> dict[str, Any]:
+    with _lock:
+        return dict(_startup_state)
+
+
+def local_embedding_model_name() -> str:
+    """返回 UI 与测试接口使用的本地嵌入模型显示名。"""
+    return f"local:{QWEN3_EMBEDDING_MODEL}"
+
+
+def _probe_url_available(url: str, timeout: float | None = None) -> bool:
+    """用真实网络连通性判断下载端点是否可用。"""
+    request = urllib.request.Request(url, method="HEAD", headers={"User-Agent": "SparkArc-local-embedding"})
+    try:
+        with urllib.request.urlopen(request, timeout=timeout or DOWNLOAD_ENDPOINT_PROBE_TIMEOUT) as response:
+            return 200 <= int(response.status) < 400
+    except Exception:
+        return False
+
+
+def _hf_endpoint() -> str | None:
+    global _hf_endpoint_cache
+    cached_at, cached_endpoint = _hf_endpoint_cache
+    if time.monotonic() - cached_at < 300:
+        return cached_endpoint
+    official_probe = f"{HF_OFFICIAL_ENDPOINT}/{QWEN3_GGUF_REPO_ID}/resolve/main/{QWEN3_GGUF_FILENAME}"
+    if _probe_url_available(official_probe):
+        _hf_endpoint_cache = (time.monotonic(), None)
+        return None
+    mirror_probe = f"{HF_MIRROR_ENDPOINT}/{QWEN3_GGUF_REPO_ID}/resolve/main/{QWEN3_GGUF_FILENAME}"
+    if _probe_url_available(mirror_probe):
+        _hf_endpoint_cache = (time.monotonic(), HF_MIRROR_ENDPOINT)
+        return HF_MIRROR_ENDPOINT
+    _hf_endpoint_cache = (time.monotonic(), None)
+    return None
 
 
 def get_default_model_path() -> Path:
@@ -80,19 +150,24 @@ def ensure_local_model_available() -> Path:
     if target.is_file() and target.stat().st_size >= QWEN3_GGUF_MIN_BYTES:
         return target
 
+    _set_startup_state("downloading_model", "正在下载本地嵌入模型", progress=10)
     target.parent.mkdir(parents=True, exist_ok=True)
     try:
         from huggingface_hub import hf_hub_download
     except ImportError as exc:
         raise RuntimeError("缺少 huggingface_hub，无法自动下载本地嵌入模型") from exc
 
-    downloaded = hf_hub_download(
-        repo_id=QWEN3_GGUF_REPO_ID,
-        filename=QWEN3_GGUF_FILENAME,
-        local_dir=str(target.parent),
-        local_dir_use_symlinks=False,
-        resume_download=True,
-    )
+    download_kwargs = {
+        "repo_id": QWEN3_GGUF_REPO_ID,
+        "filename": QWEN3_GGUF_FILENAME,
+        "local_dir": str(target.parent),
+        "local_dir_use_symlinks": False,
+        "resume_download": True,
+    }
+    endpoint = _hf_endpoint()
+    if endpoint:
+        download_kwargs["endpoint"] = endpoint
+    downloaded = hf_hub_download(**download_kwargs)
     downloaded_path = Path(downloaded).resolve()
     if downloaded_path != target and downloaded_path.is_file():
         if target.exists():
@@ -100,6 +175,7 @@ def ensure_local_model_available() -> Path:
         downloaded_path.replace(target)
     if not target.is_file() or target.stat().st_size < QWEN3_GGUF_MIN_BYTES:
         raise RuntimeError(f"本地嵌入模型下载不完整：{target}")
+    _set_startup_state("model_ready", "本地嵌入模型已就绪", progress=40)
     return target
 
 
@@ -138,24 +214,63 @@ def _find_cached_llama_server() -> Path | None:
     return None
 
 
-def _llama_cpp_asset_name(tag: str) -> str:
+def _llama_cpp_assets(tag: str) -> list[_ReleaseAsset]:
     system = platform.system().lower()
     machine = platform.machine().lower()
     is_arm = machine in {"arm64", "aarch64"}
     is_x64 = machine in {"x86_64", "amd64", "x64"}
 
     if system == "windows":
-        return f"llama-{tag}-bin-win-arm64.zip" if is_arm else f"llama-{tag}-bin-win-cpu-x64.zip"
+        return [
+            _ReleaseAsset(f"llama-{tag}-bin-win-arm64.zip", "zip"),
+        ] if is_arm else [
+            _ReleaseAsset(f"llama-{tag}-bin-win-cpu-x64.zip", "zip"),
+        ]
     if system == "linux":
         if is_arm:
-            return f"llama-{tag}-bin-ubuntu-arm64.zip"
+            return [
+                _ReleaseAsset(f"llama-{tag}-bin-ubuntu-arm64.tar.gz", "tar.gz"),
+                _ReleaseAsset(f"llama-{tag}-bin-ubuntu-arm64.zip", "zip"),
+            ]
         if is_x64:
-            return f"llama-{tag}-bin-ubuntu-x64.zip"
+            return [
+                _ReleaseAsset(f"llama-{tag}-bin-ubuntu-x64.tar.gz", "tar.gz"),
+                _ReleaseAsset(f"llama-{tag}-bin-ubuntu-x64.zip", "zip"),
+            ]
 
     raise RuntimeError(
         f"当前平台暂不支持自动下载 llama.cpp 预编译包：{platform.system()} {platform.machine()}。"
         "请手动安装 llama-server，或通过 SPARKARC_LOCAL_EMBEDDING_SERVER_EXE 指定路径。"
     )
+
+
+def _download_url_candidates(tag: str, asset_name: str) -> list[str]:
+    official_url = f"{GITHUB_RELEASE_BASE_URL}/{tag}/{asset_name}"
+    return [
+        official_url,
+        f"{GITHUB_RELEASE_PROXY_PREFIX}{official_url}",
+    ]
+
+
+def _select_download_url(candidates: list[str]) -> list[str]:
+    """按真实可达性排序候选下载 URL，避免先打明显不可用的端点。"""
+    reachable = [url for url in candidates if _probe_url_available(url)]
+    if reachable:
+        return reachable + [url for url in candidates if url not in reachable]
+    return candidates
+
+
+def _extract_archive(archive_path: Path, extract_dir: Path, archive_type: str) -> None:
+    extract_dir.mkdir(parents=True, exist_ok=True)
+    if archive_type == "zip":
+        with zipfile.ZipFile(archive_path, "r") as archive:
+            archive.extractall(extract_dir)
+        return
+    if archive_type == "tar.gz":
+        with tarfile.open(archive_path, "r:gz") as archive:
+            archive.extractall(extract_dir)
+        return
+    raise RuntimeError(f"不支持的 llama.cpp 压缩包格式：{archive_type}")
 
 
 def ensure_llama_server_available() -> Path:
@@ -171,25 +286,40 @@ def ensure_llama_server_available() -> Path:
         )
 
     tag = LLAMA_CPP_RELEASE_TAG.strip() or "b9632"
-    asset_name = _llama_cpp_asset_name(tag)
     runtime_dir = get_llama_cpp_runtime_dir()
     runtime_dir.mkdir(parents=True, exist_ok=True)
-    archive_path = runtime_dir / asset_name
-    extract_dir = runtime_dir / asset_name.removesuffix(".zip")
 
-    if not archive_path.is_file():
-        url = f"{LLAMA_CPP_RELEASE_BASE_URL.rstrip('/')}/{tag}/{asset_name}"
-        urllib.request.urlretrieve(url, archive_path)
+    _set_startup_state("downloading_server", "正在准备 llama.cpp 本地服务", progress=45)
+    errors: list[str] = []
+    for asset in _llama_cpp_assets(tag):
+        archive_path = runtime_dir / asset.name
+        suffix = ".tar.gz" if asset.archive_type == "tar.gz" else ".zip"
+        extract_dir = runtime_dir / asset.name.removesuffix(suffix)
 
-    extract_dir.mkdir(parents=True, exist_ok=True)
-    with zipfile.ZipFile(archive_path, "r") as archive:
-        archive.extractall(extract_dir)
+        try:
+            if not archive_path.is_file():
+                last_error: Exception | None = None
+                for url in _select_download_url(_download_url_candidates(tag, asset.name)):
+                    try:
+                        urllib.request.urlretrieve(url, archive_path)
+                        last_error = None
+                        break
+                    except Exception as exc:
+                        last_error = exc
+                        if archive_path.exists():
+                            archive_path.unlink(missing_ok=True)
+                if last_error is not None:
+                    raise last_error
 
-    cached = _find_cached_llama_server()
-    if cached is not None:
-        return cached
+            _extract_archive(archive_path, extract_dir, asset.archive_type)
+            cached = _find_cached_llama_server()
+            if cached is not None:
+                _set_startup_state("server_ready", "llama.cpp 本地服务已就绪", progress=60)
+                return cached
+        except Exception as exc:
+            errors.append(f"{asset.name}: {exc}")
 
-    raise RuntimeError(f"已下载 llama.cpp 预编译包，但未找到 llama-server：{archive_path}")
+    raise RuntimeError("无法准备 llama-server：" + "；".join(errors))
 
 
 def _base_endpoint(path: str) -> str:
@@ -307,9 +437,12 @@ def get_local_embedding_status() -> dict[str, Any]:
         "pid": pid,
         "base_url": LOCAL_EMBEDDING_BASE_URL,
         "model": QWEN3_EMBEDDING_MODEL,
+        "display_model": local_embedding_model_name() if alive else QWEN3_EMBEDDING_MODEL,
         "dimensions": QWEN3_EMBEDDING_DIMENSIONS,
         "server_executable": str(_find_cached_llama_server() or (shutil.which(LOCAL_EMBEDDING_SERVER_EXE.strip() or "llama-server") or "")),
         "auto_download_server": LOCAL_EMBEDDING_AUTO_DOWNLOAD_SERVER,
+        "hf_endpoint": _hf_endpoint() or HF_OFFICIAL_ENDPOINT,
+        "startup": _get_startup_state(),
         "command": preview_local_embedding_command(),
     }
 
@@ -317,35 +450,46 @@ def get_local_embedding_status() -> dict[str, Any]:
 def start_local_embedding_service() -> dict[str, Any]:
     """启动本地嵌入服务；若端口已有可用服务则只返回状态。"""
     global _process
-    should_return_status = False
-    started_process: subprocess.Popen | None = None
-    with _lock:
-        if _process is not None and _process.poll() is None:
-            should_return_status = True
-        elif is_local_embedding_alive(timeout=1.0):
-            should_return_status = True
-        else:
-            command = build_local_embedding_command()
-            popen_kwargs: dict[str, Any] = {
-                "stdout": subprocess.DEVNULL,
-                "stderr": subprocess.DEVNULL,
-            }
-            if os.name == "nt":
-                popen_kwargs["creationflags"] = getattr(subprocess, "CREATE_NO_WINDOW", 0)
-            _process = subprocess.Popen(command, **popen_kwargs)
-            started_process = _process
+    _set_startup_state("starting", "正在启动本地嵌入服务", progress=1, error="")
+    try:
+        should_return_status = False
+        started_process: subprocess.Popen | None = None
+        with _lock:
+            if _process is not None and _process.poll() is None:
+                should_return_status = True
+            elif is_local_embedding_alive(timeout=1.0):
+                should_return_status = True
+            else:
+                command = build_local_embedding_command()
+                popen_kwargs: dict[str, Any] = {
+                    "stdout": subprocess.DEVNULL,
+                    "stderr": subprocess.DEVNULL,
+                }
+                if os.name == "nt":
+                    popen_kwargs["creationflags"] = getattr(subprocess, "CREATE_NO_WINDOW", 0)
+                _process = subprocess.Popen(command, **popen_kwargs)
+                started_process = _process
 
-    if should_return_status:
-        return get_local_embedding_status()
-    if started_process is not None:
-        deadline = time.monotonic() + max(1.0, LOCAL_EMBEDDING_STARTUP_TIMEOUT)
-        while time.monotonic() < deadline:
-            if started_process.poll() is not None:
-                break
-            if is_local_embedding_alive(timeout=2.0, ttl=0):
-                break
-            time.sleep(0.5)
-    return get_local_embedding_status()
+        if should_return_status:
+            _set_startup_state("ready", "本地嵌入服务已启动", progress=100)
+            return get_local_embedding_status()
+        if started_process is not None:
+            deadline = time.monotonic() + max(1.0, LOCAL_EMBEDDING_STARTUP_TIMEOUT)
+            _set_startup_state("loading", "正在加载本地嵌入模型", progress=70)
+            while time.monotonic() < deadline:
+                if started_process.poll() is not None:
+                    break
+                if is_local_embedding_alive(timeout=2.0, ttl=0):
+                    _set_startup_state("ready", "本地嵌入服务已启动", progress=100)
+                    break
+                time.sleep(0.5)
+        status = get_local_embedding_status()
+        if not status.get("alive"):
+            _set_startup_state("error", "本地嵌入服务启动失败", progress=100, error="服务未在超时时间内就绪")
+        return status
+    except Exception as exc:
+        _set_startup_state("error", "本地嵌入服务启动失败", progress=100, error=str(exc))
+        raise
 
 
 def stop_local_embedding_service() -> dict[str, Any]:

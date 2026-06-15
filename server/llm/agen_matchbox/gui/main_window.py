@@ -218,7 +218,7 @@ class LLMConfigGUI(
         for col in range(3):
             action_row.columnconfigure(col, weight=1)
         ttk.Button(action_row, text="新增平台", command=self.add_platform).grid(row=0, column=0, sticky="ew")
-        ttk.Button(action_row, text="删除平台", command=self.delete_platform, style="Danger.TButton").grid(row=0, column=1, sticky="ew", padx=self._scale(8))
+        ttk.Button(action_row, text="禁用平台", command=self.delete_platform, style="Danger.TButton").grid(row=0, column=1, sticky="ew", padx=self._scale(8))
         ttk.Button(action_row, text="设为默认平台", command=self.set_as_default).grid(row=0, column=2, sticky="ew")
 
     def _build_user_usage_panel(self, parent):
@@ -744,8 +744,8 @@ class LLMConfigGUI(
         """强制从配置文件重置数据库（调用后端 admin_reload_from_yaml）。"""
         if not messagebox.askyesno(
             "确认重置",
-            "⚠️ 警告：这将使用 YAML 文件覆盖数据库中的所有系统平台配置！\n\n"
-            "- 数据库中新增的平台将被删除\n"
+            "⚠️ 警告：这将使用 YAML 文件重置数据库中的系统平台配置！\n\n"
+            "- YAML 中不存在的平台将被软禁用，不会硬删除\n"
             "- 平台名称和模型列表将重置为 YAML 中的状态\n"
             "- 用户的 API Key 设置不会受影响\n\n"
             "确定要继续吗？"
@@ -762,7 +762,7 @@ class LLMConfigGUI(
             self.log(f"✗ 重置失败: {e}")
 
     def export_db_to_yaml(self):
-        """导出数据库配置到 YAML（调用后端 admin_export_to_yaml）。"""
+        """导出数据库配置到 YAML（调用后端 admin_save_to_yaml）。"""
         if not messagebox.askyesno(
             "确认导出",
             "这将覆盖当前的 matchbox_cfg.yaml 和 matchbox_key.yaml 文件。\n确定要导出数据库配置吗？"
@@ -770,7 +770,7 @@ class LLMConfigGUI(
             return
 
         try:
-            paths = self.ai_manager.admin_export_to_yaml()
+            paths = self.ai_manager.admin_save_to_yaml()
             config_path = paths.get("config_path", paths) if isinstance(paths, dict) else paths
             key_path = paths.get("key_path", "") if isinstance(paths, dict) else ""
             self.log(f"✓ 已导出配置到 {config_path}", tag="success")

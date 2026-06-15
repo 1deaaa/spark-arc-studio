@@ -48,7 +48,7 @@
   - 用户可通过兑换码充值系统点数，兑换记录可追溯。
 - **动态模型探测**：内置独立的模型探测工具 (`probe_platform_models`)，可以探测任何兼容OpenAI接口的平台所支持的模型列表。
   - **推理内容/计费字段可视化（平台测试）**：GUI 的“测试模型”会展示原始响应 JSON，部分平台会返回 `reasoning_content`、`usage` 或 `billing` 相关字段，可直接在日志中查看。
-  - **图形化配置工具**：提供一个基于 `Tkinter` 的 GUI 工具（`matchbox_cfg_gui.py`），完全无需依赖前端配置，**直接操作数据库**，支持添加/编辑/删除平台与模型、加密存储 API Key、探测和测试模型，以及从本地 YAML 重置数据库或将数据库导出为 `matchbox_cfg.yaml` + `matchbox_key.yaml`。
+  - **图形化配置工具**：提供一个基于 `Tkinter` 的 GUI 工具（`matchbox_cfg_gui.py`），完全无需依赖前端配置，**直接操作数据库**，支持添加/编辑/软禁用平台与模型、加密存储 API Key、探测和测试模型，以及从本地 YAML 重置数据库或将数据库导出为 `matchbox_cfg.yaml` + `matchbox_key.yaml`。
 - **数据库持久化**：默认使用 SQLite 存储用户配置、平台和模型信息；生产环境可通过 `AGENT_MATCHBOX_DATABASE_URL` 切换到 PostgreSQL。
 - **自动配置修正**：当用户的配置失效（如模型或平台被删除），系统会自动回退到第一个可用的默认平台，保证服务的可用性。
 
@@ -91,7 +91,7 @@
 - **`quota_services.py`**: 配额服务模块，集中处理 `sys_paid/self_paid` 两条计费口径的配额配置、周期用量统计、总量统计与调用前拦截。
 - **`usage_services.py`**: 用量统计模块，除单用户汇总外，也提供面向 GUI 的全用户调用总览聚合能力。
 - **`matchbox_cfg.yaml`**: **初始化配置文件**。用于定义初始的"系统平台"。首次启动时，管理器会将此文件中的平台同步到数据库。后续启动仅增量添加新平台，不会覆盖已有配置。**运行时权威数据源是数据库，而非此文件。**
-- **`matchbox_cfg_gui.py`**: GUI 入口文件，实际逻辑拆分在 `gui/` 子目录中。**直接操作数据库**，支持平台/模型增删改、API Key 加密存储、模型探测与测试、全用户调用总览、双击用户查看详情，以及从本地 YAML 重置数据库或将数据库导出为 `matchbox_cfg.yaml` + `matchbox_key.yaml`。
+- **`matchbox_cfg_gui.py`**: GUI 入口文件，实际逻辑拆分在 `gui/` 子目录中。**直接操作数据库**，支持平台/模型增删改（删除为软禁用）、API Key 加密存储、模型探测与测试、全用户调用总览、双击用户查看详情，以及从本地 YAML 重置数据库或将数据库导出为 `matchbox_cfg.yaml` + `matchbox_key.yaml`。
 
 ## 🛠️ 第一次配置流程 (新手必读)
 
@@ -284,7 +284,7 @@ python matchbox_cfg_gui.py
 2. 在右侧填入你的真实 **API Key**，点击"保存 Key"（Key 会加密存入数据库）。
 3. 点击"探测模型"，右侧会列出该平台支持的所有模型。
 4. 从探测结果中选中模型，点击"添加选中"将其加入平台模型列表。
-5. 对不需要的平台，点击"删除平台"将其从列表中移除。
+5. 对不需要的平台，点击"禁用平台"会将其软禁用并从默认列表中隐藏，不会硬删除数据库记录。
 
 #### 2.2. 手动编辑 YAML（仅用于初始化/分发）
 
@@ -392,7 +392,7 @@ except ValueError as e:
 
 3. **强制重置 (Force Reset)**
     - **触发**：GUI "从配置文件重置" 按钮 或 API 调用。
-    - **行为**：以 YAML 为准**覆盖**数据库中的系统平台配置（保留用户的 API Key）。
+    - **行为**：以 YAML 为准**重置**数据库中的系统平台配置：更新平台/模型，软禁用 YAML 中不存在的平台，保留用户的 API Key。
     - **目的**：当数据库配置混乱或需要恢复标准状态时使用。
 
 ### GUI 工具
@@ -400,7 +400,7 @@ except ValueError as e:
 GUI 配置工具 (`matchbox_cfg_gui.py`) **直接操作数据库**，修改即时生效，无需重启服务。
 
 - **📦 数据库（唯一模式）**：所有平台/模型的增删改均写入数据库，API Key 加密存储。
-- **📥 从YAML重置DB**：以本地 `matchbox_cfg.yaml` + `matchbox_key.yaml` 为准覆盖数据库中的系统平台（保留用户 API Key）。适合恢复标准状态。
+- **📥 从YAML重置DB**：以本地 `matchbox_cfg.yaml` + `matchbox_key.yaml` 为准重置数据库中的系统平台；YAML 中不存在的平台会被软禁用，用户 API Key 会保留。适合恢复标准状态。
 - **📤 导出DB到YAML**：将当前数据库配置导出为 `matchbox_cfg.yaml`（结构）和 `matchbox_key.yaml`（密钥），用于版本控制或分发。
 
 ### 前端管理 API
@@ -411,7 +411,7 @@ GUI 配置工具 (`matchbox_cfg_gui.py`) **直接操作数据库**，修改即�
 GET    /api/ai/admin/sys-platforms          # 获取所有系统平台
 POST   /api/ai/admin/sys-platform           # 添加系统平台
 PUT    /api/ai/admin/sys-platform           # 更新系统平台
-DELETE /api/ai/admin/sys-platform           # 删除系统平台
+DELETE /api/ai/admin/sys-platform           # 软禁用系统平台
 POST   /api/ai/admin/sys-platform/api-key   # 更新平台 API Key
 POST   /api/ai/admin/reload-from-yaml       # 从配置文件强制重置数据库
 ```

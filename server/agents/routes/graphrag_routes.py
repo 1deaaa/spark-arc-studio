@@ -22,6 +22,7 @@ from core.project_settings import (
     get_default_graphrag_enabled,
     set_default_graphrag_enabled,
 )
+from agents.project_background_builds import cancel_project_graphrag_build
 
 graphrag_router = APIRouter(prefix="/api/graphrag", tags=["graphrag"])
 
@@ -320,12 +321,14 @@ async def disable_graphrag(data: ProjectNameRequest, user: dict = Depends(get_cu
         raise HTTPException(status_code=400, detail="缺少项目名称")
 
     set_project_setting(user_id, project_name, "graphrag_enabled", False)
+    cancel_warnings = await run_in_threadpool(cancel_project_graphrag_build, user_id, project_name)
     # 禁用后查询时不再做 freshness 比对，避免无意义的哈希扫描
     index_status = await _resolve_project_graphrag_status(user_id, project_name, False)
     return {
         "success": True,
         "projectName": project_name,
         "enabled": False,
+        "cancel_warnings": cancel_warnings,
         "graph_ready": index_status["graph_ready"],
         "metadata_ready": index_status["metadata_ready"],
         "needs_rebuild": index_status["needs_rebuild"],

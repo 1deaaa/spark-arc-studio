@@ -234,7 +234,7 @@ class AdminMixin:
         - admin_mode=True: 管理员禁用系统平台
         - admin_mode=False: 用户禁用自定义平台，需要 user_id
 
-        注意：删除平台不属于"创建/修改"范畴，不受 USE_SYS_LLM_CONFIG 锁定限制。
+        注意：软禁用平台不属于"创建/修改"范畴，不受 USE_SYS_LLM_CONFIG 锁定限制。
         """
         # 不调用 _ensure_mutable()：删除 ≠ 创建，锁定模式下也应允许删除
         with self.Session() as session:
@@ -1047,7 +1047,7 @@ class AdminMixin:
     #    - 首次启动时，YAML 配置（含 matchbox_key.yaml 中的密钥）初始化到数据库
     #    - 后续启动时，仅添加 YAML 中新增的平台，不覆盖已有配置
     #    - 提供 admin_reload_from_yaml() 方法手动重置为本地 YAML 配置
-    #    - 提供 admin_import_from_yaml() 方法从上传文件即时覆盖系统配置
+    #    - 提供 admin_import_from_yaml() 方法从上传文件增量同步系统配置
     #
 
     def admin_get_sys_platforms(

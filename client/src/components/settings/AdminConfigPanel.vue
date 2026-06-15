@@ -155,6 +155,56 @@
         </div>
 
         <n-modal
+            v-model:show="masterKeyMigrationDialogShow"
+            preset="card"
+            :title="t('components.adminConfigPanel.masterKeyMigration.title')"
+            :mask-closable="false"
+            :closable="true"
+            :style="{ width: '460px', maxWidth: '92vw' }"
+            @update:show="handleMasterKeyMigrationShowUpdate"
+        >
+            <SparkAlert type="warning" style="margin-bottom: 16px;">
+                {{ masterKeyMigrationMessage }}
+            </SparkAlert>
+
+            <div class="master-key-migration-body">
+                <n-text depth="3">
+                    {{ t('components.adminConfigPanel.masterKeyMigration.prompt') }}
+                </n-text>
+                <div class="master-key-migration-sample">
+                    <n-text depth="3">
+                        {{ t('components.adminConfigPanel.masterKeyMigration.sampleLabel', { sample: masterKeyMigrationSample }) }}
+                    </n-text>
+                </div>
+                <n-input
+                    v-model:value="masterKeyOldKey"
+                    type="password"
+                    show-password-on="click"
+                    :placeholder="t('components.adminConfigPanel.masterKeyMigration.oldKeyPlaceholder')"
+                    @keyup.enter="submitOldMasterKey"
+                />
+            </div>
+
+            <template #footer>
+                <div class="master-key-migration-actions">
+                    <n-button @click="cancelMasterKeyMigration">
+                        {{ t('views.common.cancel') }}
+                    </n-button>
+                    <n-button type="warning" secondary @click="chooseClearMigration">
+                        {{ t('components.adminConfigPanel.masterKeyMigration.clearInstead') }}
+                    </n-button>
+                    <n-button
+                        type="primary"
+                        :disabled="!canSubmitOldMasterKey"
+                        @click="submitOldMasterKey"
+                    >
+                        {{ t('components.adminConfigPanel.masterKeyMigration.enterOldKey') }}
+                    </n-button>
+                </div>
+            </template>
+        </n-modal>
+
+        <n-modal
             v-model:show="verificationDialogShow"
             preset="card"
             :title="verificationDialogMode === 'edit'
@@ -253,6 +303,11 @@ type RegistrationVerificationView = {
 };
 
 type VerificationDialogMode = 'enable' | 'edit';
+type MasterKeyMigrationDetail = { message?: string; unresolved_count?: number; sample_labels?: string[] };
+type MasterKeyMigrationPromptResult =
+    | { action: 'migrate'; oldKey: string }
+    | { action: 'clear' }
+    | { action: 'cancel' };
 
 const message = useMessage();
 const dialog = useDialog();
@@ -286,6 +341,10 @@ const verificationForm = ref({
     site_key: '',
     secret_key: '',
 });
+const masterKeyMigrationDialogShow = ref(false);
+const masterKeyMigrationDetail = ref<MasterKeyMigrationDetail | null>(null);
+const masterKeyMigrationResolver = ref<((result: MasterKeyMigrationPromptResult) => void) | null>(null);
+const masterKeyOldKey = ref('');
 
 const providerOptions = computed(() =>
     (verification.value.supported_providers || ['turnstile']).map((p) => ({ label: p, value: p })),
@@ -297,6 +356,23 @@ const canSaveVerification = computed(() => {
     if (verificationDialogMode.value === 'edit' && !verification.value.secret_key_set && !verificationForm.value.secret_key.trim()) return false;
     return true;
 });
+
+const masterKeyMigrationSample = computed(() => {
+    const labels = masterKeyMigrationDetail.value?.sample_labels;
+    return Array.isArray(labels) && labels.length
+        ? labels.join('，')
+        : t('components.adminConfigPanel.masterKeyMigration.noSample');
+});
+
+const masterKeyMigrationMessage = computed(() => {
+    const detail = masterKeyMigrationDetail.value;
+    return detail?.message || t('components.adminConfigPanel.masterKeyMigration.desc', {
+        count: detail?.unresolved_count ?? 0,
+        sample: masterKeyMigrationSample.value,
+    });
+});
+
+const canSubmitOldMasterKey = computed(() => !!masterKeyOldKey.value.trim());
 
 async function loadConfig() {
     loading.value = true;
@@ -406,30 +482,138 @@ async function setLLMKey() {
     
     keySaving.value = true;
     try {
-        const res = await fetchWithAuth('/api/admin/config/llm-key', {
-            method: 'POST',
-            body: JSON.stringify({ key: newLLMKey.value }),
-            headers: { 'Content-Type': 'application/json' }
-        });
-        
-        if (res.ok) {
-            const data = await res.json();
-            if (data.success) {
-                message.success(t('components.adminConfigPanel.messages.keySetSuccess'));
-                newLLMKey.value = '';
-                config.value.llm_key_set = true;
-            } else {
-                message.error(data.message || t('components.adminConfigPanel.messages.setFailed'));
-            }
-        } else {
-            message.error(t('components.adminConfigPanel.messages.setRequestFailed'));
-        }
+        await submitLLMKey({ key: newLLMKey.value });
+        message.success(t('components.adminConfigPanel.messages.keySetSuccess'));
+        newLLMKey.value = '';
+        config.value.llm_key_set = true;
     } catch (e: unknown) {
         const errorMessage = e instanceof Error ? e.message : String(e || 'Unknown error');
         message.error(`${t('components.adminConfigPanel.messages.setError')}: ${errorMessage}`);
     } finally {
         keySaving.value = false;
     }
+}
+
+type LLMKeyPayload = {
+    key: string;
+    old_key?: string;
+    allow_clear_unrecoverable?: boolean;
+};
+
+async function submitLLMKey(payload: LLMKeyPayload): Promise<void> {
+    const res = await fetchWithAuth('/api/admin/config/llm-key', {
+        method: 'POST',
+        body: JSON.stringify(payload),
+        headers: { 'Content-Type': 'application/json' }
+    });
+
+    if (res.ok) {
+        const data = await res.json();
+        if (!data.success) {
+            throw new Error(data.message || t('components.adminConfigPanel.messages.setFailed'));
+        }
+        return;
+    }
+
+    let errorBody: unknown = null;
+    try {
+        errorBody = await res.json();
+    } catch {
+        // 保留默认错误。
+    }
+
+    const detail = errorBody && typeof errorBody === 'object' ? (errorBody as { detail?: unknown }).detail : null;
+    const migrationDetail = detail && typeof detail === 'object'
+        ? detail as { code?: string; message?: string; unresolved_count?: number; sample_labels?: string[] }
+        : null;
+
+    if (res.status === 409 && migrationDetail?.code === 'master_key_migration_required') {
+        await handleMasterKeyMigration(payload.key, migrationDetail);
+        return;
+    }
+
+    const detailText = typeof detail === 'string'
+        ? detail
+        : migrationDetail?.message;
+    throw new Error(detailText || t('components.adminConfigPanel.messages.setRequestFailed'));
+}
+
+async function handleMasterKeyMigration(
+    key: string,
+    detail: MasterKeyMigrationDetail
+) {
+    const decision = await promptOldMasterKey(detail);
+    if (decision.action === 'cancel') {
+        throw new Error(t('components.adminConfigPanel.masterKeyMigration.cancelled'));
+    }
+    if (decision.action === 'clear') {
+        const shouldClear = await confirmClearUnrecoverableKeys(detail);
+        if (!shouldClear) {
+            throw new Error(t('components.adminConfigPanel.masterKeyMigration.cancelled'));
+        }
+        await submitLLMKey({ key, allow_clear_unrecoverable: true });
+        message.warning(t('components.adminConfigPanel.masterKeyMigration.cleared'));
+        return;
+    }
+
+    await submitLLMKey({ key, old_key: decision.oldKey });
+}
+
+function promptOldMasterKey(detail: MasterKeyMigrationDetail): Promise<MasterKeyMigrationPromptResult> {
+    masterKeyMigrationDetail.value = detail;
+    masterKeyOldKey.value = '';
+    masterKeyMigrationDialogShow.value = true;
+    return new Promise((resolve) => {
+        masterKeyMigrationResolver.value = resolve;
+    });
+}
+
+function resolveMasterKeyMigration(result: MasterKeyMigrationPromptResult) {
+    const resolver = masterKeyMigrationResolver.value;
+    masterKeyMigrationResolver.value = null;
+    masterKeyMigrationDialogShow.value = false;
+    masterKeyMigrationDetail.value = null;
+    masterKeyOldKey.value = '';
+    resolver?.(result);
+}
+
+function submitOldMasterKey() {
+    const oldKey = masterKeyOldKey.value.trim();
+    if (!oldKey) return;
+    resolveMasterKeyMigration({ action: 'migrate', oldKey });
+}
+
+function chooseClearMigration() {
+    resolveMasterKeyMigration({ action: 'clear' });
+}
+
+function cancelMasterKeyMigration() {
+    if (!masterKeyMigrationResolver.value) return;
+    resolveMasterKeyMigration({ action: 'cancel' });
+}
+
+function handleMasterKeyMigrationShowUpdate(show: boolean) {
+    if (!show) {
+        cancelMasterKeyMigration();
+    }
+}
+
+function confirmClearUnrecoverableKeys(detail: { unresolved_count?: number }): Promise<boolean> {
+    return new Promise((resolve) => {
+        dialog.warning({
+            title: t('components.adminConfigPanel.masterKeyMigration.clearTitle'),
+            content: t('components.adminConfigPanel.masterKeyMigration.clearContent', {
+                count: detail.unresolved_count ?? 0,
+            }),
+            positiveText: t('components.adminConfigPanel.masterKeyMigration.clearConfirm'),
+            negativeText: t('views.common.cancel'),
+            onPositiveClick: () => resolve(true),
+            onNegativeClick: () => resolve(false),
+            onClose: () => resolve(false),
+            onEsc: () => resolve(false),
+            onMaskClick: () => resolve(false),
+        });
+    });
 }
 
 async function loadVerification() {
@@ -708,5 +892,26 @@ function handleRemoteUpdate(payload: unknown) {
     display: flex;
     justify-content: flex-end;
     gap: 8px;
+}
+
+.master-key-migration-body {
+    display: flex;
+    flex-direction: column;
+    gap: 12px;
+}
+
+.master-key-migration-sample {
+    padding: 8px 10px;
+    border-radius: 6px;
+    background: color-mix(in srgb, var(--spark-panel-bg), var(--spark-bg) 18%);
+    border: 1px solid var(--spark-border);
+    line-height: 1.5;
+}
+
+.master-key-migration-actions {
+    display: flex;
+    justify-content: flex-end;
+    gap: 8px;
+    flex-wrap: wrap;
 }
 </style>

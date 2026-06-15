@@ -104,9 +104,31 @@
       "problemMatcher": []
     },
     {
-      "label": "Server: 本地快速后端 Checks",
+      "label": "Server: 准备便携 Python",
       "type": "process",
-      "command": "${command:python.interpreterPath}",
+      "command": "powershell",
+      "args": [
+        "-NoProfile",
+        "-ExecutionPolicy",
+        "Bypass",
+        "-File",
+        "${workspaceFolder}/server/pyloader.ps1"
+      ],
+      "options": {
+        "cwd": "${workspaceFolder}/server"
+      },
+      "presentation": {
+        "reveal": "always",
+        "panel": "shared",
+        "clear": true
+      },
+      "problemMatcher": []
+    },
+    {
+      "label": "Server: 本地快速后端 Checks",
+      "type": "shell",
+      "command": "python",
+      // 依赖当前 VS Code 终端/调试已选解释器，不绑定仓库内便携 Python
       "args": ["-X", "utf8", "scripts/run_pytest_if_present.py"],
       "options": {
         "cwd": "${workspaceFolder}/server"

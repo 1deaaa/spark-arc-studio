@@ -74,8 +74,16 @@ export interface LocalEmbeddingStatus {
   pid?: number | null;
   base_url?: string;
   model?: string;
+  display_model?: string;
   dimensions?: number;
   command?: string[];
+  startup?: {
+    phase: string;
+    message?: string;
+    progress?: number;
+    error?: string;
+    updated_at?: string;
+  };
 }
 
 export interface LocalEmbeddingResponse {

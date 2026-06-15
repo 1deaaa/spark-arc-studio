@@ -15,7 +15,6 @@ if __package__ in (None, "", "gui"):
         sys.path.insert(0, _PARENT_DIR)
     __package__ = f"{os.path.basename(_PKG_DIR)}.{os.path.basename(_GUI_DIR)}"
 
-from ..config import reload_default_platform_configs
 from ..models import DEFAULT_MAX_CONTEXT_TOKENS, DEFAULT_MAX_OUTPUT_TOKENS
 from .dpi import prepare_toplevel_window
 from .theme import style_listbox, style_text_widget
@@ -522,8 +521,7 @@ class DialogsMixin:
 
         def load_data():
             try:
-                reload_default_platform_configs()
-                self.ai_manager._sync_default_platforms()
+                self.ai_manager.admin_sync_from_yaml()
                 _all_models = self.ai_manager.get_platform_models(user_id=system_user_id)
                 _usage_list = self.ai_manager.list_user_usage_selections(user_id=system_user_id)
                 return _all_models, _usage_list

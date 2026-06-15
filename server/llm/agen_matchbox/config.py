@@ -11,12 +11,13 @@ import shutil
 import yaml
 from typing import Dict, Any, Optional
 
-from .env_utils import load_env, get_env_var
+from .env_utils import load_env, get_env_var, get_env_path
 from .paths import get_config_file_path, get_key_file_path, get_packaged_config_template_path, ensure_mgr_home_exists
 from .security import SecurityManager
 
 
 _API_KEY_PLACEHOLDER_RE = re.compile(r"^\{\s*([A-Za-z_][A-Za-z0-9_]*)\s*\}$")
+_STARTUP_KEY_NOTICE_PRINTED = False
 
 
 # ---------------- 配置常量 ----------------
@@ -40,15 +41,45 @@ BUILTIN_USAGE_SLOTS = [
 
 # ---------------- 配置加载 ----------------
 
-def _safe_decrypt(sec_mgr: SecurityManager, value: str) -> Any:
+def _safe_decrypt(sec_mgr: SecurityManager, value: str, stats: Optional[Dict[str, int]] = None) -> Any:
     if not value:
         return None
     if value.startswith("ENC:"):
         # 注意：仓库同步下发的 YAML 中可能携带其他环境生成的 ENC 密文。
         # 这类值在新站点首次拉取后无法直接解开属于正常现象；
         # 配置加载层统一将其视为“当前不可用”，等待管理员设置本机 LLM_KEY 并重新配置托管密钥。
-        return sec_mgr.decrypt(value).to_optional_plaintext()
+        result = sec_mgr.decrypt(value)
+        if stats is not None:
+            stats[result.status] = stats.get(result.status, 0) + 1
+        return result.to_optional_plaintext()
     return value
+
+
+def _emit_startup_key_notice(stats: Dict[str, int]) -> None:
+    """启动期聚合提示密钥状态，避免每个平台逐条刷屏。"""
+    global _STARTUP_KEY_NOTICE_PRINTED
+    if _STARTUP_KEY_NOTICE_PRINTED:
+        return
+
+    missing_key = int(stats.get("missing_key", 0) or 0)
+    failed = int(stats.get("failed", 0) or 0)
+    if missing_key <= 0 and failed <= 0:
+        return
+
+    _STARTUP_KEY_NOTICE_PRINTED = True
+    parts = []
+    if missing_key:
+        parts.append(f"{missing_key} 个托管密钥等待设置 LLM_KEY")
+    if failed:
+        parts.append(f"{failed} 个托管密钥需要重新配置")
+
+    print(
+        "🔑 Matchbox key notice: "
+        + "，".join(parts)
+        + "。这在首次克隆或迁移环境时通常是正常现象；平台/模型结构会继续同步，"
+        + "请在管理后台设置主密钥并重新录入需要使用的平台 API Key。",
+        flush=True,
+    )
 
 
 def is_api_key_placeholder(value: Any) -> bool:
@@ -182,6 +213,7 @@ def load_default_platform_configs() -> Dict[str, Any]:
     merge_key_yaml_into_configs(configs)
 
     sec_mgr = SecurityManager.get_instance()
+    decrypt_stats: Dict[str, int] = {}
 
     for name, cfg in configs.items():
         api_val = cfg.get("api_key")
@@ -192,14 +224,14 @@ def load_default_platform_configs() -> Dict[str, Any]:
         api_val = api_val.strip()
         # 情况1: 已加密值
         if api_val.startswith("ENC:"):
-            cfg["api_key"] = _safe_decrypt(sec_mgr, api_val)
+            cfg["api_key"] = _safe_decrypt(sec_mgr, api_val, decrypt_stats)
             continue
 
         # 情况2: 占位符 {ENV_VAR}
         if is_api_key_placeholder(api_val):
             env_val = resolve_api_key_reference(api_val)
             if env_val:
-                cfg["api_key"] = _safe_decrypt(sec_mgr, env_val)
+                cfg["api_key"] = _safe_decrypt(sec_mgr, env_val, decrypt_stats)
             else:
                 cfg["api_key"] = None
             continue
@@ -207,6 +239,7 @@ def load_default_platform_configs() -> Dict[str, Any]:
         # 情况3: 纯明文
         cfg["api_key"] = api_val
 
+    _emit_startup_key_notice(decrypt_stats)
     return configs
 
 
@@ -230,18 +263,11 @@ def _ensure_env_setup():
     key = get_env_var("LLM_KEY")
             
     if not key:
-        gui_path = os.path.join(os.path.dirname(__file__), "matchbox_cfg_gui.py")
-        if os.path.exists(gui_path):
-            print("\n" + "!"*80)
-            print("🔑 [IMPORTANT] LLM_KEY (API master password) is not configured")
-            print("🔒 This is normal on first startup and is not an error. For security, all API Keys require a master password for encryption/decryption; without it, they cannot be used.")
-            print("-" * 80)
-            print(f"Option 1 (Recommended): Run the configuration tool\n   python \"{os.path.normpath(gui_path)}\"")
-            print("-" * 80)
-            print("Option 2: Set LLM_KEY via the /api/admin/config/llm-key endpoint or the admin page")
-            print("Option 3: Set it through the app initialization wizard")
-            print("!"*80 + "\n")
-            return
+        print(
+            f"🔑 Matchbox LLM_KEY is not configured yet. First startup can continue; set it later via admin page or {get_env_path()}.",
+            flush=True,
+        )
+        return
 
 
 def get_decrypted_api_key(platform_name: str = None, base_url: str = None):

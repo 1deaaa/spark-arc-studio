@@ -67,8 +67,6 @@ class SecurityManager:
         key = get_env_var("LLM_KEY")
 
         if not key:
-            print("🔑 LLM_KEY not set. This is normal on first startup and is not an error.")
-            print(f"Please set LLM_KEY in {get_env_path()} or run the config cfg_gui.")
             self._fernet = None
         else:
             try:
@@ -179,14 +177,7 @@ class SecurityManager:
             raise ValueError(f"API Key 加密失败: {e}") from e
         
     def decrypt(self, text: str) -> SecretResolution:
-        result = self._resolve_secret(text, self._fernet)
-        if result.is_missing_key:
-            print("🔑 Managed key found but LLM_KEY is not set; this platform needs API Key configuration")
-        elif result.is_failed:
-            # 注意：此状态在仓库同步场景下是正常现象（上游密文用不同 LLM_KEY 加密），
-            # 不应视为错误，而应引导用户为该平台配置自己的 API Key。
-            print(f"🔑 Managed key does not match current site master key; platform needs API Key configuration (reason: {result.error}）")
-        return result
+        return self._resolve_secret(text, self._fernet)
 
     def set_key(self, key: str, persist: bool = True):
         """

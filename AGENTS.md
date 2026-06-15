@@ -386,6 +386,7 @@ YAML 顶层 `tool_rules` 字段用于存放 Agent 在聊天/委派模式下的�
 ### 10.0 基础建筑测试（长期护栏）
 
 项目已建立一组“基础建筑测试”，专门覆盖稳定协议与统一收口层，而不是覆盖大模型输出质量或具体业务文案。
+这组测试只是后端测试体系中的一个长期子集，不是“后端测试”的同义词；普通功能回归、短期 bug 回归、模块级验证应放在更贴近业务语义的测试位置，如没有测试位置，可以新建目录。
 
 **强制原则**：
 
@@ -402,6 +403,7 @@ YAML 顶层 `tool_rules` 字段用于存放 Agent 在聊天/委派模式下的�
   - `test_chat_stream_contracts.py`：ChatTaskEntry / accumulator / observer / retry 契约。
   - `test_streaming_bridge_contracts.py`：同步生成器到异步流桥接、业务语义帧。
   - `test_common_infrastructure_contracts.py`：`_apply_patch`、`TokenTextSplitter`、迁移路径规格。
+- 说明：`server/test/architecture/` 只放长期契约与基础建筑护栏测试；如果是普通业务回归、页面/接口功能回归或一次性 bug 回归，不要默认塞进这个目录。
 - 前端：
   - `client/src/utils/__tests__/streamingRuntime.architecture.spec.ts`
   - `client/src/components/stores/chat/__tests__/toolUi.architecture.spec.ts`

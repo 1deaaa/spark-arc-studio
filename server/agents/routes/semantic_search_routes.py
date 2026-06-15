@@ -7,6 +7,7 @@ from fastapi import APIRouter, Depends, HTTPException
 from pydantic import BaseModel, ConfigDict, Field
 from starlette.concurrency import run_in_threadpool
 from typing import Annotated
+import threading
 
 from core.auth import get_current_user
 from core.auth import require_admin
@@ -26,6 +27,7 @@ from agents.vector_index.embedding_contract import (
     embedding_contract_metadata,
     embedding_extra_body,
 )
+from agents.project_background_builds import cancel_project_vector_index_build
 
 semantic_search_router = APIRouter(prefix="/api/semantic-search", tags=["semantic_search"])
 
@@ -117,6 +119,27 @@ async def _resolve_project_semantic_status(
     )
 
 
+async def _resolve_embedding_runtime_status(user_id: str) -> tuple[bool, str]:
+    """读取当前语义检索使用的嵌入运行时，优先展示已启用的本地服务。"""
+    try:
+        if get_local_embedding_enabled():
+            from agents.vector_index.local_embedding import (
+                is_local_embedding_alive,
+                local_embedding_model_name,
+            )
+            if await run_in_threadpool(lambda: is_local_embedding_alive(timeout=1.0, ttl=0)):
+                return True, local_embedding_model_name()
+    except Exception:
+        pass
+
+    try:
+        from llm.agen_matchbox import matchbox
+        emb = matchbox().get_user_embedding(user_id)
+        return True, emb.model
+    except Exception:
+        return False, ""
+
+
 def _trigger_project_semantic_refresh_sync(user_id: str, project_name: str) -> dict:
     """同步实现：freshness 检查 + 必要时启动后台增量更新（启动本身仍走 daemon 线程）。"""
     index_status = _resolve_project_semantic_status_sync(user_id, project_name, True)
@@ -205,16 +228,7 @@ async def get_semantic_search_status(
         settings = get_project_settings(user_id, projectName)
         enabled = settings.get("semantic_search_enabled", False)
 
-        # 检查嵌入模型是否就绪
-        embedding_ready = False
-        embedding_model_name = ""
-        try:
-            from llm.agen_matchbox import matchbox
-            emb = matchbox().get_user_embedding(user_id)
-            embedding_ready = True
-            embedding_model_name = emb.model
-        except Exception:
-            pass
+        embedding_ready, embedding_model_name = await _resolve_embedding_runtime_status(user_id)
 
         # 单项目模式：用户主动看一个项目，可以付出一次扫盘代价换 needs_rebuild 判定
         index_status = await _resolve_project_semantic_status(
@@ -234,16 +248,7 @@ async def get_semantic_search_status(
         # 全部项目批量查询
         projects = list_projects_semantic_status(user_id)
 
-        # 检查嵌入模型就绪状态（用户级，所有项目共享）
-        embedding_ready = False
-        embedding_model_name = ""
-        try:
-            from llm.agen_matchbox import matchbox
-            emb = matchbox().get_user_embedding(user_id)
-            embedding_ready = True
-            embedding_model_name = emb.model
-        except Exception:
-            pass
+        embedding_ready, embedding_model_name = await _resolve_embedding_runtime_status(user_id)
 
         # 列表模式：N 个项目串行调用，必须避免每个项目都扫盘哈希。
         # 仅返回 build_state（内存读）+ index_exists（一次目录探测）。
@@ -378,6 +383,7 @@ async def disable_semantic_search(data: ProjectNameRequest, user: dict = Depends
         raise HTTPException(status_code=400, detail="缺少项目名称")
 
     settings = set_project_setting(user_id, project_name, "semantic_search_enabled", False)
+    cancel_warnings = await run_in_threadpool(cancel_project_vector_index_build, user_id, project_name)
     index_status = await _resolve_project_semantic_status(user_id, project_name, False)
 
     return {
@@ -385,6 +391,7 @@ async def disable_semantic_search(data: ProjectNameRequest, user: dict = Depends
         "projectName": project_name,
         "enabled": False,
         "settings": settings,
+        "cancel_warnings": cancel_warnings,
         "index_exists": index_status["index_exists"],
         "needs_rebuild": index_status["needs_rebuild"],
         "build_state": index_status["build_state"],
@@ -397,6 +404,37 @@ async def test_semantic_embedding(user: dict = Depends(get_current_user)):
     user_id = str(user['user_id'])
 
     try:
+        if get_local_embedding_enabled():
+            from agents.vector_index.local_embedding import (
+                is_local_embedding_alive,
+                local_embedding_model_name,
+                LOCAL_EMBEDDING_API_KEY,
+                LOCAL_EMBEDDING_BASE_URL,
+            )
+            if await run_in_threadpool(lambda: is_local_embedding_alive(timeout=2.0, ttl=0)):
+                from langchain_openai import OpenAIEmbeddings
+
+                emb = OpenAIEmbeddings(
+                    model=embedding_contract_metadata()["model"],
+                    api_key=LOCAL_EMBEDDING_API_KEY,
+                    base_url=LOCAL_EMBEDDING_BASE_URL,
+                    check_embedding_ctx_length=False,
+                    extra_body=embedding_extra_body(),
+                )
+                test_vector = await run_in_threadpool(emb.embed_query, "测试")
+                dims = len(test_vector) if test_vector else 0
+                if dims != QWEN3_EMBEDDING_DIMENSIONS:
+                    raise ValueError(
+                        f"本地嵌入模型维度为 {dims}，但当前索引契约要求 {QWEN3_EMBEDDING_DIMENSIONS} 维。"
+                    )
+                return {
+                    "success": True,
+                    "dims": dims,
+                    "model_name": local_embedding_model_name(),
+                    "platform_name": "local",
+                    "embedding_contract": embedding_contract_metadata(),
+                }
+
         from llm.agen_matchbox import matchbox
         mb = matchbox()
 
@@ -498,14 +536,25 @@ async def set_local_embedding(
     """管理员手动启动或停止本地嵌入服务。"""
     try:
         from agents.vector_index.local_embedding import (
+            get_local_embedding_status,
             start_local_embedding_service,
             stop_local_embedding_service,
         )
 
-        action = start_local_embedding_service if data.enabled else stop_local_embedding_service
-        status = await run_in_threadpool(action)
-        enabled = bool(data.enabled and status.get("alive"))
-        set_local_embedding_enabled(enabled)
+        if data.enabled:
+            set_local_embedding_enabled(True)
+            thread = threading.Thread(
+                target=start_local_embedding_service,
+                name="local-embedding-startup",
+                daemon=True,
+            )
+            thread.start()
+            status = await run_in_threadpool(get_local_embedding_status)
+            enabled = True
+        else:
+            status = await run_in_threadpool(stop_local_embedding_service)
+            enabled = False
+            set_local_embedding_enabled(False)
         return {
             "success": True,
             "status": status,

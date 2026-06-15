@@ -2,8 +2,7 @@ from fastapi import APIRouter, Depends, UploadFile, File
 from fastapi.responses import JSONResponse, Response
 from pydantic import BaseModel
 from typing import Optional
-import gc
-import io
+import io
 import os
 import re
 import shutil
@@ -24,39 +23,26 @@ from core.utils import (
 )
 from core.models import UserInfoSession, ProjectVersion
 from agents.chat_manager import ChatManager
-from story.file_naming import build_story_filename
+from story.file_naming import build_story_filename
+from agents.project_background_builds import cancel_project_background_builds
+
+project_router = APIRouter()
 
-project_router = APIRouter()
 
-
-def _cancel_project_background_builds(
+def _cancel_project_background_builds(
     user_id: str,
     project_name: str,
     *,
     vector_wait_timeout: float = 4.0,
     graph_wait_timeout: float = 2.0,
-) -> list[str]:
-    """删除项目优先级最高：先请求停止项目级后台索引/图谱构建。"""
-    warnings: list[str] = []
-
-    try:
-        from agents.vector_index import VectorIndexService
-
-        service = VectorIndexService(user_id, project_name)
-        service.cancel_background_build(wait_timeout=vector_wait_timeout)
-        VectorIndexService.release_process_resources()
-    except Exception as exc:
-        warnings.append(f"取消向量索引构建失败: {exc}")
-
-    try:
-        from agents.graphrag import GraphRAGService
-
-        GraphRAGService(user_id=user_id, project_name=project_name).cancel_background_build(wait_timeout=graph_wait_timeout)
-    except Exception as exc:
-        warnings.append(f"取消知识图谱构建失败: {exc}")
-
-    gc.collect()
-    return warnings
+) -> list[str]:
+    """删除项目优先级最高：先请求停止项目级后台索引/图谱构建。"""
+    return cancel_project_background_builds(
+        user_id,
+        project_name,
+        vector_wait_timeout=vector_wait_timeout,
+        graph_wait_timeout=graph_wait_timeout,
+    )
 
 
 def _remove_project_directory_with_retries(user_id: str, project_name: str, project_path: str) -> None:

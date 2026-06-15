@@ -428,13 +428,13 @@ export function useAIPlatformManager(options: { syncAiStoreSilently?: () => void
     function confirmDeletePlatform(plat: AiPlatform) {
         const isSystemPlatform = !!plat.is_sys;
         const extraWarning = isSystemPlatform
-            ? '\n\n注意：这是系统平台，删除后所有用户将立即无法使用该平台。\n此外，模型增量同步将绕过此平台，除非手动重新添加此URL的平台。'
+            ? `\n\n${t('components.aiManager.confirm.disableSystemPlatformExtra')}`
             : '';
         dialog.warning({
-            title: '确认删除',
-            content: `确定要删除平台「${plat.name}」及其所有模型吗？${extraWarning}`,
-            positiveText: '删除',
-            negativeText: '取消',
+            title: t('components.aiManager.confirm.disablePlatformTitle'),
+            content: `${t('components.aiManager.confirm.disablePlatformContent', { name: plat.name })}${extraWarning}`,
+            positiveText: t('components.aiManager.confirm.disableConfirm'),
+            negativeText: t('views.common.cancel'),
             onPositiveClick: () => doDeletePlatform(plat)
         });
     }
