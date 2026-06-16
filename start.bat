@@ -17,27 +17,21 @@ set "PS_CMD=powershell"
 where pwsh >nul 2>&1
 if not errorlevel 1 set "PS_CMD=pwsh"
 
-REM 探测网络归属地并选择下载镜像（中国大陆自动走镜像，其他地区优先官方源）
-set "NETWORK_PROBE=%~dp0scripts\network_probe.ps1"
-if exist "%NETWORK_PROBE%" (
-    echo [launcher] Detecting network region for mirror selection...
-    for /f "usebackq delims=" %%a in (`%PS_CMD% -NoProfile -ExecutionPolicy Bypass -File "%NETWORK_PROBE%" -Output pypi`) do set "PYLOADER_PIP_MIRROR=%%a"
-    for /f "usebackq delims=" %%a in (`%PS_CMD% -NoProfile -ExecutionPolicy Bypass -File "%NETWORK_PROBE%" -Output python_standalone`) do set "PYLOADER_PYTHON_MIRROR_LATEST=%%a"
-    echo [launcher] Using PyPI mirror: %PYLOADER_PIP_MIRROR%
-)
-
 REM 并行启动前端构建（如果存在脚本）。最小化窗口、独立日志，不阻塞后端部署。
 if exist "%CLIENT_BUILD_SCRIPT%" (
     echo [launcher] Starting frontend build in parallel...
     start /min "SparkArc Frontend Build" %PS_CMD% -NoProfile -ExecutionPolicy Bypass -File "%CLIENT_BUILD_SCRIPT%"
 )
 
-%PS_CMD% -NoProfile -ExecutionPolicy Bypass -File "%SERVER_DIR%\pyloader.ps1"
+%PS_CMD% -NoProfile -ExecutionPolicy Bypass -File "%SERVER_DIR%\pyloader.win.ps1"
 if errorlevel 1 (
     echo [ERROR] Environment deployment failed.
     pause
     exit /b 1
 )
+
+REM 记录当前 SparkArc 项目根目录到用户目录，方便 launcher 后续定位
+"%PYTHON_EXE%" -X utf8 -c "from core.service_registry import record_service_install; record_service_install(r'%~dp0')"
 
 if not exist "%MARKER%" (
     echo [ERROR] Deployment script finished but marker file missing. Aborting.

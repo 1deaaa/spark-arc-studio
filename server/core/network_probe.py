@@ -34,7 +34,10 @@ _GEOIP_PROVIDERS: list[str] = [
 ]
 
 _PROBE_TIMEOUT = 3.0
-_CACHE_TTL_SECONDS = 300
+# 区域探测缓存 TTL（秒）。这是所有 Python 端网络探测的统一缓存时间。
+# 设置较短（5 秒），让用户在切换网络（如开启/关闭梯子）后，下一次下载请求
+# 就能重新探测并切换镜像，而不用等很久。
+NETWORK_PROBE_CACHE_TTL_SECONDS = 5
 
 # 镜像表：同一资源类型，越靠前优先级越高。
 _MIRROR_TABLE: dict[str, dict[str, list[str]]] = {
@@ -108,7 +111,7 @@ def lookup_region() -> dict[str, Any]:
     """
     global _region_cache
     cached_at, cached = _region_cache
-    if cached is not None and _now() - cached_at < _CACHE_TTL_SECONDS:
+    if cached is not None and _now() - cached_at < NETWORK_PROBE_CACHE_TTL_SECONDS:
         return dict(cached)
 
     result: dict[str, Any] = {
@@ -250,6 +253,18 @@ def probe_hf_endpoint(
     return probe_url(url, timeout=timeout, method="HEAD")
 
 
+def get_git_clone_url(repo_url: str = "https://github.com/1deaaa/sparkarc.git") -> str:
+    """根据网络归属地返回适合 git clone 的 URL。
+
+    中国大陆网络下通过 gh-proxy.com 代理 GitHub HTTPS 克隆地址，
+    其他地区直接返回原始地址。
+    """
+    if is_mainland_china():
+        proxy = get_gh_proxy().rstrip("/")
+        return f"{proxy}/{repo_url}"
+    return repo_url
+
+
 def get_network_snapshot() -> dict[str, Any]:
     """返回完整的网络环境快照，便于日志和调试。"""
     region = lookup_region()
@@ -260,6 +275,7 @@ def get_network_snapshot() -> dict[str, Any]:
             "pypi": get_pypi_mirror(),
             "github_release": get_github_release_mirror(),
             "gh_proxy": get_gh_proxy(),
+            "git_clone": get_git_clone_url(),
         },
         "probe_timestamp": time.strftime("%Y-%m-%dT%H:%M:%SZ", time.gmtime()),
     }

@@ -28,6 +28,17 @@ const messages = {
           'ko-KR': '한국어',
         },
       },
+      disclaimer: {
+        title: '免责声明',
+        body: '您选择的是项目作者运营的仅供临时体验的测试实例。\n\n本项目完全开源免费，因此，最佳使用方式是直接拉取代码运行服务端。这样您可以自由地管理接入模型，自行控制审查开关等。\n\n测试实例会提供一些额度供您体验。限于本人的精力与财力，该实例无法保证稳定。该实例仅供临时评估，数据可能会被删除，切勿存储重要数据。',
+        acknowledge: '我已知晓',
+        deploy: '一键本地部署',
+      },
+      mobileGuide: {
+        title: '移动端部署引导',
+        body: '移动端不支持在本地一键部署服务端。推荐方案：\n\n1. 最佳：在服务器或 PC 上部署 SparkArc 后端，填入公网地址。\n2. 临时：在同一局域网的 PC 上运行后端，然后填入 http://PC的IP:6688。',
+        gotIt: '我知道了',
+      },
     },
     server: {
       title: '服务器配置',
@@ -68,6 +79,17 @@ const messages = {
           'ja-JP': '日本語',
           'ko-KR': '한국어',
         },
+      },
+      disclaimer: {
+        title: 'Disclaimer',
+        body: 'You are connecting to a temporary demo instance operated by the project author.\n\nThis project is fully open-source and free. The recommended way is to run your own server from the source code, so you can freely manage models and control content filters.\n\nThe demo instance provides limited quota for evaluation. Due to limited resources, stability cannot be guaranteed. Data may be deleted at any time — please do not store important data.',
+        acknowledge: 'I Understand',
+        deploy: 'Deploy Locally',
+      },
+      mobileGuide: {
+        title: 'Mobile Deployment Guide',
+        body: 'Mobile devices do not support one-click local deployment. Recommended options:\n\n1. Best: Deploy SparkArc backend on a server or PC, then enter the public address.\n2. Temporary: Run the backend on a PC in the same LAN, then enter http://PC-IP:6688.',
+        gotIt: 'Got It',
       },
     },
     server: {
@@ -110,6 +132,17 @@ const messages = {
           'ko-KR': '한국어',
         },
       },
+      disclaimer: {
+        title: '免責事項',
+        body: '選択中のサーバーは、プロジェクト作者が運用する体験用のテストインスタンスです。\n\n本プロジェクトは完全にオープンソースかつ無料です。最も推奨される利用方法は、ソースコードから自分のサーバーを実行することです。そうすれば、利用するモデルやコンテンツフィルターを自由に管理できます。\n\nテストインスタンスは体験用の一定の枠を提供しますが、作者のリソースに限りがあるため、安定性は保証できません。データは削除される可能性があるため、重要なデータは保存しないでください。',
+        acknowledge: '理解しました',
+        deploy: 'ローカルにデプロイ',
+      },
+      mobileGuide: {
+        title: 'モバイルデプロイガイド',
+        body: 'モバイル端末ではローカルへのワンクリックデプロイに対応していません。推奨方法：\n\n1. 最善：サーバーまたはPCにSparkArcバックエンドをデプロイし、公网アドレスを入力する。\n2. 臨時：同一LAN内のPCでバックエンドを実行し、http://PCのIP:6688 を入力する。',
+        gotIt: 'わかりました',
+      },
     },
     server: {
       title: 'サーバー設定',
@@ -150,6 +183,17 @@ const messages = {
           'ja-JP': '日本語',
           'ko-KR': '한국어',
         },
+      },
+      disclaimer: {
+        title: '면책 조항',
+        body: '선택하신 서버는 프로젝트 원작자가 운영하는 임시 체험용 테스트 인스턴스입니다.\n\n본 프로젝트는 완전히 오픈소스이며 무료입니다. 따라서 소스코드를 직접 가져와서 서버를 실행하는 것이 가장 좋은 방법입니다. 그렇게 하면 연동할 모델을 자유롭게 관리하고 필터링 설정을 직접 제어할 수 있습니다.\n\n테스트 인스턴스는 체험을 위한 일부 크레딧을 제공합니다. 다만 개인의 리소스 한계로 인해 서비스의 안정성을 보장할 수 없습니다. 임시 평가용으로 데이터가 언제든지 삭제될 수 있으니 중요한 데이터는 저장하지 마십시오.',
+        acknowledge: '이해했습니다',
+        deploy: '로컬에 배포',
+      },
+      mobileGuide: {
+        title: '모바일 배포 가이드',
+        body: '모바일 기기에서는 로컬 원클릭 배포를 지원하지 않습니다. 권장 방법:\n\n1. 최선: 서버 또는 PC에 SparkArc 백엔드를 배포하고 공개 주소를 입력하세요.\n2. 임시: 동일 LAN의 PC에서 백엔드를 실행한 후 http://PC의IP:6688을 입력하세요.',
+        gotIt: '확인',
       },
     },
     server: {

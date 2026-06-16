@@ -30,7 +30,7 @@
 #   }
 
 param(
-    [ValidateSet("json", "pypi", "github_release", "huggingface", "gh_proxy", "python_standalone", "country")]
+    [ValidateSet("json", "pypi", "github_release", "huggingface", "gh_proxy", "python_standalone", "git_clone", "country")]
     [string]$Output = "json"
 )
 
@@ -74,6 +74,11 @@ $MirrorTable = @{
     gh_proxy = @{
         default  = "https://gh-proxy.com/"
         mainland = @("https://gh-proxy.com/")
+    }
+    git_clone = @{
+        # 默认仓库：SparkArc 主仓库；中国大陆通过 gh-proxy 代理 HTTPS clone
+        default  = "https://github.com/1deaaa/sparkarc.git"
+        mainland = @("https://gh-proxy.com/https://github.com/1deaaa/sparkarc.git")
     }
     python_standalone = @{
         # 专为 pyloader 准备的完整 LatestRelease 索引页 URL
@@ -228,7 +233,7 @@ function Get-RecommendedMirror {
     #>
     param(
         [Parameter(Mandatory = $true)]
-        [ValidateSet("pypi", "github_release", "huggingface", "gh_proxy", "python_standalone")]
+        [ValidateSet("pypi", "github_release", "huggingface", "gh_proxy", "python_standalone", "git_clone")]
         [string]$Type,
         [bool]$Probe = $true
     )
@@ -305,6 +310,7 @@ if ($MyInvocation.InvocationName -ne '.') {
             }
             $url
         }
+        "git_clone"       { (Get-RecommendedMirror -Type "git_clone").Primary }
         "country"         { (Get-NetworkRegion).CountryCode }
         default           { Invoke-NetworkProbe | ConvertTo-Json -Depth 4 }
     }

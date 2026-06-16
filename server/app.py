@@ -316,6 +316,14 @@ async def lifespan(app: FastAPI):
         except Exception as e:
             print(f"⚠️ Tokenizer warm-up submission failed (non-fatal): {e}", flush=True)
 
+        # 注册当前 SparkArc 项目根目录到用户目录，方便 launcher 定位
+        try:
+            from core.service_registry import record_service_install
+            project_root = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+            record_service_install(project_root)
+        except Exception:
+            pass
+
         # 应用启动后预热
         asyncio.create_task(warm_up())
         try:

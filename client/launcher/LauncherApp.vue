@@ -208,6 +208,59 @@
           </div>
         </div>
       </Transition>
+
+      <!-- 默认远端免责声明弹窗 -->
+      <Transition name="panel-slide">
+        <div v-if="showDisclaimer" class="launcher-overlay" @click.self="dismissDisclaimer">
+          <div class="launcher-overlay__card">
+            <div class="launcher-overlay__header">
+              <span class="launcher-overlay__title">{{ t('launcher.disclaimer.title') }}</span>
+            </div>
+            <div class="launcher-overlay__body">
+              <p class="launcher-disclaimer__body">{{ t('launcher.disclaimer.body') }}</p>
+              <div class="launcher-disclaimer__actions">
+                <button
+                  type="button"
+                  class="launcher-disclaimer__btn launcher-disclaimer__btn--secondary"
+                  @click="acknowledgeDefaultRemote"
+                >
+                  {{ t('launcher.disclaimer.acknowledge') }}
+                </button>
+                <button
+                  type="button"
+                  class="launcher-disclaimer__btn launcher-disclaimer__btn--primary"
+                  @click="startLocalDeployment"
+                >
+                  {{ t('launcher.disclaimer.deploy') }}
+                </button>
+              </div>
+            </div>
+          </div>
+        </div>
+      </Transition>
+
+      <!-- 移动端本地部署引导弹窗 -->
+      <Transition name="panel-slide">
+        <div v-if="showMobileGuide" class="launcher-overlay" @click.self="closeMobileGuide">
+          <div class="launcher-overlay__card">
+            <div class="launcher-overlay__header">
+              <span class="launcher-overlay__title">{{ t('launcher.mobileGuide.title') }}</span>
+            </div>
+            <div class="launcher-overlay__body">
+              <p class="launcher-disclaimer__body">{{ t('launcher.mobileGuide.body') }}</p>
+              <div class="launcher-disclaimer__actions">
+                <button
+                  type="button"
+                  class="launcher-disclaimer__btn launcher-disclaimer__btn--primary"
+                  @click="closeMobileGuide"
+                >
+                  {{ t('launcher.mobileGuide.gotIt') }}
+                </button>
+              </div>
+            </div>
+          </div>
+        </div>
+      </Transition>
     </div>
   </div>
 </template>
@@ -215,6 +268,7 @@
 <script setup lang="ts">
 import { computed, onBeforeUnmount, onMounted, ref, watch } from 'vue';
 import { useI18n } from 'vue-i18n';
+import { invoke } from '@tauri-apps/api/core';
 import SparkLoaderAnimation from '@/components/share/SparkLoaderAnimation.vue';
 import { useThemeStore } from '@/components/stores/themeStore';
 import { useWindowControls } from '@/composables/useWindowControls';
@@ -242,8 +296,13 @@ import {
 } from '@/utils/launcherHandoff';
 import { setI18nLocale } from './i18n';
 import { SUPPORTED_LOCALES, normalizeLocale, type AppLocale } from '@/i18n/types';
+import {
+  LAUNCHER_DEFAULT_REMOTE_ACK_KEY,
+  LAUNCHER_DEFAULT_REMOTE_SERVER,
+  LAUNCHER_SERVICE_RECORD_FILE,
+} from './constants';
 
-const APP_DEFAULT_SERVER = 'https://arc.1dea.top';
+const APP_DEFAULT_SERVER = LAUNCHER_DEFAULT_REMOTE_SERVER;
 const AUTO_ENTER_KEY = 'spark_launcher_auto_enter';
 
 const { t, locale } = useI18n();
@@ -294,6 +353,14 @@ const serverPanelOpen = ref(false);
 const serverChecking = ref(false);
 const serverInput = ref(getApiBaseUrl());
 const serverStatusOk = ref(false);
+
+// 免责声明 / 本地部署相关状态
+const showDisclaimer = ref(false);
+const showMobileGuide = ref(false);
+const localBackendDirExists = ref(false);
+const localBackendDeploying = ref(false);
+const deploymentLog = ref('');
+
 const serverDisplayAddr = computed(() => {
   const addr = serverInput.value || APP_DEFAULT_SERVER;
   try {
@@ -398,6 +465,65 @@ async function detectLocalhandshake(): Promise<string | null> {
   return null;
 }
 
+// ===== 默认远端免责声明 / 本地部署 =====
+function readAckPreference(): boolean {
+  if (typeof window === 'undefined') return false;
+  try {
+    return localStorage.getItem(LAUNCHER_DEFAULT_REMOTE_ACK_KEY) === '1';
+  } catch {
+    return false;
+  }
+}
+
+function persistAckPreference() {
+  if (typeof window === 'undefined') return;
+  try {
+    localStorage.setItem(LAUNCHER_DEFAULT_REMOTE_ACK_KEY, '1');
+  } catch {
+    // ignore
+  }
+}
+
+async function detectLocalBackendDir(): Promise<boolean> {
+  if (!isTauriDesktop.value) return false;
+  try {
+    return await invoke<boolean>('check_local_backend_dir');
+  } catch {
+    return false;
+  }
+}
+
+function acknowledgeDefaultRemote() {
+  persistAckPreference();
+  showDisclaimer.value = false;
+}
+
+async function startLocalDeployment() {
+  showDisclaimer.value = false;
+
+  if (!isTauriDesktop.value) {
+    showMobileGuide.value = true;
+    return;
+  }
+
+  localBackendDeploying.value = true;
+  deploymentLog.value = '';
+  try {
+    await invoke('start_local_deployment');
+    // 启动后会自动轮询本地端口，成功后跳转
+  } catch (err) {
+    deploymentLog.value = String(err);
+  }
+}
+
+function closeMobileGuide() {
+  showMobileGuide.value = false;
+}
+
+function dismissDisclaimer() {
+  showDisclaimer.value = false;
+}
+
 async function checkServerOnLauncherStartup() {
   const startupHints = consumeLauncherStartupHintsFromUrl();
   skipAutoConnectOnce.value = !!startupHints?.skipAutoConnect;
@@ -405,6 +531,9 @@ async function checkServerOnLauncherStartup() {
   if (startupHints?.reason === 'manual-server-switch') {
     clearLauncherResume();
   }
+
+  // 提前探测本地后端目录，供免责声明决策使用
+  localBackendDirExists.value = await detectLocalBackendDir();
 
   if (startupHints?.serverBase) {
     setApiBaseUrl(startupHints.serverBase);
@@ -425,7 +554,16 @@ async function checkServerOnLauncherStartup() {
 
   if (!health.ok) {
     serverStatusOk.value = false;
-    serverPanelOpen.value = true;
+    // 首次使用默认远端且没有本地后端时，弹免责声明
+    if (
+      configured === APP_DEFAULT_SERVER &&
+      !localBackendDirExists.value &&
+      !readAckPreference()
+    ) {
+      showDisclaimer.value = true;
+    } else {
+      serverPanelOpen.value = true;
+    }
     bootReady.value = true;
     return;
   }
@@ -1471,6 +1609,56 @@ watch(autoEnterNextTime, (nextValue) => {
     transform: scale(1.16);
     opacity: 1;
   }
+}
+
+/* --- 免责声明 / 移动端引导弹窗 --- */
+.launcher-disclaimer__body {
+  margin: 0;
+  font-size: 13px;
+  line-height: 1.7;
+  color: color-mix(in srgb, var(--spark-text), transparent 18%);
+  white-space: pre-line;
+}
+
+.launcher-disclaimer__actions {
+  display: flex;
+  gap: 12px;
+  justify-content: flex-end;
+  margin-top: 20px;
+}
+
+.launcher-disclaimer__btn {
+  height: 40px;
+  padding: 0 18px;
+  border-radius: 12px;
+  border: none;
+  font-size: 13px;
+  font-weight: 600;
+  cursor: pointer;
+  transition: background-color 0.2s ease, transform 0.1s ease;
+}
+
+.launcher-disclaimer__btn--primary {
+  background: var(--spark-primary);
+  color: #ffffff;
+}
+
+.launcher-disclaimer__btn--primary:hover {
+  filter: brightness(1.08);
+}
+
+.launcher-disclaimer__btn--secondary {
+  background: color-mix(in srgb, var(--spark-panel-bg), transparent 40%);
+  color: color-mix(in srgb, var(--spark-text), transparent 20%);
+  border: 1px solid color-mix(in srgb, var(--spark-border), transparent 60%);
+}
+
+.launcher-disclaimer__btn--secondary:hover {
+  background: color-mix(in srgb, var(--spark-panel-bg), transparent 20%);
+}
+
+.launcher-disclaimer__btn:active {
+  transform: scale(0.98);
 }
 
 /* --- 移动端 --- */

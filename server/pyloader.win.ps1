@@ -33,10 +33,11 @@ $ReqHashFile   = Join-Path $EnvDir ".requirements.sha256"
 $PythonExe     = Join-Path $EnvDir "python.exe"
 $InitScript    = Join-Path $BasePath "init_env.py"
 $ReqFile       = Join-Path $BasePath "requirements.txt"
-# 允许调用方通过环境变量覆盖镜像；未设置时保持原有中国大陆默认镜像。
-$PipMirror         = if ($env:PYLOADER_PIP_MIRROR) { $env:PYLOADER_PIP_MIRROR } else { "https://mirrors.aliyun.com/pypi/simple/" }
-$PythonMirrorBase  = if ($env:PYLOADER_PYTHON_MIRROR_BASE) { $env:PYLOADER_PYTHON_MIRROR_BASE } else { "https://mirrors.ustc.edu.cn" }
-$MirrorLatestUrl   = if ($env:PYLOADER_PYTHON_MIRROR_LATEST) { $env:PYLOADER_PYTHON_MIRROR_LATEST } else { "$PythonMirrorBase/github-release/astral-sh/python-build-standalone/LatestRelease/" }
+
+# 允许调用方通过环境变量覆盖镜像；正常使用无需设置，脚本会自动探测网络区域。
+$PipMirror         = if ($env:PYLOADER_PIP_MIRROR) { $env:PYLOADER_PIP_MIRROR } else { $null }
+$PythonMirrorBase  = if ($env:PYLOADER_PYTHON_MIRROR_BASE) { $env:PYLOADER_PYTHON_MIRROR_BASE } else { $null }
+$MirrorLatestUrl   = $null
 $ArchiveName       = $null
 $ArchiveLocal      = $null
 $ResolvedPythonVersion = $null
@@ -48,6 +49,49 @@ function Exit-WithError {
     Write-Host "[ERROR] $Message" -ForegroundColor Red
     Read-Host "Press Enter to exit"
     exit 1
+}
+
+function Resolve-Mirrors {
+    # 如果调用方已经显式覆盖了镜像，则跳过探测
+    if ($PipMirror -and $PythonMirrorBase) {
+        Write-Host "[mirror] Using caller-provided mirror overrides." -ForegroundColor Cyan
+        $script:MirrorLatestUrl = "$PythonMirrorBase/github-release/astral-sh/python-build-standalone/LatestRelease/"
+        return
+    }
+
+    $providers = @(
+        "https://freeipapi.com/api/json/"
+        "https://ipapi.co/json/"
+        "https://ipwho.is/json/"
+    )
+
+    $countryCode = $null
+    foreach ($provider in $providers) {
+        try {
+            $resp = Invoke-RestMethod -Uri $provider -TimeoutSec 3 -ErrorAction Stop
+            $countryCode = ($resp.countryCode -or $resp.country_code -or $resp.country)
+            if ($countryCode) {
+                $countryCode = $countryCode.ToString().Trim().ToUpper()
+                if ($countryCode.Length -ge 2) { break }
+            }
+        }
+        catch {
+            continue
+        }
+    }
+
+    if ($countryCode -eq "CN") {
+        Write-Host "[mirror] Detected mainland China network (CN), using domestic mirrors." -ForegroundColor Cyan
+        $script:PipMirror         = if ($PipMirror) { $PipMirror } else { "https://mirrors.aliyun.com/pypi/simple/" }
+        $script:PythonMirrorBase  = if ($PythonMirrorBase) { $PythonMirrorBase } else { "https://mirrors.ustc.edu.cn" }
+    }
+    else {
+        Write-Host "[mirror] Network region: ${countryCode}, using default mirrors." -ForegroundColor Cyan
+        $script:PipMirror         = if ($PipMirror) { $PipMirror } else { "https://pypi.org/simple/" }
+        $script:PythonMirrorBase  = if ($PythonMirrorBase) { $PythonMirrorBase } else { "https://github.com" }
+    }
+
+    $script:MirrorLatestUrl = "$PythonMirrorBase/github-release/astral-sh/python-build-standalone/LatestRelease/"
 }
 
 function Get-CurrentPythonVersion {
@@ -125,11 +169,18 @@ function Resolve-PythonArchive {
     $script:ArchiveName = "cpython-$ResolvedPythonVersion+$ResolvedReleaseTag-x86_64-pc-windows-msvc-install_only.tar.gz"
     $script:ArchiveLocal = Join-Path $RuntimeRoot $ArchiveName
 
+    # PythonMirrorBase 已根据网络区域自动选择：国内用 USTC 镜像，海外用 GitHub 官方
+    $mirrorUrl = if ($PythonMirrorBase -eq "https://github.com") {
+        "https://github.com/astral-sh/python-build-standalone/releases/download/$ResolvedReleaseTag/$ArchiveName"
+    } else {
+        "$PythonMirrorBase$($best.Href)"
+    }
+
     return [pscustomobject]@{
         Version     = $ResolvedPythonVersion
         ReleaseTag  = $ResolvedReleaseTag
         ArchiveName = $ArchiveName
-        MirrorUrl   = "$PythonMirrorBase$($best.Href)"
+        MirrorUrl   = $mirrorUrl
     }
 }
 
@@ -268,6 +319,9 @@ namespace SparkArc {
 }
 "@
 }
+
+# ---- 网络探测与镜像选择 ----
+Resolve-Mirrors
 
 # ---- Skip python deployment if already fully deployed ----
 $CurrentVersion = Get-CurrentPythonVersion

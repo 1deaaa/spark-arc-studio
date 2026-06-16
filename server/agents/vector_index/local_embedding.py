@@ -21,7 +21,13 @@ from typing import Any
 
 import requests
 
-from core.network_probe import get_hf_endpoint, get_gh_proxy, is_mainland_china, probe_hf_endpoint
+from core.network_probe import (
+    NETWORK_PROBE_CACHE_TTL_SECONDS,
+    get_hf_endpoint,
+    get_gh_proxy,
+    is_mainland_china,
+    probe_hf_endpoint,
+)
 
 from .embedding_contract import (
     QWEN3_EMBEDDING_DIMENSIONS,
@@ -113,7 +119,7 @@ def _hf_endpoint() -> str | None:
     """
     global _hf_endpoint_cache
     cached_at, cached_endpoint = _hf_endpoint_cache
-    if time.monotonic() - cached_at < 300:
+    if time.monotonic() - cached_at < NETWORK_PROBE_CACHE_TTL_SECONDS:
         return cached_endpoint
 
     recommended = get_hf_endpoint()
