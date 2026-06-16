@@ -67,6 +67,43 @@ Director 的 `delegate_task` 不再同步调用目标 Agent 的 `chat()`，而�
 
 SparkArc 所有 Agent 的所有调用——无论是面板按钮、聊天对话还是导演委派——最终都汇入**同一条管线**。理解这条管线，就理解了整个 Agent 体系的运行方式。
 
+### 2.0 聊天上下文结构与缓存前缀策略
+
+聊天链路的上下文拼接收口在 `server/agents/prompt_layout.py` 与 `server/agents/context_budget.py`。核心目标是：**把高复用、低变化内容尽量放在消息前缀，把本轮易变内容放到最后一条 user message**，让上游模型的 prompt cache 尽可能稳定命中。
+
+```mermaid
+flowchart TD
+    A["Agent 身份与模态 prompt<br/>chat_system / pipeline_system<br/>固定：同 Agent + 同模态基本稳定"] --> B["语言策略<br/>prepend_prompt_language_policy<br/>固定：随 locale 变化"]
+    B --> C["工具清单<br/>tools/registry.py 按 agent_id 聚合<br/>固定：随 Agent 工具注册变化"]
+    C --> D["工具执行规则<br/>确认规则 / PIPELINE MODE<br/>固定：随 skip_tool_confirmation 变化"]
+    D --> E["tool reference<br/>落盘工具 → YAML system 规范<br/>固定：随 Agent 规范与 export_format 变化"]
+    E --> F["tool_rules<br/>YAML 顶层补充规则<br/>固定：随 Agent YAML 变化"]
+    F --> G["SystemMessage 完成<br/>缓存友好稳定前缀"]
+
+    H["历史消息<br/>ChatManager 最近历史<br/>历史：随对话增长"] --> I["context_budget<br/>预算裁剪 / 压缩摘要 / 工具边界修复"]
+    I --> J["历史窗口<br/>历史：保留最近对话或压缩摘要"]
+
+    K["active_context<br/>当前编辑区 / 附件清单 / 单附件正文<br/>动态：每轮任务现场"] --> L["build_current_user_message"]
+    M["user_message<br/>本轮用户请求<br/>动态：每轮变化"] --> L
+    L --> N["最后一条 HumanMessage<br/>动态尾部"]
+
+    G --> O["最终 messages"]
+    J --> O
+    N --> O
+    O --> P["LLM 调用<br/>上游返回 prompt_tokens / cached_prompt_tokens"]
+```
+
+稳定前缀主要由以下部分组成：Agent 模态 prompt、语言策略、工具清单、工具确认规则、tool reference、tool_rules。历史消息和压缩摘要位于中段；本轮 `active_context`、附件现场和用户请求统一塞入最后一条 user message。这样做的效果是：用户在同一个 Agent、同一个模态下连续工作时，系统段和工具协议段不会因为编辑区内容变化而整体漂移；接入 AgentSkills 也不会默认破坏前缀，因为 Skill 内容不会自动灌入 system 前缀，只有模型显式调用 `search_skills` / `read_skill` 后才作为工具结果进入后续历史。
+
+需要注意的边界：
+
+- `web_search` 的日期锚点会随日期变化，是少量必要动态内容；它只影响绑定了 `web_search` 的 Agent。
+- Director 的团队成员能力概览由 registry 运行时构建，随 Agent 注册表变化而变化。
+- 单附件全文、当前编辑器上下文、多附件清单都属于动态尾部，不应提前塞入 system。
+- 多轮工具循环会调用 `rebudget_existing_messages`，并用附件分片滑窗折叠旧 `read_attachment_chunk` 结果，避免历史膨胀。
+- 更换模型 / 平台、修改专家 prompt / `pipeline_system` / `tool_rules`、改变工具绑定、语言策略或部分全局参数，都会改变稳定前缀并导致上游缓存重新建立。
+- 前端在消息下方展示 `context_window_stats`。完成后，后端只从 `llm_usage.by_agent[当前窗口 agent_id]` 合并当前 Agent 的缓存命中 token；为 0 时不显示。`llm_usage` 顶层是整个 chat task 的全链路汇总，可能包含导演委派的子 Agent，只用于后台成本诊断，不作为当前窗口缓存命中率。
+
 ### 2.1 一张图看懂：三条入口，一条管线
 
 ```mermaid
@@ -89,8 +126,9 @@ flowchart TD
 
     subgraph CHAT_PIPE["对话管线（统一入口）"]
         CHAT["chat_stream()"] --> SEL["第一步：选 prompt 字段<br/>skip=False → chat_system<br/>skip=True  → pipeline_system"]
-        SEL --> ASM["第二步：_build_tool_system_prompt() 装配<br/>+ 工具列表 + 确认规则 + tool reference<br/>+ active_context + tool_rules"]
-        ASM --> LLM2["第三步：llm.bind_tools().stream()<br/>✅ 有工具绑定，多轮循环"]
+        SEL --> ASM["第二步：_build_tool_system_prompt() 装配<br/>+ 工具列表 + 确认规则 + tool reference<br/>+ tool_rules"]
+        ASM --> LAYOUT["第三步：build_chat_prompt_layout()<br/>动态 active_context 放入最后 user"]
+        LAYOUT --> LLM2["第四步：llm.bind_tools().stream()<br/>✅ 有工具绑定，多轮循环"]
         LLM2 --> OUT2["文本增量 + 工具调用混合输出"]
     end
 ```
@@ -148,13 +186,14 @@ flowchart TD
     ASM_LIST --> A2["工具列表（registry.py 按 agent_id 查询）"]
     ASM_LIST --> A3["确认规则<br/>skip=False → 需用户确认<br/>skip=True  → PIPELINE MODE 自动执行"]
     ASM_LIST --> A4["tool reference block<br/>落盘工具 → 格式规范自动注入"]
-    ASM_LIST --> A5["active_context（当前编辑内容）"]
-    ASM_LIST --> A6["tool_rules（从 YAML 自动加载）"]
+    ASM_LIST --> A5["tool_rules（从 YAML 自动加载）"]
+    ASM_LIST --> A6["Agent Skills 边界说明<br/>仅绑定 skill 工具时追加"]
     A6 --> DIR_NOTE["Director 额外追加：<br/>团队成员能力概览块"]
 
-    A1 & A2 & A3 & A4 & A5 & A6 & DIR_NOTE --> STEP3
+    A1 & A2 & A3 & A4 & A5 & A6 & DIR_NOTE --> LAYOUT["build_chat_prompt_layout()<br/>active_context + user_message<br/>放入最后一条 user"]
 
     STEP3["第三步：LLM 多轮工具调用循环"]
+    LAYOUT --> STEP3
     STEP3 --> LOOP["llm.bind_tools(tools).stream(messages)"]
     LOOP --> YIELD["文本增量：yield 给前端"]
     LOOP --> TOOL["工具调用：_execute_tool_calls() 执行落盘"]
@@ -218,14 +257,16 @@ flowchart LR
 
 ### 2.6 各 Agent 完整调用速查
 
-| Agent | 专有工作管线（面板按钮） | 对话管线工具 |
-| :--- | :--- | :--- |
-| **Director** | ❌ 无（纯对话入口） | `delegate_task` + 读取工具 + 自动化工具 + 团队概览 |
-| **Showrunner** | `generate_synopsis` / `generate_beat_sheet` / `generate_outline` | `rewrite_synopsis` / `rewrite_beat_sheet` / `rewrite_outline` + patch 系列 |
-| **Scriptwriter** | `write_script`(arc/novel) / `bridge_scenes` / `feedback` | `create_chapter` / `create_or_rewrite_script` / `patch_script` / `work_tracker` / 读取工具 |
-| **Critic** | `evaluate` | `SHARED_READ_TOOLS`（仅读取，无落盘工具） |
-| **Muse** | `expand_inspiration` | `rewrite_inspiration` / `web_search` |
-| **Lorebook** | `build_worldview` / `generate_character` | `rewrite_worldview` / `rewrite_all_characters` / `update_character` / `patch_worldview` |
+| Agent | 负责范围 | 专有工作管线（面板按钮） | 对话管线工具 |
+| :--- | :--- | :--- | :--- |
+| **Director** | 总入口与调度中枢：拆任务、读项目、委派专家、触发 Auto-Write | ❌ 无（纯对话入口） | `delegate_task` + 读取工具 + 自动化工具 + 搜索工具 + 团队概览 |
+| **Showrunner** | 文案策划，兼具三类职责：梗概策划、节拍表设计、分章/分集大纲组织 | `generate_synopsis` / `generate_beat_sheet` / `generate_outline` | `rewrite_synopsis` / `rewrite_beat_sheet` / `rewrite_outline` + patch 系列 |
+| **Scriptwriter** | 执笔编剧：正文、场景、对白、续写、章节整理与局部补丁 | `write_script`(arc/novel) / `bridge_scenes` / `feedback` | `create_chapter` / `create_or_rewrite_script` / `organize_scenes_to_chapter` / `patch_script` / `work_tracker` / 读取工具 |
+| **Critic** | 评审专家：AI 味、对白自然度、文学承载、逻辑与人设一致性审核 | `evaluate` | 共享读取工具 + `graph_rag_tool` + AgentSkills 工具；无落盘工具 |
+| **Muse** | 灵感种子：灵感扩展、灵感库读取、灵感绑定与外部资料检索 | `expand_inspiration` | `rewrite_inspiration` / `list_inspirations` / `read_inspiration` / `bind_inspiration_to_current_project` / `web_search` |
+| **Lorebook** | 设定专家：世界观、角色档案、人物关系、背景百科与设定补丁 | `build_worldview` / `generate_character` | `rewrite_worldview` / `rewrite_all_characters` / `update_character` / `patch_worldview` |
+| **Style** | 文风克隆：长文本风格分析、风格档案、负向约束与文风迁移 | 风格分析子集群 | 无聊天工具绑定 |
+| **Utility** | 系统内部工具：上下文压缩、附件预处理等基础能力 | 内部调用 | 不进入聊天入口 |
 
 ### 2.7 新增 Agent 自检清单
 
@@ -268,12 +309,12 @@ SparkArc 的工具层采用“统一门面 + 内部按域拆分”的结构：
 
 | Agent | 工具列表 |
 | :--- | :--- |
-| **Director** | `list_chapters`, `read_chapter_scene`, `read_chapter_outline_raw`, `delegate_task`, `work_tracker`, `trigger_auto_write`, `check_scriptwriter_status`, `search_project`, `semantic_search`, `replace_from_search`, `web_search`, `read_attachment_chunk` |
-| **Muse** | `rewrite_inspiration`, `web_search` |
-| **Lorebook** | `rewrite_worldview`, `rewrite_all_characters`, `update_character`, `patch_worldview` |
-| **Showrunner** | `rewrite_synopsis`, `rewrite_beat_sheet`, `rewrite_outline`, `patch_synopsis`, `patch_beat_sheet`, `patch_outline`, `read_chapter_outline_raw` |
-| **Scriptwriter** | `create_chapter`, `create_or_rewrite_script`, `patch_script`, `read_worldview`, `read_character`, `read_synopsis`, `read_beat_sheet`, `work_tracker` + `list_chapters`, `read_chapter_scene`, `read_chapter_outline_raw` |
-| **Critic** | `list_chapters`, `read_chapter_scene`, `read_chapter_outline_raw`（仅共享读取工具） |
+| **Director** | `list_chapters`, `read_chapter_scene`, `read_chapter_outline_raw`, `delegate_task`, `organize_scenes_to_chapter`, `work_tracker`, `trigger_auto_write`, `check_scriptwriter_status`, `update_project_story_tags`, `search_project`, `semantic_search`, `replace_from_search`, `graph_rag_tool`, `web_search`, `read_attachment_chunk`, `search_skills`, `read_skill`, `read_skill_reference` |
+| **Muse** | `rewrite_inspiration`, `list_inspirations`, `read_inspiration`, `bind_inspiration_to_current_project`, `web_search`, `search_skills`, `read_skill`, `read_skill_reference` |
+| **Lorebook** | `rewrite_worldview`, `rewrite_all_characters`, `update_character`, `patch_worldview`, `search_skills`, `read_skill`, `read_skill_reference` |
+| **Showrunner** | `rewrite_synopsis`, `rewrite_beat_sheet`, `rewrite_outline`, `patch_synopsis`, `patch_beat_sheet`, `patch_outline`, `read_chapter_outline_raw`, `search_skills`, `read_skill`, `read_skill_reference` |
+| **Scriptwriter** | `create_chapter`, `create_or_rewrite_script`, `organize_scenes_to_chapter`, `patch_script`, `read_worldview`, `read_character`, `read_synopsis`, `read_beat_sheet`, `work_tracker`, `graph_rag_tool`, `search_skills`, `read_skill`, `read_skill_reference` + `list_chapters`, `read_chapter_scene`, `read_chapter_outline_raw` |
+| **Critic** | `list_chapters`, `read_chapter_scene`, `read_chapter_outline_raw`, `graph_rag_tool`, `search_skills`, `read_skill`, `read_skill_reference` |
 | **Style** | 无绑定工具（通过子集群内部流程执行） |
 
 ### 3.2 可选灰度工具
@@ -283,7 +324,17 @@ SparkArc 的工具层采用“统一门面 + 内部按域拆分”的结构：
 | `graph_rag_tool` | 已生产化，默认不挂载 | 支持 `build` / `query` / `status` / `reset` 四种操作，查询模式支持 `local` / `global` / `drift`。若要启用，只需加入目标 Agent 的工具列表 |
 | `capture_inspiration` | MCP 专用 | 仅通过 MCP Server 暴露，不挂载到任何聊天 Agent |
 
-### 3.3 Scriptwriter 三模式工具授权
+### 3.3 AgentSkills 与 MCP 兼容层
+
+SparkArc 同时兼容两类外部生态，但两者边界不同：
+
+- **AgentSkills**：面向写作质量参考。用户或管理员通过 `/api/agents/skills` 上传 `SKILL.md` 或从 URL 导入，后端存入用户域 / 全局域索引。导入时只保留文本与允许目录，并生成 `QUALITY_ADAPTER.md`；脚本、工具、安装命令、MCP 运行时说明会被忽略或剥离。聊天 Agent 只通过 `search_skills` / `read_skill` / `read_skill_reference` 按需读取，读取视图明确声明不得改变系统输出格式、工具协议、字段结构或落盘规则。
+- **MCP 灵感信箱**：面向外部客户端写入灵感。FastMCP 服务挂载在 `/api/mcp`，由用户 MCP API Key 鉴权，当前生产工具是 `capture_inspiration`。该工具列入 `MCP_ONLY_TOOLS`，不挂载给聊天 Agent，避免普通对话绕过灵感来源与未读状态语义。
+- **外部 MCP 搜索**：`web_search` 内部通过 Exa MCP Streamable HTTP 调用外部搜索服务，但它在 SparkArc 内仍表现为普通工具，统一经 `tools/registry.py` 分配给需要联网知识的 Agent。
+
+AgentSkills 对 prompt cache 的影响是受控的：Skill 内容不是固定 system 前缀的一部分，只有被工具读取后才作为工具结果进入后续上下文。也就是说，安装 Skill 不会改变同一 Agent 的稳定前缀；使用某个 Skill 会改变本轮及后续历史，这是符合预期的动态内容。
+
+### 3.4 Scriptwriter 三模式工具授权
 
 | 模式 | 授权工具 |
 | :--- | :--- |

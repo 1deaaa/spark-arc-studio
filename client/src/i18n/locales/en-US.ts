@@ -921,6 +921,8 @@ const enUS = {
       daysAgo: '{count}d ago',
       windowTokenLabel: 'Window ↑{input} / ↓{output}',
       windowTokenHint: 'Tokens that most recently entered the actual context window for this reply. ↑ is input, ↓ is output.',
+      cachedTokenLabel: 'cached {cached}',
+      cachedTokenHint: '{cached} cached tokens, hit rate {rate}',
       contextCompacting: 'Compacting context',
       contextCompacted: 'Context compacted, continuing',
       contextCompactFailed: 'Compaction failed; continuing with recent context',

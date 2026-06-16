@@ -921,6 +921,8 @@ const jaJP = {
       daysAgo: '{count}日前',
       windowTokenLabel: 'ウィンドウ ↑{input} / ↓{output}',
       windowTokenHint: 'この返信で直近に実際のコンテキストウィンドウへ入った token 数です。↑ は入力、↓ は出力を表します。',
+      cachedTokenLabel: 'キャッシュ {cached}',
+      cachedTokenHint: 'キャッシュ命中 {cached} token、命中率 {rate}',
       contextCompacting: 'コンテキストを圧縮中',
       contextCompacted: 'コンテキストを圧縮しました。生成を続けます',
       contextCompactFailed: '圧縮に失敗しました。直近のコンテキストで続行します',

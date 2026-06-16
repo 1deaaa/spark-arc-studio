@@ -4,7 +4,11 @@ import asyncio
 import threading
 import time
 
-from agents.routes.chat import _observe_chat_task_events, _run_chat_stream_with_retry
+from agents.routes.chat import (
+    _merge_context_window_stats_with_usage,
+    _observe_chat_task_events,
+    _run_chat_stream_with_retry,
+)
 from agents.routes.chat_task import ChatTaskEntry
 
 
@@ -134,3 +138,29 @@ def test_chat_stream_retry_suppresses_intermediate_error_events(monkeypatch) -> 
     ]
     assert not any(event.get("event") == "error" for event in entry.event_log)
     assert entry.build_snapshot()["content"] == "最终成功"
+
+
+def test_context_window_stats_merges_agent_cache_usage() -> None:
+    stats = {
+        "agent_id": "agent_lorebook",
+        "input_tokens": 1200,
+        "output_tokens": 0,
+    }
+    usage = {
+        "by_agent": {
+            "agent_lorebook": {
+                "completion_tokens": 240,
+                "cached_prompt_tokens": 900,
+                "cache_miss_prompt_tokens": 300,
+                "cache_hit_rate": 0.75,
+            }
+        }
+    }
+
+    merged = _merge_context_window_stats_with_usage(stats, usage)
+
+    assert merged is not None
+    assert merged["output_tokens"] == 240
+    assert merged["cached_prompt_tokens"] == 900
+    assert merged["cache_miss_prompt_tokens"] == 300
+    assert merged["cache_hit_rate"] == 0.75

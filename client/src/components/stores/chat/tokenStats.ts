@@ -4,6 +4,9 @@ export type ContextWindowStats = {
   agentId: string;
   inputTokens: number;
   outputTokens: number;
+  cachedPromptTokens: number;
+  cacheMissPromptTokens: number;
+  cacheHitRate: number | null;
   originalTokens: number;
   retainedMessages: number;
   model: string;
@@ -61,6 +64,14 @@ export function extractContextWindowStats(evt: AnyRecord): ContextWindowStats {
     agentId: String(evt.agent_id || evt.agentId || evt.source_agent || evt.sourceAgent || ''),
     inputTokens: Number(evt.input_tokens ?? evt.inputTokens ?? 0) || 0,
     outputTokens: Number(evt.output_tokens ?? evt.outputTokens ?? 0) || 0,
+    cachedPromptTokens: Number(evt.cached_prompt_tokens ?? evt.cachedPromptTokens ?? 0) || 0,
+    cacheMissPromptTokens: Number(evt.cache_miss_prompt_tokens ?? evt.cacheMissPromptTokens ?? 0) || 0,
+    cacheHitRate: (() => {
+      const raw = evt.cache_hit_rate ?? evt.cacheHitRate;
+      if (raw == null) return null;
+      const value = Number(raw);
+      return Number.isFinite(value) ? Math.max(0, Math.min(1, value)) : null;
+    })(),
     originalTokens: Number(evt.original_tokens ?? evt.originalTokens ?? 0) || 0,
     retainedMessages: Number(evt.retained_messages ?? evt.retainedMessages ?? 0) || 0,
     model: String(evt.model || ''),

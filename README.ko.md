@@ -91,7 +91,8 @@ SparkArc의 아키텍처는 헐리우드 극본가 및 AAA 게임사의 시나�
 * [시스템 아키텍처](#시스템-아키텍처)
   * [1. 에이전트 클러스터](#1-에이전트-클러스터)
     * [스타일 클론 클러스터](#스타일-클론-클러스터)
-  * [2. 신호등 버스 통신 메커니즘](#2-신호등-버스-통신-메커니즘)
+  * [2. 컨텍스트 구조와 통합 실행 파이프라인](#2-컨텍스트-구조와-통합-실행-파이프라인)
+  * [3. 신호등 버스 통신 메커니즘](#3-신호등-버스-통신-메커니즘)
 * [데이터 프로토콜](#데이터-프로토콜)
   * [ARC 인터랙티브 극본 포맷](#arc-인터랙티브-극본-포맷)
   * [Novel 순수 소설 모드](#novel-순수-소설-모드)
@@ -387,9 +388,35 @@ graph TD
 
 > 📗 스타일 분석 매개변수와 어조 대치 가이드는 [아키텍처 가이드라인 §7](docs/architecture.md#7-风格克隆集群完整版)에서 확인하실 수 있습니다.
 
----
+### 2. 컨텍스트 구조와 통합 실행 파이프라인
 
-### 2. 신호등 버스 통신 메커니즘 (Beacon Event Bus)
+SparkArc의 멀티 Agent 아키텍처는 여러 프롬프트를 나란히 호출하는 구조가 아니라, 공통 실행 인프라에 수렴합니다. 같은 플랫폼, 같은 모델, 같은 Agent의 연속 요청에서는 프로젝트 / 사용자 / Agent 식별자, 공유 system, tool reference, AgentSkills / MCP 능력 설명을 최대한 고정하고, 현재 메시지, 활성 컨텍스트, 첨부 파일, 임시 파라미터를 뒤쪽에 둡니다. 이렇게 하면 상위 접두어 캐시가 더 자주 적중하여 SparkArc 안에서 같은 모델이 계속 작업할 때 비용은 낮아지고 응답은 빨라집니다.
+
+```mermaid
+flowchart LR
+    A["고정 접두어\n프로젝트 / 사용자 / Agent 식별\n공유 system\ntool reference / AgentSkills / MCP"] --> B["동적 내용\n현재 메시지\n현재 작업\n활성 컨텍스트\n임시 파라미터 / 첨부"]
+    B --> C["히스토리 내용\n최근 대화\n압축 요약\ncheckpoint / snapshot"]
+    C --> D["통합 요청\n접두어는 최대한 고정\n히스토리는 필요한 만큼 추가"]
+```
+
+* **고정 내용**: 식별자, 역할, 공유 system, tool reference, 프로토콜 뼈대.
+* **동적 내용**: 현재 메시지, 목표, 활성 컨텍스트, 첨부, 임시 파라미터.
+* **히스토리 내용**: 최근 대화, 압축 요약, checkpoint / snapshot.
+* **실측 효과**: DeepSeek V4 flash max Director 연속 대화 테스트에서 두 번째 요청의 상위 캐시 히트 token은 `10752`, 적중률은 약 `94.5%`였습니다.
+
+> ⚠️ **캐시 무효화 주의**: 모델이나 플랫폼 변경, 전문 Agent 프롬프트 / `pipeline_system` / `tool_rules` 수정, 도구 바인딩 변경, 언어 전략 또는 일부 전역 파라미터 변경은 안정 접두어를 바꾸므로 상위 캐시가 다시 구축됩니다.
+>
+> 채팅 창 아래에 표시되는 캐시 히트 token은 해당 창 Agent의 `context_window_stats`만 사용합니다. Director 위임으로 생기는 하위 태스크는 다른 Agent, 다른 도구 집합, 다른 컨텍스트 접두어로 실행되므로 현재 창의 적중률에 섞지 않습니다. 전체 태스크 단위 `llm_usage`는 백엔드 비용 진단을 위해 전체 체인 집계로 유지됩니다.
+
+* **컨텍스트 조립**: `communication.py`가 안정적인 system 접두어를 만들고, `prompt_layout.py`가 현재 편집 영역, 첨부 현장, 이번 턴 사용자 요청을 뒤쪽에 배치하며, `context_budget.py`가 히스토리 예산, 압축, 도구 루프 재예산을 담당합니다.
+* **통합 실행 프로토콜**: 전문 Agent는 `SparkBaseAgent`와 `SparkAgentExecutor`를 재사용하며, `build_context -> execute -> write_result`를 업무 진입 계약으로 삼습니다. 채팅과 감독 위임은 모두 `chat_stream(skip_tool_confirmation)`을 통과합니다.
+* **통합 도구 생태계**: 모든 도구는 `server/agents/tools/registry.py`에서 그룹 등록되고, 공개 파사드 `agent_tools.py`로 내보내집니다. 시나리오, 아웃라인, 설정의 부분 치환은 `_apply_patch`를 공유하고, Token 분할과 시맨틱 분할도 공통 기반을 사용합니다.
+* **AgentSkills와 MCP**: AgentSkills는 `search_skills` / `read_skill` / `read_skill_reference`를 통해 필요한 시점에 읽는 집필 품질 레퍼런스이며, system 접두어를 자동으로 오염시키지 않습니다. MCP 영감 우체통은 `/api/mcp`의 `capture_inspiration`으로 제공되며 채팅 Agent 도구 목록과 분리됩니다.
+* **프론트엔드 매핑**: Agent 이름, 설명, 배지, 테마 색상은 `server/agents/registry.py`를 진실 공급원으로 사용합니다. 도구 호출 UI 메타데이터는 백엔드 `build_tool_stream_event`가 주입하고 프론트엔드 `chatStore`가 중앙에서 소비합니다.
+
+> 📗 전체 컨텍스트 구조, 캐시 적중 표시, Agent 책임 표, AgentSkills/MCP 경계, 도구 등록 세부 사항은 [아키텍처 가이드라인 §2-§3](docs/architecture.md#2-agent-统一调用管线)을 참고하십시오.
+
+### 3. 신호등 버스 통신 메커니즘
 
 여러 에이전트 간의 얽히고설키는 통신 권한과 무분별한 메시지 순환 참조(브로드캐스팅 루프)를 정비하기 위해, SparkArc는 독자적인 통신 규격인 **신호등 버스 (Beacon Event Bus)**를 구현했습니다. "신호등(Beacon) / 나팔(Horn) / 깃발(Baton)" 모델을 활용해 가상 워크룸 내의 에이전트들의 가시 권한을 통제합니다.
 

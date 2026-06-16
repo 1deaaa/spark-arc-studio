@@ -116,10 +116,6 @@ SparkArc は協調権限を以下で分離します。
 
 > 📘 完全な実行時ロジック・`pipeline_system` 厳格制約・ツール reference 機構・新 Agent チェックリスト：[アーキテクチャ詳細 §2](docs/architecture.md#2-agent-三模态调用协议完整版) および [AGENTS.md §4.5](AGENTS.md)
 
----
-
-
-
 ## システムアーキテクチャ
 
 ### 1. Agent クラスタ
@@ -244,7 +240,35 @@ graph TD
 
 > 📘 完全な直列分析詳細とネガティブ制約メカニズム：[アーキテクチャ詳細 §7](docs/architecture.md#7-风格克隆集群完整版)
 
-### 2. ビーコンバス通信メカニズム
+### 2. コンテキスト構造と統一実行パイプライン
+
+SparkArc のマルチ Agent アーキテクチャは、複数のプロンプトを並べて呼ぶだけではありません。共通の実行基盤に収束しています。同じプラットフォーム・同じモデル・同じ Agent の連続リクエストでは、プロジェクト / ユーザー / Agent 識別、共有 system、tool reference、AgentSkills / MCP の能力説明をできるだけ固定し、現在メッセージ、アクティブコンテキスト、添付、一時パラメータを後段へ寄せます。これにより上流の接頭辞キャッシュを利用しやすくなり、SparkArc 内で同じモデルが継続作業するときのコスト低下と応答高速化につながります。
+
+```mermaid
+flowchart LR
+    A["固定接頭辞\nプロジェクト / ユーザー / Agent 識別\n共有 system\ntool reference / AgentSkills / MCP"] --> B["動的内容\n現在メッセージ\n現在タスク\nアクティブコンテキスト\n一時パラメータ / 添付"]
+    B --> C["履歴内容\n最近の対話\n圧縮要約\ncheckpoint / snapshot"]
+    C --> D["統一リクエスト\n接頭辞をできるだけ固定\n履歴は必要時のみ追加"]
+```
+
+* **固定内容**：識別、役割、共有 system、tool reference、プロトコル骨格。
+* **動的内容**：現在メッセージ、目標、アクティブコンテキスト、添付、一時パラメータ。
+* **履歴内容**：最近の対話、圧縮要約、checkpoint / snapshot。
+* **実測効果**：DeepSeek V4 flash max の Director 連続対話テストで、二回目の上流キャッシュヒット token は `10752`、命中率は約 `94.5%`。
+
+> ⚠️ **キャッシュ失効の注意**：モデルやプラットフォームの変更、専門 Agent のプロンプト / `pipeline_system` / `tool_rules` の編集、ツールバインディング、言語戦略、一部グローバルパラメータの変更は安定接頭辞を変えるため、上流キャッシュは再構築されます。
+>
+> チャットウィンドウ下部に表示されるキャッシュヒット token は、そのウィンドウ所属 Agent の `context_window_stats` だけを使います。Director 委譲によるサブタスクは別 Agent・別ツール集合・別コンテキスト接頭辞で動くため、現在ウィンドウの命中率には混ぜません。全タスク単位の `llm_usage` は、バックエンドのコスト診断用に全チェーン集計として保持されます。
+
+* **コンテキスト組み立て**：`communication.py` が安定した system 接頭辞を構築し、`prompt_layout.py` が現在の編集領域、添付現場、本ターンのユーザー要求を後段に置き、`context_budget.py` が履歴予算、圧縮、ツールループ再予算を担当します。
+* **統一実行プロトコル**：専門 Agent は `SparkBaseAgent` と `SparkAgentExecutor` を再利用し、`build_context -> execute -> write_result` を業務入口の契約にします。チャットと監督委譲はいずれも `chat_stream(skip_tool_confirmation)` を通ります。
+* **統一ツールエコシステム**：全ツールは `server/agents/tools/registry.py` でグループ登録され、公開ファサード `agent_tools.py` からエクスポートされます。脚本、構成、設定の局所置換は `_apply_patch` を共有し、Token 分割とセマンティック分割も共通基盤を使います。
+* **AgentSkills と MCP**：AgentSkills は `search_skills` / `read_skill` / `read_skill_reference` で必要時に読み込む執筆品質リファレンスであり、system 接頭辞を自動汚染しません。MCP 着想受信箱は `/api/mcp` の `capture_inspiration` として提供され、チャット Agent のツール一覧とは分離されています。
+* **フロントエンド対応**：Agent 名、説明、バッジ、テーマ色は `server/agents/registry.py` を真実源にし、ツール呼び出し UI メタデータはバックエンドの `build_tool_stream_event` が注入し、フロントエンド `chatStore` が一元消費します。
+
+> 📘 完全なコンテキスト構造、キャッシュ命中表示、Agent 職責表、AgentSkills/MCP 境界、ツール登録詳細：[アーキテクチャ詳細 §2-§3](docs/architecture.md#2-agent-统一调用管线)
+
+### 3. ビーコンバス通信メカニズム
 
 SparkArc は**ビーコンバス**を実装——「ビーコン / ホーン / バトン」の三点セットで可視性・能動発話権・タスク帰属を制御する権限付きメッセージルーティングアーキテクチャ。
 

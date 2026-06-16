@@ -21,6 +21,8 @@ from typing import Any
 
 import requests
 
+from core.network_probe import get_hf_endpoint, get_gh_proxy, is_mainland_china, probe_hf_endpoint
+
 from .embedding_contract import (
     QWEN3_EMBEDDING_DIMENSIONS,
     QWEN3_EMBEDDING_MAX_CONTEXT_TOKENS,
@@ -105,18 +107,25 @@ def _probe_url_available(url: str, timeout: float | None = None) -> bool:
 
 
 def _hf_endpoint() -> str | None:
+    """返回应使用的 HF endpoint；官方可达时返回 None，让 hf_hub_download 使用默认官方端点。
+
+    内部复用 core.network_probe 的统一探测入口，避免各模块各自维护镜像逻辑。
+    """
     global _hf_endpoint_cache
     cached_at, cached_endpoint = _hf_endpoint_cache
     if time.monotonic() - cached_at < 300:
         return cached_endpoint
-    official_probe = f"{HF_OFFICIAL_ENDPOINT}/{QWEN3_GGUF_REPO_ID}/resolve/main/{QWEN3_GGUF_FILENAME}"
-    if _probe_url_available(official_probe):
+
+    recommended = get_hf_endpoint()
+    if recommended == HF_OFFICIAL_ENDPOINT or not recommended:
         _hf_endpoint_cache = (time.monotonic(), None)
         return None
-    mirror_probe = f"{HF_MIRROR_ENDPOINT}/{QWEN3_GGUF_REPO_ID}/resolve/main/{QWEN3_GGUF_FILENAME}"
-    if _probe_url_available(mirror_probe):
-        _hf_endpoint_cache = (time.monotonic(), HF_MIRROR_ENDPOINT)
-        return HF_MIRROR_ENDPOINT
+
+    # 用真实模型文件二次确认镜像可用
+    if probe_hf_endpoint(recommended, repo_id=QWEN3_GGUF_REPO_ID, filename=QWEN3_GGUF_FILENAME):
+        _hf_endpoint_cache = (time.monotonic(), recommended)
+        return recommended
+
     _hf_endpoint_cache = (time.monotonic(), None)
     return None
 
@@ -245,11 +254,18 @@ def _llama_cpp_assets(tag: str) -> list[_ReleaseAsset]:
 
 
 def _download_url_candidates(tag: str, asset_name: str) -> list[str]:
+    """构造 llama.cpp 预编译包下载候选 URL。
+
+    在中国大陆网络下优先使用 gh-proxy 前缀，其他地区优先官方直链。
+    proxy 前缀由 core.network_probe 统一提供，避免写死。
+    """
     official_url = f"{GITHUB_RELEASE_BASE_URL}/{tag}/{asset_name}"
-    return [
-        official_url,
-        f"{GITHUB_RELEASE_PROXY_PREFIX}{official_url}",
-    ]
+    proxy_prefix = get_gh_proxy()
+    proxy_url = f"{proxy_prefix.rstrip('/')}/{official_url}"
+
+    if is_mainland_china():
+        return [proxy_url, official_url]
+    return [official_url, proxy_url]
 
 
 def _select_download_url(candidates: list[str]) -> list[str]:

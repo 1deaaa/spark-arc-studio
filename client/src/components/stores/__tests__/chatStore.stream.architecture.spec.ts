@@ -83,10 +83,53 @@ describe('chatStore NDJSON 消费契约', () => {
         tool_result: '完成',
       },
       {
-        event: 'task_done',
+        event: 'context_window_stats',
         seq: 7,
+        agent_id: 'agent_director',
+        input_tokens: 1200,
+        output_tokens: 0,
+        cached_prompt_tokens: 900,
+        cache_miss_prompt_tokens: 300,
+        cache_hit_rate: 0.75,
+        original_tokens: 1200,
+        retained_messages: 2,
+        model: 'fake-model',
+        compacted: false,
+        reason: 'within_budget',
+      },
+      {
+        event: 'task_done',
+        seq: 8,
         status: 'completed',
-        metadata: { stream_status: 'completed', stream_seq: 7 },
+        metadata: { stream_status: 'completed', stream_seq: 8 },
+        llm_usage: {
+          prompt_tokens: 1200,
+          completion_tokens: 120,
+          total_tokens: 1320,
+          cached_prompt_tokens: 900,
+          cache_miss_prompt_tokens: 300,
+          by_agent: {
+            agent_director: {
+              completion_tokens: 120,
+              cached_prompt_tokens: 900,
+              cache_miss_prompt_tokens: 300,
+              cache_hit_rate: 0.75,
+            },
+          },
+        },
+        context_window_stats: {
+          agent_id: 'agent_director',
+          input_tokens: 1200,
+          output_tokens: 120,
+          cached_prompt_tokens: 900,
+          cache_miss_prompt_tokens: 300,
+          cache_hit_rate: 0.75,
+          original_tokens: 1200,
+          retained_messages: 2,
+          model: 'fake-model',
+          compacted: false,
+          reason: 'within_budget',
+        },
       },
     ]);
 
@@ -120,6 +163,19 @@ describe('chatStore NDJSON 消费契约', () => {
     });
     expect(session.sending).toBe(false);
     expect(session.backgroundTaskStatus).toBeNull();
+    expect(session.contextWindowStats).toMatchObject({
+      agentId: 'agent_director',
+      inputTokens: 1200,
+      outputTokens: 120,
+      cachedPromptTokens: 900,
+      cacheMissPromptTokens: 300,
+      cacheHitRate: 0.75,
+    });
+    expect(assistantMsg.metadata.context_window_stats).toMatchObject({
+      cached_prompt_tokens: 900,
+      cache_miss_prompt_tokens: 300,
+      cache_hit_rate: 0.75,
+    });
 
     vi.runOnlyPendingTimers();
   });

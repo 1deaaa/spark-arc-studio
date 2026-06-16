@@ -114,10 +114,6 @@ Every specialist Agent's prompts are strictly separated into three invocation mo
 
 > 📘 Full runtime logic, `pipeline_system` hard constraints, tool reference mechanism, and new-agent checklist: see [Architecture Deep Dive §2](docs/architecture.md#2-agent-三模态调用协议完整版) and [AGENTS.md §4.5](AGENTS.md)
 
----
-
-
-
 ## System Architecture
 
 ### 1. Agent Cluster
@@ -242,7 +238,35 @@ graph TD
 
 > 📘 Full serial analysis details and negative constraint mechanism: [Architecture Deep Dive §7](docs/architecture.md#7-风格克隆集群完整版)
 
-### 2. Beacon Bus Communication
+### 2. Context Structure and Unified Execution Pipeline
+
+SparkArc's multi-Agent architecture is not a pile of parallel prompts. It is built around shared execution infrastructure. For repeated calls on the same platform, model, and Agent, SparkArc keeps the prefix stable: project / user / Agent identity, shared system prompts, tool references, and AgentSkills / MCP capability notes stay as fixed as possible; the current message, active context, attachments, and temporary parameters are placed later. This helps upstream prefix cache hit more often, reducing cost and improving response speed when the same model keeps working inside SparkArc.
+
+```mermaid
+flowchart LR
+    A["Fixed prefix\nProject / user / Agent identity\nShared system\nTool references / AgentSkills / MCP"] --> B["Dynamic content\nCurrent message\nCurrent task\nActive context\nTemporary params / attachments"]
+    B --> C["History content\nRecent dialogue\nCompacted summary\nCheckpoint / snapshot"]
+    C --> D["Unified request\nKeep prefix stable\nAppend history as needed"]
+```
+
+* **Fixed content**: identity, role, shared system prompt, tool references, protocol skeleton.
+* **Dynamic content**: current message, target, active context, attachments, temporary parameters.
+* **History content**: recent dialogue, compacted summary, checkpoint / snapshot.
+* **Observed benefit**: in a real DeepSeek V4 flash max Director chat test, the second round reported `10752` upstream cached prompt tokens, about `94.5%` cache hit rate.
+
+> ⚠️ **Cache invalidation note**: changing the model or platform, editing specialist prompts / `pipeline_system` / `tool_rules`, changing tool bindings, language strategy, or some global parameters changes the stable prefix and makes upstream cache rebuild.
+>
+> The cached-token number shown under a chat window only uses that window Agent's `context_window_stats`. Director-delegated sub-tasks start another Agent with a different tool set and context prefix, so their cache hits are not mixed into the current window. Full task-level `llm_usage` still keeps the whole-chain aggregate for backend cost diagnostics.
+
+* **Context assembly**: `communication.py` builds the stable system prefix; `prompt_layout.py` places the current editor state, attachment context, and user request near the tail; `context_budget.py` handles history budgets, compaction, and tool-loop re-budgeting.
+* **Unified execution protocol**: Specialist Agents reuse `SparkBaseAgent` and `SparkAgentExecutor`, with `build_context -> execute -> write_result` as the business entry contract. Chat and Director delegation both go through `chat_stream(skip_tool_confirmation)`.
+* **Unified tool ecosystem**: Tools are grouped in `server/agents/tools/registry.py` and exported through the public `agent_tools.py` facade. Script, outline, and lorebook patching share `_apply_patch`; token chunking and semantic chunking also use common foundations.
+* **AgentSkills and MCP**: AgentSkills are read on demand through `search_skills` / `read_skill` / `read_skill_reference` as writing-quality references, without automatically polluting the system prefix. The MCP inspiration inbox exposes `capture_inspiration` through `/api/mcp` and stays isolated from chat Agent tool lists.
+* **Frontend mapping**: Agent names, descriptions, badges, and colors use `server/agents/registry.py` as the source of truth. Tool-call UI metadata is injected by backend `build_tool_stream_event` and consumed centrally by frontend `chatStore`.
+
+> 📘 Full context structure, cache-hit display, Agent responsibility table, AgentSkills/MCP boundaries, and tool registry details: [Architecture Deep Dive §2-§3](docs/architecture.md#2-agent-统一调用管线).
+
+### 3. Beacon Bus Communication
 
 SparkArc implements a **Beacon Bus** — a permission-controlled message routing architecture using "Beacon / Horn / Baton" to model real-world collaboration visibility, proactive communication, and task ownership.
 

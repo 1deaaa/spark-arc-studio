@@ -1,4 +1,5 @@
 # 绝对不可以上传密钥文件
+matchbox_key.yaml
 .env
 
 .tmp-home-screens/

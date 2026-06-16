@@ -12,6 +12,8 @@ from typing import Callable, Dict, List, Optional, Tuple, Union
 import tiktoken
 import tiktoken.load  # 必须显式导入，才能访问 tiktoken.load 模块
 
+from core.network_probe import get_hf_candidates
+
 # 注：全局 warnings 过滤和 logging 抑制已统一在 app.py 顶部设置，
 # 确保在所有第三方库导入之前生效。此文件仅保留局部 catch_warnings。
 
@@ -185,20 +187,29 @@ def _wrap_gemini_local_counter(tok) -> Callable[[str], int]:
 
 
 # -----------------------------------------------------------------------------
-# 下载策略：先国内镜像，超时再官方
+# 下载策略：由 core.network_probe 统一决定先官方还是先镜像
 # -----------------------------------------------------------------------------
-_HF_ATTEMPTS = [
-    {
-        "HF_ENDPOINT": "https://hf-mirror.com",
+def _build_hf_attempts() -> list[dict[str, str | None]]:
+    """构造 tokenizer 下载尝试序列。
+
+    network_probe 已按网络归属地和可达性排序，这里直接复用其候选列表。
+    """
+    if _LOCAL_ONLY:
+        return [{"HF_ENDPOINT": None}]
+
+    base_timeout = {
         "HF_HUB_ETAG_TIMEOUT": "3",
         "HF_HUB_DOWNLOAD_TIMEOUT": "8",
-    },
-    {
-        "HF_ENDPOINT": None,
-        "HF_HUB_ETAG_TIMEOUT": "5",
-        "HF_HUB_DOWNLOAD_TIMEOUT": "15",
-    },
-]
+    }
+    candidates = get_hf_candidates(probe=True)
+    attempts: list[dict[str, str | None]] = []
+    for endpoint in candidates:
+        env = dict(base_timeout)
+        env["HF_ENDPOINT"] = endpoint if endpoint != "https://huggingface.co" else None
+        attempts.append(env)
+    if not attempts:
+        attempts.append({"HF_ENDPOINT": None, **base_timeout})
+    return attempts
 
 # -----------------------------------------------------------------------------
 # tokenizer / counter 加载器
@@ -233,7 +244,7 @@ def _get_hf_counter(cache_key: str, repo: str, trust_remote_code: bool = False) 
     except Exception:
         return None
 
-    attempts = [{"HF_ENDPOINT": None}] if _LOCAL_ONLY else _HF_ATTEMPTS
+    attempts = _build_hf_attempts()
 
     for envs in attempts:
         try:

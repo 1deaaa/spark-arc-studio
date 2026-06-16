@@ -20,7 +20,7 @@
             <template #trigger>
               <span class="chat-token-chip">{{ contextTokenLabel }}</span>
             </template>
-            {{ t('components.chatPanel.taskTokenHint') }}
+            {{ contextTokenHint }}
           </n-tooltip>
         </div>
         <n-popconfirm
@@ -187,6 +187,9 @@ type ChatPanelMessage = ChatMessage & {
 type ContextWindowStats = {
   inputTokens?: number;
   outputTokens?: number;
+  cachedPromptTokens?: number;
+  cacheMissPromptTokens?: number;
+  cacheHitRate?: number | null;
   originalTokens?: number;
   model?: string;
   agentId?: string;
@@ -290,19 +293,46 @@ function formatTokenCount(value: number): string {
 
 const contextTokenLabel = computed(() => {
   const usage = props.contextTokenUsage;
+  const cached = Number(props.contextWindowStats?.cachedPromptTokens ?? 0) || 0;
   if (usage) {
     const input = Number(usage.promptTokens ?? 0) || 0;
     const output = Number(usage.completionTokens ?? 0) || 0;
     if (input > 0 || output > 0) {
-      return t('components.chatPanel.taskTokenIoLabel', {
+      const baseLabel = t('components.chatPanel.taskTokenIoLabel', {
         input: formatTokenCount(input),
         output: formatTokenCount(output),
       });
+      if (cached <= 0) return baseLabel;
+      return `${baseLabel} · ${t('components.chatMessageList.cachedTokenLabel', {
+        cached: formatTokenCount(cached),
+      })}`;
     }
   }
   const total = Number(props.contextTokenCount ?? 0);
-  if (!Number.isFinite(total) || total <= 0) return '';
-  return t('components.chatPanel.taskTokenLabel', { tokens: formatTokenCount(total) });
+  if (!Number.isFinite(total) || total <= 0) {
+    if (cached <= 0) return '';
+    return t('components.chatMessageList.cachedTokenLabel', {
+      cached: formatTokenCount(cached),
+    });
+  }
+  const baseLabel = t('components.chatPanel.taskTokenLabel', { tokens: formatTokenCount(total) });
+  if (cached <= 0) return baseLabel;
+  return `${baseLabel} · ${t('components.chatMessageList.cachedTokenLabel', {
+    cached: formatTokenCount(cached),
+  })}`;
+});
+
+const contextTokenHint = computed(() => {
+  const cached = Number(props.contextWindowStats?.cachedPromptTokens ?? 0) || 0;
+  if (cached <= 0) return t('components.chatPanel.taskTokenHint');
+  const rateRaw = props.contextWindowStats?.cacheHitRate;
+  const rate = typeof rateRaw === 'number' && Number.isFinite(rateRaw)
+    ? `${Math.round(Math.max(0, Math.min(1, rateRaw)) * 100)}%`
+    : '-';
+  return `${t('components.chatPanel.taskTokenHint')} · ${t('components.chatMessageList.cachedTokenHint', {
+    cached: formatTokenCount(cached),
+    rate,
+  })}`;
 });
 
 /** AgentRadialPicker 选中 Agent 时透传给上层（轮盘自身会自动关闭） */

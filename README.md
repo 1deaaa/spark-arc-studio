@@ -91,7 +91,8 @@
 * [系统架构](#系统架构)
   * [1. 智能体集群](#1-智能体集群)
     * [风格克隆集群](#风格克隆集群)
-  * [2. 信标总线通信机制](#2-信标总线通信机制)
+  * [2. 上下文结构与统一执行管线](#2-上下文结构与统一执行管线)
+  * [3. 信标总线通信机制](#3-信标总线通信机制)
 * [数据协议](#数据协议)
   * [ARC 互动剧本格式](#arc-互动剧本格式)
   * [小说模式](#小说模式)
@@ -363,8 +364,6 @@ graph TD
 > 📗 完整的运行态逻辑、`pipeline_system` 写法硬约束、工具 reference 机制与新增 Agent 自检清单，请参阅 [架构深度文档 §2](docs/architecture.md#2-agent-三模态调用协议完整版) 及 [AGENTS.md §4.5](AGENTS.md)
 
 
----
-
 #### 风格克隆集群
 
 引火AI 最具技术深度的模块——通过 **UnifiedStyleAnalyzer** 串行分析 + **ValidatorAgent** 图灵回测闭环，捕捉人类作者微妙的文风并生成风格档案，用于约束后续生成、消除 AI 味高频词。
@@ -409,7 +408,35 @@ graph TD
 
 ---
 
-### 2. 信标总线通信机制
+### 2. 上下文结构与统一执行管线
+
+SparkArc 的多 Agent 架构不是“多个提示词并列调用”，而是一套统一执行基础设施。系统会尽量让同一平台、同一模型、同一 Agent 的连续请求保持稳定前缀：项目 / 用户 / Agent 身份、共享 system、工具 reference、AgentSkills / MCP 能力说明尽量不变；当前消息、活动上下文、附件与临时参数放在后段。这样上游前缀缓存更容易命中，同一模型在 SparkArc 里连续工作时通常成本更低、响应更快。
+
+```mermaid
+flowchart LR
+    A["固定前缀\n项目 / 用户 / Agent 身份\n共享 system\n工具 reference / AgentSkills / MCP"] --> B["动态内容\n当前消息\n当前任务\n活动上下文\n临时参数 / 附件"]
+    B --> C["历史内容\n最近对话\n压缩摘要\ncheckpoint / snapshot"]
+    C --> D["统一请求\n稳定前缀尽量不动\n历史按需追加"]
+```
+
+* **固定内容**：身份、角色、共享系统提示、工具 reference、协议骨架。
+* **动态内容**：当前消息、目标、活动上下文、附件、临时参数。
+* **历史内容**：最近对话、压缩摘要、checkpoint / snapshot。
+* **实际收益**：DeepSeek V4 flash max 实测连续导演对话中，第二轮上游缓存命中 token 达到 `10752`，命中率约 `94.5%`。
+
+> ⚠️ **缓存失效提醒**：更换模型或平台、修改专家提示词 / `pipeline_system` / `tool_rules`、调整工具绑定、改变语言策略或部分全局参数，都会改变稳定前缀并导致上游缓存重新建立。
+> 
+> 当前聊天窗口下方显示的缓存命中 token 只统计该窗口所属 Agent 的 `context_window_stats`。导演委派产生的子任务会启用新的 Agent、工具集和上下文前缀，命中率不应混入当前窗口；完整 task 级 `llm_usage` 仍保留全链路汇总，供后台排查成本使用。
+
+* **上下文拼接**：`communication.py` 构造稳定 system 前缀，`prompt_layout.py` 将当前编辑区、附件现场与本轮用户请求放入后段，`context_budget.py` 负责历史预算、压缩与工具循环再预算。
+* **统一执行协议**：典型专家 Agent 复用 `SparkBaseAgent` 与 `SparkAgentExecutor`，以 `build_context -> execute -> write_result` 收口业务入口；聊天与导演委派统一走 `chat_stream(skip_tool_confirmation)`。
+* **统一工具生态**：所有工具经 `server/agents/tools/registry.py` 分组注册，再由 `agent_tools.py` 作为公共门面导出。剧本、大纲、设定等局部替换统一复用 `_apply_patch`，Token 切分与语义分块也复用公共底座。
+* **AgentSkills 与 MCP**：AgentSkills 通过 `search_skills` / `read_skill` / `read_skill_reference` 作为写作质量参考按需读取，不自动污染 system 前缀；MCP 灵感信箱通过 `/api/mcp` 暴露 `capture_inspiration`，与聊天 Agent 工具列表隔离。
+* **前端映射**：Agent 名称、描述、徽标和主题色以 `server/agents/registry.py` 为真相源；工具调用 UI 元数据由后端 `build_tool_stream_event` 注入，前端 `chatStore` 统一消费并渲染。
+
+> 📗 更完整的上下文结构、缓存命中显示、Agent 职责表、AgentSkills/MCP 边界与工具注册细节，请参阅 [架构深度文档 §2-§3](docs/architecture.md#2-agent-统一调用管线)。
+
+### 3. 信标总线通信机制
 
 为了解决多 Agent 之间复杂的水平交互问题，引火AI 设计并实现了**信标总线**。这是一种带权限控制的消息路由架构，使用“信标 / 号角 / 旗帜”三件套来模拟真实协作中的“是否可见”“是否可主动发话”“当前任务在谁手里”。
 

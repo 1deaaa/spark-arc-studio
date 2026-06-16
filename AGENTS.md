@@ -31,6 +31,7 @@ SparkArc 现有架构已经有清晰收口层。新增功能必须先判断是�
  - 流式桥接层：server/agents/routes/streaming_utils.py
  - 业务语义层：server/agents/routes/stream_semantics.py + server/agents/routes/execution_core.py
  - 路由聚合层：server/agents/routes/__init__.py
+ - 上下文布局层：server/agents/prompt_layout.py + server/agents/context_budget.py
  - **大统一工具性底层（大统一基建）**：
    - **局部替换与增量修改（Patch）**：统一收口在 `server/agents/tools/common.py` 的 `_apply_patch`。无论是剧本复写、大纲局部修改还是设定更新，凡是涉及“在已有文本中定位并替换”的逻辑，必须复用此底层，严禁各 Agent 自行实现正则或字符串替换。
    - **智能文本切分（Token Chunking）**：统一收口在 `server/core/file_ingest/chunking.py` 的 `TokenTextSplitter`（或通过 `server/agents/agent_style/text_splitter.py` 兼容重导出）。无论是上传附件、评审专家审稿、还是文风克隆分析，凡是涉及按 Token 数量切分文本的逻辑，必须复用此底层，避免 3 次以上重复实现。
@@ -128,6 +129,13 @@ SparkArc 现有架构已经有清晰收口层。新增功能必须先判断是�
 ### 4.4 工具 UI 联动必须双端一致
 
 工具事件中的 UI 提示由后端 communication.py 的 build_tool_stream_event 注入（ui_scope/ui_target/ui_refresh_events），前端 chatStore 读取。
+
+### 4.4.1 AgentSkills 与 MCP 边界
+
+- AgentSkills 是写作质量参考层，不是运行时插件执行层。导入逻辑在 `server/agents/skill_packs.py`，工具入口为 `search_skills` / `read_skill` / `read_skill_reference`，统一在 `server/agents/tools/registry.py` 作为共享 Skill 工具分配。
+- Skill 读取视图必须保持 `quality_only`：只采纳写作质量、审美判断、检查清单和领域知识；不得采纳脚本、命令、工具调用、外部工作流、输出格式、字段结构或落盘规则。
+- MCP 灵感信箱通过 `server/mcp_server/spark_inspiration/server.py` 挂载到 `/api/mcp`，以 MCP API Key 鉴权；`capture_inspiration` 属于 `MCP_ONLY_TOOLS`，禁止挂载到普通聊天 Agent。
+- 外部 MCP 服务（如 `web_search` 通过 Exa MCP）必须包装成 SparkArc 普通工具后再进入 registry；不要让 Agent 直接绕过工具门面连接外部 MCP。
 
 ### 4.5 Agent 三模态提示词协议（强制）
 
@@ -280,12 +288,24 @@ YAML 顶层 `tool_rules` 字段用于存放 Agent 在聊天/委派模式下的�
 
 禁止在组件里直接解析聊天 NDJSON 并自行维护状态。
 
+### 5.2.1 聊天上下文布局与缓存前缀（强制）
+
+聊天上下文必须维持“稳定前缀 + 动态尾部”的布局：
+
+1. 固定/低频变化内容放在 `SystemMessage`：Agent 模态 prompt、语言策略、工具清单、确认规则、tool reference、tool_rules。
+2. 当前编辑区、附件现场、用户本轮请求必须通过 `server/agents/prompt_layout.py` 的 `build_current_user_message()` 放入最后一条 user message，禁止重新塞回 system prompt。
+3. 历史消息、压缩摘要与工具结果必须交给 `server/agents/context_budget.py` 管理预算；工具循环后必须继续使用 `rebudget_existing_messages()`，不要手写裁剪逻辑。
+4. AgentSkills 只能通过 `search_skills` / `read_skill` / `read_skill_reference` 按需读取；Skill 内容是动态工具结果，不得自动拼入 system 前缀，也不得覆盖输出格式、字段结构、工具协议或落盘规则。
+5. 新增动态系统规则前必须评估是否会破坏 prompt cache 稳定前缀；能放到最后 user 的任务现场内容，不要放进 system。
+6. 更换模型 / 平台、修改专家 prompt / `pipeline_system` / `tool_rules`、改变工具绑定、语言策略或部分全局参数，都会改变稳定前缀并导致上游缓存重新建立。文档和 UI 不得暗示缓存跨这些变更仍稳定命中。
+7. 前端展示的窗口 token 与缓存命中来自后端 `context_window_stats`，完成时只从 `llm_usage.by_agent[当前窗口 agent_id]` 合并当前 Agent 的缓存命中；缓存命中为 0 时不显示，不要在前端自行估算。`llm_usage` 顶层是整个 chat task 的全链路汇总，可能包含导演委派的子 Agent，只能用于后台成本诊断，不得混入当前窗口命中率展示。
+
 ### 5.3 新增 Agent 的前端映射检查清单
 
 新增 Agent 时，除了后端注册，还需要检查以下前端映射点是否需要更新：
 
 1. 视图默认 Agent 分配：client/src/components/share/GlobalChatFloat.vue（viewAgentMap）
-2. 聊天气泡显示名/颜色/图标：client/src/composables/useAgentRegistry.ts（agentIconMap / agentColorMap / agentNameMap）
+2. 聊天气泡显示名/颜色/图标：后端 `server/agents/registry.py` 的 `name` / `icon` / `color` 是真相源，前端 `client/src/composables/useAgentRegistry.ts` 只负责读取与兜底。
 3. Agent 流程蓝图布局与默认连线：client/src/components/lorebook/AgentFlowBlueprint.vue
 4. 运行态 mock 数据（如保留）：client/src/components/stores/agentRuntimeStore.ts
 5. 页面级快捷模型选择入口（如需要）：client/src/components/lorebook/AiSettingsPanel.vue 与对应视图

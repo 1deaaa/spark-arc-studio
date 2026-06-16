@@ -448,11 +448,16 @@ function getMessageContextWindowStats(message: ChatMessageItem) {
   if (!raw || typeof raw !== 'object') return null;
   const input = Number(raw.input_tokens ?? raw.inputTokens ?? 0) || 0;
   const output = Number(raw.output_tokens ?? raw.outputTokens ?? 0) || 0;
+  const cached = Number(raw.cached_prompt_tokens ?? raw.cachedPromptTokens ?? 0) || 0;
+  const cacheHitRateRaw = raw.cache_hit_rate ?? raw.cacheHitRate;
+  const cacheHitRateValue = cacheHitRateRaw == null ? Number.NaN : Number(cacheHitRateRaw);
   const model = String(raw.model || '').trim();
-  if (input <= 0 && output <= 0) return null;
+  if (input <= 0 && output <= 0 && cached <= 0) return null;
   return {
     input,
     output,
+    cached,
+    cacheHitRate: Number.isFinite(cacheHitRateValue) ? Math.max(0, Math.min(1, cacheHitRateValue)) : null,
     model,
   };
 }
@@ -460,17 +465,27 @@ function getMessageContextWindowStats(message: ChatMessageItem) {
 function getMessageWindowTokenLabel(message: ChatMessageItem) {
   const stats = getMessageContextWindowStats(message);
   if (!stats) return '';
-  return t('components.chatMessageList.windowTokenLabel', {
+  const baseLabel = t('components.chatMessageList.windowTokenLabel', {
     input: formatTokenCount(stats.input),
     output: formatTokenCount(stats.output),
   });
+  if (stats.cached <= 0) return baseLabel;
+  return `${baseLabel} · ${t('components.chatMessageList.cachedTokenLabel', {
+    cached: formatTokenCount(stats.cached),
+  })}`;
 }
 
 function getMessageWindowTokenHint(message: ChatMessageItem) {
   const stats = getMessageContextWindowStats(message);
   if (!stats) return '';
   const modelSuffix = stats.model ? ` · ${stats.model}` : '';
-  return `${t('components.chatMessageList.windowTokenHint')}${modelSuffix}`;
+  const cacheSuffix = stats.cached > 0
+    ? ` · ${t('components.chatMessageList.cachedTokenHint', {
+      cached: formatTokenCount(stats.cached),
+      rate: stats.cacheHitRate == null ? '-' : `${Math.round(stats.cacheHitRate * 100)}%`,
+    })}`
+    : '';
+  return `${t('components.chatMessageList.windowTokenHint')}${cacheSuffix}${modelSuffix}`;
 }
 
 function getContextSummaryKey(message: ChatMessageItem, messageIdx: number, segIdx: number) {

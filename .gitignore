@@ -53,6 +53,10 @@ dist-launcher/
 dist-ssr/
 *.local
 
+# 前端一键构建脚本产生的标记与校验文件
+client/.frontend_build_complete
+client/.package-lock.sha256
+
 # App build outputs
 /app-build/*
 !/app-build/**/.gitkeep

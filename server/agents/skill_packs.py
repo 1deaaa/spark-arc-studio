@@ -16,6 +16,7 @@ from urllib.parse import urlparse
 
 import yaml
 
+from core.network_probe import get_gh_proxy, is_mainland_china
 from core.utils import USERDATA_ROOT
 
 
@@ -272,6 +273,16 @@ def _hash_skill_files(files: list[dict[str, str]]) -> str:
     return digest.hexdigest()
 
 
+def _maybe_apply_github_proxy(url: str) -> str:
+    """在中国大陆网络下，对 GitHub 相关下载地址自动套上 gh-proxy 前缀。"""
+    if not is_mainland_china():
+        return url
+    host = (urlparse(url).netloc or "").lower()
+    if host not in {"github.com", "www.github.com", "raw.githubusercontent.com", "codeload.github.com"}:
+        return url
+    return f"{get_gh_proxy().rstrip('/')}/{url}"
+
+
 def _source_key_from_url(url: str, skill_path: str = "") -> str:
     parsed = urlparse(url or "")
     host = (parsed.netloc or "").lower()
@@ -495,6 +506,7 @@ def import_skill_from_url(user_id: str | int, url: str, *, domain: str = "user",
     if not clean_url.lower().startswith(("http://", "https://")):
         raise ValueError("仅支持 http/https URL")
     download_url = _github_download_url(clean_url)
+    download_url = _maybe_apply_github_proxy(download_url)
     response = requests.get(download_url, timeout=timeout)
     response.raise_for_status()
     content_type = (response.headers.get("content-type") or "").lower()

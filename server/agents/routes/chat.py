@@ -457,6 +457,31 @@ def _merge_context_window_stats_with_usage(
         merged["output_tokens"] = max(int(completion_tokens), 0)
     except Exception:
         return merged
+
+    cached_prompt_tokens = agent_usage.get("cached_prompt_tokens")
+    if cached_prompt_tokens is None:
+        cached_prompt_tokens = agent_usage.get("cachedPromptTokens")
+    cache_miss_prompt_tokens = agent_usage.get("cache_miss_prompt_tokens")
+    if cache_miss_prompt_tokens is None:
+        cache_miss_prompt_tokens = agent_usage.get("cacheMissPromptTokens")
+    cache_hit_rate = agent_usage.get("cache_hit_rate")
+    if cache_hit_rate is None:
+        cache_hit_rate = agent_usage.get("cacheHitRate")
+
+    try:
+        merged["cached_prompt_tokens"] = max(int(cached_prompt_tokens or 0), 0)
+    except Exception:
+        merged["cached_prompt_tokens"] = 0
+    if cache_miss_prompt_tokens is not None:
+        try:
+            merged["cache_miss_prompt_tokens"] = max(int(cache_miss_prompt_tokens or 0), 0)
+        except Exception:
+            pass
+    if cache_hit_rate is not None:
+        try:
+            merged["cache_hit_rate"] = max(0.0, min(1.0, float(cache_hit_rate)))
+        except Exception:
+            pass
     return merged
 
 

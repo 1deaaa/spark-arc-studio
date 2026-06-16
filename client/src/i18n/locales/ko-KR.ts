@@ -919,6 +919,8 @@ const koKR = {
       daysAgo: '{count}일 전',
       windowTokenLabel: '입력 {input} / 출력 {output} 토큰',
       windowTokenHint: '해당 응답 도출 시점에 소모된 실제 토큰 윈도우입니다.',
+      cachedTokenLabel: '캐시 적중 {cached}',
+      cachedTokenHint: '캐시 적중 {cached} token, 적중률 {rate}',
       contextCompacting: '기억 용량 압축 중',
       contextCompacted: '기기 기억 압축 처리가 완수되어 뒤이어 생성을 계속합니다',
       contextCompactFailed: '압축에 실패하여 기존 컨텍스트 상태로 진행합니다',

@@ -919,6 +919,8 @@ const zhCN = {
       daysAgo: '{count} 天前',
       windowTokenLabel: '窗口 ↑{input} / ↓{output}',
       windowTokenHint: '这条回复最近一次实际进入上下文窗口的 token。↑ 表示输入，↓ 表示输出。',
+      cachedTokenLabel: '缓存命中 {cached}',
+      cachedTokenHint: '缓存命中 {cached} token，命中率 {rate}',
       contextCompacting: '正在压缩上下文',
       contextCompacted: '上下文已压缩，继续生成',
       contextCompactFailed: '压缩失败，已保留最近上下文继续',

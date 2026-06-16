@@ -33,10 +33,10 @@ $ReqHashFile   = Join-Path $EnvDir ".requirements.sha256"
 $PythonExe     = Join-Path $EnvDir "python.exe"
 $InitScript    = Join-Path $BasePath "init_env.py"
 $ReqFile       = Join-Path $BasePath "requirements.txt"
-$PipMirror     = "https://mirrors.aliyun.com/pypi/simple/"
-
-# ===== PYTHON DOWNLOAD CONFIG =====
-$MirrorLatestUrl   = "https://mirrors.ustc.edu.cn/github-release/astral-sh/python-build-standalone/LatestRelease/"
+# 允许调用方通过环境变量覆盖镜像；未设置时保持原有中国大陆默认镜像。
+$PipMirror         = if ($env:PYLOADER_PIP_MIRROR) { $env:PYLOADER_PIP_MIRROR } else { "https://mirrors.aliyun.com/pypi/simple/" }
+$PythonMirrorBase  = if ($env:PYLOADER_PYTHON_MIRROR_BASE) { $env:PYLOADER_PYTHON_MIRROR_BASE } else { "https://mirrors.ustc.edu.cn" }
+$MirrorLatestUrl   = if ($env:PYLOADER_PYTHON_MIRROR_LATEST) { $env:PYLOADER_PYTHON_MIRROR_LATEST } else { "$PythonMirrorBase/github-release/astral-sh/python-build-standalone/LatestRelease/" }
 $ArchiveName       = $null
 $ArchiveLocal      = $null
 $ResolvedPythonVersion = $null
@@ -129,7 +129,7 @@ function Resolve-PythonArchive {
         Version     = $ResolvedPythonVersion
         ReleaseTag  = $ResolvedReleaseTag
         ArchiveName = $ArchiveName
-        MirrorUrl   = "https://mirrors.ustc.edu.cn$($best.Href)"
+        MirrorUrl   = "$PythonMirrorBase$($best.Href)"
     }
 }
 
