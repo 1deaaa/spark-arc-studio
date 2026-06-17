@@ -184,6 +184,9 @@ from llm.agen_matchbox import QuotaExceededError, CreditBalanceExceededError
 # MCP 服务器（使用 fastmcp 框架）
 from mcp_server.spark_inspiration.server import mcp as mcp_inst, verify_api_key, current_user_id
 
+# spark_control MCP 服务器（远程操控：聊天链路 + 导演调度 + 查询工具）
+from mcp_server.spark_control.server import mcp as mcp_control_inst, verify_api_key as verify_api_key_control
+
 # ============================================
 # MCP 应用配置（使用 HTTP 传输）
 # ============================================
@@ -197,10 +200,21 @@ _mcp_app = mcp_inst.http_app(
     stateless_http=True
 )
 
+# spark_control MCP 应用（挂载到 /api/mcp/control）
+_mcp_control_app = mcp_control_inst.http_app(
+    path='/',
+    transport='http',
+    json_response=True,
+    stateless_http=True
+)
+
 
 # 自定义 MCP 鉴权中间件
 from starlette.types import ASGIApp, Scope, Receive, Send
 from starlette.responses import JSONResponse
+
+# 导入 core.request_context 的 ContextVar（工具执行依赖这套上下文）
+from core.request_context import current_user_id as core_current_user_id
 
 class McpAuthMiddleware:
     """
@@ -208,10 +222,13 @@ class McpAuthMiddleware:
     
     使用 fastmcp 框架后，我们仍需要自定义中间件来：
     1. 验证 Authorization header 中的 API Key
-    2. 设置 current_user_id 上下文变量（供 logic.py 使用）
+    2. 设置两套 current_user_id 上下文变量：
+       a. mcp_server.spark_inspiration.logic.current_user_id（灵感库工具依赖）
+       b. core.request_context.current_user_id（Agent/工具执行依赖）
     """
-    def __init__(self, app: ASGIApp):
+    def __init__(self, app: ASGIApp, verify_fn=None):
         self.app = app
+        self.verify_fn = verify_fn or verify_api_key
 
     async def __call__(self, scope: Scope, receive: Receive, send: Send):
         if scope["type"] != "http":
@@ -231,7 +248,7 @@ class McpAuthMiddleware:
             return
 
         # 验证 API Key
-        user_info = await verify_api_key(auth_header.strip())
+        user_info = await self.verify_fn(auth_header.strip())
         
         if not user_info:
             response = JSONResponse(
@@ -241,16 +258,21 @@ class McpAuthMiddleware:
             await response(scope, receive, send)
             return
         
-        # 设置用户上下文
-        token = current_user_id.set(user_info["user_id"])
+        # 设置用户上下文（两套 ContextVar 同时设置）
+        token_mcp = current_user_id.set(user_info["user_id"])
+        token_core = core_current_user_id.set(user_info["user_id"])
         try:
             await self.app(scope, receive, send)
         finally:
-            current_user_id.reset(token)
+            current_user_id.reset(token_mcp)
+            core_current_user_id.reset(token_core)
 
 
 # 包装 MCP 应用，添加鉴权
 _mcp_app_with_auth = McpAuthMiddleware(_mcp_app)
+
+# 包装 spark_control MCP 应用（复用同一鉴权中间件类，使用相同的 verify_api_key 逻辑）
+_mcp_control_app_with_auth = McpAuthMiddleware(_mcp_control_app, verify_fn=verify_api_key_control)
 
 
 # ============================================
@@ -290,9 +312,14 @@ async def lifespan(app: FastAPI):
         raise FileNotFoundError(error_msg)
 
     # 嵌套 MCP 的 lifespan（初始化 session manager）
-    # 使用 http_app 返回的 StarletteWithLifespan 的 lifespan 管理生命周期
-    async with _mcp_app.lifespan(app):
+    # 使用 AsyncExitStack 同时管理两个 MCP 服务的 lifespan，
+    # 确保两者在应用 yield（开始服务请求）期间都保持活跃。
+    from contextlib import AsyncExitStack
+    async with AsyncExitStack() as _mcp_stack:
+        await _mcp_stack.enter_async_context(_mcp_app.lifespan(app))
         print("✅ MCP Server initialized", flush=True)
+        await _mcp_stack.enter_async_context(_mcp_control_app.lifespan(app))
+        print("✅ Spark Control MCP Server initialized", flush=True)
         # 显式初始化 LLM Manager（确保 migration 已完成且释放了 DB 锁）
         # 关键说明：
         # 1. 这里必须只做 Matchbox 的“轻启动”硬依赖初始化，目标是尽快放行 /health 与 startup complete。
@@ -599,6 +626,9 @@ async def health_check():
 # 注意：Starlette mount 要求挂载路径不带尾部斜杠，但 MCP 端点需要尾部斜杠
 app.mount("/api/mcp", _mcp_app_with_auth)
 
+# 挂载 spark_control MCP Server（远程操控：聊天链路 + 导演调度 + 查询工具）
+app.mount("/api/mcp/control", _mcp_control_app_with_auth)
+
 
 # 处理不带尾部斜杠的 MCP 请求，重定向或代理到正确的端点
 from starlette.responses import RedirectResponse
@@ -608,6 +638,12 @@ async def mcp_redirect(request: Request):
     """将 /api/mcp 重定向到 /api/mcp/ 以确保 MCP 客户端兼容性"""
     # 构建带尾部斜杠的 URL
     url = request.url.replace(path="/api/mcp/")
+    return RedirectResponse(url=str(url), status_code=307)
+
+@app.api_route("/api/mcp/control", methods=["GET", "POST", "DELETE", "OPTIONS"])
+async def mcp_control_redirect(request: Request):
+    """将 /api/mcp/control 重定向到 /api/mcp/control/ 以确保 MCP 客户端兼容性"""
+    url = request.url.replace(path="/api/mcp/control/")
     return RedirectResponse(url=str(url), status_code=307)
 
 async def warm_up():

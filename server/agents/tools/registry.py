@@ -135,3 +135,24 @@ def get_tools_for_agent(agent_id: str) -> list:
         "agent_style": [],
     }
     return tool_map.get(agent_id, [])
+
+
+# MCP 远程操控暴露的纯查询工具白名单（P0 第二层）
+# 这些工具只读不写，安全无副作用，适合 MCP 远程调用。
+# 写盘工具不在此列——写盘操作走 MCP 导演工单，经内部 Agent 委派完成，
+# 让 SparkArc 自己的 Agent 生成内容并落盘，受 prompt 规范约束。
+# 外部依赖型工具（web_search/graph_rag_tool）和需要附件上下文的工具（read_attachment_chunk）不纳入。
+MCP_EXPOSED_QUERY_TOOL_NAMES = frozenset({
+    "list_chapters",
+    "read_chapter_scene",
+    "read_chapter_outline_raw",
+    "read_worldview",
+    "read_character",
+    "read_synopsis",
+    "read_beat_sheet",
+    "search_project",
+    "semantic_search",
+    "list_inspirations",
+    "read_inspiration",
+    "check_scriptwriter_status",
+})
