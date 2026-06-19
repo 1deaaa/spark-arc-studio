@@ -5,18 +5,44 @@
             {{ label }}
         </span>
         <div class="index-row-tags">
-            <n-tooltip
-                v-for="tag in tags"
-                :key="tag.key"
-                trigger="hover"
-            >
-                <template #trigger>
-                    <span class="status-pill" :class="`status-pill-${tag.tone}`">
-                        {{ tag.label }}
-                    </span>
-                </template>
-                {{ tag.title || tag.label }}
-            </n-tooltip>
+            <template v-for="tag in tags" :key="tag.key">
+                <n-popover
+                    v-if="tag.tone === 'error'"
+                    trigger="manual"
+                    placement="top"
+                    :show="isErrorTagVisible(tag.key)"
+                >
+                    <template #trigger>
+                        <button
+                            type="button"
+                            class="status-pill status-pill-error-dot"
+                            :aria-label="tag.title || tag.label"
+                            @mouseenter="showErrorTag(tag.key)"
+                            @mouseleave="hideErrorTag(tag.key)"
+                            @focus="showErrorTag(tag.key)"
+                            @blur="hideErrorTag(tag.key)"
+                            @click.stop.prevent="toggleErrorTag(tag.key)"
+                        >
+                            <span class="status-pill-error-dot-inner" />
+                        </button>
+                    </template>
+                    <div
+                        class="error-popover-content"
+                        @mouseenter="showErrorTag(tag.key)"
+                        @mouseleave="hideErrorTag(tag.key)"
+                    >
+                        {{ tag.title || tag.label }}
+                    </div>
+                </n-popover>
+                <n-tooltip v-else trigger="hover">
+                    <template #trigger>
+                        <span class="status-pill" :class="`status-pill-${tag.tone}`">
+                            {{ tag.label }}
+                        </span>
+                    </template>
+                    {{ tag.title || tag.label }}
+                </n-tooltip>
+            </template>
         </div>
         <n-tooltip trigger="hover" placement="top">
             <template #trigger>
@@ -46,8 +72,8 @@
 </template>
 
 <script setup lang="ts">
-import { computed } from 'vue';
-import { NSwitch, NTooltip, NIcon } from 'naive-ui';
+import { computed, ref } from 'vue';
+import { NSwitch, NTooltip, NPopover, NIcon } from 'naive-ui';
 import { RefreshCw, Search, Network } from '@lucide/vue';
 
 export type IndexKind = 'semantic' | 'graphrag';
@@ -77,6 +103,8 @@ const emit = defineEmits<{
     (e: 'refresh'): void;
 }>();
 
+const hoveredErrorTagKey = ref<string | null>(null);
+const pinnedErrorTagKey = ref<string | null>(null);
 const kindIcon = computed(() => (props.kind === 'graphrag' ? Network : Search));
 
 function onToggle(value: boolean) {
@@ -85,6 +113,33 @@ function onToggle(value: boolean) {
 
 function onRefreshClick() {
     emit('refresh');
+}
+
+function isErrorTagVisible(key: string): boolean {
+    return hoveredErrorTagKey.value === key || pinnedErrorTagKey.value === key;
+}
+
+function showErrorTag(key: string): void {
+    hoveredErrorTagKey.value = key;
+}
+
+function hideErrorTag(key: string): void {
+    if (hoveredErrorTagKey.value === key) {
+        hoveredErrorTagKey.value = null;
+    }
+}
+
+function toggleErrorTag(key: string): void {
+    if (pinnedErrorTagKey.value === key) {
+        pinnedErrorTagKey.value = null;
+        if (hoveredErrorTagKey.value === key) {
+            hoveredErrorTagKey.value = null;
+        }
+        return;
+    }
+
+    pinnedErrorTagKey.value = key;
+    hoveredErrorTagKey.value = key;
 }
 </script>
 
@@ -168,6 +223,48 @@ function onRefreshClick() {
     color: #cf1322;
     background: color-mix(in srgb, #ff4d4f 14%, var(--spark-panel-bg));
     border-color: color-mix(in srgb, #ff4d4f 24%, transparent);
+}
+
+.status-pill-error-dot {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    width: 14px;
+    height: 14px;
+    padding: 0;
+    margin: 0;
+    line-height: 0;
+    border: 1px solid color-mix(in srgb, #ff4d4f 36%, transparent);
+    background: color-mix(in srgb, #ff4d4f 80%, #ffffff 20%);
+    color: #ffffff;
+    cursor: pointer;
+    flex-shrink: 0;
+}
+
+.status-pill-error-dot:hover {
+    filter: brightness(1.04);
+}
+
+.status-pill-error-dot:focus-visible {
+    outline: 2px solid color-mix(in srgb, #ff4d4f 52%, white);
+    outline-offset: 2px;
+}
+
+.status-pill-error-dot-inner {
+    width: 6px;
+    height: 6px;
+    border-radius: 50%;
+    background: currentColor;
+    display: block;
+}
+
+.error-popover-content {
+    max-width: 320px;
+    white-space: pre-wrap;
+    word-break: break-word;
+    line-height: 1.45;
+    font-size: 12px;
+    color: var(--spark-text);
 }
 
 .status-pill-muted {

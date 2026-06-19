@@ -30,12 +30,12 @@
 
             <div v-if="isAdmin" class="local-embedding-bar">
                 <div class="embedding-info">
-                    <span class="dot" :class="localEmbeddingStatus?.alive ? 'dot-ok' : 'dot-off'" />
+                    <span class="dot" :class="localEmbeddingDotClass" />
                     <span class="embedding-label">{{ t('components.semanticSearchCard.localEmbedding') }}</span>
                     <span class="embedding-value">{{ localEmbeddingLabel }}</span>
                 </div>
                 <n-switch
-                    :value="localEmbeddingEnabled"
+                    :value="localEmbeddingSwitchOn"
                     :loading="togglingLocalEmbedding"
                     :disabled="!isAdmin"
                     size="small"
@@ -179,6 +179,7 @@ import { NButton, NSwitch, NEmpty, NTooltip, NPopover, NIcon, useMessage, useDia
 import { Info } from '@lucide/vue';
 import SparkLoaderAnimation from '../share/SparkLoaderAnimation.vue';
 import ProjectIndexRow, { type IndexRowTag } from './ProjectIndexRow.vue';
+import { isLocalEmbeddingStartupActive, isLocalEmbeddingSwitchOn } from './localEmbeddingUi';
 import {
     fetchSemanticSearchStatus,
     enableSemanticSearch,
@@ -216,7 +217,6 @@ const embeddingReady = ref<boolean | null>(null);
 const embeddingModelName = ref('');
 const isAdmin = ref(false);
 const localEmbeddingStatus = ref<LocalEmbeddingStatus | null>(null);
-const localEmbeddingEnabled = ref(false);
 const defaultEnabledSemantic = ref(false);
 const defaultEnabledGraphRAG = ref(false);
 const searchKeyword = ref('');
@@ -249,9 +249,9 @@ const localEmbeddingLabel = computed(() => {
         return t('components.semanticSearchCard.localEmbeddingAlive', { url: status.base_url || '' });
     }
     const startup = status.startup;
-    if (startup && ['starting', 'downloading_model', 'model_ready', 'downloading_server', 'server_ready', 'loading'].includes(startup.phase)) {
-        const progress = typeof startup.progress === 'number' ? `${startup.progress}%` : '';
-        return [startup.message || t('components.semanticSearchCard.localEmbeddingStarting'), progress].filter(Boolean).join(' ');
+    if (isLocalEmbeddingStartupActive(status)) {
+        const progress = typeof startup?.progress === 'number' ? `${startup.progress}%` : '';
+        return [startup?.message || t('components.semanticSearchCard.localEmbeddingStarting'), progress].filter(Boolean).join(' ');
     }
     if (startup?.phase === 'error' && startup.error) {
         return startup.error;
@@ -263,6 +263,17 @@ const localEmbeddingLabel = computed(() => {
         return t('components.semanticSearchCard.localEmbeddingNotConfigured');
     }
     return t('components.semanticSearchCard.localEmbeddingStopped');
+});
+
+const localEmbeddingSwitchOn = computed(() => isLocalEmbeddingSwitchOn(localEmbeddingStatus.value));
+const localEmbeddingDotClass = computed(() => {
+    if (localEmbeddingStatus.value?.alive) {
+        return 'dot-ok';
+    }
+    if (localEmbeddingStatus.value?.running || isLocalEmbeddingStartupActive(localEmbeddingStatus.value)) {
+        return 'dot-warn';
+    }
+    return 'dot-off';
 });
 
 function getGraphRAG(projectName: string): GraphRAGRow | undefined {
@@ -292,8 +303,7 @@ function hasAnyBuilding(): boolean {
     graphragMap.value.forEach((row) => {
         if (isGraphRAGBuilding(row)) busy = true;
     });
-    const localPhase = localEmbeddingStatus.value?.startup?.phase;
-    if (isAdmin.value && localEmbeddingEnabled.value && localPhase && !['ready', 'error', 'idle'].includes(localPhase)) {
+    if (isAdmin.value && (localEmbeddingStatus.value?.running || isLocalEmbeddingStartupActive(localEmbeddingStatus.value))) {
         busy = true;
     }
     return busy;
@@ -463,7 +473,6 @@ async function loadData(options: { silent?: boolean } = {}) {
         defaultEnabledSemantic.value = semanticStatus.default_enabled ?? false;
         defaultEnabledGraphRAG.value = graphragStatus.default_enabled ?? false;
         localEmbeddingStatus.value = localStatus?.status ?? null;
-        localEmbeddingEnabled.value = Boolean(localStatus?.enabled);
 
         const semanticLoadingMap = new Map(projects.value.map((project) => [project.projectName, Boolean(project._loading)]));
         const semanticRefreshingMap = new Map(projects.value.map((project) => [project.projectName, Boolean(project._refreshing)]));
@@ -697,7 +706,6 @@ async function handleLocalEmbeddingToggle(enabled: boolean) {
     try {
         const result = await setLocalEmbeddingEnabled(enabled);
         localEmbeddingStatus.value = result.status;
-        localEmbeddingEnabled.value = Boolean(result.enabled);
         message.success(
             enabled
                 ? t('components.semanticSearchCard.localEmbeddingStartTriggered')

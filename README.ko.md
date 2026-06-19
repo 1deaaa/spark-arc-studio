@@ -4,7 +4,7 @@
 
 > 📢 **지원 및 관심**: SparkArc가 창작에 도움이 되었다면 우측 상단의 **Star**(즐겨찾기 추가로 언제든 다시 찾기)와 **Watch**(Custom -> Releases를 선택하여 신규 업데이트 구독)를 부탁드립니다. 독립적인 오픈소스 프로젝트로서, 모든 Star와 Watch는 커뮤니티 내 노출도 향상과 지속적인 업데이트 및 장기적인 발전에 매우 중요합니다. 지원해 주셔서 감사합니다!
 > 
-> 💖 **스폰서 및 파트너십**: 만약 귀하가 API 프록시 제공업체, 애그리게이터 또는 GPU 공급업체라면, [**스폰서 및 비즈니스 협력 가이드**](.github/SUPPORT.md)(현재 중문/영문만 지원)를 확인해 주시기 바랍니다. 개발 및 테스트에 필요한 API 크레딧 후원에 대한 보답으로, 자체 호스팅 사용자들을 위한 "기본 구성 배포" 등 홍보 가치가 높은 채널을 제공합니다. **프로젝트의 빠른 업데이트와 반복 개발을 유지하기 위해 스폰서십이 절실히 필요합니다.**
+> 🤝 **공동 저자**: 디자인과 홍보 측면에서 헌신해 주신 [<img src="https://github.com/wxwxwkai.png" width="20" style="border-radius:50%; vertical-align:middle;"/> @wxwxwkai](https://github.com/wxwxwkai) 님께 특별한 감사를 드립니다. 이러한 핵심 작업이 없었다면 본 프로젝트는 빛을 보지 못했을 것입니다. 프로젝트의 지속적인 업데이트와 커뮤니티 관리는 [<img src="https://github.com/wxwxwkai.png" width="20" style="border-radius:50%; vertical-align:middle;"/> @wxwxwkai](https://github.com/wxwxwkai) 님이 주도하며, [<img src="https://github.com/1deaaa.png" width="20" style="border-radius:50%; vertical-align:middle;"/> @1deaaa](https://github.com/1deaaa) 님 역시 기술 지원을 지속적으로 제공할 예정입니다.
 
 SparkArc AI 창작 플랫폼(SparkArc Studio)은 자율적 멀티 에이전트(Agent) 그룹이 구동하는 창작 플랫폼입니다. 전문적인 창작 파이프라인을 통해 한 줄의 미약한 영감을 온전한 스토리 세계관으로 확장하고 소설이나 시나리오를 집필하며, 미려한 웹(WEB) 연출과 게임 엔진 연출까지 구동할 수 있도록 설계되었습니다.
 이 플랫폼은 **영감 — 설정 — 템포 — 대纲(아웃라인) — 집필 — 검증 — 배포 — 공유 — 연출**에 이르는 모든 링크를 관통하여 창작자에게 강력한 생산성 도구를 제공합니다.
@@ -642,6 +642,12 @@ Unity 프로젝트 안에서 제작한 인터랙티브 극본을 게임 스토�
 | [데이터베이스 마이그레이션 백서](docs/database-migration.md) | 개발환경 스키마 갱신법, 테이블 컬럼 유실 예방 대책 |
 | [CI/CD 파이프라인 가이드](docs/cicd-deployment.md) | 러너 설치, 토큰 변수 주입, 원격 가동 플로우 |
 | [LEGAL/README.md](LEGAL/README.md) | 법적 면책 조항 및 서비스 이용규약 모음집 |
+
+---
+
+## 스폰서 및 파트너십
+
+만약 귀하가 API 프록시 제공업체, 애그리게이터 또는 GPU 공급업체라면, [**스폰서 및 비즈니스 협력 가이드**](.github/SUPPORT.md)(현재 중문/영문만 지원)를 확인해 주시기 바랍니다. 개발 및 테스트에 필요한 API 크레딧 후원에 대한 보답으로, 자체 호스팅 사용자들을 위한 "기본 구성 배포" 등 홍보 가치가 높은 채널을 제공합니다. **프로젝트의 빠른 업데이트와 반복 개발을 유지하기 위해 스폰서십이 절실히 필요합니다.**
 
 ---
 

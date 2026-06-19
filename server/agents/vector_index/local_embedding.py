@@ -97,6 +97,85 @@ def _get_startup_state() -> dict[str, Any]:
         return dict(_startup_state)
 
 
+def mark_local_embedding_starting() -> dict[str, Any]:
+    """同步把本地嵌入启动态标记为进行中，避免外层瞬间读到空闲。"""
+    _set_startup_state("starting", "开始加载本地嵌入服务", progress=1, error="")
+    return _get_startup_state()
+
+
+def _download_file_with_progress(
+    url_candidates: list[str],
+    target: Path,
+    *,
+    phase: str,
+    message: str,
+    progress_start: int,
+    progress_span: int,
+) -> None:
+    """按候选 URL 流式下载文件，并把字节进度回写到启动态。"""
+    if not url_candidates:
+        raise RuntimeError("没有可用的下载地址")
+
+    target.parent.mkdir(parents=True, exist_ok=True)
+    temp_path = target.with_name(f"{target.name}.download")
+    last_error: Exception | None = None
+
+    for url in url_candidates:
+        try:
+            if temp_path.exists():
+                temp_path.unlink()
+
+            _set_startup_state(phase, message, progress=progress_start)
+            with requests.get(
+                url,
+                headers={"User-Agent": "SparkArc-local-embedding"},
+                stream=True,
+                timeout=(10, 120),
+            ) as response:
+                response.raise_for_status()
+                total_bytes = int(response.headers.get("content-length") or 0)
+                downloaded_bytes = 0
+                last_progress = progress_start - 1
+                last_update_at = 0.0
+
+                with open(temp_path, "wb") as file_handle:
+                    for chunk in response.iter_content(chunk_size=1024 * 1024):
+                        if not chunk:
+                            continue
+                        file_handle.write(chunk)
+                        downloaded_bytes += len(chunk)
+
+                        if total_bytes <= 0:
+                            continue
+
+                        progress_value = progress_start + int(
+                            progress_span * min(downloaded_bytes, total_bytes) / total_bytes
+                        )
+                        progress_value = max(progress_start, min(progress_start + progress_span, progress_value))
+                        now = time.monotonic()
+                        if progress_value != last_progress and (now - last_update_at >= 0.4 or progress_value >= progress_start + progress_span):
+                            percent = int(min(100, downloaded_bytes * 100 / total_bytes))
+                            _set_startup_state(
+                                phase,
+                                f"{message}（{percent}%）",
+                                progress=progress_value,
+                            )
+                            last_progress = progress_value
+                            last_update_at = now
+
+            if temp_path.exists():
+                if target.exists():
+                    target.unlink()
+                temp_path.replace(target)
+            return
+        except Exception as exc:
+            last_error = exc
+            if temp_path.exists():
+                temp_path.unlink(missing_ok=True)
+
+    raise RuntimeError(f"下载失败：{last_error}") from last_error
+
+
 def local_embedding_model_name() -> str:
     """返回 UI 与测试接口使用的本地嵌入模型显示名。"""
     return f"local:{QWEN3_EMBEDDING_MODEL}"
@@ -136,6 +215,21 @@ def _hf_endpoint() -> str | None:
     return None
 
 
+def _build_hf_file_url(repo_id: str, filename: str, *, endpoint: str | None = None) -> str:
+    """构造 Hugging Face 文件直链，兼容旧版参数签名。"""
+    try:
+        from huggingface_hub import hf_hub_url
+    except ImportError as exc:
+        raise ImportError("缺少 huggingface_hub，无法自动下载本地嵌入模型") from exc
+
+    if endpoint:
+        try:
+            return hf_hub_url(repo_id=repo_id, filename=filename, endpoint=endpoint)
+        except TypeError:
+            return hf_hub_url(repo_id=repo_id, filename=filename)
+    return hf_hub_url(repo_id=repo_id, filename=filename)
+
+
 def get_default_model_path() -> Path:
     """返回 SparkArc 默认本地 GGUF 模型缓存路径。"""
     server_root = Path(__file__).resolve().parents[2]
@@ -166,28 +260,23 @@ def ensure_local_model_available() -> Path:
         return target
 
     _set_startup_state("downloading_model", "正在下载本地嵌入模型", progress=10)
-    target.parent.mkdir(parents=True, exist_ok=True)
+    endpoint = _hf_endpoint()
     try:
-        from huggingface_hub import hf_hub_download
+        url_candidates = []
+        if endpoint:
+            url_candidates.append(_build_hf_file_url(QWEN3_GGUF_REPO_ID, QWEN3_GGUF_FILENAME, endpoint=endpoint))
+        url_candidates.append(_build_hf_file_url(QWEN3_GGUF_REPO_ID, QWEN3_GGUF_FILENAME))
     except ImportError as exc:
         raise RuntimeError("缺少 huggingface_hub，无法自动下载本地嵌入模型") from exc
 
-    download_kwargs = {
-        "repo_id": QWEN3_GGUF_REPO_ID,
-        "filename": QWEN3_GGUF_FILENAME,
-        "local_dir": str(target.parent),
-        "local_dir_use_symlinks": False,
-        "resume_download": True,
-    }
-    endpoint = _hf_endpoint()
-    if endpoint:
-        download_kwargs["endpoint"] = endpoint
-    downloaded = hf_hub_download(**download_kwargs)
-    downloaded_path = Path(downloaded).resolve()
-    if downloaded_path != target and downloaded_path.is_file():
-        if target.exists():
-            target.unlink()
-        downloaded_path.replace(target)
+    _download_file_with_progress(
+        list(dict.fromkeys(url_candidates)),
+        target,
+        phase="downloading_model",
+        message="正在下载本地嵌入模型",
+        progress_start=10,
+        progress_span=30,
+    )
     if not target.is_file() or target.stat().st_size < QWEN3_GGUF_MIN_BYTES:
         raise RuntimeError(f"本地嵌入模型下载不完整：{target}")
     _set_startup_state("model_ready", "本地嵌入模型已就绪", progress=40)
@@ -320,18 +409,14 @@ def ensure_llama_server_available() -> Path:
 
         try:
             if not archive_path.is_file():
-                last_error: Exception | None = None
-                for url in _select_download_url(_download_url_candidates(tag, asset.name)):
-                    try:
-                        urllib.request.urlretrieve(url, archive_path)
-                        last_error = None
-                        break
-                    except Exception as exc:
-                        last_error = exc
-                        if archive_path.exists():
-                            archive_path.unlink(missing_ok=True)
-                if last_error is not None:
-                    raise last_error
+                _download_file_with_progress(
+                    _select_download_url(_download_url_candidates(tag, asset.name)),
+                    archive_path,
+                    phase="downloading_server",
+                    message="正在准备 llama.cpp 本地服务",
+                    progress_start=45,
+                    progress_span=15,
+                )
 
             _extract_archive(archive_path, extract_dir, asset.archive_type)
             cached = _find_cached_llama_server()

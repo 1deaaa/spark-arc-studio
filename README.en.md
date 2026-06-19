@@ -4,7 +4,7 @@
 
 > 📢 **Support & Follow**: If SparkArc has been helpful to you, please consider giving us a **Star** (bookmark the project to prevent losing it) and a **Watch** (select Custom -> Releases to subscribe to new updates). As an independent open-source project, every Star and Watch significantly improves our visibility in the community, which is crucial for our continuous iteration and long-term development. Thank you for your support!
 > 
-> 💖 **Sponsorship & Partnership**: If you are an API proxy provider, aggregator, or GPU supplier, please check our [**Sponsorship & Partnership Guide**](.github/SUPPORT.en.md). We offer high-value promotion channels including **default configuration push** for our self-hosted users in exchange for development & testing API credits. **We highly need sponsorships to maintain our high-speed iterations.**
+> 🤝 **Co-author**: Special thanks to [<img src="https://github.com/wxwxwkai.png" width="20" style="border-radius:50%; vertical-align:middle;"/> @wxwxwkai](https://github.com/wxwxwkai) for their dedication to design and promotion; without these critical efforts, this project would not have been possible. The project is led by [<img src="https://github.com/wxwxwkai.png" width="20" style="border-radius:50%; vertical-align:middle;"/> @wxwxwkai](https://github.com/wxwxwkai) for iterations and community management, while [<img src="https://github.com/1deaaa.png" width="20" style="border-radius:50%; vertical-align:middle;"/> @1deaaa](https://github.com/1deaaa) continues to provide technical support.
 
 SparkArc is a production-grade creative studio powered by coordinated Agents.
 It helps creators turn a tiny spark into a complete story world and publishable output across:
@@ -699,6 +699,12 @@ This project's code is released under AGPL-3.0-only; however, **the "SparkArc" n
 Any deployment, modified version, or distribution based on this project must not imply official, authorized, agency, or partnership affiliation with the original project.
 
 The Matchbox Agent Gateway (`server/llm/agen_matchbox`) is a separately reusable component licensed under Apache-2.0 according to the `LICENSE` file in that directory. Unless otherwise stated, the rest of the main project is licensed under AGPL-3.0-only.
+
+---
+
+## Sponsorship & Partnership
+
+If you are an API proxy provider, aggregator, or GPU supplier, please check our [**Sponsorship & Partnership Guide**](.github/SUPPORT.en.md). We offer high-value promotion channels including **default configuration push** for our self-hosted users in exchange for development & testing API credits. **We highly need sponsorships to maintain our high-speed iterations.**
 
 ---
 

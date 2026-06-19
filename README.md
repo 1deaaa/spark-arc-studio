@@ -4,7 +4,7 @@
 
 > 📢 **支持与关注**：如果本项目对你有所启发或帮助，请帮我们点个 **Star**（收藏项目防止迷路）和 **Watch**（选择 Custom -> Releases 订阅新版本更新）。作为一个独立开源项目，每一个 Star 和 Watch 都能极大地提升我们在社区中的能见度，对项目的持续迭代和长远发展至关重要，非常感谢你的支持！
 > 
-> 💖 **赞助与商业合作**：如果您是模型中转商、API 聚合平台或 GPU 算力提供商，欢迎查看我们的 [**赞助与商业合作指南**](.github/SUPPORT.md)。我们提供了极具流量价值的“默认配置下发”等方案，以互惠您赞助的开发与测试 API 额度。**我们需要赞助来维持项目的高速迭代。**
+> 🤝 **联合作者**：感谢 [<img src="https://github.com/wxwxwkai.png" width="20" style="border-radius:50%; vertical-align:middle;"/> @wxwxwkai](https://github.com/wxwxwkai) 在设计与宣发上的付出，没有这些关键工作，本项目不可能面世。本项目由 [<img src="https://github.com/wxwxwkai.png" width="20" style="border-radius:50%; vertical-align:middle;"/> @wxwxwkai](https://github.com/wxwxwkai) 主导迭代与社区管理，[<img src="https://github.com/1deaaa.png" width="20" style="border-radius:50%; vertical-align:middle;"/> @1deaaa](https://github.com/1deaaa) 亦会持续提供技术支持。
 
 **引火AI创作台（SparkArc Studio）** 是一个Agent自主智能集群驱动的创作平台，旨在通过专业创作流水线，将星星灵感之火扩展为完整的故事世界，创作小说、剧本，并驱动精美的WEB演出甚至游戏引擎演出。
 它打通了**灵感——设定——节奏——大纲——编写——验证——发布——分享——演出**的全链路，为创作者提供了一套强大的生产力工具。
@@ -829,6 +829,12 @@ SparkArc 是本项目的官方名称与标识。
 任何基于本项目的部署、修改版或分发版，均不得暗示与原项目存在官方、授权、代理或合作关系。
 
 火柴 Agent 网关（`server/llm/agen_matchbox`）是独立可复用组件，按该目录内 `LICENSE` 以 Apache-2.0 单独授权；根项目其他部分除非另有说明，按 AGPL-3.0-only 授权。
+
+---
+
+## 赞助与商业合作
+
+如果您是模型API 聚合平台，欢迎查看我们的 [**赞助与合作指南**](.github/SUPPORT.md)。我们提供了极具流量价值的“默认配置下发”等方案，以互惠您赞助的开发与测试 API 额度。**我们需要赞助来维持项目的高速迭代。**
 
 ---
 

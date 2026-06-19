@@ -537,12 +537,14 @@ async def set_local_embedding(
     try:
         from agents.vector_index.local_embedding import (
             get_local_embedding_status,
+            mark_local_embedding_starting,
             start_local_embedding_service,
             stop_local_embedding_service,
         )
 
         if data.enabled:
             set_local_embedding_enabled(True)
+            mark_local_embedding_starting()
             thread = threading.Thread(
                 target=start_local_embedding_service,
                 name="local-embedding-startup",
