@@ -44,6 +44,7 @@ export interface AutoWriteSnapshot {
   lastCompletedChapterIndex?: number;
   nextChapterIndex?: number;
   availableResumeChapterIndex?: number | null;
+  availableResumeSceneIndex?: number | null;
   lastSavedFilename: string;
   lastError: string;
   updatedAt: string;
@@ -54,6 +55,12 @@ export interface AutoWriteSnapshot {
   streamingSpeed: number;
   streamingChars: number;
   streamingElapsed: number;
+  autoReviewEnabled?: boolean;
+  lastReviewDecision?: string;
+  lastReviewGrade?: string;
+  lastReviewTarget?: string;
+  lastReviewTicketCount?: number;
+  lastReviewError?: string;
   /** 用户是否已确认该状态（关闭遮罩/手动中断后为 true，下次不再弹出） */
   acknowledged?: boolean;
 }
@@ -159,12 +166,14 @@ export const useDirectorAutoWriteStore = defineStore('directorAutoWrite', () => 
   function onDirectorStarted(payload: {
     project_name: string;
     start_chapter_index: number;
+    start_scene_index?: number;
     mode: string;
     export_format: string;
+    auto_review?: boolean;
     total_chapters: number;
     total_scenes: number;
   }): void {
-    const { project_name, mode, export_format, total_chapters, total_scenes } = payload;
+    const { project_name, mode, export_format, auto_review, total_chapters, total_scenes } = payload;
     tasks.value[project_name] = {
       projectName: project_name,
       fromDirector: true,
@@ -180,6 +189,8 @@ export const useDirectorAutoWriteStore = defineStore('directorAutoWrite', () => 
         currentSceneTitle: '',
         totalChapters: total_chapters,
         totalScenes: total_scenes,
+        availableResumeChapterIndex: payload.start_chapter_index,
+        availableResumeSceneIndex: payload.start_scene_index ?? 0,
         lastSavedFilename: '',
         lastError: '',
         updatedAt: new Date().toISOString(),
@@ -189,6 +200,7 @@ export const useDirectorAutoWriteStore = defineStore('directorAutoWrite', () => 
         streamingSpeed: 0,
         streamingChars: 0,
         streamingElapsed: 0,
+        autoReviewEnabled: auto_review === true,
       },
     };
     // 立即拉一次最新状态
@@ -215,8 +227,9 @@ export const useDirectorAutoWriteStore = defineStore('directorAutoWrite', () => 
         // idle 状态且毫无痕迹时静默，不予打扰
         if (data.status === 'idle') return;
 
-        // 已确认的遗留状态（用户已关闭遮罩或手动中断），不再弹出
-        if (data.acknowledged) return;
+        // 已确认的遗留状态（用户已关闭遮罩或手动中断），不再弹出。
+        // 但 running 是后台仍在写作的强锁定态，刷新/重登后必须恢复遮罩。
+        if (data.acknowledged && data.status !== 'running') return;
 
         // 服务器有活跃进度或错误/完成等遗留状态，进行强行恢复
         const isManual = data.status === 'running' && !data.fromDirector;
@@ -327,12 +340,14 @@ export const useDirectorAutoWriteStore = defineStore('directorAutoWrite', () => 
       startChapterIndex?: number;
       startSceneIndex?: number;
       exportFormat?: string;
+      autoReview?: boolean;
     } = {},
   ): Promise<{ success: boolean; error?: string }> {
     const mode = config.mode || 'chapter_by_chapter';
     const startChapterIndex = config.startChapterIndex ?? 0;
     const startSceneIndex = config.startSceneIndex ?? 0;
     const exportFormat = config.exportFormat || 'arc';
+    const autoReview = config.autoReview === true;
 
     try {
       const res = await fetchWithAuth(
@@ -345,6 +360,7 @@ export const useDirectorAutoWriteStore = defineStore('directorAutoWrite', () => 
             start_chapter_index: startChapterIndex,
             start_scene_index: startSceneIndex,
             export_format: exportFormat,
+            auto_review: autoReview,
           }),
         },
       );
@@ -380,6 +396,7 @@ export const useDirectorAutoWriteStore = defineStore('directorAutoWrite', () => 
         streamingSpeed: 0,
         streamingChars: 0,
         streamingElapsed: 0,
+        autoReviewEnabled: autoReview,
       },
     };
 

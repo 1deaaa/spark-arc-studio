@@ -1308,7 +1308,7 @@ input[type="password"] {
 
 .login-lang-select {
   position: absolute;
-  top: 16px;
+  top: calc(16px + var(--sat, env(safe-area-inset-top, 0px)));
   right: 16px;
   z-index: 1000;
 }

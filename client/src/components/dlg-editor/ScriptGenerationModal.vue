@@ -421,7 +421,8 @@ async function runStream() {
       body: JSON.stringify({
         mode: config.value.mode,
         start_chapter_index: config.value.startChapterIndex,
-        export_format: config.value.exportFormat
+        export_format: config.value.exportFormat,
+        auto_review: false
       }),
       signal: activeController.signal,
       openWhenHidden: true, // Keep connection alive when page is hidden/background

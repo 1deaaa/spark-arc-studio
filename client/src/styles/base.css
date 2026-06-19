@@ -15,6 +15,10 @@ input, textarea, [contenteditable="true"] {
     cursor: text;
 }
 
+button, input, textarea, select {
+    font-family: inherit;
+}
+
 /* Ensure clickable elements have pointer cursor */
 button, a, [role="button"], .clickable {
     cursor: pointer;

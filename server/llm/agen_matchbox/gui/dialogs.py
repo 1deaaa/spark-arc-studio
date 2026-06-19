@@ -143,7 +143,7 @@ class DialogsMixin:
         max_context_entry.grid(row=4, column=1, padx=10, pady=(8, 0), sticky=tk.W)
         _init_max_context = auto_max_context if auto_max_context is not None else DEFAULT_MAX_CONTEXT_TOKENS
         max_context_entry.insert(0, str(_init_max_context))
-        _ctx_hint = f"探测值: {auto_max_context}" if auto_max_context is not None else "默认 200000"
+        _ctx_hint = f"探测值: {auto_max_context}" if auto_max_context is not None else "默认 256000"
         ttk.Label(dialog, text=_ctx_hint, foreground="gray").grid(row=4, column=1, padx=(210, 10), pady=(8, 0), sticky=tk.W)
 
         ttk.Label(dialog, text="最大单次输出:").grid(row=5, column=0, sticky=tk.W, padx=10, pady=(8, 0))
@@ -373,7 +373,7 @@ class DialogsMixin:
         max_context_entry = ttk.Entry(dialog, width=24)
         max_context_entry.grid(row=4, column=1, padx=10, pady=(8, 0), sticky=tk.W)
         max_context_entry.insert(0, str(model_max_context))
-        ttk.Label(dialog, text="默认 200000", foreground="gray").grid(row=4, column=1, padx=(210, 10), pady=(8, 0), sticky=tk.W)
+        ttk.Label(dialog, text="默认 256000", foreground="gray").grid(row=4, column=1, padx=(210, 10), pady=(8, 0), sticky=tk.W)
 
         ttk.Label(dialog, text="最大单次输出:").grid(row=5, column=0, sticky=tk.W, padx=10, pady=(8, 0))
         max_output_entry = ttk.Entry(dialog, width=24)

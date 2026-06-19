@@ -16,15 +16,16 @@ from typing import Any, Literal
 import networkx as nx
 from langchain_core.documents import Document
 from langchain_core.messages import HumanMessage, SystemMessage
-from langchain_text_splitters import RecursiveCharacterTextSplitter
 
 from core.utils import get_project_path
 from llm.agen_matchbox import matchbox
 from agents.language_policy import prepend_prompt_language_policy
 from story.project_files import collect_project_files
+from story.semantic_chunker import SemanticChunker
 
 GraphRAGQueryMode = Literal["local", "global", "drift"]
 logger = logging.getLogger(__name__)
+GRAPHRAG_CHUNKING_STRATEGY_VERSION = "semantic-v1"
 
 
 # ==================== 全局后台构建状态注册表 ====================
@@ -88,7 +89,7 @@ class GraphRAGService:
             raise FileNotFoundError(f"项目不存在: {self._project_path}")
 
     def _get_build_llm(self):
-        # 建图阶段固定走 fast。
+        # 建图阶段默认走 fast，也允许部署者通过环境变量切换到自定义用途。
         return matchbox().get_user_llm(
             self.user_id,
             usage_key=self._build_usage_key,
@@ -347,6 +348,8 @@ class GraphRAGService:
         """对比 metadata 中存的 file_hashes 与当前源文件哈希。"""
         if not isinstance(metadata, dict):
             return True
+        if metadata.get("chunking_strategy") != GRAPHRAG_CHUNKING_STRATEGY_VERSION:
+            return True
         stored = metadata.get("file_hashes")
         if not isinstance(stored, dict):
             # 旧版 metadata 没有 file_hashes，视为需要重建
@@ -503,22 +506,40 @@ class GraphRAGService:
     def _collect_source_documents(self) -> list[Document]:
         self._ensure_project_exists()
 
-        # 复用通用项目文件收集（其中 character 文件 content 已被注入"# 角色：xxx"前缀）
-        project_files = collect_project_files(
-            self.user_id, self.project_name,
-            max_source_chars=self._max_source_chars,
+        # 复用项目级语义分块器，按场景 / 大纲节点 / 角色档案等叙事单元建图。
+        # 这避免字符切片把关键人物关系切在两个 chunk 里，是 GraphRAG 与语义搜索的统一底座。
+        chunker = SemanticChunker(
+            max_chunk_tokens=max(100, self._chunk_size),
+            sub_chunk_size=max(200, self._chunk_size),
+            sub_chunk_overlap=max(0, self._chunk_overlap),
         )
+        semantic_state = chunker.chunk_project_state(
+            self.user_id,
+            self.project_name,
+            use_cache=True,
+        )
+        semantic_chunks = semantic_state.get("chunks") or []
 
         documents: list[Document] = []
-        for pf in project_files:
+        for chunk in semantic_chunks:
+            metadata = dict(getattr(chunk, "metadata", {}) or {})
+            format_key = str(metadata.get("format_key") or "")
             # 仅纳入叙事相关文件
-            if pf.format_key not in self._GRAPHRAG_INDEX_FORMAT_KEYS:
+            if format_key not in self._GRAPHRAG_INDEX_FORMAT_KEYS:
+                continue
+            text = str(getattr(chunk, "text", "") or "").strip()
+            if not text:
                 continue
             documents.append(Document(
-                page_content=pf.content,
+                page_content=text,
                 metadata={
-                    "source": pf.rel_path,
-                    "format_key": pf.format_key,
+                    **metadata,
+                    "source": str(metadata.get("source") or ""),
+                    "format_key": format_key,
+                    "narrative_ref": getattr(chunk, "narrative_ref", "") or metadata.get("narrative_ref", ""),
+                    "start_line": int(getattr(chunk, "start_line", 0) or 0),
+                    "end_line": int(getattr(chunk, "end_line", 0) or 0),
+                    "chunking_strategy": GRAPHRAG_CHUNKING_STRATEGY_VERSION,
                 },
             ))
 
@@ -610,6 +631,23 @@ class GraphRAGService:
             items.append(sample)
         return " || ".join(items[:4])
 
+    @staticmethod
+    def _format_chunk_source(chunk: Document) -> str:
+        metadata = dict(getattr(chunk, "metadata", {}) or {})
+        source = str(metadata.get("source") or "未知来源")
+        ref = str(metadata.get("narrative_ref") or "").strip()
+        start_line = int(metadata.get("start_line") or 0)
+        end_line = int(metadata.get("end_line") or 0)
+        location = ""
+        if start_line and end_line:
+            location = f"L{start_line}-L{end_line}"
+        parts = [source]
+        if ref:
+            parts.append(ref)
+        if location:
+            parts.append(location)
+        return " :: ".join(parts)
+
     def _canonicalize_entity(self, raw_name: str, alias_map: dict[str, str]) -> str:
         name = str(raw_name or "").strip()
         if not name:
@@ -633,7 +671,7 @@ class GraphRAGService:
 
         for idx, chunk in enumerate(chunks):
             self._check_cancelled()
-            source = str(chunk.metadata.get("source") or "")
+            source = self._format_chunk_source(chunk)
             logger.info(
                 "[GraphRAG] 提取三元组 chunk=%s/%s source=%s chars=%s",
                 idx + 1,
@@ -875,33 +913,29 @@ class GraphRAGService:
             self._check_cancelled()
             if not docs:
                 raise RuntimeError("未找到可用于构建 GraphRAG 的项目文本（世界观/角色/梗概/大纲/剧本）。")
+            source_doc_count = len({str(doc.metadata.get("source") or "") for doc in docs if doc.metadata.get("source")})
 
             logger.info(
                 "[GraphRAG] 开始构建 project=%s user_id=%s source_docs=%s timeout=%ss",
                 self.project_name,
                 self.user_id,
-                len(docs),
+                source_doc_count,
                 self._llm_timeout,
             )
 
-            # 切块阶段
+            # 语义分块阶段：_collect_source_documents 已经产出场景/事件/角色等叙事单元
             self._set_build_state(
                 status="building",
-                stage="splitting",
+                stage="semantic_splitting",
                 progress={
                     **self._empty_progress(),
-                    "source_docs": len(docs),
+                    "source_docs": source_doc_count,
                 },
             )
-            splitter = RecursiveCharacterTextSplitter(
-                chunk_size=self._chunk_size,
-                chunk_overlap=self._chunk_overlap,
-            )
-            chunks = splitter.split_documents(docs)
+            chunks = docs[: self._max_chunks]
             self._check_cancelled()
-            chunks = chunks[: self._max_chunks]
             logger.info(
-                "[GraphRAG] 切块完成 project=%s chunks=%s chunk_size=%s overlap=%s",
+                "[GraphRAG] 语义分块完成 project=%s chunks=%s max_tokens=%s overlap=%s",
                 self.project_name,
                 len(chunks),
                 self._chunk_size,
@@ -916,7 +950,7 @@ class GraphRAGService:
                     "total_chunks": len(chunks),
                     "done_chunks": 0,
                     "triplets_collected": 0,
-                    "source_docs": len(docs),
+                    "source_docs": source_doc_count,
                     "nodes": 0,
                     "edges": 0,
                 },
@@ -932,7 +966,7 @@ class GraphRAGService:
                         "total_chunks": total,
                         "done_chunks": done,
                         "triplets_collected": triplets,
-                        "source_docs": len(docs),
+                        "source_docs": source_doc_count,
                         "nodes": nodes,
                         "edges": edges,
                     },
@@ -964,8 +998,9 @@ class GraphRAGService:
                 "user_id": self.user_id,
                 "build_usage_key": self._build_usage_key,
                 "query_agent_policy": "follow_caller_agent",
+                "chunking_strategy": GRAPHRAG_CHUNKING_STRATEGY_VERSION,
                 "alias_count": len(alias_map),
-                "source_docs": len(docs),
+                "source_docs": source_doc_count,
                 "chunks": len(chunks),
                 "triplets": triplet_count,
                 "nodes": int(graph.number_of_nodes()),
@@ -994,7 +1029,7 @@ class GraphRAGService:
                     "total_chunks": len(chunks),
                     "done_chunks": len(chunks),
                     "triplets_collected": triplet_count,
-                    "source_docs": len(docs),
+                    "source_docs": source_doc_count,
                     "nodes": int(graph.number_of_nodes()),
                     "edges": int(graph.number_of_edges()),
                 },

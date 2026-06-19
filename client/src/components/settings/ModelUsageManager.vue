@@ -17,8 +17,16 @@
             <div v-for="usage in usageSelections" :key="usage.usage_key" class="usage-item">
                 <div class="usage-header">
                     <div class="usage-info">
-                        <span class="usage-label">{{ usage.usage_label }}</span>
+                        <span class="usage-label">{{ getUsageDisplayLabel(usage) }}</span>
                         <span class="usage-key">{{ usage.usage_key }}</span>
+                        <n-tooltip v-if="getBuiltinUsageDescription(usage.usage_key)" trigger="hover" placement="top" :width="260">
+                            <template #trigger>
+                                <n-icon class="usage-help-icon" :title="t('components.modelUsageManager.usageInfo')">
+                                    <CircleHelp />
+                                </n-icon>
+                            </template>
+                            {{ getBuiltinUsageDescription(usage.usage_key) }}
+                        </n-tooltip>
                     </div>
                     <n-space :size="6" class="usage-actions">
                         <n-button class="usage-action-btn" size="tiny" secondary strong @click="openEditUsageModal(usage)" :disabled="isBuiltinUsage(usage.usage_key)">{{ t('components.modelUsageManager.edit') }}</n-button>
@@ -125,17 +133,23 @@
 <script setup lang="ts">
 import { ref, computed, watch } from 'vue';
 import { useI18n } from 'vue-i18n';
-import { NButton, NIcon, NSpace, NFormItem, NSelect, NModal, NCard, NForm, NInput, useMessage, useDialog } from 'naive-ui';
+import { NButton, NIcon, NSpace, NFormItem, NSelect, NModal, NCard, NForm, NInput, NTooltip, useMessage, useDialog } from 'naive-ui';
 import SparkAlert from '../share/SparkAlert.vue';
 import SparkLoaderAnimation from '../share/SparkLoaderAnimation.vue';
-import { Plus, Trophy } from '@lucide/vue';
+import { CircleHelp, Plus, Trophy } from '@lucide/vue';
 import { createUserUsageSlot, deleteUserUsageSlot, renameUserUsageSlot } from '../../services/api';
 import { useAiStore } from '../stores/aiStore';
+import { useUsageDisplay } from '@/composables/useUsageDisplay';
 
 const message = useMessage();
 const dialog = useDialog();
 const { t } = useI18n();
 const aiStore = useAiStore();
+const {
+    isBuiltinUsage,
+    getBuiltinUsageDescription,
+    getUsageDisplayLabel,
+} = useUsageDisplay();
 
 const loading = computed(() => aiStore.loading);
 
@@ -231,7 +245,7 @@ async function handleModelChange(usage, modelId) {
 async function saveSelection(usage) {
     try {
         await aiStore.updateSelection(usage.usage_key, usage.platform_id, usage.model_id);
-        message.success(t('components.modelUsageManager.modelUpdated', { label: usage.usage_label }));
+        message.success(t('components.modelUsageManager.modelUpdated', { label: getUsageDisplayLabel(usage) }));
     } catch (e: unknown) {
         const errorMessage = e instanceof Error ? e.message : String(e || t('views.common.unknownError'));
         message.error(errorMessage);
@@ -269,11 +283,6 @@ function handleNewUsagePlatformChange(platformId) {
     }
 }
 
-function isBuiltinUsage(key) {
-    const builtin = ['main', 'fast', 'reason'];
-    return builtin.includes((key || '').toString().trim().toLowerCase());
-}
-
 function openEditUsageModal(usage) {
     editingUsage.value = { usage_key: usage.usage_key, usage_label: usage.usage_label };
     showEditUsageModal.value = true;
@@ -299,7 +308,7 @@ async function deleteUsage(usage) {
     }
     dialog.error({
         title: t('components.modelUsageManager.deleteUsageTitle'),
-        content: t('components.modelUsageManager.deleteUsageConfirm', { label: usage.usage_label, key: usage.usage_key }),
+        content: t('components.modelUsageManager.deleteUsageConfirm', { label: getUsageDisplayLabel(usage), key: usage.usage_key }),
         positiveText: t('views.common.delete'),
         negativeText: t('views.common.cancel'),
         onPositiveClick: async () => {
@@ -420,6 +429,20 @@ async function deleteUsage(usage) {
 .usage-actions {
     margin-left: auto;
     flex-shrink: 0;
+}
+
+.usage-help-icon {
+    width: 17px;
+    height: 17px;
+    color: var(--spark-text-muted);
+    cursor: help;
+    opacity: 0.86;
+    transition: color 0.16s ease, opacity 0.16s ease;
+}
+
+.usage-help-icon:hover {
+    color: var(--spark-primary);
+    opacity: 1;
 }
 
 .usage-action-btn {

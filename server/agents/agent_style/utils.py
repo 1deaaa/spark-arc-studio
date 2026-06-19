@@ -263,6 +263,87 @@ def load_project_style_profile(user_id: str, project_name: str) -> Dict | None:
     return load_style_profile_from_file(author_id, user_id=user_id)
 
 
+def format_style_profile_for_prompt(
+    style_profile: Any,
+    *,
+    fallback: str = "用户未提供参考风格档案。请根据故事主题、世界观氛围和角色特质，自行选择最合适的文笔风格进行创作。",
+    raw_char_limit: int = 6000,
+) -> str:
+    """把风格档案压成写作模型更容易执行的提示块。
+
+    风格分析产物本身是 Author OS JSON。直接整段注入时，模型容易把它当
+    静态资料读过就忘。本函数保留原始档案，同时前置一张“风格执行卡”，
+    明确句子呼吸、情绪处理、感官焦点、对白机制和禁忌。
+    """
+    if style_profile is None:
+        return fallback
+    if isinstance(style_profile, str):
+        return style_profile.strip() or fallback
+    if not isinstance(style_profile, dict):
+        try:
+            raw = json.dumps(style_profile, ensure_ascii=False, indent=2)
+            return raw.strip() or fallback
+        except Exception:
+            return fallback
+
+    def _value(path: str) -> str:
+        current: Any = style_profile
+        for key in path.split("."):
+            if not isinstance(current, dict):
+                return ""
+            current = current.get(key)
+        if isinstance(current, str):
+            return current.strip()
+        if isinstance(current, list):
+            return "；".join(str(item).strip() for item in current if str(item).strip())
+        if current is None:
+            return ""
+        return str(current).strip()
+
+    execution_items = [
+        ("标志性手法", _value("coordinator.signature_style")),
+        ("独特性摘要", _value("coordinator.distinctive_summary")),
+        ("句子呼吸", _value("verbal_physicality.sentence_weight_and_breath")),
+        ("修饰密度", _value("verbal_physicality.modifier_density")),
+        ("修辞迁移", _value("verbal_physicality.metaphor_gene")),
+        ("情绪处理", _value("emotional_processing.emotion_presentation")),
+        ("高潮处理", _value("emotional_processing.climax_handling")),
+        ("感官焦点", _value("sensory_and_attention.sensory_priority")),
+        ("注意力偏移", _value("sensory_and_attention.focus_shifting")),
+        ("对白效率", _value("interpersonal_field.dialogue_efficiency")),
+        ("沉默机制", _value("interpersonal_field.silence_mechanism")),
+        ("叙述距离", _value("interpersonal_field.narrator_temperature")),
+    ]
+    negative_constraints = _value("coordinator.negative_constraints")
+
+    lines = ["### 风格执行卡（写作时优先执行）"]
+    has_signal = False
+    for label, value in execution_items:
+        if value and value != "待后续补充":
+            has_signal = True
+            lines.append(f"- {label}：{value}")
+    if negative_constraints:
+        has_signal = True
+        lines.append(f"- 禁止/避开：{negative_constraints}")
+
+    if has_signal:
+        lines.append("")
+        lines.append("### 本次写作执行要求")
+        lines.append("- 先模仿“句子呼吸、情绪处理、感官焦点、对白机制”，不要只复制表层词汇。")
+        lines.append("- 对白、旁白和心理活动都要遵守风格执行卡；禁止在结尾额外升华或解释风格。")
+        lines.append("- 若风格档案与当前剧情类型冲突，以当前剧情真实情绪为主，只迁移底层表达方法。")
+    else:
+        lines.append("- 风格档案缺少可执行字段；请只把下方原始档案作为弱参考。")
+
+    raw = json.dumps(style_profile, ensure_ascii=False, indent=2)
+    if raw_char_limit > 0 and len(raw) > raw_char_limit:
+        raw = raw[:raw_char_limit].rstrip() + "\n...（原始风格档案已截断）"
+    lines.append("")
+    lines.append("### 原始风格档案（补充参考）")
+    lines.append(raw)
+    return "\n".join(lines).strip()
+
+
 # ==================== 用户级默认风格 ====================
 
 def get_user_default_style_binding_path(user_id: str) -> Path:

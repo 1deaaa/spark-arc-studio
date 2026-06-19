@@ -691,7 +691,7 @@ class LLMConfigGUI(
                         "model_name": m["model_name"],
                         "is_embedding": bool(m["is_embedding"]),
                         "_db_id": m["_db_id"],
-                        "max_context_tokens": m.get("max_context_tokens", 200000),
+                        "max_context_tokens": m.get("max_context_tokens", 256000),
                         "max_output_tokens": m.get("max_output_tokens", 64000),
                         "sys_credit_input_price_per_million": m.get("sys_credit_input_price_per_million"),
                         "sys_credit_output_price_per_million": m.get("sys_credit_output_price_per_million"),

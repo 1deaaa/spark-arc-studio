@@ -108,12 +108,14 @@ import SparkAlert from '@/components/share/SparkAlert.vue';
 import { Link, RefreshCw } from '@lucide/vue';
 import { fetchAgentUsageBindings, saveAgentBinding } from '../../services/agentUsage';
 import { useAgentRegistry } from '@/composables/useAgentRegistry';
+import { useUsageDisplay } from '@/composables/useUsageDisplay';
 import { useAiStore } from '../stores/aiStore';
 
 const loading = ref(false);
 const error = ref(null);
 const updating = ref(null);
 const aiStore = useAiStore();
+const { formatUsageOptionLabel } = useUsageDisplay();
 
 const { registry: agentRegistry, load: loadAgentRegistry } = useAgentRegistry(); 
 const agentBindings = ref({}); 
@@ -216,7 +218,7 @@ const checkAndFixBindings = async () => {
 // Computed options
 const usageOptions = computed(() => 
   aiStore.usageSelections.map(slot => ({
-    label: `${slot.usage_label} (${slot.usage_key})`,
+    label: formatUsageOptionLabel(slot),
     value: slot.usage_key
   }))
 );

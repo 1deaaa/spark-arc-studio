@@ -9,17 +9,37 @@ import json
 import os
 from typing import Any
 from llm.agen_matchbox import matchbox
-from llm.agen_matchbox.reasoning_compat import PrefixReasoningStreamParser
+from llm.agen_matchbox.reasoning_compat import (
+    PrefixReasoningStreamParser,
+    extract_visible_text_from_plain_text,
+)
 from agents.agent_utils import load_prompt, build_length_hint_str, SparkAgentExecutor
+from agents.agent_style.utils import format_style_profile_for_prompt
 from agents.prompt_layout import build_prompt_messages
 from story.outline_parser import parse_beat_sheet_markup, parse_outline_markup
 from .communication import SparkBaseAgent
+
+
+SHOWRUNNER_STYLE_FALLBACK = "用户未提供参考风格档案。请根据故事主题、世界观氛围和角色特质，自行选择最合适的文笔风格进行创作。"
 
 
 class ShowrunnerAgent(SparkBaseAgent, SparkAgentExecutor):
     def __init__(self, user_id):
         super().__init__(agent_id="agent_showrunner", user_id=user_id)
         self.llm = matchbox().get_user_llm(str(user_id), agent_name="agent_showrunner")
+
+    def _stringify_style_profile(self, style_profile: object = None) -> str:
+        """把风格档案转成规划阶段也能执行的提示块。"""
+        return format_style_profile_for_prompt(
+            style_profile,
+            fallback=SHOWRUNNER_STYLE_FALLBACK,
+        )
+
+    def _invoke_visible_text(self, messages) -> str:
+        """后台/非流式生成直接走 invoke，并剥离兼容推理标签。"""
+        response = self.llm.invoke(messages)
+        raw_content = response.content if isinstance(response.content, str) else str(response.content)
+        return extract_visible_text_from_plain_text(raw_content)
 
     def build_context(self, operation: str, **kwargs) -> dict:
         """把梗概/节拍/大纲请求整理成统一上下文。"""
@@ -86,12 +106,7 @@ class ShowrunnerAgent(SparkBaseAgent, SparkAgentExecutor):
         """
         生成故事梗概 (Synopsis)，返回 Synopsis Markup 文本。
         """
-        style_profile_text = "用户未提供参考风格档案。请根据故事主题、世界观氛围和角色特质，自行选择最合适的文笔风格进行创作。"
-        if style_profile is not None:
-            if isinstance(style_profile, str):
-                style_profile_text = style_profile.strip() or "用户未提供参考风格档案。请根据故事主题、世界观氛围和角色特质，自行选择最合适的文笔风格进行创作。"
-            else:
-                style_profile_text = json.dumps(style_profile, ensure_ascii=False, indent=2)
+        style_profile_text = self._stringify_style_profile(style_profile)
 
         prompts = load_prompt(
             'showrunner',
@@ -108,19 +123,8 @@ class ShowrunnerAgent(SparkBaseAgent, SparkAgentExecutor):
         messages = build_prompt_messages(system_prompt=prompts['system'], user_prompt=prompts['user'])
 
         try:
-            full_content = ""
-            parser = PrefixReasoningStreamParser()
-            for chunk in self.llm.stream(messages):
-                content = getattr(chunk, "content", "")
-                if content:
-                    _, visible = parser.push(content)
-                    if visible:
-                        full_content += visible
-            _, trailing_visible = parser.flush()
-            if trailing_visible:
-                full_content += trailing_visible
             # 不再强制解析 JSON，直接返回 Markup 文本
-            return full_content.strip()
+            return self._invoke_visible_text(messages).strip()
         except Exception as e:
             raise RuntimeError(f"[Showrunner] 生成梗概失败: {e}")
 
@@ -128,12 +132,7 @@ class ShowrunnerAgent(SparkBaseAgent, SparkAgentExecutor):
         """
         流式生成故事梗概 (Synopsis)
         """
-        style_profile_text = "用户未提供参考风格档案。请根据故事主题、世界观氛围和角色特质，自行选择最合适的文笔风格进行创作。"
-        if style_profile is not None:
-            if isinstance(style_profile, str):
-                style_profile_text = style_profile.strip() or "用户未提供参考风格档案。请根据故事主题、世界观氛围和角色特质，自行选择最合适的文笔风格进行创作。"
-            else:
-                style_profile_text = json.dumps(style_profile, ensure_ascii=False, indent=2)
+        style_profile_text = self._stringify_style_profile(style_profile)
 
         prompts = load_prompt(
             'showrunner',
@@ -183,12 +182,7 @@ class ShowrunnerAgent(SparkBaseAgent, SparkAgentExecutor):
         """
         生成节拍表 (Beat Sheet)
         """
-        style_profile_text = "用户未提供参考风格档案。请根据故事主题、世界观氛围和角色特质，自行选择最合适的文笔风格进行创作。"
-        if style_profile is not None:
-            if isinstance(style_profile, str):
-                style_profile_text = style_profile.strip() or "用户未提供参考风格档案。请根据故事主题、世界观氛围和角色特质，自行选择最合适的文笔风格进行创作。"
-            else:
-                style_profile_text = json.dumps(style_profile, ensure_ascii=False, indent=2)
+        style_profile_text = self._stringify_style_profile(style_profile)
 
         prompts = load_prompt(
             'showrunner',
@@ -205,18 +199,7 @@ class ShowrunnerAgent(SparkBaseAgent, SparkAgentExecutor):
         messages = build_prompt_messages(system_prompt=prompts['system'], user_prompt=prompts['user'])
 
         try:
-            full_content = ""
-            parser = PrefixReasoningStreamParser()
-            for chunk in self.llm.stream(messages):
-                content = getattr(chunk, "content", "")
-                if content:
-                    _, visible = parser.push(content)
-                    if visible:
-                        full_content += visible
-            _, trailing_visible = parser.flush()
-            if trailing_visible:
-                full_content += trailing_visible
-            content = self._clean_json_block(full_content)
+            content = self._clean_json_block(self._invoke_visible_text(messages))
             return parse_beat_sheet_markup(content)
         except Exception as e:
             raise RuntimeError(f"[Showrunner] 生成节拍表失败: {e}")
@@ -247,12 +230,7 @@ class ShowrunnerAgent(SparkBaseAgent, SparkAgentExecutor):
         if isinstance(beat_sheet, (dict, list)):
             beat_sheet_str = json.dumps(beat_sheet, ensure_ascii=False, indent=2)
 
-        style_profile_text = "用户未提供参考风格档案。请根据故事主题、世界观氛围和角色特质，自行选择最合适的文笔风格进行创作。"
-        if style_profile is not None:
-            if isinstance(style_profile, str):
-                style_profile_text = style_profile.strip() or "用户未提供参考风格档案。请根据故事主题、世界观氛围和角色特质，自行选择最合适的文笔风格进行创作。"
-            else:
-                style_profile_text = json.dumps(style_profile, ensure_ascii=False, indent=2)
+        style_profile_text = self._stringify_style_profile(style_profile)
 
         # 从 YAML 加载提示词（generate_outline 子模板）
         prompts = load_prompt(
@@ -272,18 +250,7 @@ class ShowrunnerAgent(SparkBaseAgent, SparkAgentExecutor):
         messages = build_prompt_messages(system_prompt=prompts['system'], user_prompt=prompts['user'])
 
         try:
-            full_content = ""
-            parser = PrefixReasoningStreamParser()
-            for chunk in self.llm.stream(messages):
-                content = getattr(chunk, "content", "")
-                if content:
-                    _, visible = parser.push(content)
-                    if visible:
-                        full_content += visible
-            _, trailing_visible = parser.flush()
-            if trailing_visible:
-                full_content += trailing_visible
-            content = self._clean_markdown_block(full_content)
+            content = self._clean_markdown_block(self._invoke_visible_text(messages))
             outline = parse_outline_markup(content)
             
             # 确保必要字段存在
@@ -302,12 +269,7 @@ class ShowrunnerAgent(SparkBaseAgent, SparkAgentExecutor):
         """
         流式生成节拍表 (Beat Sheet)
         """
-        style_profile_text = "用户未提供参考风格档案。请根据故事主题、世界观氛围和角色特质，自行选择最合适的文笔风格进行创作。"
-        if style_profile is not None:
-            if isinstance(style_profile, str):
-                style_profile_text = style_profile.strip() or "用户未提供参考风格档案。请根据故事主题、世界观氛围和角色特质，自行选择最合适的文笔风格进行创作。"
-            else:
-                style_profile_text = json.dumps(style_profile, ensure_ascii=False, indent=2)
+        style_profile_text = self._stringify_style_profile(style_profile)
 
         prompts = load_prompt(
             'showrunner',
@@ -368,12 +330,7 @@ class ShowrunnerAgent(SparkBaseAgent, SparkAgentExecutor):
         if isinstance(beat_sheet, (dict, list)):
             beat_sheet_str = json.dumps(beat_sheet, ensure_ascii=False, indent=2)
 
-        style_profile_text = "用户未提供参考风格档案。请根据故事主题、世界观氛围和角色特质，自行选择最合适的文笔风格进行创作。"
-        if style_profile is not None:
-            if isinstance(style_profile, str):
-                style_profile_text = style_profile.strip() or "用户未提供参考风格档案。请根据故事主题、世界观氛围和角色特质，自行选择最合适的文笔风格进行创作。"
-            else:
-                style_profile_text = json.dumps(style_profile, ensure_ascii=False, indent=2)
+        style_profile_text = self._stringify_style_profile(style_profile)
 
         prompts = load_prompt(
             'showrunner',
@@ -521,5 +478,3 @@ class ShowrunnerAgent(SparkBaseAgent, SparkAgentExecutor):
     def chat_stream(self, user_message: str, history: list = None, active_context: str = None, **kwargs):
         """支持工具调用的流式对话入口。"""
         yield from super().chat_stream(user_message, history=history, active_context=active_context, **kwargs)
-
-

@@ -1,5 +1,4 @@
 import { createRouter, createWebHashHistory, type RouteRecordRaw } from 'vue-router';
-import { getUserInfo } from './services/api';
 import { getSessionToken } from './services/apiClient';
 import { isLocalTauriShell } from './composables/usePlatform';
 const LoginPage = () => import('./components/user/LoginPage.vue');
@@ -58,7 +57,7 @@ const router = createRouter({
   routes,
 });
 
-router.beforeEach(async (to) => {
+router.beforeEach((to) => {
   if (isLocalTauriShell.value) {
     if (to.name !== 'Login') {
       return '/login';
@@ -74,29 +73,21 @@ router.beforeEach(async (to) => {
     return true;
   }
 
-  // 优先检查本地 token，避免登录页做多余网络校验。
+  // 路由守卫只做本地 token 快速判断，真实过期由 fetchWithAuth 的 401 处理统一收口。
+  // 自动写作等后台任务繁忙时，首屏不能被 /api/user/info 阻塞，否则 router-view 会迟迟不放行。
   const hasLocalToken = !!getSessionToken();
 
   if (to.name === 'Login' && !hasLocalToken) {
     return true;
   }
-
-  let isAuthenticated = false;
-  try {
-    await getUserInfo();
-    isAuthenticated = true;
-  } catch (e: unknown) {
-    isAuthenticated = false;
-  }
-
-  if (requiresAuth && !isAuthenticated) {
+  if (requiresAuth && !hasLocalToken) {
     // 跳转登录前记录原目标，登录后可回到用户本来想去的位置。
     if (to.fullPath !== '/') {
       localStorage.setItem('postLoginUrl', to.fullPath);
     }
     return '/login';
   }
-  if (to.name === 'Login' && isAuthenticated) {
+  if (to.name === 'Login' && hasLocalToken) {
     return '/';
   }
   return true;

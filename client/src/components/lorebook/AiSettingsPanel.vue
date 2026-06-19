@@ -48,7 +48,7 @@
           </n-form-item>
 
           <SparkAlert type="info" style="margin-top: 8px;">
-            当前修改将应用于「{{ selectedUsageKey === 'main' ? '主模型' : selectedUsageKey }}」
+            当前修改将应用于「{{ getUsageKeyDisplayName(selectedUsageKey, aiStore.usageSelections) }}」
           </SparkAlert>
         </n-form>
       </n-spin>
@@ -130,6 +130,7 @@ import { NCard, NForm, NFormItem, NSelect, NIcon, NDivider, NSpin, useMessage, N
 import SparkAlert from '@/components/share/SparkAlert.vue';
 import { Info, Zap } from '@lucide/vue';
 import { useAiStore } from '@/components/stores/aiStore';
+import { useUsageDisplay } from '@/composables/useUsageDisplay';
 import { fetchAgentUsageBindings, saveAgentBinding } from '@/services/agentUsage';
 import bus from '@/eventBus';
 
@@ -140,6 +141,7 @@ const props = defineProps({
 });
 const message = useMessage();
 const aiStore = useAiStore();
+const { getUsageDisplayLabel, getUsageKeyDisplayName } = useUsageDisplay();
 
 function toStoreId(value: unknown): string | null {
   if (value == null || value === '') return null;
@@ -160,7 +162,7 @@ const panelId = `ai-settings-${Math.random().toString(36).slice(2, 10)}`;
 // Usage options (presets)
 const usageOptions = computed(() => 
   aiStore.usageSelections.map(u => ({
-    label: u.usage_label,
+    label: getUsageDisplayLabel(u),
     value: u.usage_key
   }))
 );
@@ -451,7 +453,7 @@ async function saveToUsage(usageKey, platformId, modelId, options: SaveOptions =
     }
     await aiStore.updateSelection(usageKey, resolvedPlatformId, resolvedModelId);
     if (!silentSuccess) {
-      message.success(`已更新 ${usageKey === 'main' ? '主模型' : usageKey} 设置`);
+      message.success(`已更新 ${getUsageKeyDisplayName(usageKey, aiStore.usageSelections)} 设置`);
     }
     return true;
   } catch (err: unknown) {

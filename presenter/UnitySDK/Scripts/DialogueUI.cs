@@ -65,7 +65,7 @@ namespace SparkArc.Unity
             _isWaitingForInput = true;
             while (_isWaitingForInput)
             {
-                if (Input.GetMouseButtonDown(0) || Input.GetKeyDown(KeyCode.Space) || Input.GetKeyDown(KeyCode.E))
+                if (SparkArcInput.WasContinuePressed())
                 {
                     _isWaitingForInput = false;
                 }
@@ -85,6 +85,7 @@ namespace SparkArc.Unity
             {
                 var opt = options[i] as JObject;
                 var btnObj = Instantiate(choiceButtonPrefab, choiceContainer);
+                btnObj.SetActive(true);
                 var btnText = btnObj.GetComponentInChildren<TextMeshProUGUI>();
                 if (btnText) btnText.text = opt["optn"].ToString();
 

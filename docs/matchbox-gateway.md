@@ -69,9 +69,11 @@
 
 | 槽位 | 用途 | 典型模型 |
 | :--- | :--- | :--- |
-| **Fast (快速槽)** | 轻量级快速模型 | 文本自动格式化、分类标签抓取 |
+| **Fast (快速槽)** | 高频后台整理与轻量判定 | StoryMemory 记忆整理、GraphRAG 建图抽取、公开分享审核、文本自动格式化、分类标签抓取 |
 | **Reason (推理槽)** | 具备极强思维推演能力的模型 | 设定审核、情节大纲评估与逻辑链验证 |
 | **Main (默认槽)** | 标准的优质文本输出模型 | 日常创作与生成 |
+
+其中 StoryMemory 记忆整理默认读取 `SPARKARC_STORY_MEMORY_USAGE_KEY`，未配置时使用 `fast`；GraphRAG 建图抽取默认读取 `SPARKARC_GRAPHRAG_BUILD_USAGE_KEY`，未配置时同样使用 `fast`。StoryMemory 默认不是某个专家 Agent 负责，而是由 `StoryMemoryFacade` + `server/agents/story_memory/jobs.py` 组成的后台记忆服务在保存后吸收正文；生产流和自动写作通过上下文包读取，Scriptwriter / Director / Critic 可通过只读 `story_memory_tool` 按需查询。用户可以在 AI 管理里把 `fast` 用途绑定到更合适的模型；部署者也可以通过环境变量把这些后台任务切到自定义用途。
 
 ---
 

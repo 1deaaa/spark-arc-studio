@@ -33,9 +33,10 @@ from fastapi import APIRouter, Depends, Request
 from fastapi.responses import StreamingResponse
 
 from core.auth import get_current_user
-from core.utils import get_project_path
+from core.utils import get_project_path, get_project_stories_path
 from core.project_settings import get_project_story_tags
 from agents.agent_scriptwriter import ScriptwriterAgent
+from agents.agent_critic import CriticAgent
 from .stream_semantics import (
     semantic_sse_data,
     merge_semantics,
@@ -115,6 +116,67 @@ def _build_story_tags_block_for_auto_write(story_tags: Dict[str, Any]) -> str:
     return "\n".join(parts)
 
 
+def record_auto_write_scene_review(
+    *,
+    user_id: str,
+    project_name: str,
+    critic: Any,
+    scene_text: str,
+    context_text: str,
+    guidance_text: str,
+    scene_title: str,
+    source_rel_path: str,
+    worldview: str,
+    roles: str,
+    style_profile: Any,
+    story_tags_block: str,
+) -> Dict[str, Any] | None:
+    """自动写作场景保存后执行 Critic 评审，并把修订工单写入 StoryMemory。"""
+    if critic is None:
+        return None
+    try:
+        review_target = source_rel_path or scene_title or "自动写作场景"
+        review = critic.evaluate(
+            script_text=scene_text,
+            context=context_text,
+            guidance=guidance_text,
+            worldview=worldview,
+            roles=roles,
+            style_profile=style_profile,
+            review_target=review_target,
+            story_tags=story_tags_block,
+        )
+
+        from agents.story_memory import StoryMemoryFacade
+
+        tickets = StoryMemoryFacade(user_id, project_name).record_quality_review(
+            review=review,
+            review_target=review_target,
+            scene_name=scene_title,
+            source_path=source_rel_path,
+        )
+        patch_auto_write_state(
+            user_id,
+            project_name,
+            lastReviewDecision=review.get("decision") or "",
+            lastReviewGrade=review.get("overall_grade") or "",
+            lastReviewTarget=review_target,
+            lastReviewTicketCount=len(tickets or []),
+            lastReviewError="",
+        )
+        return review
+    except Exception as e:
+        message = str(e)
+        print(f"[AutoWrite] 自动审稿失败（不影响写作保存）：{message}")
+        patch_auto_write_state(
+            user_id,
+            project_name,
+            lastReviewError=message,
+            lastReviewTarget=source_rel_path or scene_title or "",
+        )
+        return None
+
+
 # 全局存储运行中项目的 stop_event
 _auto_write_stop_events: Dict[str, threading.Event] = {}
 
@@ -134,6 +196,8 @@ async def generate_script_stream(
     start_scene_index: int = 0,  # 从该章内第 N 个场景开始（仅对起始章有效）
     context_strategy: str = "accumulate",
     export_format: str = "arc",
+    auto_review: bool = False,
+    from_director: bool = False,
 ):
     """
     Generator function for SSE streaming of script generation progress.
@@ -168,6 +232,7 @@ async def generate_script_stream(
         start_scene_index=start_scene_index,
         total_chapters=len(chapter_nodes),
         total_scenes=total_scenes_count,
+        from_director=from_director,
     )
 
     def update_state(status: str, **extra: Any) -> Dict[str, Any]:
@@ -175,6 +240,8 @@ async def generate_script_stream(
             "status": status,
             "mode": mode,
             "exportFormat": export_format,
+            "autoReviewEnabled": auto_review,
+            "fromDirector": from_director,
             "currentChapterIndex": current_chapter_index,
             "currentChapterTitle": current_chapter_title,
             "currentSceneIndex": current_scene_index,
@@ -194,6 +261,7 @@ async def generate_script_stream(
             "complete",
             nextChapterIndex=len(chapter_nodes),
             availableResumeChapterIndex=None,
+            availableResumeSceneIndex=None,
             availableRestartChapterIndex=None,
             completedAt=patch_auto_write_state(user_id, project_name).get("updatedAt", ""),
             lastError="",
@@ -210,13 +278,38 @@ async def generate_script_stream(
     try:
         writer = ScriptwriterAgent(user_id)
     except ValueError as e:
-        yield semantic_sse_data("error", message=str(e), **on_error(str(e)))
+        message = str(e)
+        update_state(
+            "error",
+            nextChapterIndex=start_chapter_index,
+            availableResumeChapterIndex=start_chapter_index,
+            availableResumeSceneIndex=start_scene_index,
+            availableRestartChapterIndex=start_chapter_index,
+            lastError=message,
+        )
+        yield semantic_sse_data("error", message=message, **on_error(message))
         return
     except Exception as e:
         from .schemas import format_ai_error
         message = format_ai_error(e)
+        update_state(
+            "error",
+            nextChapterIndex=start_chapter_index,
+            availableResumeChapterIndex=start_chapter_index,
+            availableResumeSceneIndex=start_scene_index,
+            availableRestartChapterIndex=start_chapter_index,
+            lastError=message,
+        )
         yield semantic_sse_data("error", message=message, **on_error(message))
         return
+
+    critic: CriticAgent | None = None
+    if auto_review:
+        try:
+            critic = CriticAgent(user_id)
+        except Exception as e:
+            critic = None
+            print(f"[AutoWrite] Critic 初始化失败，自动审稿降级跳过：{e}")
 
     yield semantic_sse_data(
         "started",
@@ -243,6 +336,7 @@ async def generate_script_stream(
     # Context accumulation (简单片段积累，三圈记忆策略会在 build_scene_context 里处理跨章前文)
     chapters_processed = 0
     accumulated_context = ""
+    previous_scene_context = ""
 
     for i in range(start_chapter_index, len(chapter_nodes)):
         if request is not None and await request.is_disconnected():
@@ -251,6 +345,7 @@ async def generate_script_stream(
                 "interrupted",
                 nextChapterIndex=current_chapter_index if current_chapter_index is not None else start_chapter_index,
                 availableResumeChapterIndex=current_chapter_index if current_chapter_index is not None else start_chapter_index,
+                availableResumeSceneIndex=current_scene_index if current_scene_index is not None else start_scene_index,
                 availableRestartChapterIndex=current_chapter_index if current_chapter_index is not None else start_chapter_index,
                 lastError="",
             )
@@ -269,11 +364,14 @@ async def generate_script_stream(
         current_chapter_title = chapter_title
         current_scene_index = None
         current_scene_title = ""
+        # 第一章：如果有 start_scene_index，跳过小于它的场景
+        effective_start_scene = start_scene_index if i == start_chapter_index else 0
 
         update_state(
             "running",
             nextChapterIndex=i,
             availableResumeChapterIndex=i,
+            availableResumeSceneIndex=effective_start_scene,
             availableRestartChapterIndex=i,
             lastError="",
         )
@@ -290,9 +388,6 @@ async def generate_script_stream(
         # Determine existing content or start fresh?
         # For auto-write, we generally assume we are writing fresh or overwriting.
 
-        # 第一章：如果有 start_scene_index，跳过小于它的场景
-        effective_start_scene = start_scene_index if i == start_chapter_index else 0
-
         for scene_idx, scene in enumerate(scenes):
             if scene_idx < effective_start_scene:
                 continue
@@ -302,6 +397,7 @@ async def generate_script_stream(
                     "interrupted",
                     nextChapterIndex=i,
                     availableResumeChapterIndex=i,
+                    availableResumeSceneIndex=scene_idx,
                     availableRestartChapterIndex=i,
                     lastError="",
                 )
@@ -337,6 +433,7 @@ async def generate_script_stream(
                 "running",
                 nextChapterIndex=i,
                 availableResumeChapterIndex=i,
+                availableResumeSceneIndex=scene_idx,
                 availableRestartChapterIndex=i,
                 lastSavedFilename=filename if os.path.exists(filepath) else "",
             )
@@ -373,12 +470,22 @@ async def generate_script_stream(
                 project_name,
                 current_chapter_index=i,
                 current_scene_index=scene_idx,
+                chapter_meta=chapter,
+                scene_meta=scene,
+                chr_map=chr_map,
             )
             
             # ── 注入项目级故事主题参数（POV 等）──────────────────────────────
             # 将 story_tags_block 前置到 context_str，确保 POV 等关键参数在上下文最前面
             if story_tags_block:
                 context_str = story_tags_block + "\n\n" + context_str
+
+            if previous_scene_context.strip():
+                context_str = (
+                    context_str
+                    + "\n\n=== 上一场完整正文（自动写作硬上下文，优先保证连续性）===\n"
+                    + previous_scene_context.strip()
+                )
 
             # 场景元数据（从大纲 > 行解析）
             scene_meta_parts = []
@@ -471,6 +578,7 @@ async def generate_script_stream(
                             "interrupted",
                             nextChapterIndex=i,
                             availableResumeChapterIndex=i,
+                            availableResumeSceneIndex=scene_idx,
                             availableRestartChapterIndex=i,
                             lastSavedFilename=filename if os.path.exists(filepath) else "",
                             lastError="",
@@ -594,14 +702,17 @@ async def generate_script_stream(
                     scene_arc_content.append(arc_text)
                     scene_arc_content.append("")
 
+                current_scene_full_text = "\n".join(scene_arc_content).strip()
                 # Update accumulation (full text to prevent context loss in long generation)
-                accumulated_context += f"\n# {scene_title}\n{arc_text}\n"
+                accumulated_context += f"\n\n{current_scene_full_text}\n"
+                previous_scene_context = current_scene_full_text
 
                 # Send completion with stats
                 update_state(
                     "running",
                     nextChapterIndex=i,
                     availableResumeChapterIndex=i,
+                    availableResumeSceneIndex=scene_idx,
                     availableRestartChapterIndex=i,
                     lastSavedFilename=filename if os.path.exists(filepath) else "",
                     lastError="",
@@ -637,6 +748,7 @@ async def generate_script_stream(
                     "error",
                     nextChapterIndex=i,
                     availableResumeChapterIndex=i,
+                    availableResumeSceneIndex=scene_idx,
                     availableRestartChapterIndex=i,
                     lastSavedFilename=display_filename,
                     lastError=message,
@@ -650,6 +762,7 @@ async def generate_script_stream(
                     "interrupted",
                     nextChapterIndex=i,
                     availableResumeChapterIndex=i,
+                    availableResumeSceneIndex=scene_idx,
                     availableRestartChapterIndex=i,
                     lastSavedFilename=filename if os.path.exists(filepath) else "",
                     lastError="",
@@ -662,14 +775,73 @@ async def generate_script_stream(
                 return
             with open(filepath, "w", encoding="utf-8") as f:
                 f.write("\n".join(scene_arc_content))
-            
+
+            from agents.story_memory import enqueue_scene_memory_write
+
+            source_rel_path = os.path.relpath(
+                filepath,
+                get_project_stories_path(user_id, project_name),
+            ).replace("\\", "/")
+            enqueue_scene_memory_write(
+                user_id=user_id,
+                project_name=project_name,
+                label="自动写作场景",
+                scene_text="\n".join(scene_arc_content),
+                chapter_index=i,
+                scene_index=scene_idx,
+                chapter_title=chapter_title,
+                scene_title=scene_title,
+                scene_description=scene_desc,
+                guidance=scene_goal,
+                source_path=source_rel_path,
+                export_format=export_format,
+                chr_map=chr_map,
+                scene_characters=scene_characters,
+            )
+
+            review = record_auto_write_scene_review(
+                user_id=user_id,
+                project_name=project_name,
+                critic=critic if auto_review else None,
+                scene_text="\n".join(scene_arc_content),
+                context_text=context_str,
+                guidance_text=scene_goal,
+                scene_title=scene_title,
+                source_rel_path=source_rel_path,
+                worldview=worldview,
+                roles=roles,
+                style_profile=style_profile,
+                story_tags_block=story_tags_block,
+            )
+            if review:
+                yield semantic_sse_data(
+                    "scene_reviewed",
+                    scene_title=scene_title,
+                    filename=display_filename,
+                    decision=review.get("decision") or "",
+                    overallGrade=review.get("overall_grade") or "",
+                    rewriteRequired=bool(review.get("rewrite_required")),
+                    fixTicketCount=len(review.get("fix_tickets") or []),
+                    **on_progress(
+                        f"场景已审稿：{scene_title}",
+                        stage="scene_reviewed",
+                    ),
+                )
+
             if filename not in generated_scene_files:
                 generated_scene_files.append(filename)
+
+            next_resume_chapter_index = i
+            next_resume_scene_index = scene_idx + 1
+            if next_resume_scene_index >= len(scenes):
+                next_resume_chapter_index = i + 1
+                next_resume_scene_index = 0
             
             update_state(
                 "running",
-                nextChapterIndex=i,
-                availableResumeChapterIndex=i,
+                nextChapterIndex=next_resume_chapter_index,
+                availableResumeChapterIndex=next_resume_chapter_index,
+                availableResumeSceneIndex=next_resume_scene_index,
                 availableRestartChapterIndex=i,
                 lastSavedFilename=display_filename,
                 generatedFiles=generated_scene_files,
@@ -692,6 +864,7 @@ async def generate_script_stream(
             lastCompletedChapterTitle=chapter_title,
             nextChapterIndex=i + 1,
             availableResumeChapterIndex=i + 1,
+            availableResumeSceneIndex=0,
             availableRestartChapterIndex=i,
             currentSceneIndex=None,
             currentSceneTitle="",
@@ -710,6 +883,7 @@ async def generate_script_stream(
                 "chapter_paused",
                 nextChapterIndex=i + 1,
                 availableResumeChapterIndex=i + 1,
+                availableResumeSceneIndex=0,
                 availableRestartChapterIndex=i,
                 currentSceneIndex=None,
                 currentSceneTitle="",
@@ -727,6 +901,7 @@ async def generate_script_stream(
         "complete",
         nextChapterIndex=len(chapter_nodes),
         availableResumeChapterIndex=None,
+        availableResumeSceneIndex=None,
         availableRestartChapterIndex=None,
         currentSceneIndex=None,
         currentSceneTitle="",
@@ -784,6 +959,7 @@ async def auto_write_start(
     start_chapter_index = data.get("start_chapter_index", 0)
     start_scene_index = data.get("start_scene_index", 0)
     export_format = data.get("export_format", "arc")
+    auto_review = bool(data.get("auto_review", False))
 
     # 检查是否已有运行中的任务
     if project_name in _auto_write_stop_events and not _auto_write_stop_events[project_name].is_set():
@@ -822,6 +998,8 @@ async def auto_write_start(
                     start_scene_index=start_scene_index,
                     context_strategy="accumulate",
                     export_format=export_format,
+                    auto_review=auto_review,
+                    from_director=False,
                 ):
                     progress_queue.put(event_str)
             except Exception as e:
@@ -900,6 +1078,7 @@ async def auto_write_stream(
     start_chapter_index = data.get("start_chapter_index", 0)
     start_scene_index = data.get("start_scene_index", 0)
     export_format = data.get("export_format", "arc")
+    auto_review = bool(data.get("auto_review", False))
 
     # Load Outline
     from story.outline_parser import parse_outline_markup
@@ -921,6 +1100,8 @@ async def auto_write_stream(
             start_scene_index,
             context_strategy="accumulate",
             export_format=export_format,
+            auto_review=auto_review,
+            from_director=False,
         ),
         media_type="text/event-stream",
     )

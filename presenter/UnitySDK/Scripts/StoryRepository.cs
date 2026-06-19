@@ -1,6 +1,7 @@
 using System;
 using System.Collections.Generic;
 using System.IO;
+using System.Text;
 using UnityEngine;
 using Newtonsoft.Json.Linq;
 using System.Data;
@@ -71,28 +72,28 @@ namespace SparkArc.Unity
                             var scene = new SceneData
                             {
                                 sceneName = sceneName,
-                                guide = reader["guide"]?.ToString() ?? "",
-                                intro = reader["intro"]?.ToString() ?? "",
-                                buttonText = reader["button_text"]?.ToString() ?? "",
+                                guide = ReadText(reader["guide"]),
+                                intro = ReadText(reader["intro"]),
+                                buttonText = ReadText(reader["button_text"]),
                                 hidden = false,
                             };
 
-                            var dlgJson = reader["dlg_json"]?.ToString();
+                            var dlgJson = ReadText(reader["dlg_json"]);
                             scene.dialogues = !string.IsNullOrEmpty(dlgJson) ? JArray.Parse(dlgJson) : new JArray();
 
-                            var condJson = reader["conditions"]?.ToString();
+                            var condJson = ReadText(reader["conditions"]);
                             if (!string.IsNullOrEmpty(condJson))
                             {
                                 try { scene.conditions = JToken.Parse(condJson); } catch { }
                             }
 
-                            var effectsJson = reader["effects"]?.ToString();
+                            var effectsJson = ReadText(reader["effects"]);
                             if (!string.IsNullOrEmpty(effectsJson))
                             {
                                 try { scene.effects = JToken.Parse(effectsJson); } catch { }
                             }
 
-                            scene.triggerEvent = reader["trigger_event"]?.ToString() ?? string.Empty;
+                            scene.triggerEvent = ReadText(reader["trigger_event"]);
 
                             var priorityRaw = reader["priority"];
                             if (priorityRaw != null && priorityRaw != DBNull.Value)
@@ -100,7 +101,7 @@ namespace SparkArc.Unity
                                 try { scene.priority = Convert.ToInt32(priorityRaw); } catch { scene.priority = 0; }
                             }
 
-                            scene.onceKey = reader["once_key"]?.ToString() ?? string.Empty;
+                            scene.onceKey = ReadText(reader["once_key"]);
 
                             var hiddenRaw = reader["hiden"];
                             if (hiddenRaw != null && hiddenRaw != DBNull.Value)
@@ -118,6 +119,13 @@ namespace SparkArc.Unity
             {
                 Debug.LogError($"SparkArc: 加载数据库失败: {ex.Message}");
             }
+        }
+
+        private static string ReadText(object value)
+        {
+            if (value == null || value == DBNull.Value) return string.Empty;
+            if (value is byte[] bytes) return Encoding.UTF8.GetString(bytes);
+            return value.ToString() ?? string.Empty;
         }
 
         public SceneData GetScene(string sceneName)

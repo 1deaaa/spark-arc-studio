@@ -37,16 +37,19 @@ function resolveInitialLocale(): AppLocale {
   }
 
   try {
+    const source = localStorage.getItem(LOCALE_SOURCE_STORAGE_KEY);
+    const stored = localStorage.getItem(LOCALE_STORAGE_KEY);
     const fromQuery = new URL(window.location.href).searchParams.get(LOCALE_QUERY_PARAM);
     if (fromQuery) {
+      if (stored && source === 'manual') {
+        return normalizeLocale(stored);
+      }
       const normalized = normalizeLocale(fromQuery);
       localStorage.setItem(LOCALE_STORAGE_KEY, normalized);
       localStorage.setItem(LOCALE_SOURCE_STORAGE_KEY, 'launcher');
       return normalized;
     }
 
-    const source = localStorage.getItem(LOCALE_SOURCE_STORAGE_KEY);
-    const stored = localStorage.getItem(LOCALE_STORAGE_KEY);
     if (stored && isPersistentLocaleSource(source)) {
       return normalizeLocale(stored);
     }

@@ -84,6 +84,13 @@ def test_critic_keeps_schema_in_pipeline_because_it_has_no_write_tool_reference(
         assert token in pipeline
 
 
+def test_showrunner_outline_prompt_requires_scene_contract_fields() -> None:
+    prompt = load_prompt("showrunner", "generate_outline")["system"]
+    for token in ("情绪", "张力", "登场", "对应节拍", "指引", "@key_dialogue"):
+        assert token in prompt
+    assert "场景元数据必填" in prompt
+
+
 def test_only_director_overrides_dynamic_tool_system_prompt() -> None:
     from agents.communication import SparkBaseAgent
     from agents.agent_director import DirectorAgent

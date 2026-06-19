@@ -71,6 +71,20 @@
             </div>
           </div>
 
+          <!-- 当前剧情进度 -->
+          <div v-if="currentProgressAction" class="daw-resume-row">
+            <n-icon :component="FileText" :size="13" class="daw-row-icon daw-icon--warning" />
+            <div class="daw-resume-content">
+              <span class="daw-resume-text">{{ currentProgressSummary }}</span>
+              <div class="daw-resume-actions">
+                <button
+                  class="daw-action-btn daw-action-btn--small daw-action-btn--primary"
+                  @click="currentProgressAction && startFromAction(currentProgressAction)"
+                >{{ currentProgressAction.label }}</button>
+              </div>
+            </div>
+          </div>
+
           <!-- 配置表单 -->
           <div class="daw-form">
             <div class="daw-form-item">
@@ -95,10 +109,17 @@
             </div>
             <div v-if="chapterOptions.length > 1" class="daw-form-item">
               <span class="daw-form-label">{{ t('components.directorAutoWrite.startChapter') }}</span>
-              <select v-model="config.startChapterIndex" class="daw-select">
+              <select v-model="config.startChapterIndex" class="daw-select" @change="config.startSceneIndex = 0">
                 <option v-for="opt in chapterOptions" :key="opt.value" :value="opt.value">{{ opt.label }}</option>
               </select>
             </div>
+            <label class="daw-check-row">
+              <input v-model="config.autoReview" class="daw-check" type="checkbox" />
+              <span class="daw-check-copy">
+                <span class="daw-check-title">{{ t('components.directorAutoWrite.autoReview') }}</span>
+                <span class="daw-check-desc">{{ t('components.directorAutoWrite.autoReviewHint') }}</span>
+              </span>
+            </label>
           </div>
 
           <!-- 覆盖警告 -->
@@ -270,6 +291,8 @@ const config = reactive({
   mode: 'chapter_by_chapter',
   exportFormat: 'arc',
   startChapterIndex: 0,
+  startSceneIndex: 0,
+  autoReview: false,
 });
 
 /** 大纲数据（setup 阶段加载） */
@@ -290,8 +313,15 @@ const chapterOptions = computed(() => {
 /** 覆盖文件数 */
 const overwriteCount = computed(() => {
   const sceneFiles = (autoWriteState.value?.sceneFiles as Array<Record<string, unknown>> | undefined) ?? [];
-  const startIdx = config.startChapterIndex;
-  return sceneFiles.filter(s => (s.chapterIndex as number) >= startIdx && s.exists).length;
+  const startChapterIndex = Number(config.startChapterIndex ?? 0);
+  const startSceneIndex = Number(config.startSceneIndex ?? 0);
+  return sceneFiles.filter((s) => {
+    if (!s.exists) return false;
+    const chapterIndex = Number(s.chapterIndex ?? 0);
+    const sceneIndex = Number(s.sceneIndex ?? 0);
+    return chapterIndex > startChapterIndex
+      || (chapterIndex === startChapterIndex && sceneIndex >= startSceneIndex);
+  }).length;
 });
 
 /** 恢复摘要 */
@@ -314,15 +344,80 @@ const resumeSummary = computed(() => {
 const resumeActions = computed(() => {
   const s = autoWriteState.value;
   if (!s) return [];
-  const actions: Array<{ key: string; label: string; chapterIndex: number }> = [];
+  const actions: Array<{ key: string; label: string; chapterIndex: number; sceneIndex: number }> = [];
   if (s.availableResumeChapterIndex != null && (s.availableResumeChapterIndex as number) >= 0) {
+    const chapterIndex = s.availableResumeChapterIndex as number;
+    const sceneIndex = typeof s.availableResumeSceneIndex === 'number'
+      ? s.availableResumeSceneIndex as number
+      : (typeof s.currentSceneIndex === 'number' && s.currentChapterIndex === chapterIndex ? s.currentSceneIndex as number : 0);
     actions.push({
       key: 'resume',
-      label: t('components.directorAutoWrite.resumeFromChapter', { chapter: ((s.availableResumeChapterIndex as number) + 1) }),
-      chapterIndex: s.availableResumeChapterIndex as number,
+      label: sceneIndex > 0
+        ? t('components.directorAutoWrite.resumeFromScene', { chapter: chapterIndex + 1, scene: sceneIndex + 1 })
+        : t('components.directorAutoWrite.resumeFromChapter', { chapter: chapterIndex + 1 }),
+      chapterIndex,
+      sceneIndex,
     });
   }
   return actions;
+});
+
+type ScenePlanItem = {
+  chapterIndex?: number;
+  sceneIndex?: number;
+  exists?: boolean;
+};
+
+type StartAction = {
+  key: string;
+  label: string;
+  chapterIndex: number;
+  sceneIndex: number;
+};
+
+function getOrderedSceneFiles(): ScenePlanItem[] {
+  const sceneFiles = (autoWriteState.value?.sceneFiles as ScenePlanItem[] | undefined) ?? [];
+  return sceneFiles
+    .filter((item) => typeof item.chapterIndex === 'number' && typeof item.sceneIndex === 'number')
+    .slice()
+    .sort((a, b) => {
+      const ac = Number(a.chapterIndex ?? 0);
+      const bc = Number(b.chapterIndex ?? 0);
+      if (ac !== bc) return ac - bc;
+      return Number(a.sceneIndex ?? 0) - Number(b.sceneIndex ?? 0);
+    });
+}
+
+const currentProgressAction = computed<StartAction | null>(() => {
+  const scenes = getOrderedSceneFiles();
+  if (!scenes.length) return null;
+
+  let latestExistingIndex = -1;
+  scenes.forEach((scene, index) => {
+    if (scene.exists) latestExistingIndex = index;
+  });
+  if (latestExistingIndex < 0) return null;
+
+  const nextScene = scenes[latestExistingIndex + 1];
+  if (!nextScene) return null;
+
+  const chapterIndex = Number(nextScene.chapterIndex ?? 0);
+  const sceneIndex = Number(nextScene.sceneIndex ?? 0);
+  return {
+    key: 'current-progress',
+    label: t('components.directorAutoWrite.startFromCurrentProgress', { chapter: chapterIndex + 1, scene: sceneIndex + 1 }),
+    chapterIndex,
+    sceneIndex,
+  };
+});
+
+const currentProgressSummary = computed(() => {
+  const action = currentProgressAction.value;
+  if (!action) return '';
+  return t('components.directorAutoWrite.currentProgressDetected', {
+    chapter: action.chapterIndex + 1,
+    scene: action.sceneIndex + 1,
+  });
 });
 
 // ── 可见性与阶段 ──
@@ -330,7 +425,8 @@ const resumeActions = computed(() => {
 /** 遮罩可见：有当前任务（导演或手动触发），或 setup 阶段 */
 const visible = computed(() => {
   if (setupVisible.value) return true;
-  return store.currentTask !== null;
+  const status = store.currentTask?.snapshot.status;
+  return status === 'running' || status === 'chapter_paused';
 });
 
 /** 是否显示 setup 阶段 */
@@ -384,6 +480,20 @@ async function openSetup(): Promise<void> {
   }
 }
 
+async function refreshSetupState(): Promise<void> {
+  if (!setupVisible.value) return;
+  const proj = projectStore.currentProject;
+  if (!proj) return;
+  try {
+    const stateRes = await fetchWithAuth(
+      `/api/outline/${encodeURIComponent(proj)}/auto-write-state?export_format=${encodeURIComponent(config.exportFormat)}`,
+    );
+    if (stateRes.ok) autoWriteState.value = await stateRes.json();
+  } catch {
+    // 静默
+  }
+}
+
 async function handleStart(): Promise<void> {
   const proj = projectStore.currentProject;
   if (!proj) return;
@@ -392,7 +502,9 @@ async function handleStart(): Promise<void> {
     const result = await store.startManualWrite(proj, {
       mode: config.mode,
       startChapterIndex: config.startChapterIndex,
+      startSceneIndex: config.startSceneIndex,
       exportFormat: config.exportFormat,
+      autoReview: config.autoReview,
     });
     if (result.success) {
       setupVisible.value = false;
@@ -402,13 +514,15 @@ async function handleStart(): Promise<void> {
   }
 }
 
-function startFromAction(action: { chapterIndex: number }): void {
+function startFromAction(action: { chapterIndex: number; sceneIndex?: number }): void {
   config.startChapterIndex = action.chapterIndex;
+  config.startSceneIndex = action.sceneIndex ?? 0;
   handleStart();
 }
 
 function restartFromBeginning(): void {
   config.startChapterIndex = 0;
+  config.startSceneIndex = 0;
   handleStart();
 }
 
@@ -422,7 +536,9 @@ async function handleContinue(): Promise<void> {
     await store.startManualWrite(proj, {
       mode: config.mode,
       startChapterIndex: nextIdx,
+      startSceneIndex: 0,
       exportFormat: config.exportFormat,
+      autoReview: config.autoReview,
     });
   } finally {
     continuing.value = false;
@@ -472,6 +588,14 @@ watch(
   },
 );
 
+watch(
+  () => config.exportFormat,
+  () => {
+    config.startSceneIndex = 0;
+    void refreshSetupState();
+  },
+);
+
 // 暴露 openSetup 供外部组件调用
 defineExpose({ openSetup });
 
@@ -491,12 +615,12 @@ onUnmounted(() => {
 </script>
 
 <style scoped>
-/* ── 顶层容器：固定定位占满全屏，但 z-index=800 让它位于层级之下 ── */
+/* ── 顶层容器：固定定位占满全屏，低于顶部栏但高于聊天面板 ── */
 .daw-overlay {
   position: fixed;
   inset: 0;
   top: 60px; /* 桌面端：为顶部 TitleBar 保留完全清晰的空间 */
-  z-index: 800; /* TitleBar(9999), ChatFloat(1000) 位于其上 */
+  z-index: 2000; /* TitleBar(9999) 位于其上；聊天浮窗位于其下 */
   display: flex;
   align-items: center;
   justify-content: center;
@@ -1023,6 +1147,44 @@ onUnmounted(() => {
 }
 .daw-select:focus {
   border-color: var(--spark-primary);
+}
+
+.daw-check-row {
+  display: flex;
+  align-items: flex-start;
+  gap: 10px;
+  padding: 10px 12px;
+  border: 1px solid var(--spark-border);
+  border-radius: 8px;
+  background: color-mix(in srgb, var(--spark-primary), transparent 94%);
+  cursor: pointer;
+}
+
+.daw-check {
+  width: 16px;
+  height: 16px;
+  margin: 2px 0 0;
+  accent-color: var(--spark-primary);
+  flex-shrink: 0;
+}
+
+.daw-check-copy {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  min-width: 0;
+}
+
+.daw-check-title {
+  font-size: var(--spark-fs-sm);
+  font-weight: 600;
+  color: var(--spark-text);
+}
+
+.daw-check-desc {
+  font-size: var(--spark-fs-xs);
+  line-height: 1.45;
+  color: var(--spark-text-muted);
 }
 
 /* ── 覆盖警告 ── */

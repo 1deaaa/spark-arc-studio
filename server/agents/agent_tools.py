@@ -124,6 +124,7 @@ from agents.tools.showrunner import (
     rewrite_outline,
     rewrite_synopsis,
 )
+from agents.tools.story_memory import StoryMemoryToolInput, story_memory_tool
 from agents.tools.web_search import WebSearchInput, web_search
 
 __all__ = [
@@ -170,6 +171,7 @@ __all__ = [
     "SearchSkillsInput",
     "SearchProjectInput",
     "SemanticSearchInput",
+    "StoryMemoryToolInput",
     "TOOLS_BY_NAME",
     "ToolExecutionContext",
     "TriggerAutoWriteInput",
@@ -217,6 +219,7 @@ __all__ = [
     "search_project",
     "search_skills",
     "semantic_search",
+    "story_memory_tool",
     "trigger_auto_write",
     "update_character",
     "update_project_story_tags",

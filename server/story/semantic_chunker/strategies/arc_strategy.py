@@ -38,7 +38,12 @@ class ArcChunkStrategy(ChunkStrategy):
         scene_title = display_name  # 首个场景块用文件名作为标题
 
         for i, line in enumerate(lines, start=1):
-            if re.match(r'^#\s+', line) and current_lines:
+            is_scene_heading = bool(re.match(r'^#\s+', line))
+            if is_scene_heading and not current_lines:
+                scene_title = line.strip().lstrip("#").strip() or scene_title
+                start_line = i
+
+            if is_scene_heading and current_lines:
                 # 保存上一个场景块
                 text = self._clean_scene_text("\n".join(current_lines))
                 if text:

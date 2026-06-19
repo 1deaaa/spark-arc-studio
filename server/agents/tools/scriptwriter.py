@@ -157,6 +157,20 @@ def create_or_rewrite_script(
         f.write(content)
 
     rel = os.path.join(relative_dir, filename).replace("\\", "/") if relative_dir else filename
+    from agents.story_memory import enqueue_scene_memory_write
+
+    enqueue_scene_memory_write(
+        user_id=user_id,
+        project_name=project_name,
+        label="Scriptwriter 工具落盘",
+        scene_text=content,
+        chapter_title=chapter_name or "",
+        scene_title=display,
+        source_path=rel,
+        export_format=effective_format,
+        scene_characters=[],
+    )
+
     format_label = "小说" if effective_format == "novel" else "剧本"
     return f"{format_label}已保存：{rel}"
 

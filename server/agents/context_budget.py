@@ -4,7 +4,7 @@ from __future__ import annotations
 
 import json
 from dataclasses import dataclass
-from typing import Any, Callable, Dict, List
+from typing import Any, Callable, Dict, List, Sequence
 
 from langchain_core.messages import AIMessage, BaseMessage, HumanMessage, SystemMessage
 
@@ -12,6 +12,7 @@ from llm.agen_matchbox.estimate_tokens import estimate_tokens
 
 
 CHAT_HISTORY_FETCH_LIMIT = 200
+DEFAULT_CONTEXT_WINDOW_FALLBACK_TOKENS = 256_000
 
 
 @dataclass(slots=True)
@@ -21,6 +22,16 @@ class ContextBudgetResult:
     original_tokens: int = 0
     compacted_tokens: int = 0
     retained_messages: int = 0
+
+
+@dataclass(frozen=True, slots=True)
+class PromptSectionBudget:
+    """专有工作模式 user prompt 的可裁剪区块规则。"""
+
+    heading: str
+    min_chars: int = 800
+    floor_ratio: float = 0.25
+    protected: bool = False
 
 
 def _coerce_content(content: Any) -> str:
@@ -127,7 +138,7 @@ def _get_model_name(llm_client: Any) -> str:
 
 
 def _get_limits(llm_client: Any) -> tuple[int, int]:
-    max_context = int(getattr(llm_client, "max_context_tokens", 0) or 100000)
+    max_context = int(getattr(llm_client, "max_context_tokens", 0) or DEFAULT_CONTEXT_WINDOW_FALLBACK_TOKENS)
     max_output = int(getattr(llm_client, "max_output_tokens", 0) or 4096)
     return max(max_context, 8192), max(max_output, 1024)
 
@@ -232,6 +243,241 @@ def _emit_context_window_stats(
         "compacted": bool(compacted),
         "reason": reason,
     })
+
+
+def _clamp_ratio(value: float) -> float:
+    try:
+        ratio = float(value)
+    except Exception:
+        return 0.25
+    return min(max(ratio, 0.0), 1.0)
+
+
+def _truncate_middle(text: str, target_chars: int) -> str:
+    """保留首尾，压缩中段；适合全局设定/大纲/旧前文这种可恢复材料。"""
+    clean = str(text or "")
+    target = max(int(target_chars or 0), 0)
+    if target <= 0 or len(clean) <= target:
+        return clean
+    marker = "\n...（中间内容因上下文预算已截断；优先保留当前场景任务包、场景契约、创作指导与最近上下文）...\n"
+    if target <= len(marker) + 80:
+        return clean[:target].rstrip() + "\n...（内容因上下文预算已截断）"
+    head = max(40, int((target - len(marker)) * 0.6))
+    tail = max(40, target - len(marker) - head)
+    return (clean[:head].rstrip() + marker + clean[-tail:].lstrip()).strip()
+
+
+def _priority_prefix_end(text: str) -> int:
+    """识别嵌在“前文/上下文”区块顶部的高优先级写作任务包。"""
+    high_markers = ("=== 当前场景任务包", "【当前大纲场景契约】", "### Director→Scriptwriter 场景交接包")
+    if not any(marker in text for marker in high_markers):
+        return 0
+    low_markers = (
+        "\n=== 前序各章节末尾场景",
+        "\n=== 当前章节前文",
+        "\n=== 当前章节前文（已完成场景）",
+        "\n# ",
+        "\n## ",
+    )
+    starts = [text.find(marker) for marker in high_markers if text.find(marker) >= 0]
+    if not starts:
+        return 0
+    first_high = min(starts)
+    candidates = [text.find(marker, first_high + 1) for marker in low_markers]
+    candidates = [idx for idx in candidates if idx > first_high]
+    return min(candidates) if candidates else 0
+
+
+def _truncate_section_text(text: str, target_chars: int) -> str:
+    prefix_end = _priority_prefix_end(text)
+    if prefix_end <= 0:
+        return _truncate_middle(text, target_chars)
+
+    protected_prefix = text[:prefix_end].rstrip()
+    low_priority_tail = text[prefix_end:].lstrip()
+    if len(text) <= target_chars:
+        return text
+    if len(protected_prefix) >= target_chars:
+        return protected_prefix + "\n...（低优先级前文因上下文预算已省略；高优先级任务包已完整保留）"
+    tail_target = max(400, target_chars - len(protected_prefix) - 80)
+    return (
+        protected_prefix
+        + "\n\n...（以下低优先级历史前文因上下文预算已压缩；高优先级任务包已完整保留）...\n"
+        + _truncate_middle(low_priority_tail, tail_target)
+    ).strip()
+
+
+def _section_budget_for_heading(
+    heading: str,
+    section_budgets: Sequence[PromptSectionBudget],
+) -> PromptSectionBudget:
+    clean_heading = str(heading or "").strip()
+    for rule in section_budgets:
+        if rule.heading and rule.heading in clean_heading:
+            return rule
+    return PromptSectionBudget(clean_heading, min_chars=600, floor_ratio=0.35)
+
+
+def _split_markdown_heading_sections(text: str) -> List[Dict[str, str]]:
+    """按二/三级标题拆分 prompt，保留标题前导文本。"""
+    lines = str(text or "").splitlines(keepends=True)
+    sections: List[Dict[str, str]] = []
+    current_heading = ""
+    current_lines: List[str] = []
+
+    def flush() -> None:
+        if current_lines or current_heading:
+            sections.append({
+                "heading": current_heading,
+                "text": "".join(current_lines),
+            })
+
+    for line in lines:
+        stripped = line.strip()
+        if stripped.startswith("### "):
+            flush()
+            current_heading = stripped
+            current_lines = [line]
+        else:
+            current_lines.append(line)
+    flush()
+    return sections
+
+
+def _truncate_user_prompt_sections(
+    *,
+    user_prompt: str,
+    target_tokens: int,
+    model_name: str,
+    section_budgets: Sequence[PromptSectionBudget],
+) -> str:
+    """在专有工作模式中保护高优先级区块，只裁剪可恢复的大段材料。"""
+    sections = _split_markdown_heading_sections(user_prompt)
+    if not sections:
+        return user_prompt
+
+    current_prompt = user_prompt
+    while estimate_tokens(current_prompt, model=model_name) > target_tokens:
+        candidates: List[tuple[int, int, PromptSectionBudget, Dict[str, str]]] = []
+        for idx, section in enumerate(sections):
+            text = section.get("text") or ""
+            rule = _section_budget_for_heading(section.get("heading") or "", section_budgets)
+            if rule.protected:
+                continue
+            floor = max(int(rule.min_chars), int(len(text) * _clamp_ratio(rule.floor_ratio)))
+            if len(text) > floor + 120:
+                candidates.append((len(text) - floor, idx, rule, section))
+        if not candidates:
+            break
+
+        _saving, idx, rule, section = max(candidates, key=lambda item: item[0])
+        text = section.get("text") or ""
+        floor = max(int(rule.min_chars), int(len(text) * _clamp_ratio(rule.floor_ratio)))
+        next_len = max(floor, int(len(text) * 0.72))
+        if next_len >= len(text):
+            next_len = floor
+        sections[idx] = {
+            "heading": section.get("heading") or "",
+            "text": _truncate_section_text(text, next_len),
+        }
+        current_prompt = "".join(section.get("text") or "" for section in sections)
+
+    return current_prompt
+
+
+DEFAULT_SPECIALIZED_SECTION_BUDGETS: tuple[PromptSectionBudget, ...] = (
+    PromptSectionBudget("当前场景任务包", protected=True),
+    PromptSectionBudget("当前大纲场景契约", protected=True),
+    PromptSectionBudget("当前场景的创作指导", protected=True),
+    PromptSectionBudget("创作指导/章节目标", protected=True),
+    PromptSectionBudget("修正意见", protected=True),
+    PromptSectionBudget("审阅目标", protected=True),
+    PromptSectionBudget("待审阅剧本", protected=True),
+    PromptSectionBudget("写作指导", protected=True),
+    PromptSectionBudget("作者想参考的文学风格档案", min_chars=2400, floor_ratio=0.5),
+    PromptSectionBudget("作者风格档案", min_chars=2400, floor_ratio=0.5),
+    PromptSectionBudget("世界观背景", min_chars=2200, floor_ratio=0.35),
+    PromptSectionBudget("世界观", min_chars=2200, floor_ratio=0.35),
+    PromptSectionBudget("全局大纲", min_chars=2600, floor_ratio=0.35),
+    PromptSectionBudget("叙事记忆", min_chars=1600, floor_ratio=0.4),
+    PromptSectionBudget("角色详细档案", min_chars=3600, floor_ratio=0.35),
+    PromptSectionBudget("角色档案", min_chars=3600, floor_ratio=0.35),
+    PromptSectionBudget("前文剧本", min_chars=5200, floor_ratio=0.45),
+    PromptSectionBudget("当前上下文/前情", min_chars=5200, floor_ratio=0.45),
+    PromptSectionBudget("前情提要", min_chars=5200, floor_ratio=0.45),
+)
+
+
+def prepare_specialized_prompt_messages_with_budget(
+    *,
+    agent_id: str,
+    system_prompt: str,
+    user_prompt: str,
+    llm_client: Any,
+    section_budgets: Sequence[PromptSectionBudget] | None = None,
+    emit_event: Callable[[Dict[str, Any]], None] | None = None,
+) -> ContextBudgetResult:
+    """构造专有工作模式 messages，并在超预算时只裁动态 user 尾部材料。
+
+    专有工作模式通常是固定 system 头 + 单条动态 user prompt。为维持上游
+    prompt cache 稳定，预算保护只调整 user prompt 内的可恢复区块，不移动
+    或改写 system prompt。
+    """
+    model_name = _get_model_name(llm_client)
+    max_context, max_output = _get_limits(llm_client)
+    hard_budget, trigger_budget = _budget_limits(max_context, max_output)
+    system_msg = SystemMessage(content=str(system_prompt or "").strip())
+    user_msg = HumanMessage(content=str(user_prompt or "").strip())
+    original_messages = [system_msg, user_msg]
+    original_tokens = _messages_tokens(original_messages, model_name)
+    if original_tokens <= hard_budget and original_tokens <= trigger_budget:
+        _emit_context_window_stats(
+            emit_event,
+            agent_id=agent_id,
+            original_tokens=original_tokens,
+            input_tokens=original_tokens,
+            retained_messages=1,
+            model_name=model_name,
+            max_context_tokens=max_context,
+            max_output_tokens=max_output,
+            hard_budget=hard_budget,
+            trigger_budget=trigger_budget,
+            compacted=False,
+            reason="within_budget",
+        )
+        return ContextBudgetResult(original_messages, False, original_tokens, original_tokens, 1)
+
+    system_tokens = _messages_tokens([system_msg], model_name)
+    user_budget = max(1024, hard_budget - system_tokens)
+    truncated_user_prompt = _truncate_user_prompt_sections(
+        user_prompt=str(user_prompt or "").strip(),
+        target_tokens=user_budget,
+        model_name=model_name,
+        section_budgets=section_budgets or DEFAULT_SPECIALIZED_SECTION_BUDGETS,
+    )
+    compacted_messages = [system_msg, HumanMessage(content=truncated_user_prompt)]
+    compacted_tokens = _messages_tokens(compacted_messages, model_name)
+    _emit_context_window_stats(
+        emit_event,
+        agent_id=agent_id,
+        original_tokens=original_tokens,
+        input_tokens=compacted_tokens,
+        retained_messages=1,
+        model_name=model_name,
+        max_context_tokens=max_context,
+        max_output_tokens=max_output,
+        hard_budget=hard_budget,
+        trigger_budget=trigger_budget,
+        compacted=compacted_tokens < original_tokens,
+        reason="specialized_user_prompt_trimmed" if compacted_tokens < original_tokens else "specialized_prompt_over_budget_untrimmed",
+    )
+    return ContextBudgetResult(
+        compacted_messages,
+        compacted=compacted_tokens < original_tokens,
+        original_tokens=original_tokens,
+        compacted_tokens=compacted_tokens,
+        retained_messages=1,
+    )
 
 
 def _compress_history_items(

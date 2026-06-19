@@ -139,6 +139,7 @@ import {
 } from '@/services/agentPromptPreferences';
 import { useAgentRegistry } from '@/composables/useAgentRegistry';
 import { useAiStore } from '../stores/aiStore';
+import { useUsageDisplay } from '@/composables/useUsageDisplay';
 import AgentPromptPreferenceModal from './AgentPromptPreferenceModal.vue';
 
 const { t } = useI18n();
@@ -147,6 +148,7 @@ const loading = ref(false);
 const error = ref(null);
 const updating = ref(false);
 const aiStore = useAiStore();
+const { formatUsageOptionLabel } = useUsageDisplay();
 
 const { registry: agentRegistry, load: loadAgentRegistry } = useAgentRegistry();
 const agentBindings = ref({});
@@ -221,7 +223,7 @@ async function loadPromptPreferenceBadge(agentId) {
 // 用途选项
 const usageOptions = computed(() =>
   aiStore.usageSelections.map(slot => ({
-    label: `${slot.usage_label} (${slot.usage_key})`,
+    label: formatUsageOptionLabel(slot),
     value: slot.usage_key
   }))
 );

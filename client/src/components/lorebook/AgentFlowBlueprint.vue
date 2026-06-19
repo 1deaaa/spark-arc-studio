@@ -164,6 +164,7 @@ import { FilePenLine, Link } from '@lucide/vue';
 import { fetchAgentUsageBindings, saveAgentBinding } from '@/services/agentUsage';
 import { useAgentRegistry } from '@/composables/useAgentRegistry';
 import { useAiStore } from '@/components/stores/aiStore';
+import { useUsageDisplay } from '@/composables/useUsageDisplay';
 import { useAgentRuntimeStore } from '../stores/agentRuntimeStore';
 import { useBlueprintCanvas } from '@/hooks/useBlueprintCanvas';
 import BeaconIndicator from './BeaconIndicator.vue';
@@ -221,6 +222,7 @@ const shouldShowIndicators = (agentId: string) => {
 const updating = ref<string | null>(null);
 
 const aiStore = useAiStore();
+const { formatUsageOptionLabel } = useUsageDisplay();
 
 // 使用共享的蓝图画布 composable
 const {
@@ -417,7 +419,7 @@ const gradientDefs = computed<GradientDef[]>(() => {
 
 const usageOptions = computed(() =>
   aiStore.usageSelections.map(slot => ({
-    label: `${slot.usage_label} (${slot.usage_key})`,
+    label: formatUsageOptionLabel(slot),
     value: slot.usage_key,
   }))
 );

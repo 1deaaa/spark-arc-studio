@@ -3,15 +3,19 @@ ScriptWriter Context Builder - 执笔编剧统一上下文组装器
 
 ════════════════════════════════════════════════════════════════════════
 【设计目标】
-本模块是 ScriptwriterAgent 三条触发链路的唯一上下文数据源：
-  1. 手动创作 (production.py / compose)
+本模块是 ScriptwriterAgent 正式写作链路的统一上下文数据源：
+  1. 用户手动生产流 (production.py / compose)
   2. 全自动批处理 (auto_write.py)
-  3. 导演委派 (director_graph.py)
+  3. 导演委派写作 (director_graph.py)
+  4. 编剧聊天落盘工具 (tools/scriptwriter.py，经 tool_rules 约束读取 StoryMemory/GraphRAG)
+  5. 用户显式吸收故事文件 (story/routes_files.py，普通保存不隐式写 StoryMemory)
 
-在此之前，各链路分别维护各自的上下文组装代码，导致任何逻辑改动
-必须同步修改三处，且 auto_write.py 内的世界观/角色均为硬编码占位符。
+其中 1/2/3 共享本模块的写前上下文组装；4 走聊天工具管线，但复用同一套
+StoryMemory / GraphRAG / 风格执行卡 / 工具规则；5 只在用户明确触发时提交后台状态吸收。
 
 【核心改进】
+  - StoryMemory 场景任务包：在三圈记忆前注入当前场景相关的角色动态状态、
+    关系记录、开放线索和最近场景摘要；该状态由场景保存后后台吸收生成。
   - 全量世界观 / 全量角色：废弃"只传选中角色"的旧逻辑，所有入口必须
     全量加载，因为大模型上下文窗口（128K+）完全容纳，且遗漏角色设定
     是导致 OOC（角色崩坏）和"吃书"的根本原因。
@@ -28,6 +32,7 @@ from __future__ import annotations
 
 import json
 import os
+import re
 from typing import Any, Dict, List, Optional, Tuple
 
 from core.utils import (
@@ -272,6 +277,332 @@ def load_project_context_bundle(user_id: str, project_name: str) -> Dict[str, An
     }
 
 
+def _normalize_outline_title(value: Any) -> str:
+    text = str(value or "").strip()
+    if not text:
+        return ""
+    text = text.replace("\\", "/").split("/")[-1]
+    text = os.path.splitext(text)[0]
+    text = text.split(".__spark__", 1)[0]
+    text = re.sub(r"^\s*\d+\s*[-_.·]\s*\d+\s*", "", text)
+    text = re.sub(r"^\s*(?:第)?\s*\d+\s*(?:场|幕|节)\s*[:：.\-_ ]*", "", text)
+    text = re.sub(r"\s+", "", text)
+    return text.lower()
+
+
+def _outline_text_match_score(candidate: str, targets: set[str]) -> int:
+    normalized = _normalize_outline_title(candidate)
+    if not normalized:
+        return 0
+    if normalized in targets:
+        return 6
+    if any(normalized in target or target in normalized for target in targets if target):
+        return 3
+    return 0
+
+
+def _outline_scene_contract_payload(
+    ci: int,
+    si: int,
+    chapter: Dict[str, Any],
+    scene: Dict[str, Any],
+) -> Dict[str, Any]:
+    """把大纲节点转成统一场景契约 payload。"""
+    key_dialogues = scene.get("key_dialogues") if isinstance(scene.get("key_dialogues"), list) else []
+    characters = scene.get("characters") if isinstance(scene.get("characters"), list) else []
+    beat_refs = scene.get("beat_refs") if isinstance(scene.get("beat_refs"), list) else []
+    return {
+        "chapter_index": ci,
+        "scene_index": si,
+        "chapter_title": str(chapter.get("title") or chapter.get("name") or "").strip(),
+        "chapter_description": str(chapter.get("description") or "").strip(),
+        "scene_title": str(scene.get("title") or scene.get("name") or "").strip(),
+        "scene_description": str(scene.get("description") or "").strip(),
+        "guidance": str(scene.get("guide") or "").strip(),
+        "characters": [str(item).strip() for item in characters if str(item).strip()],
+        "mood": str(scene.get("mood") or "").strip(),
+        "tension": str(scene.get("tension") or "").strip(),
+        "beat_refs": [str(item).strip() for item in beat_refs if str(item).strip()],
+        "key_dialogues": [str(item).strip() for item in key_dialogues if str(item).strip()],
+    }
+
+
+def resolve_outline_scene_contract(
+    outline_data: Dict[str, Any],
+    *,
+    scene_name: str = "",
+    file_path: str = "",
+    chapter_title: str = "",
+    chapter_index: Optional[int] = None,
+    scene_index: Optional[int] = None,
+) -> Dict[str, Any]:
+    """从结构化大纲中解析当前场景契约，供写作上下文复用。"""
+    nodes = outline_data.get("nodes") if isinstance(outline_data, dict) else []
+    if not isinstance(nodes, list):
+        return {}
+
+    try:
+        from story.file_naming import parse_story_filename
+    except Exception:
+        parse_story_filename = None
+
+    parsed_file = parse_story_filename(os.path.basename(file_path)) if parse_story_filename and file_path else None
+    if parsed_file:
+        if not scene_name:
+            scene_name = str(parsed_file.get("display_name") or "")
+        if chapter_index is None and parsed_file.get("chapter_num") is not None:
+            chapter_index = int(parsed_file["chapter_num"]) - 1
+        if scene_index is None and parsed_file.get("scene_num") is not None:
+            scene_index = int(parsed_file["scene_num"]) - 1
+
+    scene_targets = {
+        item for item in (
+            _normalize_outline_title(scene_name),
+            _normalize_outline_title(file_path),
+            _normalize_outline_title(os.path.basename(file_path)),
+        ) if item
+    }
+    chapter_targets = {
+        item for item in (
+            _normalize_outline_title(chapter_title),
+            _normalize_outline_title(os.path.dirname(file_path)),
+        ) if item
+    }
+
+    best: tuple[int, int, int, Dict[str, Any], Dict[str, Any]] | None = None
+    for ci, chapter in enumerate(nodes):
+        if not isinstance(chapter, dict):
+            continue
+        children = chapter.get("children") or []
+        if not isinstance(children, list):
+            continue
+        chapter_score = 0
+        if chapter_index is not None and ci == chapter_index:
+            chapter_score += 8
+        chapter_score += _outline_text_match_score(
+            str(chapter.get("title") or chapter.get("name") or ""),
+            chapter_targets,
+        )
+
+        for si, scene in enumerate(children):
+            if not isinstance(scene, dict):
+                continue
+            score = chapter_score
+            if scene_index is not None and si == scene_index:
+                score += 8
+            score += _outline_text_match_score(
+                str(scene.get("title") or scene.get("name") or ""),
+                scene_targets,
+            )
+            if score <= 0:
+                continue
+            candidate = (score, ci, si, chapter, scene)
+            if best is None or candidate[:3] > best[:3]:
+                best = candidate
+
+    if best is None or best[0] < 3:
+        return {}
+
+    _, ci, si, chapter, scene = best
+    return _outline_scene_contract_payload(ci, si, chapter, scene)
+
+
+def resolve_outline_scene_contract_for_task(
+    outline_data: Dict[str, Any],
+    *,
+    task_description: str = "",
+    chapter_title: str = "",
+    scene_name: str = "",
+    file_path: str = "",
+) -> Dict[str, Any]:
+    """从导演委派任务中尽力解析当前大纲场景契约。"""
+    explicit = resolve_outline_scene_contract(
+        outline_data,
+        scene_name=scene_name,
+        file_path=file_path,
+        chapter_title=chapter_title,
+    )
+    if explicit:
+        return explicit
+
+    nodes = outline_data.get("nodes") if isinstance(outline_data, dict) else []
+    if not isinstance(nodes, list):
+        return {}
+
+    task_text = _normalize_outline_title(
+        "\n".join([task_description, chapter_title, scene_name, file_path])
+    )
+    if not task_text:
+        return {}
+
+    def _contains_score(value: Any, score: int) -> int:
+        normalized = _normalize_outline_title(value)
+        if len(normalized) < 2:
+            return 0
+        return score if normalized in task_text else 0
+
+    best: tuple[int, int, int, Dict[str, Any], Dict[str, Any]] | None = None
+    for ci, chapter in enumerate(nodes):
+        if not isinstance(chapter, dict):
+            continue
+        chapter_score = _contains_score(chapter.get("title") or chapter.get("name"), 4)
+        children = chapter.get("children") or []
+        if not isinstance(children, list):
+            continue
+        for si, scene in enumerate(children):
+            if not isinstance(scene, dict):
+                continue
+            score = chapter_score
+            score += _contains_score(scene.get("title") or scene.get("name"), 9)
+            score += _contains_score(scene.get("guide"), 2)
+            for dialogue in scene.get("key_dialogues") or []:
+                score += _contains_score(dialogue, 2)
+            description = _normalize_outline_title(scene.get("description"))
+            if len(description) >= 8 and description[:24] in task_text:
+                score += 2
+            if score <= 0:
+                continue
+            candidate = (score, ci, si, chapter, scene)
+            if best is None or candidate[:3] > best[:3]:
+                best = candidate
+
+    if best is None or best[0] < 6:
+        return {}
+
+    _, ci, si, chapter, scene = best
+    return _outline_scene_contract_payload(ci, si, chapter, scene)
+
+
+def format_outline_scene_contract(contract: Dict[str, Any]) -> str:
+    """把当前场景契约转成 prompt 可读文本。"""
+    if not contract:
+        return ""
+    lines = ["【当前大纲场景契约】"]
+    if contract.get("chapter_title"):
+        lines.append(f"- 章节：{contract.get('chapter_title')}")
+    if contract.get("chapter_description"):
+        lines.append(f"- 章节目标：{contract.get('chapter_description')}")
+    if contract.get("scene_title"):
+        lines.append(f"- 场景：{contract.get('scene_title')}")
+    if contract.get("scene_description"):
+        lines.append(f"- 场景功能：{contract.get('scene_description')}")
+    scene_traits: list[str] = []
+    if contract.get("mood"):
+        scene_traits.append(f"情绪：{contract.get('mood')}")
+    if contract.get("tension"):
+        scene_traits.append(f"张力：{contract.get('tension')}")
+    if contract.get("beat_refs"):
+        scene_traits.append(f"对应节拍：{', '.join(contract.get('beat_refs') or [])}")
+    if contract.get("characters"):
+        scene_traits.append(f"登场：{'、'.join(contract.get('characters') or [])}")
+    if scene_traits:
+        lines.append("- 场景参数：" + " | ".join(scene_traits))
+    if contract.get("guidance"):
+        lines.append(f"- 导演指引：{contract.get('guidance')}")
+    key_dialogues = contract.get("key_dialogues") or []
+    if key_dialogues:
+        lines.append("- 关键对话/剧情方向：")
+        lines.extend(f"  - {item}" for item in key_dialogues[:6])
+    lines.append("- 写作时必须服务于这个场景契约；如用户补充要求与契约冲突，优先保留用户明确要求并避免破坏全局结构。")
+    return "\n".join(lines)
+
+
+def _normalize_scene_character_list(value: Any) -> List[str]:
+    if isinstance(value, str):
+        items = re.split(r"[,，、\n]", value)
+    elif isinstance(value, list):
+        items = value
+    else:
+        items = []
+    seen: set[str] = set()
+    names: List[str] = []
+    for item in items:
+        name = str(item or "").strip()
+        if not name or name in seen:
+            continue
+        seen.add(name)
+        names.append(name)
+    return names
+
+
+def _compact_prompt_text(value: Any, limit: int = 700) -> str:
+    text = re.sub(r"\s+", " ", str(value or "")).strip()
+    if len(text) <= limit:
+        return text
+    return text[:limit].rstrip() + "..."
+
+
+def build_scriptwriter_handoff_context(
+    user_id: str,
+    project_name: str,
+    *,
+    task_description: str,
+    chapter_name: str = "",
+    scene_name: str = "",
+    scene_file_path: str = "",
+    scene_guidance: str = "",
+    scene_characters: Any = None,
+) -> str:
+    """为 Director 委派 Scriptwriter 时生成写前场景交接包。"""
+    if not project_name:
+        return ""
+
+    bundle = load_project_context_bundle(user_id, project_name)
+    outline_data = bundle.get("outline_data") or {}
+    chr_map = bundle.get("chr_map") or {}
+    outline_contract = resolve_outline_scene_contract_for_task(
+        outline_data,
+        task_description=task_description,
+        chapter_title=chapter_name,
+        scene_name=scene_name,
+        file_path=scene_file_path,
+    )
+
+    effective_chapter = chapter_name or outline_contract.get("chapter_title") or ""
+    effective_scene = scene_name or outline_contract.get("scene_title") or ""
+    effective_guidance = scene_guidance or outline_contract.get("guidance") or task_description
+    characters = _normalize_scene_character_list(scene_characters)
+    for name in outline_contract.get("characters") or []:
+        if name and name not in characters:
+            characters.append(name)
+
+    lines: List[str] = ["### Director→Scriptwriter 场景交接包"]
+    if task_description:
+        lines.append("【导演委派任务】")
+        lines.append(_compact_prompt_text(task_description, 900))
+
+    contract_text = format_outline_scene_contract(outline_contract)
+    if contract_text:
+        lines.append("")
+        lines.append(contract_text)
+
+    try:
+        from agents.story_memory import StoryMemoryFacade
+
+        state_pack = StoryMemoryFacade(user_id, project_name).compose_scene_task_pack(
+            chapter_index=outline_contract.get("chapter_index"),
+            scene_index=outline_contract.get("scene_index"),
+            chapter_title=effective_chapter,
+            chapter_description=str(outline_contract.get("chapter_description") or ""),
+            scene_title=effective_scene,
+            scene_description=str(outline_contract.get("scene_description") or ""),
+            scene_characters=characters,
+            guidance=effective_guidance,
+            chr_map=chr_map,
+        )
+        if state_pack.get("text"):
+            lines.append("")
+            lines.append(state_pack["text"])
+    except Exception as e:
+        print(f"[StoryMemory] 委派场景任务包构建失败（已降级）：{e}")
+
+    lines.append("")
+    lines.append("【委派写作约束】")
+    lines.append("- 写作前优先服从本交接包中的大纲场景契约、实时人物状态、关系记录、开放伏笔与修订工单。")
+    lines.append("- 若交接包缺少具体人物或场景状态，正式落盘前应按需调用 story_memory_tool 或项目读取工具核对。")
+    return "\n".join(line for line in lines if line is not None).strip()
+
+
 def load_full_outline(user_id: str, project_name: str) -> str:
     """
     直接读取 大纲.txt 原文，用于注入 {full_outline}。
@@ -365,6 +696,9 @@ def build_scene_context(
     *,
     current_chapter_arc_text: Optional[str] = None,
     current_scene_index: Optional[int] = None,
+    chapter_meta: Optional[Dict[str, Any]] = None,
+    scene_meta: Optional[Dict[str, Any]] = None,
+    chr_map: Optional[Dict[int, str]] = None,
 ) -> str:
     """
     三圈记忆策略：为写作当前场景组装前文上下文。
@@ -378,6 +712,35 @@ def build_scene_context(
 
     arc_files = _get_chapter_arc_files(user_id, project_name)
     parts: List[str] = []
+
+    # ── StoryMemory：当前场景任务包（高优先级状态）──────────────────────
+    try:
+        from agents.story_memory import StoryMemoryFacade
+
+        chapter_meta = chapter_meta or {}
+        scene_meta = scene_meta or {}
+        scene_characters = (
+            scene_meta.get("characters")
+            or scene_meta.get("roles")
+            or scene_meta.get("登场角色")
+            or []
+        )
+        pack = StoryMemoryFacade(user_id, project_name).compose_scene_task_pack(
+            chapter_index=current_chapter_index,
+            scene_index=current_scene_index,
+            chapter_title=str(chapter_meta.get("title") or chapter_meta.get("name") or ""),
+            chapter_description=str(chapter_meta.get("description") or chapter_meta.get("summary") or ""),
+            scene_title=str(scene_meta.get("title") or scene_meta.get("scene") or ""),
+            scene_description=str(scene_meta.get("description") or scene_meta.get("summary") or ""),
+            scene_characters=scene_characters,
+            guidance=str(scene_meta.get("guidance") or scene_meta.get("goal") or ""),
+            chr_map=chr_map,
+        )
+        if pack.get("text"):
+            parts.append(pack["text"])
+            parts.append("")
+    except Exception as e:
+        print(f"[StoryMemory] 构建场景任务包失败（已降级为三圈记忆）：{e}")
 
     # ── 圈 2：前序章节末尾场景 ──────────────────────────────────────────
     tail_scenes: List[str] = []
@@ -519,6 +882,7 @@ def build_scriptwriter_context(
         current_chapter_index,
         current_chapter_arc_text=current_chapter_arc_text,
         current_scene_index=current_scene_index,
+        chr_map=chr_map,
     )
 
     # 拼接用户/Director 额外补充

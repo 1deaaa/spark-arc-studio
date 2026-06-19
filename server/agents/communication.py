@@ -30,6 +30,7 @@ import dataclasses
 import json
 import os
 import queue
+import re
 import time
 import uuid
 from typing import Dict, Any, Optional, List
@@ -167,6 +168,21 @@ def normalize_handoff_payload(
     return_to = str(raw.get("return_to") or sender_id or "agent_director").strip() or (sender_id or "agent_director")
     grant_baton_to = str(raw.get("grant_baton_to") or target_agent).strip() or target_agent
     task_id = str(raw.get("task_id") or uuid.uuid4().hex).strip() or uuid.uuid4().hex
+    export_format = str(raw.get("export_format") or "").strip().lower()
+    if export_format not in {"arc", "novel"}:
+        export_format = ""
+
+    scene_characters = raw.get("scene_characters") or raw.get("characters") or []
+    if isinstance(scene_characters, str):
+        scene_characters = [
+            item.strip()
+            for item in re.split(r"[,，、\n]", scene_characters)
+            if item.strip()
+        ]
+    elif isinstance(scene_characters, list):
+        scene_characters = [str(item).strip() for item in scene_characters if str(item).strip()]
+    else:
+        scene_characters = []
 
     return {
         "task_id": task_id,
@@ -181,6 +197,12 @@ def normalize_handoff_payload(
         "grant_baton_to": grant_baton_to,
         "delegated_by": delegated_by,
         "project_name": str(raw.get("project_name") or "").strip(),
+        "export_format": export_format,
+        "chapter_name": str(raw.get("chapter_name") or "").strip(),
+        "scene_name": str(raw.get("scene_name") or "").strip(),
+        "scene_file_path": str(raw.get("scene_file_path") or raw.get("file_path") or "").strip(),
+        "scene_guidance": str(raw.get("scene_guidance") or "").strip(),
+        "scene_characters": scene_characters,
     }
 
 

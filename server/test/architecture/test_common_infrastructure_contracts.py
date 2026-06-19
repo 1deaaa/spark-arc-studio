@@ -6,6 +6,7 @@ from pathlib import Path
 from agents.tools.common import _apply_patch
 from core.file_ingest.chunking import TokenTextSplitter
 from core.migration_specs import get_db_path, get_db_spec, get_version_dir, iter_db_names, sqlite_url
+from llm.agen_matchbox.models import DEFAULT_MAX_CONTEXT_TOKENS, DEFAULT_MAX_OUTPUT_TOKENS
 
 
 def test_apply_patch_exact_append_whitespace_and_json_validation(tmp_path: Path) -> None:
@@ -62,3 +63,8 @@ def test_migration_specs_keep_known_database_branches(monkeypatch, tmp_path: Pat
     assert get_db_path("users") == users_db.resolve()
     assert get_version_dir("users", base_dir=tmp_path) == tmp_path.resolve() / "alembic" / "versions" / "users"
     assert sqlite_url(users_db).startswith("sqlite:///")
+
+
+def test_default_llm_context_baseline_matches_modern_long_context() -> None:
+    assert DEFAULT_MAX_CONTEXT_TOKENS == 256_000
+    assert DEFAULT_MAX_OUTPUT_TOKENS == 64_000

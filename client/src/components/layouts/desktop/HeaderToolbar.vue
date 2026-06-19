@@ -162,7 +162,7 @@
 import { onBeforeUnmount, onMounted, ref, computed, h } from 'vue';
 import { useI18n } from 'vue-i18n';
 import { NButton, NIcon, NText, NDropdown, NTooltip } from 'naive-ui';
-import { Archive, CircleCheck, CloudDownload, CloudUpload, FolderOpen, Laptop, LogOut, Maximize2, Minimize2, Moon, PaintBucket, Play, Save, SaveAll, SaveOff, Share2, Sun, Languages } from '@lucide/vue';
+import { Archive, BrainCircuit, CircleCheck, CloudDownload, CloudUpload, FolderOpen, Laptop, LogOut, Maximize2, Minimize2, Moon, PaintBucket, Play, Save, SaveAll, SaveOff, Share2, Sun, Languages } from '@lucide/vue';
 import { useLocaleStore } from '@/components/stores/localeStore';
 import type { AppLocale } from '@/i18n/types';
 import bus from '@/eventBus';
@@ -171,7 +171,7 @@ import { useSceneStore } from '@/components/stores/sceneStore';
 import { useProjectStore } from '@/components/stores/projectStore';
 import { useFileStore } from '@/components/stores/fileStore';
 import { useThemeStore } from '@/components/stores/themeStore';
-import { saveStory, uploadStory, logout as apiLogout, fetchWithAuth } from '@/services/api';
+import { absorbStoryMemory, saveStory, uploadStory, logout as apiLogout, fetchWithAuth } from '@/services/api';
 import { exportProjectToSQLite, exportProjectAsSpark, importProjectFromSpark } from '@/services/projectService';
 import { useFullscreen } from '@/composables/useFullscreen';
 import { useWindowControls } from '@/composables/useWindowControls';
@@ -245,11 +245,18 @@ const { isFullscreen, preferred, requestFullscreen, toggleFullscreen } = useFull
 const fileOptions = computed(() => [
   { label: t('components.headerToolbar.importArc'), key: 'import', icon: () => h(NIcon, null, { default: () => h(CloudDownload) }) },
   { label: t('components.headerToolbar.exportArc'), key: 'export_arc', icon: () => h(NIcon, null, { default: () => h(CloudUpload) }) },
+  {
+    label: t('components.headerToolbar.absorbStoryMemory'),
+    key: 'absorb_story_memory',
+    disabled: !currentFilePath.value,
+    icon: () => h(NIcon, null, { default: () => h(BrainCircuit) }),
+  },
 ]);
 
 function handleFileAction(key) {
   if (key === 'import') triggerFileImport();
   else if (key === 'export_arc') exportArc();
+  else if (key === 'absorb_story_memory') absorbCurrentStoryMemory();
 }
 
 const projectOptions = computed(() => [
@@ -419,6 +426,20 @@ async function saveCurrentFile() {
     const errorMessage = e instanceof Error ? e.message : String(e || 'Unknown error');
     bus.emit('toast', { type: 'error', message: `${t('views.common.saveFailed')}: ${errorMessage}` });
     throw e;
+  }
+}
+
+async function absorbCurrentStoryMemory() {
+  if (!projectStore.currentProject || !currentFilePath.value) {
+    bus.emit('toast', { type: 'info', message: t('components.headerToolbar.selectStoryFileFirst') });
+    return;
+  }
+  try {
+    await absorbStoryMemory(projectStore.currentProject, currentFilePath.value);
+    bus.emit('toast', { type: 'success', message: t('components.headerToolbar.absorbStoryMemoryQueued') });
+  } catch (e: unknown) {
+    const errorMessage = e instanceof Error ? e.message : String(e || 'Unknown error');
+    bus.emit('toast', { type: 'error', message: `${t('components.headerToolbar.absorbStoryMemoryFailed')}: ${errorMessage}` });
   }
 }
 

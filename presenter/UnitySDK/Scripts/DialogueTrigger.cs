@@ -18,7 +18,7 @@ namespace SparkArc.Unity
         [Header("交互提示 (可选)")]
         public GameObject interactHint;
         public TMP_Text interactHintText;
-        public string fallbackHintText = "交互";
+        public string fallbackHintText = "按 F 交互";
 
         private bool _canInteract = false;
 
@@ -34,7 +34,7 @@ namespace SparkArc.Unity
         {
             if (_canInteract && mode == TriggerMode.Manual)
             {
-                if (Input.GetKeyDown(KeyCode.E))
+                if (SparkArcInput.WasInteractPressed())
                 {
                     Trigger();
                 }

@@ -342,6 +342,40 @@ AgentSkills 对 prompt cache 的影响是受控的：Skill 内容不是固定 sy
 | **Auto-Write Pre-flight** | 仅 `SHARED_READ_TOOLS`（世界观/角色/梗概/节拍已在循环前全量注入 Prompt） |
 | **Chat / 导演委派** | `SCRIPTWRITER_TOOLS` + `SHARED_READ_TOOLS` 全部开放 |
 
+### 3.5 Scriptwriter 特殊触发链路与统一程度
+
+Scriptwriter 不是单一入口。它目前至少有“导演触发自动写作、导演直接委派、用户聊天微改、用户手动生产流、用户手动保存”等多条链路。贡献者修改其中任一入口时，必须同步确认“谁负责读取 StoryMemory、谁负责写回 StoryMemory、Critic 是否默认参与、是否需要工具落盘”。
+
+下表中的“系统自动调用（容错）”也可理解为“强制尝试”：后端业务流程会在固定节点主动调用 `StoryMemoryFacade` 读取轻量故事状态，或向 `server/agents/story_memory/jobs.py` 提交后台写入任务，并捕获异常降级；它**不是**再强制拉起一个独立的 Scriptwriter 任务，也不是让 Scriptwriter 再总结一遍。实际的状态提取发生在 `StoryMemoryFacade.record_scene_write()` 内部，它会从已保存正文中抽取场景摘要、人物状态、关系、伏笔、事实等轻量状态；内部默认按 `SPARKARC_STORY_MEMORY_USAGE_KEY=fast` 调用轻量 LLM 状态抽取器，但该调用是 StoryMemory 的抽取器任务，不是 Scriptwriter 写作任务，并且失败时会回退到确定性摘要/扫描。“强制”只表示流程会固定发起这次吸收尝试；如果这一步失败，正文保存和下一场写作本身不能被阻断。
+
+换句话说，默认没有一个名为 StoryMemory 的专家 Agent 在聊天链路里负责“整理记忆”。写入侧由 `StoryMemoryFacade` 和后台 jobs 承担；读取侧则由生产流/自动写作上下文包，以及 Scriptwriter / Director / Critic 的只读 `story_memory_tool` 按需使用。
+
+| 模式 / 入口 | 由什么触发 | 主要后端链路 | 读取记忆方式 | 读记忆约束 | 写入记忆方式 | 写记忆约束 | 是否能工具调用 | 特殊操作 / 边界 |
+| :--- | :--- | :--- | :--- | :--- | :--- | :--- | :--- | :--- |
+| Director 启动完整自动写作 | 用户在聊天里要求 Director 自动写完整项目或继续自动写作；Director 调用自动写作工具 | `Director -> trigger_auto_write -> auto_write_start / generate_script_stream -> ScriptwriterAgent.write_script_stream` | 每场调用 `build_scene_context()`，其中会尝试 `StoryMemoryFacade.compose_scene_task_pack()`；同时加载世界观、角色、大纲、叙事记忆，并把上一场完整正文作为硬上下文追加给下一场；可通过 pre-flight `research_references()` 按需读历史场景 | 系统自动调用（容错）：不靠模型主动想起；失败则降级继续；上一场完整正文不依赖 StoryMemory 完成 | 每场保存文件后调用 `enqueue_scene_memory_write()` 后台吸收；若 `auto_review=true`，Critic 评审后再 `record_quality_review()` 写修订工单 | 场景记忆异步写入（容错），不阻塞下一场；Critic 仅显式开启 | 正文生成本身不靠 LLM 工具落盘；pre-flight 只开放只读项目工具 | 后台任务，不受前端断连影响；状态写入 `auto_write_state.json`；`fromDirector=true` 时刷新/重登应恢复锁定遮罩 |
+| 用户手动启动全自动写作 | 用户在大纲或自动写作面板点开始、继续、从当前剧情进度开始 | `auto_write_start -> generate_script_stream -> ScriptwriterAgent.write_script_stream` | 与 Director 完整自动写作同一套：`build_scene_context()` + 上一场完整正文硬上下文 + StoryMemory 任务包 + 全局设定/大纲/角色/叙事记忆 + pre-flight 历史侦查 | 系统自动调用（容错） | 每场保存后 `enqueue_scene_memory_write()`；用户勾选自动审稿才 `record_quality_review()` | 场景记忆异步写入（容错）；Critic 可选 | 正文生成不依赖 LLM 工具落盘，后端直接保存 | 支持 `start_scene_index`，可从某章某场继续；“从当前剧情进度开始”通过扫描已有场景文件推算下一场 |
+| Director 直接委派 Scriptwriter 写/改某场 | Director 通过 `delegate_task` 把具体写作任务交给 Scriptwriter | `Director -> sub_agent_node -> ScriptwriterAgent.chat_stream(skip_tool_confirmation=True)` | 聊天/委派上下文会注入项目全局材料；`tool_rules` 要求涉及人物关系、伏笔、前情时优先调用 `story_memory_tool(action="query" 或 "scene_task_pack")`，必要时再用 GraphRAG | 模型按规则自主调用：不是后端硬性调用，依赖模型遵循提示 | 若调用 `create_or_rewrite_script` 落盘，工具内部会 `enqueue_scene_memory_write()`；若调用 `patch_script`，当前只 `_apply_patch()`，不会写回 StoryMemory | `create_or_rewrite_script` 异步写入（容错）；`patch_script` 当前缺失写回 | 能。Scriptwriter 绑定 `create_chapter`、`create_or_rewrite_script`、`patch_script`、`story_memory_tool`、GraphRAG 等工具 | 若只输出正文不调落盘工具，Director 不应视为完成；`patch_script` 后 StoryMemory 可能滞后，是当前边界盲点 |
+| 用户和 Scriptwriter 聊天微改 / 写作 | 用户在聊天框直接让 Scriptwriter 改某段、补某场、续写 | `chat.py -> ScriptwriterAgent.chat_stream(skip_tool_confirmation=False)` | 类似 Director 委派：项目上下文 + `tool_rules` 要求按需调用 `story_memory_tool` / GraphRAG | 模型按规则自主调用，普通聊天模式还可能需要用户确认工具 | 同上：`create_or_rewrite_script` 会后台写 StoryMemory；`patch_script` 当前不会写 StoryMemory | 取决于具体工具；`create_or_rewrite_script` 会异步写，`patch_script` 不会 | 能，普通聊天模式可能有工具确认 | 适合局部互动修改；如果只是提供建议或草稿，不落盘也不写记忆 |
+| 用户手动生产流 / 生成当前场景 | 用户在剧本生成弹窗或编辑器里点续写、重写、桥接等 | `production.py /api/scriptwriter/compose/stream -> build_scriptwriter_context_pack -> ScriptwriterAgent.execute/write_script_stream` | `build_scriptwriter_context_pack()` 自动组装上下文，并尝试 `StoryMemoryFacade.compose_scene_task_pack()` 注入当前场景任务包；同时读取世界观、全量角色、大纲、叙事记忆、当前文件前文 | 系统自动调用（容错） | 如果本次生成有 `filePath` 并实际落盘，之后 `_record_story_memory_from_story_file()` 提交 `enqueue_story_file_memory_write()`，由后台回读文件并 `record_scene_write()` | 落盘后异步写入（容错）；仅预览不写 | 不是聊天工具链；后端负责上下文和落盘 | 支持单节点续写、场景重写、桥接；桥接/预览类如果不写文件，不更新 StoryMemory |
+| 用户手动保存 `.arc/.md` 文件 | 用户在编辑器保存故事文件 | `story/routes_files.py /api/save-story` | 保存本身不读 StoryMemory | 不读取 | 普通保存不写 StoryMemory；用户显式触发时调用 `/api/story-memory/absorb-story`，再由 `_record_story_memory_after_story_save()` 提交后台吸收 | 默认不写入，避免用户不知情的 LLM/摘要副作用 | 否，不经过 Scriptwriter 工具 | 保存只负责落盘；不自动启动 Critic，不自动重写正文；后续前端按钮应调用显式吸收接口 |
+| Scriptwriter 工具 `create_or_rewrite_script` | Director / 聊天中的 Scriptwriter 工具调用 | `agents/tools/scriptwriter.py:create_or_rewrite_script` | 工具本身不读 StoryMemory；读记忆应由调用前的上下文或 `story_memory_tool` 完成 | 不读取 | 保存文件后提交 `enqueue_scene_memory_write()` | 工具落盘后异步写入（容错） | 是 | 新建场景前应先 `create_chapter`，并传入一致 `chapter_name`，避免孤儿场景 |
+| Scriptwriter 工具 `patch_script` | Director / 聊天中的局部替换工具调用 | `agents/tools/scriptwriter.py:patch_script -> common._apply_patch` | 工具本身不读 StoryMemory | 不读取 | 当前没有回写 StoryMemory | 不写入，是当前缺口 | 是 | 局部 patch 成功后，StoryMemory 可能仍是旧状态；后续用户保存或其他吸收链路才会刷新 |
+
+统一并不是把所有入口强行改成同一条 HTTP 路由，而是把关键能力收口到同一批底座：
+
+- 写前上下文：`server/agents/routes/context_builder.py` 负责生产流、自动写作、导演委派的场景上下文。
+- 实时故事状态：`server/agents/story_memory/` 负责后台吸收场景状态、人物关系、伏笔、事实与质量工单；业务保存链路只提交任务，不等待 LLM 摘要完成。
+- 工具门面：Scriptwriter 聊天与导演委派只通过 `server/agents/tools/registry.py` 暴露工具。
+- 格式规范：`ScriptwriterAgent._get_tool_prompt_references()` 把 `.arc`/小说生成规范挂到落盘工具，避免 `pipeline_system` 重复维护格式。
+- 缓存布局：固定系统头 + 动态尾部 + 专有预算器，动态材料优先放最后 user message 或业务 user prompt。
+
+运行时护栏：
+
+- 导演委派 Scriptwriter 时，若模型只输出正文草稿但没有调用 `create_or_rewrite_script` / `patch_script` 落盘，该轮会被判定为“未完成落盘”，强制回导演复核，不会把草稿当成已完成章节。
+- 连续自动写作必须进入全局 Auto-Write 遮罩；遮罩层级低于顶部项目栏、高于聊天面板，避免聊天面板继续抢焦点。
+- Critic 是可选质量增强，不是默认写作链路。自动写作的 `auto_review` 默认关闭；手动设置面板勾选或 Director 明确传参才会在每场保存后生成质量工单。
+- 连续自动写作采用“零等待记忆”策略：上一场保存后立即把上一场完整正文作为下一场硬上下文，同时后台吸收上一场 StoryMemory；因此下一场连续性不依赖记忆摘要先完成。
+
 ---
 
 ## 4. 流式基础设施层
@@ -529,3 +563,4 @@ graph TB
 2. **元数据提取**：提取 `@guide`, `@intro` 等元数据。
 3. **思维链过滤**：自动移除 `<conception>` 标签内容，保留纯净剧本。
 4. **混合解析**：使用正则表达式处理对话行 (`[ID]`)，同时使用自定义标签解析器（基于深度追踪的标签匹配）处理 `<choice>` 分支结构，并识别 `@act` 行为指令与 `@next` 跳转逻辑，确保逻辑树的准确性。
+

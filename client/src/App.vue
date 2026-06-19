@@ -250,6 +250,11 @@ onMounted(() => {
   };
   bus.on('auth-session-expired', onSessionExpired);
 
+  const onDirectorAutoWriteStarted = () => {
+    void loadDirectorOverlayModule();
+  };
+  bus.on('director-auto-write-started', onDirectorAutoWriteStarted);
+
   // 初始检查 (如果已登录)
   runPostLoginGuards();
   
@@ -257,6 +262,7 @@ onMounted(() => {
     mediaQuery.removeEventListener('change', updateTheme);
     bus.off('login-success', runPostLoginGuards);
     bus.off('auth-session-expired', onSessionExpired);
+    bus.off('director-auto-write-started', onDirectorAutoWriteStarted);
   });
 });
 
@@ -307,7 +313,10 @@ function stopOnboarding() {
 async function runPostLoginGuards() {
   resetPostLoginReady();
   stopOnboarding();
-  if (isLocalTauriShell.value) return;
+  if (isLocalTauriShell.value) {
+    await loadDirectorOverlayModule();
+    return;
+  }
   // 未登录时不应触发任何登录后逻辑（包括 onboarding）
   if (!getSessionToken()) return;
   const tosStatus = await checkTosStatus();
@@ -318,8 +327,8 @@ async function runPostLoginGuards() {
     // 需要接受条款时，不触发 post-login-ready，等用户同意后在 handleTosAccepted 中触发
     return;
   }
-  await checkSystemConfig();
   await loadDirectorOverlayModule();
+  await checkSystemConfig();
   await loadOnboardingModule();
   primeAppFontCacheInBackground();
   // 所有登录后检查完成，通知子组件可以安全触发 onboarding

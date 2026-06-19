@@ -313,10 +313,12 @@ def collect_project_files(
     # stories/ 目录
     stories_dir = get_project_stories_path(user_id, project_name)
     if os.path.isdir(stories_dir):
-        # 按文件名排序保证章节顺序
-        for name in sorted(os.listdir(stories_dir)):
-            if name.endswith((".arc", ".md")):
-                candidate_files.append(os.path.join(stories_dir, name))
+        # 按目录与文件名排序保证章节 / 场景顺序；支持“章节文件夹 > 场景文件”的作品管理器结构。
+        for root, dirs, files in os.walk(stories_dir):
+            dirs.sort()
+            for name in sorted(files):
+                if name.endswith((".arc", ".md")):
+                    candidate_files.append(os.path.join(root, name))
 
     # 读取文件内容并分类
     results: list[ProjectFile] = []

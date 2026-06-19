@@ -86,6 +86,7 @@ def default_auto_write_state() -> Dict[str, Any]:
         "lastCompletedChapterTitle": "",
         "nextChapterIndex": 0,
         "availableResumeChapterIndex": None,
+        "availableResumeSceneIndex": None,
         "availableRestartChapterIndex": None,
         "lastSavedFilename": "",
         "generatedFiles": [],         # 保留兼容（章节级）
@@ -100,6 +101,14 @@ def default_auto_write_state() -> Dict[str, Any]:
         "streamingSpeed": 0,
         "streamingChars": 0,
         "streamingElapsed": 0,
+        # 自动写作后的轻量质量回流信息；不阻断写作，只为后续修订与排查提供状态。
+        "autoReviewEnabled": False,
+        "fromDirector": False,
+        "lastReviewDecision": "",
+        "lastReviewGrade": "",
+        "lastReviewTarget": "",
+        "lastReviewTicketCount": 0,
+        "lastReviewError": "",
         # 用户是否已确认该状态（关闭遮罩 / 手动中断后标记为 True，下次不再弹出）
         "acknowledged": False,
     }
@@ -150,6 +159,7 @@ def begin_auto_write_run(
     start_scene_index: int = 0,
     total_chapters: int = 0,
     total_scenes: int = 0,
+    from_director: bool = False,
 ) -> Dict[str, Any]:
     run_id = str(uuid.uuid4())
     return save_auto_write_state(
@@ -164,6 +174,7 @@ def begin_auto_write_run(
             "requestedStartSceneIndex": start_scene_index,
             "totalChapters": total_chapters,
             "totalScenes": total_scenes,
+            "fromDirector": from_director,
             "currentChapterIndex": None,
             "currentChapterTitle": "",
             "currentSceneIndex": None,
@@ -172,10 +183,16 @@ def begin_auto_write_run(
             "lastCompletedChapterTitle": "",
             "nextChapterIndex": start_chapter_index,
             "availableResumeChapterIndex": start_chapter_index,
+            "availableResumeSceneIndex": start_scene_index,
             "availableRestartChapterIndex": start_chapter_index,
             "lastSavedFilename": "",
             "generatedFiles": [],
             "lastError": "",
+            "lastReviewDecision": "",
+            "lastReviewGrade": "",
+            "lastReviewTarget": "",
+            "lastReviewTicketCount": 0,
+            "lastReviewError": "",
             "startedAt": _utc_now_iso(),
             "completedAt": "",
             "acknowledged": False,

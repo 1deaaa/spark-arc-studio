@@ -256,6 +256,16 @@ YAML 顶层 `tool_rules` 字段用于存放 Agent 在聊天/委派模式下的�
 | muse | （无额外工具规则） | N/A |
 | director | （动态团队概览，保留 Python 重写） | ❌ 保留 |
 
+### 4.5.4 Scriptwriter 写作链路与 Critic 默认边界
+
+Scriptwriter 有五类入口：导演委派、用户聊天微改、用户手动生产流、连续自动写作、用户手动保存故事文件。贡献者修改任一入口时必须同步确认这些边界：
+
+1. 导演委派 Scriptwriter 时，正文必须通过 `create_or_rewrite_script` 或 `patch_script` 落盘；如果只输出草稿正文，运行态必须判定为未完成，不得向导演或用户宣称章节已完成。
+2. 连续自动写作必须走 Auto-Write 后台任务与全局遮罩，不得把正文流塞进聊天面板作为主展示。
+3. StoryMemory 是保存后的轻量状态层；生产流、自动写作、工具落盘、手动保存故事文件都可以回写 StoryMemory，但不应因此新增用户心智负担。
+4. Critic 是可选质量增强。自动写作的 `auto_review` 默认必须关闭；只有用户在手动设置中显式开启，或导演工具收到用户明确“边写边审 / 自动审稿”意图并传入 `auto_review=true`，才允许每场保存后调用 Critic 生成质量工单。
+5. 用户手动保存 `.arc/.md` 只允许回写 StoryMemory，不得隐式启动 Critic 或重写正文。
+
 ### 4.6 新增 Agent 的三模态自检清单
 
 新增 Agent 时，以下所有项必须同时满足：
@@ -423,7 +433,18 @@ YAML 顶层 `tool_rules` 字段用于存放 Agent 在聊天/委派模式下的�
   - `test_chat_stream_contracts.py`：ChatTaskEntry / accumulator / observer / retry 契约。
   - `test_streaming_bridge_contracts.py`：同步生成器到异步流桥接、业务语义帧。
   - `test_common_infrastructure_contracts.py`：`_apply_patch`、`TokenTextSplitter`、迁移路径规格。
-- 说明：`server/test/architecture/` 只放长期契约与基础建筑护栏测试；如果是普通业务回归、页面/接口功能回归或一次性 bug 回归，不要默认塞进这个目录。
+  - `test_matchbox_startup_contracts.py`：火柴 Agent 网关启动期懒加载契约。
+  - `test_mcp_control_contracts.py`：MCP 控制面与请求上下文注入契约。
+  - `test_prompt_preferences_contracts.py`：用户提示词偏好存储与注入边界契约。
+  - `test_skill_packs_contracts.py`：AgentSkills 质量视图与运行时工作流隔离契约。
+  - `test_specialized_context_budget_contracts.py`：专有工作模式稳定 system 前缀与动态 user 预算契约。
+- 其他后端业务/功能回归目录：
+  - `server/test/director/`：导演调度、委派边界、自动写作触发等业务护栏。
+  - `server/test/graphrag/`：知识图谱、语义分块、项目文件收集等检索能力回归。
+  - `server/test/story_context/`：大纲场景契约、生产上下文包、Scriptwriter 交接上下文。
+  - `server/test/story_memory/`：StoryMemory 状态吸收、任务包、显式吸收接口、自动写作记忆回写。
+  - `server/test/style/`：文风档案格式化、风格注入、风格相关生成路径。
+- 说明：`server/test/architecture/` 只放长期契约与基础建筑护栏测试；如果是普通业务回归、页面/接口功能回归或一次性 bug 回归，不要默认塞进这个目录。测试名称里已经出现明确业务对象（如 StoryMemory、GraphRAG、风格、导演委派）时，优先放入对应业务目录，除非它真的在守护全局基础协议。
 - 前端：
   - `client/src/utils/__tests__/streamingRuntime.architecture.spec.ts`
   - `client/src/components/stores/chat/__tests__/toolUi.architecture.spec.ts`

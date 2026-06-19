@@ -88,6 +88,14 @@ def _ensure_graph_agent_registered(agent_id: str, user_id: str, project_name: st
     return agent
 
 
+def _is_scriptwriter_persist_tool(tool_name: str) -> bool:
+    """判断 Scriptwriter 是否真的执行了正文落盘类工具。"""
+    return normalize_tool_name(tool_name) in {
+        "create_or_rewrite_script",
+        "patch_script",
+    }
+
+
 # ==================== 导演节点 ====================
 
 def director_node(state: DirectorState) -> Dict[str, Any]:
@@ -539,6 +547,23 @@ def sub_agent_node(state: DirectorState) -> Dict[str, Any]:
         target_agent,
         extra_context=inherited_active_context,
     )
+    handoff_context = ""
+    if target_agent == "agent_scriptwriter" and project_name:
+        try:
+            from agents.routes.context_builder import build_scriptwriter_handoff_context
+
+            handoff_context = build_scriptwriter_handoff_context(
+                user_id,
+                project_name,
+                task_description=task_description,
+                chapter_name=str(delegate.get("chapter_name") or ""),
+                scene_name=str(delegate.get("scene_name") or ""),
+                scene_file_path=str(delegate.get("scene_file_path") or ""),
+                scene_guidance=str(delegate.get("scene_guidance") or ""),
+                scene_characters=delegate.get("scene_characters") or [],
+            )
+        except Exception as e:
+            print(f"[DirectorGraph] Scriptwriter 委派交接包构建失败（已降级）：{e}")
     collaboration_context = [
         "### 协作任务元信息",
         f"- delegated_by: {delegate.get('delegated_by') or 'agent_director'}",
@@ -547,7 +572,7 @@ def sub_agent_node(state: DirectorState) -> Dict[str, Any]:
         f"- user_confirmation_state: {user_confirmation_state or 'needs_confirmation'}",
         f"- skip_tool_confirmation: {'true' if skip_tool_confirmation else 'false'}",
     ]
-    merged_active_context = "\n\n".join([part for part in [active_context, "\n".join(collaboration_context)] if part])
+    merged_active_context = "\n\n".join([part for part in [active_context, handoff_context, "\n".join(collaboration_context)] if part])
     sub_agent = _ensure_graph_agent_registered(target_agent, user_id, project_name)
     if hasattr(sub_agent, "signals") and not sub_agent.signals.is_beacon_open:
         return {"sub_agent_result": f"Delegation failed: target agent {target_agent} beacon is not open"}
@@ -558,6 +583,8 @@ def sub_agent_node(state: DirectorState) -> Dict[str, Any]:
     event_sink = queue.Queue()
     set_tool_event_sink(event_sink)
     cancelled = False
+    suppress_scriptwriter_draft = target_agent == "agent_scriptwriter" and skip_tool_confirmation
+    scriptwriter_saved = False
     
     try:
         # NOTE: 此处不使用 yield，而是将生成内容全部截留后向 writer 推送同时汇聚 buf，
@@ -581,6 +608,10 @@ def sub_agent_node(state: DirectorState) -> Dict[str, Any]:
                     cancelled = True
                     break
                 evt = event_sink.get_nowait()
+                if isinstance(evt, dict) and _is_scriptwriter_persist_tool(str(evt.get("tool_name") or "")):
+                    event_name = str(evt.get("event") or "")
+                    if event_name == "tool_exec_finished":
+                        scriptwriter_saved = True
                 if writer:
                     tagged_evt = {**evt, "source_agent": target_agent, "nested": True}
                     writer(tagged_evt)
@@ -591,14 +622,25 @@ def sub_agent_node(state: DirectorState) -> Dict[str, Any]:
             if isinstance(delta, dict):
                 event_type = delta.get("event", "")
                 tagged_delta = {**delta, "source_agent": target_agent, "nested": True}
-                if writer: writer(tagged_delta)
+                tool_name = str(delta.get("tool_name") or "")
+                if _is_scriptwriter_persist_tool(tool_name) and event_type == "tool_exec_finished":
+                    scriptwriter_saved = True
+
+                if writer and not (
+                    suppress_scriptwriter_draft
+                    and event_type == "assistant_delta"
+                    and not scriptwriter_saved
+                ):
+                    writer(tagged_delta)
                 
                 if event_type == "assistant_delta":
-                    buf.append(delta.get("text", ""))
+                    if not (suppress_scriptwriter_draft and not scriptwriter_saved):
+                        buf.append(delta.get("text", ""))
             elif isinstance(delta, str):
-                if writer: writer({"event": "assistant_delta", "text": delta,
-                                   "source_agent": target_agent, "nested": True})
-                buf.append(delta)
+                if not suppress_scriptwriter_draft or scriptwriter_saved:
+                    if writer: writer({"event": "assistant_delta", "text": delta,
+                                       "source_agent": target_agent, "nested": True})
+                    buf.append(delta)
 
             if is_stop_event_set(stop_event):
                 cancelled = True
@@ -610,6 +652,10 @@ def sub_agent_node(state: DirectorState) -> Dict[str, Any]:
                 cancelled = True
                 break
             evt = event_sink.get_nowait()
+            if isinstance(evt, dict) and _is_scriptwriter_persist_tool(str(evt.get("tool_name") or "")):
+                event_name = str(evt.get("event") or "")
+                if event_name == "tool_exec_finished":
+                    scriptwriter_saved = True
             if writer:
                 tagged_evt = {**evt, "source_agent": target_agent, "nested": True}
                 writer(tagged_evt)
@@ -631,11 +677,21 @@ def sub_agent_node(state: DirectorState) -> Dict[str, Any]:
     
     # 清洗子 agent 收集到的正文，防止 </think> 残留正文进入导演的下一轮对话历史
     result = extract_visible_text_from_plain_text("".join(buf).strip())
+
+    if suppress_scriptwriter_draft and not scriptwriter_saved:
+        result = (
+            "Scriptwriter 未完成落盘：本轮只生成了正文草稿，但没有调用 "
+            "create_chapter / create_or_rewrite_script / patch_script 保存到项目文件。"
+            "请重新委派同一场景，并明确要求先创建章节、再调用 create_or_rewrite_script 落盘；"
+            "不要把未保存草稿视为已完成章节。"
+        )
     
     if writer:
         writer({"event": "agent_turn_finished", "source_agent": target_agent})
 
-    if completion_mode == HANDOFF_COMPLETION_REPORT_TO_USER:
+    if suppress_scriptwriter_draft and not scriptwriter_saved:
+        sub_agent_result = f"[{target_agent}] Execution failed:\n{result}"
+    elif completion_mode == HANDOFF_COMPLETION_REPORT_TO_USER:
         sub_agent_result = result
     elif completion_mode == HANDOFF_COMPLETION_SILENT_CONTINUE:
         sub_agent_result = f"[{target_agent}] Silent execution result:\n{result}"
@@ -654,7 +710,10 @@ def sub_agent_node(state: DirectorState) -> Dict[str, Any]:
         "baton_holder": target_agent,
     }
 
-    if completion_mode in {HANDOFF_COMPLETION_RETURN_TO_DIRECTOR, HANDOFF_COMPLETION_SILENT_CONTINUE}:
+    if (
+        completion_mode in {HANDOFF_COMPLETION_RETURN_TO_DIRECTOR, HANDOFF_COMPLETION_SILENT_CONTINUE}
+        or (suppress_scriptwriter_draft and not scriptwriter_saved)
+    ):
         _ensure_graph_agent_registered(return_to, user_id, project_name)
         transfer_result = transfer_baton(
             get_global_context(),
@@ -699,6 +758,12 @@ def route_after_sub_agent(state: DirectorState) -> str:
         if (delegate.get("delivery_mode") or HANDOFF_DELIVERY_DIRECT_TO_USER) == HANDOFF_DELIVERY_RETURN_TO_DIRECTOR
         else HANDOFF_COMPLETION_REPORT_TO_USER
     )
+    sub_agent_result = str(state.get("sub_agent_result") or "")
+    if (
+        delegate.get("target_agent") == "agent_scriptwriter"
+        and "未完成落盘" in sub_agent_result
+    ):
+        return "director"
     if completion_mode in {HANDOFF_COMPLETION_RETURN_TO_DIRECTOR, HANDOFF_COMPLETION_SILENT_CONTINUE}:
         return "director"
     return END

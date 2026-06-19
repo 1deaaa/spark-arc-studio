@@ -38,11 +38,12 @@ from agents.tools.showrunner import (
     rewrite_outline,
     rewrite_synopsis,
 )
+from agents.tools.story_memory import story_memory_tool
 from agents.tools.web_search import web_search
 
 MCP_ONLY_TOOLS = [capture_inspiration]
 EXTERNAL_SEARCH_TOOLS = [web_search]
-OPTIONAL_RESEARCH_TOOLS = [graph_rag_tool]
+OPTIONAL_RESEARCH_TOOLS = [story_memory_tool, graph_rag_tool]
 SHARED_SKILL_TOOLS = [search_skills, read_skill, read_skill_reference]
 MUSE_TOOLS = [
     rewrite_inspiration,

@@ -114,6 +114,17 @@ export async function saveStory(projectName: string, filename: string, data: str
   return result;
 }
 
+export async function absorbStoryMemory(projectName: string, filename: string): Promise<StoryMutationResult & { queued?: boolean }> {
+  const response = await fetchWithAuth('/api/story-memory/absorb-story', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ projectName, filename }),
+  });
+  const result = await response.json() as StoryMutationResult & { queued?: boolean };
+  if (!response.ok || result.success === false) throw new Error(result.message || '提交记忆吸收失败');
+  return result;
+}
+
 // 上传剧本文件到当前项目 stories 目录
 export async function uploadStory(projectName: string, file: File): Promise<StoryMutationResult> {
   const formData = new FormData();

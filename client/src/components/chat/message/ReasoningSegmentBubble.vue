@@ -462,6 +462,7 @@ onBeforeUnmount(() => {
 }
 
 .reasoning-content {
+  height: 100%;
   overflow: hidden;
   min-height: auto;
 }

@@ -22,6 +22,8 @@ from llm.agen_matchbox.reasoning_compat import (
     extract_visible_text_from_plain_text,
 )
 from agents.agent_utils import load_prompt, SparkAgentExecutor
+from agents.agent_style.utils import format_style_profile_for_prompt
+from agents.context_budget import prepare_specialized_prompt_messages_with_budget
 from agents.prompt_layout import build_prompt_messages
 from .communication import SparkBaseAgent
 
@@ -191,6 +193,16 @@ class ScriptwriterAgent(SparkBaseAgent, SparkAgentExecutor):
         """执行工具调用并返回结果。"""
         return super()._execute_tool_calls(tool_calls)
 
+    def _build_write_messages(self, *, system_prompt: str, user_prompt: str):
+        """构造正式写作消息，保持固定 system 头，只在超预算时裁动态 user 材料。"""
+        result = prepare_specialized_prompt_messages_with_budget(
+            agent_id=getattr(self, "agent_id", "agent_scriptwriter"),
+            system_prompt=system_prompt,
+            user_prompt=user_prompt,
+            llm_client=self.llm,
+        )
+        return result.messages
+
     def chat(self, user_message: str, history=None, active_context: str = None) -> str:
         """用于“与专家交流”的对话模式：先沟通需求，不默认进入 .arc 创作输出。"""
         text = (user_message or "").strip()
@@ -332,14 +344,7 @@ class ScriptwriterAgent(SparkBaseAgent, SparkAgentExecutor):
 
         arc_example = self._get_arc_example()
 
-        style_profile_text = "用户未提供参考风格档案。请根据故事主题、世界观氛围和角色特质，自行选择最合适的文笔风格进行创作。"
-        if style_profile is not None:
-            if isinstance(style_profile, str):
-                style_profile_text = style_profile.strip() or "用户未提供参考风格档案。请根据故事主题、世界观氛围和角色特质，自行选择最合适的文笔风格进行创作。"
-            else:
-                style_profile_text = json.dumps(
-                    style_profile, ensure_ascii=False, indent=2
-                )
+        style_profile_text = format_style_profile_for_prompt(style_profile)
 
         if segment_count is None or segment_count <= 0:
             length_instruction = (
@@ -385,20 +390,12 @@ class ScriptwriterAgent(SparkBaseAgent, SparkAgentExecutor):
             )
 
         system_prompt = prompts["system"]
-        messages = build_prompt_messages(system_prompt=system_prompt, user_prompt=prompts["user"])
+        messages = self._build_write_messages(system_prompt=system_prompt, user_prompt=prompts["user"])
 
         try:
-            full_content = ""
-            parser = PrefixReasoningStreamParser()
-            for chunk in self.llm.stream(messages):
-                content = getattr(chunk, "content", "")
-                if content:
-                    _, visible = parser.push(content)
-                    if visible:
-                        full_content += visible
-            _, trailing_visible = parser.flush()
-            if trailing_visible:
-                full_content += trailing_visible
+            response = self.llm.invoke(messages)
+            raw_content = response.content if isinstance(response.content, str) else str(response.content)
+            full_content = extract_visible_text_from_plain_text(raw_content)
 
             thought = ""
             thought_match = re.search(
@@ -449,14 +446,7 @@ class ScriptwriterAgent(SparkBaseAgent, SparkAgentExecutor):
 
         arc_example = self._get_arc_example()
 
-        style_profile_text = "用户未提供参考风格档案。请根据故事主题、世界观氛围和角色特质，自行选择最合适的文笔风格进行创作。"
-        if style_profile is not None:
-            if isinstance(style_profile, str):
-                style_profile_text = style_profile.strip() or "用户未提供参考风格档案。请根据故事主题、世界观氛围和角色特质，自行选择最合适的文笔风格进行创作。"
-            else:
-                style_profile_text = json.dumps(
-                    style_profile, ensure_ascii=False, indent=2
-                )
+        style_profile_text = format_style_profile_for_prompt(style_profile)
 
         if segment_count is None or segment_count <= 0:
             length_instruction = (
@@ -502,7 +492,7 @@ class ScriptwriterAgent(SparkBaseAgent, SparkAgentExecutor):
             )
 
         system_prompt = prompts["system"]
-        messages = build_prompt_messages(system_prompt=system_prompt, user_prompt=prompts["user"])
+        messages = self._build_write_messages(system_prompt=system_prompt, user_prompt=prompts["user"])
 
         full_content = ""
         parser = PrefixReasoningStreamParser()
@@ -683,14 +673,10 @@ class ScriptwriterAgent(SparkBaseAgent, SparkAgentExecutor):
                 )
             char_info = "\n".join(char_lines)
 
-        style_profile_text = ""
-        if style_profile is not None:
-            if isinstance(style_profile, str):
-                style_profile_text = style_profile
-            else:
-                style_profile_text = json.dumps(
-                    style_profile, ensure_ascii=False, indent=2
-                )
+        style_profile_text = format_style_profile_for_prompt(
+            style_profile,
+            fallback="（未提供）",
+        )
 
         prompts = load_prompt(
             "scriptwriter",
@@ -753,14 +739,10 @@ class ScriptwriterAgent(SparkBaseAgent, SparkAgentExecutor):
                 )
             char_info = "\n".join(char_lines)
 
-        style_profile_text = ""
-        if style_profile is not None:
-            if isinstance(style_profile, str):
-                style_profile_text = style_profile
-            else:
-                style_profile_text = json.dumps(
-                    style_profile, ensure_ascii=False, indent=2
-                )
+        style_profile_text = format_style_profile_for_prompt(
+            style_profile,
+            fallback="（未提供）",
+        )
 
         prompts = load_prompt(
             "scriptwriter",

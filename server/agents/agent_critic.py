@@ -9,7 +9,8 @@ from typing import Any, Dict, List, Optional
 from llm.agen_matchbox import matchbox
 from llm.agen_matchbox.reasoning_compat import extract_visible_text_from_plain_text
 from agents.agent_utils import load_prompt
-from agents.prompt_layout import build_prompt_messages
+from agents.agent_style.utils import format_style_profile_for_prompt
+from agents.context_budget import prepare_specialized_prompt_messages_with_budget
 from .communication import SparkBaseAgent
 
 
@@ -20,11 +21,10 @@ class CriticAgent(SparkBaseAgent):
         self.llm = matchbox().get_user_llm(str(user_id), agent_name="agent_critic")
 
     def _stringify_style_profile(self, style_profile: object = None) -> str:
-        if style_profile is None:
-            return "用户未提供参考风格档案。请根据剧本内容和主题，自行判断最合适的文笔风格作为审稿参照。"
-        if isinstance(style_profile, str):
-            return style_profile
-        return json.dumps(style_profile, ensure_ascii=False, indent=2)
+        return format_style_profile_for_prompt(
+            style_profile,
+            fallback="用户未提供参考风格档案。请根据剧本内容和主题，自行判断最合适的文笔风格作为审稿参照。",
+        )
 
     def _serialize_review_target(
         self,
@@ -195,7 +195,12 @@ class CriticAgent(SparkBaseAgent):
         }
 
     def _invoke_prompt_json(self, prompts: Dict[str, Any]) -> Dict[str, Any]:
-        messages = build_prompt_messages(system_prompt=prompts["system"], user_prompt=prompts["user"])
+        messages = prepare_specialized_prompt_messages_with_budget(
+            agent_id=getattr(self, "agent_id", "agent_critic"),
+            system_prompt=prompts["system"],
+            user_prompt=prompts["user"],
+            llm_client=self.llm,
+        ).messages
 
         response = self.llm.invoke(messages)
         raw_content = response.content if isinstance(response.content, str) else str(response.content)

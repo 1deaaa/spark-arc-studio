@@ -13,7 +13,7 @@ from core.utils import (
     get_project_stories_path,
     get_project_path,
 )
-from story.arc_parser import serialize_to_arc
+from story.arc_parser import serialize_to_arc
 from story.file_naming import (
     build_display_story_path,
     build_story_filename,
@@ -60,7 +60,30 @@ def _batch_story_renames(rename_pairs: list[tuple[str, str]]) -> None:
     for src, dst in prepared:
         os.rename(staged[src], dst)
 
-class FileOperation(BaseModel):
+def _record_story_memory_after_story_save(
+    *,
+    user_id: str,
+    project_name: str,
+    stories_path: str,
+    file_path: str,
+    content: str,
+    file_format: str,
+) -> Any:
+    """显式手动吸收入口：普通保存接口默认不调用。"""
+    from agents.story_memory import enqueue_story_content_memory_write
+
+    return enqueue_story_content_memory_write(
+        user_id=user_id,
+        project_name=project_name,
+        stories_path=stories_path,
+        file_path=file_path,
+        content=content,
+        file_format=file_format,
+        label="手动保存显式吸收",
+    )
+
+
+class FileOperation(BaseModel):
     projectName: str
     path: str
     type: Optional[str] = None
@@ -69,14 +92,18 @@ class FileOperation(BaseModel):
     oldPath: Optional[str] = None
     newPath: Optional[str] = None
 
-class StoryData(BaseModel):
-    projectName: str
-    filename: str
-    data: Any
-
-class SaveOrder(BaseModel):
-    projectName: str
-    dirPath: str = ""
+class StoryData(BaseModel):
+    projectName: str
+    filename: str
+    data: Any
+
+class StoryMemoryAbsorbData(BaseModel):
+    projectName: str
+    filename: str
+
+class SaveOrder(BaseModel):
+    projectName: str
+    dirPath: str = ""
     order: List[str]
 
 class ExportRequest(BaseModel):
@@ -239,7 +266,7 @@ async def get_file_content(project_name: str, path: str, user: Optional[dict] = 
 
 
 @files_router.post('/api/save-story')
-async def save_story(data: StoryData, user: dict = Depends(get_current_user)):
+async def save_story(data: StoryData, user: dict = Depends(get_current_user)):
     """保存 stories 目录下的故事文件，兼容 .arc 与 .md。"""
     try:
         user_id = str(user['user_id'])
@@ -294,13 +321,52 @@ async def save_story(data: StoryData, user: dict = Depends(get_current_user)):
         with open(file_path, 'w', encoding='utf-8') as f:
             f.write(content)
 
-        return {"success": True, "message": "保存成功"}
-    except Exception as exc:
-        return JSONResponse(status_code=500, content={"success": False, "message": f"保存失败: {exc}"})
-
-
-@files_router.post('/api/file-operations/create')
-async def create_file_or_folder(data: FileOperation, user: dict = Depends(get_current_user)):
+        return {"success": True, "message": "保存成功"}
+    except Exception as exc:
+        return JSONResponse(status_code=500, content={"success": False, "message": f"保存失败: {exc}"})
+
+
+@files_router.post('/api/story-memory/absorb-story')
+async def absorb_story_memory(data: StoryMemoryAbsorbData, user: dict = Depends(get_current_user)):
+    """显式把指定故事文件提交到 StoryMemory 后台吸收队列。"""
+    try:
+        user_id = str(user['user_id'])
+        project_name = normalize_project_name(data.projectName)
+        filename = str(data.filename or '').replace('\\', '/').strip('/')
+
+        if not project_name:
+            return JSONResponse(status_code=400, content={"success": False, "message": "缺少项目名称"})
+        if not filename:
+            return JSONResponse(status_code=400, content={"success": False, "message": "文件名不能为空"})
+
+        stories_path = ensure_project_stories_directory(user_id, project_name)
+        file_path, file_format = _resolve_story_file_path(stories_path, filename)
+        if not file_path or not file_format:
+            return JSONResponse(status_code=404, content={"success": False, "message": "文件不存在"})
+
+        with open(file_path, 'r', encoding='utf-8') as f:
+            content = f.read()
+
+        future = _record_story_memory_after_story_save(
+            user_id=user_id,
+            project_name=project_name,
+            stories_path=stories_path,
+            file_path=file_path,
+            content=content,
+            file_format=file_format,
+        )
+
+        return {
+            "success": True,
+            "queued": future is not None,
+            "message": "已提交记忆吸收任务",
+        }
+    except Exception as exc:
+        return JSONResponse(status_code=500, content={"success": False, "message": f"提交记忆吸收失败: {exc}"})
+
+
+@files_router.post('/api/file-operations/create')
+async def create_file_or_folder(data: FileOperation, user: dict = Depends(get_current_user)):
     """创建文件或文件夹"""
     try:
         user_id = str(user['user_id'])

@@ -85,8 +85,83 @@
 | **5. 质量保证**  | Script Doctor / Coverage  | **逻辑审核 & 文风克隆** | 逻辑审核负责模拟苛刻的审稿人提供冲突或逻辑漏洞的专业反馈；文风克隆负责通过目标文风约束消除 AI 味高频词。GraphRAG 事实约束工具已生产化，可按需灰度启用以增强跨章节一致性。 |
 | **6. 发布/演出**      | Implementation / Assets   | **浏览器演出/Unity SDK**                  | 剧本资产化。编译剧本为高性能运行时，驱动游戏内的对话系统、演出调度与任务触发。                                 |
 
+## 普通用户创作工作流图
+
+你可以把引火AI当成一个“可自动驾驶，也随时允许你接管方向盘”的创作台。日常使用时，你只需要在几种入口之间选择：把任务交给导演、启动自动写作、让 AI 帮你补当前场景，或完全自己手写。系统会在不打断你的情况下整理作品记忆；如果是你手动改过的内容，也可以自己决定要不要让 AI 记住这次改动。
+
+```mermaid
+flowchart TB
+    Start["打开项目"] --> Prepare["可选准备：把零散点子放进灵感信箱"]
+    Prepare --> Choice{"今天想怎么推进？"}
+
+    Choice --> Director["让导演统筹<br/>适合：只想说明目标"]
+    Choice --> Auto["自动写作<br/>适合：已有大纲，批量生成正文"]
+    Choice --> Assist["AI 辅助当前场景<br/>适合：卡住了，想接一段"]
+    Choice --> Manual["自己手写和编辑<br/>适合：精修对白、情绪和细节"]
+
+    subgraph DirectorFlow["路线一：导演统筹"]
+        Director --> DirectorPick{"导演帮你分配下一步"}
+        DirectorPick --> Build["补齐灵感、设定、角色或大纲"]
+        DirectorPick --> Auto
+        DirectorPick --> Assist
+        DirectorPick --> Review["审稿<br/>查看问题证据和修改建议"]
+    end
+
+    subgraph AutoFlow["路线二：自动写作"]
+        Auto --> AutoRun["按大纲逐场写作<br/>中途断开也能恢复"]
+        AutoRun --> AutoSave["自动保存每一场"]
+        AutoSave --> AutoMemory["后台整理作品记忆<br/>让后续场景记住前情"]
+        AutoSave --> AutoReview{"需要边写边审吗？"}
+        AutoReview -- "需要" --> Review
+        AutoReview -- "不需要" --> AutoNext{"还有下一场？"}
+        AutoMemory --> AutoNext
+        AutoNext -- "有" --> AutoRun
+    end
+
+    subgraph AssistFlow["路线三：AI 辅助当前场景"]
+        Assist --> Draft["AI 参考前文、大纲和作品记忆<br/>生成草稿"]
+        Draft --> Accept{"你满意吗？"}
+        Accept -- "保存采用" --> AutoSave
+        Accept -- "继续调整" --> Workbench["回到项目工作台"]
+    end
+
+    subgraph ManualFlow["路线四：自己手写和编辑"]
+        Manual --> ManualSave["普通保存<br/>只保存你的文本"]
+        ManualSave --> Remember{"要让 AI 记住这次改动吗？"}
+        Remember -- "是" --> ManualMemory["文件菜单：吸收到记忆"]
+        Remember -- "暂时不用" --> Workbench
+        ManualMemory --> Workbench
+    end
+
+    Build --> Workbench
+    Review --> Workbench
+    AutoNext -- "没有" --> Workbench
+    Workbench --> Publish{"准备给别人看了吗？"}
+    Publish -- "还要继续打磨" --> Stay["留在工作台<br/>从上面四条路线任选一种继续"]
+    Publish -- "发布、试玩或导出" --> Release["创建版本快照<br/>浏览器演出 / Unity 使用"]
+
+    classDef start fill:#f8fafc,stroke:#64748b,color:#0f172a;
+    classDef choice fill:#fff7ed,stroke:#f59e0b,color:#7c2d12;
+    classDef director fill:#eef2ff,stroke:#6366f1,color:#312e81;
+    classDef auto fill:#ecfdf5,stroke:#10b981,color:#064e3b;
+    classDef assist fill:#eff6ff,stroke:#3b82f6,color:#1e3a8a;
+    classDef manual fill:#fdf2f8,stroke:#ec4899,color:#831843;
+    classDef memory fill:#f5f3ff,stroke:#8b5cf6,color:#4c1d95;
+    classDef finish fill:#f1f5f9,stroke:#475569,color:#0f172a;
+
+    class Start,Prepare,Workbench,Stay start;
+    class Choice,DirectorPick,AutoReview,AutoNext,Accept,Remember,Publish choice;
+    class Director,Build,Review director;
+    class Auto,AutoRun,AutoSave auto;
+    class Assist,Draft assist;
+    class Manual,ManualSave,ManualMemory manual;
+    class AutoMemory memory;
+    class Release finish;
+```
+
 ## 目录
 
+* [普通用户创作工作流图](#普通用户创作工作流图)
 * [🚀 快速开始](#-快速开始)
 * [系统架构](#系统架构)
   * [1. 智能体集群](#1-智能体集群)

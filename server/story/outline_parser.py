@@ -109,6 +109,7 @@ def parse_outline_markup(text: str) -> Dict[str, Any]:
                 "characters": [],
                 "mood": "",
                 "tension": "",
+                "beat_refs": [],
                 "key_dialogues": []
             }
             current_chapter["children"].append(current_scene)
@@ -124,7 +125,7 @@ def parse_outline_markup(text: str) -> Dict[str, Any]:
                 part = part.strip()
                 if ':' in part or '：' in part:
                     # 分割键值对，最多切1次
-                    kv = re.split(r':|：', part, 1)
+                    kv = re.split(r':|：', part, maxsplit=1)
                     if len(kv) == 2:
                         k = kv[0].strip()
                         v = kv[1].strip()
@@ -132,6 +133,12 @@ def parse_outline_markup(text: str) -> Dict[str, Any]:
                             current_scene['mood'] = v
                         elif '张力' in k or 'tension' in k.lower():
                             current_scene['tension'] = v
+                        elif '节拍' in k or 'beat' in k.lower():
+                            current_scene['beat_refs'] = [
+                                item.strip()
+                                for item in re.split(r'[,，、;；\s]+', v)
+                                if item.strip()
+                            ]
                         elif '出场' in k or '登场' in k or '人物' in k or '角色' in k or 'characters' in k.lower():
                             # 切分人物列表
                             chars = [c.strip() for c in re.split(r'[,，、]', v) if c.strip()]
@@ -238,7 +245,7 @@ def parse_beat_sheet_markup(text: str) -> Dict[str, Any]:
             parts = meta_str.split('|')
             for part in parts:
                 if ':' in part or '：' in part:
-                    kv = re.split(r':|：', part, 1)
+                    kv = re.split(r':|：', part, maxsplit=1)
                     if len(kv) == 2:
                         k = kv[0].strip().lower()
                         v = kv[1].strip()
@@ -379,6 +386,12 @@ def serialize_outline_to_markup(outline: Dict[str, Any]) -> str:
             characters = scene.get('characters', [])
             if characters:
                 meta_parts.append(f"登场：{', '.join(characters)}")
+            beat_refs = scene.get('beat_refs', [])
+            if beat_refs:
+                meta_parts.append(f"对应节拍：{', '.join(str(item) for item in beat_refs)}")
+            guide = scene.get('guide', '')
+            if guide:
+                meta_parts.append(f"指引：{guide}")
             if meta_parts:
                 lines.append("> " + " | ".join(meta_parts))
 

@@ -23,7 +23,7 @@ from sqlalchemy.orm import (
 Base = declarative_base()
 
 
-DEFAULT_MAX_CONTEXT_TOKENS = 200_000
+DEFAULT_MAX_CONTEXT_TOKENS = 256_000
 DEFAULT_MAX_OUTPUT_TOKENS = 64_000
 
 

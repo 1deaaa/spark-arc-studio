@@ -17,6 +17,8 @@ def start_auto_write_background(
     start_scene_index: int,
     export_format: str,
     context_strategy: str = "accumulate",
+    auto_review: bool = False,
+    from_director: bool = True,
 ) -> threading.Thread:
     from agents.routes.auto_write import generate_script_stream
 
@@ -35,6 +37,8 @@ def start_auto_write_background(
                 start_scene_index=start_scene_index,
                 context_strategy=context_strategy,
                 export_format=export_format,
+                auto_review=auto_review,
+                from_director=from_director,
             ):
                 pass
 

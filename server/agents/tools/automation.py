@@ -18,6 +18,7 @@ class TriggerAutoWriteInput(BaseModel):
     start_scene: int = Field(default=1, description="在起始章内从第几个场景开始写作（1=该章第一个场景）。仅对起始章有效，后续章节总是从第 1 个场景开始")
     export_format: str = Field(default="arc", description="输出格式：arc=互动小说剧本格式；novel=普通小说纯文本格式")
     mode: str = Field(default="continuous_write", description="写作模式：continuous_write=连续写作全部章节（无人值守直达结束）；chapter_by_chapter=逐章写作（写完一章后暂停断开）")
+    auto_review: bool = Field(default=False, description="是否在每个场景保存后自动触发 Critic 轻量审稿，并将修订工单写入 StoryMemory。默认关闭；只有用户明确要求边写边审时才开启，且不会自动改写正文。")
 
 
 class WorkTrackerInput(BaseModel):
@@ -47,6 +48,7 @@ def trigger_auto_write(
     start_scene: int = 1,
     export_format: str = "arc",
     mode: str = "continuous_write",
+    auto_review: bool = False,
 ) -> str:
     """在后台启动自动写作任务。"""
     start_chapter_index = max(0, start_chapter - 1)
@@ -86,6 +88,8 @@ def trigger_auto_write(
         start_scene_index=start_scene_index,
         export_format=export_format,
         context_strategy="accumulate",
+        auto_review=auto_review,
+        from_director=True,
     )
 
     remaining_chapters = total_chapters - start_chapter_index
@@ -94,8 +98,10 @@ def trigger_auto_write(
         {
             "project_name": project_name,
             "start_chapter_index": start_chapter_index,
+            "start_scene_index": start_scene_index,
             "mode": mode,
             "export_format": export_format,
+            "auto_review": auto_review,
             "total_chapters": remaining_chapters,
             "total_scenes": total_scenes,
         },
@@ -109,6 +115,7 @@ def trigger_auto_write(
         f"- 从第 {start_chapter_index + 1} 章第 {start_scene_index + 1} 场景开始，共 {remaining_chapters} 章，{total_scenes} 个场景\n"
         f"- 输出格式：{export_format}\n"
         f"- 模式：{mode}\n"
+        f"- 自动审稿：{'开启' if auto_review else '关闭'}\n"
         f"写作已在后台进行，前端顶部状态条将实时显示进度，你可以在进度面板中随时中断任务。"
     )
 

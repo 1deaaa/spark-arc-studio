@@ -22,6 +22,9 @@ from story.project_files import (
 from .base import SemanticChunk, get_strategy
 
 
+SEMANTIC_CHUNKER_CACHE_VERSION = "2.1"
+
+
 class SemanticChunker:
     """项目级语义分块器（策略注册模式）"""
 
@@ -105,7 +108,7 @@ class SemanticChunker:
             self._save_cache(
                 cache_path,
                 {
-                    "version": "2.0",
+                    "version": SEMANTIC_CHUNKER_CACHE_VERSION,
                     "outline_hash": outline_hash,
                     "files": next_cache_files,
                 },
@@ -244,6 +247,8 @@ class SemanticChunker:
     def _extract_cached_files(self, cached_payload: Any) -> dict[str, dict[str, Any]]:
         """兼容新旧缓存格式，统一转换为按文件分组的缓存结构。"""
         if not isinstance(cached_payload, dict):
+            return {}
+        if cached_payload.get("version") != SEMANTIC_CHUNKER_CACHE_VERSION:
             return {}
 
         raw_files = cached_payload.get("files")

@@ -44,8 +44,8 @@ from core.utils import (
 
 from agents import ScriptwriterAgent, CriticAgent
 from agents.agent_style.utils import load_project_style_profile
+from agents.context_budget import prepare_specialized_prompt_messages_with_budget
 from agents.language_policy import prepend_prompt_language_policy
-from agents.prompt_layout import build_prompt_messages
 from core.project_settings import get_project_story_tags
 from llm.agen_matchbox import matchbox
 from llm.agen_matchbox.reasoning_compat import PrefixReasoningStreamParser
@@ -58,8 +58,11 @@ from .schemas import (
 from .context_builder import (
     build_scriptwriter_context,
     build_story_tags_hint,
+    format_outline_scene_contract,
     load_all_roles,
+    load_outline_data,
     load_project_context_bundle,
+    resolve_outline_scene_contract,
 )
 from .streaming_utils import iterate_sync_iterable_in_thread
 from .stream_semantics import (
@@ -107,7 +110,29 @@ def build_scriptwriter_context_pack(
     worldview = load_worldview(user_id, project_name)
     roles, chr_map = load_all_roles(user_id, project_name)
     full_outline = load_full_outline(user_id, project_name)
+    outline_data = load_outline_data(user_id, project_name)
     narrative_memory, _ = load_narrative_memory(user_id, project_name)
+
+    def _append_character_name(names: List[str], raw_id: Any) -> None:
+        try:
+            cid = int(raw_id)
+        except Exception:
+            return
+        name = str(chr_map.get(cid) or "").strip()
+        if name and name != "旁白" and name not in names:
+            names.append(name)
+
+    def _collect_character_ids(value: Any) -> List[Any]:
+        ids: List[Any] = []
+        if isinstance(value, dict):
+            if "chr" in value:
+                ids.append(value.get("chr"))
+            for child in value.values():
+                ids.extend(_collect_character_ids(child))
+        elif isinstance(value, list):
+            for child in value:
+                ids.extend(_collect_character_ids(child))
+        return ids
 
     # ── 构建 characters_payload（仅用于接口返回，供前端展示）────────────
     characters_payload: List[Dict[str, Any]] = [
@@ -152,6 +177,85 @@ def build_scriptwriter_context_pack(
                         + str(context).strip()
                     )
 
+    scene_characters: List[str] = []
+    for raw_id in selected_character_ids or []:
+        _append_character_name(scene_characters, raw_id)
+    if target_scene:
+        for raw_id in _collect_character_ids(target_scene):
+            _append_character_name(scene_characters, raw_id)
+
+    chapter_title = ""
+    if normalized_file_path:
+        chapter_title = os.path.basename(os.path.dirname(normalized_file_path.replace("/", os.sep)))
+    scene_description = ""
+    if isinstance(target_scene, dict):
+        scene_description = str(
+            target_scene.get("description")
+            or target_scene.get("summary")
+            or target_scene.get("guide")
+            or target_scene.get("thought")
+            or ""
+        )
+
+    outline_contract = resolve_outline_scene_contract(
+        outline_data,
+        scene_name=scene_name or "",
+        file_path=normalized_file_path,
+        chapter_title=chapter_title,
+    )
+    if outline_contract:
+        chapter_title = outline_contract.get("chapter_title") or chapter_title
+        outline_scene_description = str(outline_contract.get("scene_description") or "").strip()
+        if outline_scene_description:
+            scene_description = (
+                f"{outline_scene_description}\n{scene_description}".strip()
+                if scene_description and outline_scene_description not in scene_description
+                else outline_scene_description
+            )
+        for name in outline_contract.get("characters") or []:
+            if name and name not in scene_characters:
+                scene_characters.append(name)
+
+        contract_text = format_outline_scene_contract(outline_contract)
+        if contract_text:
+            canonical_context = (
+                f"{contract_text}\n\n{canonical_context}"
+                if canonical_context
+                else contract_text
+            )
+
+    effective_guidance = guidance or ""
+    if outline_contract and outline_contract.get("guidance"):
+        contract_guidance = str(outline_contract.get("guidance") or "").strip()
+        if contract_guidance and contract_guidance not in effective_guidance:
+            effective_guidance = (
+                f"{contract_guidance}\n\n用户/当前操作补充：{effective_guidance}"
+                if effective_guidance
+                else contract_guidance
+            )
+
+    try:
+        from agents.story_memory import StoryMemoryFacade
+
+        state_pack = StoryMemoryFacade(user_id, project_name).compose_scene_task_pack(
+            chapter_title=chapter_title or "",
+            chapter_description=str((outline_contract or {}).get("chapter_description") or ""),
+            scene_title=scene_name or "",
+            scene_description=scene_description,
+            scene_characters=scene_characters,
+            guidance=effective_guidance,
+            chr_map=chr_map,
+        )
+        state_text = state_pack.get("text") or ""
+        if state_text:
+            canonical_context = (
+                f"{state_text}\n\n{canonical_context}"
+                if canonical_context
+                else state_text
+            )
+    except Exception as e:
+        print(f"[StoryMemory] 生产端场景任务包构建失败（已降级）：{e}")
+
     return {
         "project_meta": {
             "project_name": project_name,
@@ -168,18 +272,78 @@ def build_scriptwriter_context_pack(
         "story_structure": {
             "operation": operation,
             "segment_count": segment_count,
-            "guidance": guidance,
+            "guidance": effective_guidance,
+            "outline_scene_contract": outline_contract,
         },
         "local_script": local_script,
         "task_intent": {
             "operation": operation,
-            "guidance": guidance,
+            "guidance": effective_guidance,
             "last_node_text": last_node_text,
         },
+        "guidance": effective_guidance,
+        "outline_scene_contract": outline_contract,
         "context": canonical_context,
         "story_data": story_data,
         "target_scene": target_scene,
     }
+
+
+def _persist_generated_text(
+    user_id: str,
+    project_name: str,
+    current_file: str,
+    generated_text: str,
+    rewrite: bool = False,
+) -> None:
+    """ScriptWriter 小说正文落盘函数。"""
+    from story.file_naming import resolve_story_file_path
+
+    stories_path = get_project_stories_path(user_id, project_name)
+    file_path, _, _ = resolve_story_file_path(stories_path, current_file or "")
+    if not file_path:
+        normalized_file = current_file or "新场景.md"
+        if not os.path.splitext(normalized_file)[1]:
+            normalized_file += ".md"
+        file_path = os.path.join(stories_path, normalized_file)
+
+    os.makedirs(os.path.dirname(file_path), exist_ok=True)
+    new_text = (generated_text or "").strip()
+    if not new_text:
+        return
+
+    if rewrite or not os.path.exists(file_path):
+        final_text = new_text
+    else:
+        with open(file_path, "r", encoding="utf-8") as f:
+            existing = f.read().rstrip()
+        final_text = f"{existing}\n\n{new_text}" if existing else new_text
+
+    with open(file_path, "w", encoding="utf-8") as f:
+        f.write(final_text)
+
+
+def _record_story_memory_from_story_file(
+    user_id: str,
+    project_name: str,
+    current_file: str,
+    *,
+    scene_name: str = "",
+    guidance: str = "",
+    chr_map: Dict[int, str] | None = None,
+) -> None:
+    """手动创作落盘后，后台从实际文件回读并吸收故事状态。"""
+    from agents.story_memory import enqueue_story_file_memory_write
+
+    enqueue_story_file_memory_write(
+        user_id=user_id,
+        project_name=project_name,
+        current_file=current_file,
+        scene_name=scene_name,
+        guidance=guidance,
+        chr_map=chr_map,
+        label="手动生产流",
+    )
 
 
 def _clean_generated_nodes(final_nodes: List[Dict[str, Any]]) -> List[Dict[str, Any]]:
@@ -324,6 +488,17 @@ async def run_critic_review(
         review_target=review_target,
         story_tags=story_tags_hint,
     )
+    try:
+        from agents.story_memory import StoryMemoryFacade
+
+        StoryMemoryFacade(user_id, project_name).record_quality_review(
+            review=review,
+            review_target=review_target,
+            scene_name=data.sceneName or "",
+            source_path=data.filePath or "",
+        )
+    except Exception as memory_err:
+        print(f"[StoryMemory] Critic 质量记忆回写失败（不影响评审返回）：{memory_err}")
 
     return {
         "success": True,
@@ -494,11 +669,13 @@ async def scriptwriter_compose_stream(
 
             if mode == "single-node":
                 prompt = f'''我的世界观是：\n"{context_pack.get("worldview", "")}"\n\n你可能需要用到的角色设定：\n"{context_pack.get("roles", "")}"\n\n我当前的上下文是：\n"{data.context or ""}"\n\n请根据以上信息，续写一句纯文本内容，续写长度约为 {data.length} 字。'''
-                messages = build_prompt_messages(
+                chat = matchbox().get_user_llm(user_id, agent_name="agent_scriptwriter")
+                messages = prepare_specialized_prompt_messages_with_budget(
+                    agent_id="agent_scriptwriter",
                     system_prompt=prepend_prompt_language_policy("你是一个专业的剧本创作助手。你只输出纯文本的对话内容。"),
                     user_prompt=prompt,
-                )
-                chat = matchbox().get_user_llm(user_id, agent_name="agent_scriptwriter")
+                    llm_client=chat,
+                ).messages
                 parser = PrefixReasoningStreamParser()
                 async for model_chunk in iterate_sync_iterable_in_thread(
                     lambda: chat.stream(messages),
@@ -584,7 +761,7 @@ async def scriptwriter_compose_stream(
                 full_outline=context_pack.get("full_outline") or "",
                 narrative_memory=context_pack.get("narrative_memory") or "",
                 segment_count=data.segmentCount,
-                guidance=data.guidance or "",
+                guidance=context_pack.get("guidance") or data.guidance or "",
                 style_profile=style_profile,
                 chr_map=context_pack.get("chr_map") or None,
                 last_node_text=data.lastNodeText or "",
@@ -655,6 +832,14 @@ async def scriptwriter_compose_stream(
                         generated_text=full_arc_script,
                         rewrite=(operation == "rewrite_scene" or data.rewrite),
                     )
+                    _record_story_memory_from_story_file(
+                        user_id,
+                        project_name,
+                        data.filePath,
+                        scene_name=data.sceneName or "",
+                        guidance=data.guidance or "",
+                        chr_map=context_pack.get("chr_map") or None,
+                    )
                 elif data.sceneName:
                     _persist_generated_nodes(
                         user_id=user_id,
@@ -665,6 +850,14 @@ async def scriptwriter_compose_stream(
                         final_nodes=final_nodes,
                         rewrite=(operation == "rewrite_scene" or data.rewrite),
                         thought=thought,
+                    )
+                    _record_story_memory_from_story_file(
+                        user_id,
+                        project_name,
+                        data.filePath,
+                        scene_name=data.sceneName or "",
+                        guidance=data.guidance or "",
+                        chr_map=context_pack.get("chr_map") or None,
                     )
             elapsed = max(time.monotonic() - started_at, 0.001)
             final_speed = round(total_chars / elapsed, 2)

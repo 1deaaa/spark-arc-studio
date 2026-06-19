@@ -1373,7 +1373,7 @@ class AdminMixin:
                 "display_name": "GPT-4o",
                 "extra_body": {...} or None,
                 "temperature": 0.7 or None,
-                "max_context_tokens": 200000,
+                "max_context_tokens": 256000,
                 "max_output_tokens": 64000,
                 "sys_credit_input_price_per_million": 100000 or None,
                 "sys_credit_cached_input_price_per_million": 25000 or None,

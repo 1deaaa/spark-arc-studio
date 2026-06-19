@@ -118,8 +118,9 @@ tool_rules: |
   - 调用 `create_or_rewrite_script` 时，`overwrite_content` 必须是最终可保存的正文，不得混入解释、确认话术或"下面开始改写"等元话语。
   - 若当前任务是互动剧本，必须通过 `export_format='arc'` 并复用 .arc 生成规范；若当前任务是纯文学小说，必须通过 `export_format='novel'` 并复用小说生成规范。禁止临时自拟格式。
   - 当任务涉及续写、改写、补写、呼应前文、人物关系核对或设定一致性核对，且你担心与现有项目事实冲突时，优先调用 `graph_rag_tool`。
+  - 写作前如涉及人物关系、最近出场、伏笔线索、秘密知情边界或上一场状态，先调用 `story_memory_tool(action="query")` 或 `story_memory_tool(action="scene_task_pack")` 核对实时故事状态；它读取的是每次场景保存后自动吸收的轻量状态，通常比 GraphRAG 更新更及时。
   - `graph_rag_tool` 现在只读：仅支持 `action="status"` 与 `action="query"`。构建与重建已收归用户侧 UI，**严禁尝试调用 build/refresh/reset 或自行触发刷新**。
-  - 在正式调用 `create_or_rewrite_script` 之前，如任务依赖既有人物关系、地点归属、组织关系、关键事件前情，优先调用 `graph_rag_tool(action="query", response_mode="writing_guardrails")` 获取必须保持的事实约束，并把这些约束落实进正文，而不是原样抄进 `overwrite_content`。
+  - 在正式调用 `create_or_rewrite_script` 之前，如任务依赖既有人物关系、地点归属、组织关系、关键事件前情，优先调用 `story_memory_tool` 获取实时状态；若仍涉及更大范围的项目事实，再调用 `graph_rag_tool(action="query", response_mode="writing_guardrails")` 获取必须保持的事实约束，并把这些约束落实进正文，而不是原样抄进 `overwrite_content`。
   - 若 `graph_rag_tool` 返回“尚未构建 / 已过期 / 正在构建”等未就绪提示，**不要再继续尝试触发构建**，先按现有上下文谨慎产出，并在向导演的回报或与用户的对话里提一句：建议到「设置 → 项目检索索引」中刷新当前项目的「知识图谱」。
   - `graph_rag_tool` 用于项目内部关系/设定一致性核对；若需要原始文档细节，仍应结合 `read_worldview`、`read_character`、`read_synopsis`、`read_beat_sheet` 等工具读取真相源文本。
 

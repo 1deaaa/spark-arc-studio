@@ -2148,14 +2148,20 @@ export const useChatStore = defineStore('chat', {
           }
         }
         if (eventType === 'director_auto_write_started') {
+          bus.emit('director-auto-write-started', evt);
           // 懒引入：避免循环依赖（directorAutoWriteStore 也引用了 projectStore）
           import('@/components/stores/directorAutoWriteStore').then(({ useDirectorAutoWriteStore }) => {
             const dirStore = useDirectorAutoWriteStore();
+            const currentProjectStore = useProjectStore();
+            const projectName = String(evt.project_name || currentProjectStore.currentProject || '').trim();
+            if (!projectName) return;
             dirStore.onDirectorStarted({
-              project_name:        String(evt.project_name || ''),
+              project_name:        projectName,
               start_chapter_index: Number(evt.start_chapter_index ?? 0),
+              start_scene_index:   Number(evt.start_scene_index ?? 0),
               mode:                String(evt.mode || 'chapter_by_chapter'),
               export_format:       String(evt.export_format || 'arc'),
+              auto_review:         evt.auto_review === true,
               total_chapters:      Number(evt.total_chapters ?? 0),
               total_scenes:        Number(evt.total_scenes ?? 0),
             });

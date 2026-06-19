@@ -73,12 +73,22 @@ export function useChatActions(adapter: ChatActionsAdapter, options: UseChatActi
     // 智能自动下滑：用户上滚可打断，AI 新回复时恢复
     const autoScrollEnabled = ref(true);
     const SCROLL_BOTTOM_THRESHOLD = 60; // 距底部多少像素内视为"在底部"
+    let programmaticScrollUntil = 0;
     let scrollListeners: Array<{ el: HTMLElement; handler: () => void }> = [];
 
     /** 判断元素是否滚动到接近底部 */
     function isNearBottom(el: { scrollTop?: number; scrollHeight?: number; clientHeight?: number }) {
         if (el.scrollTop == null || el.scrollHeight == null || el.clientHeight == null) return true;
         return el.scrollTop + el.clientHeight >= el.scrollHeight - SCROLL_BOTTOM_THRESHOLD;
+    }
+
+    function markProgrammaticScroll() {
+        if (typeof performance === 'undefined') return;
+        programmaticScrollUntil = performance.now() + 160;
+    }
+
+    function isProgrammaticScrollActive() {
+        return typeof performance !== 'undefined' && performance.now() < programmaticScrollUntil;
     }
 
     /** 为滚动容器绑定 scroll 事件，检测用户上滚 */
@@ -90,10 +100,13 @@ export function useChatActions(adapter: ChatActionsAdapter, options: UseChatActi
             const el = resolveEl(sourceRef) as HTMLElement | undefined;
             if (!el) continue;
             const handler = () => {
-                if (!autoScrollEnabled.value) return;
-                if (!isNearBottom(el)) {
-                    autoScrollEnabled.value = false;
+                if (isProgrammaticScrollActive()) return;
+                if (isNearBottom(el)) {
+                    autoScrollEnabled.value = true;
+                    return;
                 }
+                if (!autoScrollEnabled.value) return;
+                autoScrollEnabled.value = false;
             };
             el.addEventListener('scroll', handler, { passive: true });
             scrollListeners.push({ el, handler });
@@ -129,6 +142,7 @@ export function useChatActions(adapter: ChatActionsAdapter, options: UseChatActi
     function scrollToBottom(force = false) {
         nextTick(() => {
             if (!force && !autoScrollEnabled.value) return;
+            markProgrammaticScroll();
             const desktopEl = resolveEl(listRef);
             if (desktopEl && desktopEl.scrollHeight !== undefined && desktopEl.scrollTop !== undefined) {
                 desktopEl.scrollTop = desktopEl.scrollHeight;
