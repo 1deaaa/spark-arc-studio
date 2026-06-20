@@ -124,7 +124,13 @@ def create_or_rewrite_script(
 ) -> str:
     """创建或覆盖剧本文件。"""
     from core.utils import get_project_stories_path
-    from story.file_naming import build_story_filename, next_story_order, sanitize_story_display_name
+    from story.file_naming import (
+        build_story_filename,
+        next_story_order,
+        parse_scene_identity_from_title,
+        resolve_planned_scene_file_path,
+        sanitize_story_display_name,
+    )
 
     effective_format = export_format or "arc"
 
@@ -144,9 +150,26 @@ def create_or_rewrite_script(
         relative_dir = ""
 
     display = sanitize_story_display_name(work_name.strip() if work_name and work_name.strip() else "新场景")
-    order = next_story_order(stories_path, relative_dir)
-    filename = build_story_filename(display, file_format=effective_format, order=order)
-    file_path = os.path.join(target_dir, filename)
+    chapter_num, scene_num = parse_scene_identity_from_title(display)
+    if chapter_num is not None and scene_num is not None:
+        file_path, existed, _ = resolve_planned_scene_file_path(
+            stories_path,
+            chapter_num,
+            scene_num,
+            display,
+            chapter_dir_name=chapter_name.strip() if chapter_name else "",
+            file_format=effective_format,
+        )
+        os.makedirs(os.path.dirname(file_path), exist_ok=True)
+        relative_dir = os.path.relpath(os.path.dirname(file_path), stories_path)
+        if relative_dir == ".":
+            relative_dir = ""
+        filename = os.path.basename(file_path)
+    else:
+        existed = False
+        order = next_story_order(stories_path, relative_dir)
+        filename = build_story_filename(display, file_format=effective_format, order=order)
+        file_path = os.path.join(target_dir, filename)
 
     import re as _re
 
@@ -172,7 +195,8 @@ def create_or_rewrite_script(
     )
 
     format_label = "小说" if effective_format == "novel" else "剧本"
-    return f"{format_label}已保存：{rel}"
+    action_label = "已覆盖" if existed else "已保存"
+    return f"{format_label}{action_label}：{rel}"
 
 
 @tool(args_schema=CreateChapterInput)

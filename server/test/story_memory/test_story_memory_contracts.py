@@ -46,7 +46,7 @@ def test_story_memory_records_scene_and_builds_task_pack(monkeypatch, tmp_path: 
         chr_map={1: "沈棠", 2: "林烬"},
     )
     text = pack["text"]
-    assert "当前场景任务包" in text
+    assert "当前场景事实包" in text
     assert "林烬" in text
     assert "钟楼交易" in text
     assert "档案室秘密" in text
@@ -470,8 +470,8 @@ def test_story_memory_advances_and_resolves_existing_threads(monkeypatch, tmp_pa
         scene_characters=["林烬"],
     )["text"]
     assert "档案室记录被篡改的真相" not in task_pack
-    assert "暂无命中的开放伏笔" in task_pack
-    assert "开放线索/伏笔数: 0" in facade.format_status()
+    assert "暂无命中的开放线索" in task_pack
+    assert "开放线索数: 0" in facade.format_status()
 
 
 def test_critic_receives_story_memory_read_tool() -> None:
@@ -514,7 +514,7 @@ def test_production_context_pack_injects_story_memory_quality_tickets(monkeypatc
         guidance="重写沈棠和林烬的对白。",
     )
 
-    assert "当前场景任务包" in pack["context"]
+    assert "当前场景事实包" in pack["context"]
     assert "未关闭修订工单" in pack["context"]
     assert "减少解释腔" in pack["context"]
     assert "旧钥匙已经交到林烬手里" in pack["context"]

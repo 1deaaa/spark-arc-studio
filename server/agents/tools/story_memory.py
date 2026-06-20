@@ -12,7 +12,7 @@ class StoryMemoryToolInput(BaseModel):
     """StoryMemory 只读工具入参。"""
 
     action: Literal["status", "query", "scene_task_pack"] = Field(
-        description="操作类型：status=查看已吸收的故事状态；query=按问题查询角色/关系/场景状态；scene_task_pack=生成当前场景写作状态包。"
+        description="操作类型：status=查看已吸收的故事状态；query=按问题查询角色/关系/场景事实；scene_task_pack=生成当前场景事实核对包。"
     )
     question: str | None = Field(default=None, description="query 时填写要核对的问题；scene_task_pack 时可填写当前场景目标。")
     scene_title: str | None = Field(default=None, description="scene_task_pack 时填写当前场景名。")
@@ -29,7 +29,7 @@ def story_memory_tool(
     """读取项目的实时故事记忆。
 
     本工具只读，不触发生成、不修改文件。它读取每次场景保存后自动吸收的轻量状态，
-    适合在写作前核对人物关系、最近出场、伏笔线索和相关场景摘要。
+    适合在写作前核对人物关系、最近出场、开放线索和相关场景证据；不提供剧情方案。
     """
     from agents.story_memory import StoryMemoryFacade
 
@@ -45,8 +45,7 @@ def story_memory_tool(
                 scene_characters=characters or [],
                 guidance=question or "",
             )
-            return payload.get("text") or "StoryMemory 尚未整理出可用任务包。"
+            return payload.get("text") or "StoryMemory 尚未整理出可用事实包。"
         return facade.query_text(question or "")
     except Exception as e:
         return f"StoryMemory 查询失败：{e}"
-

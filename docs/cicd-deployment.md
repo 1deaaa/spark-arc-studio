@@ -36,6 +36,7 @@
     - 自动创建四个持久化 Docker Volume（`sparkarc_data`、`sparkarc_userdata`、`sparkarc_shares`、`sparkarc_llm_config`），已存在则跳过
     - 若在 CI Secret 中配置了 `LLM_KEY`，自动写入容器的 `.env` 文件；未配置则启动后可通过前端设置
     - 若在 CI Secret / Variable 中配置了注册验证相关变量，会通过容器环境变量传入运行时
+    - 若在管理员后台保存注册验证配置，会写入持久化数据卷中的运行时 `.env`，不会随容器重建丢失
     - 原子替换：先删除旧容器，再以相同 Volume 启动新容器，数据零丢失
     - 启动阶段自动执行"受管文件同步"：将镜像中的 Git 受管文件覆盖回挂载目录，并清理已下线的旧受管文件；`*.db`、`.env` 等运行时数据不覆盖
 4. **清理**：自动执行 `docker image prune` 清理构建过程中产生的悬空镜像

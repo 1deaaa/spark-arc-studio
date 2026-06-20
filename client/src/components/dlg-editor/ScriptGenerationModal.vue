@@ -205,7 +205,7 @@ import { fetchWithAuth, resolveApiUrl } from '@/services/apiClient';
 import { useMobile } from '@/composables/useMobile';
 import GlobalLoading from '../share/GlobalLoading.vue';
 import { createStreamingTask, isAbortLikeError } from '@/utils/streamingRuntime';
-import { buildAutoWriteResumeActions, collectOverwriteTargets, describeAutoWriteState } from '@/utils/autoWriteState';
+import { buildAutoWriteResumeActions, collectOverwriteTargets, collectSceneOverwriteTargets, describeAutoWriteState } from '@/utils/autoWriteState';
 
 const props = defineProps({
   show: Boolean,
@@ -268,7 +268,11 @@ const resumeAlertType = computed(() => {
   if (remoteState.value?.status === 'interrupted') return 'warning';
   return 'info';
 });
-const overwriteTargets = computed(() => collectOverwriteTargets(remoteState.value?.chapterFiles || [], config.value.startChapterIndex));
+const overwriteTargets = computed(() => {
+  const endChapterIndex = config.value.mode === 'chapter_by_chapter' ? config.value.startChapterIndex : null;
+  const sceneTargets = collectSceneOverwriteTargets(remoteState.value?.sceneFiles || [], config.value.startChapterIndex, 0, endChapterIndex);
+  return sceneTargets.length ? sceneTargets : collectOverwriteTargets(remoteState.value?.chapterFiles || [], config.value.startChapterIndex);
+});
 const overwritePreviewText = computed(() => {
   const targets = overwriteTargets.value.slice(0, 3).map(item => item.filename);
   if (overwriteTargets.value.length <= 3) return targets.join('，');
@@ -333,17 +337,24 @@ async function refreshGenerationState() {
 }
 
 async function confirmOverwriteIfNeeded(startChapterIndex: number): Promise<boolean> {
-  const targets = collectOverwriteTargets(remoteState.value?.chapterFiles || [], startChapterIndex);
+  const endChapterIndex = config.value.mode === 'chapter_by_chapter' ? startChapterIndex : null;
+  const sceneTargets = collectSceneOverwriteTargets(remoteState.value?.sceneFiles || [], startChapterIndex, 0, endChapterIndex);
+  const targets = sceneTargets.length ? sceneTargets : collectOverwriteTargets(remoteState.value?.chapterFiles || [], startChapterIndex);
   if (!targets.length) {
     return true;
   }
 
   return await new Promise<boolean>((resolve) => {
     dialog.warning({
-      title: '检测到已有章节文件',
-      content: `从第 ${startChapterIndex + 1} 章开始会覆盖 ${targets.length} 个文件：${targets.slice(0, 5).map(item => item.filename).join('，')}${targets.length > 5 ? ' ...' : ''}`,
-      positiveText: '覆盖并继续',
-      negativeText: '取消',
+      title: t('components.scriptGenModal.overwriteDialogTitle'),
+      content: t('components.scriptGenModal.overwriteDialogContent', {
+        chapter: startChapterIndex + 1,
+        count: targets.length,
+        files: targets.slice(0, 5).map(item => item.filename).join('，'),
+        suffix: targets.length > 5 ? ' ...' : '',
+      }),
+      positiveText: t('components.scriptGenModal.overwriteDialogConfirm'),
+      negativeText: t('common.cancel'),
       onPositiveClick: () => resolve(true),
       onNegativeClick: () => resolve(false),
       onClose: () => resolve(false),

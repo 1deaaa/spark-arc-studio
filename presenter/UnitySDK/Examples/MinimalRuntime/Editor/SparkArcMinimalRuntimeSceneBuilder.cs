@@ -20,11 +20,13 @@ namespace SparkArc.Unity.EditorTools
         private const string ScenePath = "Assets/Scenes/SparkArcMinimalRuntime.unity";
         private const string ExampleRoot = "Assets/SparkArc/Examples/MinimalRuntime";
         private const string CharacterDbPath = ExampleRoot + "/SparkArcDemoCharacters.asset";
+        private const string DemoDbPath = "Assets/StreamingAssets/stories.db";
 
         [MenuItem("SparkArc/Demo/Rebuild Minimal Runtime Scene")]
         public static void Rebuild()
         {
             EnsureFolders();
+            EnsureDemoDatabase();
 
             var scene = EditorSceneManager.NewScene(NewSceneSetup.EmptyScene, NewSceneMode.Single);
             scene.name = "SparkArcMinimalRuntime";
@@ -52,6 +54,15 @@ namespace SparkArc.Unity.EditorTools
             Debug.Log("SparkArc: 最小 Unity 运行时接入示例场景已生成。打开 Assets/Scenes/SparkArcMinimalRuntime.unity 后点击 Play，靠近 NPC 按 F。");
         }
 
+        [MenuItem("SparkArc/Demo/Create Demo Story DB")]
+        public static void CreateDemoStoryDb()
+        {
+            EnsureFolders();
+            EnsureDemoDatabase(true);
+            AssetDatabase.Refresh();
+            Debug.Log($"SparkArc: 示例 stories.db 已生成: {DemoDbPath}");
+        }
+
         [MenuItem("SparkArc/Demo/Run Runtime Smoke Probe")]
         public static void RunRuntimeSmokeProbe()
         {
@@ -71,6 +82,10 @@ namespace SparkArc.Unity.EditorTools
                 Debug.LogError("SparkArc Demo Smoke: 运行时组件未就绪，无法触发对话。");
                 return;
             }
+
+            var dispatched = SparkArcActionDispatcher.Instance != null
+                && SparkArcActionDispatcher.Instance.Dispatch("bgm", new[] { "town_theme" });
+            Debug.Log($"SparkArc Demo Smoke: actionDispatched={dispatched}");
 
             DialogueManager.Instance.StartScene(sceneName);
 
@@ -99,6 +114,60 @@ namespace SparkArc.Unity.EditorTools
                 EnsureFolder(parent);
             }
             AssetDatabase.CreateFolder(parent ?? "Assets", name);
+        }
+
+        private static void EnsureDemoDatabase(bool overwrite = false)
+        {
+            var fullPath = Path.GetFullPath(DemoDbPath);
+            if (!overwrite && File.Exists(fullPath)) return;
+
+            var directory = Path.GetDirectoryName(fullPath);
+            if (!string.IsNullOrEmpty(directory))
+            {
+                Directory.CreateDirectory(directory);
+            }
+
+            if (File.Exists(fullPath))
+            {
+                File.Delete(fullPath);
+            }
+
+            using (var connection = new Mono.Data.Sqlite.SqliteConnection($"Data Source={fullPath};Version=3;"))
+            {
+                connection.Open();
+                ExecuteSql(connection, "CREATE TABLE stories (id INTEGER PRIMARY KEY AUTOINCREMENT, chapter INTEGER NOT NULL, scene_name TEXT NOT NULL, button_text TEXT, progress REAL NOT NULL DEFAULT 0, guide TEXT NOT NULL, conditions TEXT, effects TEXT, trigger_event TEXT, priority INTEGER NOT NULL DEFAULT 0, once_key TEXT, intro TEXT, dlg_json TEXT NOT NULL, hiden INTEGER)");
+                ExecuteSql(connection, "CREATE TABLE characters (id INTEGER PRIMARY KEY AUTOINCREMENT, character_id INTEGER NOT NULL, name TEXT NOT NULL, description TEXT, content TEXT, avatar_path TEXT)");
+                ExecuteSql(connection, "CREATE TABLE binding_act (id INTEGER PRIMARY KEY AUTOINCREMENT, act_type TEXT, act_name TEXT NOT NULL, func_name TEXT NOT NULL, act_description TEXT, act_args TEXT)");
+                ExecuteSql(connection, "CREATE TABLE registry (id INTEGER PRIMARY KEY AUTOINCREMENT, name TEXT NOT NULL, value TEXT NOT NULL)");
+
+                ExecuteSql(connection, "INSERT INTO characters (character_id, name) VALUES (-1, '旁白'), (0, '旅行者'), (1, '风丘信使')");
+                ExecuteSql(connection, "INSERT INTO registry (name, value) VALUES ('player_name', '[\"旅行者\"]'), ('place', '[\"风丘\"]')");
+                ExecuteSql(connection, "INSERT INTO binding_act (act_type, act_name, func_name, act_description, act_args) VALUES ('audio', 'bgm', 'PlayBGM', '播放指定背景音乐', '{\"musicName\":[\"town_theme\",\"battle_theme\"]}'), ('world', 'weather', 'ChangeWeather', '切换天气、持续时间和地点', '{\"weatherType\":[\"sunny\",\"rainy\"],\"duration\":\"12\",\"location\":\"{place}\"}')");
+
+                var dialogues = "[{\"id\":1,\"chr\":-1,\"txt\":\"你靠近路边的信使。风从草坡上穿过，像有人轻轻翻开了一页剧情数据库。\",\"act\":{\"bgm\":\"town_theme\"}},{\"id\":2,\"chr\":1,\"txt\":\"终于等到你了，{player_name}。SparkArc 的 stories.db 已经被 Unity 读取，这段话不是写死在场景里的。\",\"act\":{\"weather\":[\"sunny\",\"12\",\"{place}\"]}},{\"id\":3,\"chr\":0,\"txt\":\"所以按钮文案、触发条件、角色名、行为绑定和对话内容都来自同一份导出库？\"},{\"id\":4,\"chr\":1,\"txt\":\"对。你刚刚按下 F，只是触发了 scene_name=windrise_first_meet 的剧情入口。\",\"opt\":[{\"optn\":\"询问下一步\",\"dia\":[{\"id\":5,\"chr\":1,\"txt\":\"下一步可以把 act 行为接到镜头、BGM、任务、战斗结算，剧情就能真正驱动游戏系统。\"}]},{\"optn\":\"结束演示\",\"dia\":[{\"id\":6,\"chr\":1,\"txt\":\"好。对话结束后，effects 会写回 StoryStateStore，证明运行时状态链路也通了。\"}]}]}]";
+                var effects = "[{\"op\":\"set\",\"key\":\"quest.demo.step\",\"value\":2},{\"op\":\"mark_played\",\"key\":\"demo.windrise_first_meet\"}]";
+                using (var command = connection.CreateCommand())
+                {
+                    command.CommandText = "INSERT INTO stories (chapter, scene_name, button_text, progress, guide, conditions, effects, trigger_event, priority, once_key, intro, dlg_json, hiden) VALUES (1, @scene, @button, 1, @guide, NULL, @effects, NULL, 0, @onceKey, @intro, @dlg, 0)";
+                    command.Parameters.AddWithValue("@scene", "windrise_first_meet");
+                    command.Parameters.AddWithValue("@button", "按 F 与信使对话");
+                    command.Parameters.AddWithValue("@guide", "验证 SparkArc story DB 驱动 Unity 对话、行为和状态写回。");
+                    command.Parameters.AddWithValue("@effects", effects);
+                    command.Parameters.AddWithValue("@onceKey", "demo.windrise_first_meet");
+                    command.Parameters.AddWithValue("@intro", "最小 Unity 运行时接入示例");
+                    command.Parameters.AddWithValue("@dlg", dialogues);
+                    command.ExecuteNonQuery();
+                }
+            }
+        }
+
+        private static void ExecuteSql(Mono.Data.Sqlite.SqliteConnection connection, string sql)
+        {
+            using (var command = connection.CreateCommand())
+            {
+                command.CommandText = sql;
+                command.ExecuteNonQuery();
+            }
         }
 
         private static DemoMaterials CreateMaterials()
@@ -183,6 +252,8 @@ namespace SparkArc.Unity.EditorTools
             manager.AddComponent<StoryStateStore>();
             manager.AddComponent<SceneConditionEvaluator>();
             manager.AddComponent<StoryEffectApplier>();
+            manager.AddComponent<SparkArcDemoActionHandler>();
+            manager.AddComponent<SparkArcActionDispatcher>();
             manager.AddComponent<SparkArcRuntimeBootstrap>();
             var ui = manager.AddComponent<DialogueUI>();
             var dialogueManager = manager.AddComponent<DialogueManager>();

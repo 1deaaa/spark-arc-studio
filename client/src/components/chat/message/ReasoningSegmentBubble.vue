@@ -462,12 +462,12 @@ onBeforeUnmount(() => {
 }
 
 .reasoning-content {
-  height: 100%;
   overflow: hidden;
   min-height: auto;
 }
 
 .reasoning-content-wrapper.is-auto-streaming .reasoning-content {
+  height: 100%;
   overflow-y: auto;
   overscroll-behavior: contain;
 }

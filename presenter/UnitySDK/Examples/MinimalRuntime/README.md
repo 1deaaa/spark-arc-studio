@@ -41,11 +41,15 @@ Windows 编辑器下，示例已验证的插件放置方式是：
 5. 在 Unity 菜单执行 `SparkArc/Demo/Rebuild Minimal Runtime Scene`。
 6. 打开 `Assets/Scenes/SparkArcMinimalRuntime.unity`，点击 Play，靠近 NPC 后按 `F`。
 
+如果你还没有 SparkArc 导出的数据库，`Rebuild Minimal Runtime Scene` 会自动生成一个演示用 `Assets/StreamingAssets/stories.db`。如果该文件已存在，菜单不会覆盖它；需要重置演示库时可执行 `SparkArc/Demo/Create Demo Story DB`。
+
+也可以执行 `SparkArc/Actions/Export Action Manifest` 导出 Unity 行为方法清单，再回到 SparkArc 前端“Unity 运行时映射”中导入该清单。
+
 ## 场景组成
 
 菜单生成的最小场景包含：
 
-- `SparkArc_Manager`：挂载 `StoryRepository`、`StoryStateStore`、`SceneConditionEvaluator`、`StoryEffectApplier`、`DialogueUI`、`DialogueManager` 与 `SparkArcRuntimeBootstrap`。
+- `SparkArc_Manager`：挂载 `StoryRepository`、`StoryStateStore`、`SceneConditionEvaluator`、`StoryEffectApplier`、`SparkArcActionDispatcher`、`SparkArcDemoActionHandler`、`DialogueUI`、`DialogueManager` 与 `SparkArcRuntimeBootstrap`。
 - `SparkArc_Canvas`：生成简易对话框、选项按钮与交互提示。
 - `Player`：挂载 `CharacterController` 与 `SparkArcFirstPersonController`。
 - `NPC_WindriseMessenger`：挂载 `DialogueTrigger`，触发 `windrise_first_meet`。
@@ -69,6 +73,18 @@ Windows 编辑器下，示例已验证的插件放置方式是：
 - `character_id`：对话节点里的 `chr`。
 - `name`：运行时显示名。
 
+`binding_act` 表用于把剧情 `act` 映射到 Unity 方法：
+
+- `act_name`：对话节点里的行为名，例如 `bgm`。
+- `func_name`：Unity 侧 `SparkArcActionHandler` 子类中的方法名，例如 `PlayBGM`。
+- `act_type`：行为分类，可为空。
+- `act_args`：参数示例和候选值。
+
+`registry` 表用于全局占位符：
+
+- `name`：变量名，例如 `place`。
+- `value`：JSON 数组，运行时默认使用第一个值替换 `{place}`。
+
 注意：SparkArc 通过 SQLAlchemy 的 JSON 类型写入 SQLite 时，`dlg_json`、`conditions`、`effects`、`registry.value` 在部分读取链路下会表现为 UTF-8 `byte[]`。Unity SDK 的 `StoryRepository.ReadText` 已兼容 `byte[]` 与普通字符串。
 
 ## 自动验证
@@ -77,5 +93,6 @@ Windows 编辑器下，示例已验证的插件放置方式是：
 
 ```text
 SparkArc Demo Smoke: sceneLoaded=True, dialogues=4, button=按 F 与信使对话
+SparkArc Demo Smoke: actionDispatched=True
 SparkArc Demo Smoke: dialogueRunning=True, current=windrise_first_meet, panelActive=True
 ```

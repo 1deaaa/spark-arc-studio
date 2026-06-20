@@ -7,9 +7,9 @@
   你必须严格遵守以下 .arc 语法规范：
   - **旁白**：使用 `[-1]` 标记，后接描述文本。
     - **对话**：使用 `[角色ID]` 标记，后接对话内容。
-    - **分支选项**：使用 `<choice>` 包裹，内部使用 `<opt text="选项文本">` 定义分支。允许
+    - **分支选项**：使用 `<choice>` 包裹，内部使用 `<opt text="选项文本">` 定义分支。
     - **思考过程**：在生成剧本正文前，必须将你的分析过程包裹在 `<conception>` 标签中，*分析过程禁止超过200字*。
-    - **标签闭合**：所有标签（<choice>, <opt>）必须严格成对闭合，严禁交叉嵌套或在同一行混合使用指令（如 @next）与闭合标签。
+    - **标签闭合**：所有标签（<choice>, <opt>）必须严格成对闭合，严禁交叉嵌套。
 """
 
 import json
@@ -25,6 +25,7 @@ from agents.agent_utils import load_prompt, SparkAgentExecutor
 from agents.agent_style.utils import format_style_profile_for_prompt
 from agents.context_budget import prepare_specialized_prompt_messages_with_budget
 from agents.prompt_layout import build_prompt_messages
+from story.arc_safety import sanitize_arc_for_ai_context
 from .communication import SparkBaseAgent
 
 
@@ -148,6 +149,34 @@ class ScriptwriterAgent(SparkBaseAgent, SparkAgentExecutor):
     # tool_rules 已迁入 scriptwriter.yaml 的 tool_rules 字段，
     # 基类 _build_tool_system_prompt 会自动加载并追加，无需再重写此方法。
 
+    @staticmethod
+    def _clean_model_visible_arc_text(text: Any) -> str:
+        """构造编剧模型可见的 ARC 干净视图，不改写用户原始文件。"""
+        return sanitize_arc_for_ai_context(str(text or ""))
+
+    def _clean_history_for_model(self, history):
+        """清理历史消息副本，避免旧工具结果把历史控制节点重新带入模型。"""
+        if not history:
+            return history
+        cleaned = []
+        for item in history:
+            if not isinstance(item, dict):
+                cleaned.append(item)
+                continue
+            copied = dict(item)
+            for key in ("content", "text"):
+                if isinstance(copied.get(key), str):
+                    copied[key] = self._clean_model_visible_arc_text(copied[key])
+            meta = copied.get("metadata")
+            if isinstance(meta, dict):
+                meta_copy = dict(meta)
+                for key in ("active_context", "activeContext"):
+                    if isinstance(meta_copy.get(key), str):
+                        meta_copy[key] = self._clean_model_visible_arc_text(meta_copy[key])
+                copied["metadata"] = meta_copy
+            cleaned.append(copied)
+        return cleaned
+
     def _get_tool_prompt_references(self) -> dict[str, list[dict]]:
         from core.request_context import get_current_export_format
         fmt = get_current_export_format()
@@ -191,7 +220,8 @@ class ScriptwriterAgent(SparkBaseAgent, SparkAgentExecutor):
 
     def _execute_tool_calls(self, tool_calls: list) -> str:
         """执行工具调用并返回结果。"""
-        return super()._execute_tool_calls(tool_calls)
+        result = super()._execute_tool_calls(tool_calls)
+        return self._clean_model_visible_arc_text(result)
 
     def _build_write_messages(self, *, system_prompt: str, user_prompt: str):
         """构造正式写作消息，保持固定 system 头，只在超预算时裁动态 user 材料。"""
@@ -208,7 +238,11 @@ class ScriptwriterAgent(SparkBaseAgent, SparkAgentExecutor):
         text = (user_message or "").strip()
         if self._is_greeting(text) and len(text) <= 12:
             return "你好，我在。你想让我帮你：续写/改写某段场景，还是一起梳理接下来怎么写？"
-        return super().chat(text, history=history, active_context=active_context)
+        return super().chat(
+            text,
+            history=self._clean_history_for_model(history),
+            active_context=self._clean_model_visible_arc_text(active_context),
+        )
 
     def chat_stream(self, user_message: str, history=None, active_context: str = None, **kwargs):
         """对话模式的流式输出。"""
@@ -218,7 +252,10 @@ class ScriptwriterAgent(SparkBaseAgent, SparkAgentExecutor):
             return
 
         yield from super().chat_stream(
-            text, history=history, active_context=active_context, **kwargs
+            text,
+            history=self._clean_history_for_model(history),
+            active_context=self._clean_model_visible_arc_text(active_context),
+            **kwargs,
         )
 
     def research_references(
@@ -309,9 +346,10 @@ class ScriptwriterAgent(SparkBaseAgent, SparkAgentExecutor):
                 else:
                     result = f"未知工具: {tool_name}"
 
-                gathered_references.append(f"[Pre-flight 查阅 via {tool_name}]\n{result}")
+                clean_result = self._clean_model_visible_arc_text(result)
+                gathered_references.append(f"[Pre-flight 查阅 via {tool_name}]\n{clean_result}")
                 messages.append(
-                    ToolMessage(content=str(result), tool_call_id=call_id, name=tool_name)
+                    ToolMessage(content=clean_result, tool_call_id=call_id, name=tool_name)
                 )
 
         return "\n\n".join(gathered_references)
@@ -333,6 +371,13 @@ class ScriptwriterAgent(SparkBaseAgent, SparkAgentExecutor):
         story_tags: str = "",
     ):
         """非流式版本的剧本生成。返回 (arc_script, thought)。"""
+        context = self._clean_model_visible_arc_text(context)
+        full_outline = self._clean_model_visible_arc_text(full_outline)
+        narrative_memory = self._clean_model_visible_arc_text(narrative_memory)
+        guidance = self._clean_model_visible_arc_text(guidance)
+        feedback = self._clean_model_visible_arc_text(feedback)
+        last_node_text = self._clean_model_visible_arc_text(last_node_text)
+
         chr_reference = ""
         if chr_map:
             if -1 not in chr_map:
@@ -434,6 +479,13 @@ class ScriptwriterAgent(SparkBaseAgent, SparkAgentExecutor):
             dict: {'type': 'chunk', 'content': str, 'total_chars': int} 或
                   {'type': 'done', 'arc_script': str, 'thought': str, 'total_chars': int}
         """
+        context = self._clean_model_visible_arc_text(context)
+        full_outline = self._clean_model_visible_arc_text(full_outline)
+        narrative_memory = self._clean_model_visible_arc_text(narrative_memory)
+        guidance = self._clean_model_visible_arc_text(guidance)
+        feedback = self._clean_model_visible_arc_text(feedback)
+        last_node_text = self._clean_model_visible_arc_text(last_node_text)
+
         # 复用 write_script 的 prompt 构建逻辑
         chr_reference = ""
         if chr_map:
@@ -541,6 +593,10 @@ class ScriptwriterAgent(SparkBaseAgent, SparkAgentExecutor):
         roles: str = "",
     ):
         """讨论/建议模式的流式输出，不落盘。"""
+        context = self._clean_model_visible_arc_text(context)
+        last_content = self._clean_model_visible_arc_text(last_content)
+        user_input = self._clean_model_visible_arc_text(user_input)
+
         prompts = load_prompt(
             "scriptwriter",
             worldview=worldview or "（未提供）",
@@ -583,6 +639,10 @@ class ScriptwriterAgent(SparkBaseAgent, SparkAgentExecutor):
         roles: str = "",
     ) -> str:
         """非流式反馈输出，用于稳定的实时 smoke 与回退路径。"""
+        context = self._clean_model_visible_arc_text(context)
+        last_content = self._clean_model_visible_arc_text(last_content)
+        user_input = self._clean_model_visible_arc_text(user_input)
+
         prompts = load_prompt(
             "scriptwriter",
             worldview=worldview or "（未提供）",
@@ -619,7 +679,7 @@ class ScriptwriterAgent(SparkBaseAgent, SparkAgentExecutor):
             template_path = os.path.join(server_root, "ARC_AI_Format.arc")
             if os.path.exists(template_path):
                 with open(template_path, "r", encoding="utf-8") as f:
-                    return f.read().strip()
+                    return self._clean_model_visible_arc_text(f.read())
         except Exception as e:
             print(f"[Scriptwriter] Warning: Failed to load ARC_AI_Format.arc: {e}")
 

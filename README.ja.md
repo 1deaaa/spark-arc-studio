@@ -536,6 +536,8 @@ SPARKARC_TURNSTILE_SITE_KEY=your Turnstile Site Key
 SPARKARC_TURNSTILE_SECRET_KEY=your Turnstile Secret Key
 ```
 
+管理画面から Turnstile キーを保存することもできます。その場合、SparkArc はサーバーの永続化データディレクトリ内の実行時 `.env` に書き込むため、Docker の再ビルド後も保持されます。
+
 その後、コンテナを再作成してください：
 
 ```bash

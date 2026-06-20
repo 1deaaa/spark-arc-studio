@@ -7,7 +7,11 @@ from datetime import datetime, timezone
 from typing import Any, Dict, List
 
 from core.utils import get_project_path, get_project_stories_path
-from story.file_naming import build_scene_story_filename, strip_story_filename_meta
+from story.file_naming import (
+    build_scene_story_filename,
+    find_scene_file_by_identity,
+    strip_story_filename_meta,
+)
 
 
 AUTO_WRITE_STATE_FILENAME = "auto_write_state.json"
@@ -222,7 +226,13 @@ def build_auto_write_chapter_plan(
         for s_idx, scene in enumerate(scenes):
             scene_title = scene.get("title", f"Scene {s_idx + 1}")
             fn = build_scene_output_filename(chapter_num, chapter_title, s_idx, scene_title, export_format)
-            if os.path.exists(os.path.join(chapter_dir, fn)):
+            existing_path, _ = find_scene_file_by_identity(
+                stories_path,
+                int(chapter_num),
+                int(s_idx) + 1,
+                file_format=export_format,
+            )
+            if existing_path or os.path.exists(os.path.join(chapter_dir, fn)):
                 any_exists = True
                 break
         plan.append(
@@ -270,7 +280,13 @@ def build_auto_write_scene_plan(
             from agents.tools.scriptwriter import _ensure_chapter_dir
             chapter_dir = _ensure_chapter_dir(stories_path, chapter_title)
             filename = build_scene_output_filename(chapter_num, chapter_title, s_idx, scene_title, export_format)
-            file_path = os.path.join(chapter_dir, filename)
+            existing_path, _ = find_scene_file_by_identity(
+                stories_path,
+                int(chapter_num),
+                int(s_idx) + 1,
+                file_format=export_format,
+            )
+            file_path = existing_path or os.path.join(chapter_dir, filename)
             plan.append(
                 {
                     "chapterIndex": ch_idx,
@@ -278,7 +294,7 @@ def build_auto_write_scene_plan(
                     "chapterTitle": chapter_title,
                     "sceneIndex": s_idx,
                     "sceneTitle": scene_title,
-                    "filename": strip_story_filename_meta(filename),
+                    "filename": strip_story_filename_meta(os.path.basename(file_path)),
                     "exists": os.path.exists(file_path),
                 }
             )

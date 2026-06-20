@@ -118,6 +118,82 @@ def build_scene_story_filename(
     )
 
 
+def parse_scene_identity_from_title(value: str | None) -> tuple[Optional[int], Optional[int]]:
+    """从“1-1 场景名”这类标题中解析规划场景身份。"""
+    text = str(value or "").strip()
+    if not text:
+        return None, None
+    match = re.match(r"^\s*(\d{1,4})\s*[-－—_]\s*(\d{1,4})(?=\D|$)", text)
+    if not match:
+        return None, None
+    return int(match.group(1)), int(match.group(2))
+
+
+def find_scene_file_by_identity(
+    stories_path: str,
+    chapter_num: int,
+    scene_num: int,
+    *,
+    file_format: str = "arc",
+) -> Tuple[Optional[str], Optional[Dict[str, Any]]]:
+    """递归按文件名 meta 查找规划场景文件。"""
+    target_ext = story_extension(file_format)
+    if not os.path.isdir(stories_path):
+        return None, None
+
+    matches: list[tuple[tuple, str, Dict[str, Any]]] = []
+    for root, _, files in os.walk(stories_path):
+        for filename in files:
+            parsed = parse_story_filename(filename)
+            if not parsed:
+                continue
+            if parsed.get("extension") != target_ext:
+                continue
+            if parsed.get("free"):
+                continue
+            if parsed.get("chapter_num") != int(chapter_num):
+                continue
+            if parsed.get("scene_num") != int(scene_num):
+                continue
+            rel_path = os.path.relpath(os.path.join(root, filename), stories_path).replace(os.sep, "/")
+            matches.append((story_sort_key(rel_path), os.path.join(root, filename), parsed))
+
+    if not matches:
+        return None, None
+    matches.sort(key=lambda item: item[0])
+    return matches[0][1], matches[0][2]
+
+
+def resolve_planned_scene_file_path(
+    stories_path: str,
+    chapter_num: int,
+    scene_num: int,
+    scene_title: str,
+    *,
+    chapter_dir_name: str = "",
+    file_format: str = "arc",
+) -> Tuple[str, bool, Dict[str, Any] | None]:
+    """解析规划场景文件路径：已有则覆盖，未有则按身份新建。"""
+    existing_path, parsed = find_scene_file_by_identity(
+        stories_path,
+        chapter_num,
+        scene_num,
+        file_format=file_format,
+    )
+    if existing_path:
+        return existing_path, True, parsed
+
+    safe_dir = str(chapter_dir_name or "").strip().replace("\\", "_").replace("/", "_")
+    target_dir = os.path.join(stories_path, safe_dir) if safe_dir else stories_path
+    filename = build_scene_story_filename(
+        chapter_num,
+        scene_num,
+        scene_title,
+        file_format=file_format,
+    )
+    return os.path.join(target_dir, filename), False, None
+
+
 def strip_story_filename_meta(filename: str, *, keep_extension: bool = True) -> str:
     parsed = parse_story_filename(filename)
     if not parsed:

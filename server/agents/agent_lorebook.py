@@ -45,6 +45,7 @@ class WorldviewAgent(SparkBaseAgent, SparkAgentExecutor):
                 worldview=context.get("worldview", ""),
                 existing_characters=context.get("existing_characters", ""),
                 extra_guidance=context.get("extra_guidance", ""),
+                story_tags=context.get("story_tags", ""),
             )
         raise ValueError(f"不支持的 Lorebook operation: {operation}")
 
@@ -92,6 +93,7 @@ class WorldviewAgent(SparkBaseAgent, SparkAgentExecutor):
                 "style_profile": "（未提供）",
             },
             "generate_characters": {
+                "story_tags": "（由项目创作参数提供；若锁定第一人称，必须生成或保留叙述者主角档案）",
                 "worldview": "（由当前项目与上下文提供）",
                 "existing_characters": "（由当前项目角色列表提供）",
                 "extra_guidance": "（由用户当前修改要求决定）",
@@ -133,12 +135,17 @@ class WorldviewAgent(SparkBaseAgent, SparkAgentExecutor):
             yield trailing_visible
 
     def generate_character(
-        self, worldview: str, existing_characters: str, extra_guidance: str = ""
+        self,
+        worldview: str,
+        existing_characters: str,
+        extra_guidance: str = "",
+        story_tags: str = "",
     ):
         """基于世界观和已有角色生成新角色。"""
         prompts = load_prompt(
             "lorebook",
             "generate_characters",
+            story_tags=story_tags or "",
             worldview=worldview,
             existing_characters=existing_characters,
             extra_guidance=f"额外要求：{extra_guidance}" if extra_guidance else "",

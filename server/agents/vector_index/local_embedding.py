@@ -57,7 +57,8 @@ QWEN3_GGUF_REPO_ID = "Qwen/Qwen3-Embedding-0.6B-GGUF"
 QWEN3_GGUF_FILENAME = "Qwen3-Embedding-0.6B-Q8_0.gguf"
 QWEN3_GGUF_MIN_BYTES = 600 * 1024 * 1024
 
-_lock = threading.Lock()
+_process_lock = threading.Lock()
+_startup_lock = threading.Lock()
 _process: subprocess.Popen | None = None
 _alive_cache: tuple[float, bool] = (0.0, False)
 _hf_endpoint_cache: tuple[float, str | None] = (0.0, None)
@@ -81,7 +82,7 @@ def _now_state_ts() -> str:
 
 
 def _set_startup_state(phase: str, message: str = "", *, progress: int | None = None, error: str = "") -> None:
-    with _lock:
+    with _startup_lock:
         _startup_state.update({
             "phase": phase,
             "message": message,
@@ -93,7 +94,7 @@ def _set_startup_state(phase: str, message: str = "", *, progress: int | None = 
 
 
 def _get_startup_state() -> dict[str, Any]:
-    with _lock:
+    with _startup_lock:
         return dict(_startup_state)
 
 
@@ -532,7 +533,7 @@ def preview_local_embedding_command() -> list[str]:
 
 def get_local_embedding_status() -> dict[str, Any]:
     """读取本地嵌入服务状态。"""
-    with _lock:
+    with _process_lock:
         running = _process is not None and _process.poll() is None
         pid = _process.pid if running and _process is not None else None
     alive = is_local_embedding_alive(timeout=1.0)
@@ -559,27 +560,32 @@ def start_local_embedding_service() -> dict[str, Any]:
     global _process
     _set_startup_state("starting", "正在启动本地嵌入服务", progress=1, error="")
     try:
-        should_return_status = False
+        with _process_lock:
+            existing_process = _process
+        if existing_process is not None and existing_process.poll() is None:
+            _set_startup_state("ready", "本地嵌入服务已启动", progress=100)
+            return get_local_embedding_status()
+
+        if is_local_embedding_alive(timeout=1.0):
+            _set_startup_state("ready", "本地嵌入服务已启动", progress=100)
+            return get_local_embedding_status()
+
         started_process: subprocess.Popen | None = None
-        with _lock:
+        command = build_local_embedding_command()
+        popen_kwargs: dict[str, Any] = {
+            "stdout": subprocess.DEVNULL,
+            "stderr": subprocess.DEVNULL,
+        }
+        if os.name == "nt":
+            popen_kwargs["creationflags"] = getattr(subprocess, "CREATE_NO_WINDOW", 0)
+
+        with _process_lock:
             if _process is not None and _process.poll() is None:
-                should_return_status = True
-            elif is_local_embedding_alive(timeout=1.0):
-                should_return_status = True
+                started_process = _process
             else:
-                command = build_local_embedding_command()
-                popen_kwargs: dict[str, Any] = {
-                    "stdout": subprocess.DEVNULL,
-                    "stderr": subprocess.DEVNULL,
-                }
-                if os.name == "nt":
-                    popen_kwargs["creationflags"] = getattr(subprocess, "CREATE_NO_WINDOW", 0)
                 _process = subprocess.Popen(command, **popen_kwargs)
                 started_process = _process
 
-        if should_return_status:
-            _set_startup_state("ready", "本地嵌入服务已启动", progress=100)
-            return get_local_embedding_status()
         if started_process is not None:
             deadline = time.monotonic() + max(1.0, LOCAL_EMBEDDING_STARTUP_TIMEOUT)
             _set_startup_state("loading", "正在加载本地嵌入模型", progress=70)
@@ -593,6 +599,7 @@ def start_local_embedding_service() -> dict[str, Any]:
         status = get_local_embedding_status()
         if not status.get("alive"):
             _set_startup_state("error", "本地嵌入服务启动失败", progress=100, error="服务未在超时时间内就绪")
+            status = get_local_embedding_status()
         return status
     except Exception as exc:
         _set_startup_state("error", "本地嵌入服务启动失败", progress=100, error=str(exc))
@@ -602,7 +609,7 @@ def start_local_embedding_service() -> dict[str, Any]:
 def stop_local_embedding_service() -> dict[str, Any]:
     """停止由当前后端进程拉起的本地嵌入服务。"""
     global _process
-    with _lock:
+    with _process_lock:
         process = _process
         _process = None
     if process is not None and process.poll() is None:

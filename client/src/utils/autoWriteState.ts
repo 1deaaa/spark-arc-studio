@@ -15,10 +15,31 @@ function toIntegerOrNull(value) {
 }
 
 type ChapterFile = { chapterIndex?: number; filename?: string; exists?: boolean };
+type SceneFile = { chapterIndex?: number; sceneIndex?: number; filename?: string; exists?: boolean };
 
 export function collectOverwriteTargets(chapterFiles: ChapterFile[] = [], startChapterIndex = 0) {
   const normalizedStart = Math.max(0, Number(startChapterIndex) || 0);
   return (chapterFiles || []).filter((item: ChapterFile) => item?.exists && Number(item.chapterIndex) >= normalizedStart);
+}
+
+export function collectSceneOverwriteTargets(
+  sceneFiles: SceneFile[] = [],
+  startChapterIndex = 0,
+  startSceneIndex = 0,
+  endChapterIndex: number | null = null,
+) {
+  const normalizedChapter = Math.max(0, Number(startChapterIndex) || 0);
+  const normalizedScene = Math.max(0, Number(startSceneIndex) || 0);
+  const normalizedEndChapter = Number.isInteger(endChapterIndex) ? Number(endChapterIndex) : null;
+  return (sceneFiles || []).filter((item: SceneFile) => {
+    if (!item?.exists) return false;
+    const chapterIndex = Number(item.chapterIndex ?? 0);
+    const sceneIndex = Number(item.sceneIndex ?? 0);
+    const afterStart = chapterIndex > normalizedChapter
+      || (chapterIndex === normalizedChapter && sceneIndex >= normalizedScene);
+    const beforeEnd = normalizedEndChapter === null || chapterIndex <= normalizedEndChapter;
+    return afterStart && beforeEnd;
+  });
 }
 
 export function buildAutoWriteResumeActions(state: AutoWriteState = {}, totalChapters = 0) {

@@ -411,6 +411,8 @@ async def gen_characters_stream(
                     json.dump(mapping, f, ensure_ascii=False, indent=2)
 
             existing_ids = {int(k) for k in mapping.keys()} if mapping else set()
+            story_tags = get_project_story_tags(user_id, projectName)
+            story_tags_hint = build_story_tags_hint(story_tags)
 
             created_count = 0
 
@@ -442,6 +444,7 @@ async def gen_characters_stream(
                     worldview=worldview,
                     existing_characters=existing_block,
                     extra_guidance=prompt,
+                    story_tags=story_tags_hint,
                 )
 
                 # 为每个角色创建独立的 stop_event 和 cancelled_event：

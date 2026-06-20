@@ -190,6 +190,12 @@ const koKR = {
     engine: 'Agent 워크플로우 및 모델 설정',
   },
   components: {
+    bindingEditor: {
+      importUnityManifest: 'Unity 매니페스트 가져오기',
+      emptyManifest: '이 Unity 매니페스트에 가져올 행동 메서드가 없습니다',
+      importedManifest: 'Unity 행동 메서드 {count}개를 가져왔습니다',
+      importManifestFailed: 'Unity 매니페스트 가져오기 실패: {message}',
+    },
     announcement: {
       title: '시스템 공지사항',
       markRead: '읽음',
@@ -395,7 +401,7 @@ const koKR = {
       },
       registrationVerification: {
         label: '회원가입 캡차 검증',
-        help: '활성화 시, 신규 이용자 가입 경로에 Cloudflare Turnstile 사람 검증 절차가 포함됩니다. 연동용 프론트엔드 및 백엔드 시크릿 키는 루트 경로의 .env 파일에 평문 저장되므로 유출에 유의하세요.',
+        help: '활성화 시, 신규 이용자 가입 경로에 Cloudflare Turnstile 사람 검증 절차가 포함됩니다. 사이트 키와 서버 시크릿 키는 서버의 지속 설정 파일에 평문으로 저장되므로 배포 데이터 디렉터리를 보호해 주세요.',
         edit: '시크릿 편집',
         statusEnabled: '보안 검증 중 ({provider})',
         statusConfiguredButOff: '시크릿은 입력되었으나 현재 비활성화됨',
@@ -403,7 +409,7 @@ const koKR = {
         dialog: {
           setupTitle: '회원가입 캡차 시크릿 설정',
           editTitle: '캡차 연동 시크릿 편집',
-          intro: '회원가입 API 호출 전 단계에 Cloudflare Turnstile 검증 모듈을 추가합니다. 설정 즉시 .env 파일에 반영되며 프로세스 재시작이 필요하지 않습니다.',
+          intro: '회원가입 API 호출 전 단계에 Cloudflare Turnstile 검증 모듈을 추가합니다. 설정은 서버의 지속 설정 파일에 즉시 반영되며 프로세스 재시작이 필요하지 않습니다.',
           provider: '검증 제공사',
           siteKey: '사이트 키 (Site Key)',
           siteKeyPlaceholder: '0x4AAAAAA... 형태로 프론트엔드 코드에 노출되는 키',
@@ -1009,7 +1015,7 @@ const koKR = {
       startChapter: '시작 장 번호',
       autoReview: '자동 검토',
       autoReviewHint: '각 장면 저장 후 Critic을 실행해 수정 티켓을 만듭니다. 대기 시간이 늘어납니다.',
-      overwriteWarning: '기존에 작성된 파일 {count}개가 덮어써집니다',
+      overwriteWarning: '기존에 작성된 장면 {count}개가 덮어써집니다',
       startAutoWrite: '자동 연속 집필 개시',
       starting: '엔진 구동 중...',
       restartFromBeginning: '처음 장부터 완전 재창작',
@@ -1239,7 +1245,10 @@ const koKR = {
       startChapter: '창작 타겟 시작 장 번호',
       selectStartPosition: '시작 위치 지정',
       overwriteWarning: '덮어쓰기 파일 고지',
-      overwriteWarningContent: '선택하신 시작 장 번호 이후로, 기존에 존재하던 창작 결과물 {count}개가 덮어써집니다:',
+      overwriteWarningContent: '선택하신 시작 장 번호 이후로, 기존에 존재하던 장면 {count}개가 덮어써집니다:',
+      overwriteDialogTitle: '기존 장면 감지',
+      overwriteDialogContent: '{chapter}장부터 시작하면 이미 작성된 장면 {count}개가 덮어써집니다: {files}{suffix}',
+      overwriteDialogConfirm: '덮어쓰고 계속',
       startAutoWrite: '자동 집필 엔진 시작',
       currentProgress: '실시간 창작 경과',
       generating: '문맥 분석 및 문장 창작 중...',

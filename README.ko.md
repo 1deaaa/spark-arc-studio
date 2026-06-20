@@ -220,6 +220,8 @@ SPARKARC_TURNSTILE_SITE_KEY=당신의 Turnstile Site Key
 SPARKARC_TURNSTILE_SECRET_KEY=당신의 Turnstile Secret Key
 ```
 
+관리자 화면에서 Turnstile 키를 저장할 수도 있습니다. 이 경우 SparkArc는 서버의 지속 데이터 디렉터리 안에 있는 런타임 `.env`에 값을 기록하므로 Docker를 다시 빌드해도 유지됩니다.
+
 주요 안내:
 - `SPARKARC_TURNSTILE_SITE_KEY`는 공개 사이트 키이며, 프론트엔드가 `/api/auth/verification-config` 엔드포인트를 호출할 때 전송되어 Turnstile 위젯을 활성화합니다.
 - `SPARKARC_TURNSTILE_SECRET_KEY`는 서버 내에서 검증에만 활용되며 외부에 유출되지 않는 비밀 키입니다.

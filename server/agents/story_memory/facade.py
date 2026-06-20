@@ -467,7 +467,7 @@ class StoryMemoryFacade:
 
         system_prompt = prepend_prompt_language_policy(
             "你是长篇小说项目的叙事状态抽取器。任务标签:[TASK:STORY_MEMORY_EXTRACT]。"
-            "你只从用户提供的场景正文和场景目标中抽取事实，不补设定、不脑补隐含情节。"
+            "你只从用户提供的场景正文和场景目标中抽取事实，不补设定、不脑补隐含情节、不提供创作建议。"
             "输出必须是严格 JSON 对象，不要 Markdown，不要解释。"
         )
         user_prompt = f"""
@@ -498,13 +498,13 @@ class StoryMemoryFacade:
     {{"characters": ["角色A", "角色B"], "state": "本场结束时关系状态", "why": "原因", "evidence": "证据短句"}}
   ],
   "foreshadows": [
-    {{"description": "新增/推进/回收的伏笔或线索", "status": "open|advanced|resolved", "related_characters": ["角色名"], "evidence": "证据短句"}}
+    {{"description": "正文中明确出现的开放线索、秘密、承诺或已回收线索", "status": "open|advanced|resolved", "related_characters": ["角色名"], "evidence": "证据短句"}}
   ],
   "fact_claims": [
-    {{"claim": "必须保持的事实", "entities": ["实体名"], "evidence": "证据短句"}}
+    {{"claim": "正文已经确立、后续应核对保持的事实", "entities": ["实体名"], "evidence": "证据短句"}}
   ],
   "conflict_risks": [
-    {{"risk": "可能与旧设定或后文冲突的风险", "severity": "low|medium|high", "evidence": "证据短句"}}
+    {{"risk": "仅当正文或场景目标中明确出现自相矛盾、需人工核对的信息时填写", "severity": "low|medium|high", "evidence": "证据短句"}}
   ]
 }}
 
@@ -513,6 +513,7 @@ class StoryMemoryFacade:
 - 没有就给空数组。
 - 角色名尽量使用项目角色表中的名称。
 - evidence 必须来自场景正文或场景指导。
+- 不要推测作者意图，不要设计伏笔，不要给后续写作方案。
 """
         response = llm.invoke([
             SystemMessage(content=system_prompt),
@@ -975,7 +976,7 @@ class StoryMemoryFacade:
         chr_map: Optional[dict] = None,
         max_recent_scenes: int = 4,
     ) -> Dict[str, Any]:
-        """为 Scriptwriter 生成写前高优先级状态包。"""
+        """为 Scriptwriter 生成写前事实核对包。"""
         active_characters = _merge_unique(
             _normalize_character_names(scene_characters),
             _scan_character_names(
@@ -1053,7 +1054,7 @@ class StoryMemoryFacade:
         )
 
         lines: list[str] = []
-        lines.append("=== 当前场景任务包（StoryMemory 自动整理，高优先级）===")
+        lines.append("=== 当前场景事实包（StoryMemory 自动整理，仅供核对）===")
         lines.append("【场景契约】")
         if chapter_title:
             lines.append(f"- 当前章节：{chapter_title}")
@@ -1086,14 +1087,14 @@ class StoryMemoryFacade:
         else:
             lines.append("- 暂无可靠的同场互动记录；不要凭空升级关系。")
 
-        lines.append("\n【待呼应伏笔/线索】")
+        lines.append("\n【开放线索/待核对项】")
         if relevant_threads:
             for thread in relevant_threads:
                 lines.append(
                     f"- {thread.get('description')}（来源：{thread.get('scene_title') or thread.get('introduced_scene')}）"
                 )
         else:
-            lines.append("- 暂无命中的开放伏笔；若本场要埋线索，请写得可追踪。")
+            lines.append("- 暂无命中的开放线索。")
 
         lines.append("\n【相关历史事件】")
         if relevant_events:
@@ -1102,19 +1103,19 @@ class StoryMemoryFacade:
         else:
             lines.append("- 暂无命中的结构化历史事件。")
 
-        lines.append("\n【必须保持的事实】")
+        lines.append("\n【已确立事实】")
         if relevant_facts:
             for item in relevant_facts:
                 lines.append(f"- {item.get('claim')}（证据：{_compact_text(item.get('evidence', ''), 160)}）")
         else:
-            lines.append("- 暂无命中的结构化事实约束。")
+            lines.append("- 暂无命中的结构化事实记录。")
 
-        lines.append("\n【潜在冲突风险】")
+        lines.append("\n【待人工核对的矛盾风险】")
         if relevant_risks:
             for item in relevant_risks:
                 lines.append(f"- [{item.get('severity', 'medium')}] {item.get('risk')}（证据：{_compact_text(item.get('evidence', ''), 160)}）")
         else:
-            lines.append("- 暂无结构化冲突风险。")
+            lines.append("- 暂无明确矛盾风险记录。")
 
         lines.append("\n【未关闭修订工单 / 质量记忆】")
         if relevant_quality_tickets:
@@ -1139,9 +1140,10 @@ class StoryMemoryFacade:
         else:
             lines.append("- 尚无已吸收的场景状态。")
 
-        lines.append("\n【写作约束】")
-        lines.append("- 优先遵守本任务包中的角色状态、关系状态、伏笔和最近场景事实。")
-        lines.append("- 若当前任务涉及旧伏笔、秘密、人物关系或世界规则，写作前优先调用只读工具补查，不要凭空补设定。")
+        lines.append("\n【使用边界】")
+        lines.append("- 以上内容是已保存正文整理出的事实和证据，不是剧情方案。")
+        lines.append("- 写作时核对角色状态、关系状态、开放线索和最近场景事实；具体表达和回收方式由执笔编剧根据大纲与用户意图决定。")
+        lines.append("- 若当前任务涉及旧线索、秘密、人物关系或世界规则，写作前优先调用只读工具补查，不要凭空补设定。")
         lines.append("- 写完后系统会在后台吸收本场状态；正文内不要输出状态解释、工具说明或元话语。")
 
         pack = {
@@ -1205,7 +1207,7 @@ class StoryMemoryFacade:
             f"- 已抽取事实数: {len(state.get('fact_claims') or [])}\n"
             f"- 有动态状态的角色数: {len(state.get('character_states') or {})}\n"
             f"- 已记录互动关系数: {len(state.get('relationships') or {})}\n"
-            f"- 开放线索/伏笔数: {len([t for t in state.get('threads') or [] if t.get('status') == 'open'])}\n"
+            f"- 开放线索数: {len([t for t in state.get('threads') or [] if t.get('status') == 'open'])}\n"
             f"- 潜在冲突风险数: {len(state.get('conflict_risks') or [])}\n"
             f"- 开放修订工单数: {len(open_quality_tickets)}\n"
             f"- 更新时间: {state.get('updated_at') or '-'}"

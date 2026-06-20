@@ -24,6 +24,29 @@ namespace SparkArc.Unity
     }
 
     /// <summary>
+    /// act 行为与 Unity C# 方法之间的绑定关系。
+    /// </summary>
+    [Serializable]
+    public class ActionBindingData
+    {
+        public string actName;
+        public string functionName;
+        public string actionType;
+        public string description;
+        public JObject argsSchema;
+    }
+
+    /// <summary>
+    /// 全局注册表项，可用于对话文本和行为参数中的 {name} 占位符。
+    /// </summary>
+    [Serializable]
+    public class RegistryData
+    {
+        public string name;
+        public JArray values;
+    }
+
+    /// <summary>
     /// 对话节点类型
     /// </summary>
     public enum NodeType

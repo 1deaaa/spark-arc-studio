@@ -6,7 +6,7 @@ from sqlalchemy import create_engine, delete, select, func
 from sqlalchemy.orm import sessionmaker
 from sqlalchemy.pool import NullPool
 
-from core.models import Story, StoryData
+from core.models import Story, StoryData
 from core.utils import (
     ensure_project_directory,
     ensure_project_stories_directory,
@@ -16,17 +16,43 @@ from .project_files import _coerce_character_name
 from .scene_loader import load_story_file
 
 
-def _collect_char_ids_from_dialogues(dialogues: list, collected: set):
-    """递归收集对话中的角色ID"""
-    for d in dialogues:
-        collected.add(d.character)
-        for opt in d.options:
-            _collect_char_ids_from_dialogues(opt.dialogues, collected)
-
-
-def import_project_stories_to_db(user_id: str, project_name: str, *, reset: bool = True) -> dict:
-    """将项目 stories 目录导入独立的 SQLite 数据库。"""
-    from core.models import BindChr, Character
+def _collect_char_ids_from_dialogues(dialogues: list, collected: set):
+    """递归收集对话中的角色ID"""
+    for d in dialogues:
+        collected.add(d.character)
+        for opt in d.options:
+            _collect_char_ids_from_dialogues(opt.dialogues, collected)
+
+
+def _load_json_list(path: str) -> list:
+    """读取项目级 JSON 列表配置，异常时回退为空列表。"""
+    if not os.path.exists(path):
+        return []
+    try:
+        with open(path, 'r', encoding='utf-8') as handle:
+            data = json.load(handle)
+        return data if isinstance(data, list) else []
+    except Exception:
+        return []
+
+
+def _normalize_json_object(value) -> dict:
+    """确保行为参数示例写入数据库时始终是对象。"""
+    return value if isinstance(value, dict) else {}
+
+
+def _normalize_registry_value(value) -> list:
+    """注册表值统一写成 JSON 数组，便于 Unity 端做占位符和枚举选择。"""
+    if isinstance(value, list):
+        return value
+    if value is None:
+        return []
+    return [value]
+
+
+def import_project_stories_to_db(user_id: str, project_name: str, *, reset: bool = True) -> dict:
+    """将项目 stories 目录导入独立的 SQLite 数据库。"""
+    from core.models import BindAct, BindChr, Character, Registry
 
     project_root = ensure_project_directory(user_id, project_name)
     stories_dir = ensure_project_stories_directory(user_id, project_name)
@@ -61,14 +87,16 @@ def import_project_stories_to_db(user_id: str, project_name: str, *, reset: bool
     seen_char_ids = set()
 
     try:
-        if reset:
-            session.execute(delete(Story))
-            session.execute(delete(Character))
-        else:
-            result = session.execute(select(func.max(Story.progress)))
-            max_progress = result.scalar()
-            if max_progress is not None:
-                progress_counter = float(max_progress)
+        if reset:
+            session.execute(delete(Story))
+            session.execute(delete(Character))
+            session.execute(delete(BindAct))
+            session.execute(delete(Registry))
+        else:
+            result = session.execute(select(func.max(Story.progress)))
+            max_progress = result.scalar()
+            if max_progress is not None:
+                progress_counter = float(max_progress)
 
         for _, rel_path, parsed in story_files:
             file_path = os.path.join(stories_dir, rel_path)
@@ -156,10 +184,48 @@ def import_project_stories_to_db(user_id: str, project_name: str, *, reset: bool
                 
                 session.add(Character(character_id=cid, name=name))
                 
-        except Exception as exc:
-             print(f"Warning: Failed to populate Character table: {exc}")
-
-        session.commit()
+        except Exception as exc:
+             print(f"Warning: Failed to populate Character table: {exc}")
+
+        # 3. 同步 Unity 行为函数绑定
+        try:
+            session.execute(delete(BindAct))
+            action_bindings = _load_json_list(os.path.join(project_root, 'action_bindings.json'))
+            for item in action_bindings:
+                if not isinstance(item, dict):
+                    continue
+                act_name = str(item.get('act_name') or '').strip()
+                func_name = str(item.get('func_name') or '').strip()
+                if not act_name or not func_name:
+                    continue
+                session.add(BindAct(
+                    act_name=act_name,
+                    func_name=func_name,
+                    act_type=(str(item.get('act_type')).strip() if item.get('act_type') is not None else None),
+                    act_description=(str(item.get('act_description')).strip() if item.get('act_description') is not None else None),
+                    act_args=copy.deepcopy(_normalize_json_object(item.get('act_args'))),
+                ))
+        except Exception as exc:
+            print(f"Warning: Failed to sync action bindings (BindAct): {exc}")
+
+        # 4. 同步 Unity 全局注册表
+        try:
+            session.execute(delete(Registry))
+            registries = _load_json_list(os.path.join(project_root, 'registries.json'))
+            for item in registries:
+                if not isinstance(item, dict):
+                    continue
+                name = str(item.get('name') or '').strip()
+                if not name:
+                    continue
+                session.add(Registry(
+                    name=name,
+                    value=copy.deepcopy(_normalize_registry_value(item.get('value'))),
+                ))
+        except Exception as exc:
+            print(f"Warning: Failed to sync registries (Registry): {exc}")
+
+        session.commit()
 
     except Exception:
         session.rollback()

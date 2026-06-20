@@ -14,7 +14,7 @@ ScriptWriter Context Builder - 执笔编剧统一上下文组装器
 StoryMemory / GraphRAG / 风格执行卡 / 工具规则；5 只在用户明确触发时提交后台状态吸收。
 
 【核心改进】
-  - StoryMemory 场景任务包：在三圈记忆前注入当前场景相关的角色动态状态、
+  - StoryMemory 场景事实包：在三圈记忆前注入当前场景相关的角色动态状态、
     关系记录、开放线索和最近场景摘要；该状态由场景保存后后台吸收生成。
   - 全量世界观 / 全量角色：废弃"只传选中角色"的旧逻辑，所有入口必须
     全量加载，因为大模型上下文窗口（128K+）完全容纳，且遗漏角色设定
@@ -597,8 +597,9 @@ def build_scriptwriter_handoff_context(
         print(f"[StoryMemory] 委派场景任务包构建失败（已降级）：{e}")
 
     lines.append("")
-    lines.append("【委派写作约束】")
-    lines.append("- 写作前优先服从本交接包中的大纲场景契约、实时人物状态、关系记录、开放伏笔与修订工单。")
+    lines.append("【委派核对边界】")
+    lines.append("- 写作前核对本交接包中的大纲场景契约、实时人物状态、关系记录、开放线索与修订工单。")
+    lines.append("- StoryMemory 只提供已保存正文整理出的事实和证据，不提供剧情方案；具体表达与取舍由执笔编剧根据导演意图完成。")
     lines.append("- 若交接包缺少具体人物或场景状态，正式落盘前应按需调用 story_memory_tool 或项目读取工具核对。")
     return "\n".join(line for line in lines if line is not None).strip()
 
@@ -709,11 +710,12 @@ def build_scene_context(
     圈 3（Compressed）：由调用方通过 narrative_memory 注入，此函数不重复处理。
     """
     from story.arc_parser import parse_arc, serialize_to_arc
+    from story.arc_safety import sanitize_arc_for_ai_context
 
     arc_files = _get_chapter_arc_files(user_id, project_name)
     parts: List[str] = []
 
-    # ── StoryMemory：当前场景任务包（高优先级状态）──────────────────────
+    # ── StoryMemory：当前场景事实包（仅供核对）──────────────────────
     try:
         from agents.story_memory import StoryMemoryFacade
 
@@ -756,7 +758,7 @@ def build_scene_context(
                 # 只取最后一个场景作为章末锚点
                 last_scene_arc = serialize_to_arc([parsed[-1]])
                 tail_scenes.append(
-                    f"【第 {ci} 章 尾声 - {parsed[-1].get('scene', '')}】\n{last_scene_arc}"
+                    f"【第 {ci} 章 尾声 - {parsed[-1].get('scene', '')}】\n{sanitize_arc_for_ai_context(last_scene_arc)}"
                 )
         except Exception:
             continue
@@ -770,7 +772,7 @@ def build_scene_context(
     if current_chapter_arc_text and current_chapter_arc_text.strip():
         # 调用方已传入当前章的完整 arc 文本（截至 target_scene 之前）
         parts.append("=== 当前章节前文 ===")
-        parts.append(current_chapter_arc_text)
+        parts.append(sanitize_arc_for_ai_context(current_chapter_arc_text))
     elif current_chapter_index < len(arc_files):
         # 全自动模式下：读取已保存的当前章 arc 文件
         raw = _read_arc_file_safe(arc_files[current_chapter_index])
@@ -782,12 +784,12 @@ def build_scene_context(
                     before_scenes = parsed[:current_scene_index]
                     if before_scenes:
                         parts.append("=== 当前章节前文（已完成场景）===")
-                        parts.append(serialize_to_arc(before_scenes))
+                        parts.append(sanitize_arc_for_ai_context(serialize_to_arc(before_scenes)))
                 except Exception:
                     pass
             else:
                 parts.append("=== 当前章节前文 ===")
-                parts.append(raw)
+                parts.append(sanitize_arc_for_ai_context(raw))
 
     return "\n".join(parts)
 
@@ -887,6 +889,7 @@ def build_scriptwriter_context(
 
     # 拼接用户/Director 额外补充
     if extra_context and extra_context.strip():
+        extra_context = sanitize_arc_for_ai_context(extra_context)
         if context:
             context += f"\n\n# 用户补充上下文\n{extra_context.strip()}"
         else:

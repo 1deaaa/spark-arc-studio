@@ -103,6 +103,7 @@ def build_scriptwriter_context_pack(
     - arc 文件解析和前文序列化逻辑保留（生产端需要精确的 target_scene 和 local_script）。
     """
     from story.arc_parser import parse_arc, serialize_to_arc
+    from story.arc_safety import sanitize_arc_for_ai_context
 
     # ── 全量加载：世界观 / 所有角色 / 完整大纲 / 叙事记忆 ──────────────
     from .context_builder import load_worldview, load_all_roles, load_full_outline, load_narrative_memory
@@ -143,7 +144,7 @@ def build_scriptwriter_context_pack(
     # ── 解析 .arc 文件，提取前文和目标场景 ─────────────────────────────
     story_data = []
     target_scene = None
-    canonical_context = (context or "").strip()
+    canonical_context = sanitize_arc_for_ai_context(context or "")
     local_script = ""
     stories_path = get_project_stories_path(user_id, project_name)
     normalized_file_path = file_path or ""
@@ -164,8 +165,8 @@ def build_scriptwriter_context_pack(
                     break
             if target_scene:
                 context_scenes = story_data[: target_index + 1]
-                canonical_context = serialize_to_arc(context_scenes).strip()
-                local_script = serialize_to_arc([target_scene]).strip()
+                canonical_context = sanitize_arc_for_ai_context(serialize_to_arc(context_scenes))
+                local_script = sanitize_arc_for_ai_context(serialize_to_arc([target_scene]))
                 if (
                     context
                     and str(context).strip()
@@ -174,7 +175,7 @@ def build_scriptwriter_context_pack(
                     canonical_context = (
                         canonical_context
                         + "\n\n# 用户补充上下文\n"
-                        + str(context).strip()
+                        + sanitize_arc_for_ai_context(str(context))
                     )
 
     scene_characters: List[str] = []

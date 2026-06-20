@@ -69,12 +69,28 @@ def _load_dotenv_values() -> Dict[str, str]:
     server_root = Path(__file__).resolve().parents[1]
     project_root = server_root.parent
     values: Dict[str, str] = {}
-    for env_path in (project_root / ".env", server_root / ".env"):
+    for env_path in _registration_verification_dotenv_paths(project_root, server_root):
         if not env_path.exists():
             continue
         values.update(_parse_dotenv_file(env_path))
     _DOTENV_CACHE = values
     return values
+
+
+def _registration_verification_dotenv_paths(project_root: Path, server_root: Path) -> tuple[Path, ...]:
+    """返回注册验证配置读取路径，后面的路径优先级更高。"""
+    import os
+
+    paths = [project_root / ".env", server_root / ".env"]
+    configured = (os.environ.get("SPARKARC_REGISTRATION_VERIFICATION_ENV_PATH") or "").strip()
+    if configured:
+        configured_path = Path(configured).expanduser()
+        if not configured_path.is_absolute():
+            configured_path = project_root / configured_path
+        paths.append(configured_path)
+    else:
+        paths.append(server_root / "data" / ".env")
+    return tuple(dict.fromkeys(paths))
 
 
 def _parse_dotenv_file(path: Path) -> Dict[str, str]:
@@ -100,9 +116,12 @@ def _env(name: str, default: str = "") -> str:
     import os
 
     raw = os.environ.get(name)
-    if raw is None:
-        raw = _load_dotenv_values().get(name)
-    return (raw if raw is not None else default).strip()
+    if raw is not None and raw.strip():
+        return raw.strip()
+    raw = _load_dotenv_values().get(name)
+    if raw is not None and raw.strip():
+        return raw.strip()
+    return default.strip()
 
 
 def _env_bool(name: str, default: bool) -> bool:
@@ -152,13 +171,21 @@ def get_registration_verification_admin_view() -> RegistrationVerificationAdminV
 
 
 def _get_project_dotenv_path() -> Path:
-    """Project-root ``.env`` is the canonical location for verification config."""
+    """返回注册验证配置的持久化 .env 路径。"""
+    import os
+
     server_root = Path(__file__).resolve().parents[1]
-    return server_root.parent / ".env"
+    configured = (os.environ.get("SPARKARC_REGISTRATION_VERIFICATION_ENV_PATH") or "").strip()
+    if configured:
+        env_path = Path(configured).expanduser()
+        if env_path.is_absolute():
+            return env_path
+        return server_root.parent / env_path
+    return server_root / "data" / ".env"
 
 
 def _persist_env_values(updates: Dict[str, Optional[str]]) -> None:
-    """Write/clear keys in the project root ``.env`` and refresh in-process state.
+    """写入或清理注册验证 .env，并刷新当前进程状态。
 
     - ``value is None`` (or empty string) removes the key from the file.
     - Non-empty values are written via ``python-dotenv``'s ``set_key`` to preserve
@@ -196,7 +223,7 @@ def update_registration_verification_settings(
     site_key: Optional[str] = None,
     secret_key: Optional[str] = None,
 ) -> RegistrationVerificationAdminView:
-    """Persist registration verification config to the project root ``.env``.
+    """持久化注册验证配置到运行时 .env。
 
     Validation rules:
     - ``provider`` must be one of :data:`SUPPORTED_PROVIDERS`.

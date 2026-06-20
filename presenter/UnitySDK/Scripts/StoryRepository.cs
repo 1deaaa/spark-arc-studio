@@ -21,6 +21,8 @@ namespace SparkArc.Unity
         public string dbFileName = "stories.db";
 
         private Dictionary<string, SceneData> _sceneCache = new Dictionary<string, SceneData>();
+        private Dictionary<string, ActionBindingData> _actionBindings = new Dictionary<string, ActionBindingData>(StringComparer.OrdinalIgnoreCase);
+        private Dictionary<string, RegistryData> _registries = new Dictionary<string, RegistryData>(StringComparer.OrdinalIgnoreCase);
         private string _dbPath;
 
         void Awake()
@@ -42,6 +44,8 @@ namespace SparkArc.Unity
         public void LoadDatabase()
         {
             _sceneCache.Clear();
+            _actionBindings.Clear();
+            _registries.Clear();
 
             if (!File.Exists(_dbPath))
             {
@@ -56,68 +60,146 @@ namespace SparkArc.Unity
                 using (var connection = new SqliteConnection(connectionString))
                 {
                     connection.Open();
-                    const string sql = "SELECT chapter, scene_name, guide, intro, button_text, conditions, effects, trigger_event, priority, once_key, dlg_json, hiden FROM stories ORDER BY chapter ASC, progress ASC, id ASC";
-                    
-                    using (var command = new SqliteCommand(sql, connection))
-                    using (var reader = command.ExecuteReader())
-                    {
-                        while (reader.Read())
-                        {
-                            var sceneName = reader["scene_name"]?.ToString();
-                            if (string.IsNullOrEmpty(sceneName))
-                            {
-                                sceneName = $"Chapter_{reader["chapter"]}_{_sceneCache.Count + 1}";
-                            }
-
-                            var scene = new SceneData
-                            {
-                                sceneName = sceneName,
-                                guide = ReadText(reader["guide"]),
-                                intro = ReadText(reader["intro"]),
-                                buttonText = ReadText(reader["button_text"]),
-                                hidden = false,
-                            };
-
-                            var dlgJson = ReadText(reader["dlg_json"]);
-                            scene.dialogues = !string.IsNullOrEmpty(dlgJson) ? JArray.Parse(dlgJson) : new JArray();
-
-                            var condJson = ReadText(reader["conditions"]);
-                            if (!string.IsNullOrEmpty(condJson))
-                            {
-                                try { scene.conditions = JToken.Parse(condJson); } catch { }
-                            }
-
-                            var effectsJson = ReadText(reader["effects"]);
-                            if (!string.IsNullOrEmpty(effectsJson))
-                            {
-                                try { scene.effects = JToken.Parse(effectsJson); } catch { }
-                            }
-
-                            scene.triggerEvent = ReadText(reader["trigger_event"]);
-
-                            var priorityRaw = reader["priority"];
-                            if (priorityRaw != null && priorityRaw != DBNull.Value)
-                            {
-                                try { scene.priority = Convert.ToInt32(priorityRaw); } catch { scene.priority = 0; }
-                            }
-
-                            scene.onceKey = ReadText(reader["once_key"]);
-
-                            var hiddenRaw = reader["hiden"];
-                            if (hiddenRaw != null && hiddenRaw != DBNull.Value)
-                            {
-                                try { scene.hidden = Convert.ToBoolean(hiddenRaw); } catch { scene.hidden = false; }
-                            }
-
-                            _sceneCache[sceneName] = scene;
-                        }
-                    }
+                    LoadRegistries(connection);
+                    LoadScenes(connection);
+                    LoadActionBindings(connection);
                 }
-                Debug.Log($"SparkArc: 成功加载 {_sceneCache.Count} 个场景");
+                Debug.Log($"SparkArc: 成功加载 {_sceneCache.Count} 个场景、{_actionBindings.Count} 个行为绑定、{_registries.Count} 个注册表项");
             }
             catch (Exception ex)
             {
                 Debug.LogError($"SparkArc: 加载数据库失败: {ex.Message}");
+            }
+        }
+
+        private void LoadScenes(SqliteConnection connection)
+        {
+            const string sql = "SELECT chapter, scene_name, guide, intro, button_text, conditions, effects, trigger_event, priority, once_key, dlg_json, hiden FROM stories ORDER BY chapter ASC, progress ASC, id ASC";
+
+            using (var command = new SqliteCommand(sql, connection))
+            using (var reader = command.ExecuteReader())
+            {
+                while (reader.Read())
+                {
+                    var sceneName = ReadText(reader["scene_name"]);
+                    if (string.IsNullOrEmpty(sceneName))
+                    {
+                        sceneName = $"Chapter_{reader["chapter"]}_{_sceneCache.Count + 1}";
+                    }
+
+                    var scene = new SceneData
+                    {
+                        sceneName = sceneName,
+                        guide = ResolveRegistryTokens(ReadText(reader["guide"])),
+                        intro = ResolveRegistryTokens(ReadText(reader["intro"])),
+                        buttonText = ResolveRegistryTokens(ReadText(reader["button_text"])),
+                        hidden = false,
+                    };
+
+                    var dlgJson = ReadText(reader["dlg_json"]);
+                    scene.dialogues = !string.IsNullOrEmpty(dlgJson) ? JArray.Parse(dlgJson) : new JArray();
+
+                    var condJson = ReadText(reader["conditions"]);
+                    if (!string.IsNullOrEmpty(condJson))
+                    {
+                        try { scene.conditions = JToken.Parse(condJson); } catch { }
+                    }
+
+                    var effectsJson = ReadText(reader["effects"]);
+                    if (!string.IsNullOrEmpty(effectsJson))
+                    {
+                        try { scene.effects = JToken.Parse(effectsJson); } catch { }
+                    }
+
+                    scene.triggerEvent = ReadText(reader["trigger_event"]);
+
+                    var priorityRaw = reader["priority"];
+                    if (priorityRaw != null && priorityRaw != DBNull.Value)
+                    {
+                        try { scene.priority = Convert.ToInt32(priorityRaw); } catch { scene.priority = 0; }
+                    }
+
+                    scene.onceKey = ReadText(reader["once_key"]);
+
+                    var hiddenRaw = reader["hiden"];
+                    if (hiddenRaw != null && hiddenRaw != DBNull.Value)
+                    {
+                        try { scene.hidden = Convert.ToBoolean(hiddenRaw); } catch { scene.hidden = false; }
+                    }
+
+                    _sceneCache[sceneName] = scene;
+                }
+            }
+        }
+
+        private void LoadActionBindings(SqliteConnection connection)
+        {
+            if (!TableExists(connection, "binding_act")) return;
+
+            const string sql = "SELECT act_name, func_name, act_type, act_description, act_args FROM binding_act";
+            using (var command = new SqliteCommand(sql, connection))
+            using (var reader = command.ExecuteReader())
+            {
+                while (reader.Read())
+                {
+                    var actName = ReadText(reader["act_name"]).Trim();
+                    var functionName = ReadText(reader["func_name"]).Trim();
+                    if (string.IsNullOrEmpty(actName) || string.IsNullOrEmpty(functionName)) continue;
+
+                    var argsJson = ReadText(reader["act_args"]);
+                    JObject argsSchema = null;
+                    if (!string.IsNullOrWhiteSpace(argsJson))
+                    {
+                        try { argsSchema = JObject.Parse(argsJson); } catch { }
+                    }
+
+                    _actionBindings[actName] = new ActionBindingData
+                    {
+                        actName = actName,
+                        functionName = functionName,
+                        actionType = ReadText(reader["act_type"]),
+                        description = ReadText(reader["act_description"]),
+                        argsSchema = argsSchema,
+                    };
+                }
+            }
+        }
+
+        private void LoadRegistries(SqliteConnection connection)
+        {
+            if (!TableExists(connection, "registry")) return;
+
+            const string sql = "SELECT name, value FROM registry";
+            using (var command = new SqliteCommand(sql, connection))
+            using (var reader = command.ExecuteReader())
+            {
+                while (reader.Read())
+                {
+                    var name = ReadText(reader["name"]).Trim();
+                    if (string.IsNullOrEmpty(name)) continue;
+
+                    var valueJson = ReadText(reader["value"]);
+                    JArray values = null;
+                    if (!string.IsNullOrWhiteSpace(valueJson))
+                    {
+                        try { values = JArray.Parse(valueJson); } catch { }
+                    }
+
+                    _registries[name] = new RegistryData
+                    {
+                        name = name,
+                        values = values ?? new JArray(),
+                    };
+                }
+            }
+        }
+
+        private static bool TableExists(SqliteConnection connection, string tableName)
+        {
+            using (var command = new SqliteCommand("SELECT name FROM sqlite_master WHERE type='table' AND name=@name LIMIT 1", connection))
+            {
+                command.Parameters.AddWithValue("@name", tableName);
+                return command.ExecuteScalar() != null;
             }
         }
 
@@ -138,6 +220,62 @@ namespace SparkArc.Unity
         public List<string> GetAllSceneNames()
         {
             return new List<string>(_sceneCache.Keys);
+        }
+
+        public bool TryGetActionBinding(string actName, out ActionBindingData binding)
+        {
+            if (string.IsNullOrWhiteSpace(actName))
+            {
+                binding = null;
+                return false;
+            }
+            return _actionBindings.TryGetValue(actName.Trim(), out binding);
+        }
+
+        public IReadOnlyDictionary<string, ActionBindingData> GetActionBindings()
+        {
+            return _actionBindings;
+        }
+
+        public bool TryGetRegistry(string name, out RegistryData registry)
+        {
+            if (string.IsNullOrWhiteSpace(name))
+            {
+                registry = null;
+                return false;
+            }
+            return _registries.TryGetValue(name.Trim(), out registry);
+        }
+
+        public string ResolveRegistryTokens(string value)
+        {
+            if (string.IsNullOrEmpty(value) || _registries.Count == 0) return value ?? string.Empty;
+
+            var result = value;
+            foreach (var item in _registries)
+            {
+                var replacement = GetRegistryDefaultText(item.Value);
+                result = result.Replace("{" + item.Key + "}", replacement);
+            }
+            return result;
+        }
+
+        public string[] ResolveRegistryTokens(string[] values)
+        {
+            if (values == null) return Array.Empty<string>();
+            var resolved = new string[values.Length];
+            for (var i = 0; i < values.Length; i++)
+            {
+                resolved[i] = ResolveRegistryTokens(values[i]);
+            }
+            return resolved;
+        }
+
+        private static string GetRegistryDefaultText(RegistryData registry)
+        {
+            if (registry == null || registry.values == null || registry.values.Count == 0) return string.Empty;
+            var first = registry.values[0];
+            return first == null || first.Type == JTokenType.Null ? string.Empty : first.ToString();
         }
 
         /// <summary>

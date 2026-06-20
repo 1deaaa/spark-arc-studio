@@ -1,0 +1,89 @@
+import json
+import sqlite3
+from pathlib import Path
+
+
+def test_import_project_stories_exports_unity_runtime_bindings(tmp_path, monkeypatch):
+    """守住 Unity 运行时导出契约：行为绑定和注册表必须进入 stories.db。"""
+    from core import utils as core_utils
+    from story import importer
+
+    userdata_root = tmp_path / "_userdata"
+    monkeypatch.setattr(core_utils, "USERDATA_ROOT", str(userdata_root))
+    monkeypatch.setattr(importer, "ensure_project_directory", core_utils.ensure_project_directory)
+    monkeypatch.setattr(importer, "ensure_project_stories_directory", core_utils.ensure_project_stories_directory)
+
+    user_id = "unity_runtime_export"
+    project_name = "demo"
+    project_path = Path(core_utils.ensure_project_directory(user_id, project_name))
+    stories_dir = Path(core_utils.ensure_project_stories_directory(user_id, project_name))
+    chr_dir = Path(core_utils.ensure_project_characters_directory(user_id, project_name))
+
+    (chr_dir / "chr.bind").write_text(
+        json.dumps({"-1": "旁白", "1": "信使"}, ensure_ascii=False),
+        encoding="utf-8",
+    )
+    (stories_dir / "001_测试.arc").write_text(
+        "\n".join(
+            [
+                "# windrise_first_meet",
+                "@guide 测试 Unity 行为映射",
+                "@intro 欢迎来到 {place}",
+                "@meta button_text:按 F 与 {npc_name} 对话",
+                "[-1]",
+                "系统准备触发行为。",
+                "@act bgm:town_theme",
+                "[1]",
+                "你好，{player_name}。",
+            ]
+        ),
+        encoding="utf-8",
+    )
+    (project_path / "action_bindings.json").write_text(
+        json.dumps(
+            [
+                {
+                    "id": "bgm",
+                    "act_name": "bgm",
+                    "func_name": "PlayBGM",
+                    "act_type": "audio",
+                    "act_description": "播放背景音乐",
+                    "act_args": {"musicName": ["town_theme", "battle_theme"]},
+                }
+            ],
+            ensure_ascii=False,
+        ),
+        encoding="utf-8",
+    )
+    (project_path / "registries.json").write_text(
+        json.dumps(
+            [
+                {"id": "player_name", "name": "player_name", "value": ["艾莉"]},
+                {"id": "place", "name": "place", "value": ["风丘"]},
+                {"id": "npc_name", "name": "npc_name", "value": ["信使"]},
+            ],
+            ensure_ascii=False,
+        ),
+        encoding="utf-8",
+    )
+
+    result = importer.import_project_stories_to_db(user_id, project_name)
+
+    with sqlite3.connect(result["db_path"]) as connection:
+        action_rows = connection.execute(
+            "select act_name, func_name, act_type, act_args from binding_act"
+        ).fetchall()
+        registry_rows = connection.execute(
+            "select name, value from registry order by name"
+        ).fetchall()
+        dlg_json = connection.execute("select dlg_json from stories limit 1").fetchone()[0]
+
+    assert action_rows == [
+        ("bgm", "PlayBGM", "audio", '{"musicName": ["town_theme", "battle_theme"]}')
+    ]
+    assert registry_rows == [
+        ("npc_name", '["信使"]'),
+        ("place", '["风丘"]'),
+        ("player_name", '["艾莉"]'),
+    ]
+    assert '"act": {"bgm": "town_theme"}' in dlg_json

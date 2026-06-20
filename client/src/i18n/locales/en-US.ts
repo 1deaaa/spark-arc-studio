@@ -192,6 +192,12 @@ const enUS = {
     engine: 'Agent workflow and model config',
   },
   components: {
+    bindingEditor: {
+      importUnityManifest: 'Import Unity Manifest',
+      emptyManifest: 'No Unity action methods found in this manifest',
+      importedManifest: 'Imported {count} Unity action methods',
+      importManifestFailed: 'Failed to import Unity manifest: {message}',
+    },
     announcement: {
       title: 'System Announcement',
       markRead: 'Mark as Read',
@@ -397,7 +403,7 @@ const enUS = {
       },
       registrationVerification: {
         label: 'Registration verification',
-        help: 'When enabled, new sign-ups must pass Cloudflare Turnstile. Both the site key and secret key are written in plain text to the project root .env file. Make sure that file is gitignored.',
+        help: 'When enabled, new sign-ups must pass Cloudflare Turnstile. Both the site key and secret key are written in plain text to the server persisted config file. Protect your deployment data directory.',
         edit: 'Edit keys',
         statusEnabled: 'Enabled ({provider})',
         statusConfiguredButOff: 'Keys are saved, but verification is currently off',
@@ -405,7 +411,7 @@ const enUS = {
         dialog: {
           setupTitle: 'Set up registration verification',
           editTitle: 'Edit registration verification keys',
-          intro: 'Adds Cloudflare Turnstile in front of the registration endpoint. The values are written to the project root .env on save and take effect immediately, no restart required.',
+          intro: 'Adds Cloudflare Turnstile in front of the registration endpoint. The values are written to the server persisted config file on save and take effect immediately, no restart required.',
           provider: 'Provider',
           siteKey: 'Site key',
           siteKeyPlaceholder: 'e.g. 0x4AAAAAA... (public, exposed to browsers)',
@@ -1012,7 +1018,7 @@ const enUS = {
       startChapter: 'Start chapter',
       autoReview: 'Auto review',
       autoReviewHint: 'Run Critic after each saved scene to create revision tickets. This adds latency.',
-      overwriteWarning: '{count} existing files will be overwritten',
+      overwriteWarning: '{count} existing scenes will be overwritten',
       startAutoWrite: 'Start auto-write',
       starting: 'Starting...',
       restartFromBeginning: 'Start from beginning',
@@ -1244,7 +1250,10 @@ const enUS = {
       startChapter: 'Start chapter',
       selectStartPosition: 'Select start position',
       overwriteWarning: 'Overwrite warning',
-      overwriteWarningContent: 'Starting from the current chapter will overwrite {count} existing files:',
+      overwriteWarningContent: 'Starting from the current chapter will overwrite {count} existing scenes:',
+      overwriteDialogTitle: 'Existing scenes detected',
+      overwriteDialogContent: 'Starting from chapter {chapter} will overwrite {count} written scenes: {files}{suffix}',
+      overwriteDialogConfirm: 'Overwrite and continue',
       startAutoWrite: 'Start auto-write',
       currentProgress: 'Current progress',
       generating: 'Generating...',

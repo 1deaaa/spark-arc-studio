@@ -53,7 +53,22 @@ string text = dialogue.txt.Replace("{player_name}", registry.value[0]);
         size="small"
       >
         <template #header-extra>
-          <n-icon :component="Code" size="20" />
+          <n-space align="center" :size="8">
+            <input
+              ref="manifestInputRef"
+              type="file"
+              accept=".json,application/json"
+              style="display: none"
+              @change="importActionManifest"
+            />
+            <n-button size="small" secondary strong @click="openManifestPicker">
+              <template #icon>
+                <n-icon :component="Upload" />
+              </template>
+              {{ t('components.bindingEditor.importUnityManifest') }}
+            </n-button>
+            <n-icon :component="Code" size="20" />
+          </n-space>
         </template>
 
         <SparkAlert type="info" style="margin-bottom: 12px">
@@ -129,6 +144,9 @@ string text = dialogue.txt.Replace("{player_name}", registry.value[0]);
                 </n-form-item>
                 <n-form-item label="类型">
                   <n-input v-model:value="act.act_type" @blur="updateActionBinding(act)" />
+                </n-form-item>
+                <n-form-item label="Handler">
+                  <n-input v-model:value="act.handler_type" @blur="updateActionBinding(act)" />
                 </n-form-item>
                 <n-form-item label="描述">
                   <n-input 
@@ -253,12 +271,13 @@ string text = dialogue.txt.Replace("{player_name}", registry.value[0]);
 <script setup lang="ts">
 import { ref, onMounted, watch } from 'vue';
 import { storeToRefs } from 'pinia';
+import { useI18n } from 'vue-i18n';
 import {
-  NCard, NSpace, NInput, NInputGroup, NInputNumber, NButton, NIcon, NTable,
-  NTag, NCollapse, NCollapseItem, NForm, NFormItem, NEmpty
+  NCard, NSpace, NInput, NButton, NIcon,
+  NCollapse, NCollapseItem, NForm, NFormItem, NEmpty
 } from 'naive-ui';
 import SparkAlert from '@/components/share/SparkAlert.vue';
-import { Code, List, Plus, Save, Trash } from '@lucide/vue';
+import { Code, List, Plus, Trash, Upload } from '@lucide/vue';
 import { useProjectStore } from '@/components/stores/projectStore';
 import { useActionBindingStore } from '@/components/stores/actionBindingStore';
 import bus from '@/eventBus';
@@ -266,6 +285,7 @@ import bus from '@/eventBus';
 const projectStore = useProjectStore();
 const actionBindingStore = useActionBindingStore();
 const { actionBindings, registries } = storeToRefs(actionBindingStore);
+const { t } = useI18n();
 
 // 行为函数绑定
 const newActName = ref('');
@@ -273,6 +293,7 @@ const newActFuncName = ref('');
 const newActType = ref('');
 const newActDescription = ref('');
 const newActArgsStr = ref('');
+const manifestInputRef = ref<HTMLInputElement | null>(null);
 
 // 全局注册表
 const newRegName = ref('');
@@ -306,6 +327,7 @@ function addActionBinding() {
     id: Date.now(),
     act_name: newActName.value.trim(),
     func_name: newActFuncName.value.trim(),
+    handler_type: null,
     act_type: newActType.value.trim() || null,
     act_description: newActDescription.value.trim() || null,
     act_args: argsObj,
@@ -319,6 +341,65 @@ function addActionBinding() {
   newActArgsStr.value = '';
   
   saveAllActionBindings();
+}
+
+function openManifestPicker() {
+  manifestInputRef.value?.click();
+}
+
+async function importActionManifest(event: Event) {
+  const input = event.target as HTMLInputElement;
+  const file = input.files?.[0];
+  input.value = '';
+  if (!file) return;
+
+  try {
+    const manifest = JSON.parse(await file.text());
+    const actions = Array.isArray(manifest?.actions) ? manifest.actions : [];
+    if (!actions.length) {
+      bus.emit('toast', { type: 'warning', message: t('components.bindingEditor.emptyManifest') });
+      return;
+    }
+
+    let imported = 0;
+    for (const item of actions) {
+      const actName = String(item?.act_name || '').trim();
+      const funcName = String(item?.func_name || '').trim();
+      if (!actName || !funcName) continue;
+
+      const existing = actionBindings.value.find((act) => act.act_name === actName);
+      const actArgs = normalizeManifestArgs(item?.act_args);
+      const payload = {
+        id: existing?.id ?? `manifest-${actName}`,
+        act_name: actName,
+        func_name: funcName,
+        handler_type: item?.handler_type == null ? null : String(item.handler_type),
+        act_type: item?.act_type == null ? null : String(item.act_type),
+        act_description: item?.act_description == null ? null : String(item.act_description),
+        act_args: actArgs,
+        act_args_str: JSON.stringify(actArgs, null, 2),
+      };
+
+      if (existing) {
+        Object.assign(existing, payload);
+      } else {
+        actionBindings.value.push(payload);
+      }
+      imported += 1;
+    }
+
+    await saveAllActionBindings();
+    bus.emit('toast', { type: 'success', message: t('components.bindingEditor.importedManifest', { count: imported }) });
+  } catch (e: unknown) {
+    const errorMessage = e instanceof Error ? e.message : String(e || '未知错误');
+    bus.emit('toast', { type: 'error', message: t('components.bindingEditor.importManifestFailed', { message: errorMessage }) });
+  }
+}
+
+function normalizeManifestArgs(value: unknown): Record<string, unknown> {
+  return value && typeof value === 'object' && !Array.isArray(value)
+    ? value as Record<string, unknown>
+    : {};
 }
 
 function updateActionBinding(act) {

@@ -7,6 +7,7 @@ export type ActionBindingItem = {
   id: string | number;
   act_name: string;
   func_name: string;
+  handler_type?: string | null;
   act_type?: string | null;
   act_description?: string | null;
   act_args?: ActionBindingArgs;
@@ -42,6 +43,7 @@ function normalizeActionBinding(item: unknown, index: number): ActionBindingItem
     id: raw.id != null ? String(raw.id) : `${actName || 'act'}-${index}`,
     act_name: actName,
     func_name: funcName,
+    handler_type: raw.handler_type == null ? null : String(raw.handler_type),
     act_type: raw.act_type == null ? null : String(raw.act_type),
     act_description: raw.act_description == null ? null : String(raw.act_description),
     act_args: actArgs,
@@ -124,6 +126,7 @@ export const useActionBindingStore = defineStore('action-bindings', {
         id: act.id,
         act_name: String(act.act_name || '').trim(),
         func_name: String(act.func_name || '').trim(),
+        handler_type: act.handler_type ?? null,
         act_type: act.act_type ?? null,
         act_description: act.act_description ?? null,
         act_args: asRecord(act.act_args),

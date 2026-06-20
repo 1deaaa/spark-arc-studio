@@ -184,12 +184,12 @@ chat_system: |
 
 tool_rules: |
   ### Director 工具补充规则
-  - 当用户的问题本质是“最近剧情状态 / 人物当前处境 / 最近出场 / 伏笔是否已回收 / 修订工单 / 下一场写作前情”，且仅靠当前上下文不稳妥时，优先调用 `story_memory_tool(action="query")` 或 `story_memory_tool(action="scene_task_pack")`。
+  - 当用户的问题本质是“最近剧情状态 / 人物当前处境 / 最近出场 / 开放线索是否已推进或回收 / 修订工单 / 下一场写作前情”，且仅靠当前上下文不稳妥时，优先调用 `story_memory_tool(action="query")` 或 `story_memory_tool(action="scene_task_pack")` 核对事实。
   - 当用户的问题本质是“全项目事实核对 / 世界观关系 / 设定冲突排查 / 跨章节线索追溯”，且需要图谱级关联时，再调用 `graph_rag_tool`。
   - `graph_rag_tool` 现在只读：仅支持 `action="status"` 与 `action="query"`。构建与重建已收归用户侧 UI，**严禁尝试调用 build/refresh/reset 或自行触发刷新**。
-  - 当你需要回答“谁和谁当前是什么关系 / 某人最近是否知道某个秘密 / 某个伏笔现在处于什么状态”这类实时创作状态问题时，优先调用 `story_memory_tool(action="query")`；当你需要回答“某人和某地、某组织、某事件之间有什么全局关系”这类图谱关联问题时，调用 `graph_rag_tool(action="query", response_mode="answer")`。
+  - 当你需要回答“谁和谁当前是什么关系 / 某人最近是否知道某个秘密 / 某个开放线索在已保存正文中处于什么状态”这类实时事实问题时，优先调用 `story_memory_tool(action="query")`；当你需要回答“某人和某地、某组织、某事件之间有什么全局关系”这类图谱关联问题时，调用 `graph_rag_tool(action="query", response_mode="answer")`。
   - 当你准备委派下游创作或审稿，而任务容易与既有设定冲突时，先调用 `graph_rag_tool(action="query", response_mode="writing_guardrails")` 获取事实约束，再把约束自然语言写入 `delegate_task.task_description`。
-  - 当你委派 `agent_scriptwriter` 写具体章节/场景时，尽量填写 `chapter_name`、`scene_name`、`scene_file_path`、`scene_guidance`、`scene_characters`。这些字段不会展示给用户，但会让系统自动预装当前大纲场景契约、StoryMemory 实时人物状态、关系记录、伏笔和修订工单。
+  - 当你委派 `agent_scriptwriter` 写具体章节/场景时，尽量填写 `chapter_name`、`scene_name`、`scene_file_path`、`scene_guidance`、`scene_characters`。这些字段不会展示给用户，但会让系统自动预装当前大纲场景契约、StoryMemory 实时人物状态、关系记录、开放线索事实和修订工单。StoryMemory 只提供事实与证据，不提供剧情方案。
   - 若 `graph_rag_tool` 返回“尚未构建 / 已过期 / 正在构建”等未就绪提示，**不要再继续调用工具尝试触发构建**，直接用一句话向用户说明：到「设置 → 项目检索索引」中开启或刷新对应项目的「知识图谱」，构建完成后再问。
   - `graph_rag_tool` 只用于项目内部事实图谱检索，不替代 `web_search` 的项目外资料检索，也不替代 `semantic_search` 的全文片段定位。
 

@@ -93,23 +93,20 @@
           <n-collapse style="margin-top: 8px;">
             <n-collapse-item name="unity-scene">
               <template #header>
-                <n-space align="center" :size="6">
+                <span class="unity-collapse-title">
                   <n-icon :component="Gamepad2" size="16" />
-                  <span style="font-size: var(--spark-fs-sm); font-weight: 500;">Unity 运行时配置</span>
-                </n-space>
-              </template>
-              <template #header-extra>
-                <n-text depth="3" style="font-size: var(--spark-fs-2xs);">触发条件 / 效果 / 按钮文案等</n-text>
+                  <span>Unity 运行时配置</span>
+                </span>
               </template>
 
               <n-form label-placement="top" size="small" style="margin-top: 4px;">
 
                 <n-form-item>
                   <template #label>
-                    <n-space align="center" :size="4">
+                    <div class="unity-label">
                       <span>交互按钮文案</span>
-                      <n-text depth="3" style="font-size: var(--spark-fs-2xs);">接近角色时显示的对话按钮文本</n-text>
-                    </n-space>
+                      <n-text depth="3" class="unity-label__hint">接近角色时显示的对话按钮文本</n-text>
+                    </div>
                   </template>
                   <n-input
                     v-model:value="sceneDraft.button_text"
@@ -121,10 +118,10 @@
 
                 <n-form-item>
                   <template #label>
-                    <n-space align="center" :size="4">
+                    <div class="unity-label">
                       <span>外部触发事件</span>
-                      <n-text depth="3" style="font-size: var(--spark-fs-2xs);">非玩家触碰触发时填写</n-text>
-                    </n-space>
+                      <n-text depth="3" class="unity-label__hint">非玩家触碰触发时填写</n-text>
+                    </div>
                   </template>
                   <n-input
                     v-model:value="sceneDraft.trigger_event"
@@ -136,10 +133,10 @@
 
                 <n-form-item>
                   <template #label>
-                    <n-space align="center" :size="4">
+                    <div class="unity-label">
                       <span>播放优先级</span>
-                      <n-text depth="3" style="font-size: var(--spark-fs-2xs);">多场景同时满足时数值越大越先触发</n-text>
-                    </n-space>
+                      <n-text depth="3" class="unity-label__hint">多场景同时满足时数值越大越先触发</n-text>
+                    </div>
                   </template>
                   <n-input-number
                     v-model:value="sceneDraft.priority"
@@ -152,10 +149,10 @@
 
                 <n-form-item>
                   <template #label>
-                    <n-space align="center" :size="4">
+                    <div class="unity-label">
                       <span>一次性标记键</span>
-                      <n-text depth="3" style="font-size: var(--spark-fs-2xs);">场景完成后自动写入状态，防重放</n-text>
-                    </n-space>
+                      <n-text depth="3" class="unity-label__hint">场景完成后自动写入状态，防重放</n-text>
+                    </div>
                   </template>
                   <n-input
                     v-model:value="sceneDraft.once_key"
@@ -167,20 +164,20 @@
 
                 <n-form-item>
                   <template #label>
-                    <n-space align="center" :size="4">
+                    <div class="unity-label">
                       <span>隐藏场景</span>
-                      <n-text depth="3" style="font-size: var(--spark-fs-2xs);">开启后不在触发列表中显示，仅可由条件或事件激活</n-text>
-                    </n-space>
+                      <n-text depth="3" class="unity-label__hint">开启后不在触发列表中显示，仅可由条件或事件激活</n-text>
+                    </div>
                   </template>
                   <n-switch v-model:value="sceneDraft.hiden" @update:value="applyScene" />
                 </n-form-item>
 
                 <n-form-item>
                   <template #label>
-                    <n-space align="center" :size="4">
+                    <div class="unity-label">
                       <span>触发条件</span>
-                      <n-text depth="3" style="font-size: var(--spark-fs-2xs);">满足条件才可见/可触发</n-text>
-                    </n-space>
+                      <n-text depth="3" class="unity-label__hint">满足条件才可见/可触发</n-text>
+                    </div>
                   </template>
                   <conditions-editor
                     v-model:model-value="sceneDraft.conditions"
@@ -191,10 +188,10 @@
 
                 <n-form-item>
                   <template #label>
-                    <n-space align="center" :size="4">
+                    <div class="unity-label">
                       <span>场景完成后状态写入</span>
-                      <n-text depth="3" style="font-size: var(--spark-fs-2xs);">场景结束后写回状态（不触发函数，只记状态）</n-text>
-                    </n-space>
+                      <n-text depth="3" class="unity-label__hint">场景结束后写回状态（不触发函数，只记状态）</n-text>
+                    </div>
                   </template>
                   <effects-editor
                     v-model:model-value="sceneDraft.effects"
@@ -287,14 +284,13 @@
           <n-collapse style="margin-top: 8px;">
             <n-collapse-item name="unity-act">
               <template #header>
-                <n-space align="center" :size="6">
+                <span class="unity-collapse-title">
                   <n-icon :component="Gamepad2" size="16" />
-                  <span style="font-size: var(--spark-fs-sm); font-weight: 500;">Unity 行为绑定</span>
-                </n-space>
+                  <span>Unity 行为绑定</span>
+                </span>
               </template>
               <template #header-extra>
                 <SparkTag v-if="currentActCount > 0" type="info" size="small">{{ currentActCount }} 个</SparkTag>
-                <n-text v-else depth="3" style="font-size: var(--spark-fs-2xs);">节点执行时广播给 Unity 监听器</n-text>
               </template>
 
               <!-- ActEditor 组件 -->
@@ -772,5 +768,32 @@ watch(
 }
 .no-selection {
   padding: 20px 0;
+}
+
+/* Unity 配置区：collapse 标题横向排列，窄宽度下不压缩 */
+.unity-collapse-title {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  font-size: var(--spark-fs-sm);
+  font-weight: 500;
+  white-space: nowrap;
+}
+
+/* Unity 配置区 label：标题与说明横向排列，窄宽度下说明可换行但标题不拆 */
+.unity-label {
+  display: flex;
+  align-items: baseline;
+  flex-wrap: wrap;
+  gap: 2px 8px;
+}
+.unity-label > span {
+  font-weight: 500;
+  white-space: nowrap;
+}
+.unity-label__hint {
+  font-size: var(--spark-fs-2xs);
+  font-weight: normal;
+  line-height: 1.4;
 }
 </style>

@@ -15,7 +15,7 @@
 
 `server/.runtime/python/` 是 Windows 一键启动脚本生成的便携运行时环境，仅服务于 `start.bat` 这类免配置启动链路。它不是开发者默认 Python 环境，也不是 AI 运行开发测试时的首选解释器。
 
-开发 / 测试应优先使用 VSCode 当前选中的解释器、用户显式指定的 conda / venv / uv 环境。只有在验证 Windows 一键启动部署链路时，才使用 `server/.runtime/python/python.exe`。
+开发 / 测试应优先使用 VSCode 当前选中的解释器、用户显式指定的 conda / venv / uv 环境（根目录找不到环境就考虑诸如conda env list寻找，需要灵活判断用户当前使用的是哪种包管理器）。
 
 ## 2. 统一收口，不复制实现
 

@@ -538,6 +538,8 @@ SPARKARC_TURNSTILE_SITE_KEY=your Turnstile Site Key
 SPARKARC_TURNSTILE_SECRET_KEY=your Turnstile Secret Key
 ```
 
+You can also save the Turnstile keys from the admin UI. In that path SparkArc writes the runtime `.env` under the server persisted data directory, so Docker rebuilds will keep it.
+
 Then recreate the container:
 
 ```bash

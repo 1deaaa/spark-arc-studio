@@ -1,119 +1,360 @@
-# SparkArc Unity SDK 配置指南
+# SparkArc Unity SDK 新手接入指南
 
-欢迎使用 SparkArc 对话系统 Unity SDK！本 SDK 旨在帮助开发者快速将 Web 编辑器生成的剧本导入到 Unity 中运行。
+SparkArc Unity SDK 的目标是把 SparkArc 创作端导出的 `stories.db` 变成 Unity 游戏运行时可以直接消费的剧情数据。
 
-> 当前测试版已支持运行时增强字段：
-> - `guide`：场景导演意图/简要概述（原 `caption`，已统一为 `guide`）
-> - `intro`：场景引言，在场景标题下方显示的简短介绍文本
-> - `button_text`：交互提示文案
-> - `conditions`：场景触发条件
-> - `hiden`：隐藏场景过滤
-> - `effects`：场景结束后的最小状态写回
-> - `trigger_event`：外部系统事件回调键（如 `battle.end.xxx`）
-> - `priority`：同一触发点命中多个场景时的优先级
-> - `once_key`：一次性剧情标记
->
-> **注意**：`thought`（辅助 AI 决策的思维链字段）仅在 ARC 源文件中存在，不写入数据库，运行时无需处理。
->
-> 推荐将 Web 端继续视为轻量分享演出器，将 Unity 端作为正式游戏运行时。
+这不是一个只能展示文本的 demo。它的设计目标是：
 
-## 🚀 快速上手
+- 编剧 / 策划在 SparkArc 中写剧情、配置 `act` 行为和全局注册表。
+- Unity 开发者在游戏工程里写模块化 C# Handler。
+- Unity Editor 扫描可绑定方法，导出行为清单。
+- SparkArc 导入行为清单，生成 `binding_act` 映射。
+- 游戏运行时读取 `stories.db`，由剧情驱动对话、状态、任务、镜头、BGM 等系统。
 
-### 1. 准备工作
-- 确保你的 Unity 项目中已导入 `Newtonsoft.Json` (可通过 Unity Package Manager 安装 "Json .NET" 或手动导入 DLL)。
-- 在项目中创建 `StreamingAssets` 文件夹 (如果还没有)。
+## 一、最快跑通：空 URP 项目
 
-### 2. 导入数据
-- 将编辑器导出的 `stories.db` 文件放入项目的 `Assets/StreamingAssets/` 目录下。
+### 1. 创建 Unity 项目
 
-### 3. 环境配置
-1. 在场景中创建一个空物体，命名为 `SparkArc_Manager`。
-2. 挂载以下组件：
-   - `StoryRepository`: 负责读取数据库。
-   - `DialogueManager`: 核心逻辑。
-   - `DialogueUI`: 负责界面显示。
-   - `StoryStateStore`: 全局剧情状态仓库。
-   - `SceneConditionEvaluator`: 场景条件判定器。
-   - `StoryEffectApplier`: 场景播完后的效果写回器。
-3. **配置角色**：
-   - 在 Project 窗口右键 -> `Create` -> `SparkArc` -> `Character Database`。
-   - 在新创建的 Asset 中，点击 `+` 号添加角色（例如：ID: 1, Name: "我"）。
-   - 将此 Asset 拖入 `DialogueManager` 的 `Character DB` 槽位。
+1. 打开 Unity Hub。
+2. 新建一个 URP 项目。
+3. 打开项目后等待编译完成。
 
-### 4. UI 绑定
-1. 在 Canvas 下创建一个对话面板。
-2. 将面板中的 `Text` 组组件分别拖入 `DialogueUI` 对应的槽位：
-   - `Name Text`: 显示说话人名字。
-   - `Content Text`: 显示对话正文。
-   - `Choice Container`: 用于放置选项按钮的父物体 (通常带 LayoutGroup)。
-   - `Choice Button Prefab`: 你的选项按钮预制体。
+### 2. 复制 SDK 文件
 
-### 5. 触发对话
-- 在你的 NPC 或触发区域挂载 `DialogueTrigger` 脚本。
-- 在 `Scene Name` 中填入编辑器中定义的场景名称 (例如 `Chapter_1_1`)。
-- 设置 `Trigger Mode` 为 `Manual` (靠近按 E) 或 `OnEnter` (走进去就触发)。
-- 如果你给场景配置了 `button_text`，可将交互提示文本组件拖入 `Interact Hint Text`，系统会自动显示该文案。
-- 如果场景配置了 `conditions` 或 `hiden`，触发器会在运行时自动过滤不可用场景。
+把 SparkArc 仓库里的文件复制到 Unity 项目：
 
----
-
-## 🛠️ 进阶功能
-
-### 最小运行时状态接入
-你可以在外部系统中直接写入剧情状态：
-
-```csharp
-StoryStateStore.Instance.SetInt("quest.main.prologue.step", 3);
-StoryStateStore.Instance.SetBool("npc.venti.met", true);
+```text
+presenter/UnitySDK/Scripts  ->  Assets/SparkArc/Runtime/Scripts
+presenter/UnitySDK/Editor   ->  Assets/SparkArc/Editor
+presenter/UnitySDK/Examples/MinimalRuntime -> Assets/SparkArc/Examples/MinimalRuntime
 ```
 
-然后在场景 `conditions` 中这样配置：
+如果你的 Unity 项目还没有这些目录，可以直接新建。
+
+### 3. 安装依赖
+
+Unity 项目需要：
+
+- `Newtonsoft.Json`
+- `TextMeshPro`
+- `Unity UI`
+- `Input System` 或旧输入系统
+- `Mono.Data.Sqlite`
+- 当前平台对应的原生 `sqlite3`
+
+Unity 6 可在 `Packages/manifest.json` 中加入：
+
+```json
+"com.unity.nuget.newtonsoft-json": "3.2.2"
+```
+
+Windows 编辑器下，SQLite 插件通常放在：
+
+```text
+Assets/SparkArc/Plugins/Managed/Mono.Data.Sqlite.dll
+Assets/SparkArc/Plugins/Windows/x86_64/sqlite3.dll
+```
+
+### 4. 放入剧情数据库
+
+把 SparkArc 导出的数据库放到：
+
+```text
+Assets/StreamingAssets/stories.db
+```
+
+### 5. 一键生成示例场景
+
+在 Unity 菜单执行：
+
+```text
+SparkArc/Demo/Rebuild Minimal Runtime Scene
+```
+
+生成后打开：
+
+```text
+Assets/Scenes/SparkArcMinimalRuntime.unity
+```
+
+点击 Play，靠近 NPC，按 `F`。如果对话框弹出，就说明最小链路跑通了。
+
+## 二、行为绑定完整链路
+
+SparkArc 的行为系统不是让剧情数据任意调用 C#，而是走一条受控链路：
+
+```text
+dlg_json.act
+  -> act_name
+  -> stories.db / binding_act.func_name
+  -> SparkArcActionDispatcher
+  -> SparkArcActionHandler 实例方法
+  -> 你的游戏系统
+```
+
+### 1. 在 Unity 写 Handler
+
+示例：
+
+```csharp
+using SparkArc.Unity;
+using UnityEngine;
+
+public class AudioActionHandler : SparkArcActionHandler
+{
+    [SparkArcAction("bgm", ActionType = "audio", Description = "播放指定背景音乐")]
+    public void PlayBGM(string musicName)
+    {
+        Debug.Log($"播放 BGM: {musicName}");
+    }
+}
+```
+
+新手先记住三点：
+
+- 继承 `SparkArcActionHandler`。
+- 方法必须是 `public void`。
+- 参数尽量用 `string`、`int`、`float`、`double`、`bool` 或 `string[]`。
+
+### 2. 在 Unity 导出行为清单
+
+在 Unity 菜单执行：
+
+```text
+SparkArc/Actions/Export Action Manifest
+```
+
+它会生成：
+
+```text
+Assets/SparkArc/spark_actions.manifest.json
+```
+
+这个文件会列出 Unity 工程里可绑定的 C# 行为方法。
+
+### 3. 在 SparkArc 导入清单
+
+回到 SparkArc 前端：
+
+```text
+风格与运行时 -> Unity 运行时映射 -> 行为函数绑定
+```
+
+点击：
+
+```text
+导入 Unity 清单
+```
+
+选择 Unity 导出的 `spark_actions.manifest.json`。
+
+SparkArc 会把方法合并进行为绑定列表，例如：
+
+```text
+bgm -> PlayBGM
+weather -> ChangeWeather
+```
+
+保存后，SparkArc 导出 `stories.db` 时会把这些映射写入 `binding_act` 表。
+
+### 4. 在剧本中触发行为
+
+对话节点中写：
+
+```json
+"act": {
+  "bgm": "town_theme"
+}
+```
+
+运行时会读取 `binding_act`：
+
+```text
+bgm -> PlayBGM
+```
+
+然后调用：
+
+```csharp
+PlayBGM("town_theme")
+```
+
+## 三、场景里需要哪些组件
+
+你可以手动搭建，也可以用示例场景生成器。核心对象建议叫：
+
+```text
+SparkArc_Manager
+```
+
+挂载组件：
+
+- `StoryRepository`：读取 `stories.db`。
+- `StoryStateStore`：保存运行时剧情变量。
+- `SceneConditionEvaluator`：判断 `conditions`。
+- `StoryEffectApplier`：对话结束后执行 `effects`。
+- `SparkArcActionDispatcher`：把 `act` 映射到 C# Handler。
+- `DialogueManager`：播放对话树。
+- `DialogueUI`：显示对话框、选项和文本。
+
+然后把你的模块 Handler 挂在同一个物体或其他系统物体上，例如：
+
+- `AudioActionHandler`
+- `CameraActionHandler`
+- `QuestActionHandler`
+- `WorldStateActionHandler`
+
+小项目可以让 `SparkArcActionDispatcher` 自动扫描场景里的 Handler。中型项目建议把 Handler 显式拖到 `SparkArcActionDispatcher.handlers` 列表里，更可控。
+
+## 四、NPC 触发对话
+
+在 NPC 或触发区域上挂：
+
+```text
+DialogueTrigger
+```
+
+常用配置：
+
+- `Scene Name`：填 `stories.db` 中的 `scene_name`。
+- `Trigger Mode`：新手建议先用 `Manual`。
+- `Interact Hint`：拖入提示 UI。
+- `Interact Hint Text`：拖入提示文字。
+
+运行时靠近 NPC，按 `F`，就会开始对应剧情。
+
+如果 `stories` 表里配置了 `button_text`，提示文字会优先显示数据库里的内容。
+
+## 五、全局注册表
+
+SparkArc 前端的全局注册表会导出到 `registry` 表。
+
+例如：
+
+```json
+{
+  "name": "player_name",
+  "value": ["艾莉"]
+}
+```
+
+对话文本：
+
+```text
+你好，{player_name}
+```
+
+Unity 运行时会显示：
+
+```text
+你好，艾莉
+```
+
+行为参数里也可以使用占位符：
+
+```json
+"act": {
+  "weather": ["sunny", "12", "{place}"]
+}
+```
+
+## 六、状态条件与效果写回
+
+### 条件
+
+场景可配置 `conditions`，例如：
 
 ```json
 {
   "all": [
-    { "var": "quest.main.prologue.step", "op": "==", "value": 3 },
+    { "var": "quest.main.step", "op": ">=", "value": 3 },
     { "var": "npc.venti.met", "op": "==", "value": false }
   ]
 }
 ```
 
-### 最小效果写回
-场景结束后可自动执行 `effects`：
+如果条件不满足，`DialogueTrigger` 会忽略这场剧情。
+
+### 效果
+
+场景结束后可执行 `effects`：
 
 ```json
 [
   { "op": "set", "key": "npc.venti.met", "value": true },
-  { "op": "set", "key": "quest.main.prologue.step", "value": 4 },
+  { "op": "set", "key": "quest.main.step", "value": 4 },
   { "op": "mark_played", "key": "cutscene.windrise_intro" }
 ]
 ```
 
-如果配置了 `once_key`，场景播放完成后系统会自动标记为已播放。
+如果配置了 `once_key`，场景播放完成后系统会自动标记已播放。
 
-### 处理自定义行为 (Actions)
-在编辑器中定义的 `@act func:arg` 会通过 `DialogueEvents.OnActionTriggered` 事件广播。你可以写一个脚本来监听它：
+## 七、中型项目怎么组织
+
+不要把所有行为写成一个静态大类。
+
+不要这样：
 
 ```csharp
-void OnEnable() {
-    DialogueEvents.OnActionTriggered += HandleMyAction;
-}
-
-void HandleMyAction(string func, string[] args) {
-    if (func == "bgm") {
-        // 播放背景音乐逻辑
-    }
+public static class AllActions
+{
+    public static void PlayBGM(string name) {}
+    public static void StartQuest(string id) {}
+    public static void ChangeWeather(string type) {}
 }
 ```
 
-### 数据库初始化
-在游戏启动时，请确保调用一次加载：
-```csharp
-StoryRepository.Instance.LoadDatabase();
+推荐这样：
+
+```text
+SparkArcRuntime
+  StoryRepository
+  StoryStateStore
+  SparkArcActionDispatcher
+  AudioActionHandler
+  CameraActionHandler
+  QuestActionHandler
+  WorldStateActionHandler
 ```
 
----
+更详细的模块组织建议见：
 
-## 📝 注意事项
-- **Android 平台**：由于 Android 不允许直接通过文件流读取 StreamingAssets 内的 SQLite，你可能需要使用协程将文件复制到 `Application.persistentDataPath` 之后再打开。
-- **SQLite 库**：本 SDK 默认使用 `Mono.Data.Sqlite`，如果你的环境报错，请确保 `Mono.Data.Sqlite.dll` 和 `sqlite3.dll` 在项目中。
+```text
+presenter/UnitySDK/RuntimeArchitectureGuide.md
+```
+
+## 八、常见问题
+
+### Play 后提示找不到 stories.db
+
+检查文件是否在：
+
+```text
+Assets/StreamingAssets/stories.db
+```
+
+### 提示 SQLite 加载失败
+
+检查是否有：
+
+```text
+Assets/SparkArc/Plugins/Managed/Mono.Data.Sqlite.dll
+Assets/SparkArc/Plugins/Windows/x86_64/sqlite3.dll
+```
+
+### act 触发了但方法没执行
+
+依次检查：
+
+1. Unity 菜单是否执行过 `SparkArc/Actions/Export Action Manifest`。
+2. SparkArc 前端是否导入过 `spark_actions.manifest.json`。
+3. SparkArc 是否重新导出过 `stories.db`。
+4. 场景里是否有 `SparkArcActionDispatcher`。
+5. Handler 是否继承 `SparkArcActionHandler`。
+6. 方法是否是 `public void`。
+7. 方法参数数量和 `act` 参数是否匹配。
+
+### Android 平台怎么读数据库
+
+Android 不允许直接用普通文件流读取 `StreamingAssets` 内的 SQLite。正式项目需要启动时把数据库复制到 `Application.persistentDataPath`，再让 `StoryRepository` 读取持久化路径。
+
+当前 SDK 先覆盖 Editor / Windows 原型链路，移动端分发建议单独做平台适配。

@@ -315,12 +315,15 @@ const overwriteCount = computed(() => {
   const sceneFiles = (autoWriteState.value?.sceneFiles as Array<Record<string, unknown>> | undefined) ?? [];
   const startChapterIndex = Number(config.startChapterIndex ?? 0);
   const startSceneIndex = Number(config.startSceneIndex ?? 0);
+  const endChapterIndex = config.mode === 'chapter_by_chapter' ? startChapterIndex : null;
   return sceneFiles.filter((s) => {
     if (!s.exists) return false;
     const chapterIndex = Number(s.chapterIndex ?? 0);
     const sceneIndex = Number(s.sceneIndex ?? 0);
-    return chapterIndex > startChapterIndex
+    const afterStart = chapterIndex > startChapterIndex
       || (chapterIndex === startChapterIndex && sceneIndex >= startSceneIndex);
+    const beforeEnd = endChapterIndex === null || chapterIndex <= endChapterIndex;
+    return afterStart && beforeEnd;
   }).length;
 });
 

@@ -273,6 +273,7 @@ function onJsonBlur() {
   display: flex;
   flex-direction: column;
   gap: 0;
+  container-type: inline-size;
 }
 
 .ae-header {
@@ -303,7 +304,8 @@ function onJsonBlur() {
 .ae-row {
   display: flex;
   align-items: center;
-  gap: 6px;
+  flex-wrap: wrap;
+  gap: 4px 6px;
   background: var(--n-color-embedded, rgba(128,128,128,.05));
   border-radius: 6px;
   padding: 6px 8px;
@@ -311,8 +313,8 @@ function onJsonBlur() {
 }
 
 .ae-key {
-  width: 170px;
-  flex-shrink: 0;
+  flex: 1 1 140px;
+  min-width: 0;
 }
 
 .ae-colon {
@@ -323,8 +325,18 @@ function onJsonBlur() {
 }
 
 .ae-val {
-  flex: 1;
+  flex: 2 1 100px;
   min-width: 0;
+}
+
+/* 窄容器：key 独占一行，隐藏冒号，value + 删除按钮占一行 */
+@container (max-width: 320px) {
+  .ae-key {
+    flex: 1 1 100%;
+  }
+  .ae-colon {
+    display: none;
+  }
 }
 
 .ae-json {

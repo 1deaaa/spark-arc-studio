@@ -53,7 +53,7 @@ from .auto_write_state import (
     build_scene_output_filename,
     patch_auto_write_state,
 )
-from story.file_naming import strip_story_filename_meta
+from story.file_naming import resolve_planned_scene_file_path, strip_story_filename_meta
 from .context_builder import (
     load_worldview,
     load_all_roles,
@@ -415,10 +415,17 @@ async def generate_script_stream(
             current_scene_title = scene_title
             
             # Prepare file path for this specific scene
-            from agents.tools.scriptwriter import _ensure_chapter_dir
-            chapter_dir = _ensure_chapter_dir(stories_path, chapter_title)
             filename = build_scene_output_filename(chapter_num, chapter_title, scene_idx, scene_title, export_format)
-            filepath = os.path.join(chapter_dir, filename)
+            filepath, _, _ = resolve_planned_scene_file_path(
+                stories_path,
+                int(chapter_num),
+                int(scene_idx) + 1,
+                scene_title,
+                chapter_dir_name=chapter_title,
+                file_format=export_format,
+            )
+            os.makedirs(os.path.dirname(filepath), exist_ok=True)
+            filename = os.path.basename(filepath)
             display_filename = strip_story_filename_meta(filename)
             
             scene_arc_content = []

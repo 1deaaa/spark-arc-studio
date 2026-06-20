@@ -88,6 +88,10 @@ namespace SparkArc.Unity
             // 1. 处理角色和文本
             int chrId = node["chr"]?.Value<int>() ?? -1;
             string txt = node["txt"]?.ToString() ?? "";
+            if (StoryRepository.Instance != null)
+            {
+                txt = StoryRepository.Instance.ResolveRegistryTokens(txt);
+            }
             string chrName = characterDB != null ? characterDB.GetCharacterName(chrId) : chrId.ToString();
 
             // thought: 辅助AI决策的字段，运行时不需要处理
@@ -127,20 +131,43 @@ namespace SparkArc.Unity
 
         private void HandleActions(JObject acts)
         {
+            if (acts == null) return;
+
             foreach (var property in acts.Properties())
             {
                 string func = property.Name;
-                string[] args;
-                
-                if (property.Value.Type == JTokenType.Array)
-                    args = property.Value.ToObject<string[]>();
-                else
-                    args = property.Value.ToString().Split(new[] { ' ' }, StringSplitOptions.RemoveEmptyEntries);
+                string[] args = ParseActionArgs(property.Value);
 
-                // 发送全局广播，让其他组件响应行为
+                // 发送全局广播，SparkArcActionDispatcher 和旧式监听脚本都可以响应。
                 DialogueEvents.OnActionTriggered?.Invoke(func, args);
                 Debug.Log($"SparkArc: 触发行为 [{func}] 参数: {string.Join(", ", args)}");
             }
+        }
+
+        private static string[] ParseActionArgs(JToken value)
+        {
+            if (value == null || value.Type == JTokenType.Null)
+            {
+                return Array.Empty<string>();
+            }
+
+            if (value.Type == JTokenType.Array)
+            {
+                var array = value as JArray;
+                var args = new List<string>();
+                foreach (var item in array)
+                {
+                    args.Add(item == null || item.Type == JTokenType.Null ? string.Empty : item.ToString());
+                }
+                return args.ToArray();
+            }
+
+            if (value.Type == JTokenType.Object)
+            {
+                return new[] { value.ToString(Newtonsoft.Json.Formatting.None) };
+            }
+
+            return new[] { value.ToString() };
         }
 
         public void EndDialogue()

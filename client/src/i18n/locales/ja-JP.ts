@@ -192,6 +192,12 @@ const jaJP = {
     engine: 'Agent ワークフローとモデル設定',
   },
   components: {
+    bindingEditor: {
+      importUnityManifest: 'Unity マニフェストをインポート',
+      emptyManifest: 'この Unity マニフェストにインポート可能なアクションメソッドがありません',
+      importedManifest: '{count} 個の Unity アクションメソッドをインポートしました',
+      importManifestFailed: 'Unity マニフェストのインポートに失敗しました: {message}',
+    },
     announcement: {
       title: 'システムお知らせ',
       markRead: '既読にする',
@@ -397,7 +403,7 @@ const jaJP = {
       },
       registrationVerification: {
         label: '登録時の人間検証',
-        help: '有効化すると、新規登録時に Cloudflare Turnstile による検証が必須になります。Site Key と Secret Key はプロジェクトルートの .env ファイルに平文で書き込まれるため、必ず .gitignore で除外してください。',
+        help: '有効化すると、新規登録時に Cloudflare Turnstile による検証が必須になります。Site Key と Secret Key はサーバーの永続化設定ファイルに平文で保存されます。デプロイ先のデータディレクトリを保護してください。',
         edit: 'キーを編集',
         statusEnabled: '有効（{provider}）',
         statusConfiguredButOff: 'キーは保存済みですが、現在は無効です',
@@ -405,7 +411,7 @@ const jaJP = {
         dialog: {
           setupTitle: '登録検証を設定',
           editTitle: '登録検証キーを編集',
-          intro: '登録 API の前段に Cloudflare Turnstile を追加します。保存するとプロジェクトルートの .env に書き込まれ、再起動なしで即時反映されます。',
+          intro: '登録 API の前段に Cloudflare Turnstile を追加します。保存するとサーバーの永続化設定ファイルに書き込まれ、再起動なしで即時反映されます。',
           provider: '検証プロバイダ',
           siteKey: 'Site Key',
           siteKeyPlaceholder: '例: 0x4AAAAAA...（公開、ブラウザに渡されます）',
@@ -1012,7 +1018,7 @@ const jaJP = {
       startChapter: '開始章',
       autoReview: '自動レビュー',
       autoReviewHint: '各シーン保存後に Critic を実行して修正チケットを作成します。待ち時間が増えます。',
-      overwriteWarning: '{count} 個の既存ファイルが上書きされます',
+      overwriteWarning: '{count} 個の既存シーンが上書きされます',
       startAutoWrite: '自動執筆を開始',
       starting: '開始中...',
       restartFromBeginning: '最初から開始',
@@ -1244,7 +1250,10 @@ const jaJP = {
       startChapter: '開始章',
       selectStartPosition: '開始位置を選択',
       overwriteWarning: '上書き警告',
-      overwriteWarningContent: '現在の開始章から始めると、{count} 個の既存ファイルが上書きされます：',
+      overwriteWarningContent: '現在の開始章から始めると、{count} 個の既存シーンが上書きされます：',
+      overwriteDialogTitle: '既存シーンが見つかりました',
+      overwriteDialogContent: '第 {chapter} 章から開始すると、執筆済みシーン {count} 個が上書きされます：{files}{suffix}',
+      overwriteDialogConfirm: '上書きして続行',
       startAutoWrite: '自動執筆を開始',
       currentProgress: '現在の進捗',
       generating: '生成中...',

@@ -25,6 +25,10 @@ namespace SparkArc.Unity.Examples
                 yield break;
             }
 
+            var dispatched = SparkArcActionDispatcher.Instance != null
+                && SparkArcActionDispatcher.Instance.Dispatch("bgm", new[] { "town_theme" });
+            Debug.Log($"SparkArc Demo Smoke: actionDispatched={dispatched}");
+
             DialogueManager.Instance.StartScene(sceneName);
             yield return null;
 

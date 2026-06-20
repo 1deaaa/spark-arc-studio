@@ -190,6 +190,12 @@ const zhCN = {
     engine: 'Agent 工作流与模型配置',
   },
   components: {
+    bindingEditor: {
+      importUnityManifest: '导入 Unity 清单',
+      emptyManifest: 'Unity 清单中没有可导入的行为方法',
+      importedManifest: '已导入 {count} 个 Unity 行为方法',
+      importManifestFailed: '导入 Unity 清单失败: {message}',
+    },
     announcement: {
       title: '系统公告',
       markRead: '已阅',
@@ -395,7 +401,7 @@ const zhCN = {
       },
       registrationVerification: {
         label: '注册人机验证',
-        help: '开启后，新用户注册时需要通过 Cloudflare Turnstile 验证。站点密钥与服务端密钥会以明文写入项目根目录的 .env 文件，请确保该文件已被 .gitignore 忽略。',
+        help: '开启后，新用户注册时需要通过 Cloudflare Turnstile 验证。站点密钥与服务端密钥会以明文写入服务端持久化配置文件，请妥善保护部署数据目录。',
         edit: '编辑密钥',
         statusEnabled: '已启用（{provider}）',
         statusConfiguredButOff: '密钥已配置，但当前未启用',
@@ -403,7 +409,7 @@ const zhCN = {
         dialog: {
           setupTitle: '配置注册人机验证',
           editTitle: '编辑注册验证密钥',
-          intro: '用于在注册接口前增加 Cloudflare Turnstile 验证。提交后将写入项目根目录 .env 文件并立即生效，无需重启进程。',
+          intro: '用于在注册接口前增加 Cloudflare Turnstile 验证。提交后将写入服务端持久化配置文件并立即生效，无需重启进程。',
           provider: '验证服务商',
           siteKey: '站点密钥（Site Key）',
           siteKeyPlaceholder: '形如 0x4AAAAAA...，前端可见，会暴露给浏览器',
@@ -1010,7 +1016,7 @@ const zhCN = {
       startChapter: '起始章节',
       autoReview: '自动审稿',
       autoReviewHint: '每个场景保存后调用 Critic 生成修订工单，会增加等待时间。',
-      overwriteWarning: '将覆盖 {count} 个已有文件',
+      overwriteWarning: '将覆盖 {count} 个已有场景',
       startAutoWrite: '开始自动撰写',
       starting: '正在启动...',
       restartFromBeginning: '从头开始',
@@ -1242,7 +1248,10 @@ const zhCN = {
       startChapter: '起始章节',
       selectStartPosition: '选择开始位置',
       overwriteWarning: '覆盖预警',
-      overwriteWarningContent: '从当前起始章节开始，会覆盖 {count} 个已存在文件：',
+      overwriteWarningContent: '从当前起始章节开始，会覆盖 {count} 个已存在场景：',
+      overwriteDialogTitle: '检测到已有场景',
+      overwriteDialogContent: '从第 {chapter} 章开始会覆盖 {count} 个已写场景：{files}{suffix}',
+      overwriteDialogConfirm: '覆盖并继续',
       startAutoWrite: '开始自动撰写',
       currentProgress: '当前进度',
       generating: '正在生成...',
