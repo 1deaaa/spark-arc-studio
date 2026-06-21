@@ -38,6 +38,12 @@ ENV PYTHONDONTWRITEBYTECODE=1
 # 防止 Python 缓冲 stdout 和 stderr
 ENV PYTHONUNBUFFERED=1
 
+# 安装运行时系统依赖
+# libgomp1 提供 llama.cpp 预编译包需要的 OpenMP 运行库 libgomp.so.1。
+RUN apt-get update && \
+    apt-get install -y --no-install-recommends libgomp1 ca-certificates && \
+    rm -rf /var/lib/apt/lists/*
+
 # 安装后端依赖
 COPY server/requirements.txt ./server/requirements.txt
 # --mount=type=cache:利用 Docker 缓存挂载点，加速 pip 安装
