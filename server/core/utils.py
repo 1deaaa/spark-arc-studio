@@ -3,6 +3,27 @@ import json
 
 # 一致的用户数据根目录，统一为 server/_userdata
 USERDATA_ROOT = os.path.abspath(os.path.join(os.path.dirname(__file__), '../_userdata'))
+SYSTEM_CHARACTER_NARRATOR_ID = -1
+SYSTEM_CHARACTER_UNKNOWN_ID = -2
+SYSTEM_CHARACTER_IDS = {SYSTEM_CHARACTER_NARRATOR_ID, SYSTEM_CHARACTER_UNKNOWN_ID}
+SYSTEM_CHARACTER_NAMES = {
+    SYSTEM_CHARACTER_NARRATOR_ID: "旁白",
+    SYSTEM_CHARACTER_UNKNOWN_ID: "?",
+}
+SYSTEM_CHARACTER_DESCRIPTIONS = {
+    SYSTEM_CHARACTER_NARRATOR_ID: "# 旁白\n\n这是旁白，用于叙述和场景描述。",
+    SYSTEM_CHARACTER_UNKNOWN_ID: "# ?\n\n这是尚未揭示姓名的出场角色，用于角色第一次出场但读者暂不知道名字时。",
+}
+
+
+def is_system_character_id(character_id) -> bool:
+    """判断角色 ID 是否为系统保留角色。"""
+    try:
+        return int(character_id) in SYSTEM_CHARACTER_IDS
+    except Exception:
+        return False
+
+
 def get_character_bind_file_path(character_settings_dir):
     """获取角色绑定文件路径"""
     return os.path.join(character_settings_dir, 'chr.bind')
@@ -119,18 +140,20 @@ def ensure_project_characters_directory(user_id, project_name):
     characters_path = get_project_characters_path(user_id, project_name)
     if not os.path.exists(characters_path):
         os.makedirs(characters_path)
-        bindings = load_character_bindings(characters_path)
 
-        # 1. 创建旁白角色 (ID: -1)
-        narrator_id = -1
-        narrator_name = "旁白"
-        narrator_file = os.path.join(characters_path, f"{narrator_id}.txt")
-        if not os.path.exists(narrator_file):
-            with open(narrator_file, 'w', encoding='utf-8') as f:
-                f.write(f"# {narrator_name}\n\n这是旁白")
-        bindings[str(narrator_id)] = " " # 名字在剧本里显示为空格（一个空格）
+    bindings = load_character_bindings(characters_path)
+    changed = False
+    for character_id, name in SYSTEM_CHARACTER_NAMES.items():
+        character_file = os.path.join(characters_path, f"{character_id}.txt")
+        if not os.path.exists(character_file):
+            with open(character_file, 'w', encoding='utf-8') as f:
+                f.write(SYSTEM_CHARACTER_DESCRIPTIONS[character_id])
+        bind_name = " " if character_id == SYSTEM_CHARACTER_NARRATOR_ID else name
+        if str(character_id) not in bindings:
+            bindings[str(character_id)] = bind_name
+            changed = True
 
-        # 保存绑定
+    if changed:
         save_character_bindings(characters_path, bindings)
         
     return characters_path

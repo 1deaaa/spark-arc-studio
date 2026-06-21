@@ -930,12 +930,18 @@ export const useChatStore = defineStore('chat', {
             session.toolName = '';
             session.toolProgressText = '';
           }
+          const canKeepRunning = !session.abortRequested && !abortController.signal.aborted;
+          const stillRunning = canKeepRunning
+            ? await this._isChatTaskStillRunning(agentIdAtStart, contextKeyAtStart)
+            : false;
           session.sending = false;
-          this._finalizeSessionAbort(sessionId, abortController);
-          // 流正常结束（非中断）→ 后台任务已完成
-          if (!session.abortRequested && session.streamEpoch === streamEpoch) {
+          if (stillRunning) {
+            session.backgroundTaskStatus = 'running';
+            session.sending = true;
+          } else if (!session.abortRequested && session.streamEpoch === streamEpoch) {
             session.backgroundTaskStatus = null;
           }
+          this._finalizeSessionAbort(sessionId, abortController);
         }
       }
     },
@@ -994,6 +1000,18 @@ export const useChatStore = defineStore('chat', {
       }
 
       return false;
+    },
+
+    async _isChatTaskStillRunning(agentId: string, contextKey: string): Promise<boolean> {
+      const projectStore = useProjectStore();
+      const projectName = projectStore.currentProject;
+      if (!projectName) return false;
+      try {
+        const status = await getChatTaskStatus(projectName, agentId, contextKey) as AnyRecord;
+        return !!status?.hasTask && status.status === 'running';
+      } catch {
+        return false;
+      }
     },
 
     async checkBackgroundTasks(): Promise<boolean> {
@@ -1207,13 +1225,17 @@ export const useChatStore = defineStore('chat', {
           return;
         }
         if (session.streamEpoch === streamEpoch) {
-          session.sending = false;
-          session.backgroundTaskStatus = null;
+          const canKeepRunning = !session.abortRequested && !abortController.signal.aborted;
+          const stillRunning = canKeepRunning
+            ? await this._isChatTaskStillRunning(agentId, contextKey)
+            : false;
+          session.sending = stillRunning;
+          session.backgroundTaskStatus = stillRunning ? 'running' : null;
           this._finalizeSessionAbort(sessionId, abortController);
 
           // 重连流只包含断开后的 delta，本地 assistant 内容不完整。
           // 流结束时后端已将完整消息落盘，移除本地部分消息后刷新历史。
-          if (!abortController.signal.aborted && assistantMsg) {
+          if (!stillRunning && !abortController.signal.aborted && assistantMsg) {
             const partialClientId = assistantMsg.clientId;
             if (partialClientId) {
               session.history = (session.history || []).filter(
@@ -1490,8 +1512,15 @@ export const useChatStore = defineStore('chat', {
             session.toolName = '';
             session.toolProgressText = '';
           }
+          const canKeepRunning = !session.abortRequested && !abortController.signal.aborted;
+          const stillRunning = canKeepRunning
+            ? await this._isChatTaskStillRunning(agentIdAtStart, contextKeyAtStart)
+            : false;
           session.sending = false;
-          if (!session.abortRequested && session.streamEpoch === streamEpoch) {
+          if (stillRunning) {
+            session.backgroundTaskStatus = 'running';
+            session.sending = true;
+          } else if (!session.abortRequested && session.streamEpoch === streamEpoch) {
             session.backgroundTaskStatus = null;
           }
           this._finalizeSessionAbort(sessionId, abortController);

@@ -1,10 +1,18 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { createPinia, setActivePinia } from 'pinia';
 import { useChatStore } from '../chatStore';
+import { getChatTaskStatus } from '@/services/chatService';
 
 vi.mock('@/components/stores/projectStore', () => ({
   useProjectStore: () => ({ currentProject: '测试项目' }),
 }));
+vi.mock('@/services/chatService', async () => {
+  const actual = await vi.importActual<typeof import('@/services/chatService')>('@/services/chatService');
+  return {
+    ...actual,
+    getChatTaskStatus: vi.fn(),
+  };
+});
 
 function readerFromEvents(events: Record<string, unknown>[]): ReadableStreamDefaultReader<Uint8Array> {
   const encoder = new TextEncoder();
@@ -178,5 +186,29 @@ describe('chatStore NDJSON 消费契约', () => {
     });
 
     vi.runOnlyPendingTimers();
+  });
+
+  it('观察流断开但后台任务仍运行时保留运行态', async () => {
+    vi.mocked(getChatTaskStatus).mockResolvedValueOnce({
+      hasTask: true,
+      status: 'running',
+      agentId: 'agent_director',
+      contextKey: 'global',
+    });
+
+    const store = useChatStore();
+    const session = store.primarySession;
+    session.sending = false;
+    session.backgroundTaskStatus = null;
+
+    const stillRunning = await store._isChatTaskStillRunning('agent_director', 'global');
+    if (stillRunning) {
+      session.backgroundTaskStatus = 'running';
+      session.sending = true;
+    }
+
+    expect(stillRunning).toBe(true);
+    expect(session.sending).toBe(true);
+    expect(session.backgroundTaskStatus).toBe('running');
   });
 });

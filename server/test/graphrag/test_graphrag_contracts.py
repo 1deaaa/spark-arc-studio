@@ -82,3 +82,38 @@ def test_graphrag_uses_semantic_chunks_with_narrative_metadata(monkeypatch, tmp_
     assert any(doc.metadata.get("scene_title") == "钟楼交易" for doc in arc_docs)
     assert any(doc.metadata.get("scene_title") == "档案室" for doc in arc_docs)
     assert all("narrative_ref" in doc.metadata for doc in arc_docs)
+    assert all("【角色索引】" in doc.page_content for doc in arc_docs)
+    assert all("[1] = 沈棠" in doc.page_content for doc in arc_docs)
+    assert all("[2] = 林烬" in doc.page_content for doc in arc_docs)
+
+
+def test_arc_chunks_expose_character_names_without_changing_arc_runtime_contract(monkeypatch, tmp_path: Path) -> None:
+    monkeypatch.setattr("core.utils.USERDATA_ROOT", str(tmp_path))
+    project_path = tmp_path / "uid_16" / "projects" / "demo"
+    story_dir = project_path / "stories" / "一 · 开端"
+    chr_dir = project_path / "chr"
+    story_dir.mkdir(parents=True)
+    chr_dir.mkdir(parents=True)
+    (chr_dir / "chr.bind").write_text(
+        json.dumps({"-1": "旁白", "-2": "?", "1": {"name": "沈棠"}, "2": {"name": "林烬"}}, ensure_ascii=False),
+        encoding="utf-8",
+    )
+    arc_text = "# 钟楼交易\n[1]\n把钥匙收好。\n[2]\n我会查清楚。"
+    (story_dir / "1-1 钟楼交易.arc").write_text(arc_text, encoding="utf-8")
+
+    files = collect_project_files("16", "demo")
+    arc_file = next(item for item in files if item.format_key == "arc")
+
+    assert arc_file.content.startswith("【角色索引】")
+    assert "[1] = 沈棠" in arc_file.content
+    assert "[2] = 林烬" in arc_file.content
+    assert "[-1] = 旁白" not in arc_file.content
+    assert "[-2] = ?" not in arc_file.content
+    assert arc_text in arc_file.content
+
+    chunks = SemanticChunker().chunk_file(arc_file, load_outline_data("16", "demo"))
+    assert len(chunks) == 1
+    assert chunks[0].start_line == 1
+    assert chunks[0].text.startswith("【角色索引】")
+    assert "[1] = 沈棠" in chunks[0].text
+    assert "[1]\n把钥匙收好。" in chunks[0].text

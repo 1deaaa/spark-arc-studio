@@ -144,8 +144,15 @@ def load_character_bundle(user_id: str, project_name: str) -> Dict[str, Any]:
             continue
 
         raw_name = _coerce_character_name(raw_info)
-        display_name = "旁白" if cid == -1 else raw_name
+        if cid == -1:
+            display_name = "旁白"
+        elif cid == -2:
+            display_name = "?"
+        else:
+            display_name = raw_name
         chr_map[cid] = display_name
+        if cid in (-1, -2):
+            continue
 
         content = ""
         detail_path = os.path.join(characters_path, f"{cid_str}.txt")
@@ -172,7 +179,7 @@ def load_character_bundle(user_id: str, project_name: str) -> Dict[str, Any]:
             f"--- 角色: {display_name} (ID: {cid}) ---\n{content or '(暂无详细设定)'}"
         )
 
-        if cid != -1:
+        if cid not in (-1, -2):
             summary_entry = f"- {display_name}"
             if desc:
                 summary_entry += f": {desc}"

@@ -461,7 +461,7 @@ class GraphRAGService:
         chr_dir = os.path.join(self._project_path, "chr")
         # 旁白角色对实体合并没有意义，去掉
         id_to_name = load_character_id_name_map(
-            self.user_id, self.project_name, include_narrator=False,
+            self.user_id, self.project_name, include_narrator=False, include_system=False,
         )
         if not id_to_name:
             return alias_map

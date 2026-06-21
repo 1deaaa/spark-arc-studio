@@ -178,6 +178,9 @@ const showWorldGen = ref(false);
 const showSingleCharDrawer = ref(false);
 const worldview = ref('');
 const characters = ref([]);
+const SYSTEM_CHARACTER_IDS = new Set([-1, -2]);
+const isSystemCharacter = (ch: any) => SYSTEM_CHARACTER_IDS.has(Number(ch?.id));
+const userCharactersOnly = (items: any[]) => (Array.isArray(items) ? items.filter(ch => !isSystemCharacter(ch)) : []);
 let suppressWorldviewAutoSave = false;
 let worldviewSaveTimer: ReturnType<typeof setTimeout> | null = null;
 
@@ -233,7 +236,7 @@ function hydrateLorebookFromCache() {
   if (!cached) return;
   worldview.value = cached.worldview || '';
   if (Array.isArray(cached.characters)) {
-    characters.value = cached.characters.map((ch) => ({ ...ch }));
+    characters.value = userCharactersOnly(cached.characters).map((ch) => ({ ...ch }));
   }
   if (cached.editingCharDraft) {
     editingChar.id = cached.editingCharDraft.id;
@@ -325,7 +328,7 @@ async function loadCharacters() {
   try {
     const remoteCharacters = await fetchCharacters(pid, true);
     if (!isCreativeCacheEqual(characters.value, remoteCharacters)) {
-      characters.value = Array.isArray(remoteCharacters) ? remoteCharacters : [];
+      characters.value = userCharactersOnly(remoteCharacters);
     }
   } catch {
     characters.value = [];

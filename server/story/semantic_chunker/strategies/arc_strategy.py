@@ -23,7 +23,13 @@ class ArcChunkStrategy(ChunkStrategy):
 
     @override
     def chunk(self, project_file: ProjectFile, outline_data: dict) -> list[SemanticChunk]:
-        lines = project_file.content.split("\n")
+        raw_lines = project_file.content.split("\n")
+        first_scene_idx = next(
+            (idx for idx, line in enumerate(raw_lines) if re.match(r'^#\s+', line)),
+            0,
+        )
+        context_prefix = "\n".join(raw_lines[:first_scene_idx]).strip()
+        lines = raw_lines[first_scene_idx:] if first_scene_idx else raw_lines
         chunks: list[SemanticChunk] = []
 
         # 从文件名解析章节/场景索引
@@ -47,6 +53,7 @@ class ArcChunkStrategy(ChunkStrategy):
                 # 保存上一个场景块
                 text = self._clean_scene_text("\n".join(current_lines))
                 if text:
+                    text = self._prepend_context_prefix(text, context_prefix)
                     ref = build_narrative_ref(
                         project_file.rel_path, "arc", outline_data,
                         chapter_idx=chapter_idx, scene_idx=scene_idx,
@@ -79,6 +86,7 @@ class ArcChunkStrategy(ChunkStrategy):
         if current_lines:
             text = self._clean_scene_text("\n".join(current_lines))
             if text:
+                text = self._prepend_context_prefix(text, context_prefix)
                 ref = build_narrative_ref(
                     project_file.rel_path, "arc", outline_data,
                     chapter_idx=chapter_idx, scene_idx=scene_idx,
@@ -105,3 +113,11 @@ class ArcChunkStrategy(ChunkStrategy):
         """移除 <conception> 块，保留正文"""
         text = re.sub(r'<conception>[\s\S]*?</conception>', '', text)
         return text.strip()
+
+    @staticmethod
+    def _prepend_context_prefix(text: str, context_prefix: str) -> str:
+        """把角色索引等模型可见前缀附到每个场景块，避免单独成块。"""
+        prefix = (context_prefix or "").strip()
+        if not prefix:
+            return text
+        return f"{prefix}\n\n{text}"

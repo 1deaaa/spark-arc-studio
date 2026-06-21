@@ -12,7 +12,11 @@ import json
 
 from core.auth import get_current_user, get_optional_user
 from core.request_context import get_current_project_name, resolve_project_name
-from core.utils import ensure_project_characters_directory
+from core.utils import (
+    SYSTEM_CHARACTER_NAMES,
+    ensure_project_characters_directory,
+    is_system_character_id,
+)
 
 from .schemas import (
     CharacterSettingsCreate, CharacterSettingsSave,
@@ -81,12 +85,24 @@ def _coerce_bind_name(entry) -> str:
     return str(entry or '').strip()
 
 
+def _display_character_name(chr_id: str, info) -> str:
+    """返回前端可读角色名，系统保留角色用固定显示名。"""
+    try:
+        numeric_id = int(chr_id)
+    except Exception:
+        numeric_id = None
+    if numeric_id in SYSTEM_CHARACTER_NAMES:
+        return SYSTEM_CHARACTER_NAMES[numeric_id]
+    return _coerce_bind_name(info)
+
+
 # ==================== 统一接口 ====================
 
 @characters_router.get('/api/characters')
 async def get_characters(
     projectName: str = Query(None),
     includeContent: bool = Query(False, description="是否包含角色设定内容"),
+    includeSystem: bool = Query(False, description="是否包含旁白、? 等系统保留角色"),
     user: dict = Depends(get_current_user),
 ):
     """
@@ -106,9 +122,11 @@ async def get_characters(
     
     characters = []
     for chr_id, info in chr_data.items():
+        if not includeSystem and is_system_character_id(chr_id):
+            continue
         char = {
             'id': int(chr_id),
-            'name': _coerce_bind_name(info),
+            'name': _display_character_name(chr_id, info),
             'desc': ''
         }
         
@@ -141,7 +159,7 @@ async def get_character_content(
     if chr_id not in chr_data:
         return JSONResponse(status_code=404, content={'error': '角色不存在'})
     
-    name = _coerce_bind_name(chr_data[chr_id])
+    name = _display_character_name(chr_id, chr_data[chr_id])
     content = _read_character_content(chr_dir, chr_id)
     
     return {
@@ -169,7 +187,14 @@ async def create_character(
     chr_data = _load_bind_file(bind_file)
     
     # 生成新 ID（找最大值 + 1）
-    existing_ids = [int(k) for k in chr_data.keys()] if chr_data else []
+    existing_ids = []
+    for raw_id in chr_data.keys() if chr_data else []:
+        try:
+            numeric_id = int(raw_id)
+        except Exception:
+            continue
+        if numeric_id >= 0:
+            existing_ids.append(numeric_id)
     new_id = max(existing_ids, default=-1) + 1
     
     name = data.name or '新角色'
@@ -195,6 +220,8 @@ async def save_character(
         return JSONResponse(status_code=400, content={'error': '缺少项目名称'})
 
     chr_dir = ensure_project_characters_directory(user_id, project_name)
+    if is_system_character_id(data.id):
+        return JSONResponse(status_code=403, content={'error': '系统保留角色不能编辑'})
     
     _write_character_content(chr_dir, str(data.id), data.content or '')
     
@@ -217,6 +244,8 @@ async def rename_character(
     
     chr_data = _load_bind_file(bind_file)
     chr_id = str(data.id)
+    if is_system_character_id(chr_id):
+        return JSONResponse(status_code=403, content={'error': '系统保留角色不能重命名'})
     
     if chr_id not in chr_data:
         return JSONResponse(status_code=404, content={'error': '角色不存在'})
@@ -243,6 +272,8 @@ async def delete_character(
     chr_dir = ensure_project_characters_directory(user_id, project_name)
     bind_file = os.path.join(chr_dir, 'chr.bind')
     chr_id = str(id)
+    if is_system_character_id(chr_id):
+        return JSONResponse(status_code=403, content={'error': '系统保留角色不能删除'})
     
     # 从 bind 文件中删除
     chr_data = _load_bind_file(bind_file)

@@ -382,10 +382,12 @@ class ScriptwriterAgent(SparkBaseAgent, SparkAgentExecutor):
         if chr_map:
             if -1 not in chr_map:
                 chr_map[-1] = "旁白"
+            if -2 not in chr_map:
+                chr_map[-2] = "?"
             chr_lines = [f"  [{cid}] = {name}" for cid, name in chr_map.items()]
             chr_reference = "\n".join(chr_lines)
         else:
-            chr_reference = "  [-1] = 旁白\n  (其他角色ID由上下文推断)"
+            chr_reference = "  [-1] = 旁白\n  [-2] = ?（姓名尚未揭示的真实说话者）\n  (其他角色ID由上下文推断)"
 
         arc_example = self._get_arc_example()
 
@@ -491,10 +493,12 @@ class ScriptwriterAgent(SparkBaseAgent, SparkAgentExecutor):
         if chr_map:
             if -1 not in chr_map:
                 chr_map[-1] = "旁白"
+            if -2 not in chr_map:
+                chr_map[-2] = "?"
             chr_lines = [f"  [{cid}] = {name}" for cid, name in chr_map.items()]
             chr_reference = "\n".join(chr_lines)
         else:
-            chr_reference = "  [-1] = 旁白\n  (其他角色ID由上下文推断)"
+            chr_reference = "  [-1] = 旁白\n  [-2] = ?（姓名尚未揭示的真实说话者）\n  (其他角色ID由上下文推断)"
 
         arc_example = self._get_arc_example()
 
@@ -605,7 +609,7 @@ class ScriptwriterAgent(SparkBaseAgent, SparkAgentExecutor):
             guidance=user_input or "请给出修改建议",
             style_profile="（未提供）",
             feedback="请只提供讨论、建议、诊断，不要输出落盘指令。",
-            chr_reference="  [-1] = 旁白",
+            chr_reference="  [-1] = 旁白\n  [-2] = ?（姓名尚未揭示的真实说话者）",
             arc_example=self._get_arc_example() or "",
             length_instruction="输出建议即可，无需生成完整剧本。",
         )
@@ -651,7 +655,7 @@ class ScriptwriterAgent(SparkBaseAgent, SparkAgentExecutor):
             guidance=user_input or "请给出修改建议",
             style_profile="（未提供）",
             feedback="请只提供讨论、建议、诊断，不要输出落盘指令。",
-            chr_reference="  [-1] = 旁白",
+            chr_reference="  [-1] = 旁白\n  [-2] = ?（姓名尚未揭示的真实说话者）",
             arc_example=self._get_arc_example() or "",
             length_instruction="输出建议即可，无需生成完整剧本。",
         )

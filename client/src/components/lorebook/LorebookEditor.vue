@@ -139,6 +139,9 @@ const worldview = ref('');
 const { t } = useI18n();
 
 const characters = ref([]); // [{id, name, content}]
+const SYSTEM_CHARACTER_IDS = new Set([-1, -2]);
+const isSystemCharacter = (ch: any) => SYSTEM_CHARACTER_IDS.has(Number(ch?.id));
+const userCharactersOnly = (items: any[]) => (Array.isArray(items) ? items.filter(ch => !isSystemCharacter(ch)) : []);
 
 type LorebookCacheSnapshot = {
   worldview: string;
@@ -172,7 +175,7 @@ function hydrateLorebookFromCache() {
   if (!cached) return;
   worldview.value = cached.worldview || '';
   if (Array.isArray(cached.characters)) {
-    characters.value = cached.characters.map((ch) => ({ ...ch }));
+    characters.value = userCharactersOnly(cached.characters).map((ch) => ({ ...ch }));
   }
 }
 
@@ -230,7 +233,7 @@ async function loadCharacters() {
   try {
     const remoteCharacters = await fetchCharacters(projectStore.currentProject, true);
     if (!isCreativeCacheEqual(characters.value, remoteCharacters)) {
-      characters.value = Array.isArray(remoteCharacters) ? remoteCharacters : [];
+      characters.value = userCharactersOnly(remoteCharacters);
     }
   } catch {
     characters.value = [];

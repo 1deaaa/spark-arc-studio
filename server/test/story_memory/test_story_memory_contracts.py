@@ -52,6 +52,41 @@ def test_story_memory_records_scene_and_builds_task_pack(monkeypatch, tmp_path: 
     assert "档案室秘密" in text
 
 
+def test_story_memory_resolves_arc_character_ids_from_chr_map(monkeypatch, tmp_path: Path) -> None:
+    monkeypatch.setattr("core.utils.USERDATA_ROOT", str(tmp_path))
+    project_path = tmp_path / "uid_17" / "projects" / "demo"
+    project_path.mkdir(parents=True)
+
+    facade = StoryMemoryFacade("17", "demo")
+    facade.record_scene_write(
+        scene_text="\n".join(
+            [
+                "# 钟楼交易",
+                "[1]",
+                "把钥匙收好。",
+                "[2]",
+                "我会查清楚。",
+                "[-1]",
+                "雨声吞没了脚步。",
+                "[-2]",
+                "别回头。",
+            ]
+        ),
+        chapter_index=0,
+        scene_index=0,
+        scene_title="钟楼交易",
+        chr_map={-1: "旁白", -2: "?", 1: "沈棠", 2: "林烬"},
+        use_llm_extractor=False,
+    )
+
+    state = facade.load_state()
+    assert state["scenes"][0]["characters"] == ["沈棠", "林烬"]
+    assert "沈棠" in state["character_states"]
+    assert "林烬" in state["character_states"]
+    assert "旁白" not in state["character_states"]
+    assert "?" not in state["character_states"]
+
+
 def test_story_memory_llm_delta_feeds_scene_task_pack(monkeypatch, tmp_path: Path) -> None:
     monkeypatch.setattr("core.utils.USERDATA_ROOT", str(tmp_path))
     project_path = tmp_path / "uid_8" / "projects" / "demo"

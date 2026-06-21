@@ -91,6 +91,16 @@ def test_showrunner_outline_prompt_requires_scene_contract_fields() -> None:
     assert "场景元数据必填" in prompt
 
 
+def test_showrunner_pipeline_requires_in_task_append_until_complete() -> None:
+    prompts = load_prompt("showrunner")
+    pipeline = prompts["pipeline_system"]
+    outline_system = load_prompt("showrunner", "generate_outline")["system"]
+
+    assert "本次委派内连续完成" in pipeline
+    assert "不要把“只完成核心部分”等同于任务完成" in pipeline
+    assert "同一次任务中继续追加后续章节" in outline_system
+
+
 def test_only_director_overrides_dynamic_tool_system_prompt() -> None:
     from agents.communication import SparkBaseAgent
     from agents.agent_director import DirectorAgent

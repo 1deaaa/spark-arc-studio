@@ -215,12 +215,13 @@ export async function saveStoriesOrder(projectName: string, dirPath: string, ord
  * @param {boolean} includeContent - 是否包含角色设定内容（编辑器用）
  * @returns {Promise<Array>} 角色数组 [{id, name, desc, content?}]
  */
-export async function fetchCharacters(projectName: string, includeContent: true): Promise<StoryCharacterDetail[]>;
-export async function fetchCharacters(projectName: string, includeContent?: false): Promise<StoryCharacter[]>;
-export async function fetchCharacters(projectName: string, includeContent = false): Promise<StoryCharacter[] | StoryCharacterDetail[]> {
+export async function fetchCharacters(projectName: string, includeContent: true, includeSystem?: boolean): Promise<StoryCharacterDetail[]>;
+export async function fetchCharacters(projectName: string, includeContent?: false, includeSystem?: boolean): Promise<StoryCharacter[]>;
+export async function fetchCharacters(projectName: string, includeContent = false, includeSystem = false): Promise<StoryCharacter[] | StoryCharacterDetail[]> {
   if (!projectName) return [];
   let url = `/api/characters?projectName=${encodeURIComponent(projectName)}`;
   if (includeContent) url += '&includeContent=true';
+  if (includeSystem) url += '&includeSystem=true';
 
   const response = await fetchWithAuth(url);
   if (!response.ok) return [];

@@ -226,6 +226,86 @@ describe('ChatMessageList 深度思考块展开性能契约', () => {
     expect(wrapper.find('.reasoning-content-wrapper').classes()).not.toContain('is-expanded');
   });
 
+  it('流式思考窗口高度保持稳定，不随内容增量撑高外层列表', async () => {
+    vi.useFakeTimers();
+    vi.spyOn(window, 'requestAnimationFrame').mockImplementation((callback: FrameRequestCallback) => {
+      callback(performance.now());
+      return 1;
+    });
+    vi.spyOn(HTMLElement.prototype, 'getBoundingClientRect').mockImplementation(function getMockRect(this: HTMLElement) {
+      const el = this;
+      if (el.classList?.contains('reasoning-inner')) {
+        return { width: 420, height: 480, top: 0, left: 0, right: 420, bottom: 480, x: 0, y: 0, toJSON: () => ({}) } as DOMRect;
+      }
+      if (el.classList?.contains('node-slot')) {
+        return { width: 420, height: 480, top: 0, left: 0, right: 420, bottom: 480, x: 0, y: 0, toJSON: () => ({}) } as DOMRect;
+      }
+      return { width: 420, height: 0, top: 0, left: 0, right: 420, bottom: 0, x: 0, y: 0, toJSON: () => ({}) } as DOMRect;
+    });
+
+    const wrapper = mount(ChatMessageList, {
+      props: {
+        history: [
+          {
+            id: 'assistant-5',
+            role: 'assistant',
+            content: '',
+            segments: [
+              {
+                type: 'reasoning',
+                text: '第一段流式推理',
+                source_agent: 'agent_director',
+              },
+            ],
+          },
+        ],
+        sending: true,
+      },
+      global: {
+        plugins: [i18n],
+        stubs: {
+          NButton: defineComponent({ template: '<button><slot /><slot name="icon" /></button>' }),
+          NTooltip: defineComponent({ template: '<span><slot name="trigger" /><slot /></span>' }),
+          NPopover: defineComponent({ template: '<span><slot name="trigger" /><slot /></span>' }),
+          NInput: defineComponent({ template: '<textarea />' }),
+          SparkAlert: defineComponent({ template: '<div><slot /></div>' }),
+          ContextCompactionSegment: true,
+          ToolTraceSegment: true,
+        },
+      },
+    });
+
+    await nextTick();
+    await Promise.resolve();
+    await nextTick();
+    vi.runOnlyPendingTimers();
+    await nextTick();
+
+    const panel = wrapper.find('.reasoning-content-wrapper');
+    expect(panel.attributes('style')).toContain('--reasoning-panel-height: 108px');
+
+    await wrapper.setProps({
+      history: [
+        {
+          id: 'assistant-5',
+          role: 'assistant',
+          content: '',
+          segments: [
+            {
+              type: 'reasoning',
+              text: Array.from({ length: 20 }, (_, index) => `第 ${index + 1} 段流式推理`).join('\n'),
+              source_agent: 'agent_director',
+            },
+          ],
+        },
+      ],
+      sending: true,
+    });
+    await nextTick();
+
+    expect(wrapper.find('.reasoning-content-wrapper').attributes('style')).toContain('--reasoning-panel-height: 108px');
+  });
+
   it('首次展开按实际渲染节点高度落定，且测量时不把真实面板改成 auto', async () => {
     vi.useFakeTimers();
     const rafCallbacks: FrameRequestCallback[] = [];

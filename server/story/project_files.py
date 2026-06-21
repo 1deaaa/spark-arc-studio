@@ -10,7 +10,13 @@ import os
 from dataclasses import dataclass
 from typing import Optional
 
-from core.utils import get_project_path, get_project_stories_path, get_project_characters_path
+from core.utils import (
+    SYSTEM_CHARACTER_NAMES,
+    get_project_path,
+    get_project_stories_path,
+    get_project_characters_path,
+    is_system_character_id,
+)
 from story.outline_parser import parse_outline_markup
 
 
@@ -92,7 +98,9 @@ def _read_file_text(file_path: str) -> str:
 # 特殊 ID："-1" 视作"旁白"，仅在 ``include_narrator=True`` 时回填默认名"旁白"。
 
 _CHARACTER_NARRATOR_ID = "-1"
-_CHARACTER_NARRATOR_NAME = "旁白"
+_CHARACTER_NARRATOR_NAME = SYSTEM_CHARACTER_NAMES.get(-1, "旁白")
+_CHARACTER_UNKNOWN_ID = "-2"
+_CHARACTER_UNKNOWN_NAME = SYSTEM_CHARACTER_NAMES.get(-2, "?")
 
 
 def _character_bind_path(user_id: str, project_name: str) -> str:
@@ -111,6 +119,7 @@ def load_character_id_name_map_from_bind_path(
     bind_path: str,
     *,
     include_narrator: bool = True,
+    include_system: bool = True,
     include_empty: bool = False,
 ) -> dict[str, str]:
     """底层版本：直接按 chr.bind 文件绝对路径读取 ID→名字映射。
@@ -140,6 +149,10 @@ def load_character_id_name_map_from_bind_path(
                 continue
             # 旁白角色名约定为"旁白"，即便 chr.bind 内是空字符串也补上
             name = name or _CHARACTER_NARRATOR_NAME
+        elif cid == _CHARACTER_UNKNOWN_ID:
+            if not include_system:
+                continue
+            name = name or _CHARACTER_UNKNOWN_NAME
         if not name and not include_empty:
             continue
         result[cid] = name
@@ -151,6 +164,7 @@ def load_character_id_name_map(
     project_name: str,
     *,
     include_narrator: bool = True,
+    include_system: bool = True,
     include_empty: bool = False,
 ) -> dict[str, str]:
     """读取 chr.bind，返回 ``{character_id: character_name}`` 映射。
@@ -161,6 +175,7 @@ def load_character_id_name_map(
         include_narrator: 是否把 ID="-1" 的旁白角色纳入映射。默认 True。
             对于"想拿到全部角色名做实体识别"的场景应保持 True；
             对于"列出可写作的角色"的场景可以设 False 把旁白排除。
+        include_system: 是否把除旁白外的系统保留角色纳入映射。默认 True。
         include_empty: 是否保留名字为空的条目。默认 False（过滤掉）。
 
     Returns:
@@ -169,6 +184,7 @@ def load_character_id_name_map(
     return load_character_id_name_map_from_bind_path(
         _character_bind_path(user_id, project_name),
         include_narrator=include_narrator,
+        include_system=include_system,
         include_empty=include_empty,
     )
 
@@ -265,6 +281,51 @@ def enrich_character_content(
     return f"# {label}\n\n{raw_content}"
 
 
+def _iter_named_story_characters(character_map: dict) -> list[tuple[str, str]]:
+    """返回普通角色的 ID/名字列表，排除旁白、? 等系统角色。"""
+    items: list[tuple[str, str]] = []
+    if not isinstance(character_map, dict):
+        return items
+    for raw_cid, raw_name in character_map.items():
+        cid = str(raw_cid).strip()
+        name = str(raw_name or "").strip()
+        if not cid or not name:
+            continue
+        try:
+            if is_system_character_id(int(cid)):
+                continue
+        except Exception:
+            pass
+        items.append((cid, name))
+    return items
+
+
+def enrich_arc_content_for_model(
+    raw_content: str,
+    character_map: dict,
+) -> str:
+    """给模型/检索使用的 ARC 文本补一段角色索引，不改变真实落盘格式。
+
+    ARC 正文仍以 ``[0]`` 这类 ID 保存，Web 与 Unity 运行时也继续按 ID 解析。
+    但 GraphRAG、向量检索和 StoryMemory 看到的只读文本需要知道 ID 对应的
+    角色名，否则关系抽取容易把 ``[0]`` 当成无意义符号。
+    """
+    text = str(raw_content or "")
+    if not text.strip():
+        return text
+    if text.lstrip().startswith("【角色索引】"):
+        return text
+
+    named_characters = _iter_named_story_characters(character_map)
+    if not named_characters:
+        return text
+
+    index_lines = ["【角色索引】"]
+    index_lines.extend(f"[{cid}] = {name}" for cid, name in named_characters)
+    index_lines.append("【剧本正文】")
+    return "\n".join(index_lines) + "\n" + text
+
+
 # ==================== 项目文件收集 ====================
 
 def collect_project_files(
@@ -285,6 +346,9 @@ def collect_project_files(
       "# 角色：xxx（ID: yyy）" 前缀（参见 :func:`enrich_character_content`）。
       下游（vector_index、GraphRAG、grep）由此可以识别"沈逐流"对应
       ``chr/0.txt``，而不必各自再写一份 ID→名字解析。
+      对 ``format_key == "arc"`` 的文件，会在模型可见文本头部注入紧凑
+      角色索引（参见 :func:`enrich_arc_content_for_model`），但不修改原始
+      ``.arc`` 文件，也不改变运行时解析协议。
     """
     project_path = get_project_path(user_id, project_name)
     if not os.path.isdir(project_path):
@@ -351,6 +415,8 @@ def collect_project_files(
             character_id = os.path.splitext(filename)[0]
             character_name = character_map.get(character_id, "")
             text = enrich_character_content(text, character_id, character_name)
+        elif format_key == "arc":
+            text = enrich_arc_content_for_model(text, character_map)
 
         remaining = max_source_chars - total_chars
         if remaining <= 0:

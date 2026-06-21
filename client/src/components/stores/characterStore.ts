@@ -28,7 +28,7 @@ export const useCharacterStore = defineStore('characters', {
       if (this.loadedForProject === projectName && this.list.length) return;
       this.loading = true;
       try {
-        const items = await fetchCharacters(projectName);
+        const items = await fetchCharacters(projectName, false, true);
         this.list = Array.isArray(items) ? items : [];
         const m: Record<number, string> = {};
         for (const it of this.list) {

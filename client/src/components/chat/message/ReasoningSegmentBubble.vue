@@ -156,7 +156,7 @@ function measureRenderedContentHeight(root: HTMLElement | null) {
 function measurePanelHeight(streaming = props.streaming) {
   const fullHeight = measureRenderedContentHeight(contentRef.value);
   if (!streaming) return fullHeight;
-  return Math.min(fullHeight, STREAMING_REASONING_MAX_HEIGHT);
+  return STREAMING_REASONING_MAX_HEIGHT;
 }
 
 function getTargetHeight(streaming = props.streaming) {

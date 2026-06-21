@@ -109,4 +109,33 @@ describe('useChatActions 聊天自动滚动开关', () => {
 
     expect(el.scrollTop).toBe(1000);
   });
+
+  it('用户在程序滚动保护窗口内主动上滚，也会暂停后续非强制自动下滑', async () => {
+    vi.useFakeTimers();
+    vi.setSystemTime(0);
+    vi.spyOn(performance, 'now').mockReturnValue(0);
+
+    const wrapper = mountHarness();
+    await nextTick();
+    await nextTick();
+
+    const exposed = wrapper.vm as any;
+    const el = exposed.listEl as HTMLElement;
+    setScrollMetrics(el, { scrollTop: 20, scrollHeight: 1000, clientHeight: 320 });
+
+    exposed.actions.scrollToBottom();
+    await nextTick();
+    expect(el.scrollTop).toBe(1000);
+
+    vi.mocked(performance.now).mockReturnValue(80);
+    el.dispatchEvent(new WheelEvent('wheel'));
+    setScrollMetrics(el, { scrollTop: 260, scrollHeight: 1000, clientHeight: 320 });
+    el.dispatchEvent(new Event('scroll'));
+
+    setScrollMetrics(el, { scrollTop: 260, scrollHeight: 1200, clientHeight: 320 });
+    exposed.actions.scrollToBottom();
+    await nextTick();
+
+    expect(el.scrollTop).toBe(260);
+  });
 });

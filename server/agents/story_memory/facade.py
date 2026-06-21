@@ -88,6 +88,26 @@ def _scan_character_names(text: str, chr_map: Optional[dict]) -> list[str]:
     return matches
 
 
+def _scan_character_ids_from_arc(text: str, chr_map: Optional[dict]) -> list[str]:
+    """从 ARC 的 [角色ID] 行映射登场角色名，跳过旁白和未知身份系统角色。"""
+    if not chr_map:
+        return []
+    matches: list[str] = []
+    for raw_id in re.findall(r"^\s*\[(-?\d+)\](?:\s|$)", str(text or ""), flags=re.MULTILINE):
+        try:
+            cid = int(raw_id)
+        except Exception:
+            continue
+        if cid < 0:
+            continue
+        name = str(chr_map.get(cid) or chr_map.get(str(cid)) or "").strip()
+        if not name or name == "旁白" or name == "?":
+            continue
+        if name not in matches:
+            matches.append(name)
+    return matches
+
+
 def _merge_unique(base: list[str], extra: list[str], limit: int = 12) -> list[str]:
     merged = list(base)
     for item in extra:
@@ -225,9 +245,12 @@ class StoryMemoryFacade:
             source_path=source_path,
         )
         explicit_characters = _normalize_character_names(scene_characters)
-        scanned_characters = _scan_character_names(
-            "\n".join([plain_text, guidance, scene_description, scene_title]),
-            chr_map,
+        scanned_characters = _merge_unique(
+            _scan_character_ids_from_arc(scene_text, chr_map),
+            _scan_character_names(
+                "\n".join([plain_text, guidance, scene_description, scene_title]),
+                chr_map,
+            ),
         )
         characters = _merge_unique(explicit_characters, scanned_characters)
 

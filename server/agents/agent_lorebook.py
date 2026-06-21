@@ -12,6 +12,7 @@ from agents.prompt_layout import build_prompt_messages
 
 from core.request_context import current_user_id, get_current_project_name, resolve_project_name
 from core.utils import (
+    SYSTEM_CHARACTER_IDS,
     ensure_project_characters_directory,
     get_project_worldview_path,
     ensure_project_worldview_and_character_settings,
@@ -202,24 +203,32 @@ class WorldviewAgent(SparkBaseAgent, SparkAgentExecutor):
             except Exception:
                 continue
 
-        narrator_raw = mapping.get("-1") if "-1" in mapping else None
-        narrator_name = _coerce_character_name(narrator_raw) if narrator_raw else None
+        system_mapping = {}
+        for cid, raw_value in mapping.items():
+            try:
+                if int(cid) in SYSTEM_CHARACTER_IDS:
+                    system_mapping[str(cid)] = raw_value
+            except Exception:
+                continue
         existing_block = "\n".join(lines) if lines else ""
-        return characters_path, bind_path, mapping, existing_block, narrator_name
+        return characters_path, bind_path, mapping, existing_block, system_mapping
 
-    def _reset_characters_keep_narrator(
-        self, bind_path: str, characters_path: str, narrator_name: str | None
+    def _reset_characters_keep_system(
+        self, bind_path: str, characters_path: str, system_mapping: dict | None
     ):
         for filename in os.listdir(characters_path):
-            if filename.endswith(".txt") and filename != "-1.txt":
+            stem = os.path.splitext(filename)[0]
+            try:
+                is_system_file = int(stem) in SYSTEM_CHARACTER_IDS
+            except Exception:
+                is_system_file = False
+            if filename.endswith(".txt") and not is_system_file:
                 try:
                     os.remove(os.path.join(characters_path, filename))
                 except Exception:
                     pass
 
-        mapping = {}
-        if narrator_name:
-            mapping["-1"] = narrator_name
+        mapping = dict(system_mapping or {})
         with open(bind_path, "w", encoding="utf-8") as f:
             json.dump(mapping, f, ensure_ascii=False, indent=2)
         return mapping
@@ -309,15 +318,15 @@ class WorldviewAgent(SparkBaseAgent, SparkAgentExecutor):
     def _write_characters_overwrite(
         self, user_id: str, project_name: str, overwrite_content: str
     ) -> str:
-        characters_path, bind_path, mapping, existing_block, narrator_name = (
+        characters_path, bind_path, mapping, existing_block, system_mapping = (
             self._snapshot_characters(user_id, project_name)
         )
         parsed_characters = self._parse_characters_overwrite_text(overwrite_content)
         if not parsed_characters:
             return "角色覆盖失败：overwrite_content 格式不正确。请使用 JSON characters 列表、XML <character><name>角色名</name><content>角色设定</content></character>，或兼容旧的“角色名 + 空行 + 角色内容”并用 --- 分隔多个角色。"
 
-        mapping = self._reset_characters_keep_narrator(
-            bind_path, characters_path, narrator_name
+        mapping = self._reset_characters_keep_system(
+            bind_path, characters_path, system_mapping
         )
 
         existing_ids = {int(k) for k in mapping.keys()} if mapping else set()

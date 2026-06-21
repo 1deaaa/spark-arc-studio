@@ -74,7 +74,9 @@ export function useChatActions(adapter: ChatActionsAdapter, options: UseChatActi
     const autoScrollEnabled = ref(true);
     const SCROLL_BOTTOM_THRESHOLD = 60; // 距底部多少像素内视为"在底部"
     let programmaticScrollUntil = 0;
+    let userScrollIntentUntil = 0;
     let scrollListeners: Array<{ el: HTMLElement; handler: () => void }> = [];
+    let intentListeners: Array<{ el: HTMLElement; type: 'wheel' | 'touchstart' | 'pointerdown'; handler: () => void }> = [];
 
     /** 判断元素是否滚动到接近底部 */
     function isNearBottom(el: { scrollTop?: number; scrollHeight?: number; clientHeight?: number }) {
@@ -91,6 +93,15 @@ export function useChatActions(adapter: ChatActionsAdapter, options: UseChatActi
         return typeof performance !== 'undefined' && performance.now() < programmaticScrollUntil;
     }
 
+    function markUserScrollIntent() {
+        if (typeof performance === 'undefined') return;
+        userScrollIntentUntil = performance.now() + 800;
+    }
+
+    function isUserScrollIntentActive() {
+        return typeof performance !== 'undefined' && performance.now() < userScrollIntentUntil;
+    }
+
     /** 为滚动容器绑定 scroll 事件，检测用户上滚 */
     function bindScrollListeners() {
         // 先清理旧监听
@@ -100,7 +111,7 @@ export function useChatActions(adapter: ChatActionsAdapter, options: UseChatActi
             const el = resolveEl(sourceRef) as HTMLElement | undefined;
             if (!el) continue;
             const handler = () => {
-                if (isProgrammaticScrollActive()) return;
+                if (isProgrammaticScrollActive() && !isUserScrollIntentActive()) return;
                 if (isNearBottom(el)) {
                     autoScrollEnabled.value = true;
                     return;
@@ -110,6 +121,16 @@ export function useChatActions(adapter: ChatActionsAdapter, options: UseChatActi
             };
             el.addEventListener('scroll', handler, { passive: true });
             scrollListeners.push({ el, handler });
+
+            const intentHandler = () => markUserScrollIntent();
+            el.addEventListener('wheel', intentHandler, { passive: true });
+            el.addEventListener('touchstart', intentHandler, { passive: true });
+            el.addEventListener('pointerdown', intentHandler, { passive: true });
+            intentListeners.push(
+                { el, type: 'wheel', handler: intentHandler },
+                { el, type: 'touchstart', handler: intentHandler },
+                { el, type: 'pointerdown', handler: intentHandler },
+            );
         }
     }
 
@@ -119,6 +140,10 @@ export function useChatActions(adapter: ChatActionsAdapter, options: UseChatActi
             el.removeEventListener('scroll', handler);
         }
         scrollListeners = [];
+        for (const { el, type, handler } of intentListeners) {
+            el.removeEventListener(type, handler);
+        }
+        intentListeners = [];
     }
 
     // 延迟绑定：等 listRef 对应的 DOM 挂载后再绑定

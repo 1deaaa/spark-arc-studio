@@ -107,7 +107,7 @@ async function buildActiveContext(projectName: string): Promise<string> {
   try {
     const characters = await fetchCharacters(projectName, true) as StoryCharacterDetail[];
     charactersText = (characters || [])
-      .filter(ch => ch.id !== -1)
+      .filter(ch => ![-1, -2].includes(Number(ch.id)))
       .map(ch => {
         const name = (ch.name || `角色 ${ch.id}`).trim();
         const content = (ch.content || '').trim();

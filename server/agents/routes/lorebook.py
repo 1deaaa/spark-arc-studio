@@ -13,6 +13,7 @@ import threading
 from core.auth import get_current_user, get_optional_user
 from core.request_context import get_current_project_name, normalize_project_name, resolve_project_name
 from core.utils import (
+    SYSTEM_CHARACTER_IDS,
     get_project_path,
     get_project_worldview_path,
     get_project_lorebook_path,
@@ -159,7 +160,7 @@ async def save_worldview_by_path(
 async def reset_lorebook(
     data: LorebookResetRequest, user: dict = Depends(get_current_user)
 ):
-    """重置世界观并删除所有角色（保留旁白）"""
+    """重置世界观并删除所有普通角色（保留系统角色）。"""
     try:
         user_id = str(user["user_id"])
         project_name = resolve_project_name(get_current_project_name(), data.projectName)
@@ -167,7 +168,7 @@ async def reset_lorebook(
         # 1. 重置世界观
         _write_worldview(user_id, project_name, "")
 
-        # 2. 删除所有角色（保留 ID 为 -1 的旁白）
+        # 2. 删除所有普通角色（保留旁白、? 等系统保留角色）
         characters_path = ensure_project_characters_directory(user_id, project_name)
         bind_file = os.path.join(characters_path, "chr.bind")
 
@@ -176,14 +177,23 @@ async def reset_lorebook(
             try:
                 with open(bind_file, "r", encoding="utf-8") as f:
                     old_mapping = json.load(f) or {}
-                    if "-1" in old_mapping:
-                        mapping["-1"] = old_mapping["-1"]
+                    for cid, value in old_mapping.items():
+                        try:
+                            if int(cid) in SYSTEM_CHARACTER_IDS:
+                                mapping[str(cid)] = value
+                        except Exception:
+                            continue
             except Exception:
                 mapping = {}
 
-        # 删除所有角色文件（除了旁白 -1.txt）
+        # 删除所有普通角色文件，保留系统角色文件
         for filename in os.listdir(characters_path):
-            if filename.endswith(".txt") and filename != "-1.txt":
+            stem = os.path.splitext(filename)[0]
+            try:
+                is_system_file = int(stem) in SYSTEM_CHARACTER_IDS
+            except Exception:
+                is_system_file = False
+            if filename.endswith(".txt") and not is_system_file:
                 try:
                     os.remove(os.path.join(characters_path, filename))
                 except Exception:
@@ -391,21 +401,28 @@ async def gen_characters_stream(
             existing_block = "\n".join(lines) if lines else ""
 
             if overwrite:
-                # 清空角色文件（保留旁白 -1）但保留旧设定作为生成参考
-                narrator_name = None
-                if "-1" in mapping:
-                    narrator_name = mapping.get("-1")
+                # 清空普通角色文件（保留系统角色）但保留旧设定作为生成参考
+                system_mapping = {}
+                for cid, value in mapping.items():
+                    try:
+                        if int(cid) in SYSTEM_CHARACTER_IDS:
+                            system_mapping[str(cid)] = value
+                    except Exception:
+                        continue
 
                 for filename in os.listdir(characters_path):
-                    if filename.endswith(".txt") and filename != "-1.txt":
+                    stem = os.path.splitext(filename)[0]
+                    try:
+                        is_system_file = int(stem) in SYSTEM_CHARACTER_IDS
+                    except Exception:
+                        is_system_file = False
+                    if filename.endswith(".txt") and not is_system_file:
                         try:
                             os.remove(os.path.join(characters_path, filename))
                         except Exception:
                             pass
 
-                mapping = {}
-                if narrator_name:
-                    mapping["-1"] = narrator_name
+                mapping = system_mapping
 
                 with open(bind_path, "w", encoding="utf-8") as f:
                     json.dump(mapping, f, ensure_ascii=False, indent=2)
