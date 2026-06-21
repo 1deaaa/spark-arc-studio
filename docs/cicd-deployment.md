@@ -33,10 +33,11 @@
 1. **构建**：执行 `docker build`，利用 BuildKit 的 `--mount=type=cache` 缓存 npm/pip 包，非首次构建可大幅提速
 2. **测试**：Gitea / GitLab 当前为预留阶段；GitHub Actions 已集成前端类型检查 + 单元测试 + 后端 `pytest` 回归测试 + Docker 构建验证
 3. **部署**：
-    - 自动创建四个持久化 Docker Volume（`sparkarc_data`、`sparkarc_userdata`、`sparkarc_shares`、`sparkarc_llm_config`），已存在则跳过
+    - 自动创建五个持久化 Docker Volume（`sparkarc_data`、`sparkarc_userdata`、`sparkarc_shares`、`sparkarc_llm_config`、`sparkarc_runtime_cache`），已存在则跳过
     - 若在 CI Secret 中配置了 `LLM_KEY`，自动写入容器的 `.env` 文件；未配置则启动后可通过前端设置
     - 若在 CI Secret / Variable 中配置了注册验证相关变量，会通过容器环境变量传入运行时
     - 若在管理员后台保存注册验证配置，会写入持久化数据卷中的运行时 `.env`，不会随容器重建丢失
+    - 本地嵌入相关的 GGUF 模型、llama.cpp 预编译包、Hugging Face / transformers tokenizer 缓存会写入 `sparkarc_runtime_cache`，Docker 重建后继续复用
     - 原子替换：先删除旧容器，再以相同 Volume 启动新容器，数据零丢失
     - 启动阶段自动执行"受管文件同步"：将镜像中的 Git 受管文件覆盖回挂载目录，并清理已下线的旧受管文件；`*.db`、`.env` 等运行时数据不覆盖
 4. **清理**：自动执行 `docker image prune` 清理构建过程中产生的悬空镜像

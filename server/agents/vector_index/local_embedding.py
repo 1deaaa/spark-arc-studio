@@ -28,6 +28,7 @@ from core.network_probe import (
     is_mainland_china,
     probe_hf_endpoint,
 )
+from core.runtime_cache import get_runtime_cache_dir
 
 from .embedding_contract import (
     QWEN3_EMBEDDING_DIMENSIONS,
@@ -233,8 +234,7 @@ def _build_hf_file_url(repo_id: str, filename: str, *, endpoint: str | None = No
 
 def get_default_model_path() -> Path:
     """返回 SparkArc 默认本地 GGUF 模型缓存路径。"""
-    server_root = Path(__file__).resolve().parents[2]
-    return server_root / ".runtime" / "models" / "embedding" / QWEN3_GGUF_FILENAME
+    return get_runtime_cache_dir() / "models" / "embedding" / QWEN3_GGUF_FILENAME
 
 
 def get_llama_cpp_runtime_dir() -> Path:
@@ -242,8 +242,12 @@ def get_llama_cpp_runtime_dir() -> Path:
     configured = os.getenv("SPARKARC_LLAMA_CPP_RUNTIME_DIR", "").strip()
     if configured:
         return Path(configured).expanduser().resolve()
-    server_root = Path(__file__).resolve().parents[2]
-    return server_root / ".runtime" / "llama.cpp"
+    return get_runtime_cache_dir() / "llama.cpp"
+
+
+def get_llama_cpp_log_path() -> Path:
+    """返回本地 llama.cpp 服务日志路径。"""
+    return get_runtime_cache_dir() / "logs" / "local_embedding_llama_server.log"
 
 
 def resolve_model_path() -> Path:
@@ -483,6 +487,36 @@ def is_local_embedding_alive(timeout: float = 2.0, *, ttl: float = 2.0) -> bool:
         return False
 
 
+def _tail_text_file(path: Path, *, max_lines: int = 40, max_chars: int = 4000) -> str:
+    """读取文本文件尾部，用于把 llama.cpp 启动失败原因反馈给前端。"""
+    if not path.is_file():
+        return ""
+    try:
+        content = path.read_text(encoding="utf-8", errors="replace")
+    except Exception:
+        return ""
+    lines = content.splitlines()[-max_lines:]
+    text = "\n".join(lines).strip()
+    if len(text) > max_chars:
+        text = text[-max_chars:].lstrip()
+    return text
+
+
+def _format_startup_failure(process: subprocess.Popen | None, log_path: Path) -> str:
+    """生成可读的本地嵌入启动失败信息。"""
+    details: list[str] = []
+    if process is not None and process.poll() is not None:
+        return_code = getattr(process, "returncode", process.poll())
+        details.append(f"llama-server 已退出，退出码 {return_code}")
+    else:
+        details.append("服务未在超时时间内就绪")
+
+    log_tail = _tail_text_file(log_path)
+    if log_tail:
+        details.append("最近日志：\n" + log_tail)
+    return "\n".join(details)
+
+
 def _build_command_for_model(model_path: Path, *, validate_executable: bool = True) -> list[str]:
     """基于给定模型路径构造 llama.cpp embedding 服务命令。"""
 
@@ -572,19 +606,25 @@ def start_local_embedding_service() -> dict[str, Any]:
 
         started_process: subprocess.Popen | None = None
         command = build_local_embedding_command()
+        log_path = get_llama_cpp_log_path()
+        log_path.parent.mkdir(parents=True, exist_ok=True)
+        log_handle = open(log_path, "ab")
         popen_kwargs: dict[str, Any] = {
-            "stdout": subprocess.DEVNULL,
-            "stderr": subprocess.DEVNULL,
+            "stdout": log_handle,
+            "stderr": subprocess.STDOUT,
         }
         if os.name == "nt":
             popen_kwargs["creationflags"] = getattr(subprocess, "CREATE_NO_WINDOW", 0)
 
-        with _process_lock:
-            if _process is not None and _process.poll() is None:
-                started_process = _process
-            else:
-                _process = subprocess.Popen(command, **popen_kwargs)
-                started_process = _process
+        try:
+            with _process_lock:
+                if _process is not None and _process.poll() is None:
+                    started_process = _process
+                else:
+                    _process = subprocess.Popen(command, **popen_kwargs)
+                    started_process = _process
+        finally:
+            log_handle.close()
 
         if started_process is not None:
             deadline = time.monotonic() + max(1.0, LOCAL_EMBEDDING_STARTUP_TIMEOUT)
@@ -598,7 +638,12 @@ def start_local_embedding_service() -> dict[str, Any]:
                 time.sleep(0.5)
         status = get_local_embedding_status()
         if not status.get("alive"):
-            _set_startup_state("error", "本地嵌入服务启动失败", progress=100, error="服务未在超时时间内就绪")
+            _set_startup_state(
+                "error",
+                "本地嵌入服务启动失败",
+                progress=100,
+                error=_format_startup_failure(started_process, get_llama_cpp_log_path()),
+            )
             status = get_local_embedding_status()
         return status
     except Exception as exc:

@@ -15,6 +15,10 @@ os.environ.setdefault("TRANSFORMERS_NO_ADVISORY_WARNINGS", "1")
 os.environ.setdefault("PYTHONWARNINGS", "ignore::DeprecationWarning")
 os.environ.setdefault("HF_HUB_VERBOSITY", "error")
 
+from core.runtime_cache import configure_runtime_cache_environment
+
+configure_runtime_cache_environment()
+
 # ── 2. warnings 过滤 ────────────────────────────────────────────────────
 # SWIG 生成的 C 扩展在 Python 3.12+ 触发 DeprecationWarning（SwigPyPacked /
 # SwigPyObject / swigvarlink 无 __module__ 属性），属于上游问题，静默处理

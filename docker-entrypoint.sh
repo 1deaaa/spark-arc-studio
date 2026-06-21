@@ -23,6 +23,9 @@ is_preserved_runtime_file() {
         *.db|*.db-journal|*.db-wal|*.db-shm|.env|matchbox_state.json|notices.json)
             return 0
             ;;
+        .runtime|.runtime/*|runtime_cache|runtime_cache/*)
+            return 0
+            ;;
     esac
 
     case "$target_dir" in

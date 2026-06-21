@@ -27,6 +27,7 @@ jobs:
       VOL_USERDATA: "sparkarc_userdata"
       VOL_SHARES: "sparkarc_shares"
       VOL_LLM_CONFIG: "sparkarc_llm_config"
+      VOL_RUNTIME_CACHE: "sparkarc_runtime_cache"
 
     steps:
       # ========================================
@@ -106,6 +107,7 @@ jobs:
           docker volume create $VOL_USERDATA || true
           docker volume create $VOL_SHARES || true
           docker volume create $VOL_LLM_CONFIG || true
+          docker volume create $VOL_RUNTIME_CACHE || true
 
           # 写入主密钥到 agen_matchbox/.env（如果配置了 Secret）
           if [ -n "${LLM_KEY}" ]; then
@@ -129,10 +131,12 @@ jobs:
             -e SPARKARC_REGISTRATION_VERIFICATION_PROVIDER="${SPARKARC_REGISTRATION_VERIFICATION_PROVIDER}" \
             -e SPARKARC_TURNSTILE_SITE_KEY="${SPARKARC_TURNSTILE_SITE_KEY}" \
             -e SPARKARC_TURNSTILE_SECRET_KEY="${SPARKARC_TURNSTILE_SECRET_KEY}" \
+            -e SPARKARC_RUNTIME_CACHE_DIR="/app/server/.runtime" \
             -v $VOL_DATA:/app/server/data \
             -v $VOL_USERDATA:/app/server/_userdata \
             -v $VOL_SHARES:/app/server/shares_data \
             -v $VOL_LLM_CONFIG:/app/server/llm/agen_matchbox \
+            -v $VOL_RUNTIME_CACHE:/app/server/.runtime \
             --restart unless-stopped \
             $IMAGE_TAG
 

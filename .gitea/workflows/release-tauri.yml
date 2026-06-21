@@ -11,52 +11,6 @@ env:
   RUNNER_TOOL_CACHE: /toolcache
 
 jobs:
-  create-release:
-    runs-on: ubuntu-latest
-    container: node:24-bookworm
-    steps:
-      - name: Ensure repository files available
-        shell: bash
-        run: |
-          set -euo pipefail
-          if [ -f scripts/gitea-release-upload.mjs ]; then
-            echo "Repository files already present."
-            exit 0
-          fi
-
-          if ! command -v git >/dev/null 2>&1; then
-            apt-get update
-            DEBIAN_FRONTEND=noninteractive apt-get install -y --no-install-recommends git ca-certificates
-          fi
-
-          REPO_SERVER="${GITEA_SERVER_URL:-${GITHUB_SERVER_URL:-}}"
-          REPO_PATH="${GITEA_REPOSITORY:-${GITHUB_REPOSITORY:-}}"
-          REF_NAME="${GITHUB_REF_NAME:-${GITEA_REF_NAME:-dev}}"
-
-          if [ -z "$REPO_SERVER" ] || [ -z "$REPO_PATH" ]; then
-            echo "Missing repository context for fallback checkout."
-            exit 1
-          fi
-
-          TMP_DIR="$(mktemp -d)"
-          if [ -n "${GITEA_TOKEN:-}" ]; then
-            git -c "http.extraHeader=Authorization: token ${GITEA_TOKEN}" clone --depth 1 --branch "$REF_NAME" "$REPO_SERVER/$REPO_PATH.git" "$TMP_DIR/repo"
-          else
-            git clone --depth 1 --branch "$REF_NAME" "$REPO_SERVER/$REPO_PATH.git" "$TMP_DIR/repo"
-          fi
-          cp -a "$TMP_DIR/repo/." .
-          rm -rf "$TMP_DIR"
-
-      - name: Ensure Gitea Release exists
-        env:
-          RELEASE_ENSURE_ONLY: "true"
-          RELEASE_BODY: |
-            SparkArc 的各平台客户端。
-            必须部署服务端使用（详见项目主页 README）。
-
-            仅测试尝鲜用途可以直接下载，默认会尝试连接到作者自己的服务端，但并不保证服务持续有效！
-        run: node scripts/gitea-release-upload.mjs
-
   release-android:
     runs-on: ubuntu-latest
     container:
@@ -64,7 +18,6 @@ jobs:
       volumes:
         - android-sdk:/opt/android-sdk
     timeout-minutes: 90
-    needs: create-release
     env:
       CARGO_HOME: /opt/android-sdk/ci-cache/cargo
       RUSTUP_HOME: /opt/android-sdk/ci-cache/rustup
@@ -103,6 +56,16 @@ jobs:
           fi
           cp -a "$TMP_DIR/repo/." .
           rm -rf "$TMP_DIR"
+
+      - name: Ensure Gitea Release exists
+        env:
+          RELEASE_ENSURE_ONLY: "true"
+          RELEASE_BODY: |
+            SparkArc 的各平台客户端。
+            必须部署服务端使用（详见项目主页 README）。
+
+            仅测试尝鲜用途可以直接下载，默认会尝试连接到作者自己的服务端，但并不保证服务持续有效！
+        run: node scripts/gitea-release-upload.mjs
 
       - name: Ensure cache directories exist
         run: |

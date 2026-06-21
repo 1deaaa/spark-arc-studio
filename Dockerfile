@@ -60,7 +60,7 @@ RUN mkdir -p /app/server/shares_data && \
     cp -r /app/server/shares_data /_pristine_code/server/shares_data
 
 # 创建数据持久化目录
-RUN mkdir -p /app/server/_userdata /app/server/data
+RUN mkdir -p /app/server/_userdata /app/server/data /app/server/.runtime
 
 # 复制并设置启动入口脚本
 COPY docker-entrypoint.sh /docker-entrypoint.sh

@@ -31,6 +31,7 @@ services:
       - SPARKARC_REGISTRATION_VERIFICATION_PROVIDER=${SPARKARC_REGISTRATION_VERIFICATION_PROVIDER:-}
       - SPARKARC_TURNSTILE_SITE_KEY=${SPARKARC_TURNSTILE_SITE_KEY:-}
       - SPARKARC_TURNSTILE_SECRET_KEY=${SPARKARC_TURNSTILE_SECRET_KEY:-}
+      - SPARKARC_RUNTIME_CACHE_DIR=/app/server/.runtime
     volumes:
       # ====================================
       # 持久化数据挂载 - 数据存在宿主机的server目录下 请勿修改本仓库的server目录！
@@ -49,6 +50,9 @@ services:
       - ./server/llm/agen_matchbox:/app/server/llm/agen_matchbox
       
       # LLM_KEY 自动写入 agen_matchbox/.env（无需单独挂载）
+
+      # 本地嵌入模型、llama.cpp 运行包与 tokenizer 缓存
+      - ./server/.runtime:/app/server/.runtime
       
     restart: unless-stopped
 

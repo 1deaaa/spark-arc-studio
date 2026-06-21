@@ -265,6 +265,7 @@ docker compose logs --tail=120 sparkarc
 1. 镜像内最新 Git 代码一定被重新构建。
 2. 启动时会把受 Git 管理的文件同步回挂载目录，避免旧持久化文件遮蔽新版本。
 3. 用户数据库与个人数据（如 `*.db`、`_userdata`、`.env`）继续持久化，不会被覆盖。
+4. 本地嵌入所需的 GGUF 模型、llama.cpp 运行包与分词器缓存会持久化到 `server/.runtime`（CI 部署为 Docker 运行时缓存卷），镜像重建后无需重新下载。
 
 
 ### 方式三：本地裸机开发环境
