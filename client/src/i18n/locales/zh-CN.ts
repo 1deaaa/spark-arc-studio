@@ -499,6 +499,10 @@ const zhCN = {
       localEmbeddingStartTriggered: '已请求启动本地嵌入服务',
       localEmbeddingStoppedSuccess: '已停止本地嵌入服务',
       localEmbeddingToggleFailed: '本地嵌入服务操作失败',
+      localEmbeddingEnableConfirmTitle: '确认开启本地嵌入',
+      localEmbeddingEnableConfirmContent:
+        '默认纯CPU实现，仅供本地单用户使用。需要占用额外的CPU和内存。如果你有性能尚可的独显，强烈推荐自己本地部署（使用LMStudio最简单），这可以带来极大的速度和资源占用改善。\n\n你确认要继续吗？',
+      localEmbeddingEnableConfirmPositive: '继续开启',
       notConfigured: '未配置',
       testEmbedding: '测试',
       enabled: '已启用',

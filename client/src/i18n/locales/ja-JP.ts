@@ -501,6 +501,10 @@ const jaJP = {
       localEmbeddingStartTriggered: 'ローカル埋め込みサービスの起動を要求しました',
       localEmbeddingStoppedSuccess: 'ローカル埋め込みサービスを停止しました',
       localEmbeddingToggleFailed: 'ローカル埋め込みサービスの操作に失敗しました',
+      localEmbeddingEnableConfirmTitle: 'ローカル埋め込みを有効にしますか？',
+      localEmbeddingEnableConfirmContent:
+        'デフォルト実装は CPU のみで、ローカルの単一ユーザー利用向けです。追加の CPU とメモリを消費します。十分な性能のディスクリート GPU がある場合は、自分でローカル配備することを強く推奨します（LM Studio が最も簡単です）。速度とリソース使用量を大きく改善できます。\n\n続行しますか？',
+      localEmbeddingEnableConfirmPositive: '続行して有効化',
       notConfigured: '未設定',
       testEmbedding: 'テスト',
       enabled: '有効',

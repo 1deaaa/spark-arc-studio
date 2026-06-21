@@ -702,6 +702,12 @@ async function handleLocalEmbeddingToggle(enabled: boolean) {
         message.warning(t('components.semanticSearchCard.localEmbeddingAdminOnly'));
         return;
     }
+    if (enabled) {
+        const confirmed = await confirmLocalEmbeddingEnable();
+        if (!confirmed) {
+            return;
+        }
+    }
     togglingLocalEmbedding.value = true;
     try {
         const result = await setLocalEmbeddingEnabled(enabled);
@@ -723,6 +729,22 @@ async function handleLocalEmbeddingToggle(enabled: boolean) {
         await loadData({ silent: true });
         syncStatusPolling();
     }
+}
+
+function confirmLocalEmbeddingEnable(): Promise<boolean> {
+    return new Promise((resolve) => {
+        dialog.warning({
+            title: t('components.semanticSearchCard.localEmbeddingEnableConfirmTitle'),
+            content: t('components.semanticSearchCard.localEmbeddingEnableConfirmContent'),
+            positiveText: t('components.semanticSearchCard.localEmbeddingEnableConfirmPositive'),
+            negativeText: t('common.cancel'),
+            onPositiveClick: () => resolve(true),
+            onNegativeClick: () => resolve(false),
+            onClose: () => resolve(false),
+            onEsc: () => resolve(false),
+            onMaskClick: () => resolve(false),
+        });
+    });
 }
 
 async function handleDefaultSemanticToggle(val: boolean) {

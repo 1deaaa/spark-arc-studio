@@ -499,6 +499,10 @@ const koKR = {
       localEmbeddingStartTriggered: '로컬 임베딩 서비스 시작을 요청했습니다',
       localEmbeddingStoppedSuccess: '로컬 임베딩 서비스를 중지했습니다',
       localEmbeddingToggleFailed: '로컬 임베딩 서비스 작업 실패',
+      localEmbeddingEnableConfirmTitle: '로컬 임베딩을 켤까요?',
+      localEmbeddingEnableConfirmContent:
+        '기본 구현은 CPU 전용이며 로컬 단일 사용자 용도입니다. 추가 CPU와 메모리를 사용합니다. 성능이 괜찮은 외장 GPU가 있다면 직접 로컬 배포를 강력히 권장합니다(LM Studio가 가장 쉽습니다). 속도와 리소스 사용량을 크게 개선할 수 있습니다.\n\n계속할까요?',
+      localEmbeddingEnableConfirmPositive: '계속 켜기',
       notConfigured: '설정 안 됨',
       testEmbedding: '테스트',
       enabled: '활성화됨',

@@ -501,6 +501,10 @@ const enUS = {
       localEmbeddingStartTriggered: 'Local embedding service start requested',
       localEmbeddingStoppedSuccess: 'Local embedding service stopped',
       localEmbeddingToggleFailed: 'Local embedding service action failed',
+      localEmbeddingEnableConfirmTitle: 'Enable local embedding?',
+      localEmbeddingEnableConfirmContent:
+        'The default implementation is CPU-only and intended for local single-user use. It will consume extra CPU and memory. If you have a reasonably capable discrete GPU, we strongly recommend deploying locally yourself (LM Studio is the easiest option), which can greatly improve speed and resource usage.\n\nDo you want to continue?',
+      localEmbeddingEnableConfirmPositive: 'Continue',
       notConfigured: 'Not Configured',
       testEmbedding: 'Test',
       enabled: 'Enabled',
