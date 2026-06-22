@@ -3,6 +3,11 @@ import sqlite3
 from pathlib import Path
 
 
+def _decode_row(row):
+    """将 sqlite3 返回的 bytes 字段解码为 str，兼容 Python 3.13 BLOB 行为。"""
+    return tuple(v.decode("utf-8") if isinstance(v, bytes) else v for v in row)
+
+
 def test_import_project_stories_exports_unity_runtime_bindings(tmp_path, monkeypatch):
     """守住 Unity 运行时导出契约：行为绑定和注册表必须进入 stories.db。"""
     from core import utils as core_utils
@@ -70,12 +75,18 @@ def test_import_project_stories_exports_unity_runtime_bindings(tmp_path, monkeyp
     result = importer.import_project_stories_to_db(user_id, project_name)
 
     with sqlite3.connect(result["db_path"]) as connection:
-        action_rows = connection.execute(
-            "select act_name, func_name, act_type, act_args from binding_act"
-        ).fetchall()
-        registry_rows = connection.execute(
-            "select name, value from registry order by name"
-        ).fetchall()
+        action_rows = [
+            _decode_row(r)
+            for r in connection.execute(
+                "select act_name, func_name, act_type, act_args from binding_act"
+            ).fetchall()
+        ]
+        registry_rows = [
+            _decode_row(r)
+            for r in connection.execute(
+                "select name, value from registry order by name"
+            ).fetchall()
+        ]
         dlg_json = connection.execute("select dlg_json from stories limit 1").fetchone()[0]
 
     assert action_rows == [
@@ -86,4 +97,4 @@ def test_import_project_stories_exports_unity_runtime_bindings(tmp_path, monkeyp
         ("place", '["风丘"]'),
         ("player_name", '["艾莉"]'),
     ]
-    assert '"act": {"bgm": "town_theme"}' in dlg_json
+    assert '"act": {"bgm": "town_theme"}' in (dlg_json.decode("utf-8") if isinstance(dlg_json, bytes) else dlg_json)

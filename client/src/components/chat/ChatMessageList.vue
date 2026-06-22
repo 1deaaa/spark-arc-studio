@@ -449,6 +449,10 @@ function getMessageContextWindowStats(message: ChatMessageItem) {
   const input = Number(raw.input_tokens ?? raw.inputTokens ?? 0) || 0;
   const output = Number(raw.output_tokens ?? raw.outputTokens ?? 0) || 0;
   const cached = Number(raw.cached_prompt_tokens ?? raw.cachedPromptTokens ?? 0) || 0;
+  const maxContext = Number(raw.max_context_tokens ?? raw.maxContextTokens ?? 0) || 0;
+  const usageRatioRaw = raw.usage_ratio ?? raw.usageRatio;
+  const usageRatioValue = usageRatioRaw == null ? Number.NaN : Number(usageRatioRaw);
+  const fallbackUsageRatio = maxContext > 0 && input > 0 ? input / maxContext : Number.NaN;
   const cacheHitRateRaw = raw.cache_hit_rate ?? raw.cacheHitRate;
   const cacheHitRateValue = cacheHitRateRaw == null ? Number.NaN : Number(cacheHitRateRaw);
   const model = String(raw.model || '').trim();
@@ -457,9 +461,19 @@ function getMessageContextWindowStats(message: ChatMessageItem) {
     input,
     output,
     cached,
+    maxContext,
+    usageRatio: Number.isFinite(usageRatioValue)
+      ? Math.max(0, usageRatioValue)
+      : (Number.isFinite(fallbackUsageRatio) ? Math.max(0, fallbackUsageRatio) : null),
     cacheHitRate: Number.isFinite(cacheHitRateValue) ? Math.max(0, Math.min(1, cacheHitRateValue)) : null,
     model,
   };
+}
+
+function formatPercent(value: number | null | undefined) {
+  if (value == null || !Number.isFinite(value)) return '-';
+  const percent = Math.max(0, value) * 100;
+  return percent >= 10 ? `${Math.round(percent)}%` : `${Math.round(percent * 10) / 10}%`;
 }
 
 function getMessageWindowTokenLabel(message: ChatMessageItem) {
@@ -469,8 +483,11 @@ function getMessageWindowTokenLabel(message: ChatMessageItem) {
     input: formatTokenCount(stats.input),
     output: formatTokenCount(stats.output),
   });
-  if (stats.cached <= 0) return baseLabel;
-  return `${baseLabel} · ${t('components.chatMessageList.cachedTokenLabel', {
+  const usageLabel = stats.usageRatio == null ? '' : ` · ${t('components.chatMessageList.windowUsageLabel', {
+    ratio: formatPercent(stats.usageRatio),
+  })}`;
+  if (stats.cached <= 0) return `${baseLabel}${usageLabel}`;
+  return `${baseLabel}${usageLabel} · ${t('components.chatMessageList.cachedTokenLabel', {
     cached: formatTokenCount(stats.cached),
   })}`;
 }
@@ -485,7 +502,11 @@ function getMessageWindowTokenHint(message: ChatMessageItem) {
       rate: stats.cacheHitRate == null ? '-' : `${Math.round(stats.cacheHitRate * 100)}%`,
     })}`
     : '';
-  return `${t('components.chatMessageList.windowTokenHint')}${cacheSuffix}${modelSuffix}`;
+  const usageSuffix = stats.usageRatio == null ? '' : ` · ${t('components.chatMessageList.windowUsageHint', {
+    ratio: formatPercent(stats.usageRatio),
+    max: stats.maxContext > 0 ? formatTokenCount(stats.maxContext) : '-',
+  })}`;
+  return `${t('components.chatMessageList.windowTokenHint')}${usageSuffix}${cacheSuffix}${modelSuffix}`;
 }
 
 function getContextSummaryKey(message: ChatMessageItem, messageIdx: number, segIdx: number) {

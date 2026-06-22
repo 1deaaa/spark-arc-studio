@@ -191,6 +191,6 @@ def test_scriptwriter_handoff_context_resolves_outline_contract_from_task(monkey
     assert "Director→Scriptwriter 场景交接包" in context
     assert "当前大纲场景契约" in context
     assert "场景功能：沈棠交出旧钥匙" in context
-    assert "当前场景任务包" in context
+    assert "当前场景事实包" in context
     assert "沈棠、林烬" in context
-    assert "写作前优先服从本交接包" in context
+    assert "写作前核对本交接包" in context

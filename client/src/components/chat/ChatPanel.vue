@@ -190,6 +190,8 @@ type ContextWindowStats = {
   cachedPromptTokens?: number;
   cacheMissPromptTokens?: number;
   cacheHitRate?: number | null;
+  maxContextTokens?: number;
+  usageRatio?: number | null;
   originalTokens?: number;
   model?: string;
   agentId?: string;
@@ -291,9 +293,27 @@ function formatTokenCount(value: number): string {
   return String(Math.round(n));
 }
 
+function formatPercent(value: number | null | undefined): string {
+  if (value == null || !Number.isFinite(value)) return '-';
+  const percent = Math.max(0, value) * 100;
+  return percent >= 10 ? `${Math.round(percent)}%` : `${Math.round(percent * 10) / 10}%`;
+}
+
+const contextWindowUsageRatio = computed(() => {
+  const raw = props.contextWindowStats?.usageRatio;
+  if (typeof raw === 'number' && Number.isFinite(raw)) return Math.max(0, raw);
+  const input = Number(props.contextWindowStats?.inputTokens ?? props.contextTokenUsage?.promptTokens ?? 0) || 0;
+  const maxContext = Number(props.contextWindowStats?.maxContextTokens ?? 0) || 0;
+  if (input > 0 && maxContext > 0) return input / maxContext;
+  return null;
+});
+
 const contextTokenLabel = computed(() => {
   const usage = props.contextTokenUsage;
   const cached = Number(props.contextWindowStats?.cachedPromptTokens ?? 0) || 0;
+  const usageSuffix = contextWindowUsageRatio.value == null
+    ? ''
+    : ` · ${t('components.chatMessageList.windowUsageLabel', { ratio: formatPercent(contextWindowUsageRatio.value) })}`;
   if (usage) {
     const input = Number(usage.promptTokens ?? 0) || 0;
     const output = Number(usage.completionTokens ?? 0) || 0;
@@ -302,8 +322,8 @@ const contextTokenLabel = computed(() => {
         input: formatTokenCount(input),
         output: formatTokenCount(output),
       });
-      if (cached <= 0) return baseLabel;
-      return `${baseLabel} · ${t('components.chatMessageList.cachedTokenLabel', {
+      if (cached <= 0) return `${baseLabel}${usageSuffix}`;
+      return `${baseLabel}${usageSuffix} · ${t('components.chatMessageList.cachedTokenLabel', {
         cached: formatTokenCount(cached),
       })}`;
     }
@@ -316,20 +336,25 @@ const contextTokenLabel = computed(() => {
     });
   }
   const baseLabel = t('components.chatPanel.taskTokenLabel', { tokens: formatTokenCount(total) });
-  if (cached <= 0) return baseLabel;
-  return `${baseLabel} · ${t('components.chatMessageList.cachedTokenLabel', {
+  if (cached <= 0) return `${baseLabel}${usageSuffix}`;
+  return `${baseLabel}${usageSuffix} · ${t('components.chatMessageList.cachedTokenLabel', {
     cached: formatTokenCount(cached),
   })}`;
 });
 
 const contextTokenHint = computed(() => {
   const cached = Number(props.contextWindowStats?.cachedPromptTokens ?? 0) || 0;
-  if (cached <= 0) return t('components.chatPanel.taskTokenHint');
+  const maxContext = Number(props.contextWindowStats?.maxContextTokens ?? 0) || 0;
+  const usageSuffix = contextWindowUsageRatio.value == null ? '' : ` · ${t('components.chatMessageList.windowUsageHint', {
+    ratio: formatPercent(contextWindowUsageRatio.value),
+    max: maxContext > 0 ? formatTokenCount(maxContext) : '-',
+  })}`;
+  if (cached <= 0) return `${t('components.chatPanel.taskTokenHint')}${usageSuffix}`;
   const rateRaw = props.contextWindowStats?.cacheHitRate;
   const rate = typeof rateRaw === 'number' && Number.isFinite(rateRaw)
     ? `${Math.round(Math.max(0, Math.min(1, rateRaw)) * 100)}%`
     : '-';
-  return `${t('components.chatPanel.taskTokenHint')} · ${t('components.chatMessageList.cachedTokenHint', {
+  return `${t('components.chatPanel.taskTokenHint')}${usageSuffix} · ${t('components.chatMessageList.cachedTokenHint', {
     cached: formatTokenCount(cached),
     rate,
   })}`;

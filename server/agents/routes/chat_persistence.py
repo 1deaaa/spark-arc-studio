@@ -58,7 +58,19 @@ def _extract_context_window_stats_from_event(delta: Any) -> Dict[str, Any] | Non
         "compacted": compacted,
         "reason": reason,
     }
-    for key in ("max_context_tokens", "max_output_tokens", "hard_budget", "trigger_budget"):
+    for key in (
+        "max_context_tokens",
+        "max_output_tokens",
+        "hard_budget",
+        "trigger_budget",
+        "reserved_output_tokens",
+        "safety_margin_tokens",
+        "usage_ratio",
+        "original_usage_ratio",
+        "hard_usage_ratio",
+        "trigger_usage_ratio",
+        "trigger_ratio",
+    ):
         value = stats_payload.get(key)
         if value is None:
             camel_key = "".join(
@@ -69,7 +81,10 @@ def _extract_context_window_stats_from_event(delta: Any) -> Dict[str, Any] | Non
         if value is None:
             continue
         try:
-            normalized[key] = max(int(value), 0)
+            if key.endswith("_ratio") or key == "usage_ratio":
+                normalized[key] = max(float(value), 0.0)
+            else:
+                normalized[key] = max(int(value), 0)
         except Exception:
             continue
     return normalized

@@ -958,6 +958,8 @@ const koKR = {
       daysAgo: '{count}일 전',
       windowTokenLabel: '입력 {input} / 출력 {output} 토큰',
       windowTokenHint: '해당 응답 도출 시점에 소모된 실제 토큰 윈도우입니다.',
+      windowUsageLabel: '사용 {ratio}',
+      windowUsageHint: '컨텍스트 창 사용률 {ratio}, 모델 창 {max}',
       cachedTokenLabel: '캐시 적중 {cached}',
       cachedTokenHint: '캐시 적중 {cached} token, 적중률 {rate}',
       contextCompacting: '기억 용량 압축 중',

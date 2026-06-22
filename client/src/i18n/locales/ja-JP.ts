@@ -960,6 +960,8 @@ const jaJP = {
       daysAgo: '{count}日前',
       windowTokenLabel: 'ウィンドウ ↑{input} / ↓{output}',
       windowTokenHint: 'この返信で直近に実際のコンテキストウィンドウへ入った token 数です。↑ は入力、↓ は出力を表します。',
+      windowUsageLabel: '使用 {ratio}',
+      windowUsageHint: 'コンテキストウィンドウ使用率 {ratio}、モデル窓 {max}',
       cachedTokenLabel: 'キャッシュ {cached}',
       cachedTokenHint: 'キャッシュ命中 {cached} token、命中率 {rate}',
       contextCompacting: 'コンテキストを圧縮中',

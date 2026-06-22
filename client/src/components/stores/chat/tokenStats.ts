@@ -7,6 +7,17 @@ export type ContextWindowStats = {
   cachedPromptTokens: number;
   cacheMissPromptTokens: number;
   cacheHitRate: number | null;
+  maxContextTokens: number;
+  maxOutputTokens: number;
+  hardBudget: number;
+  triggerBudget: number;
+  reservedOutputTokens: number;
+  safetyMarginTokens: number;
+  usageRatio: number | null;
+  originalUsageRatio: number | null;
+  hardUsageRatio: number | null;
+  triggerUsageRatio: number | null;
+  triggerRatio: number | null;
   originalTokens: number;
   retainedMessages: number;
   model: string;
@@ -60,6 +71,11 @@ export function extractAgentCompletionTokens(payload: AnyRecord | null | undefin
 }
 
 export function extractContextWindowStats(evt: AnyRecord): ContextWindowStats {
+  const clampRatio = (raw: unknown): number | null => {
+    if (raw == null) return null;
+    const value = Number(raw);
+    return Number.isFinite(value) ? Math.max(0, value) : null;
+  };
   return {
     agentId: String(evt.agent_id || evt.agentId || evt.source_agent || evt.sourceAgent || ''),
     inputTokens: Number(evt.input_tokens ?? evt.inputTokens ?? 0) || 0,
@@ -72,6 +88,17 @@ export function extractContextWindowStats(evt: AnyRecord): ContextWindowStats {
       const value = Number(raw);
       return Number.isFinite(value) ? Math.max(0, Math.min(1, value)) : null;
     })(),
+    maxContextTokens: Number(evt.max_context_tokens ?? evt.maxContextTokens ?? 0) || 0,
+    maxOutputTokens: Number(evt.max_output_tokens ?? evt.maxOutputTokens ?? 0) || 0,
+    hardBudget: Number(evt.hard_budget ?? evt.hardBudget ?? 0) || 0,
+    triggerBudget: Number(evt.trigger_budget ?? evt.triggerBudget ?? 0) || 0,
+    reservedOutputTokens: Number(evt.reserved_output_tokens ?? evt.reservedOutputTokens ?? 0) || 0,
+    safetyMarginTokens: Number(evt.safety_margin_tokens ?? evt.safetyMarginTokens ?? 0) || 0,
+    usageRatio: clampRatio(evt.usage_ratio ?? evt.usageRatio),
+    originalUsageRatio: clampRatio(evt.original_usage_ratio ?? evt.originalUsageRatio),
+    hardUsageRatio: clampRatio(evt.hard_usage_ratio ?? evt.hardUsageRatio),
+    triggerUsageRatio: clampRatio(evt.trigger_usage_ratio ?? evt.triggerUsageRatio),
+    triggerRatio: clampRatio(evt.trigger_ratio ?? evt.triggerRatio),
     originalTokens: Number(evt.original_tokens ?? evt.originalTokens ?? 0) || 0,
     retainedMessages: Number(evt.retained_messages ?? evt.retainedMessages ?? 0) || 0,
     model: String(evt.model || ''),

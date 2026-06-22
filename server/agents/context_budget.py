@@ -34,6 +34,17 @@ class PromptSectionBudget:
     protected: bool = False
 
 
+@dataclass(frozen=True, slots=True)
+class ContextBudgetPolicy:
+    """模型上下文窗口的自适应预算策略。"""
+
+    hard_budget: int
+    trigger_budget: int
+    reserved_output: int
+    safety_margin: int
+    trigger_ratio: float
+
+
 def _coerce_content(content: Any) -> str:
     if content is None:
         return ""
@@ -143,12 +154,42 @@ def _get_limits(llm_client: Any) -> tuple[int, int]:
     return max(max_context, 8192), max(max_output, 1024)
 
 
+def _context_budget_policy(max_context: int, max_output: int) -> ContextBudgetPolicy:
+    """按模型真实窗口推导预算，避免大窗口模型过早压缩动态写作上下文。"""
+    context = max(int(max_context or 0), 8192)
+    output_limit = max(int(max_output or 0), 1024)
+    if context >= 1_000_000:
+        trigger_ratio = 0.92
+        output_ratio_cap = 0.14
+    elif context >= 512_000:
+        trigger_ratio = 0.90
+        output_ratio_cap = 0.16
+    else:
+        trigger_ratio = 0.85
+        output_ratio_cap = 0.22
+
+    safety_margin = max(4096, min(32_000, int(context * 0.03)))
+    reserved_output = min(output_limit, max(4096, int(context * output_ratio_cap)))
+    hard_budget = max(4096, context - reserved_output - safety_margin)
+    trigger_budget = max(4096, min(hard_budget, int(context * trigger_ratio)))
+    return ContextBudgetPolicy(
+        hard_budget=hard_budget,
+        trigger_budget=trigger_budget,
+        reserved_output=reserved_output,
+        safety_margin=safety_margin,
+        trigger_ratio=trigger_ratio,
+    )
+
+
 def _budget_limits(max_context: int, max_output: int) -> tuple[int, int]:
-    reserved_output = min(max_output, max(4096, int(max_context * 0.25)))
-    safety_margin = max(4096, int(max_context * 0.05))
-    hard_budget = max(4096, max_context - reserved_output - safety_margin)
-    trigger_budget = max(4096, int(max_context * 0.85))
-    return hard_budget, trigger_budget
+    policy = _context_budget_policy(max_context, max_output)
+    return policy.hard_budget, policy.trigger_budget
+
+
+def _safe_ratio(numerator: int, denominator: int) -> float:
+    if denominator <= 0:
+        return 0.0
+    return max(0.0, float(numerator or 0) / float(denominator))
 
 
 def _append_event(emit_event: Callable[[Dict[str, Any]], None] | None, payload: Dict[str, Any]) -> None:
@@ -228,18 +269,31 @@ def _emit_context_window_stats(
     compacted: bool,
     reason: str,
 ) -> None:
+    clean_input = max(int(input_tokens or 0), 0)
+    clean_original = max(int(original_tokens or 0), 0)
+    clean_context = max(int(max_context_tokens or 0), 1)
+    clean_hard = max(int(hard_budget or 0), 1)
+    clean_trigger = max(int(trigger_budget or 0), 1)
+    policy = _context_budget_policy(max_context_tokens, max_output_tokens)
     _append_event(emit_event, {
         "event": "context_window_stats",
         "agent_id": agent_id,
         "source_agent": agent_id,
-        "input_tokens": max(int(input_tokens or 0), 0),
-        "original_tokens": max(int(original_tokens or 0), 0),
+        "input_tokens": clean_input,
+        "original_tokens": clean_original,
         "retained_messages": max(int(retained_messages or 0), 0),
         "model": model_name,
         "max_context_tokens": max_context_tokens,
         "max_output_tokens": max_output_tokens,
         "hard_budget": hard_budget,
         "trigger_budget": trigger_budget,
+        "reserved_output_tokens": policy.reserved_output,
+        "safety_margin_tokens": policy.safety_margin,
+        "trigger_ratio": round(policy.trigger_ratio, 4),
+        "usage_ratio": round(_safe_ratio(clean_input, clean_context), 4),
+        "original_usage_ratio": round(_safe_ratio(clean_original, clean_context), 4),
+        "hard_usage_ratio": round(_safe_ratio(clean_input, clean_hard), 4),
+        "trigger_usage_ratio": round(_safe_ratio(clean_input, clean_trigger), 4),
         "compacted": bool(compacted),
         "reason": reason,
     })
@@ -259,7 +313,7 @@ def _truncate_middle(text: str, target_chars: int) -> str:
     target = max(int(target_chars or 0), 0)
     if target <= 0 or len(clean) <= target:
         return clean
-    marker = "\n...（中间内容因上下文预算已截断；优先保留当前场景任务包、场景契约、创作指导与最近上下文）...\n"
+    marker = "\n...（中间内容因上下文预算已截断；优先保留当前场景事实包、场景契约、创作指导与最近上下文）...\n"
     if target <= len(marker) + 80:
         return clean[:target].rstrip() + "\n...（内容因上下文预算已截断）"
     head = max(40, int((target - len(marker)) * 0.6))
@@ -269,7 +323,7 @@ def _truncate_middle(text: str, target_chars: int) -> str:
 
 def _priority_prefix_end(text: str) -> int:
     """识别嵌在“前文/上下文”区块顶部的高优先级写作任务包。"""
-    high_markers = ("=== 当前场景任务包", "【当前大纲场景契约】", "### Director→Scriptwriter 场景交接包")
+    high_markers = ("=== 当前场景事实包", "【当前大纲场景契约】", "### Director→Scriptwriter 场景交接包")
     if not any(marker in text for marker in high_markers):
         return 0
     low_markers = (
@@ -386,7 +440,7 @@ def _truncate_user_prompt_sections(
 
 
 DEFAULT_SPECIALIZED_SECTION_BUDGETS: tuple[PromptSectionBudget, ...] = (
-    PromptSectionBudget("当前场景任务包", protected=True),
+    PromptSectionBudget("当前场景事实包", protected=True),
     PromptSectionBudget("当前大纲场景契约", protected=True),
     PromptSectionBudget("当前场景的创作指导", protected=True),
     PromptSectionBudget("创作指导/章节目标", protected=True),
@@ -425,12 +479,13 @@ def prepare_specialized_prompt_messages_with_budget(
     """
     model_name = _get_model_name(llm_client)
     max_context, max_output = _get_limits(llm_client)
-    hard_budget, trigger_budget = _budget_limits(max_context, max_output)
+    policy = _context_budget_policy(max_context, max_output)
+    hard_budget, trigger_budget = policy.hard_budget, policy.trigger_budget
     system_msg = SystemMessage(content=str(system_prompt or "").strip())
     user_msg = HumanMessage(content=str(user_prompt or "").strip())
     original_messages = [system_msg, user_msg]
     original_tokens = _messages_tokens(original_messages, model_name)
-    if original_tokens <= hard_budget and original_tokens <= trigger_budget:
+    if original_tokens <= hard_budget:
         _emit_context_window_stats(
             emit_event,
             agent_id=agent_id,
@@ -443,7 +498,7 @@ def prepare_specialized_prompt_messages_with_budget(
             hard_budget=hard_budget,
             trigger_budget=trigger_budget,
             compacted=False,
-            reason="within_budget",
+            reason="within_budget" if original_tokens <= trigger_budget else "within_hard_budget_high_usage",
         )
         return ContextBudgetResult(original_messages, False, original_tokens, original_tokens, 1)
 
