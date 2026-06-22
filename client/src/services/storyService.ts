@@ -619,3 +619,21 @@ export async function generateBridge(projectName: string, prevScene: unknown, ne
   }, options);
   return result.dialogues || result.transition || [];
 }
+
+// ==================== 项目级创作模式 ====================
+
+export async function getProjectWorkspaceMode(projectName: string): Promise<'script' | 'novel'> {
+  const resp = await fetchWithAuth(`/api/project/workspace-mode?projectName=${encodeURIComponent(projectName)}`);
+  const data = await resp.json();
+  return data?.mode === 'novel' ? 'novel' : 'script';
+}
+
+export async function setProjectWorkspaceMode(projectName: string, mode: 'script' | 'novel'): Promise<'script' | 'novel'> {
+  const resp = await fetchWithAuth('/api/project/workspace-mode', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ projectName, mode }),
+  });
+  const data = await resp.json();
+  return data?.mode === 'novel' ? 'novel' : 'script';
+}

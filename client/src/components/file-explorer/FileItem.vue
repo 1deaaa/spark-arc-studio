@@ -79,6 +79,8 @@ const fileStore = useFileStore();
 const isOpen = ref(true);
 const menu = reactive({ visible: false, x: 0, y: 0 });
 
+const isNovelMode = computed(() => sceneStore.workspaceMode === 'novel');
+
 const isSelected = computed(() => fileStore.selectedFile === props.item);
 // 多选状态
 const isMultiSelected = computed(() => fileStore.isFileSelected(props.item));
@@ -108,7 +110,7 @@ const fileMenuOptions = computed(() => {
       type: 'divider'
     },
     {
-      label: t('components.fileExplorer.deleteScene'),
+      label: isNovelMode.value ? t('components.fileExplorer.deleteVolume') : t('components.fileExplorer.deleteAct'),
       key: 'delete',
       icon: _iconDanger(Trash),
       props: { style: 'color: #e74c3c;' }
@@ -128,16 +130,16 @@ const fileMenuOptions = computed(() => {
   return base;
 });
 
-// Naive UI 菜单选项 - 章节（文件夹）
+// Naive UI 菜单选项 - 分卷（文件夹）
 const folderMenuOptions = computed(() => {
   const base = [
     {
-      label: t('components.fileExplorer.newScene'),
+      label: isNovelMode.value ? t('components.fileExplorer.newSceneNovel') : t('components.fileExplorer.newSceneScript'),
       key: 'new-story',
       icon: _icon(Plus)
     },
     {
-      label: t('components.fileExplorer.newChapter'),
+      label: t('components.fileExplorer.newVolume'),
       key: 'new-folder',
       icon: _icon(SquarePen)
     },
@@ -153,7 +155,7 @@ const folderMenuOptions = computed(() => {
       type: 'divider'
     },
     {
-      label: t('components.fileExplorer.deleteChapter'),
+      label: t('components.fileExplorer.deleteVolume'),
       key: 'delete',
       icon: _iconDanger(Trash),
       props: { style: 'color: #e74c3c;' }
@@ -240,13 +242,15 @@ function handleMenuSelect(key) {
     case 'new-story':
       {
         const dir = props.item.path || props.item.name || '';
-        fileStore.createFile('story', dir, pos);
+        const title = isNovelMode.value ? t('components.fileExplorer.promptTitleStoryNovel') : t('components.fileExplorer.promptTitleStoryScript');
+        const message = isNovelMode.value ? t('components.fileExplorer.promptMessageStoryNovel') : t('components.fileExplorer.promptMessageStoryScript');
+        fileStore.createFile('story', dir, { x: pos.x, y: pos.y, title, message });
       }
       break;
     case 'new-folder':
       {
         const dir = props.item.path || props.item.name || '';
-        fileStore.createFile('folder', dir, pos);
+        fileStore.createFile('folder', dir, { x: pos.x, y: pos.y, title: t('components.fileExplorer.promptTitleFolder'), message: t('components.fileExplorer.promptMessageFolder') });
       }
       break;
   }

@@ -3,19 +3,19 @@
     <GlobalLoading scope="production" />
 
     <!-- 场景详情视图 -->
-    <template v-if="viewMode === 'detail' && currentScene">
+    <template v-if="viewMode === 'detail' && (currentScene || isNovelMode)">
       <div class="detail-header">
         <n-button quaternary circle size="small" @click="viewMode = 'list'">
           <template #icon><n-icon :component="ArrowLeft" /></template>
         </n-button>
-        <span class="detail-title">{{ currentScene.scene || t('views.production.mobile.sceneDefaultName', { index: 1 }) }}</span>
-        <n-button quaternary circle size="small" @click="showSceneMetaDrawer = true">
+        <span class="detail-title">{{ isNovelMode ? (fileStore.selectedFile?.name || t('views.production.mobile.selectStoryFile')) : (currentScene?.scene || t('views.production.mobile.sceneDefaultName', { index: 1 })) }}</span>
+        <n-button v-if="!isNovelMode" quaternary circle size="small" @click="showSceneMetaDrawer = true">
           <template #icon><n-icon :component="SquarePen" /></template>
         </n-button>
       </div>
 
-      <!-- 顶部操作栏 -->
-      <div class="detail-top-actions">
+      <!-- 顶部操作栏（仅剧本模式） -->
+      <div v-if="!isNovelMode" class="detail-top-actions">
         <n-button
           secondary
           size="small"
@@ -116,9 +116,9 @@
               <path d="M16 20h16M16 26h10" stroke="currentColor" stroke-width="2" stroke-linecap="round" opacity="0.2"/>
             </svg>
           </div>
-          <p class="empty-text">{{ t('views.production.mobile.noScenes') }}</p>
+          <p class="empty-text">{{ isNovelMode ? t('views.production.mobile.fileSceneHintNovel') : t('views.production.mobile.fileSceneHintScript') }}</p>
           <n-button size="small" type="primary" @click="createScene" :disabled="!selectedFilePath">
-            {{ t('views.production.mobile.createScene') }}
+            {{ isNovelMode ? t('views.production.mobile.createSceneNovel') : t('views.production.mobile.createSceneScript') }}
           </n-button>
         </div>
 
@@ -284,6 +284,7 @@ const viewMode = ref<'list' | 'detail'>('list');
 const scenes = computed<SceneWithClientId[]>(() => Array.isArray(sceneStore.scriptData) ? sceneStore.scriptData : []);
 const currentScene = computed(() => sceneStore.currentScene);
 const workspaceMode = computed(() => sceneStore.workspaceMode || 'script');
+const isNovelMode = computed(() => workspaceMode.value === 'novel');
 
 const sceneTitle = ref('');
 const sceneIntro = ref('');
@@ -307,7 +308,11 @@ const groupedStoryOptions = computed(() => groupedOptions.value);
 
 async function toggleWorkspaceMode() {
   const nextMode = workspaceMode.value === 'script' ? 'novel' : 'script';
-  sceneStore.workspaceMode = nextMode;
+  if (projectId.value) {
+    await sceneStore.persistWorkspaceMode(projectId.value, nextMode);
+  } else {
+    sceneStore.setWorkspaceMode(nextMode);
+  }
   sceneStore.fileFormat = nextMode === 'novel' ? 'novel' : 'arc';
   if (projectId.value) {
     await fileStore.loadFileTree(projectId.value, nextMode);
@@ -349,6 +354,10 @@ async function handleFileChange(val: string | null) {
   if (!val || !projectId.value) return;
   await fileStore.setCurrentFile(projectId.value, val);
   selectedFilePath.value = val;
+  // 小说模式选中文件后直接进入编辑器
+  if (isNovelMode.value) {
+    viewMode.value = 'detail';
+  }
 }
 
 function enterSceneDetail(s: SceneWithClientId) {
@@ -359,7 +368,13 @@ function enterSceneDetail(s: SceneWithClientId) {
 
 async function createScene() {
   if (!selectedFilePath.value) return;
-  const scene = await sceneStore.createNewScene();
+  // 小说模式是连续正文，不支持新建场景节点；直接进入编辑器
+  if (isNovelMode.value) {
+    viewMode.value = 'detail';
+    return;
+  }
+  const opts = { title: t('views.production.mobile.createSceneScript'), message: t('components.fileExplorer.promptMessageStoryNovel') };
+  const scene = await sceneStore.createNewScene(opts);
   if (scene) {
     hydrateSceneForm();
     viewMode.value = 'detail';
@@ -426,6 +441,10 @@ onMounted(async () => {
   await loadOutline();
   if (fileStore.selectedFile?.path) {
     selectedFilePath.value = fileStore.selectedFile.path;
+    // 小说模式下自动进入编辑器
+    if (isNovelMode.value) {
+      viewMode.value = 'detail';
+    }
   } else if (storyOptions.value[0]?.value) {
     selectedFilePath.value = storyOptions.value[0].value;
     await handleFileChange(selectedFilePath.value);
@@ -439,6 +458,10 @@ watch(projectId, async () => {
 
 watch(() => fileStore.selectedFile?.path, (val) => {
   if (val) selectedFilePath.value = val;
+  // 小说模式下切换文件后自动进入编辑器
+  if (val && isNovelMode.value) {
+    viewMode.value = 'detail';
+  }
 });
 
 watch(currentScene, () => {

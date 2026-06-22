@@ -10,6 +10,7 @@
   attachment_chunk_tokens: 64000  (附件分片 token 上限，等价于"按需读取"滑动窗口的窗口大小)
   story_tags: {}  (项目级故事主题参数：风格/题材/基调/世界观/人称/篇幅)
   active_inspiration_id: null  (当前生效的灵感 ID，用于追溯来源)
+  workspace_mode: "script"  (项目默认创作模式：script=剧本 / novel=小说)
 """
 
 from __future__ import annotations
@@ -45,6 +46,9 @@ _DEFAULT_SETTINGS: Dict[str, Any] = {
     },
     # 当前生效的灵感 ID（可选，用于追溯项目参数的来源灵感）
     "active_inspiration_id": None,
+    # 项目默认创作模式：script=剧本（.arc）/ novel=小说（.md）
+    # 切换项目时前端会读取此值自动恢复到上次的创作模式
+    "workspace_mode": "script",
 }
 
 # 与 routes_import.py 的 chunk_tokens 校验保持一致，避免极端值。
@@ -95,6 +99,9 @@ def _normalize(raw: Dict[str, Any] | None) -> Dict[str, Any]:
             }
         # 规范化 active_inspiration_id
         data["active_inspiration_id"] = raw.get("active_inspiration_id", _DEFAULT_SETTINGS["active_inspiration_id"])
+        # 规范化 workspace_mode：只允许 script / novel
+        raw_mode = raw.get("workspace_mode", _DEFAULT_SETTINGS["workspace_mode"])
+        data["workspace_mode"] = "novel" if raw_mode == "novel" else "script"
     return data
 
 
@@ -175,6 +182,19 @@ def set_attachment_chunk_tokens(user_id: str, project_name: str, value: Any) -> 
     coerced = _coerce_attachment_chunk_tokens(value)
     set_project_setting(user_id, project_name, "attachment_chunk_tokens", coerced)
     return coerced
+
+
+def get_workspace_mode(user_id: str, project_name: str) -> str:
+    """快捷查询：项目默认创作模式（script=剧本 / novel=小说）。"""
+    mode = get_project_setting(user_id, project_name, "workspace_mode", "script")
+    return "novel" if mode == "novel" else "script"
+
+
+def set_workspace_mode(user_id: str, project_name: str, mode: str) -> str:
+    """设置项目默认创作模式并持久化，返回最终生效的值。"""
+    normalized = "novel" if mode == "novel" else "script"
+    set_project_setting(user_id, project_name, "workspace_mode", normalized)
+    return normalized
 
 
 def list_projects_semantic_status(user_id: str) -> List[Dict[str, Any]]:

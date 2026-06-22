@@ -174,12 +174,21 @@ export const useFileStore = defineStore('file', {
     },
     async createFile(type: 'folder' | 'story', parentDir = '', opts: Record<string, unknown> = {}) {
       const projectStore = useProjectStore();
+      const sceneStore = useSceneStore();
       // prompt 弹窗始终居中显示，不使用鼠标坐标定位（坐标仅 confirm 类弹窗使用）
       const { x: _x, y: _y, ...promptOpts } = opts as { x?: unknown; y?: unknown; [k: string]: unknown };
+      // 兜底文案：当调用方未传入 i18n 文案时使用（应尽量由调用方传入 i18n 文案）
+      const isNovel = sceneStore.workspaceMode === 'novel';
+      const defaultTitle = type === 'folder'
+        ? '新建分卷'
+        : (isNovel ? '新建章节' : '新建剧幕');
+      const defaultMessage = type === 'folder'
+        ? '请输入新的分卷名称：'
+        : (isNovel ? '请输入新的章节名称：' : '请输入新的剧幕名称：');
       const name = await new Promise<string | null>((resolve) => {
         bus.emit('prompt', {
-          title: `新建${type === 'folder' ? '章节' : '作品'}`,
-          message: `请输入新的${type === 'folder' ? '章节' : '作品'}名称：`,
+          title: defaultTitle,
+          message: defaultMessage,
           resolve: (value: unknown) => resolve(typeof value === 'string' ? value : null),
           ...promptOpts
         });

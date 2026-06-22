@@ -172,7 +172,10 @@ export const useProjectStore = defineStore('project', {
       const chrStore = useCharacterStore();
       const blueprintStore = useBlueprintStore();
       if (this._currentProject) {
-        fileStore.loadFileTree(this._currentProject, fileStore.activeFormatFilter);
+        // 先异步加载项目创作模式，完成后用正确格式加载文件树
+        sceneStore.loadWorkspaceMode(this._currentProject).then(() => {
+          fileStore.loadFileTree(this._currentProject!, sceneStore.workspaceMode);
+        });
         chrStore.load(this._currentProject);
         blueprintStore.loadBlueprint(this._currentProject);
         // 进入工作台/切换项目时统一触发一次语义索引差异检查（仅一次/每会话/每项目）

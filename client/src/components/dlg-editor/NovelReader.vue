@@ -22,9 +22,9 @@
         <div class="sheet-edge" aria-hidden="true"></div>
         <div class="editor-frame">
           <div v-if="!localContent" class="editor-placeholder">
-            在这里开始你的小说创作……
+            {{ t('components.novelEditor.placeholderLine1') }}
 
-让场景先动起来，再让人物开口。
+{{ t('components.novelEditor.placeholderLine2') }}
           </div>
           <div
             ref="editorRef"
@@ -45,8 +45,11 @@
 
 <script setup lang="ts">
 import { ref, computed, watch, onMounted, nextTick, onBeforeUnmount } from 'vue';
+import { useI18n } from 'vue-i18n';
 import NovelBackdrop from '@/components/player/shared/NovelBackdrop.vue';
 import { useSceneStore } from '@/components/stores/sceneStore';
+
+const { t } = useI18n();
 
 const props = defineProps({
   content: {

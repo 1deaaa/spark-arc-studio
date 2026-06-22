@@ -24,8 +24,7 @@
             <div class="sidebar-section file-section">
               <div class="file-section-header">
                 <span class="file-section-title">{{ t('views.scriptWriter.desktop.workspaceManager') }}</span>
-                <div class="workspace-mode-switch">
-                  <span class="mode-label">{{ isNovelWorkspace ? t('views.scriptWriter.desktop.modeNovel') : t('views.scriptWriter.desktop.modeScript') }}</span>
+                <div class="workspace-mode-switch" :title="t('views.scriptWriter.desktop.modeSwitchHint')">
                   <SparkSegment
                     :model-value="workspaceMode"
                     :options="workspaceModeOptions"
@@ -33,6 +32,9 @@
                     @update:model-value="handleWorkspaceModeChange"
                   />
                 </div>
+              </div>
+              <div class="workspace-mode-desc">
+                {{ isNovelWorkspace ? t('views.scriptWriter.desktop.modeSwitchNovelDesc') : t('views.scriptWriter.desktop.modeSwitchScriptDesc') }}
               </div>
               <FileTree :key="workspaceMode" />
             </div>
@@ -182,7 +184,11 @@ const workspaceModeOptions = computed(() => [
 
 async function handleWorkspaceModeChange(mode) {
   const normalized = mode === 'novel' ? 'novel' : 'script';
-  sceneStore.setWorkspaceMode(normalized);
+  if (projectStore.currentProject) {
+    await sceneStore.persistWorkspaceMode(projectStore.currentProject, normalized);
+  } else {
+    sceneStore.setWorkspaceMode(normalized);
+  }
   if (projectStore.currentProject) {
     await fileStore.loadFileTree(projectStore.currentProject, normalized);
   }
@@ -372,10 +378,13 @@ h2 {
   gap: 8px;
 }
 
-.mode-label {
-  font-size: var(--spark-fs-xs);
+.workspace-mode-desc {
+  padding: 4px 16px 6px;
+  font-size: var(--spark-fs-2xs);
   color: var(--spark-text-muted);
-  white-space: nowrap;
+  line-height: 1.4;
+  border-bottom: 1px solid var(--spark-border);
+  flex-shrink: 0;
 }
 
 .workspace-mode-enter-from,

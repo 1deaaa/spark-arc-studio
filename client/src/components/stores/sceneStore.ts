@@ -1,5 +1,5 @@
 import { defineStore } from 'pinia';
-import { fetchStoryFile, saveStory } from '@/services/api';
+import { fetchStoryFile, saveStory, getProjectWorkspaceMode, setProjectWorkspaceMode } from '@/services/api';
 import { useProjectStore } from './projectStore';
 import bus from '@/eventBus';
 import { parseArc, serializeToArc, type ActValue, type ArcDialogueNode, type ArcOptionNode, type ArcScene } from '@/services/arcParser';
@@ -169,6 +169,31 @@ export const useSceneStore = defineStore('scene', {
     setWorkspaceMode(mode: string) {
       this.workspaceMode = mode === 'novel' ? 'novel' : 'script';
     },
+    async loadWorkspaceMode(projectName: string) {
+      if (!projectName) return;
+      try {
+        const mode = await getProjectWorkspaceMode(projectName);
+        if (this.workspaceMode !== mode) {
+          this.resetForWorkspaceMode(mode);
+        } else {
+          this.workspaceMode = mode;
+          this.fileFormat = mode === 'novel' ? 'novel' : 'arc';
+        }
+      } catch (error) {
+        console.warn('[sceneStore] 加载项目创作模式失败:', error);
+      }
+    },
+    async persistWorkspaceMode(projectName: string, mode: string) {
+      const normalized = mode === 'novel' ? 'novel' : 'script';
+      this.workspaceMode = normalized;
+      this.fileFormat = normalized === 'novel' ? 'novel' : 'arc';
+      if (!projectName) return;
+      try {
+        await setProjectWorkspaceMode(projectName, normalized);
+      } catch (error) {
+        console.warn('[sceneStore] 保存项目创作模式失败:', error);
+      }
+    },
     resetForWorkspaceMode(mode: string) {
       const normalized = mode === 'novel' ? 'novel' : 'script';
       this.workspaceMode = normalized;
@@ -273,11 +298,13 @@ export const useSceneStore = defineStore('scene', {
       Object.assign(this.currentNode, fields);
       this._syncCurrentStoryCache();
     },
-    async createNewScene() {
+    async createNewScene(opts: { title?: string; message?: string } = {}) {
+      const defaultTitle = this.workspaceMode === 'novel' ? '新建章节' : '新建场景';
+      const defaultMsg = this.workspaceMode === 'novel' ? '请输入新章节的名称:' : '请输入新场景的名称:';
       const sceneName = await new Promise<unknown>((resolve) => {
         bus.emit('prompt', {
-          title: '新建场景',
-          message: '请输入新场景的名称:',
+          title: opts.title || defaultTitle,
+          message: opts.message || defaultMsg,
           resolve
         });
       });

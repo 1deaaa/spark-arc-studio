@@ -20,13 +20,13 @@
         <n-icon :component="Book" :size="36" />
       </div>
       <div class="file-tree-empty__title">{{ $t('components.fileExplorer.emptyTitle') }}</div>
-      <div class="file-tree-empty__hint">{{ $t('components.fileExplorer.emptyHint') }}</div>
+      <div class="file-tree-empty__hint">{{ isNovelMode ? $t('components.fileExplorer.emptyHintNovel') : $t('components.fileExplorer.emptyHintScript') }}</div>
       <div class="file-tree-empty__actions">
-        <button class="file-tree-empty__btn" type="button" @click.stop="fileStore.createFile('story')">
-          <n-icon :component="Plus" :size="13" style="margin-right:4px;" />{{ $t('components.fileExplorer.newScene') }}
+        <button class="file-tree-empty__btn" type="button" @click.stop="handleCreate('story')">
+          <n-icon :component="Plus" :size="13" style="margin-right:4px;" />{{ isNovelMode ? $t('components.fileExplorer.newSceneNovel') : $t('components.fileExplorer.newSceneScript') }}
         </button>
-        <button class="file-tree-empty__btn file-tree-empty__btn--ghost" type="button" @click.stop="fileStore.createFile('folder')">
-          <n-icon :component="SquarePen" :size="13" style="margin-right:4px;" />{{ $t('components.fileExplorer.newChapter') }}
+        <button class="file-tree-empty__btn file-tree-empty__btn--ghost" type="button" @click.stop="handleCreate('folder')">
+          <n-icon :component="SquarePen" :size="13" style="margin-right:4px;" />{{ $t('components.fileExplorer.newVolume') }}
         </button>
       </div>
     </div>
@@ -69,6 +69,8 @@ const rootList = computed({
   set: (v) => { fileStore.fileTree = v; },
 });
 
+const isNovelMode = computed(() => sceneStore.workspaceMode === 'novel');
+
 const blankMenu = reactive({ visible: false, x: 0, y: 0 });
 
 const _menuIcon = (comp: Component) => () => h(NIcon, { component: comp, size: 14 });
@@ -76,12 +78,12 @@ const _menuIcon = (comp: Component) => () => h(NIcon, { component: comp, size: 1
 // Naive UI 下拉菜单选项
 const blankMenuOptions = computed(() => [
   {
-    label: t('components.fileExplorer.newScene'),
+    label: isNovelMode.value ? t('components.fileExplorer.newSceneNovel') : t('components.fileExplorer.newSceneScript'),
     key: 'new-story',
     icon: _menuIcon(Plus)
   },
   {
-    label: t('components.fileExplorer.newChapter'),
+    label: t('components.fileExplorer.newVolume'),
     key: 'new-folder',
     icon: _menuIcon(SquarePen)
   }
@@ -120,12 +122,23 @@ function handleBlankMenuSelect(key) {
   
   switch(key) {
     case 'new-story':
-      fileStore.createFile('story', '', pos);
+      handleCreate('story', '', pos);
       break;
     case 'new-folder':
-      fileStore.createFile('folder', '', pos);
+      handleCreate('folder', '', pos);
       break;
   }
+}
+
+function handleCreate(type: 'folder' | 'story', parentDir = '', pos: { x: number; y: number } = { x: 0, y: 0 }) {
+  const isFolder = type === 'folder';
+  const title = isFolder
+    ? t('components.fileExplorer.promptTitleFolder')
+    : (isNovelMode.value ? t('components.fileExplorer.promptTitleStoryNovel') : t('components.fileExplorer.promptTitleStoryScript'));
+  const message = isFolder
+    ? t('components.fileExplorer.promptMessageFolder')
+    : (isNovelMode.value ? t('components.fileExplorer.promptMessageStoryNovel') : t('components.fileExplorer.promptMessageStoryScript'));
+  fileStore.createFile(type, parentDir, { x: pos.x, y: pos.y, title, message });
 }
 
 function dirPathOf(path) {
