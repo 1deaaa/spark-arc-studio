@@ -750,7 +750,7 @@ graph TB
 
 ### Tauri 2 跨平台构建
 
-前端已接入 Tauri 2，Windows / Linux / macOS / Android / iOS 的完整“傻瓜化”构建教程请查看 [DOC/tauri/README.md](DOC/tauri/README.md)。
+前端已接入 Tauri 2，Windows / Linux / macOS / Android / iOS 的完整“傻瓜化”构建教程请查看 [doc/tauri/tauri2-all.md](doc/tauri/tauri2-all.md)。
 
 简易发布速查（进入项目根目录后 `cd client`）：
 
@@ -800,7 +800,7 @@ graph TB
 
 - 主要贡献指南：`.github/CONTRIBUTING.md`（英文）
 - Agent 约束与架构规范：`AGENTS.md`
-- Agent 语言方针：`agent.md`
+- Agent 语言方针与开发规范：[AGENTS.md](AGENTS.md)
 
 ---
 
@@ -809,7 +809,7 @@ graph TB
 | 文档 | 内容 |
 | :--- | :--- |
 | [架构深度文档](docs/architecture.md) | 导演调度 vs 信标协作对比、Agent 三模态完整协议、Critic 审核机制、风格克隆集群、信标总线核心机制、ARC 解析策略、工具注册表、流式基础设施层 |
-| [火柴Agent网关指南](docs/matchbox-gateway.md) | 双通道设计、接入链路、槽位配置、推理流兼容 |
+| [火柴Agent网关指南](server/llm/agen_matchbox/README.md) | 双通道设计、接入链路、槽位配置、推理流兼容 |
 | [数据库自动迁移指南](docs/database-migration.md) | 开发者工作流、迁移接入指南、清理历史风险 |
 | [CI/CD 部署指南](docs/cicd-deployment.md) | Runner 配置、CI Secret、GitHub Actions 迁移 |
 | [AGENTS.md](AGENTS.md) | Agent 开发规范、新增 Agent 自检清单、提示词协议 |
@@ -824,7 +824,6 @@ graph TB
 
 当前中文法律与运营文档包括：
 
-- [`NOTICE`](NOTICE)
 - [`LEGAL/LicensePolicy.zh-CN.md`](LEGAL/LicensePolicy.zh-CN.md)
 - [`LEGAL/TrademarkPolicy.zh-CN.md`](LEGAL/TrademarkPolicy.zh-CN.md)
 - [`LEGAL/TermsOfService.zh-CN.md`](LEGAL/TermsOfService.zh-CN.md)

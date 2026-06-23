@@ -1,280 +1,511 @@
-# SparkArc: Cross-Platform Agent Studio for Story Creation
+# SparkArc Studio
 
 [简体中文](README.md) | [English](README.en.md) | [日本語](README.ja.md) | [한국어](README.ko.md)
 
-> 📢 **Support & Follow**: If SparkArc has been helpful to you, please consider giving us a **Star** (bookmark the project to prevent losing it) and a **Watch** (select Custom -> Releases to subscribe to new updates). As an independent open-source project, every Star and Watch significantly improves our visibility in the community, which is crucial for our continuous iteration and long-term development. Thank you for your support!
+> 📢 **Support & Star**: If this project inspires or helps you, please give us a **Star** (bookmark the project to avoid losing it) and **Watch** (select Custom -> Releases to subscribe to new version updates). As an independent open-source project, every Star and Watch significantly increases our visibility in the community, which is crucial for the continuous iteration and long-term development of the project. Thank you very much for your support!
 > 
-> 🤝 **Co-author**: Special thanks to [<img src="https://github.com/wxwxwkai.png" width="20" style="border-radius:50%; vertical-align:middle;"/> @wxwxwkai](https://github.com/wxwxwkai) for their dedication to design and promotion; without these critical efforts, this project would not have been possible. The project is led by [<img src="https://github.com/wxwxwkai.png" width="20" style="border-radius:50%; vertical-align:middle;"/> @wxwxwkai](https://github.com/wxwxwkai) for iterations and community management, while [<img src="https://github.com/1deaaa.png" width="20" style="border-radius:50%; vertical-align:middle;"/> @1deaaa](https://github.com/1deaaa) continues to provide technical support.
+> 🤝 **Co-Authors**: Special thanks to [<img src="https://github.com/wxwxwkai.png" width="20" style="border-radius:50%; vertical-align:middle;"/> @wxwxwkai](https://github.com/wxwxwkai) for his dedication to design and publicity. Without these key works, this project would not have been released. This project is iterated and managed in the community by [<img src="https://github.com/wxwxwkai.png" width="20" style="border-radius:50%; vertical-align:middle;"/> @wxwxwkai](https://github.com/wxwxwkai), and [<img src="https://github.com/1deaaa.png" width="20" style="border-radius:50%; vertical-align:middle;"/> @1deaaa](https://github.com/1deaaa) will continue to provide technical support.
 
-SparkArc is a production-grade creative studio powered by coordinated Agents.
-It helps creators turn a tiny spark into a complete story world and publishable output across:
-
-- Novel drafting
-- Scriptwriting
-- Interactive web performance
-- Game-engine-ready story assets
-
-SparkArc connects the full chain:
-
-`Inspiration -> Worldbuilding -> Rhythm -> Outline -> Drafting -> QA -> Publish -> Share -> Performance`
+**SparkArc Studio** is a creative platform driven by an autonomous agent cluster. It is designed to expand a spark of inspiration into a complete story world through a professional creative pipeline, author novels and scripts, and drive exquisite web performances or Unity engine shows.
+It connects the entire chain of **Inspiration — Lore/Settings — Beat Sheet — Outline — Writing — Validation — Publishing — Sharing — Performance**, providing a powerful set of productivity tools for creators.
 
 ---
 
-## Why SparkArc
+## Core Features
 
-Most AI writing tools are either:
+### 1. Human-Centric, Complete Control
 
-- A black-box text generator with weak structure control
-- A complex prompt playground that shifts workflow burden back to the user
+SparkArc firmly believes that **inspiration and emotion are the non-negotiable core dignity of human creation**. This is the prerequisite for all AI creation.
 
-SparkArc takes a different product direction:
+Whether it is a quick note when inspiration strikes, or word-by-word polishing during meticulous refinement, you decide the level of AI intervention.
+* **Co-creation (Recommended)**: You provide the core concept, key scenes, and dramatic beats, and the AI **strictly builds the entire world according to your requirements**. You can interrupt, modify, and rewrite at any time, and the AI will adapt immediately to your new direction.
+* **Directed Writing**: With just a moving lyric, a vague idea, or a slice of life, simply instruct the Director Agent. You can then **close the page — the experts of SparkArc will execute a rigorous workflow in the background to present you with a complete story**.
+* **Assisted Editing**: The ultimate assistant for perfectionist creators. Highly visualized, user-friendly workflows where AI only provides structuring, verification, and suggestions. **You are in complete control of every single word, using AI only as global labor or as a critical reader to polish your work**.
 
-1. You communicate naturally with a Director Agent.
-2. The Director dispatches specialized Agents and tools.
-3. Structured editors stay in sync with generated outputs.
-4. You can intervene at any layer without losing flow.
+Creation without quality is destined for the wastebasket.
 
-Result: you get IDE-level production power with chat-level simplicity.
+* **Long-Form Quality Assurance**: Through real-time status tracking in the **Story Memory Pool**, report cards from the **Critic**, and the negative constraints of **Style Cloning** to counter AI-generated tones, we implement a strict pipeline of **pre-writing lore validation, mid-writing logic checking, and post-writing quality assurance**. This guarantees the quality of long-form narratives while fully liberating the creator's productivity.
+* **Customized Experts**: You decide exactly **how to write prompts** and **which models to bind** for each expert agent. You only need to focus on writing quality — the underlying infrastructure for these experts has been fully laid out by SparkArc.
+* **Style Cloning & Countering AI-generated Tone**: Simply upload your work to launch the analysis cluster to **clone your own or a famous writer's** unique narrative voice, word choices, and emotional tones. This **effectively resolves the high-frequency word issues common in AI creation** and dramatically **reduces the "AI flavor" (AI味)** of the output.
+* **Semantic Search & Batch Editing**: Natural language retrieval and global replacement driven by **Agentic RAG + Graph RAG**. You only need to know a concept or a plot point to retrieve it precisely. **Renaming characters, updating settings — let the AI handle the chores**.
 
----
+### 2. An IDE for Creators: Intuitive Interaction
 
-## Product Pillars
+Now, you are the Head Writer. Simply **talk to the Director in the chat box**, and it will coordinate an intelligent agent team to **work collaboratively with you** — or run entirely in the background, building your massive world view and **automatically completing the entire creative process** using **various powerful structured editing tools**. Share your **novels/scripts** with your friends, allowing them to **immerse themselves in your inspiration** on the **interactive performance terminal**.
 
-### 1. Studio UX for Serious Creation
+SparkArc is dedicated to carrying professional creative workflows on natural conversations through multi-agent capabilities.
 
-- Multi-agent orchestration behind a single conversation entry
-- Structured editors for world, synopsis, outline, and script layers
-- Traceable generation process instead of one-shot black-box output
-- Surgical refinement by specialist Agent when a section needs rework
-- **Blueprint system**: per-project `blueprint.json` defines creative preferences, style constraints, and workflow parameters
+* **Ultra-friendly & Professional Experience**: We visualize every creative node with intuitive components, allowing creators to edit conveniently and at will. It is as professional as **Cursor for writing**, but **without complex operational logic — what you see is what you get**.
+* **Say Goodbye to Manual Editing**: You no longer need to write complex prompts to constrain the AI to write an outline while considering the world view, nor do you need to copy-paste texts output by various agents. Everything is organized by the workflow. The Director Agent understands your demands, splits sub-tasks, and accurately distributes them to lore experts, showrunners, or scriptwriters. They **use tools to edit automatically for you**, allowing you to enjoy the precise control of strictly structured text without adding a single bit of work.
+* **Unveiling the Black Box: Collaborative White-Box Generation**: Traditional AI tools often generate the final long article directly in a black box. SparkArc, however, **runs autonomously** in the background, shows you the deduction process of each step, and **reveals the AI's reasoning**. If you are unsatisfied, you can **appoint an expert** to perform surgical local modifications. Generation is no longer a blind-box draw, but a fully visible white-box creation.
 
-### 2. Human-Centered Control
+### 3. Borderless Creation, Anytime, Anywhere
 
-SparkArc treats human creativity as the source of truth.
+Inspiration is often born **outside the computer — on the subway, during a walk, or in a casual chat with friends or even AI**.
 
-- `Manual mode`: AI assists with checks and suggestions
-- `Hybrid mode` (recommended): AI expands details while you keep narrative control
-- `Auto mode`: AI explores directions from a rough concept
+* **Subway Time (Fragmented Creation)**: Specially adapted for mobile devices, allowing one-handed operation to review outlines, record inspirations, or make simple plot choices during commutes. Highly automated workflows let you complete creative tasks in just five minutes of subway time.
+* **Multi-Platform Support**: Supports all common platforms — *Windows, macOS, Linux, Android, iOS; computers, tablets, and phones are all your professional Studio!*
+* **MCP Across Space**: Break device boundaries. Through Model Context Protocol (MCP), your **RikkaHub on mobile**, **Claude Code on desktop**, or any other MCP-supported AI assistant can **remote-control the Director to start creating with just one sentence during casual chats or research**, or simply send ideas to the Inspiration Inbox.
+* **Unattended Auto-Write**: Launch the Auto-Write pipeline with one click. The AI will generate chapters and scenes continuously according to the outline. **Closing the browser won't stop the writing** — simply reopen it to restore real-time progress. Supports pause/resume/breakpoint recovery, with nested progress rings displayed on the frontend.
 
-### 3. Quality and Consistency Loop
+### 4. Share the Spark, Showcase the World
 
-- `Style Agent`: style cloning to reduce generic AI phrasing
-- `Critic Agent`: evidence-based editorial review (S/A/B/C/D tiers)
-- `GraphRAG` (optional): cross-document fact constraints for long-form consistency; production-ready but not mounted by default
+**Under the AI accelerator, the protagonist you have envisioned for years can finally take the stage**. It's not just sharing plain text, but a complete show of your creation.
 
-### 4. Mobile-to-Desktop Continuity
+* **Web Performance Terminal**: Share your inspiration at any time. Audiences can enter the script with **just a single click**.
+* **Version Snapshot & Export**: Supports one-click creation of version snapshots. Export as `.arc` interactive scripts or pure literary novels, and restore to the workspace from snapshots with one click.
+* **Planned Features**: *This is a huge roadmap, please stay tuned.*
+  1. Support generating character portraits with stable styles to ensure consistency.
+  2. Implement a simple background image feature by combining image generation and editing models.
+  3. Allow custom Scriptwriter features to derive sub-agents, such as daily slice-of-life writers, item setting writers, etc.
+  4. Allow users to define custom data structures, where agents generate corresponding parsing components for frontend display and editing, and save the component code in the database (LUI or Gen-UI).
 
-- Mobile-friendly flow for commuting and fragmented sessions
-- **Auto-Write**: unattended batch pipeline — AI writes chapter by chapter, survives browser disconnect, resumable with nested progress ring
-- Desktop studio for deep editing and system-level management
-- Inspiration inbox via MCP for cross-tool idea capture
+### 5. Industrial Production, Democratic Creation
 
-### 5. Performance-Ready Outputs
+Make the world in your script move — **the generated script can be easily imported into Unity to drive the game engine's dialogue and cutscene systems**, and can be extended to Unreal, Godot, and other engines. We believe that with the development of AI, **everyone will have the right to create stories and even games**.
 
-- Share stories through web performance links
-- **Version snapshots**: one-click snapshot, export as `.arc` or novel, restore from snapshot
-- **Novel mode**: pure literary prose output (Markdown) alongside interactive script format
-- Keep a clear upgrade path to game engine integration
-- Treat scripts as executable content assets, not static documents
-
-### 6. Scalable Agent Operations
-
-SparkArc defines collaboration semantics with:
-
-- `Beacon`: visibility/receivability
-- `Horn`: proactive communication permission
-- `Baton`: ownership of current task chain
-- `Tool Permission Tiering`: role-based tool access control constrains each Agent to its dedicated capability domain, preventing hallucination-driven privilege escalation and ensuring pipeline safety
-
-This model reduces multi-agent chaos and keeps large flows maintainable.
+* **Program Decoupling**: Designers can focus purely on text and drama without writing a single line of code, controlling performances and game behaviors while iterating text at any time.
+* **Blueprint System**: Each project can be configured with an exclusive `blueprint.json` defining creative preferences, style constraints, and process parameters, letting the AI write within your framework instead of guessing from scratch.
+* **Unity Example**: A simple **Unity SDK** is provided. Experience the simplicity of one-click integration and refer to the **detailed beginner's integration guide**.
 
 ---
 
-## Agent Pipeline (Production View)
+The architecture of SparkArc is designed strictly according to the standard workflows of the literature, game, and film/television industries:
 
-| Stage | Role | Agent | What it does |
-| :-- | :-- | :-- | :-- |
-| 0. Orchestration | Director | **Director** | LangGraph-based multi-turn tool-call orchestration, task delegation, auto-write triggering, progress tracking, interaction entry |
-| 1. Ideation | Logline / High Concept | **Muse** | Captures seed ideas and expands them into creative directions |
-| 2. Worldbuilding | Story Bible / World Guide | **Lorebook** | Builds world rules, settings, and character foundations |
-| 3. Structure | Beat Sheet / Treatment | **Showrunner** | Generates beats and chapter/scene skeletons |
-| 4. Drafting | Screenplay / Script | **Scriptwriter** | Produces scene-level script; supports interactive script & novel dual output. |
-| 5. QA | Script Doctor / Coverage | **Critic + Style** | Detects weak spots, AI flavor residue, and continuity issues. GraphRAG available as optional add-on |
-| 6. Publishing | Implementation / Assets | **Web Player / Unity SDK** | Compiles scripts into high-performance runtime, driving in-game dialogue, performance scheduling, and quest triggers |
+| Stage | Role Equivalent | How SparkArc Does It | Feature Description |
+| :--- | :--- | :--- | :--- |
+| **0. Communication & Dispatch** | Director | **Director** | Global entry and context manager. Based on LangGraph multi-turn tool-calling autonomous dispatch, it delegates tasks, triggers auto-writing, and checks progress. It is the interaction node directly facing the user. |
+| **1. Planning / Concept** | Logline / High Concept | **Inspiration Seed** | Capture fleeting Flash Ideas and solidify them into story seeds with multi-dimensional tags (genre/tone/perspective). |
+| **2. Lore / Setting** | Story Bible / World Guide | **Lorebook Expert** | Establish physical laws, magic systems, geopolitics, and core character bios to ensure subsequent logical consistency. |
+| **3. Beat / Structure** | Beat Sheet / Treatment | **Showrunner** | "Save the Cat!" or "Hero's Journey"? Establish the story skeleton at this stage, divide the act structure, and generate precise beat sheets. |
+| **4. Writing** | Screenplay / Script | **Scriptwriter** | The final "pen". Fills flesh into the structural framework, handling scene descriptions, action directions, and character dialogue. Supports dual-mode output: `.arc` interactive script and pure novel format. |
+| **5. Quality Assurance** | Script Doctor / Coverage | **Critic & Style Cloning** | Critic simulates a harsh editor to provide professional feedback on conflicts or plot holes; Style Cloning eliminates AI-flavor high-frequency words through target style constraints. The GraphRAG fact constraint tool is production-ready and can be enabled as a canary rollout to enhance cross-chapter consistency. |
+| **6. Publishing / Show** | Implementation / Assets | **Web Show / Unity SDK** | Script assetization. Compiles the script into a high-performance runtime to drive in-game dialogue systems, performance scheduling, and quest triggers. |
 
-### Agent Tri-Mode Invocation Protocol
+## Creator's One-Map Workflow
 
-Every specialist Agent's prompts are strictly separated into three invocation modes, carried by three top-level fields in one YAML file. This keeps "manual panel", "user chat", and "director delegation" cleanly isolated:
+You can think of SparkArc as a creative workstation that "can drive automatically but always allows you to take over the steering wheel." In daily use, you only need to choose between several entrances: delegate tasks to the Director, start Auto-Write, let the AI assist you with the current scene, or write completely by yourself. The system organizes story memory without interrupting you; if you edit content manually, you can decide whether to let the AI absorb that change.
 
-| Mode | YAML Field | Output Behavior |
-| :--- | :--- | :--- |
-| **Specialized Work** | `system` + `user` | Strictly structured, directly consumable by parsers |
-| **Chat Mode** | `chat_system` | Natural conversation, divergent, no format enforcement |
-| **Pipeline Mode** | `pipeline_system` | Strictly structured + tool persistence + brief report to director |
+```mermaid
+flowchart TB
+    Start["Open Project"] --> Prepare["Optional: Put scattered ideas into Inspiration Inbox"]
+    Prepare --> Choice{"How to proceed today?"}
 
-> 📘 Full runtime logic, `pipeline_system` hard constraints, tool reference mechanism, and new-agent checklist: see [Architecture Deep Dive §2](docs/architecture.md#2-agent-三模态调用协议完整版) and [AGENTS.md §4.5](AGENTS.md)
+    Choice --> Director["Delegate to Director<br/>Best for: Just state your goals"]
+    Choice --> Auto["Auto-Write<br/>Best for: Having outlines, batch generate text"]
+    Choice --> Assist["AI Assist Current Scene<br/>Best for: Stuck, want to generate a transition"]
+    Choice --> Manual["Manual Writing & Editing<br/>Best for: Polishing dialogue, emotions, and details"]
+
+    subgraph DirectorFlow["Route 1: Director Orchestration"]
+        Director --> DirectorPick{"Director assigns next steps"}
+        DirectorPick --> Build["Complete inspiration, lore, characters, or outlines"]
+        DirectorPick --> Auto
+        DirectorPick --> Assist
+        DirectorPick --> Review["Review<br/>View issues, evidence, and revision suggestions"]
+    end
+
+    subgraph AutoFlow["Route 2: Auto-Write"]
+        Auto --> AutoRun["Write scene by scene<br/>Resumable if disconnected"]
+        AutoRun --> AutoSave["Auto-save each scene"]
+        AutoSave --> AutoMemory["Rearrange story memory in background<br/>Help subsequent scenes remember context"]
+        AutoSave --> AutoReview{"Need review during writing?"}
+        AutoReview -- "Yes" --> Review
+        AutoReview -- "No" --> AutoNext{"More scenes?"}
+        AutoMemory --> AutoNext
+        AutoNext -- "Yes" --> AutoRun
+    end
+
+    subgraph AssistFlow["Route 3: AI Assist Current Scene"]
+        Assist --> Draft["AI references context, outline, and story memory<br/>Generate drafts"]
+        Draft --> Accept{"Are you satisfied?"}
+        Accept -- "Save & Adopt" --> AutoSave
+        Accept -- "Adjust Further" --> Workbench["Back to Workbench"]
+    end
+
+    subgraph ManualFlow["Route 4: Manual Writing & Editing"]
+        Manual --> ManualSave["Standard Save<br/>Only saves your text"]
+        ManualSave --> Remember{"Let AI remember this change?"}
+        Remember -- "Yes" --> ManualMemory["File Menu: Absorb to Memory"]
+        Remember -- "Not now" --> Workbench
+        ManualMemory --> Workbench
+    end
+
+    Build --> Workbench
+    Review --> Workbench
+    AutoNext -- "No" --> Workbench
+    Workbench --> Publish{"Ready to show others?"}
+    Publish -- "Polishing further" --> Stay["Stay on Workbench<br/>Choose any of the four routes to continue"]
+    Publish -- "Publish, Playtest, or Export" --> Release["Create Version Snapshot<br/>Web Performance / Unity usage"]
+
+    classDef start fill:#f8fafc,stroke:#64748b,color:#0f172a;
+    classDef choice fill:#fff7ed,stroke:#f59e0b,color:#7c2d12;
+    classDef director fill:#eef2ff,stroke:#6366f1,color:#312e81;
+    classDef auto fill:#ecfdf5,stroke:#10b981,color:#064e3b;
+    classDef assist fill:#eff6ff,stroke:#3b82f6,color:#1e3a8a;
+    classDef manual fill:#fdf2f8,stroke:#ec4899,color:#831843;
+    classDef memory fill:#f5f3ff,stroke:#8b5cf6,color:#4c1d95;
+    classDef finish fill:#f1f5f9,stroke:#475569,color:#0f172a;
+
+    class Start,Prepare,Workbench,Stay start;
+    class Choice,DirectorPick,AutoReview,AutoNext,Accept,Remember,Publish choice;
+    class Director,Build,Review director;
+    class Auto,AutoRun,AutoSave auto;
+    class Assist,Draft assist;
+    class Manual,ManualSave,ManualMemory manual;
+    class AutoMemory memory;
+    class Release finish;
+```
+
+## Detailed Directory
+
+* [🚀 Quick Start](#-quick-start)
+* [System Architecture](#system-architecture)
+  * [1. Agent Cluster](#1-agent-cluster)
+    * [Style Cloning Cluster](#style-cloning-cluster)
+  * [2. Context Structure & Unified Execution Pipeline](#2-context-structure--unified-execution-pipeline)
+  * [3. Beacon Bus Communication Mechanism](#3-beacon-bus-communication-mechanism)
+* [Quality Engineering](#quality-engineering)
+  * [Interactive Script Format (ARC)](#interactive-script-format-arc)
+  * [Story Memory Pool](#story-memory-pool)
+  * [Novel Mode](#novel-mode)
+* [Infrastructure](#infrastructure)
+  * [1. Matchbox Agent Gateway](#1-matchbox-agent-gateway)
+  * [2. Database Auto-Migration](#2-database-auto-migration)
+  * [3. Multi-Tenant SaaS](#3-multi-tenant-saas)
+  * [4. Semantic Search Engine](#4-semantic-search-engine)
+  * [5. CI/CD Automated Deployment](#5-cicd-automated-deployment)
+* [Cross-Platform Ecology & Architecture](#cross-platform-ecology--architecture)
+* [📚 Deep Dive](#-deep-dive)
+* [Author's Note](#authors-note)
+
+---
+
+## 🚀 Quick Start
+
+⚠️ This project separates the client and server. **You must deploy the server according to the following documentation to use it.**
+
+**The client accesses the server's URL directly through a browser. Downloading the dedicated client from the Release page is highly recommended.**
+It will automatically detect server APIs upon startup and attempt to connect.
+
+To make it easier for everyone to experience, I maintain a server instance. If you do not start your own server, the client will automatically select mine, where you can register to experience the platform.
+**Due to limited time and funding, I cannot guarantee stability. Therefore, this test instance may be frequently inaccessible. Please do not store important data on it. Deploy your own server for serious use.**
+
+### Option 1: Windows One-Click Launcher (Recommended for Beginners)
+
+Considering Docker's resource load and potential configuration issues, we provide a one-click startup script for Windows users.
+
+**System Requirements**: Windows 10 or higher.
+
+#### How to Use
+
+1. Clone (downloading as a zip is not recommended, as you won't receive updates) this repository to an empty folder: `git clone https://github.com/1deaaa/spark-arc-studio`
+2. **Double-click `start.bat` in the project root directory.**
+3. On first run, it will automatically download portable Python (approx. 40MB) and install dependencies without any manual intervention.
+4. After installation, the backend service will start automatically.
+5. In subsequent runs, the script will detect the deployment flag and **skip installation, launching directly**.
+
+Access Address: **<http://localhost:6688>**, or download the client from Releases (recommended).
+For mobile devices, simply access **<http://192.168.x.x(your_lan_ip):6688>**.
+If you want remote access, you can learn about intranet penetration (if you have a server, you probably won't use this method anyway ~~~).
+
+> 💡 **Zero-Pollution Design**: All outputs are inside `server/.runtime/python/`. Deleting this directory completely restores your system without any residue.
+> 💡 **Idempotence & Safety**: The script has built-in version detection and deployment flags; running it repeatedly will not repeat downloads or installations.
+> 💡 **Pip Cache Exception**: The pip download cache defaults to `%LOCALAPPDATA%\pip\Cache\` (user-level, non-system-level), which does not affect the system. You can clear it by running `pip cache purge`.
+
+### Option 2: Docker Deployment (Recommended)
+
+The most hassle-free cross-platform deployment method, taking only 2 steps:
+
+```bash
+# 1. Clone the project
+git clone https://github.com/1deaaa/spark-arc-studio
+cd spark-arc-studio
+
+# 2. Start the service
+docker compose up -d --build
+```
+
+Access the service after startup at: **<http://localhost:7788>**
+
+> 💡 **Port Differentiation**: Docker environment uses port `7788`, and bare-metal environment uses port `6688`. This makes it easy to run them simultaneously (for parallel debugging in some cases) and distinguishes environments (running both simultaneously in production is **strictly prohibited to avoid potential data conflicts**).
+> 💡 **Data Persistence**: User data and databases are automatically saved in the host machine's `server/` directory, so restarting the container will not lose data.
+> 💡 **Master Key Location**: `LLM_KEY` is written to `server/llm/agen_matchbox/.env` by default, eliminating the need to create a separate `server/.env`.
+
+To recreate the container:
+
+```bash
+docker compose up -d --build --force-recreate
+```
+
+#### 🔄 Correct Update Method After Pulling New Versions (Very Important)
+
+Please do not just execute `docker compose restart`. This only restarts the old container and does not guarantee that the new code will take effect.
+
+After each `git pull`, please execute:
+
+```bash
+# 1) Pull the code
+git pull --ff-only
+
+# 2) Rebuild and replace containers (Mandatory)
+docker compose up -d --build --force-recreate
+
+# 3) Optional: Check recent logs to confirm successful startup
+docker compose logs --tail=120 sparkarc
+```
+
+This workflow ensures that:
+1. The latest Git code inside the image is rebuilt.
+2. Files managed by Git are synchronized back to the mount directory upon startup, avoiding old persisted files shadowing the new version.
+3. User databases and personal data (such as `*.db`, `_userdata`, `.env`) continue to be persisted and will not be overwritten.
+4. GGUF models, llama.cpp runner packages, and tokenizer caches required for local embeddings are persisted in `server/.runtime` (Docker runtime cache volumes for CI deployments) and do not need to be re-downloaded after image reconstruction.
+
+### Option 3: Local Bare-Metal Development Environment
+
+Configuration is simple, and you can press F5 in VS Code to start. This is suitable for those who **do not want to use Docker** or want to do secondary development. Please configure according to the following steps:
+
+1. **Initialize the Python Environment**
+   ```bash
+   # 1. Create and activate a Conda environment (make sure miniconda or anaconda is installed)
+   conda create -n sparkarc python=3.13 -y
+   conda activate sparkarc
+
+   # 2. Install backend dependencies (requirements list is in the server directory)
+   pip install -r server/requirements.txt
+   ```
+
+2. **Build the Frontend Interface**
+   ```bash
+   # Return to the project root directory, then enter client
+   cd ../../../client
+   npm install
+   npm run build
+   ```
+
+3. **F5 to Start the Service**
+   If there are no errors in the previous operations, press F5 to start the server.
+   Access the service at: **<http://localhost:6688>**
+
+#### Optional: Enable Turnstile CAPTCHA (Cloudflare Turnstile)
+
+SparkArc supports Cloudflare Turnstile during the registration phase. It only protects the "Registration" entry: the frontend displays the Turnstile component to obtain a token, and the backend calls Cloudflare's `siteverify` interface to verify the token before creating a user.
+
+Create or edit `.env` in the project root directory, adding:
+
+```env
+SPARKARC_REGISTRATION_VERIFICATION_ENABLED=1
+SPARKARC_REGISTRATION_VERIFICATION_PROVIDER=turnstile
+SPARKARC_TURNSTILE_SITE_KEY=your_turnstile_site_key
+SPARKARC_TURNSTILE_SECRET_KEY=your_turnstile_secret_key
+```
+
+Description:
+* `SPARKARC_TURNSTILE_SITE_KEY` is the public site key sent to the frontend via `/api/auth/verification-config`.
+* You can also save the Turnstile configuration directly in the Admin Panel. The backend writes this into the runtime `.env` in the server's persisted data directory, which won't be lost after Docker rebuilds.
+* `SPARKARC_TURNSTILE_SECRET_KEY` is the private key used only on the backend and will not be returned to the frontend.
+* **If site key or secret key is not configured, registration verification is disabled by default**, which won't affect self-deployed developers registering for the first time.
+* If you want to switch to other verification platforms like Google or Tencent Cloud later, keep the registration routes unchanged and extend the provider in [verification.py](file:///d:/Desktop/sparkarc/server/core/verification.py).
+
+### How to Access Self-Deployed Instances: Browser & Client
+
+SparkArc's backend directly hosts the frontend pages. Once self-deployment is complete, the easiest way to access it is to open a browser and visit your backend address:
+* Docker Deployment: `http://localhost:7788`
+* Local Bare-Metal Launch: `http://localhost:6688`
+* Remote Server Deployment: `http://your_server_address:port`
+
+The client provided in GitHub Releases is merely a convenient shell/frontend portal and does not automatically connect to your private backend. **If you download the desktop or mobile client, please change the default server address to your own actual address before logging in**. The default address may point to the official instance hosted by the maintainer, which is not suitable for private deployment users.
+
+Common configuration entries:
+* Desktop client accessing local backend: `http://localhost:6688` or `http://localhost:7788`
+* Mobile client accessing computer on the same LAN: `http://computer_lan_ip:6688` or `http://computer_lan_ip:7788`
+* Remote private deployment: Enter your server's public domain/IP and port.
+
+If you want to access your private instance on phones, tablets, or other remote devices, you can buy a cloud server for deployment, or use a simpler solution like exposing your local service to your devices using intranet penetration tools. Regardless of the method, please configure accounts, HTTPS, access control, firewalls, model keys, and data backups properly.
+
+> 💡 If your private instance is open for public registration, we suggest configuring HTTPS, registration Turnstile verification, firewall/reverse proxy rate limiting, backup policies, and keeping `LLM_KEY` and other model platform keys secure.
+
+---
 
 ## System Architecture
 
 ### 1. Agent Cluster
 
-SparkArc builds a specialized agent cluster rather than relying on a single LLM. Each Agent has its own persona, prompt engineering, and model configuration.
+SparkArc does not rely on a single large model, but builds an agent cluster with clear division of labor. Each Agent has its own independent persona, prompt engineering, and model configuration.
 
-> 💡 **Internationalization**: Agent registry (`registry.py`) natively supports `zh-CN` / `en-US` / `ja-JP` / `ko-KR`. Frontend uses i18n mapping; backend uses `resolve_agent_i18n_field()` to extract fields by request locale.
+> 💡 **Internationalization**: The Agent registry ([registry.py](file:///d:/Desktop/sparkarc/server/agents/registry.py)) natively supports four languages: `zh-CN` / `en-US` / `ja-JP` / `ko-KR`. The frontend uses i18n mapping, and the backend extracts the corresponding fields via `resolve_agent_i18n_field()` based on the request locale. Adding a new language only requires adding a set of translations in each Agent entry.
 
-#### A. Orchestrator
+#### A. Dispatcher
 
 * **Director Agent**:
-  * **Role**: Global entry point and context manager. Based on **LangGraph SupervisorGraph** for multi-turn tool-call orchestration — delegates via `delegate_task`, triggers Auto-Write via `trigger_auto_write`, checks progress via `check_scriptwriter_status`.
-  * **Core code**: `agent_director.py` + `director_graph.py`
+  * **Responsibility**: Global entry and context manager. Based on **LangGraph SupervisorGraph**, it achieves multi-turn tool calling autonomous dispatch — delegating tasks to experts via `delegate_task`, triggering auto-writing via `trigger_auto_write`, and checking progress via `check_scriptwriter_status`, replacing early rule-based intent recognition schemes. It maintains user session coherence, records key decisions, and serves as the default receiver on the "bus".
+  * **Core Code**: `agent_director.py` + `director_graph.py` (LangGraph SupervisorGraph definition)
 
 #### B. Creative Core
 
-* **Muse Agent**: Captures flash ideas and solidifies them into story seeds via multi-dimensional tags (style/tone/POV). Supports receiving inspiration from external AI assistants via MCP.
-* **Lorebook Agent**: Builds world settings from simple seeds — geography, history, magic/tech systems, and batch-generates character sheets.
-* **Showrunner Agent**: Macro narrative control. Generates beat sheets and tree-structured outlines following classic models like "Save the Cat" or "Hero's Journey".
-* **Scriptwriter Agent**: The sole "writer". Supports **dual output**: `.arc` interactive script and pure literary novel (Markdown). Built-in **Conception Chain** mechanism.
+* **Muse Agent**:
+  * **Responsibility**: The starting point of creativity. It captures fleeting inspiration flashes, solidifies them into story seeds using multi-dimensional tags (style/tone/viewpoint), and can automatically expand them into more complete creative concepts. It supports receiving inspiration from external AI assistants via MCP.
+* **Lorebook Agent**:
+  * **Responsibility**: Build the world view from scratch. It can generate detailed geography, history, magic/technology systems, and batch-generate character sheets matching the world view based on simple seeds.
+* **Showrunner Agent**:
+  * **Responsibility**: Macro-narrative control. It is responsible for generating the **Beat Sheet** and **Tree Outline**, ensuring that the story structure aligns with classic narrative models like "Save the Cat!" or the "Hero's Journey".
+* **Scriptwriter Agent**:
+  * **Responsibility**: Micro-scene realization. It is the sole "writer" responsible for transforming outlines into script text. It supports **dual-mode output**: `.arc` interactive script format (containing dialogue branches, action commands, scene jumps) and pure novel format (Markdown). It has a built-in **Conception Chain** mechanism that generates `<conception>` tags for logical deduction before outputting text.
 
 #### C. Quality Assurance
 
-* **Style Agent** (Style Clone Sub-cluster):
-  * **Role**: Anti-AI — clones target author's voice to eliminate AI-typical high-frequency phrases.
-  * **Sub-cluster**: **Coordinator** + **Validator** + **StyleChatAgent**.
-
-* **Critic Agent**:
-  * **Role**: Simulates a harsh reviewer. Outputs `S/A/B/C/D` tier ratings + evidence + `fix_ticket` modification orders, never directly rewrites text.
-  * **Model strategy**: Uses LLM as Judge/Editor rather than training a dedicated classifier.
-
-* **GraphRAG Tool** (optional, gray-scale):
-  * **Status**: Production-ready but **not mounted by default**. Can be enabled per-project.
-  * **Value**: Cross-chapter consistency, character relationship stability, setting recall.
+* **Style Agent** (Style Cloning Sub-Cluster):
+  * **Responsibility**: Counter AI flavor. By mimicking the writing style of a specified writer or even yourself, it ensures that the large model avoids using high-frequency phrases common to AI when generating, **minimizing the AI flavor**.
+  * **Sub-Cluster Structure**: Composed of the **Coordinator** (orchestrating the analysis process), the **Validator** (Turing backtest closed loop), and the **StyleChatAgent** (style profile Q&A interaction). See the [Style Cloning Cluster](#style-cloning-cluster) section for details.
+* **Critic Agent (Logic Auditor)**:
+  * **Responsibility**: Simulates a harsh editor. It does not directly modify text, but audits script/novel fragments for **AI flavor residues perceivable by readers, dialogue distortion, lack of literary depth, and logic/character persona issues**, outputting structured review feedback.
+  * **Work Mode**: Can operate either through natural language dialog in the chat panel, or be triggered manually as a structured review in the right panel of the ScriptWriter.
+  * **Output Protocol**: Uses a five-grade system of **S / A / B / C / D** instead of numeric scores; simultaneously outputs original text evidence, hit issues, and `fix_ticket` style modification orders to facilitate subsequent revisions.
+  * **Model Strategy**: Prioritizes leveraging the discriminative and attribution capabilities of large models, treating them as an **LLM Judge / Editor** rather than training a proprietary classifier that only gives probability scores.
+* **GraphRAG Tool (Fact Constraint, Optional Canary)**:
+  * **Responsibility**: Converts the world view, characters, outlines, and script fragments in the project into a searchable relationship graph, returning actionable fact constraints during writing or review.
+  * **Current State**: Operational, but **no Agent is bound by default**. It can be enabled gradually. Once enabled, graph building is fixed on the Fast slot, and query-phase configurations follow the calling Agent's model configuration.
+  * **Quality Value**: Focuses on enhancing cross-chapter consistency, character relationship stability, and setting retrieval capability, reducing "retconning" (eating settings) in long narratives.
 
 #### Critic Review Mechanism
 
-Critic answers not "is this AI-written?" but "**where does this text feel like a model completing a task?**". It outputs `S/A/B/C/D` tiers + evidence + `fix_ticket`, preserving creator authority.
+The Critic does not answer "is this written by AI?", but rather "**where in this text will the reader feel like a model is completing a task**". It outputs `S/A/B/C/D` grades + source text evidence + `fix_ticket` revision sheets, and by default, does not modify the text directly, preserving the creator's autonomy.
 
-> 📘 Full four core mechanisms and "why LLM over ML model" rationale: [Architecture Deep Dive §6](docs/architecture.md#6-critic-审核机制完整版)
+> 📗 For the complete four core mechanisms and the rationale for using LLM over ML models, please refer to [Architecture Document §6](file:///d:/Desktop/sparkarc/docs/architecture.md#6-critic-审核机制完整版).
 
-#### Collaboration Data Flow
+#### Collaborative Data Flow
 
 ```mermaid
 graph TD
-    User((User Input)) <--> Director[Director Agent<br>Router·Orchestrator·Interface]
+    User((User Input)) <--> Director[Director Agent<br>Orchestration·Routing·Interface]
     
-    Director -- "route: world/setting" --> Lorebook
-    Director -- "route: structure" --> Showrunner
-    Director -- "route: script/prose" --> Scriptwriter
-    Director -- "route: inspiration" --> Muse
+    Director -- "Route: Inspiration/Lore" --> Lorebook
+    Director -- "Route: Outline/Structure" --> Showrunner
+    Director -- "Route: Script/Text" --> Scriptwriter
+    Director -- "Route: Inspiration Expansion" --> Muse
     
     subgraph "Phase 1: Inspiration & World"
-        Muse[Muse Agent<br>Idea Workshop] -- "expand" --> Seeds[Story Seeds]
-        Lorebook[Lorebook Agent<br>World Architect] -- "generate" --> Worldview[Worldview Docs]
-        Lorebook -- "generate" --> CharSheets[Character Sheets]
+        Muse[Muse Agent<br>Inspiration Studio] -- "Expand" --> Seeds[Story Seeds]
+        Lorebook[Lorebook Agent<br>World Architect] -- "Generate" --> Worldview[Worldview Document]
+        Lorebook -- "Generate" --> CharSheets[Character Sheets]
     end
     
     subgraph "Phase 2: Structure Planning"
-        Worldview & CharSheets -.-> Showrunner[Showrunner Agent<br>Series Runner]
+        Worldview & CharSheets -.-> Showrunner[Showrunner Agent<br>Showrunner]
         Showrunner --> BeatSheet[Beat Sheet]
         BeatSheet --> Outline[Tree Outline]
     end
     
-    subgraph "Phase 3: Script Production"
+    subgraph "Phase 3: Script Realization"
         Outline -.-> Scriptwriter[Scriptwriter Agent]
-      Scriptwriter -. "optional gray-scale" .-> GraphRAG[GraphRAG Fact Constraint]
-      GraphRAG --> FactGuard[Fact Constraint List]
+        Scriptwriter -. "Optional Canary" .-> GraphRAG[GraphRAG Fact Constraint Tool]
+        GraphRAG --> FactGuard[Fact Constraint List]
         
-      Scriptwriter -- "draft" --> Draft[.arc / Novel Draft]
+        Scriptwriter -- "Write Draft" --> Draft[.arc / Novel Draft]
         Draft --> Critic[Critic Agent]
-      FactGuard -.-> Critic
+        FactGuard -.-> Critic
         
-        Critic -- "tier review & fix ticket" --> Feedback{Pass?}
+        Critic -- "Grade & Revision Sheet" --> Feedback{Pass?}
         
-        Feedback -- "No (needs revision)" --> Scriptwriter
+        Feedback -- "No (Needs Modification)" --> Scriptwriter
         
-        Feedback -- "Yes (S/A pass)" --> Finalizer[Format Standardization]
+        Feedback -- "Yes (S/A Pass)" --> Finalizer[Format Standardization]
     end
     
     Finalizer --> FinalScript["Final Script (.arc / Novel)"]
 ```
 
-#### Style Clone Cluster
+#### Agent Three-Mode Calling Protocol
 
-SparkArc's most technically deep module — **UnifiedStyleAnalyzer** serial analysis + **ValidatorAgent** Turing-test loop, capturing subtle human writing style and generating style profiles to constrain subsequent generation.
+Each expert Agent's prompt strictly distinguishes three calling modes, carried by three top-level fields of the same `yaml` file, ensuring that the three paths of "Manual Panel", "User Chat", and "Director Delegation" do not bleed into each other:
 
-- **Serial analysis**: Long novels split into 30k-token chunks, 7-dimension full analysis per chunk, plot summaries passed between chunks
-- **Self-adversarial**: ValidatorAgent writes "forgeries" based on the style profile, self-evaluates, generates negative constraints if AI flavor detected
+| Mode | YAML Field | Output Characteristics |
+| :--- | :--- | :--- |
+| **Specialized Work** | `system` + `user` | Strictly structured, can be directly parsed and saved by parsers. |
+| **User Interaction** | `chat_system` | Natural conversation, open-ended, format not forced. |
+| **Director Delegation** | `pipeline_system` | Strictly structured + tool saving + briefing the Director. |
+
+> 📗 For complete runtime logic, `pipeline_system` writing constraints, tool reference mechanisms, and new Agent self-checklists, please refer to [Architecture Document §2](file:///d:/Desktop/sparkarc/docs/architecture.md#2-agent-三模态调用协议完整版) and [AGENTS.md §4.5](file:///d:/Desktop/sparkarc/AGENTS.md).
+
+#### Style Cloning Cluster
+
+SparkArc's most technically profound module — capturing the subtle writing styles of human authors and generating style profiles through **UnifiedStyleAnalyzer** serial analysis + **ValidatorAgent** Turing backtest closed loop, which is used to constrain subsequent generation and eliminate AI-flavor high-frequency words.
+
+* **Serial Analysis**: Long novels are chunked by 30k tokens, each chunk fully analyzed across 7 dimensions, with plot summaries passed between chunks to maintain context.
+* **Adversarial Tuning**: ValidatorAgent writes "fictional mimics" based on style profiles and self-evaluates. If AI flavor is detected, negative constraints are generated and forcibly injected.
 
 #### Workflow: Serial Deep Analysis
 
 ```mermaid
 graph TD
-    Input[Target Novel/Text] --> Chunker["Smart Chunking (30k tokens/chunk)"]
+    Input[Target Novel/Text] --> Chunker["Token Chunking (30k tokens/chunk)"]
     
     subgraph "Serial Analysis Chain"
-        Chunker --> Block1[Text Block 1]
+        Chunker --> Block1[Text Chunk 1]
         Block1 --> Analyzer1[Unified Analyzer 1]
-        Analyzer1 -- "pass context" --> Analyzer2[Unified Analyzer 2]
+        Analyzer1 -- "Pass Context" --> Analyzer2[Unified Analyzer 2]
         
-        Chunker --> Block2[Text Block 2]
+        Chunker --> Block2[Text Chunk 2]
         Block2 --> Analyzer2
-        Analyzer2 -- "pass context" --> AnalyzerN[...]
+        Analyzer2 -- "Pass Context" --> AnalyzerN[...]
         
-        Chunker --> BlockN[Text Block N]
+        Chunker --> BlockN[Text Chunk N]
         BlockN --> AnalyzerN
         AnalyzerN --> FinalProfile[Complete Style Profile]
     end
     
-    subgraph "Turing-Test Loop"
+    subgraph "Turing Backtest Closed Loop"
         FinalProfile --> Validator[Validator Agent]
-        Validator -- "attempt mimicry" --> MimicText[Mimicry Fragment]
-        MimicText --> Evaluator{Similarity Tier?}
+        Validator -- "Attempt Mimicry" --> MimicText[Mimicked Snippet]
+        MimicText --> Evaluator{Similarity Grade?}
         
-        Evaluator -- "AI flavor (Tier B-F)" --> Refine[Generate Negative Constraint]
-        Refine --> Finalizer[Final Correction]
+        Evaluator -- "AI Flavor (Tier B-F)" --> Refine[Generate Negative Constraints]
+        Refine --> Finalizer[Final Refinement]
         
-        Evaluator -- "Perfect fit (Tier S/A)" --> Finalizer
+        Evaluator -- "Perfect Fit (Tier S/A)" --> Finalizer
     end
 ```
 
-> 📘 Full serial analysis details and negative constraint mechanism: [Architecture Deep Dive §7](docs/architecture.md#7-风格克隆集群完整版)
+> 📗 For full descriptions of serial analysis details and negative constraint mechanisms, please refer to [Architecture Document §7](file:///d:/Desktop/sparkarc/docs/architecture.md#7-风格克隆集群完整版).
 
-### 2. Context Structure and Unified Execution Pipeline
+---
 
-SparkArc's multi-Agent architecture is not a pile of parallel prompts. It is built around shared execution infrastructure. For repeated calls on the same platform, model, and Agent, SparkArc keeps the prefix stable: project / user / Agent identity, shared system prompts, tool references, and AgentSkills / MCP capability notes stay as fixed as possible; the current message, active context, attachments, and temporary parameters are placed later. This helps upstream prefix cache hit more often, reducing cost and improving response speed when the same model keeps working inside SparkArc.
+### 2. Context Structure & Unified Execution Pipeline
+
+SparkArc's multi-agent architecture is not "multiple prompts called in parallel", but a unified execution infrastructure. The system attempts to keep a stable prefix for continuous requests of the same platform, model, and Agent: project/user/Agent identity, shared system prompt, tool reference, and AgentSkills/MCP capability explanations remain unchanged as much as possible; the current message, active context, attachments, and temporary parameters are placed in the back segment. This makes the upstream prefix cache easier to hit, resulting in lower costs and faster responses when the same model works continuously in SparkArc.
 
 ```mermaid
 flowchart LR
-    A["Fixed prefix\nProject / user / Agent identity\nShared system\nTool references / AgentSkills / MCP"] --> B["Dynamic content\nCurrent message\nCurrent task\nActive context\nTemporary params / attachments"]
-    B --> C["History content\nRecent dialogue\nCompacted summary\nCheckpoint / snapshot"]
-    C --> D["Unified request\nKeep prefix stable\nAppend history as needed"]
+    A["Stable Prefix\nProject / User / Agent ID\nShared System Prompt\nTool References / Skills / MCP"] --> B["Dynamic Content\nCurrent Message\nCurrent Task\nActive Context\nTemporary Params / Attachments"]
+    B --> C["Historical Content\nRecent Dialog\nCondensed Summary\nCheckpoint / Snapshot"]
+    C --> D["Unified Request\nKeep stable prefix\nAppend history as needed"]
 ```
 
-* **Fixed content**: identity, role, shared system prompt, tool references, protocol skeleton.
-* **Dynamic content**: current message, target, active context, attachments, temporary parameters.
-* **History content**: recent dialogue, compacted summary, checkpoint / snapshot.
-* **Observed benefit**: in a real DeepSeek V4 flash max Director chat test, the second round reported `10752` upstream cached prompt tokens, about `94.5%` cache hit rate.
+* **Fixed Content**: Identity, role, shared system prompt, tool references, protocol skeleton.
+* **Dynamic Content**: Current message, target, active context, attachments, temporary parameters.
+* **Historical Content**: Recent conversations, condensed summaries, checkpoints / snapshots.
+* **Actual Benefit**: In DeepSeek V4 flash max tests, during continuous director dialogs, the second-turn upstream cache hit reached `10752` tokens, representing a hit rate of about `94.5%`.
 
-> ⚠️ **Cache invalidation note**: changing the model or platform, editing specialist prompts / `pipeline_system` / `tool_rules`, changing tool bindings, language strategy, or some global parameters changes the stable prefix and makes upstream cache rebuild.
->
-> The cached-token number shown under a chat window only uses that window Agent's `context_window_stats`. Director-delegated sub-tasks start another Agent with a different tool set and context prefix, so their cache hits are not mixed into the current window. Full task-level `llm_usage` still keeps the whole-chain aggregate for backend cost diagnostics.
+> ⚠️ **Cache Invalidation Reminder**: Changing models or platforms, modifying expert prompts / `pipeline_system` / `tool_rules`, adjusting tool bindings, changing language strategies, or changing some global parameters will alter the stable prefix and cause the upstream cache to rebuild.
+> 
+> The cache hit tokens displayed below the current chat window only count the `context_window_stats` of the Agent belonging to that window. Sub-tasks generated by Director delegations activate new Agents, toolsets, and context prefixes, so their hit rates should not be mixed into the current window; full task-level `llm_usage` still retains the global summary for background cost diagnostics.
 
-* **Context assembly**: `communication.py` builds the stable system prefix; `prompt_layout.py` places the current editor state, attachment context, and user request near the tail; `context_budget.py` handles history budgets, compaction, and tool-loop re-budgeting.
-* **Unified execution protocol**: Specialist Agents reuse `SparkBaseAgent` and `SparkAgentExecutor`, with `build_context -> execute -> write_result` as the business entry contract. Chat and Director delegation both go through `chat_stream(skip_tool_confirmation)`.
-* **Unified tool ecosystem**: Tools are grouped in `server/agents/tools/registry.py` and exported through the public `agent_tools.py` facade. Script, outline, and lorebook patching share `_apply_patch`; token chunking and semantic chunking also use common foundations.
-* **AgentSkills and MCP**: AgentSkills are read on demand through `search_skills` / `read_skill` / `read_skill_reference` as writing-quality references, without automatically polluting the system prefix. The MCP inspiration inbox exposes `capture_inspiration` through `/api/mcp` and stays isolated from chat Agent tool lists.
-* **Frontend mapping**: Agent names, descriptions, badges, and colors use `server/agents/registry.py` as the source of truth. Tool-call UI metadata is injected by backend `build_tool_stream_event` and consumed centrally by frontend `chatStore`.
+* **Context Concatenation**: `communication.py` constructs the stable system prefix, `prompt_layout.py` puts the current editing area, attachment scene, and the current user request into the back segment, and `context_budget.py` handles historical budgets, compression, and tool loop re-budgeting.
+* **Unified Execution Protocol**: Typical expert Agents reuse `SparkBaseAgent` and `SparkAgentExecutor`, using `build_context -> execute -> write_result` to unify business entries; chat and director delegations go through `chat_stream(skip_tool_confirmation)`.
+* **Unified Tool Ecosystem**: All tools are grouped and registered in [registry.py](file:///d:/Desktop/sparkarc/server/agents/tools/registry.py) and exported through `agent_tools.py` as a public facade. Local replacements of scripts, outlines, and settings all reuse `_apply_patch`; token splitting and semantic chunking also reuse the public base.
+* **AgentSkills & MCP**: AgentSkills are read on-demand through `search_skills` / `read_skill` / `read_skill_reference` as writing quality references and do not automatically pollute the system prefix; the MCP Inspiration Inbox exposes `capture_inspiration` via `/api/mcp` and is isolated from the chat Agent tool list.
+* **Frontend Mapping**: Agent names, descriptions, icons, and theme colors use [registry.py](file:///d:/Desktop/sparkarc/server/agents/registry.py) as the source of truth; tool-calling UI metadata is injected by the backend's `build_tool_stream_event` and consumed and rendered uniformly by the frontend's `chatStore`.
 
-> 📘 Full context structure, cache-hit display, Agent responsibility table, AgentSkills/MCP boundaries, and tool registry details: [Architecture Deep Dive §2-§3](docs/architecture.md#2-agent-统一调用管线).
+> 📗 For more complete details on context structure, cache hit displays, Agent responsibility tables, AgentSkills/MCP boundaries, and tool registration, please refer to [Architecture Document §2-§3](file:///d:/Desktop/sparkarc/docs/architecture.md#2-agent-统一调用管线).
 
-### 3. Beacon Bus Communication
+### 3. Beacon Bus Communication Mechanism
 
-SparkArc implements a **Beacon Bus** — a permission-controlled message routing architecture using "Beacon / Horn / Baton" to model real-world collaboration visibility, proactive communication, and task ownership.
+To solve the complex horizontal interaction problems between multiple agents, SparkArc designed and implemented the **Beacon Bus**. This is a message routing architecture with access control, using a "Beacon / Horn / Baton" triad to simulate "visibility", "active communication right", and "current task assignment" in real-world collaborations.
 
-> ⚠️ **Current status**: Full infrastructure is implemented and accessible via UI, but inter-Agent horizontal communication is a **reserved capability** — evaluation has found that **mainstream models are not yet fully capable of handling multi-turn, multi-role, long-context interactions**. When mainstream models achieve sufficient complex reasoning and attention capabilities, this mechanism will be officially enabled, **unlocking a second leap in creative efficiency and quality through horizontal interaction**.
+> ⚠️ **Current State**: The full infrastructure of the Beacon Bus is implemented and can be operated via the UI, but horizontal autonomous communication between Agents is currently a **reserved capability** — evaluations have shown that **current mainstream models do not fully possess the ability to handle multi-turn, multi-character, long-context interactions**. Once the complex reasoning and attention capabilities of mainstream models reach the required standard, this mechanism will be officially enabled, **achieving a second leap in creative efficiency and quality by enabling horizontal interaction**.
 
 #### Core Mechanism: Beacon / Horn / Baton
 
-Each Agent owns an independent runtime triple: **Beacon** (visible/reachable), **Horn** (can proactively speak), **Baton** (current task chain ownership).
+Each Agent possesses an independent triad: **Beacon** (visibility/reachability), **Horn** (active communication permission), and **Baton** (current task chain ownership). Separating visibility, active communication rights, and task attribution reduces the context mental burden of multi-agent clusters.
 
 #### Interaction Topology
 
@@ -282,459 +513,338 @@ Each Agent owns an independent runtime triple: **Beacon** (visible/reachable), *
 graph TB
     Bus((SparkArc<br>Event Bus))
     
-    subgraph "Agent A (can collaborate)"
+    subgraph "Agent A (Active Collaborator)"
         StateA[Beacon: Open<br>Horn: True<br>Baton: False]
         AgentA[Scriptwriter] <--> StateA
     end
     
-    subgraph "Agent B (current baton holder)"
+    subgraph "Agent B (Current Holder)"
         StateB[Beacon: Open<br>Horn: False<br>Baton: True]
         AgentB[Critic] <--> StateB
     end
     
-    subgraph "Agent C (offline)"
+    subgraph "Agent C (Offline)"
         StateC[Beacon: Closed<br>Horn: False<br>Baton: False]
         AgentC[Director] <--> StateC
     end
  
-    AgentA -- "send after blowing horn" --> Bus
-    Bus -- "broadcast" --> AgentB
-    Bus -- "broadcast (rejected)" --x AgentC
-    AgentB -- "no horn, cannot initiate" --x Bus
+    AgentA -- Broadcasts message after sounding Horn --> Bus
+    Bus -- Broadcast --> AgentB
+    Bus -- Broadcast (Rejected) --x AgentC
+    AgentB -- No Horn: Cannot initiate --x Bus
 ```
 
-> 📘 Full triple definitions and application scenarios: [Architecture Deep Dive §8](docs/architecture.md#8-信标总线核心机制完整版)
+> 📗 For complete triad definitions and application scenarios, please refer to [Architecture Document §8](file:///d:/Desktop/sparkarc/docs/architecture.md#8-信标总线核心机制完整版).
 
-#### Director Scheduling vs Beacon Collaboration (Vertical & Horizontal Collaboration)
+#### Director Orchestration vs Beacon Collaboration (Vertical & Horizontal Collaboration)
 
-SparkArc has **two independent communication mechanisms**:
+SparkArc contains **two independent communication mechanisms with different responsibilities**:
+* **Director Orchestration** (Vertical): The Director autonomously dispatches tasks based on LangGraph multi-turn tool calling. It is not limited by beacons and can directly instantiate and call Agents.
+* **Beacon Collaboration** (Horizontal): Autonomous communication between Agents is constrained by beacons, horns, and batons to prevent broadcast storms and infinite loops.
 
-- **Director Scheduling** (vertical): LangGraph-based multi-turn tool-call orchestration, unrestricted by beacons.
-- **Beacon Collaboration** (horizontal): Inter-Agent communication constrained by Beacon/Horn/Baton.
-
-> 📘 Full comparison table and design rationale: [Architecture Deep Dive §1](docs/architecture.md#1-导演调度-vs-信标协作双系统对比)
+> 📗 For comparison tables, interaction mode diagrams, and design rationales, please refer to [Architecture Document §1](file:///d:/Desktop/sparkarc/docs/architecture.md#1-导演调度-vs-信标协作双系统对比).
 
 ---
 
-## Data Protocol
+## Quality Engineering
 
-SparkArc defines a hybrid format — **.arc** — combining Markdown readability with XML logical structure, **maximally preserving literary quality in long structured text generation**.
+SparkArc is dedicated to **liberating the maximum potential of AI**. To this end, we have designed several unique quality engineering solutions.
+We define a hybrid format, **ARC**, that balances **human readability** with **machine parsing capability**. It combines Markdown's fluid reading experience with XML's rigorous logical structure, allowing you to edit easily while letting the AI unleash its greatest creative potential.
+Based on rigorous research, **it maximizes the literary quality of large models when creating long structured text.** This is the greatest value of this data format.
 
-### Format Example
+### Interactive Script Format (ARC) Example
 
 ```markdown
-# Scene: The Last Goodbye
-@guide Quest guide: Walk her through the final stretch
+# Scene Title: The Last Farewell
+@guide Task Guide: Accompany her through the last journey
 @intro Scene initialization description...
 
 [-1]
-This is the narration area. The setting sun stretches the streets long, sycamore shadows dappled.
+This is the narrator area. The setting sun stretches the street extremely long, and the sycamore shadows are mottled.
 
 [0]
 Do you still remember this place?
 
 [1]
-Grandpa... candy...
+Grandpa... Candy...
 
 <choice>
-  <opt text="Point to the school gate in the distance">
+  <opt text="Pointing at the school gate in the distance">
     [0]
-    Look, that's where we first met.
-    @next scene_memory
+    Look, that's where we met for the first time.
+    @next Scene_Memory
   </opt>
   
-  <opt text="Stay silent">
+  <opt text="Keep silent">
     [-1]
-    Silence spreads through the air.
+    Silence spreads in the air.
     @act system:AddMood(-5)
   </opt>
 </choice>
 ```
 
-### Parsing Strategy
+This format is eventually compiled into a high-performance, zero-error database to drive performances.
+By default, we do not give AI the permission to write function nodes, ensuring AI focuses on creation. **Once model capabilities improve, we will gradually open this up.**
 
-Server-side `arc_parser.py` uses layered parsing: scene splitting → metadata extraction → `<conception>` chain-of-thought filtering → regex + custom tag hybrid parsing (dialogue lines / `<choice>` branches / `@act` directives / `@next` jumps).
+> 📗 For parsing strategy details, please refer to [Architecture Document §9](file:///d:/Desktop/sparkarc/docs/architecture.md#9-arc-格式解析策略).
 
-> 📘 Full parsing strategy details: [Architecture Deep Dive §9](docs/architecture.md#9-arc-格式解析策略)
+### Story Memory Pool
+
+Long-form creation fears two things: first, that the world view and character settings are frequently messed up by temporary plots; second, that subsequent chapters forget what has already happened in previous ones. SparkArc treats these two issues separately:
+* The **Story Memory Pool** records factual plot points that have already been saved, such as characters' recent appearances, current states, relationships, open threads, must-keep facts, and original text evidence.
+* After saving in Auto-Write or AI-assisted writing, the system organizes memory in the background; manual writing content can be manually "absorbed to memory" through the file menu.
+* The memory pool **only honestly organizes facts and evidence, and does not decide how the plot should be written**. Real literary expression, foreshadowing retrieval, and character arcs are still completed by the scriptwriter based on outlines, settings, and **your intentions**.
+
+This design maintains the stability of the "Story Bible" while ensuring subsequent scenes remember the context that was actually written, without turning every small change into a dangerous global settings rewrite.
 
 ### Novel Mode
 
-Besides interactive script format, SparkArc supports **pure literary novel** output mode. When a project switches to novel mode:
+In addition to the interactive script format, SparkArc supports the **pure literary novel** output mode. When a project switches to Novel Mode:
+* Expert agents adopt a literary style suitable for novels.
+* The show terminal automatically switches to a clean, focused novel reader.
+* The script editor automatically switches to a novel view.
 
-- Experts adopt a more literary style suited to novels
-- The performance terminal automatically switches to a clean, focused novel reader
-- The script editor automatically switches to novel view
-
-Both modes share the same worldview, characters, outline, and beat sheet — only the final output format diverges.
+Both modes share the same world view, characters, outline, and beat sheet, diverging only in the final output format.
 
 ---
 
 ## Infrastructure
 
-SparkArc builds production-grade infrastructure with portability in mind — **you can easily migrate these to your own project**.
+For the stability of this massive platform, SparkArc builds many fully functional infrastructures. They are designed with generality in mind, so you can **easily migrate them to your own projects**. **I hope my work can help more developers who want to build something in this wave**.
 
 ### 1. Matchbox Agent Gateway
 
-The Matchbox gateway provides unified LLM access for Agents. It's an independent gateway with GUI, dual-channel quota billing, rate limiting, and full-chain capabilities.
+The underlying layer is managed by the Matchbox Agent Gateway, an independent LLM gateway developed specifically for Agent environments. It strictly decouples interfaces, can be deployed in other projects, and features a built-in GUI, fine-grained dual-quota billing, rate limiting, and other full-chain capabilities.
 
-**Compatible with OpenAI protocol**, with automatic reasoning-field unification into reasoning streams for optimal streaming experience.
+The gateway is **compatible with the OpenAI protocol** and supports automatically unifying common reasoning fields into reasoning streams, ensuring the best streaming experience.
 
-Core capabilities:
+Core Capabilities:
+* **Dual-Channel Design**: Strong management channel (default business channel) + Lightweight direct-connect channel (bypass capability).
+* **Flexible Hosting Models**: System hosting / BYOK / Hybrid mode, allowing site administrators to decide commercial models freely.
+* **Multi-Quota & Billing**: Independent rate limiting on `sys_paid` / `self_paid`, periodic limits + total caps.
+* **Precise Token Estimation**: Based on `tiktoken` + dynamic CJK correction coefficients, ensuring billing accuracy.
+* **Multi-Purpose Slots**: Fast / Reason / Main, routing models based on task complexity.
 
-- **Dual-channel design**: Managed channel (default) + Quick-connect channel (bypass)
-- **Flexible hosting**: System-managed / BYOK / Hybrid
-- **Multi-tier quotas**: `sys_paid` / `self_paid` independent flow control, periodic + cap limits
-- **Precise token estimation**: `tiktoken` + dynamic CJK correction
-- **Multi-purpose slots**: Fast / Reason / Main, routed by task complexity
+> 📗 For complete documentation on the dual-channel design, access links, slot configurations, and reasoning stream compatibility, please refer to the [Matchbox Agent Gateway Guide](file:///d:/Desktop/sparkarc/server/llm/agen_matchbox/README.md).
 
-> 📘 Full dual-channel design, onboarding, slot config: [Matchbox Gateway Complete Guide](docs/matchbox-gateway.md)
+### 2. Database Management & Auto-Migration
 
-### 2. Database Auto-Migration
+SparkArc uses SQLite and the high-performance vector database LanceDB as its local, zero-deployment database solution by default.
+It can be switched with **one click to PostgreSQL + PG Vector** for production-grade performance supporting large user bases.
 
-SparkArc includes **startup-time auto-migration** ensuring users can run after pulling new code without manual DB upgrades.
+#### Automatic Migration
 
-#### 🚑 Emergency Recovery
+SparkArc features **automatic migration upon startup**, ensuring that users do not need to manually upgrade databases after pulling new code.
 
-If DB errors occur, your data is safe. Copy the models and DB file out, give them to an AI code assistant with instructions to sync via SQL, then copy back.
+#### 🚑 First of all, the life-saving method is written at the very front
+
+The automatic migration mechanism considers various extreme situations, but the possibility of database version errors still cannot be completely avoided. We cannot prevent mistakes made by developers (including myself) during development.
+But one thing is guaranteed: data safety. If a database error occurs, **do not panic, your data is intact**.
+Please copy out the models defining the table structures and the erroneous database file.
+1. Give the models and database file to your AI assistant, and **make a backup of the database file**.
+2. Ask the AI to write SQL statements to synchronize the database file to the latest version of the models based on the migration history. Data safety must be guaranteed. (Since database key data is stored encrypted, you don't need to worry about AI leaking it).
+3. Overwrite the database file back.
+4. Restart the backend, done.
 
 #### Core Features
 
-1. **Multi-DB branches**: `users.db` and `llm_config.db` with independent `version_locations`
-2. **Auto-upgrade on startup**: Uses Alembic API
-3. **Smart rename detection**: Auto-identifies field renames
-4. **Dangerous operation interception**: `DROP COLUMN` / `DROP TABLE` requires confirmation
-5. **Orphan version self-healing**: Auto-repairs broken migration chains
+1. **Multiple Database Branches**: `users.db` and `llm_config.db` use independent `version_locations` without interfering with each other.
+2. **Auto-Upgrade on Startup**: If the upstream database format updates, the startup script uses the Alembic API to upgrade directly.
+3. **Temp DB Generated Migrations**: Generation scripts build temporary databases based on the migration chain, keeping the development machine's actual database clean.
+4. **Smart Rename Detection**: Automatically identifies field renames and asks for confirmation.
+5. **Dangerous Action Interception**: `DROP COLUMN` / `DROP TABLE` forces interactive confirmation.
+6. **Legacy Version Self-Healing**: When the migration chain is broken, it conservatively patches missing tables/columns and aligns version numbers, defaulting not to delete extra structures.
+7. **Version Drift Protection**: Throws errors when the version number is already head but fields are missing, preventing silent swallowing of migrations that should be submitted.
 
-> 📘 Full developer workflow and integration guide: [Database Migration Complete Guide](docs/database-migration.md)
+> 📗 For the developer workflow, migration integration guide, and instructions for clearing historical risks, please refer to the [Database Auto-Migration Guide](file:///d:/Desktop/sparkarc/docs/database-migration.md).
 
-### 3. User Management & Permissions
+### 3. Multi-Tenant SaaS
 
-Role-based access control (RBAC) with automated initial configuration:
+**You can completely deploy SparkArc for your team members or friends to use.**
+The system adopts role-based access control and simplifies initial configurations through automation.
 
-- **First admin**: System auto-sets the first registered user as admin
-- **Default permissions**: All other users default to regular (`is_admin = 0`)
-- **Permission grants**: First admin can authorize others via "Admin Center" UI
+* **First Administrator**: The system automatically sets the **first registered user** as the administrator, who has permission to modify the system's model platforms.
+* **Default Permissions**: Except for the first user, all newly registered users default to ordinary users (`is_admin = 0`).
+* **Privilege Granting**: The first administrator can authorize other users as administrators through the "Admin Panel" UI.
+
+---
 
 ### 4. Semantic Search Engine
 
-SparkArc includes a project-level semantic search engine, providing the Director Agent with **regex + semantic** dual-mode retrieval and search-result-based text replacement.
+SparkArc has a built-in project-level semantic search engine, providing the Director Agent with **regex search + semantic search** dual-mode retrieval, and supporting text replacements based on search results.
 
 #### Product Capabilities
 
-- **Dual-mode search**: `search_project` for regex pattern matching, `semantic_search` for vector-similarity content understanding. Unified result format, both usable as input for `replace_from_search`
-- **Per-project toggle**: enable/disable per project; auto-tests embedding model availability on enable, shows clear guidance on failure
-- **Default-enable option**: configurable whether new projects default to semantic search on
-- **Auto index update**: detects file hash changes on next search, incrementally rebuilds index
+* **Dual-Mode Retrieval**: `search_project` regex search supports precise pattern matching; `semantic_search` semantic search understands content meaning based on vector similarity. Both output formats are unified and can serve as inputs for `replace_from_search`.
+* **Project-Level Toggle**: Independently enabled/disabled for each project. Upon enabling, it automatically tests embedding model availability and gives clear guidance on failure.
+* **Enabled by Default**: Supports configuring whether new projects enable semantic search by default.
+* **Auto-Index Updates**: After project content changes, the next search automatically detects file hash changes and incrementally rebuilds indexes.
 
 #### Technical Architecture
 
-- **Vector pipeline**: built on LangChain + Chroma, retrieves user-configured Embedding model via Matchbox gateway, supports any OpenAI-compatible embedding API
-- **Lazy build + hash increment**: auto-builds index on first search, reuses via MD5 file hash comparison on subsequent searches
-- **Chunking strategy**: `SemanticChunker` splits project text at semantic boundaries, preserving narrative reference (`narrative_ref`) and line-number range metadata
-- **CJK project name compat**: Chroma collection name converted via MD5 hash, resolving CJK naming convention issues
-- **Batch vectorization**: calls embedding API in batches of 10, adapting to mainstream model batch limits
+* **Vectorization Pipeline**: Built on the LanceDB local vector database, obtaining the user-configured Embedding model through the Matchbox gateway, supporting any OpenAI-compatible embedding API.
+* **Lazy Building & Incremental Hashing**: Automatically builds indexes on the first search, and subsequently detects changes using MD5 file hashes, reusing existing indexes when unchanged.
+* **Chunking Strategy**: `SemanticChunker` splits project text by semantic boundaries, preserving metadata such as narrative location (`narrative_ref`) and line range.
+* **Chinese Project Name Compatibility**: LanceDB table names are converted via MD5 hashes, solving naming convention violations caused by Chinese project names.
+* **Batch Vectorization**: Calls embedding APIs in batches of `batch_size=50`, adapting to the batch limits of mainstream models.
 
 ---
 
-### 5. CI/CD Auto-Deployment
+### 5. CI/CD Automated Deployment
 
-Full CI/CD pipeline: **auto-build, test, deploy** on push. Supports Gitea Actions and GitLab CI; Gitea workflows can migrate to GitHub Actions at low cost.
+SparkArc has a built-in CI/CD pipeline, supporting **fully automated image builds, testing, and deployment** after code pushes without any manual intervention.
+It supports Gitea Actions and GitLab CI, and Gitea Actions workflows can be migrated to GitHub Actions at low cost.
+Pipeline Stages: **Checkout Code → Build Image → Test (Reserved) → Deploy → Cleanup**
 
-Pipeline stages: **Checkout → Build Image → Test (reserved) → Deploy → Cleanup**
-
-> 📘 Full Runner setup, CI secrets, GitHub Actions migration: [CI/CD Deployment Complete Guide](docs/cicd-deployment.md)
+> 📗 For complete Runner configurations, CI Secrets, and GitHub Actions migration instructions, please refer to the [CI/CD Automated Deployment Guide](file:///d:/Desktop/sparkarc/docs/cicd-deployment.md).
 
 ---
 
-## Cross-Platform Ecosystem
+## Cross-Platform Ecology & Architecture
 
-### Component Logic Decoupling
+### Component Logical Layout Decoupling
 
-- **Business Logic (Composables)**: All core logic in independent Composable functions, UI-free. Key composables: `useSynopsisLogic` / `useScriptWriterLogic` / `useWorldLogic` / `useStyleLogic` / `useStructureLogic` / `useAIModelManager` / `useAgentRegistry` / `useChatActions` / `useAdminLogic`. **Project is evolving toward LUI — soon, every sentence you type can launch a complex creative pipeline.**
-- **Streaming infrastructure**: `streamingRuntime.ts` (`createStreamingTask`) + `loadingStats.ts` + `eventBus.ts` + `GlobalLoading.vue` — complete streaming consumption loop. Chat and business task streams run independently.
-- **Responsive views**: Desktop (multi-column workbench) + Mobile (streamlined single-hand operation). Most core views have dedicated mobile layouts; ScriptWriter desktop-only for now.
+To achieve a seamless **five-minute subway** experience, SparkArc uses a decoupled architecture:
 
-### Tauri 2 Cross-Platform Build
+* **Business Logic (Composables)**: All core business logic is encapsulated in independent Composable functions that do not depend on specific UIs. Key Composables include:
+  * `useSynopsisLogic` / `useScriptWriterLogic` — Synopsis and Scriptwriter
+  * `useWorldLogic` / `useStyleLogic` / `useStructureLogic` — Worldview, Style, Structure
+  * `useAIModelManager` / `useAIPlatformManager` / `useAIEmbeddingManager` — Model and Platform management
+  * `useAgentRegistry` / `useChatActions` / `useAdminLogic` — Agent registry, Chat, and Administration
+  * **The project is evolving towards LUI. In the near future, every sentence you speak can launch a complex creative flow.**
+* **Streaming Infrastructure**: The frontend manages all business streaming tasks uniformly via `createStreamingTask` in `streamingRuntime.ts`, forming a complete streaming consumption closed loop with `loadingStats.ts` (global loading statistics), `eventBus.ts` (event bus), and `GlobalLoading.vue` (global loading UI). Chat streams and business task streams run independently and do not interfere with each other.
+* **All-Size Screen Adaptation**:
+  * **Desktop Views**: Complex workstations optimized for wide screens, providing multi-column layouts and detailed control panels.
+  * **Mobile Views**: Flow-like interactive interfaces optimized for vertical screens, emphasizing reading experiences and quick operations. Most core views (synopsis, structure, worldview, style analysis, etc.) provide independent mobile views; the script writing workbench (ScriptWriter) currently only supports desktop.
 
-Frontend integrated with Tauri 2. Full build tutorial: [DOC/tauri/README.md](DOC/tauri/README.md)
+### Tauri 2 Cross-Platform Builds
 
-Quick reference (from project root, `cd client`):
+The frontend is integrated with Tauri 2. For the complete "idiot-proof" build guide for Windows / Linux / macOS / Android / iOS, please see [doc/tauri/tauri2-all.md](file:///d:/Desktop/sparkarc/doc/tauri/tauri2-all.md).
 
-1. Install: `npm install`
-2. Desktop (Win/Linux/macOS): `npm run tauri:build`
+Quick Release Guide (enter project root directory, then `cd client`):
+1. Install dependencies: `npm install`
+2. Desktop (Windows / Linux / macOS): `npm run tauri:build`
 3. Android: `npm run tauri:android`
 4. iOS: `npm run tauri:ios`
-5. Local debug: `npm run tauri:dev`
+5. Local Debugging (Desktop): `npm run tauri:dev`
 
-Notes: macOS/iOS requires macOS device; Android needs Android Studio + SDK/NDK.
+Notes:
+* **macOS / iOS** must be compiled and signed on a macOS device.
+* **Android** requires Android Studio and configured SDK / NDK environments.
+* **Build Artifacts** are automatically synced to the project root directory's `app-build/` and separated by platform.
 
 ### Unity Game Engine Integration (BETA)
 
-Unity SDK (`SparkArc.Unity`) at `presenter/UnitySDK` — early beta.
+> The Unity SDK (`SparkArc.Unity`) is currently located as an independent module in `presenter/UnitySDK`, aimed at providing game developers with an out-of-the-box plot solution. **This feature is in an extremely early beta phase, and coverage is limited. Stay tuned.**
 
-Data pipeline: **Create** (export `.arc` or `stories.db`) → **Assets** (place in `StreamingAssets`) → **Runtime** (`StoryRepository` auto-loads, `DialogueManager` drives, `OnActionTriggered` event broadcasts `@act` directives).
+#### Full-Process Data Pipeline
 
----
+1. **Creative Phase**: Designers complete scripts and export standardized `.arc` files or `stories.db` SQLite databases.
+2. **Asset Layer**: Place the database file into the Unity project's `StreamingAssets` directory.
+3. **Runtime**:
+   * **StoryRepository**: Automatically loads and caches script data upon game startup.
+   * **DialogueManager**: The core driver. Parses the current Story Node, handling text display and option branch jumps.
+   * **Event System**: `@act` action commands in the script are broadcast via a unified `OnActionTriggered(string func, string[] args)` event. Developers register corresponding handlers (e.g., play animations, add quests) in the business layer without modifying the dialogue system code.
 
-## Quick Start
-
-### Option A: Windows One-Click (Recommended for Beginners)
-
-To avoid Docker resource overhead and configuration issues, we provide a one-click startup script for Windows users. **No manual Python installation, no Conda, no command-line operations needed** — just double-click.
-
-**Requirements**: Windows 10 or later (64-bit, any version since the original 1507 release).
-
-#### Usage
-
-1. Clone (not just download — cloning is needed to receive updates) this repository via `git clone` into an empty folder
-2. **Double-click `start.bat` in the project root**
-3. First run automatically downloads portable Python (~40MB) and installs dependencies — no intervention needed
-4. After installation completes, the backend starts automatically
-5. On subsequent runs, the script detects the deployment marker and **skips installation, starting directly**
-
-Access at: **http://localhost:6688**, or download a client from GitHub Releases (recommended).
-On mobile, just visit **http://192.168.x.x (your LAN IP):6688**.
-For remote access, look into intranet penetration tools (if you have a server, you probably wouldn't use this method anyway~~~).
-
-> 💡 **Zero-pollution design**: All artifacts stay inside `server/.runtime/python/`; deleting that directory fully restores the system with no residue.
-> 💡 **Idempotent safety**: The script has built-in version detection and a deployment marker — repeated runs won't re-download or re-install.
-> 💡 **Pip cache exception**: pip's download cache defaults to `%LOCALAPPDATA%\pip\Cache\` (user-level, not system-level) and doesn't affect the system. Run `pip cache purge` to clean it.
-
-#### How It Works
-
-The script automatically completes the following flow:
-
-1. **Prefers PowerShell 7** (`pwsh`); if unavailable, **falls back to Windows built-in PowerShell 5.x**
-2. Downloads [python-build-standalone](https://github.com/astral-sh/python-build-standalone) portable Python 3.13 from a mirror
-3. Extracts to `server/.runtime/python/` using .NET built-in `GzipStream` + inline C# tar decoder (**no tar.exe needed, zero external dependencies**)
-4. Installs dependencies with `pip install --isolated --no-user` — **packages are confined to the portable environment**
-5. Writes a `server/.runtime/python/.deploy_complete` deployment marker only after full success
-6. Starts the backend using portable Python. VS Code F5 remains a developer workflow and uses the interpreter selected in VS Code.
-
-### Option B: Docker (Recommended)
-
-```bash
-git clone https://github.com/1deaaa/spark-arc-studio
-cd spark-arc-studio
-docker compose up -d --build
-```
-
-Open: **http://localhost:7788**
-
-> 💡 **Port distinction**: Docker uses `7788`, bare-metal uses `6688`, so both can run side-by-side for debugging (production deployments **must never run both simultaneously** to avoid potential data conflicts).
-> 💡 **Data persistence**: User data and database are automatically saved in the host `server/` directory; container restarts won't lose data.
-> 💡 **Master key location**: `LLM_KEY` is written to `server/llm/agen_matchbox/.env` by default; no separate `server/.env` is needed.
-
-#### Optional: Registration Human Verification (Cloudflare Turnstile)
-
-SparkArc can protect the registration endpoint with Cloudflare Turnstile. The frontend renders the Turnstile widget and sends the token; the backend validates it with Cloudflare before creating the user.
-
-Create or edit `.env` at the project root:
-
-```env
-SPARKARC_REGISTRATION_VERIFICATION_ENABLED=1
-SPARKARC_REGISTRATION_VERIFICATION_PROVIDER=turnstile
-SPARKARC_TURNSTILE_SITE_KEY=your Turnstile Site Key
-SPARKARC_TURNSTILE_SECRET_KEY=your Turnstile Secret Key
-```
-
-You can also save the Turnstile keys from the admin UI. In that path SparkArc writes the runtime `.env` under the server persisted data directory, so Docker rebuilds will keep it.
-
-Then recreate the container:
-
-```bash
-docker compose up -d --build --force-recreate
-```
-
-Notes:
-
-- `SPARKARC_TURNSTILE_SITE_KEY` is public and is returned to the frontend by `/api/auth/verification-config`.
-- `SPARKARC_TURNSTILE_SECRET_KEY` is private and used only by the backend.
-- **If either the site key or secret key is missing, registration verification stays disabled by default**, so first-time self-hosted registration will not be blocked.
-- To switch to another provider later, keep the registration route stable and extend the provider implementation in `server/core/verification.py`.
-
-#### 🔄 Correct update procedure after pulling new code (important)
-
-Do **not** just run `docker compose restart` — it only restarts the old container and may not apply new code.
-
-After every `git pull`, always run:
-
-```bash
-# 1) Pull code
-git pull --ff-only
-
-# 2) Rebuild and replace containers (required)
-docker compose up -d --build --force-recreate
-
-# 3) Optional: check recent logs
-docker compose logs --tail=120 sparkarc
-```
-
-This ensures:
-1. Latest Git code is rebuilt into the image.
-2. Git-managed files are synced back to mounted directories on startup, preventing stale persistent files from masking new behavior.
-3. User databases and personal data (`*.db`, `_userdata`, `.env`) remain persistent and are not overwritten.
-
-### Option C: Local Development
-
-1. **Initialize Python environment**
-
-   ```bash
-   # 1. Create and activate Conda env (requires miniconda or anaconda)
-   conda create -n sparkarc python=3.13 -y
-   conda activate sparkarc
-
-   # 2. Install server dependencies (requirements in the server directory)
-   pip install -r server/requirements.txt
-   ```
-
-2. **Configure model & keys (GUI)** — optional; can also be done in the frontend.
-
-   ```bash
-   cd server/llm/agen_matchbox
-   python matchbox_cfg_gui.py
-   ```
-
-   - **Master key**: enter `LLM_KEY` for encrypted storage.
-   - **API Key**: select a platform (e.g. DeepSeek/OpenRouter), enter key, save.
-   - **Verify**: click "Test selected model" and confirm success.
-
-3. **Build frontend**
-
-   ```bash
-   cd ../../../client
-   npm install
-   npm run build
-   ```
-
-4. **Start backend**
-
-   ```bash
-   cd ../server
-   python app.py
-   ```
-
-5. **Access the app**: **http://localhost:6688**
-
-### Accessing a Self-Hosted Instance: Browser vs. Client Apps
-
-The SparkArc backend serves the web frontend directly. For self-hosting, the simplest path is to open your backend address in a browser:
-
-- Docker: `http://localhost:7788`
-- Local development: `http://localhost:6688`
-- Remote server: `http://your-server-address:port`
-
-The client apps published in GitHub Releases are convenient frontend shells. They do not automatically connect to your private backend. **If you download a desktop or mobile client, change the default server address before logging in.** The default address may point to the maintainer-hosted official instance, which is not what you want for private deployment.
-
-Common examples:
-
-- Desktop client connecting to a local backend: `http://localhost:6688` or `http://localhost:7788`
-- Phone connecting to a computer on the same LAN: `http://computer-lan-ip:6688` or `http://computer-lan-ip:7788`
-- Remote private deployment: use your server's public domain/IP and port
-
-For mobile or remote access to your private instance, you can deploy on a cloud server, or use a tunnel / reverse proxy / intranet penetration tool to expose your local service to your own devices. In all cases, configure accounts, HTTPS, access control, firewall rules, model keys, and backups responsibly.
-
-> 💡 If your private instance allows public registration, configure HTTPS, registration human verification, firewall / reverse-proxy rate limiting, backups, and protect `LLM_KEY` plus model-provider keys carefully.
+With this pipeline, developers can achieve flexible story iterations — modifying scripts does not require recompiling code, and calling the reload method manually at runtime refreshes the database.
 
 ---
 
-## Localization and Language Policy
+## Localization & Language Policy
 
-- UI locales: `zh-CN`, `en-US`, `ja-JP`, `ko-KR`
-- Frontend language is switchable in Settings
-- Agent system prompts apply a unified locale policy:
+* UI Supported Languages: `zh-CN`, `en-US`, `ja-JP`, `ko-KR`
+* Frontend language can be switched instantly in settings.
+* Language policy for Agent system prompts:
+  1. Default to using the current locale.
+  2. Switch only when the user actively uses another language or explicitly requests a switch.
 
-1. Prioritize current locale by default
-2. Switch only when user proactively uses another language or explicitly requests a switch
-
-For frontend contributions: avoid hardcoded user-visible strings and use Vue I18n.
-
----
-
-## Repository Guides
-
-- Main contribution guide: `.github/CONTRIBUTING.md`
-- Agent constraints and architecture rules: `AGENTS.md`
-- Agent language policy note: `agent.md`
+Frontend Contribution Specification: Avoid hardcoding user-visible text; use Vue I18n.
 
 ---
 
+## Repository Guide
 
-
-## Product Roadmap (directional)
-
-- Style-consistent character portrait pipeline
-- Lightweight background art generation/editing workflow
-- User-defined scriptwriter capability packs (specialist sub-agents)
-- Data-driven custom UI components generated from schema contracts
-
-SparkArc is built to make high-quality narrative production more accessible, repeatable, and creator-led.
+* Main Contribution Guide: `.github/CONTRIBUTING.md` (English)
+* Agent Constraints & Architectural Specifications: [AGENTS.md](file:///d:/Desktop/sparkarc/AGENTS.md)
+* Agent Language Policy & Development Specifications: [AGENTS.md](file:///d:/Desktop/sparkarc/AGENTS.md)
 
 ---
 
-## Deep Dive Documentation
+## 📚 Deep Dive
 
 | Document | Content |
 | :--- | :--- |
-| [Architecture Deep Dive](docs/architecture.md) | Director vs Beacon comparison, Agent tri-mode protocol, Critic mechanism, Style Clone cluster, Beacon Bus core, ARC parsing, tool registry, streaming infrastructure |
-| [Matchbox Gateway Guide](docs/matchbox-gateway.md) | Dual-channel design, onboarding, slot config, reasoning stream compat |
-| [Database Migration Guide](docs/database-migration.md) | Developer workflow, migration integration, history cleanup risks |
-| [CI/CD Deployment Guide](docs/cicd-deployment.md) | Runner setup, CI secrets, GitHub Actions migration |
-| [Semantic Search Engine](#4-semantic-search-engine) | Dual-mode search, per-project toggle, lazy build + hash increment, Chroma vector storage |
-| [AGENTS.md](AGENTS.md) | Agent development rules, new-agent checklist, prompt protocol |
-| [LEGAL/README.md](LEGAL/README.md) | Legal and operational statements unified entry |
+| [Architecture Deep Dive](file:///d:/Desktop/sparkarc/docs/architecture.md) | Director Orchestration vs Beacon Collaboration, Agent Three-Mode Protocol, Critic Review Mechanism, Style Cloning Sub-Cluster, Beacon Bus, ARC Parsing Strategy, Tool Registry, Streaming Infrastructure. |
+| [Matchbox Agent Gateway Guide](file:///d:/Desktop/sparkarc/server/llm/agen_matchbox/README.md) | Dual-channel design, access links, slot configurations, reasoning stream compatibility. |
+| [Database Auto-Migration Guide](file:///d:/Desktop/sparkarc/docs/database-migration.md) | Developer workflow, migration integration, historical risk cleanup. |
+| [CI/CD Deployment Guide](file:///d:/Desktop/sparkarc/docs/cicd-deployment.md) | Runner configurations, CI Secrets, GitHub Actions migration. |
+| [AGENTS.md](file:///d:/Desktop/sparkarc/AGENTS.md) | Agent development specifications, new Agent self-checklists, prompt protocols. |
+| [Semantic Search Engine](#4-semantic-search-engine) | Dual-mode retrieval, project-level toggles, lazy builds + hash increments, LanceDB vector storage. |
+| [LEGAL/README.md](file:///d:/Desktop/sparkarc/LEGAL/README.md) | Unified entry for legal and operational policies. |
 
 ---
 
-## Legal & Operational Statements
+## Legal & Operational Policies
 
-For licensing posture, official instances, third-party deployment, content governance, privacy, and IP boundaries, see [`NOTICE`](NOTICE) and [`LEGAL/README.md`](LEGAL/README.md) as the unified entries.
+To facilitate explanations regarding official instances, third-party deployments, content governance, privacy handling, and intellectual property boundaries, a new [`LEGAL/README.md`](file:///d:/Desktop/sparkarc/LEGAL/README.md) has been added to the repository root directory as a unified entry point.
+
+Current Chinese legal and operational documents include:
+* [`LEGAL/LicensePolicy.zh-CN.md`](file:///d:/Desktop/sparkarc/LEGAL/LicensePolicy.zh-CN.md)
+* [`LEGAL/TrademarkPolicy.zh-CN.md`](file:///d:/Desktop/sparkarc/LEGAL/TrademarkPolicy.zh-CN.md)
+* [`LEGAL/TermsOfService.zh-CN.md`](file:///d:/Desktop/sparkarc/LEGAL/TermsOfService.zh-CN.md)
+* [`LEGAL/PrivacyPolicy.zh-CN.md`](file:///d:/Desktop/sparkarc/LEGAL/PrivacyPolicy.zh-CN.md)
+* [`LEGAL/OfficialInstancePolicy.zh-CN.md`](file:///d:/Desktop/sparkarc/LEGAL/OfficialInstancePolicy.zh-CN.md)
+* [`LEGAL/ThirdPartyOperatorNotice.zh-CN.md`](file:///d:/Desktop/sparkarc/LEGAL/ThirdPartyOperatorNotice.zh-CN.md)
+* [`LEGAL/ContentPolicy.zh-CN.md`](file:///d:/Desktop/sparkarc/LEGAL/ContentPolicy.zh-CN.md)
+* [`LEGAL/EvidenceAndIPCompliance.zh-CN.md`](file:///d:/Desktop/sparkarc/LEGAL/EvidenceAndIPCompliance.zh-CN.md)
+
+Description:
+* Repository-level legal documents are used for public evidence, site reuse, and third-party deployment references.
+* The in-site ToS route reads `server/data/TermsOfService.md` by default; `LEGAL/TermsOfService.zh-CN.md` is retained as a reference template for third-party deployments.
+* Third-party deployers should add operational entities, domains, ICP filings/licenses, complaint emails, and privacy info according to their own circumstances before offering services to the public.
+
+## Brand & Trademark Policy
+
+SparkArc is the official name and logo of this project.
+This project's code is licensed under the AGPL-3.0-only license, but **the "SparkArc" name, logo, brand visuals, and related identifiers are not included in the code authorization**.
+Any deployments, modified versions, or distributions based on this project must not imply any official, authorized, agency, or cooperative relationship with the original project.
+
+The Matchbox Agent Gateway (`server/llm/agen_matchbox`) is an independent reusable component licensed separately under Apache-2.0 in its directory; other parts of the root project, unless otherwise specified, are licensed under AGPL-3.0-only.
 
 ---
 
-## Brand & Trademark Notice
+## Sponsorship & Commercial Cooperation
 
-SparkArc is the official name and identity of this project.
-
-This project's code is released under AGPL-3.0-only; however, **the "SparkArc" name, Logo, brand visuals, and associated identifiers are not included in the code license**.
-
-Any deployment, modified version, or distribution based on this project must not imply official, authorized, agency, or partnership affiliation with the original project.
-
-The Matchbox Agent Gateway (`server/llm/agen_matchbox`) is a separately reusable component licensed under Apache-2.0 according to the `LICENSE` file in that directory. Unless otherwise stated, the rest of the main project is licensed under AGPL-3.0-only.
+If you are a model API aggregation platform, please feel free to check out our [**Sponsorship & Cooperation Guide**](.github/SUPPORT.md). We provide high-value traffic options such as "default configuration distribution" to reciprocate your sponsored development and testing API credits. **We need sponsorship to sustain the high-speed iteration of the project.**
 
 ---
 
-## Sponsorship & Partnership
+## Author's Note
 
-If you are an API proxy provider, aggregator, or GPU supplier, please check our [**Sponsorship & Partnership Guide**](.github/SUPPORT.en.md). We offer high-value promotion channels including **default configuration push** for our self-hosted users in exchange for development & testing API credits. **We highly need sponsorships to maintain our high-speed iterations.**
+The initial version of this project — from design and development to testing — was completed entirely by me, so it inevitably contains many shortcomings. My time is relatively tight, and maintenance work might not be very timely. Contributors are highly welcome to actively participate in maintenance.
 
----
+This project was originally used internally within our studio for game plot system development.
 
-## Closing Remarks
+**Because AI has dramatically accelerated most of the game development processes through MCP, skills, etc., a one-person game dream is no longer out of reach.**
 
-This project was designed, developed, and tested entirely by me (1deaaa) alone, so imperfections are inevitable. My schedule is fairly tight, so maintenance may not always be immediate — community contributions are very welcome.
+**The original intention of designing it was to complete a very important piece of the AI game development puzzle that AI is not yet good at — the plot system.**
 
-The project originated as an internal tool for game narrative development at a studio.
+Later, I decided to settle down and treat this project as a testing ground for cutting-edge Agent technologies, getting users first, and gradually iterating it to game engines based on feedback.
 
-**AI has already massively accelerated most game development workflows through MCP, skills, and similar mechanisms. The dream of a solo developer making a game is no longer out of reach.**
+Unless forced by force majeure, I will keep SparkArc open source in the long run. No matter what new features are added in the future, the maintainers will prioritize syncing them to the public repository.
 
-**Its original purpose was to fill a crucial — and still AI-weak — piece of the AI game development puzzle: the narrative system.**
+I welcome individuals, creators, small teams, and studios to self-deploy SparkArc for personal creation or internal collaboration. Everyone is welcome to jointly build the ecosystem via Issues, PRs, documentation, workflows, tutorials, etc.
 
-Later, I decided to invest in deeper iteration and treat this project as a proving ground for cutting-edge Agent technology — let it gain users first, then iterate toward game engine integration based on real feedback.
+SparkArc is released under AGPL-3.0-only. You may run, copy, modify, deploy, and distribute this project provided you comply with the AGPL-3.0. If you modify SparkArc and provide services to others over a network, you must provide the complete source code of the corresponding version to those users according to AGPL-3.0 requirements (contributions back to this project are welcome), preserving copyright, license, and source declarations.
 
-Unless force majeure intervenes, I intend to keep SparkArc open source for the long term. New features developed by the maintainer are expected to land in the public repository first.
+I am also bound by the agreement, and I welcome contributors, deployers, and community members to jointly maintain the open ecosystem of SparkArc.
 
-Personal users, creators, small teams, and studios are welcome to self-host SparkArc for private or internal workflows. Contributions through issues, pull requests, documentation, templates, agents, workflows, tutorials, and ecosystem projects are warmly welcome.
+The official instance of SparkArc is operated independently only by 1deaaa / AIdeaStudio. The official instance may sustain continuous project development in the future through public welfare, sponsorships, paid credits, hosted services, or other methods.
 
-SparkArc is released under AGPL-3.0-only. You may run, copy, modify, deploy, and distribute it under the terms of AGPL-3.0. If you modify SparkArc and make it available to users over a network, you must provide those users with the complete corresponding source code for that version (contributions back to this project are welcome), and keep copyright, license, and attribution notices.
+I also hope that every contributor, deployer, and community member keeps this awareness: **the openness of SparkArc is not for someone to close the source, rebrand it, erase the source, and make unilateral profits from community achievements**. **Please safeguard the rights granted to us by AGPL**: **retain attribution and licensing**, **disclose corresponding source code** as required, **indicate modifications and sources**, and respect brand and official instance boundaries.
 
-I myself am bound by the same license, and I invite all contributors, deployers, and community members to help maintain SparkArc's open ecosystem together.
+**Compliant self-deployment, internal use, academic research, and ecosystem contributions are all welcomed; circumventing AGPL, white-label impersonation, or transferring third-party operational risks to the community is not accepted.**
 
-The official SparkArc service is operated only by 1deaaa / AIdeaStudio. It may later be sustained through public-good access, sponsorship, paid credits, hosted services, or other official offerings.
+The maintainer does not grant closed-source commercialization, white-label operations, brand agencies, official co-branding, trademark use, or AGPL exemption authorizations to third parties. Any third party deploying, modifying, distributing, or operating SparkArc must comply with AGPL-3.0 and assume their own user, content, model access, payment, credits, redemption codes, customer service, compliance, and legal responsibilities.
 
-I also encourage every contributor, deployer, and community member to stay aware of the rights AGPL protects. SparkArc is open so people can learn, self-host, build, and contribute — not so closed white-label copies can erase attribution and monetize the community one-way. Please help protect the basics: keep attribution and license notices, provide corresponding source code when required, identify modifications and source, and respect brand and official-instance boundaries. Compliant self-hosting, internal use, learning, research, and ecosystem contributions are welcome; AGPL evasion, misleading white-label operation, and shifting third-party operational risks onto the community are not.
-
-Unless expressly stated in writing, the maintainer does not grant third parties any proprietary relicensing, white-label operation, brand agency, official partnership, trademark use, or AGPL exemption. Any third-party deployment, modification, distribution, or operation of SparkArc must comply with AGPL-3.0, and the operator is solely responsible for its users, content, model providers, payments, points, redeem codes, support, compliance, and legal obligations.
-
-**Compliance issues arising from actual operators and their users are not my responsibility.** Public-service operators should handle anonymous sharing, content moderation, identity requirements, log retention, and model compliance with care.
-
+**Any compliance issues regarding generative content produced by actual operators and their users have nothing to do with me.** I also remind all webmasters offering public services: **please handle anonymous sharing, content auditing, real-name requirements, log retention, and model compliance issues with caution.**
