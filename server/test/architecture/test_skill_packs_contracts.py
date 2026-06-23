@@ -13,15 +13,41 @@ from agents.skill_packs import (
 from agents.tools.registry import get_tools_for_agent
 
 
-def test_skill_tools_are_stable_tools_not_dynamic_system_payload() -> None:
+def test_skill_tools_are_stable_tools_not_dynamic_system_payload(tmp_path: Path, monkeypatch) -> None:
+    monkeypatch.setattr("agents.skill_packs.USERDATA_ROOT", str(tmp_path))
+    imported = import_skill_markdown(
+        "skill-test",
+        """---
+name: Sensory Prose
+description: Improves sensory detail.
+---
+# Sensory Prose
+
+## Quality
+Use concrete sensory detail.
+""",
+    )
+
     agent = SparkBaseAgent("agent_scriptwriter", user_id="skill-test", project_name="demo")
     prompt = agent._build_tool_system_prompt("基础提示词", skip_tool_confirmation=False)
 
-    assert "search_skills" in {tool.name for tool in get_tools_for_agent("agent_scriptwriter")}
+    assert "search_skills" in {tool.name for tool in get_tools_for_agent("agent_scriptwriter", user_id="skill-test")}
     assert "Agent Skills 读取边界" in prompt
+    assert imported.skill_id in prompt
+    assert "Sensory Prose" in prompt
     assert "SKILL.md 正文" not in prompt
     assert "按需读取一个 Skill 的质量适配视图" in prompt
     assert "QUALITY_ADAPTER" not in prompt
+
+
+def test_skill_tools_are_hidden_when_no_skill_is_installed(tmp_path: Path, monkeypatch) -> None:
+    monkeypatch.setattr("agents.skill_packs.USERDATA_ROOT", str(tmp_path))
+
+    agent = SparkBaseAgent("agent_scriptwriter", user_id="empty-skills", project_name="demo")
+    prompt = agent._build_tool_system_prompt("基础提示词", skip_tool_confirmation=False)
+
+    assert "search_skills" not in {tool.name for tool in get_tools_for_agent("agent_scriptwriter", user_id="empty-skills")}
+    assert "Agent Skills 读取边界" not in prompt
 
 
 def test_quality_adapter_drops_runtime_workflow_sections() -> None:

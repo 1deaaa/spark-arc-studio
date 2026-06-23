@@ -153,7 +153,7 @@ const isLoginPage = computed(() => route.name === 'Login');
 
 /* 登录页标题文字融入背景，使用主题色半透明 */
 .spark-titlebar.is-login .titlebar-brand {
-  color: var(--spark-primary, #7aa2f7);
+  color: var(--spark-primary, #1deaaa);
   opacity: 0.85;
 }
 
@@ -190,7 +190,7 @@ const isLoginPage = computed(() => route.name === 'Login');
 
 .titlebar-locale:hover {
   background: rgba(255, 255, 255, 0.14);
-  border-color: var(--spark-primary, #7aa2f7);
+  border-color: var(--spark-primary, #1deaaa);
 }
 
 .titlebar-locale__label {

@@ -76,7 +76,16 @@ interface DirectorAutoWriteTask {
   sseConnected: boolean;
 }
 
-const POLL_INTERVAL_MS = 5000; // 5 秒轮询一次
+  const POLL_INTERVAL_MS = 5000; // 5 秒轮询一次
+
+  /**
+   * 导演触发后的"启动宽限期"：后端后台线程从启动到落盘 running 状态存在延迟，
+   * 在此期间轮询可能返回 idle，会用旧状态覆盖前端乐观设置的 running，导致遮罩闪退。
+   * 宽限期内若轮询返回 idle，保留前端的 running 不降级。
+   */
+  const DIRECTOR_STARTUP_GRACE_MS = 3000;
+  /** 记录每个项目最近一次导演触发的时间戳，用于宽限期判定 */
+  const directorStartedAtMap: Record<string, number> = {};
 
 export const useDirectorAutoWriteStore = defineStore('directorAutoWrite', () => {
   /** 所有项目的任务记录，key = projectName */
@@ -124,10 +133,34 @@ export const useDirectorAutoWriteStore = defineStore('directorAutoWrite', () => 
       if (!res.ok) return;
       const data = await res.json();
       if (tasks.value[projectName]) {
-        tasks.value[projectName].snapshot = {
-          ...tasks.value[projectName].snapshot,
-          ...data,
-        };
+        // 启动宽限期 + running 不降级保护：
+        // 导演刚触发后，后端后台线程落盘 running 状态存在延迟，此时轮询可能返回 idle。
+        // 若放任 idle 覆盖前端乐观设置的 running，遮罩会瞬间消失（"需要切换项目才弹出"的根因）。
+        // 对策：宽限期内或 local 仍为 running 而 remote 为 idle 时，保留 local 的 running 状态，
+        //       仅合并非 status 字段；待后端真正进入 running/complete/error 后再正常同步。
+        const localStatus = tasks.value[projectName].snapshot.status;
+        const remoteStatus = data?.status;
+        const startedAt = directorStartedAtMap[projectName] || 0;
+        const inGrace = startedAt > 0 && (Date.now() - startedAt) < DIRECTOR_STARTUP_GRACE_MS;
+        if (
+          (inGrace || localStatus === 'running')
+          && remoteStatus === 'idle'
+        ) {
+          const { status: _dropped, ...safeData } = data;
+          tasks.value[projectName].snapshot = {
+            ...tasks.value[projectName].snapshot,
+            ...safeData,
+          };
+        } else {
+          tasks.value[projectName].snapshot = {
+            ...tasks.value[projectName].snapshot,
+            ...data,
+          };
+          // 后端已进入非 idle 的稳定态，清除宽限期标记
+          if (remoteStatus && remoteStatus !== 'idle' && remoteStatus !== 'running') {
+            delete directorStartedAtMap[projectName];
+          }
+        }
         tasks.value[projectName].lastPolledAt = Date.now();
       }
     } catch {
@@ -203,6 +236,8 @@ export const useDirectorAutoWriteStore = defineStore('directorAutoWrite', () => 
         autoReviewEnabled: auto_review === true,
       },
     };
+    // 记录启动时间戳，供轮询宽限期判定使用
+    directorStartedAtMap[project_name] = Date.now();
     // 立即拉一次最新状态
     _pollSnapshot(project_name);
     _startPolling();
@@ -268,13 +303,32 @@ export const useDirectorAutoWriteStore = defineStore('directorAutoWrite', () => 
           _connectProgressSSE(projectName);
         }
       } else {
-        // 已有记录正常更新
-        tasks.value[projectName].snapshot = {
-          ...tasks.value[projectName].snapshot,
-          ...data,
-          // 确保 totalChapters 始终正确（API 旧版返回 chapterCount）
-          totalChapters: data.totalChapters || data.chapterCount || tasks.value[projectName].snapshot.totalChapters || 0,
-        };
+        // 已有记录正常更新（同样施加 running 不降级保护，避免切换项目回来时被旧 idle 覆盖）
+        const localStatus = tasks.value[projectName].snapshot.status;
+        const remoteStatus = data?.status;
+        const startedAt = directorStartedAtMap[projectName] || 0;
+        const inGrace = startedAt > 0 && (Date.now() - startedAt) < DIRECTOR_STARTUP_GRACE_MS;
+        if (
+          (inGrace || localStatus === 'running')
+          && remoteStatus === 'idle'
+        ) {
+          const { status: _dropped, ...safeData } = data;
+          tasks.value[projectName].snapshot = {
+            ...tasks.value[projectName].snapshot,
+            ...safeData,
+            totalChapters: data.totalChapters || data.chapterCount || tasks.value[projectName].snapshot.totalChapters || 0,
+          };
+        } else {
+          tasks.value[projectName].snapshot = {
+            ...tasks.value[projectName].snapshot,
+            ...data,
+            // 确保 totalChapters 始终正确（API 旧版返回 chapterCount）
+            totalChapters: data.totalChapters || data.chapterCount || tasks.value[projectName].snapshot.totalChapters || 0,
+          };
+          if (remoteStatus && remoteStatus !== 'idle' && remoteStatus !== 'running') {
+            delete directorStartedAtMap[projectName];
+          }
+        }
         tasks.value[projectName].lastPolledAt = Date.now();
       }
 
@@ -307,6 +361,7 @@ export const useDirectorAutoWriteStore = defineStore('directorAutoWrite', () => 
    */
   async function dismissTask(projectName: string): Promise<void> {
     _disconnectProgressSSE(projectName);
+    delete directorStartedAtMap[projectName];
     delete tasks.value[projectName];
     if (activeProjects.value.length === 0) {
       _stopPolling();

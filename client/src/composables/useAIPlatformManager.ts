@@ -16,6 +16,7 @@ type NewPlatformForm = {
     name: string;
     baseUrl: string;
     apiKey: string;
+    rechargeUrl: string;
     isSys: boolean;
     sysCreditBalance: number | null;
 };
@@ -24,6 +25,7 @@ type EditingPlatformForm = {
     id: ApiId | null;
     name: string;
     baseUrl: string;
+    rechargeUrl: string;
     is_sys: boolean;
     api_key_status?: string;
     api_key_message?: string;
@@ -40,6 +42,7 @@ type PlatformCreatePayload = {
     name: string;
     base_url: string;
     api_key: string | null;
+    recharge_url?: string | null;
     sys_credit_balance?: number | null;
 };
 
@@ -60,6 +63,11 @@ function normalizeCreditBalance(rawValue: number | null | undefined): number | n
     const value = Number(rawValue);
     if (!Number.isFinite(value)) return null;
     return Math.round(value * 100) / 100;
+}
+
+function normalizeOptionalText(rawValue: string | null | undefined): string | null {
+    const value = String(rawValue || '').trim();
+    return value || null;
 }
 
 export function useAIPlatformManager(options: { syncAiStoreSilently?: () => void } = {}) {
@@ -83,11 +91,12 @@ export function useAIPlatformManager(options: { syncAiStoreSilently?: () => void
     const showEditPlatformModal = ref(false);
     const showKeyModal = ref(false);
     const originalBaseUrl = ref('');
-    const newPlatform = ref<NewPlatformForm>({ name: '', baseUrl: '', apiKey: '', isSys: false, sysCreditBalance: null });
+    const newPlatform = ref<NewPlatformForm>({ name: '', baseUrl: '', apiKey: '', rechargeUrl: '', isSys: false, sysCreditBalance: null });
     const editingPlatform = ref<EditingPlatformForm>({
         id: null,
         name: '',
         baseUrl: '',
+        rechargeUrl: '',
         is_sys: false,
         api_key_status: 'missing',
         api_key_message: '',
@@ -186,10 +195,11 @@ export function useAIPlatformManager(options: { syncAiStoreSilently?: () => void
         syncAiStoreSilently?.();
     }
 
-    function buildLocalPlatform({ platformId, name, baseUrl, isSys, apiKey, sysCreditBalance }: {
+    function buildLocalPlatform({ platformId, name, baseUrl, rechargeUrl, isSys, apiKey, sysCreditBalance }: {
         platformId: ApiId;
         name: string;
         baseUrl: string;
+        rechargeUrl?: string | null;
         isSys: boolean;
         apiKey: string | null;
         sysCreditBalance?: number | null;
@@ -198,6 +208,7 @@ export function useAIPlatformManager(options: { syncAiStoreSilently?: () => void
             platform_id: platformId,
             name,
             base_url: baseUrl,
+            recharge_url: normalizeOptionalText(rechargeUrl),
             api_key_set: Boolean(apiKey),
             api_key_status: apiKey ? 'ok' : 'missing',
             api_key_message: apiKey ? '当前平台 API Key 已配置并可用。' : '该平台需要配置 API Key。',
@@ -226,6 +237,7 @@ export function useAIPlatformManager(options: { syncAiStoreSilently?: () => void
             id: plat.platform_id,
             name: plat.name,
             baseUrl: plat.base_url,
+            rechargeUrl: plat.recharge_url || '',
             is_sys: plat.is_sys,
             api_key_status: plat.api_key_status || 'missing',
             api_key_message: plat.api_key_message || '',
@@ -247,6 +259,7 @@ export function useAIPlatformManager(options: { syncAiStoreSilently?: () => void
             id: plat.platform_id,
             name: plat.name,
             baseUrl: plat.base_url,
+            rechargeUrl: plat.recharge_url || '',
             is_sys: Boolean(plat.is_sys),
             api_key_status: plat.api_key_status || 'missing',
             api_key_message: plat.api_key_message || '',
@@ -276,6 +289,7 @@ export function useAIPlatformManager(options: { syncAiStoreSilently?: () => void
                 name: newPlatform.value.name,
                 base_url: newPlatform.value.baseUrl,
                 api_key: newPlatform.value.apiKey || null,
+                recharge_url: normalizeOptionalText(newPlatform.value.rechargeUrl),
             };
             if (isSysPlatform) {
                 payload.sys_credit_balance = normalizeCreditBalance(newPlatform.value.sysCreditBalance);
@@ -298,13 +312,14 @@ export function useAIPlatformManager(options: { syncAiStoreSilently?: () => void
                 platformId: createdPlatformId,
                 name: newPlatform.value.name,
                 baseUrl: newPlatform.value.baseUrl,
+                rechargeUrl: newPlatform.value.rechargeUrl,
                 isSys: isSysPlatform,
                 apiKey: newPlatform.value.apiKey || null,
                 sysCreditBalance: isSysPlatform ? normalizeCreditBalance(newPlatform.value.sysCreditBalance) : null,
             }));
             await loadPlatforms();
             showAddPlatformModal.value = false;
-            newPlatform.value = { name: '', baseUrl: '', apiKey: '', isSys: false, sysCreditBalance: null };
+            newPlatform.value = { name: '', baseUrl: '', apiKey: '', rechargeUrl: '', isSys: false, sysCreditBalance: null };
             notifyAiStoreSync();
         } catch (e: unknown) {
             message.error(getErrorMessage(e));
@@ -320,6 +335,7 @@ export function useAIPlatformManager(options: { syncAiStoreSilently?: () => void
             const platformId = editingPlatform.value.id;
             const nextName = editingPlatform.value.name;
             const nextBaseUrl = editingPlatform.value.baseUrl;
+            const nextRechargeUrl = normalizeOptionalText(editingPlatform.value.rechargeUrl);
             const isSysPlatform = Boolean(editingPlatform.value.is_sys && isAdmin.value);
             const baseUrlChanged = prevBaseUrl !== nextBaseUrl;
 
@@ -333,12 +349,14 @@ export function useAIPlatformManager(options: { syncAiStoreSilently?: () => void
                         platform_id: platformId,
                         name: nextName,
                         base_url: nextBaseUrl,
+                        recharge_url: nextRechargeUrl,
                         sys_credit_balance: normalizeCreditBalance(editingPlatform.value.sysCreditBalance),
                     }
                     : {
                         id: platformId,
                         name: nextName,
                         base_url: nextBaseUrl,
+                        recharge_url: nextRechargeUrl,
                     };
                 const res = await fetchWithAuth(url, {
                     method: 'PUT',

@@ -133,7 +133,7 @@ class ScriptwriterAgent(SparkBaseAgent, SparkAgentExecutor):
             self.user_id,
             agent_name="agent_scriptwriter",
         )
-        return llm.bind_tools(get_tools_for_agent("agent_scriptwriter"))
+        return llm.bind_tools(get_tools_for_agent("agent_scriptwriter", user_id=self.user_id))
 
     def _get_tool_bound_llm_stream(self):
         """获取绑定了工具的 LLM 实例（流式）。"""
@@ -144,7 +144,7 @@ class ScriptwriterAgent(SparkBaseAgent, SparkAgentExecutor):
             self.user_id,
             agent_name="agent_scriptwriter",
         )
-        return llm.bind_tools(get_tools_for_agent("agent_scriptwriter"))
+        return llm.bind_tools(get_tools_for_agent("agent_scriptwriter", user_id=self.user_id))
 
     # tool_rules 已迁入 scriptwriter.yaml 的 tool_rules 字段，
     # 基类 _build_tool_system_prompt 会自动加载并追加，无需再重写此方法。

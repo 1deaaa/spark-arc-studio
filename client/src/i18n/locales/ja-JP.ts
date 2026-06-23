@@ -485,7 +485,7 @@ const jaJP = {
       usageInfo: '用途の説明',
       usageDescMain: '通常の会話、各 Agent の主要な創作出力、専用モデル未設定時の既定生成に使われます。',
       usageDescFast: '記憶プール整理、プロジェクト関係図の構築、共有レビューなど高頻度のバックグラウンド処理に使われます。安価で安定し、速いモデルを推奨します。',
-      usageDescReason: '複雑な設定確認、構成評価、深い批評など、より強い論理判断が必要なタスク向けです。',
+      usageDescReason: '複雑な設定確認、構成評価、深い批評、および専用モデル未設定時のDirector既定用途です。',
     },
     semanticSearchCard: {
       title: 'プロジェクト検索インデックス',
@@ -687,6 +687,7 @@ const jaJP = {
         probeList: '一覧取得',
         editModel: 'モデル編集',
         deleteModel: 'モデル削除',
+        openRechargeUrl: 'チャージページを開く',
       },
       tooltips: {
         dragSort: 'ドラッグで並び替え',
@@ -728,8 +729,12 @@ const jaJP = {
       form: {
         platformName: 'プラットフォーム名',
         platformNamePlaceholder: '例: My Custom API',
+        baseUrl: 'Base URL',
+        apiKey: 'API Key',
         apiKeyForAll: 'API Key（全ユーザー向け推論）',
         apiKeyPlaceholder: '空欄で後から設定',
+        rechargeUrl: 'チャージURL',
+        rechargeUrlPlaceholder: '任意。設定すると編集画面にチャージボタンを表示します',
         platformCreditBalance: 'プラットフォームのマッチ残高',
         platformCreditUnlimited: '空欄で無制限',
         example120: '例 120',
@@ -1007,6 +1012,7 @@ const jaJP = {
         readSynopsis: 'あらすじを読む',
         readBeatSheet: 'ビートシートを読む',
         workTracker: '進捗を確認',
+        updateProjectStoryTags: 'プロジェクトストーリータグを更新',
         graphRagTool: 'ナレッジグラフ検索',
         delegateTask: 'タスクを委任',
         captureInspiration: '着想を保存',
@@ -1087,6 +1093,9 @@ const jaJP = {
     },
     storyTagsPanel: {
       title: 'プロジェクトストーリータグ',
+      workspaceMode: '創作モード',
+      modeScript: '脚本',
+      modeNovel: '小説',
       noProject: 'プロジェクトを選択してください',
       saveSuccess: 'プロジェクトストーリータグを保存しました',
       saveFailed: '保存に失敗しました',
@@ -1607,6 +1616,7 @@ const jaJP = {
       readSynopsis: 'あらすじを読み込み中...',
       readBeatSheet: 'ビートシートを読み込み中...',
       workTracker: '進捗を確認中...',
+      updateProjectStoryTags: 'プロジェクトストーリータグを更新中...',
       createChapter: '章を作成中...',
       createOrRewriteScript: '本文を書き換え中...',
       patchScript: '本文を部分更新中...',
@@ -1742,6 +1752,13 @@ const jaJP = {
       },
     },
     structure: {
+      lengthOptions: {
+        short: '短編（約5章、シーン密度目安 約3/章）',
+        medium: '中編（約10章、シーン密度目安 約4/章）',
+        long: '長編（約20章、シーン密度目安 約5/章）',
+        unlimited: '制限なし（物語に応じてAIが判断）',
+        custom: 'カスタム',
+      },
       desktop: {
         title: '企画と構成',
         subtitle: '章構造と物語展開を計画',
@@ -1754,7 +1771,7 @@ const jaJP = {
         synopsisPlaceholder: '前画面で保存した概要全文を自動読込します...',
         guidance: '監督意図',
         chapterCountPrefix: '章数:',
-        scenePerChapterPrefix: '各章シーン数:',
+        scenePerChapterPrefix: 'シーン密度:',
         regenerate: '再生成',
       },
       mobile: {
@@ -1764,7 +1781,7 @@ const jaJP = {
         editGuidance: '監督意図を編集',
         generateParams: '生成パラメータ',
         chapterCount: '章数:',
-        scenesPerChapter: '各章シーン数:',
+        scenesPerChapter: 'シーン密度目安:',
         regenerateOutline: '構成を再生成',
         currentOutline: '現在の構成',
         saveOutline: '構成を保存',

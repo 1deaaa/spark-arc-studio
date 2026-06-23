@@ -6,7 +6,7 @@
 export const tokens = {
   // 核心主色（保留原色）
   primary: {
-    dark: '#7aa2f7',  // 星空蓝
+    dark: '#1deaaa',  // 翡翠星火
     light: '#EB9460', // 星火橙（淡）
   },
   // 背景色层级
@@ -27,7 +27,7 @@ export const tokens = {
     success: '#50fa7b',
     warning: '#f1fa8c',
     danger: '#ff5555',
-    info: '#7aa2f7'
+    info: '#1deaaa'
   }
 };
 

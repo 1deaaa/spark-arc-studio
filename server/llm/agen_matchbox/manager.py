@@ -46,6 +46,7 @@ from .config import (
 from .env_utils import get_env_var
 from .paths import get_db_file_path, get_state_file_path, get_config_file_path, get_key_file_path, get_mgr_home
 from .security import SecurityManager
+from .utils import normalize_recharge_url
 from core.db_engine import create_configured_engine, normalize_database_url
 
 from .admin import AdminMixin
@@ -617,6 +618,7 @@ class AIManagerBase:
                 if not isinstance(cfg, dict) or "base_url" not in cfg:
                     continue
                 base_url = cfg["base_url"]
+                recharge_url = normalize_recharge_url(cfg.get("recharge_url"))
                 plat = session.query(LLMPlatform).filter_by(base_url=base_url, is_sys=1).first()
 
                 if not plat and base_url not in disabled_base_urls:
@@ -625,6 +627,7 @@ class AIManagerBase:
                     plat = LLMPlatform(
                         name=name,
                         base_url=base_url,
+                        recharge_url=recharge_url,
                         api_key=encrypted_key,  # matchbox_key.yaml 中若有密钥则加密写入
                         user_id=SYSTEM_USER_ID,
                         is_sys=1,
@@ -644,6 +647,7 @@ class AIManagerBase:
 
                     # 按 YAML 顺序同步 sort_order
                     plat.sort_order = plat_idx
+                    plat.recharge_url = recharge_url
 
                     # 若 matchbox_key.yaml 提供 API Key，则更新平台默认 Key（加密写入）
                     encrypted_key = _prepare_seed_api_key(cfg.get("api_key"))
@@ -658,6 +662,9 @@ class AIManagerBase:
                     if plat.name != name:
                         print(f"[incremental-sync] Updating system platform name: {plat.name} -> {name}")
                         plat.name = name
+
+                    if "recharge_url" in cfg:
+                        plat.recharge_url = recharge_url
 
                     self._sync_seed_models_for_platform(session, plat, name, cfg, reset_mode=False)
 
@@ -968,6 +975,8 @@ class AIManagerBase:
                     "base_url": plat.base_url,
                     "models": {}
                 }
+                if plat.recharge_url:
+                    plat_config["recharge_url"] = plat.recharge_url
 
                 # matchbox_cfg.yaml 不再存放 api_key；密钥统一由 matchbox_key.yaml 管理。
                 # 导出时仅保留平台结构，便于安全分享与版本控制。

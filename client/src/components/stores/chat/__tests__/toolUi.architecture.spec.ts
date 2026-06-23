@@ -7,6 +7,7 @@ describe('聊天工具 UI 绑定契约', () => {
     expect(normalizeToolName('rewrite-worldview')).toBe('rewrite_worldview');
     expect(normalizeToolName('rewrite characters')).toBe('rewrite_all_characters');
     expect(normalizeToolName('update_character')).toBe('update_character');
+    expect(normalizeToolName('update story tags')).toBe('update_project_story_tags');
   });
 
   it('落盘工具拥有稳定的 scope/target/refreshEvents', () => {
@@ -31,6 +32,11 @@ describe('聊天工具 UI 绑定契约', () => {
     expect(resolveToolUiBinding('rewrite_outline').scope).toBe('outline');
     expect(resolveToolUiBinding('rewrite_synopsis')).toMatchObject({ scope: 'synopsis', target: 'content' });
     expect(resolveToolUiBinding('rewrite_beat_sheet')).toMatchObject({ scope: 'synopsis', target: 'beats' });
+    expect(resolveToolUiBinding('update_project_story_tags')).toEqual({
+      scope: 'story-tags',
+      target: '',
+      refreshEvents: ['story-tags-refresh'],
+    });
   });
 
   it('后端事件注入的 UI 元数据优先于前端默认绑定', () => {

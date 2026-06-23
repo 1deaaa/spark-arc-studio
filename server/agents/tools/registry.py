@@ -40,27 +40,35 @@ from agents.tools.showrunner import (
 )
 from agents.tools.story_memory import story_memory_tool
 from agents.tools.web_search import web_search
+from core.request_context import current_user_id
 
 MCP_ONLY_TOOLS = [capture_inspiration]
 EXTERNAL_SEARCH_TOOLS = [web_search]
 OPTIONAL_RESEARCH_TOOLS = [story_memory_tool, graph_rag_tool]
 SHARED_SKILL_TOOLS = [search_skills, read_skill, read_skill_reference]
-MUSE_TOOLS = [
+SKILL_CAPABLE_AGENT_IDS = {
+    "agent_director",
+    "agent_muse",
+    "agent_lorebook",
+    "agent_showrunner",
+    "agent_scriptwriter",
+    "agent_critic",
+}
+
+MUSE_BASE_TOOLS = [
     rewrite_inspiration,
     list_inspirations,
     read_inspiration,
     bind_inspiration_to_current_project,
     web_search,
-    *SHARED_SKILL_TOOLS,
 ]
-LOREBOOK_TOOLS = [
+LOREBOOK_BASE_TOOLS = [
     rewrite_worldview,
     rewrite_all_characters,
     update_character,
     patch_worldview,
-    *SHARED_SKILL_TOOLS,
 ]
-SHOWRUNNER_TOOLS = [
+SHOWRUNNER_BASE_TOOLS = [
     rewrite_synopsis,
     rewrite_beat_sheet,
     rewrite_outline,
@@ -68,9 +76,8 @@ SHOWRUNNER_TOOLS = [
     patch_beat_sheet,
     patch_outline,
     read_chapter_outline_raw,
-    *SHARED_SKILL_TOOLS,
 ]
-SCRIPTWRITER_TOOLS = [
+SCRIPTWRITER_BASE_TOOLS = [
     create_chapter,
     create_or_rewrite_script,
     organize_scenes_to_chapter,
@@ -81,10 +88,9 @@ SCRIPTWRITER_TOOLS = [
     read_beat_sheet,
     work_tracker,
     *OPTIONAL_RESEARCH_TOOLS,
-    *SHARED_SKILL_TOOLS,
 ]
 SHARED_READ_TOOLS = [list_chapters, read_chapter_scene, read_chapter_outline_raw]
-DIRECTOR_TOOLS = SHARED_READ_TOOLS + [
+DIRECTOR_BASE_TOOLS = SHARED_READ_TOOLS + [
     delegate_task,
     organize_scenes_to_chapter,
     work_tracker,
@@ -97,9 +103,42 @@ DIRECTOR_TOOLS = SHARED_READ_TOOLS + [
     *OPTIONAL_RESEARCH_TOOLS,
     web_search,
     read_attachment_chunk,
-    *SHARED_SKILL_TOOLS,
 ]
-CRITIC_TOOLS = SHARED_READ_TOOLS + OPTIONAL_RESEARCH_TOOLS + SHARED_SKILL_TOOLS
+CRITIC_BASE_TOOLS = SHARED_READ_TOOLS + OPTIONAL_RESEARCH_TOOLS
+
+
+def _resolve_user_id(user_id: str | int | None = None) -> str:
+    if user_id is not None and str(user_id).strip():
+        return str(user_id).strip()
+    ctx_user_id = current_user_id.get()
+    return str(ctx_user_id).strip() if ctx_user_id else ""
+
+
+def has_effective_skill_tools(user_id: str | int | None = None) -> bool:
+    resolved_user_id = _resolve_user_id(user_id)
+    if not resolved_user_id:
+        return False
+    try:
+        from agents.skill_packs import list_effective_skills
+
+        return bool(list_effective_skills(resolved_user_id))
+    except Exception:
+        return False
+
+
+def _with_skill_tools(agent_id: str, base_tools: list, user_id: str | int | None = None) -> list:
+    tools = list(base_tools)
+    if agent_id in SKILL_CAPABLE_AGENT_IDS and has_effective_skill_tools(user_id):
+        tools.extend(SHARED_SKILL_TOOLS)
+    return tools
+
+
+MUSE_TOOLS = MUSE_BASE_TOOLS + SHARED_SKILL_TOOLS
+LOREBOOK_TOOLS = LOREBOOK_BASE_TOOLS + SHARED_SKILL_TOOLS
+SHOWRUNNER_TOOLS = SHOWRUNNER_BASE_TOOLS + SHARED_SKILL_TOOLS
+SCRIPTWRITER_TOOLS = SCRIPTWRITER_BASE_TOOLS + SHARED_SKILL_TOOLS
+DIRECTOR_TOOLS = DIRECTOR_BASE_TOOLS + SHARED_SKILL_TOOLS
+CRITIC_TOOLS = CRITIC_BASE_TOOLS + SHARED_SKILL_TOOLS
 ALL_TOOLS = (
     MUSE_TOOLS
     + LOREBOOK_TOOLS
@@ -125,17 +164,17 @@ for tool in ALL_TOOLS:
     TOOLS_BY_NAME.setdefault(tool.name, tool)
 
 
-def get_tools_for_agent(agent_id: str) -> list:
+def get_tools_for_agent(agent_id: str, user_id: str | int | None = None) -> list:
     tool_map = {
-        "agent_muse": MUSE_TOOLS,
-        "agent_lorebook": LOREBOOK_TOOLS,
-        "agent_showrunner": SHOWRUNNER_TOOLS,
-        "agent_scriptwriter": SCRIPTWRITER_TOOLS + SHARED_READ_TOOLS,
-        "agent_director": DIRECTOR_TOOLS,
-        "agent_critic": CRITIC_TOOLS,
+        "agent_muse": MUSE_BASE_TOOLS,
+        "agent_lorebook": LOREBOOK_BASE_TOOLS,
+        "agent_showrunner": SHOWRUNNER_BASE_TOOLS,
+        "agent_scriptwriter": SCRIPTWRITER_BASE_TOOLS + SHARED_READ_TOOLS,
+        "agent_director": DIRECTOR_BASE_TOOLS,
+        "agent_critic": CRITIC_BASE_TOOLS,
         "agent_style": [],
     }
-    return tool_map.get(agent_id, [])
+    return _with_skill_tools(agent_id, tool_map.get(agent_id, []), user_id)
 
 
 # MCP 远程操控暴露的纯查询工具白名单（P0 第二层）

@@ -5,6 +5,7 @@
 import re
 import json
 from typing import Dict, Any, List, Optional
+from urllib.parse import urlparse
 
 
 # ─────────────────────────────────────────────
@@ -34,6 +35,21 @@ def normalize_base_url(url: str) -> str:
         url = f"{url}/v1"
 
     return url
+
+
+def normalize_recharge_url(url: Optional[str]) -> Optional[str]:
+    """规范化平台充值地址；空值返回 None，非 http(s) 链接会被拒绝。"""
+    if url is None:
+        return None
+    normalized = str(url).strip()
+    if not normalized:
+        return None
+    if len(normalized) > 512:
+        raise ValueError("充值地址不能超过 512 个字符")
+    parsed = urlparse(normalized)
+    if parsed.scheme not in {"http", "https"} or not parsed.netloc:
+        raise ValueError("充值地址必须是 http(s) 链接")
+    return normalized
 
 
 def _build_endpoint(base_url: str, path: str) -> str:

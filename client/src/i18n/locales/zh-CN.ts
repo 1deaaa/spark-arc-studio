@@ -483,7 +483,7 @@ const zhCN = {
       usageInfo: '用途说明',
       usageDescMain: '日常对话、各专家的主要创作输出，以及未指定专属模型时的默认生成。',
       usageDescFast: '记忆池整理、项目关系建图、分享审核等高频后台任务。建议选择便宜、稳定、速度快的模型。',
-      usageDescReason: '复杂设定核查、结构评估和深度审稿等需要更强逻辑判断的任务。',
+      usageDescReason: '复杂设定核查、结构评估、深度审稿，以及导演未单独绑定模型时的默认用途。',
     },
     semanticSearchCard: {
       title: '项目检索索引',
@@ -685,6 +685,7 @@ const zhCN = {
         probeList: '探测列表',
         editModel: '编辑模型',
         deleteModel: '删除模型',
+        openRechargeUrl: '打开充值地址',
       },
       tooltips: {
         dragSort: '拖拽排序',
@@ -726,8 +727,12 @@ const zhCN = {
       form: {
         platformName: '平台名称',
         platformNamePlaceholder: '例如: My Custom API',
+        baseUrl: 'Base URL',
+        apiKey: 'API Key',
         apiKeyForAll: 'API Key (为全体用户提供推理)',
         apiKeyPlaceholder: '留空则稍后设置',
+        rechargeUrl: '充值地址',
+        rechargeUrlPlaceholder: '可选，填写后编辑平台时显示充值按钮',
         platformCreditBalance: '平台火柴余额',
         platformCreditUnlimited: '留空表示无限',
         example120: '例如 120',
@@ -1005,6 +1010,7 @@ const zhCN = {
         readSynopsis: '读取故事梗概',
         readBeatSheet: '读取节奏表',
         workTracker: '跟踪进度',
+        updateProjectStoryTags: '更新项目主题参数',
         graphRagTool: '知识图谱检索',
         delegateTask: '委派任务',
         captureInspiration: '捕获灵感',
@@ -1085,6 +1091,9 @@ const zhCN = {
     },
     storyTagsPanel: {
       title: '项目主题参数',
+      workspaceMode: '创作模式',
+      modeScript: '剧本',
+      modeNovel: '小说',
       noProject: '请先选择项目',
       saveSuccess: '项目主题参数已保存',
       saveFailed: '保存失败',
@@ -1605,6 +1614,7 @@ const zhCN = {
       readSynopsis: '正在读取故事梗概...',
       readBeatSheet: '正在读取节奏表...',
       workTracker: '正在跟踪进度...',
+      updateProjectStoryTags: '正在更新项目主题参数...',
       createChapter: '正在创建章节...',
       createOrRewriteScript: '正在重写正文...',
       patchScript: '正在局部更新正文...',
@@ -1740,6 +1750,13 @@ const zhCN = {
       },
     },
     structure: {
+      lengthOptions: {
+        short: '短篇（约5章，场景密度参考约3场/章）',
+        medium: '中篇（约10章，场景密度参考约4场/章）',
+        long: '长篇（约20章，场景密度参考约5场/章）',
+        unlimited: '不限（由大模型按剧情决定）',
+        custom: '自定义',
+      },
       desktop: {
         title: '策划与大纲',
         subtitle: '规划章节结构与剧情走向',
@@ -1752,7 +1769,7 @@ const zhCN = {
         synopsisPlaceholder: '此处将自动读取上个界面保存的梗概全文...',
         guidance: '导演意图',
         chapterCountPrefix: '章节数:',
-        scenePerChapterPrefix: '每章场数:',
+        scenePerChapterPrefix: '场景密度:',
         regenerate: '重新生成',
       },
       mobile: {
@@ -1762,7 +1779,7 @@ const zhCN = {
         editGuidance: '编辑导演意图',
         generateParams: '生成参数',
         chapterCount: '章节数:',
-        scenesPerChapter: '每章场数:',
+        scenesPerChapter: '场景密度参考:',
         regenerateOutline: '重新生成大纲',
         currentOutline: '当前大纲',
         saveOutline: '保存大纲',

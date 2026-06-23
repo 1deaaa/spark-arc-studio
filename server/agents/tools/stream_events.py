@@ -12,6 +12,10 @@ def normalize_tool_name(raw_tool_name: str = "") -> str:
         "rewritecharacters": "rewrite_all_characters",
         "rewritecharacter": "update_character",
         "updatecharacter": "update_character",
+        "updatestorytags": "update_project_story_tags",
+        "updateprojectstorytags": "update_project_story_tags",
+        "updateprojectstorytag": "update_project_story_tags",
+        "updatestorytag": "update_project_story_tags",
     }
     return aliases.get(key, normalized)
 
@@ -64,6 +68,13 @@ def get_tool_ui_binding(tool_name: str) -> Dict[str, Any]:
             "scope": "synopsis",
             "target": "beats",
             "refresh_events": ["synopsis-refresh"],
+        }
+
+    if normalized == "update_project_story_tags":
+        return {
+            "scope": "story-tags",
+            "target": "",
+            "refresh_events": ["story-tags-refresh"],
         }
 
     if normalized in {"search_project", "semantic_search", "web_search"}:

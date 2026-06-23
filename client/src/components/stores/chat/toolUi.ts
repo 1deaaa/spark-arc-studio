@@ -33,6 +33,7 @@ export function getToolProgressText(toolName: unknown, fallbackText = '') {
     read_synopsis: i18n.global.t('chatStore.toolProgress.readSynopsis'),
     read_beat_sheet: i18n.global.t('chatStore.toolProgress.readBeatSheet'),
     work_tracker: i18n.global.t('chatStore.toolProgress.workTracker'),
+    update_project_story_tags: i18n.global.t('chatStore.toolProgress.updateProjectStoryTags'),
     create_chapter: i18n.global.t('chatStore.toolProgress.createChapter'),
     create_or_rewrite_script: i18n.global.t('chatStore.toolProgress.createOrRewriteScript'),
     patch_script: i18n.global.t('chatStore.toolProgress.patchScript'),
@@ -71,6 +72,10 @@ function isSynopsisTool(toolName: unknown) {
 function isBeatSheetTool(toolName: unknown) {
   const normalizedToolName = normalizeToolName(toolName);
   return normalizedToolName === 'rewrite_beat_sheet' || normalizedToolName === 'patch_beat_sheet';
+}
+
+function isStoryTagsTool(toolName: unknown) {
+  return normalizeToolName(toolName) === 'update_project_story_tags';
 }
 
 function getLorebookRefreshTarget(toolName: unknown) {
@@ -122,6 +127,14 @@ function getToolUiBinding(toolName: unknown): ToolUiBinding {
       scope: 'synopsis',
       target: 'beats',
       refreshEvents: ['synopsis-refresh'],
+    };
+  }
+
+  if (isStoryTagsTool(toolName)) {
+    return {
+      scope: 'story-tags',
+      target: '',
+      refreshEvents: ['story-tags-refresh'],
     };
   }
 

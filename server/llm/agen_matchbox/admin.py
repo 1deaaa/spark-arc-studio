@@ -17,7 +17,7 @@ from .models import (
 )
 from .config import DEFAULT_PLATFORM_CONFIGS, SYSTEM_USER_ID
 from .security import SecurityManager
-from .utils import normalize_base_url
+from .utils import normalize_base_url, normalize_recharge_url
 
 
 def _parse_extra_body_for_response(extra_body_str: Optional[str]) -> Optional[Dict]:
@@ -190,6 +190,7 @@ class AdminMixin:
         base_url: str,
         api_key: Optional[str] = None,
         user_id: str = None,
+        recharge_url: Optional[str] = None,
     ):
         self._ensure_mutable()
         if not (name and base_url):
@@ -199,6 +200,7 @@ class AdminMixin:
         
         user_id = str(user_id)
         base_url = normalize_base_url(base_url)
+        recharge_url = normalize_recharge_url(recharge_url)
         
         if api_key:
             api_key = SecurityManager.get_instance().encrypt(api_key)
@@ -209,6 +211,7 @@ class AdminMixin:
             if existing_same_url and existing_same_url.disable:
                 existing_same_url.name = name
                 existing_same_url.api_key = api_key
+                existing_same_url.recharge_url = recharge_url
                 existing_same_url.disable = 0
                 session.commit()
                 return existing_same_url
@@ -222,7 +225,12 @@ class AdminMixin:
                 raise ValueError("您已创建过使用该base_url的平台")
             
             p = LLMPlatform(
-                name=name, base_url=base_url, api_key=api_key, user_id=user_id, is_sys=0
+                name=name,
+                base_url=base_url,
+                recharge_url=recharge_url,
+                api_key=api_key,
+                user_id=user_id,
+                is_sys=0,
             )
             session.add(p)
             session.commit()
@@ -258,7 +266,15 @@ class AdminMixin:
 
             return True
 
-    def update_platform_details(self, user_id: str, platform_id: int, new_name: str, new_base_url: str):
+    def update_platform_details(
+        self,
+        user_id: str,
+        platform_id: int,
+        new_name: str,
+        new_base_url: str,
+        recharge_url: Optional[str] = None,
+        update_recharge_url: bool = False,
+    ):
         self._ensure_mutable()
         user_id = str(user_id)
         if not (new_name and new_base_url):
@@ -294,6 +310,8 @@ class AdminMixin:
             
             plat.name = new_name
             plat.base_url = new_base_url
+            if update_recharge_url:
+                plat.recharge_url = normalize_recharge_url(recharge_url)
             session.commit()
             return True
 
@@ -390,6 +408,7 @@ class AdminMixin:
                     "platform_id": plat.id,
                     "name": plat.name,
                     "base_url": plat.base_url,
+                    "recharge_url": plat.recharge_url,
                     "api_key_set": bool(api_key),
                     "api_key_status": effective_key_view["status"],
                     "api_key_message": effective_key_view["message"],
@@ -424,6 +443,7 @@ class AdminMixin:
                     "platform_id": plat.id,
                     "name": plat.name,
                     "base_url": plat.base_url,
+                    "recharge_url": plat.recharge_url,
                     "api_key_set": bool(api_key),
                     "api_key_status": "ok" if bool(api_key) else key_info["status"],
                     "api_key_message": "当前平台 API Key 已配置并可用。" if bool(api_key) else key_info["message"],
@@ -449,6 +469,7 @@ class AdminMixin:
                     "platform_id": view["platform_id"],
                     "name": view["name"],
                     "base_url": view["base_url"],
+                    "recharge_url": view.get("recharge_url"),
                     "api_key_set": view["api_key_set"],
                     "api_key_status": view.get("api_key_status", "missing"),
                     "api_key_message": view.get("api_key_message", ""),
@@ -483,6 +504,7 @@ class AdminMixin:
                     "platform_id": view["platform_id"],
                     "name": view["name"],
                     "base_url": view["base_url"],
+                    "recharge_url": view.get("recharge_url"),
                     "api_key_set": view["api_key_set"],
                     "api_key_status": view.get("api_key_status", "missing"),
                     "api_key_message": view.get("api_key_message", ""),
@@ -526,6 +548,7 @@ class AdminMixin:
                     "platform_is_sys": view["is_sys"],
                     "platform_disabled": view["disabled"],
                     "base_url": view["base_url"],
+                    "recharge_url": view.get("recharge_url"),
                     "api_key_set": view["api_key_set"],
                     "api_key_status": view.get("api_key_status", "missing"),
                     "api_key_message": view.get("api_key_message", ""),
@@ -569,6 +592,7 @@ class AdminMixin:
                     "platform_id": view["platform_id"],
                     "name": view["name"],
                     "base_url": view["base_url"],
+                    "recharge_url": view.get("recharge_url"),
                     "api_key_set": view["api_key_set"],
                     "api_key_status": view.get("api_key_status", "missing"),
                     "api_key_message": view.get("api_key_message", ""),
@@ -1093,6 +1117,7 @@ class AdminMixin:
                     "platform_id": plat.id,
                     "name": plat.name,
                     "base_url": plat.base_url,
+                    "recharge_url": plat.recharge_url,
                     "api_key_set": api_key_set,
                     "api_key_status": key_info["status"],
                     "api_key_message": key_info["message"],
@@ -1141,6 +1166,7 @@ class AdminMixin:
         base_url: str,
         api_key: Optional[str] = None,
         sys_credit_balance: Optional[float] = None,
+        recharge_url: Optional[str] = None,
     ) -> LLMPlatform:
         """
         添加系统平台（管理员专用）
@@ -1150,6 +1176,7 @@ class AdminMixin:
             raise ValueError("name / base_url 必填")
         
         base_url = normalize_base_url(base_url)
+        recharge_url = normalize_recharge_url(recharge_url)
         
         with self.Session() as session:
             # 同 base_url 的系统平台若已存在且被禁用，则复活
@@ -1157,6 +1184,7 @@ class AdminMixin:
             if existing_url and existing_url.disable:
                 existing_url.name = name
                 existing_url.disable = 0
+                existing_url.recharge_url = recharge_url
                 existing_url.sys_credit_balance = _normalize_nullable_credit_balance(sys_credit_balance)
                 if api_key:
                     existing_url.api_key = SecurityManager.get_instance().encrypt(api_key)
@@ -1185,6 +1213,7 @@ class AdminMixin:
             plat = LLMPlatform(
                 name=name,
                 base_url=base_url,
+                recharge_url=recharge_url,
                 api_key=encrypted_key,
                 user_id=SYSTEM_USER_ID,
                 is_sys=1,
@@ -1206,6 +1235,8 @@ class AdminMixin:
         new_base_url: Optional[str] = None,
         sys_credit_balance: Optional[float] = None,
         update_sys_credit_balance: bool = False,
+        recharge_url: Optional[str] = None,
+        update_recharge_url: bool = False,
     ) -> bool:
         """
         更新系统平台信息（管理员专用）
@@ -1240,6 +1271,9 @@ class AdminMixin:
 
             if update_sys_credit_balance:
                 plat.sys_credit_balance = _normalize_nullable_credit_balance(sys_credit_balance)
+
+            if update_recharge_url:
+                plat.recharge_url = normalize_recharge_url(recharge_url)
 
             session.commit()
             

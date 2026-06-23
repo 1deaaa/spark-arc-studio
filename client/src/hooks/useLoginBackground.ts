@@ -97,7 +97,7 @@ export function useLoginBackground() {
     // ========== 主题色获取 ==========
     function getThemeColors(): ThemeColors {
         const style = getComputedStyle(document.body);
-        const primary = style.getPropertyValue('--spark-primary').trim() || '#7aa2f7';
+        const primary = style.getPropertyValue('--spark-primary').trim() || '#1deaaa';
         const bg = style.getPropertyValue('--spark-bg').trim() || '#090b10';
         const accent = style.getPropertyValue('--spark-accent').trim() || '#bd93f9';
 

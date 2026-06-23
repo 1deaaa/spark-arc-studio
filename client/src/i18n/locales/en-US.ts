@@ -485,7 +485,7 @@ const enUS = {
       usageInfo: 'Usage info',
       usageDescMain: 'Everyday chat, primary creative output from agents, and default generation when no dedicated model is assigned.',
       usageDescFast: 'Memory pool cleanup, project relationship graph building, share review, and other frequent background tasks. Pick a cheap, stable, fast model.',
-      usageDescReason: 'Complex lore checks, structure evaluation, deep critique, and other tasks that need stronger reasoning.',
+      usageDescReason: 'Complex lore checks, structure evaluation, deep critique, and the default usage for Director when no dedicated model is bound.',
     },
     semanticSearchCard: {
       title: 'Project Indexes',
@@ -687,6 +687,7 @@ const enUS = {
         probeList: 'Probe List',
         editModel: 'Edit Model',
         deleteModel: 'Delete Model',
+        openRechargeUrl: 'Open recharge page',
       },
       tooltips: {
         dragSort: 'Drag to sort',
@@ -728,8 +729,12 @@ const enUS = {
       form: {
         platformName: 'Platform Name',
         platformNamePlaceholder: 'e.g. My Custom API',
+        baseUrl: 'Base URL',
+        apiKey: 'API Key',
         apiKeyForAll: 'API Key (for all users)',
         apiKeyPlaceholder: 'Leave empty to set later',
+        rechargeUrl: 'Recharge URL',
+        rechargeUrlPlaceholder: 'Optional; shows a recharge button in platform edit when set',
         platformCreditBalance: 'Platform Matchstick Balance',
         platformCreditUnlimited: 'Leave empty for unlimited',
         example120: 'e.g. 120',
@@ -1007,6 +1012,7 @@ const enUS = {
         readSynopsis: 'Read synopsis',
         readBeatSheet: 'Read beat sheet',
         workTracker: 'Track progress',
+        updateProjectStoryTags: 'Update project story tags',
         graphRagTool: 'Knowledge graph search',
         delegateTask: 'Delegate task',
         captureInspiration: 'Capture inspiration',
@@ -1087,6 +1093,9 @@ const enUS = {
     },
     storyTagsPanel: {
       title: 'Project Story Tags',
+      workspaceMode: 'Creative mode',
+      modeScript: 'Script',
+      modeNovel: 'Novel',
       noProject: 'Please select a project first',
       saveSuccess: 'Project story tags saved',
       saveFailed: 'Save failed',
@@ -1607,6 +1616,7 @@ const enUS = {
       readSynopsis: 'Reading synopsis...',
       readBeatSheet: 'Reading beat sheet...',
       workTracker: 'Tracking progress...',
+      updateProjectStoryTags: 'Updating project story tags...',
       createChapter: 'Creating chapter...',
       createOrRewriteScript: 'Rewriting script...',
       patchScript: 'Patching script...',
@@ -1742,6 +1752,13 @@ const enUS = {
       },
     },
     structure: {
+      lengthOptions: {
+        short: 'Short (about 5 chapters, scene density ~3/chapter)',
+        medium: 'Medium (about 10 chapters, scene density ~4/chapter)',
+        long: 'Long (about 20 chapters, scene density ~5/chapter)',
+        unlimited: 'Unlimited (let the model decide by story needs)',
+        custom: 'Custom',
+      },
       desktop: {
         title: 'Planning & Outline',
         subtitle: 'Plan chapter structure and plot direction',
@@ -1754,7 +1771,7 @@ const enUS = {
         synopsisPlaceholder: 'The saved synopsis from previous step will be loaded here...',
         guidance: 'Director Intent',
         chapterCountPrefix: 'Chapters:',
-        scenePerChapterPrefix: 'Scenes/Chapter:',
+        scenePerChapterPrefix: 'Scene density:',
         regenerate: 'Regenerate',
       },
       mobile: {
@@ -1764,7 +1781,7 @@ const enUS = {
         editGuidance: 'Edit Director Intent',
         generateParams: 'Generation Parameters',
         chapterCount: 'Chapters:',
-        scenesPerChapter: 'Scenes/Chapter:',
+        scenesPerChapter: 'Scene density ref:',
         regenerateOutline: 'Regenerate Outline',
         currentOutline: 'Current Outline',
         saveOutline: 'Save Outline',

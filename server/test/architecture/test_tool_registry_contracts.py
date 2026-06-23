@@ -2,6 +2,7 @@ from __future__ import annotations
 
 from agents.agent_tools import TOOLS_BY_NAME as FACADE_TOOLS_BY_NAME
 from agents.agent_tools import get_tools_for_agent as facade_get_tools_for_agent
+from agents.skill_packs import import_skill_markdown
 from agents.tools.registry import ALL_TOOLS, TOOLS_BY_NAME, get_tools_for_agent
 from agents.tools.stream_events import build_tool_stream_event, get_tool_ui_binding, normalize_tool_name
 
@@ -17,8 +18,8 @@ CORE_AGENT_IDS = {
 }
 
 
-def tool_names(agent_id: str) -> set[str]:
-    return {tool.name for tool in get_tools_for_agent(agent_id)}
+def tool_names(agent_id: str, user_id: str | None = None) -> set[str]:
+    return {tool.name for tool in get_tools_for_agent(agent_id, user_id=user_id)}
 
 
 def test_tool_registry_has_stable_unique_truth_source() -> None:
@@ -37,9 +38,30 @@ def test_core_agent_tool_boundaries() -> None:
     assert {"create_chapter", "create_or_rewrite_script", "patch_script"} <= tool_names("agent_scriptwriter")
     assert "delegate_task" not in tool_names("agent_scriptwriter")
     assert "delegate_task" not in tool_names("agent_critic")
-    for agent_id in {"agent_director", "agent_muse", "agent_lorebook", "agent_showrunner", "agent_scriptwriter", "agent_critic"}:
-        assert {"search_skills", "read_skill", "read_skill_reference"} <= tool_names(agent_id)
     assert tool_names("agent_style") == set()
+
+
+def test_skill_tools_are_exposed_only_when_user_has_skills(tmp_path, monkeypatch) -> None:
+    monkeypatch.setattr("agents.skill_packs.USERDATA_ROOT", str(tmp_path))
+
+    skill_tools = {"search_skills", "read_skill", "read_skill_reference"}
+    assert skill_tools.isdisjoint(tool_names("agent_director", user_id="42"))
+
+    import_skill_markdown(
+        "42",
+        """---
+name: Precise Style
+description: Helps line-level prose quality.
+---
+# Precise Style
+
+## Quality
+Use specific verbs.
+""",
+    )
+
+    for agent_id in {"agent_director", "agent_muse", "agent_lorebook", "agent_showrunner", "agent_scriptwriter", "agent_critic"}:
+        assert skill_tools <= tool_names(agent_id, user_id="42")
 
 
 def test_get_tools_for_agent_is_defined_for_every_core_agent() -> None:
@@ -62,8 +84,14 @@ def test_tool_stream_event_injects_ui_metadata_from_backend_binding() -> None:
     assert evt["ui_target"] == "worldview"
     assert "lorebook-refresh-worldview" in evt["ui_refresh_events"]
 
+    tags_evt = build_tool_stream_event("tool_exec_started", "update story tags")
+    assert tags_evt["tool_name"] == "update_project_story_tags"
+    assert tags_evt["ui_scope"] == "story-tags"
+    assert "story-tags-refresh" in tags_evt["ui_refresh_events"]
+
 
 def test_tool_name_aliases_match_ui_binding_normalization() -> None:
     assert normalize_tool_name("rewrite-worldview") == "rewrite_worldview"
     assert normalize_tool_name("rewrite characters") == "rewrite_all_characters"
+    assert normalize_tool_name("update story tags") == "update_project_story_tags"
     assert get_tool_ui_binding("rewrite characters")["target"] == "characters"

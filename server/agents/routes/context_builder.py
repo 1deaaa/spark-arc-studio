@@ -49,7 +49,7 @@ from story.project_files import _coerce_character_name
 def build_story_tags_hint(story_tags: dict) -> str:
     """从 story_tags 字典构建注入 LLM 上下文的提示文本块。
 
-    与 context_provider._build_story_tags_block 保持一致的格式，
+    这是 story tags 注入 LLM 上下文的唯一格式化入口。
     包含 POV 醒目优化（三层锚定策略）。
 
     Args:
@@ -62,6 +62,12 @@ def build_story_tags_hint(story_tags: dict) -> str:
         return ""
 
     parts = []
+
+    workspace_mode = story_tags.get("workspace_mode")
+    if workspace_mode == "novel":
+        parts.append("【创作格式】小说模式（纯文学小说，输出 Markdown 小说正文，避免使用 ARC 剧本语法）。")
+    else:
+        parts.append("【创作格式】剧本模式（ARC 互动剧本，输出 .arc 剧本正文，遵守 ARC 语法规范）。")
 
     pov = story_tags.get("pov")
     if pov:

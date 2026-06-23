@@ -100,12 +100,24 @@ from .chat_task import (
 chat_router = APIRouter()
 
 
-def _apply_request_runtime_meta(active_meta: Dict[str, Any] | None) -> None:
+def _apply_request_runtime_meta(
+    active_meta: Dict[str, Any] | None,
+    *,
+    user_id: str | None = None,
+    project_name: str | None = None,
+) -> None:
     inspiration_id = None
     export_format = None
     if isinstance(active_meta, dict):
         inspiration_id = active_meta.get('inspirationId') or active_meta.get('inspiration_id')
         export_format = active_meta.get('exportFormat') or active_meta.get('export_format')
+    if not export_format and user_id and project_name:
+        try:
+            from core.project_settings import get_workspace_mode
+
+            export_format = "novel" if get_workspace_mode(str(user_id), str(project_name)) == "novel" else "arc"
+        except Exception:
+            export_format = None
     set_current_inspiration_context(str(inspiration_id) if inspiration_id else None)
     set_current_export_format(export_format)
 
@@ -923,7 +935,7 @@ async def edit_chat_message(data: ChatMessageEditRequest, user: dict = Depends(g
     # 3. 如果是用户消息，则重新触发回复
     if role == 'user':
         effective_active_context = _resolve_effective_active_context(user_id, project_name, data.agentId, data.activeContext)
-        _apply_request_runtime_meta(data.activeMeta)
+        _apply_request_runtime_meta(data.activeMeta, user_id=user_id, project_name=project_name)
         imported_files_meta = _extract_imported_files_meta(data.activeMeta)
         effective_active_context = _expand_active_context_with_attachments(
             user_id, project_name, effective_active_context, imported_files_meta,
@@ -994,7 +1006,7 @@ async def edit_chat_message_stream(request: Request, data: ChatMessageEditReques
         return StreamingResponse(iter(['']), media_type='text/plain')
 
     effective_active_context = _resolve_effective_active_context(user_id, project_name, data.agentId, data.activeContext)
-    _apply_request_runtime_meta(data.activeMeta)
+    _apply_request_runtime_meta(data.activeMeta, user_id=user_id, project_name=project_name)
     imported_files_meta = _extract_imported_files_meta(data.activeMeta)
     effective_active_context = _expand_active_context_with_attachments(
         user_id, project_name, effective_active_context, imported_files_meta,
@@ -1142,7 +1154,7 @@ async def send_chat_message(data: ChatSendRequest, user: dict = Depends(get_curr
         return JSONResponse(status_code=400, content={'error': '消息为空'})
 
     effective_active_context = _resolve_effective_active_context(user_id, project_name, agent_id, data.activeContext)
-    _apply_request_runtime_meta(data.activeMeta)
+    _apply_request_runtime_meta(data.activeMeta, user_id=user_id, project_name=project_name)
     imported_files_meta = _extract_imported_files_meta(data.activeMeta)
     effective_active_context = _expand_active_context_with_attachments(
         user_id, project_name, effective_active_context, imported_files_meta,
@@ -1206,7 +1218,7 @@ async def send_chat_message_stream(request: Request, data: ChatSendRequest, user
         raise HTTPException(status_code=400, detail='消息为空')
 
     effective_active_context = _resolve_effective_active_context(user_id, project_name, agent_id, data.activeContext)
-    _apply_request_runtime_meta(data.activeMeta)
+    _apply_request_runtime_meta(data.activeMeta, user_id=user_id, project_name=project_name)
     imported_files_meta = _extract_imported_files_meta(data.activeMeta)
     effective_active_context = _expand_active_context_with_attachments(
         user_id, project_name, effective_active_context, imported_files_meta,

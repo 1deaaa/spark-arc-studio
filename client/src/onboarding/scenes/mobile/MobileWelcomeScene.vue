@@ -89,7 +89,7 @@ function playAnimation(): void {
   }
 
   // 读取 CSS 变量获取主题色
-  const primaryColor = getComputedStyle(document.body).getPropertyValue('--spark-primary').trim() || '#7aa2f7';
+  const primaryColor = getComputedStyle(document.body).getPropertyValue('--spark-primary').trim() || '#1deaaa';
   mainTimeline.to(logoEl.value, { color: primaryColor, duration: 0.4 }, 0.8);
 
   // 粒子

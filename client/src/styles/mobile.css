@@ -68,6 +68,25 @@ html.viewport-mobile .n-drawer {
     border-radius: 16px 16px 0 0;
 }
 
+/*
+ * 弹窗安全区域全局兜底（移动 App / PWA 全屏模式）
+ * 确保所有 n-modal 与顶部 n-drawer 内容不进入刘海/状态栏区域。
+ * - n-modal__container 是 naive-ui modal 的居中定位容器，给其加上下安全间距，
+ *   居中弹窗自动在安全区内排布；小弹窗因居中特性不受影响。
+ * - n-drawer 顶部弹出（top placement）让出状态栏高度；底部弹出由 --sab 处理，
+ *   不叠加顶部 --sat 以免压缩内容。
+ */
+html.viewport-mobile .n-modal__container,
+html.platform-mobile-shell .n-modal__container {
+    padding-top: var(--sat, 0px);
+    padding-bottom: var(--sab, 0px);
+}
+
+html.viewport-mobile .n-drawer--top-placement,
+html.platform-mobile-shell .n-drawer--top-placement {
+    padding-top: var(--sat, 0px);
+}
+
 html.viewport-mobile .n-drawer-header {
     border-bottom: 1px solid var(--n-divider-color);
     padding: 16px !important;

@@ -4,6 +4,7 @@ Director SupervisorGraph - 基于 LangGraph 的导演调度升级版
 from __future__ import annotations
 
 import json
+import os
 import queue
 import operator
 from typing import TypedDict, Annotated, Any, Dict, Optional
@@ -46,6 +47,7 @@ class DirectorState(TypedDict):
     pending_delegate: Optional[Dict[str, Any]]
     sub_agent_result: Optional[str]
     baton_holder: Optional[str]
+    force_return_to_director: Optional[bool]
     stop_event: Any
     
     stream_events: Annotated[list, operator.add]
@@ -94,6 +96,33 @@ def _is_scriptwriter_persist_tool(tool_name: str) -> bool:
         "create_or_rewrite_script",
         "patch_script",
     }
+
+
+def _director_tracker_has_open_items(user_id: str, project_name: str) -> bool:
+    """读取导演任务板，判断是否仍有待推进的任务。"""
+    if not user_id or not project_name:
+        return False
+    try:
+        from core.utils import get_project_path
+
+        tracker_path = os.path.join(
+            get_project_path(user_id, project_name),
+            "work_tracker_agent_director.json",
+        )
+        if not os.path.exists(tracker_path):
+            return False
+        with open(tracker_path, "r", encoding="utf-8") as f:
+            data = json.load(f)
+        items = data.get("items") if isinstance(data, dict) else []
+        if not isinstance(items, list):
+            return False
+        return any(
+            isinstance(item, dict)
+            and str(item.get("status") or "pending").strip() != "completed"
+            for item in items
+        )
+    except Exception:
+        return False
 
 
 # ==================== 导演节点 ====================
@@ -153,7 +182,7 @@ def director_node(state: DirectorState) -> Dict[str, Any]:
     
     stream_llm = matchbox().get_user_llm(user_id, agent_name="agent_director")
     base_stream_llm = stream_llm
-    tools = get_tools_for_agent("agent_director")
+    tools = get_tools_for_agent("agent_director", user_id=user_id)
     if tools:
         stream_llm = stream_llm.bind_tools(tools)
     
@@ -708,11 +737,25 @@ def sub_agent_node(state: DirectorState) -> Dict[str, Any]:
             "completion_mode": completion_mode,
         }],
         "baton_holder": target_agent,
+        "force_return_to_director": False,
     }
+
+    tracker_requires_director = (
+        completion_mode == HANDOFF_COMPLETION_REPORT_TO_USER
+        and _director_tracker_has_open_items(user_id, project_name)
+    )
+    if tracker_requires_director:
+        updates["force_return_to_director"] = True
+        updates["stream_events"][0]["completion_mode_effective"] = HANDOFF_COMPLETION_RETURN_TO_DIRECTOR
+        updates["sub_agent_result"] = (
+            f"[{target_agent}] 子任务结果已回交导演：导演任务板仍有未完成条目，"
+            f"需要继续推进后续步骤。\n{result}"
+        )
 
     if (
         completion_mode in {HANDOFF_COMPLETION_RETURN_TO_DIRECTOR, HANDOFF_COMPLETION_SILENT_CONTINUE}
         or (suppress_scriptwriter_draft and not scriptwriter_saved)
+        or tracker_requires_director
     ):
         _ensure_graph_agent_registered(return_to, user_id, project_name)
         transfer_result = transfer_baton(
@@ -763,6 +806,8 @@ def route_after_sub_agent(state: DirectorState) -> str:
         delegate.get("target_agent") == "agent_scriptwriter"
         and "未完成落盘" in sub_agent_result
     ):
+        return "director"
+    if state.get("force_return_to_director"):
         return "director"
     if completion_mode in {HANDOFF_COMPLETION_RETURN_TO_DIRECTOR, HANDOFF_COMPLETION_SILENT_CONTINUE}:
         return "director"
@@ -826,6 +871,7 @@ def run_director_stream(
         "pending_delegate": None,
         "sub_agent_result": None,
         "baton_holder": "agent_director",
+        "force_return_to_director": False,
         "stream_events": [],
         "stop_event": stop_event,
     }

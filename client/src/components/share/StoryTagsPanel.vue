@@ -21,6 +21,16 @@
     </template>
     <div class="story-tags-popover">
       <div class="popover-body">
+        <div class="workspace-mode-field">
+          <div class="field-label">{{ t('components.storyTagsPanel.workspaceMode') }}</div>
+          <SparkSegment
+            :model-value="selectedWorkspaceMode"
+            :options="workspaceModeOptions"
+            size="small"
+            :block="true"
+            @update:model-value="handleWorkspaceModeChange"
+          />
+        </div>
         <InspireTagSelector
           :default-open="true"
           v-model:genres="selectedGenres"
@@ -57,6 +67,16 @@
         >
           <div class="story-tags-mobile-panel" @click.stop>
             <div class="popover-body">
+              <div class="workspace-mode-field">
+                <div class="field-label">{{ t('components.storyTagsPanel.workspaceMode') }}</div>
+                <SparkSegment
+                  :model-value="selectedWorkspaceMode"
+                  :options="workspaceModeOptions"
+                  size="small"
+                  :block="true"
+                  @update:model-value="handleWorkspaceModeChange"
+                />
+              </div>
               <InspireTagSelector
                 :default-open="true"
                 v-model:genres="selectedGenres"
@@ -76,14 +96,18 @@
 </template>
 
 <script setup lang="ts">
-import { ref, watch, onMounted, onBeforeUnmount } from 'vue';
+import { computed, ref, watch, onMounted, onBeforeUnmount } from 'vue';
 import { useI18n } from 'vue-i18n';
 import { NPopover, NButton, NIcon, NTooltip } from 'naive-ui';
 import { Tags } from '@lucide/vue';
 import InspireTagSelector from '../lorebook/InspireTagSelector.vue';
 import { useProjectStore } from '../stores/projectStore';
+import { useSceneStore } from '../stores/sceneStore';
+import { useFileStore } from '../stores/fileStore';
 import { fetchWithAuth } from '../../services/api';
 import { useMobile } from '../../composables/useMobile';
+import bus from '../../eventBus';
+import SparkSegment from './SparkSegment.vue';
 import type { PropType } from 'vue';
 
 const { isMobile } = useMobile();
@@ -94,7 +118,10 @@ defineProps({
 
 const { t } = useI18n();
 const projectStore = useProjectStore();
+const sceneStore = useSceneStore();
+const fileStore = useFileStore();
 
+const selectedWorkspaceMode = ref<'script' | 'novel'>('script');
 const selectedGenres = ref<string[]>([]);
 const selectedTones = ref<string[]>([]);
 const selectedWorldviews = ref<string[]>([]);
@@ -103,6 +130,10 @@ const selectedLength = ref<string | undefined>(undefined);
 
 // 移动端弹出菜单的显示状态（脱离按钮锚点的居中弹出）
 const show = ref(false);
+const workspaceModeOptions = computed(() => [
+  { value: 'script', label: t('components.storyTagsPanel.modeScript') },
+  { value: 'novel', label: t('components.storyTagsPanel.modeNovel') },
+]);
 
 // Escape 键关闭移动端弹出菜单
 function onKeydown(e: KeyboardEvent) {
@@ -117,6 +148,9 @@ async function loadFromBackend() {
     if (response.ok) {
       const data = await response.json();
       if (data.success && data.tags) {
+        const mode = data.tags.workspace_mode === 'novel' ? 'novel' : 'script';
+        selectedWorkspaceMode.value = mode;
+        sceneStore.setWorkspaceMode(mode);
         selectedGenres.value = data.tags.genres || [];
         selectedTones.value = data.tags.tones || [];
         selectedWorldviews.value = data.tags.worldviews || [];
@@ -141,6 +175,7 @@ function scheduleBackendSave() {
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
           projectName: projectStore.currentProject,
+          workspaceMode: selectedWorkspaceMode.value,
           genres: selectedGenres.value,
           tones: selectedTones.value,
           worldviews: selectedWorldviews.value,
@@ -154,9 +189,25 @@ function scheduleBackendSave() {
   }, 600);
 }
 
+async function handleWorkspaceModeChange(mode: string | number) {
+  const normalized = mode === 'novel' ? 'novel' : 'script';
+  selectedWorkspaceMode.value = normalized;
+  if (!projectStore.currentProject) {
+    sceneStore.setWorkspaceMode(normalized);
+    return;
+  }
+  await sceneStore.persistWorkspaceMode(projectStore.currentProject, normalized);
+  await fileStore.loadFileTree(projectStore.currentProject, normalized);
+  const expectedFormat = normalized === 'novel' ? 'novel' : 'arc';
+  if (!fileStore.selectedFile?.format || fileStore.selectedFile.format !== expectedFormat) {
+    fileStore.selectedFile = null;
+    sceneStore.resetForWorkspaceMode(normalized);
+  }
+}
+
 // ── 监听值变化，自动异步保存到后端 ──
 watch(
-  [selectedGenres, selectedTones, selectedWorldviews, selectedPov, selectedLength],
+  [selectedWorkspaceMode, selectedGenres, selectedTones, selectedWorldviews, selectedPov, selectedLength],
   () => { scheduleBackendSave(); },
   { deep: true },
 );
@@ -168,10 +219,12 @@ watch(() => projectStore.currentProject, () => {
 
 onMounted(() => {
   loadFromBackend();
+  bus.on('story-tags-refresh', loadFromBackend);
   window.addEventListener('keydown', onKeydown);
 });
 
 onBeforeUnmount(() => {
+  bus.off('story-tags-refresh', loadFromBackend);
   window.removeEventListener('keydown', onKeydown);
 });
 </script>
@@ -192,6 +245,17 @@ onBeforeUnmount(() => {
   padding: 12px 16px;
   max-height: 50vh;
   overflow-y: auto;
+}
+
+.workspace-mode-field {
+  display: grid;
+  gap: 6px;
+  margin-bottom: 10px;
+}
+
+.field-label {
+  font-size: 12px;
+  color: var(--spark-text-secondary);
 }
 
 /* ── 移动端：标题栏下方居中弹出 ── */

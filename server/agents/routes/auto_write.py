@@ -34,7 +34,7 @@ from fastapi.responses import StreamingResponse
 
 from core.auth import get_current_user
 from core.utils import get_project_path, get_project_stories_path
-from core.project_settings import get_project_story_tags
+from core.project_settings import get_project_story_tags, get_workspace_mode
 from agents.agent_scriptwriter import ScriptwriterAgent
 from agents.agent_critic import CriticAgent
 from .stream_semantics import (
@@ -60,60 +60,11 @@ from .context_builder import (
     load_full_outline,
     load_narrative_memory,
     build_scene_context,
+    build_story_tags_hint,
 )
 from agents.agent_style.utils import load_project_style_profile
 
 auto_write_router = APIRouter()
-
-
-def _build_story_tags_block_for_auto_write(story_tags: Dict[str, Any]) -> str:
-    """
-    构建项目级故事主题参数的注入块（用于 auto_write 上下文）。
-    
-    与 context_provider._build_story_tags_block 保持一致的格式，
-    包含 POV 醒目优化（三层锚定策略）。
-    
-    Args:
-        story_tags: 从 get_project_story_tags 返回的字典
-        
-    Returns:
-        格式化后的 story tags 文本块，若所有字段均为空则返回空字符串
-    """
-    if not story_tags:
-        return ""
-    
-    parts = []
-    
-    # POV 醒目优化（最关键参数，必须引起 LLM 注意力机制）
-    pov = story_tags.get("pov")
-    if pov:
-        parts.append(
-            f"⚠️⚠️⚠️ 【叙事人称锁定】本文严格使用「{pov}」叙事。"
-            f"所有描写、对话、心理活动必须符合此人称视角，禁止切换。⚠️⚠️⚠️"
-        )
-    
-    # 其他 tags 格式化为紧凑单行
-    tag_lines = []
-    style = story_tags.get("style")
-    if style:
-        tag_lines.append(f"风格：{style}")
-    genres = story_tags.get("genres", [])
-    if genres:
-        tag_lines.append(f"题材：{'、'.join(genres)}")
-    tones = story_tags.get("tones", [])
-    if tones:
-        tag_lines.append(f"基调：{'、'.join(tones)}")
-    worldviews = story_tags.get("worldviews", [])
-    if worldviews:
-        tag_lines.append(f"世界观：{'、'.join(worldviews)}")
-    length_hint = story_tags.get("length_hint")
-    if length_hint:
-        tag_lines.append(f"篇幅：{length_hint}")
-    
-    if tag_lines:
-        parts.append("【创作参数】" + " | ".join(tag_lines))
-    
-    return "\n".join(parts)
 
 
 def record_auto_write_scene_review(
@@ -331,7 +282,7 @@ async def generate_script_stream(
     story_tags = get_project_story_tags(user_id, project_name)
     
     # 构建 story_tags 注入块（与 context_provider._build_story_tags_block 保持一致）
-    story_tags_block = _build_story_tags_block_for_auto_write(story_tags)
+    story_tags_block = build_story_tags_hint(story_tags)
 
     # Context accumulation (简单片段积累，三圈记忆策略会在 build_scene_context 里处理跨章前文)
     chapters_processed = 0
@@ -965,7 +916,9 @@ async def auto_write_start(
     mode = data.get("mode", "chapter_by_chapter")
     start_chapter_index = data.get("start_chapter_index", 0)
     start_scene_index = data.get("start_scene_index", 0)
-    export_format = data.get("export_format", "arc")
+    export_format = data.get("export_format")
+    if export_format not in ("arc", "novel"):
+        export_format = "novel" if get_workspace_mode(user_id, project_name) == "novel" else "arc"
     auto_review = bool(data.get("auto_review", False))
 
     # 检查是否已有运行中的任务

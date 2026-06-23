@@ -240,7 +240,7 @@ class ShowrunnerAgent(SparkBaseAgent, SparkAgentExecutor):
             roles=roles if roles else "（未提供，请创建合适的角色）",
             context=context if context else "这是一个全新的故事",
             beat_sheet=beat_sheet_str if beat_sheet_str else "（未提供）",
-            guidance=guidance if guidance else f"请生成一个包含{chapter_count}个章节的故事大纲",
+            guidance=guidance if guidance else f"请生成一个章节数尽量贴合 {chapter_count} 章目标的大纲；场景数量按剧情节奏弹性安排",
             chapter_count=chapter_count,
             scene_count_per_chapter=scene_count_per_chapter,
             style_profile=style_profile_text,
@@ -339,7 +339,7 @@ class ShowrunnerAgent(SparkBaseAgent, SparkAgentExecutor):
             roles=roles if roles else "（未提供，请创建合适的角色）",
             context=context if context else "这是一个全新的故事",
             beat_sheet=beat_sheet_str if beat_sheet_str else "（未提供）",
-            guidance=guidance if guidance else f"请生成一个包含{chapter_count}个章节的故事大纲",
+            guidance=guidance if guidance else f"请生成一个章节数尽量贴合 {chapter_count} 章目标的大纲；场景数量按剧情节奏弹性安排",
             chapter_count=chapter_count,
             scene_count_per_chapter=scene_count_per_chapter,
             style_profile=style_profile_text,
@@ -462,8 +462,8 @@ class ShowrunnerAgent(SparkBaseAgent, SparkAgentExecutor):
                 "beat_sheet": "（由当前项目与上下文提供）",
                 "guidance": "（由用户当前修改要求决定）",
                 "style_profile": "（未提供）",
-                "chapter_count": "按实际任务决定",
-                "scene_count_per_chapter": "按实际任务决定",
+                "chapter_count": "按实际任务决定，尽量贴合章节目标",
+                "scene_count_per_chapter": "按实际任务决定，仅作为场景密度参考",
             },
         }
 

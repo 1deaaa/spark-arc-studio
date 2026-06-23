@@ -9,7 +9,7 @@ import json
 from typing import Optional, List, Dict, Any
 
 from core.utils import get_project_path, get_project_stories_path
-from agents.routes.context_builder import load_project_context_bundle
+from agents.routes.context_builder import build_story_tags_hint, load_project_context_bundle
 from core.project_settings import get_project_story_tags
 
 
@@ -212,16 +212,7 @@ class AgentContextProvider:
         return self._bundle().get("characters_summary") or ""
 
     def _build_story_tags_block(self) -> str:
-        """从项目设置读取 story tags，格式化为上下文注入块（含 POV 醒目优化）
-        
-        设计原则：
-        1. POV 是最容易在长上下文中被 LLM 遗忘的参数，需要三层锚定：
-           - 视觉醒目标记（⚠️⚠️⚠️）
-           - 禁止切换指令
-           - 位置优先（放在上下文最前面）
-        2. POV 只从 story_tags 读取，不再从梗概 @pov 回退
-        3. 其他 tags 格式化为紧凑的单行
-        """
+        """从项目设置读取 story tags，并通过统一格式化入口注入上下文。"""
         if not self.project_name:
             return ""
         
@@ -230,39 +221,8 @@ class AgentContextProvider:
         except Exception as e:
             print(f"[ContextProvider] Error loading story tags: {e}")
             tags = {}
-        
-        parts = []
-        
-        # POV 醒目优化（最关键参数，必须引起 LLM 注意力机制）
-        pov = tags.get("pov")
-        if pov:
-            parts.append(
-                f"⚠️⚠️⚠️ 【叙事人称锁定】本文严格使用「{pov}」叙事。"
-                f"所有描写、对话、心理活动必须符合此人称视角⚠️⚠️⚠️"
-            )
-        
-        # 其他 tags 格式化为紧凑单行
-        tag_lines = []
-        style = tags.get("style")
-        if style:
-            tag_lines.append(f"风格：{style}")
-        genres = tags.get("genres", [])
-        if genres:
-            tag_lines.append(f"题材：{'、'.join(genres)}")
-        tones = tags.get("tones", [])
-        if tones:
-            tag_lines.append(f"基调：{'、'.join(tones)}")
-        worldviews = tags.get("worldviews", [])
-        if worldviews:
-            tag_lines.append(f"世界观：{'、'.join(worldviews)}")
-        length_hint = tags.get("length_hint")
-        if length_hint:
-            tag_lines.append(f"篇幅：{length_hint}")
-        
-        if tag_lines:
-            parts.append("【创作参数】" + " | ".join(tag_lines))
-        
-        return "\n".join(parts)
+
+        return build_story_tags_hint(tags)
 
     # ==================== Lorebook Agent ====================
 

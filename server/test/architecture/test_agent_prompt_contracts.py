@@ -101,6 +101,32 @@ def test_showrunner_pipeline_requires_in_task_append_until_complete() -> None:
     assert "同一次任务中继续追加后续章节" in outline_system
 
 
+def test_outline_length_guidance_keeps_scene_count_flexible() -> None:
+    outline_prompts = load_prompt(
+        "showrunner",
+        "generate_outline",
+        chapter_count=8,
+        scene_count_per_chapter=3,
+    )
+    combined = f"{outline_prompts['system']}\n{outline_prompts['user']}"
+
+    assert "章节数" in combined
+    assert "尽量贴合" in combined
+    assert "场景密度" in combined
+    assert "平均参考" in combined
+    assert "每章场景数可以不一样" in combined
+    assert "不是每章固定配额" in combined or "不是要求每一章都固定同样场数" in combined
+
+
+def test_director_contract_uses_scene_density_reference_not_fixed_scene_count() -> None:
+    director_prompt = load_prompt("director")["chat_system"]
+
+    assert "章节目标和场景密度参考" in director_prompt
+    assert "scene_density_reference" in director_prompt
+    assert "按剧情弹性安排" in director_prompt
+    assert "scenes_per_chapter" not in director_prompt
+
+
 def test_only_director_overrides_dynamic_tool_system_prompt() -> None:
     from agents.communication import SparkBaseAgent
     from agents.agent_director import DirectorAgent

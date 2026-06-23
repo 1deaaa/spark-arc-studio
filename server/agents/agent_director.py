@@ -58,7 +58,7 @@ class DirectorAgent(SparkBaseAgent):
                 continue
             name = agent.get("name", key)
             desc = agent.get("description", "")
-            tools = get_tools_for_agent(key) or []
+            tools = get_tools_for_agent(key, user_id=self.user_id) or []
             tool_lines = []
             for t in tools:
                 t_desc = (t.description or "").strip().split("\n")[0]

@@ -4,7 +4,7 @@ import json
 import os
 
 from langchain.tools import tool
-from pydantic import BaseModel, Field
+from pydantic import AliasChoices, BaseModel, ConfigDict, Field, field_validator, model_validator
 
 from agents.auto_write_service import load_auto_write_status, start_auto_write_background
 from core.utils import get_project_path
@@ -22,9 +22,11 @@ class TriggerAutoWriteInput(BaseModel):
 
 
 class WorkTrackerInput(BaseModel):
-    action: str = Field(description="操作类型：read=读取当前任务列表；update=覆盖更新任务列表（可同时更新 summary 与 contract）；clear=清空所有任务（全部完成时使用）")
-    items: list[dict] | None = Field(default=None, description="任务条目列表，仅 update 时有效。每项格式：{\"task\": \"任务描述\", \"status\": \"pending|in_progress|completed|blocked\", \"priority\": \"high|medium|low\", \"notes\": \"备注（可选）\"}")
-    summary: str | None = Field(default=None, description="全局目标/备注描述，仅 update 时有效。不传则保持原有 summary 不变")
+    model_config = ConfigDict(extra="forbid", populate_by_name=True)
+
+    action: str = Field(description="操作类型：read=读取当前任务列表；update=覆盖更新任务列表（可同时更新 summary 与 contract）；clear=清空所有任务（全部完成时使用）。收到多步骤任务后先 read，全新任务立刻 update，完成每个子任务后再次 update。")
+    items: list[dict] | None = Field(default=None, validation_alias=AliasChoices("items", "tasks", "todo_items"), description="任务条目列表，仅 update 时有效；update 会用这份完整列表覆盖旧列表，不能只传单个增量项。每项必须包含：task=任务描述，status=pending|in_progress|completed|blocked，priority=high|medium|low，notes=备注（可选）")
+    summary: str | None = Field(default=None, validation_alias=AliasChoices("summary", "goal", "objective"), description="本轮任务的总目标，仅 update 时有效。不传则保持原有 summary 不变。多步骤任务创建清单时必须写入清晰目标。")
     contract: dict | None = Field(default=None, description="结构化创作契约，仅 update 时有效。不传则保持原有 contract 不变。建议记录章节/场景/篇幅/角色数量范围/题材/风格/目标受众/阶段性完成度等可核查参数")
 
 
@@ -33,13 +35,41 @@ class CheckScriptwriterStatusInput(BaseModel):
 
 
 class UpdateProjectStoryTagsInput(BaseModel):
-    style: str | None = Field(default=None, description="风格（单选，如'治愈'、'悬疑'）")
-    genres: list[str] | None = Field(default=None, description="题材（多选，如['仙侠', '冒险']）")
-    tones: list[str] | None = Field(default=None, description="基调（多选，如['暗黑', '治愈']）")
-    worldviews: list[str] | None = Field(default=None, description="世界观（多选，如['修真']）")
-    pov: str | None = Field(default=None, description="人称视角（单选，如'第一人称'、'第三人称全知'）")
-    length_hint: str | None = Field(default=None, description="篇幅（单选，如'短篇'、'中篇'、'长篇'）")
-    active_inspiration_id: str | None = Field(default=None, description="当前生效的灵感 ID（可选，用于追溯来源）")
+    model_config = ConfigDict(extra="forbid", populate_by_name=True)
+
+    workspace_mode: str | None = Field(default=None, validation_alias=AliasChoices("workspace_mode", "workspaceMode", "mode"), description="创作模式，必须是字符串：script=ARC/剧本模式，novel=纯文字小说模式。")
+    style: str | None = Field(default=None, description="风格，单选字符串，如 '治愈'、'悬疑'。")
+    genres: list[str] | None = Field(default=None, description="题材，多选字符串数组，如 ['仙侠', '冒险']；即使只有一个也必须传数组。")
+    tones: list[str] | None = Field(default=None, description="基调，多选字符串数组，如 ['暗黑', '治愈']；即使只有一个也必须传数组。")
+    worldviews: list[str] | None = Field(default=None, description="世界观，多选字符串数组，如 ['修真']；即使只有一个也必须传数组。")
+    pov: str | None = Field(default=None, validation_alias=AliasChoices("pov", "point_of_view", "pointOfView"), description="人称视角，单选字符串，如 '第一人称'、'第三人称全知'。")
+    length_hint: str | None = Field(default=None, validation_alias=AliasChoices("length_hint", "lengthHint", "length"), description="篇幅，单选字符串，如 '短篇'、'中篇'、'长篇'。")
+    active_inspiration_id: str | None = Field(default=None, validation_alias=AliasChoices("active_inspiration_id", "activeInspirationId"), description="当前生效的灵感 ID，可选字符串，用于追溯来源。")
+
+    @model_validator(mode="before")
+    @classmethod
+    def _normalize_wrapped_story_tags(cls, value):
+        if not isinstance(value, dict):
+            return value
+        data = dict(value)
+        for wrapper_key in ("story_tags", "storyTags", "tags", "data", "payload"):
+            wrapped = data.get(wrapper_key)
+            if isinstance(wrapped, dict):
+                data.pop(wrapper_key, None)
+                data = {**wrapped, **data}
+                break
+        return data
+
+    @field_validator("genres", "tones", "worldviews", mode="before")
+    @classmethod
+    def _normalize_tag_list(cls, value):
+        if value is None or isinstance(value, list):
+            return value
+        if isinstance(value, str):
+            import re
+
+            return [item.strip() for item in re.split(r"[,，、\n]", value) if item.strip()]
+        return value
 
 
 @tool(args_schema=TriggerAutoWriteInput)
@@ -306,6 +336,7 @@ def work_tracker(
                 story_tags = get_project_story_tags(user_id, project_name)
                 if story_tags:
                     auto_contract = {
+                        "workspace_mode": story_tags.get("workspace_mode", "script"),
                         "style": story_tags.get("style"),
                         "genres": story_tags.get("genres", []),
                         "tones": story_tags.get("tones", []),
@@ -342,6 +373,10 @@ def read_project_story_tags() -> str:
         return f"读取项目故事主题参数失败：{e}"
     
     lines = ["══ 项目故事主题参数 ══"]
+
+    workspace_mode = tags.get("workspace_mode", "script")
+    mode_label = "小说模式（novel）" if workspace_mode == "novel" else "剧本模式（script）"
+    lines.append(f"创作模式：{mode_label}")
     
     # POV 醒目展示
     pov = tags.get("pov")
@@ -371,6 +406,7 @@ def read_project_story_tags() -> str:
 
 @tool(args_schema=UpdateProjectStoryTagsInput)
 def update_project_story_tags(
+    workspace_mode: str | None = None,
     style: str | None = None,
     genres: list[str] | None = None,
     tones: list[str] | None = None,
@@ -396,6 +432,7 @@ def update_project_story_tags(
             worldviews=worldviews,
             pov=pov,
             length_hint=length_hint,
+            workspace_mode=workspace_mode,
             active_inspiration_id=active_inspiration_id,
         )
     except Exception as e:
@@ -403,6 +440,9 @@ def update_project_story_tags(
     
     # 构建更新摘要
     updated_fields = []
+    if workspace_mode is not None:
+        normalized_mode = "novel" if workspace_mode == "novel" else "script"
+        updated_fields.append(f"创作模式={normalized_mode}")
     if style is not None:
         updated_fields.append(f"风格={style}")
     if genres is not None:

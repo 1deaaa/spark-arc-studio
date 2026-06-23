@@ -28,7 +28,7 @@
     </transition>
 
     <!-- 桌面端: Expanded panel -->
-    <transition name="chat-float-panel">
+    <transition name="chat-float-panel" @after-enter="onPanelEntered">
       <n-card v-if="chat.expanded && !isMobile" size="small" :bordered="true" class="chat-float-panel" :style="panelStyle">
         <!-- 左上角调整尺寸手柄 -->
         <n-tooltip trigger="hover">
@@ -62,7 +62,12 @@
           </template>
           {{ t('components.chatPanel.dragResize') }}
         </n-tooltip>
+        <!-- 内容延迟渲染占位：窗口动画优先，内容进场后再挂载 ChatPanel -->
+        <div v-if="!contentReady" class="chat-float-panel-placeholder">
+          <GlobalLoading scope="chat" target="chat-primary" variant="card" />
+        </div>
         <ChatPanel
+          v-if="contentReady"
           ref="desktopListRef"
           :agent-id="chat.currentAgentId"
           :agent-options="agentOptions"
@@ -174,7 +179,11 @@
   >
     <n-drawer-content :native-scrollbar="false" body-content-style="padding: 0; display: flex; flex-direction: column; height: 100%;">
       <div ref="drawerSurfaceEl" class="chat-mobile-drawer-surface" :style="drawerSurfaceStyle">
+        <div v-if="!contentReady" class="chat-mobile-drawer-placeholder">
+          <GlobalLoading scope="chat" target="chat-primary" variant="card" />
+        </div>
         <ChatPanel
+          v-if="contentReady"
           ref="mobileListRef"
           :agent-id="chat.currentAgentId"
           :agent-options="agentOptions"
@@ -257,6 +266,7 @@ import ChatPanel from '@/components/chat/ChatPanel.vue';
 import ChatFileImportButton from '@/components/chat/ChatFileImportButton.vue';
 import ChatMessageList from '@/components/chat/ChatMessageList.vue';
 import ExtraChatWindow from '@/components/chat/ExtraChatWindow.vue';
+import GlobalLoading from '@/components/share/GlobalLoading.vue';
 import { useAgentRegistry } from '@/composables/useAgentRegistry';
 import bus from '@/eventBus';
 import { useChatActions } from '@/composables/useChatActions';
@@ -323,6 +333,45 @@ async function compactContext() {
 
 const mobileDrawerVisible = ref(false);
 const drawerSurfaceEl = ref<HTMLElement | null>(null);
+
+/**
+ * 内容就绪标志：窗口/抽屉打开动画优先，内容延迟一帧挂载。
+ * 避免移动端历史消息较多时，ChatPanel 与 drawer 进场动画同帧渲染造成卡顿。
+ */
+const contentReady = ref(false);
+let contentReadyTimer: ReturnType<typeof setTimeout> | null = null;
+
+function resetContentReady() {
+  if (contentReadyTimer) {
+    clearTimeout(contentReadyTimer);
+    contentReadyTimer = null;
+  }
+  contentReady.value = false;
+}
+
+function scheduleContentReady() {
+  resetContentReady();
+  // 等待窗口进场动画落地后再挂载内容主体，GlobalLoading 占位期间提供加载动画
+  contentReadyTimer = setTimeout(() => {
+    contentReady.value = true;
+    contentReadyTimer = null;
+    // 内容挂载后再滚动到底部 + 同步抽屉高度
+    nextTick(() => {
+      scrollToBottom(true);
+      if (isMobile.value && mobileDrawerVisible.value) {
+        syncMobileDrawerHeight();
+      }
+    });
+  }, 200);
+}
+
+function onPanelEntered() {
+  // 桌面端 panel 进场动画结束后确保内容已挂载（兜底）
+  if (!contentReady.value) {
+    contentReady.value = true;
+    nextTick(() => scrollToBottom(true));
+  }
+}
 
 // 抽屉高度（像素字符串），由内容自适应驱动。
 const drawerHeight = ref('50%');
@@ -446,6 +495,12 @@ watch(() => chat.expanded, (expanded) => {
   if (isMobile.value) {
     mobileDrawerVisible.value = expanded;
   }
+  if (expanded) {
+    // 打开：先占位，动画落地后再挂载内容
+    scheduleContentReady();
+  } else {
+    resetContentReady();
+  }
 });
 
 watch(mobileDrawerVisible, (visible) => {
@@ -464,6 +519,8 @@ watch(mobileDrawerVisible, (visible) => {
       history.pushState({ chatDrawer: true }, '');
       drawerHistoryPushed = true;
     }
+  } else if (isMobile.value && !visible) {
+    resetContentReady();
   }
 });
 
@@ -1330,6 +1387,7 @@ onUnmounted(() => {
   if (mobileDrawerSettleTimer) clearTimeout(mobileDrawerSettleTimer);
   if (drawerAnimEndTimer) clearTimeout(drawerAnimEndTimer);
   if (drawerMeasureRAF) cancelAnimationFrame(drawerMeasureRAF);
+  if (contentReadyTimer) clearTimeout(contentReadyTimer);
   document.removeEventListener('mousemove', onDragMove);
   document.removeEventListener('mousemove', onResizeMove);
   window.removeEventListener('resize', onResize);

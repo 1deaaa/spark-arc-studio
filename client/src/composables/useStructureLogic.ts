@@ -1,5 +1,5 @@
 
-import { ref, watch, onMounted, onBeforeUnmount } from 'vue';
+import { computed, ref, watch, onMounted, onBeforeUnmount } from 'vue';
 import { useMessage, useDialog } from 'naive-ui';
 import {
     generateOutline,
@@ -12,6 +12,7 @@ import { fetchBeatSheet } from '../services/aiService';
 import { parseOutlineMarkup } from '../utils/markupSerializer';
 import { useProjectStore } from '../components/stores/projectStore';
 import bus from '../eventBus';
+import { i18n } from '@/i18n';
 import { createStreamingTask, isAbortLikeError } from '@/utils/streamingRuntime';
 import type { OutlineData } from '../services/aiContracts';
 import { buildCreativeCacheKey, isCreativeCacheEqual, loadCreativeCache, saveCreativeCache } from '@/utils/creativeLocalCache';
@@ -50,16 +51,16 @@ export function useStructureLogic() {
     const currentOutline = ref<OutlineData | null>(null);
     const outlineHistoryRef = ref<{ refresh?: () => void } | null>(null);
     const chapterCount = ref(5);  // 默认5章
-    const sceneCount = ref(3);    // 默认每章3场景
+    const sceneCount = ref(3);    // 默认场景密度参考约3场/章
     const lengthType = ref('short'); // 默认短篇
 
-    const lengthOptions = [
-        { label: '短篇 (5章, 每章3场景)', value: 'short' },
-        { label: '中篇 (10章, 每章4场景)', value: 'medium' },
-        { label: '长篇 (20章, 每章5场景)', value: 'long' },
-        { label: '不限 (由大模型决定)', value: 'unlimited' },
-        { label: '自定义', value: 'custom' }
-    ];
+    const lengthOptions = computed(() => [
+        { label: i18n.global.t('views.structure.lengthOptions.short'), value: 'short' },
+        { label: i18n.global.t('views.structure.lengthOptions.medium'), value: 'medium' },
+        { label: i18n.global.t('views.structure.lengthOptions.long'), value: 'long' },
+        { label: i18n.global.t('views.structure.lengthOptions.unlimited'), value: 'unlimited' },
+        { label: i18n.global.t('views.structure.lengthOptions.custom'), value: 'custom' }
+    ]);
 
     function buildStructureCacheKey() {
         return buildCreativeCacheKey('structure-workbench', projectStore.currentProject);

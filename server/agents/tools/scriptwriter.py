@@ -132,7 +132,12 @@ def create_or_rewrite_script(
         sanitize_story_display_name,
     )
 
-    effective_format = export_format or "arc"
+    if export_format in ("arc", "novel"):
+        effective_format = export_format
+    else:
+        from core.request_context import get_current_export_format
+
+        effective_format = get_current_export_format()
 
     content = (overwrite_content or "").strip()
     if not content:

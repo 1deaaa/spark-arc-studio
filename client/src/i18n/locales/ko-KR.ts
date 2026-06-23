@@ -483,7 +483,7 @@ const koKR = {
       usageInfo: '용도 설명',
       usageDescMain: '일반 대화, 각 Agent의 핵심 창작 출력, 전용 모델이 지정되지 않은 기본 생성에 사용됩니다.',
       usageDescFast: '기억 풀 정리, 프로젝트 관계 그래프 구축, 공유 심사 등 자주 실행되는 백그라운드 작업에 사용됩니다. 저렴하고 안정적이며 빠른 모델을 권장합니다.',
-      usageDescReason: '복잡한 설정 검토, 구조 평가, 심층 비평처럼 더 강한 논리 판단이 필요한 작업에 사용됩니다.',
+      usageDescReason: '복잡한 설정 검토, 구조 평가, 심층 비평, 그리고 Director에 전용 모델이 없을 때의 기본 용도입니다.',
     },
     semanticSearchCard: {
       title: '프로젝트 인덱싱 및 검색',
@@ -685,6 +685,7 @@ const koKR = {
         probeList: '원격 목록 탐색',
         editModel: '모델 속성 편집',
         deleteModel: '모델 삭제',
+        openRechargeUrl: '충전 페이지 열기',
       },
       tooltips: {
         dragSort: '드래그하여 순서 조정',
@@ -726,8 +727,12 @@ const koKR = {
       form: {
         platformName: '플랫폼 이름',
         platformNamePlaceholder: '예: My Custom Open AI',
+        baseUrl: 'Base URL',
+        apiKey: 'API Key',
         apiKeyForAll: '공용 마스터 API Key (전체 이용자 공용으로 사용됨)',
         apiKeyPlaceholder: '비워두면 나중에 등록 가능',
+        rechargeUrl: '충전 주소',
+        rechargeUrlPlaceholder: '선택 사항입니다. 입력하면 플랫폼 편집 화면에 충전 버튼이 표시됩니다.',
         platformCreditBalance: '해당 채널에 분배할 공용 성냥 예산 한도',
         platformCreditUnlimited: '비워두면 무제한 공급',
         example120: '예: 120',
@@ -1005,6 +1010,7 @@ const koKR = {
         readSynopsis: '시놉시스 내용 조회',
         readBeatSheet: '비트 시트 내용 조회',
         workTracker: '작업 진행도 트래킹',
+        updateProjectStoryTags: '프로젝트 스토리 태그 갱신',
         graphRagTool: '지식 그래프 정보 탐색',
         delegateTask: '태스크 전문가 위임',
         captureInspiration: '발상 포착 및 기록',
@@ -1082,6 +1088,9 @@ const koKR = {
     },
     storyTagsPanel: {
       title: '작품 테마 매개변수',
+      workspaceMode: '창작 모드',
+      modeScript: '시나리오',
+      modeNovel: '소설',
       noProject: '활성화된 프로젝트가 없습니다',
       saveSuccess: '작품 테마 설정이 저장되었습니다',
       saveFailed: '테마 설정 저장 실패',
@@ -1602,6 +1611,7 @@ const koKR = {
       readSynopsis: '시놉시스 기획서를 읽고 있습니다...',
       readBeatSheet: '스토리 비트 구조를 판독하고 있습니다...',
       workTracker: '현재까지의 작업 진도를 조사하고 있습니다...',
+      updateProjectStoryTags: '프로젝트 스토리 태그를 갱신하고 있습니다...',
       createChapter: '장 또는 씬을 생성하고 있습니다...',
       createOrRewriteScript: '시나리오 본문 단락을 집필하고 있습니다...',
       patchScript: '시나리오 일부 대사/지문을 고쳐 쓰고 있습니다...',
@@ -1737,6 +1747,13 @@ const koKR = {
       },
     },
     structure: {
+      lengthOptions: {
+        short: '단편(약 5장, 씬 밀도 참고 약 3개/장)',
+        medium: '중편(약 10장, 씬 밀도 참고 약 4개/장)',
+        long: '장편(약 20장, 씬 밀도 참고 약 5개/장)',
+        unlimited: '제한 없음(스토리에 맞춰 AI가 판단)',
+        custom: '사용자 지정',
+      },
       desktop: {
         title: '스토리 아웃라인 기획',
         subtitle: '장/화별 스토리 아웃라인 구성 및 연출 방향 설계',
@@ -1749,7 +1766,7 @@ const koKR = {
         synopsisPlaceholder: '이전 단계에서 저장한 시놉시스 줄거리를 자동으로 로딩합니다...',
         guidance: '감독 연출 의도',
         chapterCountPrefix: '기획 장수:',
-        scenePerChapterPrefix: '장당 씬(Scene) 수:',
+        scenePerChapterPrefix: '씬 밀도:',
         regenerate: '아웃라인 재구성',
       },
       mobile: {
@@ -1759,7 +1776,7 @@ const koKR = {
         editGuidance: '연출 가이드 편집',
         generateParams: '기획 속성',
         chapterCount: '기획 장수:',
-        scenesPerChapter: '장당 씬 수:',
+        scenesPerChapter: '씬 밀도 참고:',
         regenerateOutline: '아웃라인 재생성',
         currentOutline: '현재 구성된 아웃라인',
         saveOutline: '아웃라인 저장',

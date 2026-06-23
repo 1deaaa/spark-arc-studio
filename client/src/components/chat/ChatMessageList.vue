@@ -416,6 +416,7 @@ const toolNameLabelKeyMap: Record<string, string> = {
   read_character: 'components.chatMessageList.tools.readCharacter',
   read_synopsis: 'components.chatMessageList.tools.readSynopsis',
   read_beat_sheet: 'components.chatMessageList.tools.readBeatSheet',
+  update_project_story_tags: 'components.chatMessageList.tools.updateProjectStoryTags',
   graph_rag_tool: 'components.chatMessageList.tools.graphRagTool',
   delegate_task: 'components.chatMessageList.tools.delegateTask',
   capture_inspiration: 'components.chatMessageList.tools.captureInspiration',

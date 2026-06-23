@@ -132,7 +132,7 @@ function playAnimation(): void {
   }
 
   // Logo 填充色渐变（读取 CSS 变量）
-  const primaryColor = getComputedStyle(document.body).getPropertyValue('--spark-primary').trim() || '#7aa2f7';
+  const primaryColor = getComputedStyle(document.body).getPropertyValue('--spark-primary').trim() || '#1deaaa';
   mainTimeline.to(logoEl.value, { color: primaryColor, duration: 0.5 }, 1);
 
   // 粒子扩散

@@ -563,7 +563,7 @@
                     <n-form-item :label="t('components.aiManager.form.platformName')">
                         <n-input v-model:value="newPlatform.name" :placeholder="t('components.aiManager.form.platformNamePlaceholder')" />
                     </n-form-item>
-                    <n-form-item label="Base URL">
+                    <n-form-item :label="t('components.aiManager.form.baseUrl')">
                         <n-input v-model:value="newPlatform.baseUrl" placeholder="https://api.example.com/v1" :input-props="{ autocomplete: 'off' }" />
                     </n-form-item>
                     <n-form-item :label="t('components.aiManager.form.apiKeyForAll')">
@@ -578,6 +578,13 @@
                             clearable
                             style="width: 100%"
                             :placeholder="t('components.aiManager.form.platformCreditUnlimited')"
+                        />
+                    </n-form-item>
+                    <n-form-item :label="t('components.aiManager.form.rechargeUrl')">
+                        <n-input
+                            v-model:value="newPlatform.rechargeUrl"
+                            :placeholder="t('components.aiManager.form.rechargeUrlPlaceholder')"
+                            :input-props="{ autocomplete: 'off' }"
                         />
                     </n-form-item>
 
@@ -650,10 +657,28 @@
                     <n-form-item :label="t('components.aiManager.form.platformName')">
                         <n-input v-model:value="editingPlatform.name" :disabled="editingPlatform.is_sys && !isAdmin" />
                     </n-form-item>
-                    <n-form-item label="Base URL">
-                        <n-input v-model:value="editingPlatform.baseUrl" :input-props="{ autocomplete: 'off' }" :disabled="editingPlatform.is_sys && !isAdmin" />
+                    <n-form-item :label="t('components.aiManager.form.baseUrl')">
+                        <n-input-group>
+                            <n-input v-model:value="editingPlatform.baseUrl" :input-props="{ autocomplete: 'off' }" :disabled="editingPlatform.is_sys && !isAdmin" />
+                            <n-tooltip v-if="editingPlatform.rechargeUrl && editingPlatform.rechargeUrl.trim()" trigger="hover">
+                                <template #trigger>
+                                    <n-button class="recharge-link-btn" secondary @click="openRechargeUrl(editingPlatform.rechargeUrl)">
+                                        <template #icon><n-icon><CreditCard /></n-icon></template>
+                                    </n-button>
+                                </template>
+                                {{ t('components.aiManager.actions.openRechargeUrl') }}
+                            </n-tooltip>
+                        </n-input-group>
                     </n-form-item>
-                    <n-form-item label="API Key">
+                    <n-form-item :label="t('components.aiManager.form.rechargeUrl')">
+                        <n-input
+                            v-model:value="editingPlatform.rechargeUrl"
+                            :placeholder="t('components.aiManager.form.rechargeUrlPlaceholder')"
+                            :input-props="{ autocomplete: 'off' }"
+                            :disabled="editingPlatform.is_sys && !isAdmin"
+                        />
+                    </n-form-item>
+                    <n-form-item :label="t('components.aiManager.form.apiKey')">
                         <n-input v-model:value="editingApiKey" type="password" show-password-on="click" :placeholder="t('components.aiManager.form.enterApiKey')" :input-props="{ autocomplete: 'new-password' }" />
                         <template #feedback>
                             <span v-if="editingPlatform.is_sys && !editingApiKey" style="color: var(--spark-primary); font-size: var(--spark-fs-xs); opacity: 0.8;">
@@ -954,7 +979,7 @@ import {
 } from 'naive-ui';
 import SparkAlert from '@/components/share/SparkAlert.vue';
 import SparkCollapseTransition from '@/components/share/SparkCollapseTransition.vue';
-import { Activity, CircleAlert, CircleCheck, Download, Info, Key, Lock, Menu, Plus, Server, SquarePen, Trash, Unlock, Upload, User, X, Zap } from '@lucide/vue';
+import { Activity, CircleAlert, CircleCheck, CreditCard, Download, Info, Key, Lock, Menu, Plus, Server, SquarePen, Trash, Unlock, Upload, User, X, Zap } from '@lucide/vue';
 import SparkTag from '@/components/share/SparkTag.vue';
 import SparkIcon from '@/components/share/CreditIcon.vue';
 import SparkLoaderAnimation from '@/components/share/SparkLoaderAnimation.vue';
@@ -1248,6 +1273,12 @@ function platformCreditTagTitle(plat: AiPlatform) {
         return t('components.aiManager.pricing.platformDepletedHint');
     }
     return t('components.aiManager.pricing.platformBalanceHint');
+}
+
+function openRechargeUrl(url: string | null | undefined) {
+    const target = String(url || '').trim();
+    if (!target) return;
+    window.open(target, '_blank', 'noopener,noreferrer');
 }
 
 // === 平台管理 ===

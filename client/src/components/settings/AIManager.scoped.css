@@ -209,6 +209,16 @@
     font-size: var(--spark-fs-lg);
 }
 
+.recharge-link-btn {
+    width: 38px;
+    padding: 0;
+    color: var(--spark-primary) !important;
+}
+
+.recharge-link-btn :deep(.n-icon) {
+    font-size: var(--spark-fs-lg);
+}
+
 .editable-name {
     transition: all 0.2s ease;
 }

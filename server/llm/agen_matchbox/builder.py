@@ -35,6 +35,9 @@ from .models import (
 from .config import SYSTEM_USER_ID, DEFAULT_USAGE_KEY
 
 
+DIRECTOR_DEFAULT_USAGE_KEY = "reason"
+
+
 def _load_chat_runtime():
     """延迟加载 LLM 运行时重依赖，避免阻塞服务启动。"""
     from .gateway import ChatUniversal
@@ -45,6 +48,11 @@ def _load_chat_runtime():
 
 class LLMBuilderMixin:
     """LLM 客户端构建功能"""
+
+    @staticmethod
+    def _agent_default_usage_key(agent_name: Optional[str]) -> Optional[str]:
+        """返回没有显式绑定时的 Agent 默认用途。"""
+        return DIRECTOR_DEFAULT_USAGE_KEY if agent_name == "agent_director" else None
 
     def _apply_sdk_request_compat(self, kwargs: Dict[str, Any]) -> Dict[str, Any]:
         """为 LangChain/OpenAI SDK 调用补充兼容参数。"""
@@ -268,7 +276,9 @@ class LLMBuilderMixin:
 
             # 3. 处理 usage_key (如果以上均未提供)
             if not direct_config and not normalized_usage:
-                normalized_usage = self._normalize_usage_key(usage_key)
+                normalized_usage = self._normalize_usage_key(
+                    usage_key if usage_key is not None else self._agent_default_usage_key(agent_name)
+                )
 
             # 4. 解析最终的 platform_id 和 model_id
             usage_slot = None

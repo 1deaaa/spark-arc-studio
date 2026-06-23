@@ -118,6 +118,7 @@ export type AiPlatform = {
   platform_id: ApiId;
   name: string;
   base_url: string;
+  recharge_url?: string | null;
   api_key_set: boolean;
   api_key_status?: string;
   api_key_message?: string;
@@ -141,6 +142,7 @@ export type AiFlattenedModelItem = {
   platform_is_sys: boolean;
   platform_disabled?: boolean;
   base_url: string;
+  recharge_url?: string | null;
   api_key_set: boolean;
   api_key_status?: string;
   api_key_message?: string;

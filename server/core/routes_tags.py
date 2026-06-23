@@ -145,6 +145,7 @@ async def get_tags_catalog(
 class ProjectStoryTagsRequest(BaseModel):
     """项目级故事主题参数请求体"""
     projectName: str
+    workspaceMode: Optional[str] = None
     style: Optional[str] = None
     genres: Optional[List[str]] = None
     tones: Optional[List[str]] = None
@@ -200,6 +201,7 @@ async def set_project_story_tags_api(
             worldviews=data.worldviews,
             pov=data.pov,
             length_hint=data.lengthHint,
+            workspace_mode=data.workspaceMode,
             active_inspiration_id=data.activeInspirationId
         )
         return {

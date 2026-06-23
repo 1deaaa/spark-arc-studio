@@ -130,6 +130,8 @@ class PlatformCreateRequest(BaseModel):
 
     api_key: Optional[str] = None
 
+    recharge_url: Optional[str] = None
+
 
 
 class PlatformUpdateRequest(BaseModel):
@@ -139,6 +141,8 @@ class PlatformUpdateRequest(BaseModel):
     name: str
 
     base_url: str
+
+    recharge_url: Optional[str] = None
 
 
 
@@ -882,7 +886,13 @@ async def create_platform(
 
     try:
 
-        plat = matchbox().add_platform(data.name, data.base_url, data.api_key, user_id)
+        plat = matchbox().add_platform(
+            data.name,
+            data.base_url,
+            data.api_key,
+            user_id,
+            recharge_url=data.recharge_url,
+        )
 
         return {"success": True, "id": plat.id}
 
@@ -910,7 +920,16 @@ async def update_platform(
 
     try:
 
-        matchbox().update_platform_details(user_id, data.id, data.name, data.base_url)
+        fields_set = getattr(data, "model_fields_set", set())
+
+        matchbox().update_platform_details(
+            user_id,
+            data.id,
+            data.name,
+            data.base_url,
+            recharge_url=data.recharge_url,
+            update_recharge_url="recharge_url" in fields_set,
+        )
 
         return {"success": True}
 
@@ -1915,6 +1934,8 @@ class AdminSysPlatformCreateRequest(BaseModel):
 
     sys_credit_balance: Optional[float] = None
 
+    recharge_url: Optional[str] = None
+
 
 
 class AdminSysPlatformUpdateRequest(BaseModel):
@@ -1926,6 +1947,8 @@ class AdminSysPlatformUpdateRequest(BaseModel):
     base_url: Optional[str] = None
 
     sys_credit_balance: Optional[float] = None
+
+    recharge_url: Optional[str] = None
 
 
 
@@ -2001,6 +2024,8 @@ async def admin_create_sys_platform(
 
             sys_credit_balance=data.sys_credit_balance,
 
+            recharge_url=data.recharge_url,
+
         )
 
         return {"success": True, "platform_id": plat.id}
@@ -2046,6 +2071,10 @@ async def admin_update_sys_platform(
             sys_credit_balance=data.sys_credit_balance if "sys_credit_balance" in fields_set else None,
 
             update_sys_credit_balance="sys_credit_balance" in fields_set,
+
+            recharge_url=data.recharge_url if "recharge_url" in fields_set else None,
+
+            update_recharge_url="recharge_url" in fields_set,
 
         )
 

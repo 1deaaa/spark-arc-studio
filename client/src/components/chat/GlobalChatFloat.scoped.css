@@ -591,3 +591,18 @@
 .chat-float-panel:has(.resize-handle:active) {
   box-shadow: 0 0 0 2px var(--spark-primary-muted), var(--spark-shadow);
 }
+
+/* 内容延迟渲染占位：窗口动画优先，ChatPanel 挂载前展示加载动画 */
+.chat-float-panel-placeholder,
+.chat-mobile-drawer-placeholder {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  flex: 1;
+  min-height: 0;
+  width: 100%;
+}
+
+.chat-mobile-drawer-placeholder {
+  height: 100%;
+}

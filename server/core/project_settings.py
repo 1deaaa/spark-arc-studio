@@ -8,7 +8,7 @@
   graphrag_enabled: false
   attachment_index_enabled: true
   attachment_chunk_tokens: 64000  (附件分片 token 上限，等价于"按需读取"滑动窗口的窗口大小)
-  story_tags: {}  (项目级故事主题参数：风格/题材/基调/世界观/人称/篇幅)
+  story_tags: {}  (项目级故事主题参数：创作模式/风格/题材/基调/世界观/人称/篇幅)
   active_inspiration_id: null  (当前生效的灵感 ID，用于追溯来源)
   workspace_mode: "script"  (项目默认创作模式：script=剧本 / novel=小说)
 """
@@ -34,9 +34,10 @@ _DEFAULT_SETTINGS: Dict[str, Any] = {
     # 大文件按此 token 上限切片；调用 read_attachment_chunk 一次只展开一片，
     # 所以增大此值会让单次注入更长，减小则把 LLM context 让给更多其他内容。
     "attachment_chunk_tokens": 64000,
-    # 项目级故事主题参数（"项目宪法"）：风格/题材/基调/世界观/人称/篇幅
+    # 项目级故事主题参数（"项目宪法"）：创作模式/风格/题材/基调/世界观/人称/篇幅
     # 这些参数贯穿整个创作周期，所有 Agent 通过 context_provider 统一读取
     "story_tags": {
+        "workspace_mode": "script", # 创作模式（script=剧本 / novel=小说）
         "style": None,           # 风格（单选，如"治愈"）
         "genres": [],            # 题材（多选，如["仙侠", "冒险"]）
         "tones": [],             # 基调（多选，如["暗黑", "治愈"]）
@@ -72,12 +73,19 @@ def _coerce_attachment_chunk_tokens(value: Any) -> int:
 _lock = threading.Lock()
 
 
+def _default_settings_copy() -> Dict[str, Any]:
+    """返回项目默认配置副本，避免嵌套 story_tags 被运行时修改污染。"""
+    data = dict(_DEFAULT_SETTINGS)
+    data["story_tags"] = dict(_DEFAULT_SETTINGS["story_tags"])
+    return data
+
+
 def _settings_path(project_path: str) -> str:
     return os.path.join(project_path, _SETTINGS_DIR, _SETTINGS_FILENAME)
 
 
 def _normalize(raw: Dict[str, Any] | None) -> Dict[str, Any]:
-    data = dict(_DEFAULT_SETTINGS)
+    data = _default_settings_copy()
     if isinstance(raw, dict):
         data["semantic_search_enabled"] = bool(raw.get("semantic_search_enabled", _DEFAULT_SETTINGS["semantic_search_enabled"]))
         data["graphrag_enabled"] = bool(raw.get("graphrag_enabled", _DEFAULT_SETTINGS["graphrag_enabled"]))
@@ -85,11 +93,16 @@ def _normalize(raw: Dict[str, Any] | None) -> Dict[str, Any]:
         data["attachment_chunk_tokens"] = _coerce_attachment_chunk_tokens(
             raw.get("attachment_chunk_tokens", _DEFAULT_SETTINGS["attachment_chunk_tokens"])
         )
+        raw_mode_from_tags = None
         # 规范化 story_tags：保留已有值，补齐缺失字段
         raw_tags = raw.get("story_tags")
         if isinstance(raw_tags, dict):
             default_tags = _DEFAULT_SETTINGS["story_tags"]
+            raw_mode = raw_tags.get("workspace_mode", raw.get("workspace_mode", default_tags["workspace_mode"]))
+            raw_mode_from_tags = raw_tags.get("workspace_mode")
+            normalized_mode = "novel" if raw_mode == "novel" else "script"
             data["story_tags"] = {
+                "workspace_mode": normalized_mode,
                 "style": raw_tags.get("style", default_tags["style"]),
                 "genres": raw_tags.get("genres", default_tags["genres"]) or [],
                 "tones": raw_tags.get("tones", default_tags["tones"]) or [],
@@ -100,21 +113,25 @@ def _normalize(raw: Dict[str, Any] | None) -> Dict[str, Any]:
         # 规范化 active_inspiration_id
         data["active_inspiration_id"] = raw.get("active_inspiration_id", _DEFAULT_SETTINGS["active_inspiration_id"])
         # 规范化 workspace_mode：只允许 script / novel
-        raw_mode = raw.get("workspace_mode", _DEFAULT_SETTINGS["workspace_mode"])
+        raw_mode = raw_mode_from_tags if raw_mode_from_tags is not None else raw.get(
+            "workspace_mode",
+            data["story_tags"].get("workspace_mode", _DEFAULT_SETTINGS["workspace_mode"]),
+        )
         data["workspace_mode"] = "novel" if raw_mode == "novel" else "script"
+        data["story_tags"]["workspace_mode"] = data["workspace_mode"]
     return data
 
 
 def _load(project_path: str) -> Dict[str, Any]:
     path = _settings_path(project_path)
     if not os.path.exists(path):
-        return dict(_DEFAULT_SETTINGS)
+        return _default_settings_copy()
     try:
         with open(path, "r", encoding="utf-8") as f:
             raw = json.load(f)
         return _normalize(raw)
     except Exception:
-        return dict(_DEFAULT_SETTINGS)
+        return _default_settings_copy()
 
 
 def _save(project_path: str, data: Dict[str, Any]) -> None:
@@ -186,14 +203,15 @@ def set_attachment_chunk_tokens(user_id: str, project_name: str, value: Any) -> 
 
 def get_workspace_mode(user_id: str, project_name: str) -> str:
     """快捷查询：项目默认创作模式（script=剧本 / novel=小说）。"""
-    mode = get_project_setting(user_id, project_name, "workspace_mode", "script")
+    tags = get_project_story_tags(user_id, project_name)
+    mode = tags.get("workspace_mode") or get_project_setting(user_id, project_name, "workspace_mode", "script")
     return "novel" if mode == "novel" else "script"
 
 
 def set_workspace_mode(user_id: str, project_name: str, mode: str) -> str:
     """设置项目默认创作模式并持久化，返回最终生效的值。"""
     normalized = "novel" if mode == "novel" else "script"
-    set_project_setting(user_id, project_name, "workspace_mode", normalized)
+    set_project_story_tags(user_id, project_name, workspace_mode=normalized)
     return normalized
 
 
@@ -324,10 +342,11 @@ def set_default_graphrag_enabled(user_id: str, value: bool) -> bool:
 
 
 def get_project_story_tags(user_id: str, project_name: str) -> Dict[str, Any]:
-    """读取项目级故事主题参数（风格/题材/基调/世界观/人称/篇幅）。
+    """读取项目级故事主题参数（创作模式/风格/题材/基调/世界观/人称/篇幅）。
     
     返回格式：
     {
+        "workspace_mode": "script" | "novel",
         "style": str | None,
         "genres": list[str],
         "tones": list[str],
@@ -337,7 +356,7 @@ def get_project_story_tags(user_id: str, project_name: str) -> Dict[str, Any]:
     }
     """
     settings = get_project_settings(user_id, project_name)
-    return settings.get("story_tags", _DEFAULT_SETTINGS["story_tags"])
+    return dict(settings.get("story_tags", _DEFAULT_SETTINGS["story_tags"]))
 
 
 def set_project_story_tags(
@@ -349,6 +368,7 @@ def set_project_story_tags(
     worldviews: Optional[List[str]] = None,
     pov: Optional[str] = None,
     length_hint: Optional[str] = None,
+    workspace_mode: Optional[str] = None,
     active_inspiration_id: Optional[str] = None,
 ) -> Dict[str, Any]:
     """设置项目级故事主题参数（部分更新，仅覆盖传入的字段）。
@@ -362,6 +382,7 @@ def set_project_story_tags(
         worldviews: 世界观（多选，如["修真"]）
         pov: 人称视角（单选，如"第一人称"）
         length_hint: 篇幅（单选，如"中篇"）
+        workspace_mode: 创作模式（script=剧本 / novel=小说）
         active_inspiration_id: 当前生效的灵感 ID（可选）
     
     Returns:
@@ -370,7 +391,7 @@ def set_project_story_tags(
     with _lock:
         project_path = get_project_path(user_id, project_name)
         settings = _load(project_path)
-        current_tags = settings.get("story_tags", _DEFAULT_SETTINGS["story_tags"])
+        current_tags = dict(settings.get("story_tags", _DEFAULT_SETTINGS["story_tags"]))
         
         # 部分更新：仅覆盖传入的字段
         if style is not None:
@@ -385,8 +406,11 @@ def set_project_story_tags(
             current_tags["pov"] = pov
         if length_hint is not None:
             current_tags["length_hint"] = length_hint
+        if workspace_mode is not None:
+            current_tags["workspace_mode"] = "novel" if workspace_mode == "novel" else "script"
         
         settings["story_tags"] = current_tags
+        settings["workspace_mode"] = current_tags.get("workspace_mode", _DEFAULT_SETTINGS["workspace_mode"])
         
         # 更新 active_inspiration_id（如果传入）
         if active_inspiration_id is not None:

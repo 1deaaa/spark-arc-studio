@@ -19,6 +19,10 @@ export function normalizeToolName(rawToolName: unknown = '') {
     rewritecharacters: 'rewrite_all_characters',
     rewritecharacter: 'update_character',
     updatecharacter: 'update_character',
+    updatestorytags: 'update_project_story_tags',
+    updateprojectstorytags: 'update_project_story_tags',
+    updateprojectstorytag: 'update_project_story_tags',
+    updatestorytag: 'update_project_story_tags',
   };
   return aliases[key] || normalized;
 }

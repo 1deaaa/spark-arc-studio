@@ -453,7 +453,7 @@ function goToScriptWriter() {
 }
 
 .ctrl-num {
-  flex: 0 0 135px; /* 拒绝压缩，确保 "每章场数" 和控制按钮不重叠 */
+  flex: 0 0 135px; /* 拒绝压缩，确保场景密度标签和控制按钮不重叠 */
   min-width: 135px;
 }
 

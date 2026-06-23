@@ -139,14 +139,14 @@ function toggleFontHint() {
 
 // 暗色模式预制颜色 - 适合深色背景，亮度适中不刺眼，覆盖全色系
 const darkPresets = [
-    '#7aa2f7', // 星空蓝 (默认) - 经典冷静
-    '#bb9af7', // 薰衣草紫 - 优雅神秘
+    '#1deaaa', // 翡翠星火 (默认) - 清新活力
+    '#7aa2f7', // 星空蓝 - 经典冷静
     '#9ece6a', // 抹茶绿 - 自然清新
     '#ff9e64', // 晚霞橙 - 温暖活力
     '#f7768e', // 樱花粉 - 浪漫柔美
     '#2ac3de', // 赛博青 - 科技感
     '#e0af68', // 琥珀金 - 高贵典雅
-    '#73daca', // 薄荷绿 - 清凉舒适
+    '#bb9af7', // 薰衣草紫 - 优雅神秘
 ];
 
 // 亮色模式预制颜色 - 适合浅色背景，饱和度柔和不刺眼，覆盖全色系
@@ -244,7 +244,7 @@ const syncAppearanceFromStore = async () => {
 
     await nextTick();
     const current = getComputedStyle(document.documentElement).getPropertyValue('--spark-primary').trim();
-    if (!themePrimaryColorDark.value) themePrimaryColorDark.value = current || '#7aa2f7';
+    if (!themePrimaryColorDark.value) themePrimaryColorDark.value = current || '#1deaaa';
     if (!themePrimaryColorLight.value) themePrimaryColorLight.value = '#EB9460';
 };
 

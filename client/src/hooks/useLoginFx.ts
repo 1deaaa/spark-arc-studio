@@ -88,7 +88,7 @@ export function useLoginFx() {
     // ========== 主题色获取 ==========
     function getThemeColors(): ThemeColors {
         const style = getComputedStyle(document.body);
-        const primary = style.getPropertyValue('--spark-primary').trim() || '#7aa2f7';
+        const primary = style.getPropertyValue('--spark-primary').trim() || '#1deaaa';
         const accent = style.getPropertyValue('--spark-accent').trim() || '#bd93f9';
         
         return { primary, accent, isDark: isDark.value };
