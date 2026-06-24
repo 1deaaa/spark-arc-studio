@@ -253,7 +253,7 @@ def probe_hf_endpoint(
     return probe_url(url, timeout=timeout, method="HEAD")
 
 
-def get_git_clone_url(repo_url: str = "https://github.com/1deaaa/sparkarc.git") -> str:
+def get_git_clone_url(repo_url: str = "https://github.com/1deaaa/spark-arc-studio.git") -> str:
     """根据网络归属地返回适合 git clone 的 URL。
 
     中国大陆网络下通过 gh-proxy.com 代理 GitHub HTTPS 克隆地址，

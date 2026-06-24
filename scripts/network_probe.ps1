@@ -77,8 +77,8 @@ $MirrorTable = @{
     }
     git_clone = @{
         # 默认仓库：SparkArc 主仓库；中国大陆通过 gh-proxy 代理 HTTPS clone
-        default  = "https://github.com/1deaaa/sparkarc.git"
-        mainland = @("https://gh-proxy.com/https://github.com/1deaaa/sparkarc.git")
+        default  = "https://github.com/1deaaa/spark-arc-studio.git"
+        mainland = @("https://gh-proxy.com/https://github.com/1deaaa/spark-arc-studio.git")
     }
     python_standalone = @{
         # 专为 pyloader 准备的完整 LatestRelease 索引页 URL
