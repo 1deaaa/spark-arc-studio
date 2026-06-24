@@ -206,15 +206,20 @@ class LLMConfigGUI(
         self.platform_url_entry.grid(row=4, column=1, sticky="ew", pady=(0, self._scale(10)), padx=(0, self._scale(8)))
         ttk.Button(parent, text="保存 URL", command=self.save_platform_url, style="Primary.TButton").grid(row=4, column=2, sticky="ew", pady=(0, self._scale(10)))
 
-        ttk.Label(parent, text="API Key", style="Surface.TLabel").grid(row=5, column=0, sticky=tk.W, pady=(0, self._scale(12)))
-        self.api_key_entry = ttk.Entry(parent, show="*")
-        self.api_key_entry.grid(row=5, column=1, sticky="ew", pady=(0, self._scale(12)), padx=(0, self._scale(8)))
-        ttk.Button(parent, text="保存 Key", command=self.save_api_key, style="Primary.TButton").grid(row=5, column=2, sticky="ew", pady=(0, self._scale(12)))
+        ttk.Label(parent, text="充值地址", style="Surface.TLabel").grid(row=5, column=0, sticky=tk.W, pady=(0, self._scale(10)))
+        self.recharge_url_entry = ttk.Entry(parent)
+        self.recharge_url_entry.grid(row=5, column=1, sticky="ew", pady=(0, self._scale(10)), padx=(0, self._scale(8)))
+        ttk.Button(parent, text="保存充值地址", command=self.save_recharge_url, style="Primary.TButton").grid(row=5, column=2, sticky="ew", pady=(0, self._scale(10)))
 
-        ttk.Separator(parent, orient=tk.HORIZONTAL).grid(row=6, column=0, columnspan=3, sticky="ew", pady=(0, self._scale(12)))
+        ttk.Label(parent, text="API Key", style="Surface.TLabel").grid(row=6, column=0, sticky=tk.W, pady=(0, self._scale(12)))
+        self.api_key_entry = ttk.Entry(parent, show="*")
+        self.api_key_entry.grid(row=6, column=1, sticky="ew", pady=(0, self._scale(12)), padx=(0, self._scale(8)))
+        ttk.Button(parent, text="保存 Key", command=self.save_api_key, style="Primary.TButton").grid(row=6, column=2, sticky="ew", pady=(0, self._scale(12)))
+
+        ttk.Separator(parent, orient=tk.HORIZONTAL).grid(row=7, column=0, columnspan=3, sticky="ew", pady=(0, self._scale(12)))
 
         action_row = ttk.Frame(parent, style="Card.TFrame")
-        action_row.grid(row=7, column=0, columnspan=3, sticky="ew")
+        action_row.grid(row=8, column=0, columnspan=3, sticky="ew")
         for col in range(3):
             action_row.columnconfigure(col, weight=1)
         ttk.Button(action_row, text="新增平台", command=self.add_platform).grid(row=0, column=0, sticky="ew")
@@ -712,6 +717,7 @@ class LLMConfigGUI(
 
                 db_config[p_name] = {
                     "base_url": p["base_url"],
+                    "recharge_url": p.get("recharge_url") or "",
                     "api_key": api_key_val,
                     "models": models,
                     "_db_id": p["platform_id"],
@@ -726,7 +732,7 @@ class LLMConfigGUI(
                 self.platform_var.set("")
                 self.model_listbox.delete(0, tk.END)
                 self.probe_listbox.delete(0, tk.END)
-                for entry in (self.base_url_entry, self.platform_url_entry, self.api_key_entry):
+                for entry in (self.base_url_entry, self.platform_url_entry, self.recharge_url_entry, self.api_key_entry):
                     entry.config(state="normal")
                     entry.delete(0, tk.END)
                     if entry is self.base_url_entry:

@@ -705,6 +705,16 @@ async function checkServerOnLauncherStartup() {
 
   setApiBaseUrl(configured);
   serverStatusOk.value = true;
+  if (
+    configured === APP_DEFAULT_SERVER &&
+    !localBackendDirExists.value &&
+    !readAckPreference()
+  ) {
+    showDisclaimer.value = true;
+    bootReady.value = true;
+    return;
+  }
+
   const shouldAutoEnter = autoEnterNextTime.value && !skipAutoConnectOnce.value;
 
   if (shouldAutoEnter && openRemoteApp(configured)) {
