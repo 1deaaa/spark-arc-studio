@@ -19,6 +19,8 @@ struct LauncherThemeState {
     updated_at: Option<u64>,
 }
 
+const SPARKARC_REPO_URL: &str = "https://github.com/1deaaa/spark-arc-studio.git";
+
 fn launcher_theme_state_path(app: &AppHandle) -> Result<PathBuf, String> {
     let dir = app.path().app_data_dir().map_err(|err| err.to_string())?;
     fs::create_dir_all(&dir).map_err(|err| err.to_string())?;
@@ -37,7 +39,9 @@ fn get_launcher_theme_state(app: AppHandle) -> Result<Option<LauncherThemeState>
         return Ok(None);
     }
 
-    serde_json::from_str(&raw).map(Some).map_err(|err| err.to_string())
+    serde_json::from_str(&raw)
+        .map(Some)
+        .map_err(|err| err.to_string())
 }
 
 #[tauri::command]
@@ -72,7 +76,9 @@ fn read_service_record() -> Result<Option<serde_json::Value>, String> {
         return Ok(None);
     }
     let raw = fs::read_to_string(path).map_err(|err| err.to_string())?;
-    serde_json::from_str(&raw).map(Some).map_err(|err| err.to_string())
+    serde_json::from_str(&raw)
+        .map(Some)
+        .map_err(|err| err.to_string())
 }
 
 /// 校验记录的 projectRoot 是否仍然有效。
@@ -87,6 +93,20 @@ fn is_record_valid(record: &serde_json::Value) -> bool {
     (root.join("server").join("app.py")).is_file()
         || root.join("start.bat").is_file()
         || root.join("start.sh").is_file()
+}
+
+/// 返回服务记录中有效的项目根目录。
+fn valid_record_project_root() -> Result<Option<PathBuf>, String> {
+    let Some(record) = read_service_record()? else {
+        return Ok(None);
+    };
+    if !is_record_valid(&record) {
+        return Ok(None);
+    }
+    let Some(root_str) = record.get("projectRoot").and_then(|v| v.as_str()) else {
+        return Ok(None);
+    };
+    Ok(Some(PathBuf::from(root_str)))
 }
 
 /// 获取当前可执行文件所在目录。
@@ -133,7 +153,8 @@ fn read_deployment_log(lines: Option<usize>) -> Result<String, String> {
     if !path.is_file() {
         return Ok(String::new());
     }
-    let raw = fs::read_to_string(path).map_err(|err| err.to_string())?;
+    let bytes = fs::read(path).map_err(|err| err.to_string())?;
+    let raw = String::from_utf8_lossy(&bytes).to_string();
     let limit = lines.unwrap_or(200);
     let collected: Vec<&str> = raw.lines().collect();
     if collected.len() <= limit {
@@ -146,27 +167,38 @@ fn read_deployment_log(lines: Option<usize>) -> Result<String, String> {
 /// 全局部署子进程句柄，用于避免重复启动。
 static DEPLOYMENT_CHILD: Mutex<Option<std::process::Child>> = Mutex::new(None);
 
+fn deployment_child_is_running() -> Result<bool, String> {
+    let mut guard = DEPLOYMENT_CHILD.lock().map_err(|err| err.to_string())?;
+    let Some(child) = guard.as_mut() else {
+        return Ok(false);
+    };
+    match child.try_wait().map_err(|err| err.to_string())? {
+        Some(_) => {
+            *guard = None;
+            Ok(false)
+        }
+        None => Ok(true),
+    }
+}
+
 /// 命令：启动本地一键部署。
 ///
 /// 流程：
-/// 1. 探测 launcher 所在目录，决定克隆目标。
-/// 2. 探测网络环境，选择 Git 克隆 URL（国内使用 gh-proxy）。
+/// 1. 优先复用用户目录注册的项目或 launcher 同级项目。
+/// 2. 若不存在可用项目，再探测网络环境，选择 Git 克隆 URL（国内使用 gh-proxy）。
 /// 3. 调用系统 Git 克隆仓库。
 /// 4. 克隆完成后运行平台对应的 start 脚本。
 #[tauri::command]
 async fn start_local_deployment(_app: AppHandle) -> Result<(), String> {
     // 幂等：如果已经有部署进程在跑，直接返回
-    {
-        let guard = DEPLOYMENT_CHILD.lock().map_err(|err| err.to_string())?;
-        if guard.is_some() {
-            return Ok(());
-        }
+    if deployment_child_is_running()? {
+        return Ok(());
     }
 
-    let launcher_dir = launcher_dir()?;
-    let target_dir = launcher_dir.join("sparkarc-server");
     let user_dir = sparkarc_user_dir()?;
+    let target_dir = user_dir.join("sparkarc-server");
     fs::create_dir_all(&user_dir).map_err(|err| err.to_string())?;
+    let launcher_dir = launcher_dir()?;
     let log_path = deploy_log_path()?;
 
     // 清空旧日志
@@ -177,7 +209,11 @@ async fn start_local_deployment(_app: AppHandle) -> Result<(), String> {
 
     // 写入启动日志
     let append_log = |msg: &str| {
-        let line = format!("{} {}\n", chrono::Local::now().format("%Y-%m-%d %H:%M:%S"), msg);
+        let line = format!(
+            "{} {}\n",
+            chrono::Local::now().format("%Y-%m-%d %H:%M:%S"),
+            msg
+        );
         let _ = fs::OpenOptions::new()
             .create(true)
             .append(true)
@@ -186,6 +222,22 @@ async fn start_local_deployment(_app: AppHandle) -> Result<(), String> {
     };
 
     append_log("开始本地部署...");
+
+    if let Some(project_root) = valid_record_project_root()? {
+        append_log(&format!(
+            "检测到已注册的后端目录，尝试启动: {:?}",
+            project_root
+        ));
+        return start_backend(&project_root, is_windows, &append_log).await;
+    }
+
+    if let Some(project_root) = find_sibling_backend() {
+        append_log(&format!(
+            "检测到启动器同级后端目录，尝试启动: {:?}",
+            project_root
+        ));
+        return start_backend(&project_root, is_windows, &append_log).await;
+    }
 
     // 先尝试 probe 脚本 / Python 获取网络镜像信息
     let probe_result = probe_network_for_git_url(&launcher_dir, &append_log).await?;
@@ -255,8 +307,11 @@ async fn start_local_deployment(_app: AppHandle) -> Result<(), String> {
         "platform": std::env::consts::OS,
         "machine": std::env::consts::ARCH,
     });
-    fs::write(service_record_path()?, serde_json::to_string_pretty(&record).unwrap())
-        .map_err(|err| err.to_string())?;
+    fs::write(
+        service_record_path()?,
+        serde_json::to_string_pretty(&record).unwrap(),
+    )
+    .map_err(|err| err.to_string())?;
 
     start_backend(&target_dir, is_windows, &append_log).await
 }
@@ -267,19 +322,19 @@ struct ProbeResult {
 }
 
 /// 通过 PowerShell 或 Python 探测网络环境，返回推荐 Git URL。
-async fn probe_network_for_git_url<F>(
-    launcher_dir: &Path,
-    _log: &F,
-) -> Result<ProbeResult, String>
+async fn probe_network_for_git_url<F>(launcher_dir: &Path, log: &F) -> Result<ProbeResult, String>
 where
     F: Fn(&str),
 {
-    let repo_url = "https://github.com/1deaaa/sparkarc.git";
+    let repo_url = SPARKARC_REPO_URL;
 
     // Windows 优先用 PowerShell probe
     #[cfg(target_os = "windows")]
     {
-        let probe_script = launcher_dir.join("..").join("scripts").join("network_probe.ps1");
+        let probe_script = launcher_dir
+            .join("..")
+            .join("scripts")
+            .join("network_probe.ps1");
         if probe_script.is_file() {
             let output = Command::new("powershell.exe")
                 .args([
@@ -338,9 +393,87 @@ where
         }
     }
 
+    if let Some(country_code) = probe_country_code_without_repo_files() {
+        log(&format!("内置网络探测国家/地区: {}", country_code));
+        if country_code == "CN" {
+            return Ok(ProbeResult {
+                git_url: format!("https://gh-proxy.com/{}", repo_url),
+            });
+        }
+    } else {
+        log("内置网络探测失败，使用默认 GitHub 地址。");
+    }
+
     Ok(ProbeResult {
         git_url: repo_url.to_string(),
     })
+}
+
+fn probe_country_code_without_repo_files() -> Option<String> {
+    let providers = [
+        "https://freeipapi.com/api/json/",
+        "https://ipapi.co/json/",
+        "https://ipwho.is/json/",
+    ];
+
+    for provider in providers {
+        let Some(stdout) = fetch_geoip_json(provider) else {
+            continue;
+        };
+        let Ok(json) = serde_json::from_str::<serde_json::Value>(&stdout) else {
+            continue;
+        };
+        let country_code = json
+            .get("countryCode")
+            .or_else(|| json.get("country_code"))
+            .or_else(|| json.get("country"))
+            .and_then(|v| v.as_str())
+            .unwrap_or("")
+            .trim()
+            .to_uppercase();
+        if country_code.len() >= 2 {
+            return Some(country_code);
+        }
+    }
+    None
+}
+
+#[cfg(target_os = "windows")]
+fn fetch_geoip_json(url: &str) -> Option<String> {
+    let script = format!(
+        "(Invoke-WebRequest -Uri '{}' -TimeoutSec 3 -UseBasicParsing).Content",
+        url.replace('\'', "''")
+    );
+    let output = Command::new("powershell.exe")
+        .args([
+            "-NoProfile",
+            "-ExecutionPolicy",
+            "Bypass",
+            "-Command",
+            &script,
+        ])
+        .stdout(Stdio::piped())
+        .stderr(Stdio::null())
+        .output()
+        .ok()?;
+    if !output.status.success() {
+        return None;
+    }
+    Some(String::from_utf8_lossy(&output.stdout).to_string())
+}
+
+#[cfg(not(target_os = "windows"))]
+fn fetch_geoip_json(url: &str) -> Option<String> {
+    let output = Command::new("curl")
+        .args(["-fsSL", "--max-time", "3", url])
+        .stdout(Stdio::piped())
+        .stderr(Stdio::null())
+        .output()
+        .ok()?;
+    if !output.status.success() {
+        return None;
+    }
+    Some(String::from_utf8_lossy(&output.stdout).to_string())
 }
 
 /// 启动后端服务。
@@ -357,30 +490,31 @@ where
     if !script_path.is_file() {
         return Err(format!("启动脚本不存在: {:?}", script_path));
     }
+    let log_path = deploy_log_path()?;
+
+    let log_file = fs::OpenOptions::new()
+        .create(true)
+        .append(true)
+        .open(&log_path)
+        .map_err(|err| err.to_string())?;
+    let err_log_file = log_file.try_clone().map_err(|err| err.to_string())?;
 
     let child = if is_windows {
-        Command::new("powershell.exe")
-            .args([
-                "-NoProfile",
-                "-ExecutionPolicy",
-                "Bypass",
-                "-Command",
-                &format!(
-                    "Start-Process -FilePath '{}' -WorkingDirectory '{}' -WindowStyle Hidden",
-                    script_path.to_string_lossy(),
-                    project_root.to_string_lossy()
-                ),
-            ])
-            .stdout(Stdio::null())
-            .stderr(Stdio::null())
+        Command::new("cmd.exe")
+            .args(["/C", &format!("\"{}\"", script_path.to_string_lossy())])
+            .current_dir(project_root)
+            .stdin(Stdio::null())
+            .stdout(Stdio::from(log_file))
+            .stderr(Stdio::from(err_log_file))
             .spawn()
             .map_err(|err| format!("启动后端失败: {}", err))?
     } else {
         Command::new("bash")
             .arg(&script_path)
             .current_dir(project_root)
-            .stdout(Stdio::null())
-            .stderr(Stdio::null())
+            .stdin(Stdio::null())
+            .stdout(Stdio::from(log_file))
+            .stderr(Stdio::from(err_log_file))
             .spawn()
             .map_err(|err| format!("启动后端失败: {}", err))?
     };

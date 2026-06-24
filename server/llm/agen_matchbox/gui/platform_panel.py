@@ -14,7 +14,7 @@ if __package__ in (None, "", "gui"):
         sys.path.insert(0, _PARENT_DIR)
     __package__ = f"{os.path.basename(_PKG_DIR)}.{os.path.basename(_GUI_DIR)}"
 
-from ..utils import normalize_base_url
+from ..utils import normalize_base_url, normalize_recharge_url
 from .dpi import prepare_toplevel_window
 
 
@@ -49,6 +49,10 @@ class PlatformPanelMixin:
 
         self.platform_url_entry.delete(0, tk.END)
         self.platform_url_entry.insert(0, base_url)
+
+        recharge_url = platform_cfg.get("recharge_url", "") or ""
+        self.recharge_url_entry.delete(0, tk.END)
+        self.recharge_url_entry.insert(0, recharge_url)
 
         # 处理 api_key
         self.api_key_entry.delete(0, tk.END)
@@ -128,8 +132,8 @@ class PlatformPanelMixin:
         prepare_toplevel_window(
             dialog,
             self.root,
-            base_size=(560, 320),
-            min_size=(460, 260),
+            base_size=(560, 370),
+            min_size=(460, 320),
             ui_scale=getattr(self, "ui_scale", 1.0),
         )
         dialog.columnconfigure(0, weight=1)
@@ -160,10 +164,15 @@ class PlatformPanelMixin:
         key_entry = ttk.Entry(form)
         key_entry.grid(row=2, column=1, sticky="ew", pady=(0, 10))
 
+        ttk.Label(form, text="充值地址 (可选):", style="Surface.TLabel").grid(row=3, column=0, sticky=tk.W, padx=(0, 10), pady=(0, 10))
+        recharge_entry = ttk.Entry(form)
+        recharge_entry.grid(row=3, column=1, sticky="ew", pady=(0, 10))
+
         def do_add():
             name = name_entry.get().strip()
             url = url_entry.get().strip()
             key = key_entry.get().strip()
+            recharge_url = recharge_entry.get().strip()
 
             if not name or not url:
                 from tkinter import messagebox as mb
@@ -175,6 +184,12 @@ class PlatformPanelMixin:
                 return
 
             url = normalize_base_url(url)
+            try:
+                recharge_url = normalize_recharge_url(recharge_url)
+            except ValueError as exc:
+                from tkinter import messagebox as mb
+                mb.showerror("错误", str(exc), parent=dialog)
+                return
 
             if name in self.current_config:
                 from tkinter import messagebox as mb
@@ -182,11 +197,17 @@ class PlatformPanelMixin:
                 return
 
             try:
-                created = self.ai_manager.admin_add_sys_platform(name, url, key or None)
+                created = self.ai_manager.admin_add_sys_platform(
+                    name,
+                    url,
+                    key or None,
+                    recharge_url=recharge_url,
+                )
                 p_id = created.id if hasattr(created, 'id') else None
 
                 self.current_config[name] = {
                     "base_url": url,
+                    "recharge_url": recharge_url or "",
                     "api_key": key or "",
                     "models": {},
                     "_db_id": p_id,
@@ -202,7 +223,7 @@ class PlatformPanelMixin:
                 mb.showerror("错误", f"添加平台失败: {e}", parent=dialog)
 
         btn_frame = ttk.Frame(form, style="Card.TFrame")
-        btn_frame.grid(row=3, column=0, columnspan=2, sticky="e", pady=(8, 0))
+        btn_frame.grid(row=4, column=0, columnspan=2, sticky="e", pady=(8, 0))
         ttk.Button(btn_frame, text="确定", command=do_add, style="Primary.TButton").pack(side=tk.LEFT, padx=5)
         ttk.Button(btn_frame, text="取消", command=dialog.destroy).pack(side=tk.LEFT, padx=5)
 
@@ -263,6 +284,43 @@ class PlatformPanelMixin:
         except Exception as e:
             self.log(f"✗ 保存失败: {e}")
             messagebox.showerror("错误", f"保存平台 URL 失败: {e}")
+
+    def save_recharge_url(self):
+        """保存平台充值地址（调用后端 admin_update_sys_platform）。"""
+        platform_name = self._resolve_platform_name()
+        if not platform_name or platform_name not in self.current_config:
+            if self.last_selected_platform_name:
+                platform_name = self.last_selected_platform_name
+            else:
+                messagebox.showwarning("警告", "请先选择一个有效的平台")
+                return
+
+        recharge_url = self.recharge_url_entry.get().strip()
+        try:
+            recharge_url = normalize_recharge_url(recharge_url)
+        except ValueError as exc:
+            messagebox.showerror("错误", str(exc))
+            return
+
+        try:
+            db_id = self.current_config[platform_name].get("_db_id")
+            if not db_id:
+                raise ValueError("无法获取平台数据库 ID")
+            self.ai_manager.admin_update_sys_platform(
+                db_id,
+                recharge_url=recharge_url,
+                update_recharge_url=True,
+            )
+            self.current_config[platform_name]["recharge_url"] = recharge_url or ""
+            self.recharge_url_entry.delete(0, tk.END)
+            if recharge_url:
+                self.recharge_url_entry.insert(0, recharge_url)
+            if hasattr(self, "_update_overview_state"):
+                self._update_overview_state()
+            self.log(f"✓ 平台 '{platform_name}' 的充值地址已更新", tag="success")
+        except Exception as e:
+            self.log(f"✗ 保存失败: {e}")
+            messagebox.showerror("错误", f"保存充值地址失败: {e}")
 
     def set_as_default(self):
         """将选中的平台设为默认（调用后端 admin_set_sys_platform_default）。"""

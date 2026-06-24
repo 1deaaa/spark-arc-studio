@@ -130,11 +130,21 @@
         <button
           type="button"
           class="launcher-cta"
-          :disabled="serverChecking"
+          :disabled="serverChecking || localBackendDeploying"
           @click="applyServer"
         >
-          <span v-if="serverChecking" class="launcher-cta__spinner"></span>
+          <span v-if="serverChecking || localBackendDeploying" class="launcher-cta__spinner"></span>
           <span v-else>{{ t('launcher.openServer') }}</span>
+        </button>
+
+        <button
+          v-if="isTauriDesktop && localBackendDirExists && !serverStatusOk"
+          type="button"
+          class="launcher-secondary-action"
+          :disabled="localBackendDeploying"
+          @click="startLocalDeployment"
+        >
+          {{ localBackendDeploying ? t('launcher.localDeploy.starting') : t('launcher.localDeploy.startButton') }}
         </button>
 
         <div class="launcher-status" @click="toggleServerPanel">
@@ -239,6 +249,53 @@
         </div>
       </Transition>
 
+      <!-- 本地部署 / 启动进度弹窗 -->
+      <Transition name="panel-slide">
+        <div v-if="showDeploymentPanel" class="launcher-overlay">
+          <div class="launcher-overlay__card launcher-overlay__card--wide">
+            <div class="launcher-overlay__header">
+              <span class="launcher-overlay__title">{{ t('launcher.localDeploy.title') }}</span>
+              <button
+                v-if="!localBackendDeploying"
+                type="button"
+                class="launcher-overlay__close"
+                @click="closeDeploymentPanel"
+              >
+                &times;
+              </button>
+            </div>
+            <div class="launcher-overlay__body">
+              <div class="launcher-deploy-status">
+                <span
+                  class="launcher-status__dot"
+                  :class="{ checking: localBackendDeploying, ok: deploymentReady, error: !!deploymentError }"
+                ></span>
+                <span>{{ deploymentStatusText }}</span>
+              </div>
+              <p class="launcher-deploy-help">{{ t('launcher.localDeploy.help') }}</p>
+              <pre v-if="deploymentLog" class="launcher-deploy-log">{{ deploymentLog }}</pre>
+              <p v-if="deploymentError" class="launcher-deploy-error">{{ deploymentError }}</p>
+              <div v-if="!localBackendDeploying" class="launcher-disclaimer__actions">
+                <button
+                  type="button"
+                  class="launcher-disclaimer__btn launcher-disclaimer__btn--secondary"
+                  @click="closeDeploymentPanel"
+                >
+                  {{ t('launcher.localDeploy.close') }}
+                </button>
+                <button
+                  type="button"
+                  class="launcher-disclaimer__btn launcher-disclaimer__btn--primary"
+                  @click="startLocalDeployment"
+                >
+                  {{ t('launcher.localDeploy.retry') }}
+                </button>
+              </div>
+            </div>
+          </div>
+        </div>
+      </Transition>
+
       <!-- 移动端本地部署引导弹窗 -->
       <Transition name="panel-slide">
         <div v-if="showMobileGuide" class="launcher-overlay" @click.self="closeMobileGuide">
@@ -299,11 +356,14 @@ import { SUPPORTED_LOCALES, normalizeLocale, type AppLocale } from '@/i18n/types
 import {
   LAUNCHER_DEFAULT_REMOTE_ACK_KEY,
   LAUNCHER_DEFAULT_REMOTE_SERVER,
-  LAUNCHER_SERVICE_RECORD_FILE,
+  LAUNCHER_LOCAL_PORTS,
 } from './constants';
 
 const APP_DEFAULT_SERVER = LAUNCHER_DEFAULT_REMOTE_SERVER;
 const AUTO_ENTER_KEY = 'spark_launcher_auto_enter';
+const DEPLOYMENT_LOG_POLL_MS = 1200;
+const DEPLOYMENT_HEALTH_POLL_MS = 1800;
+const DEPLOYMENT_WAIT_TIMEOUT_MS = 12 * 60 * 1000;
 
 const { t, locale } = useI18n();
 const themeStore = useThemeStore();
@@ -357,8 +417,11 @@ const serverStatusOk = ref(false);
 // 免责声明 / 本地部署相关状态
 const showDisclaimer = ref(false);
 const showMobileGuide = ref(false);
+const showDeploymentPanel = ref(false);
 const localBackendDirExists = ref(false);
 const localBackendDeploying = ref(false);
+const deploymentReady = ref(false);
+const deploymentError = ref('');
 const deploymentLog = ref('');
 
 const serverDisplayAddr = computed(() => {
@@ -372,8 +435,16 @@ const serverDisplayAddr = computed(() => {
   }
 });
 
+const deploymentStatusText = computed(() => {
+  if (deploymentError.value) return t('launcher.localDeploy.failed');
+  if (deploymentReady.value) return t('launcher.localDeploy.ready');
+  if (localBackendDeploying.value) return t('launcher.localDeploy.running');
+  return t('launcher.localDeploy.idle');
+});
+
 let mediaQuery: MediaQueryList | null = null;
 let removeThemeListener: (() => void) | null = null;
+let deploymentLogTimer: number | null = null;
 
 function readAutoEnterPreference(): boolean {
   if (typeof window === 'undefined') return false;
@@ -450,8 +521,7 @@ function resetServer() {
 }
 
 async function detectLocalhandshake(): Promise<string | null> {
-  const localPorts = [6688, 7788];
-  for (const port of localPorts) {
+  for (const port of LAUNCHER_LOCAL_PORTS) {
     const localUrl = `http://localhost:${port}`;
     try {
       const res = await checkHealth(localUrl, 1000);
@@ -498,6 +568,46 @@ function acknowledgeDefaultRemote() {
   showDisclaimer.value = false;
 }
 
+function stopDeploymentLogPolling() {
+  if (deploymentLogTimer !== null && typeof window !== 'undefined') {
+    window.clearInterval(deploymentLogTimer);
+  }
+  deploymentLogTimer = null;
+}
+
+async function refreshDeploymentLog() {
+  if (!isTauriDesktop.value) return;
+  try {
+    deploymentLog.value = await invoke<string>('read_deployment_log', { lines: 80 });
+  } catch {
+    // 日志只是辅助信息，读取失败不打断部署流程。
+  }
+}
+
+function startDeploymentLogPolling() {
+  stopDeploymentLogPolling();
+  void refreshDeploymentLog();
+  if (typeof window === 'undefined') return;
+  deploymentLogTimer = window.setInterval(() => {
+    void refreshDeploymentLog();
+  }, DEPLOYMENT_LOG_POLL_MS);
+}
+
+async function waitForLocalBackendReady(): Promise<string | null> {
+  const startedAt = Date.now();
+  while (Date.now() - startedAt < DEPLOYMENT_WAIT_TIMEOUT_MS) {
+    const localDetected = await detectLocalhandshake();
+    if (localDetected) return localDetected;
+    await new Promise(resolve => window.setTimeout(resolve, DEPLOYMENT_HEALTH_POLL_MS));
+  }
+  return null;
+}
+
+function closeDeploymentPanel() {
+  if (localBackendDeploying.value) return;
+  showDeploymentPanel.value = false;
+}
+
 async function startLocalDeployment() {
   showDisclaimer.value = false;
 
@@ -506,13 +616,38 @@ async function startLocalDeployment() {
     return;
   }
 
+  showDeploymentPanel.value = true;
   localBackendDeploying.value = true;
+  deploymentReady.value = false;
+  deploymentError.value = '';
   deploymentLog.value = '';
+  serverChecking.value = true;
+  startDeploymentLogPolling();
+
   try {
     await invoke('start_local_deployment');
-    // 启动后会自动轮询本地端口，成功后跳转
+    const localDetected = await waitForLocalBackendReady();
+    await refreshDeploymentLog();
+
+    if (!localDetected) {
+      deploymentError.value = t('launcher.localDeploy.timeout');
+      return;
+    }
+
+    deploymentReady.value = true;
+    localBackendDirExists.value = true;
+    setApiBaseUrl(localDetected);
+    serverInput.value = localDetected;
+    serverStatusOk.value = true;
+    showDeploymentPanel.value = false;
+    openRemoteApp(localDetected);
   } catch (err) {
-    deploymentLog.value = String(err);
+    await refreshDeploymentLog();
+    deploymentError.value = String(err);
+  } finally {
+    serverChecking.value = false;
+    localBackendDeploying.value = false;
+    stopDeploymentLogPolling();
   }
 }
 
@@ -570,6 +705,16 @@ async function checkServerOnLauncherStartup() {
 
   setApiBaseUrl(configured);
   serverStatusOk.value = true;
+  if (
+    configured === APP_DEFAULT_SERVER &&
+    !localBackendDirExists.value &&
+    !readAckPreference()
+  ) {
+    showDisclaimer.value = true;
+    bootReady.value = true;
+    return;
+  }
+
   const shouldAutoEnter = autoEnterNextTime.value && !skipAutoConnectOnce.value;
 
   if (shouldAutoEnter && openRemoteApp(configured)) {
@@ -626,6 +771,7 @@ watch(
 onBeforeUnmount(() => {
   destroyBackground();
   destroyFx();
+  stopDeploymentLogPolling();
   removeThemeListener?.();
   removeThemeListener = null;
   mediaQuery = null;
@@ -1126,6 +1272,33 @@ watch(autoEnterNextTime, (nextValue) => {
   background: color-mix(in srgb, var(--spark-panel-bg), transparent 40%);
 }
 
+.launcher-secondary-action {
+  min-height: 38px;
+  padding: 0 18px;
+  border-radius: 12px;
+  border: 1px solid color-mix(in srgb, var(--spark-primary), transparent 55%);
+  background: color-mix(in srgb, var(--spark-primary), transparent 90%);
+  color: var(--spark-primary);
+  font-size: 13px;
+  font-weight: 600;
+  cursor: pointer;
+  transition: background-color 0.2s ease, border-color 0.2s ease, transform 0.1s ease;
+}
+
+.launcher-secondary-action:hover:not(:disabled) {
+  background: color-mix(in srgb, var(--spark-primary), transparent 82%);
+  border-color: color-mix(in srgb, var(--spark-primary), transparent 35%);
+}
+
+.launcher-secondary-action:active:not(:disabled) {
+  transform: translateY(1px);
+}
+
+.launcher-secondary-action:disabled {
+  opacity: 0.55;
+  cursor: wait;
+}
+
 .launcher-status__dot {
   width: 8px;
   height: 8px;
@@ -1197,6 +1370,10 @@ watch(autoEnterNextTime, (nextValue) => {
   backdrop-filter: blur(24px) saturate(180%);
   -webkit-backdrop-filter: blur(24px) saturate(180%);
   overflow: hidden;
+}
+
+.launcher-overlay__card--wide {
+  width: min(100%, 560px);
 }
 
 .launcher-overlay__card::before {
@@ -1365,6 +1542,48 @@ watch(autoEnterNextTime, (nextValue) => {
   width: 16px;
   height: 16px;
   accent-color: var(--spark-primary);
+}
+
+.launcher-deploy-status {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  font-size: 14px;
+  font-weight: 600;
+  color: var(--spark-text);
+}
+
+.launcher-deploy-help {
+  margin: 0;
+  color: color-mix(in srgb, var(--spark-text), transparent 24%);
+  font-size: 13px;
+  line-height: 1.65;
+}
+
+.launcher-deploy-log {
+  margin: 0;
+  max-height: 240px;
+  overflow: auto;
+  padding: 12px;
+  border-radius: 12px;
+  border: 1px solid color-mix(in srgb, var(--spark-border), transparent 45%);
+  background: color-mix(in srgb, var(--spark-bg), transparent 18%);
+  color: color-mix(in srgb, var(--spark-text), transparent 15%);
+  font-family: var(--spark-mono);
+  font-size: 11px;
+  line-height: 1.55;
+  white-space: pre-wrap;
+  word-break: break-word;
+}
+
+.launcher-deploy-error {
+  margin: 0;
+  padding: 10px 12px;
+  border-radius: 12px;
+  background: color-mix(in srgb, var(--spark-danger, #ef4444), transparent 88%);
+  color: var(--spark-danger, #ef4444);
+  font-size: 12px;
+  line-height: 1.55;
 }
 
 /* --- 面板滑入动画 --- */
