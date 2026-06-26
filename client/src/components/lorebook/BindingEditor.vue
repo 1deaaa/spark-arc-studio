@@ -1,57 +1,23 @@
 <template>
   <div class="binding-editor-container">
-    <SparkAlert type="info" style="margin-bottom: 16px">
-      <strong>提示：</strong>角色绑定会在导出 SQLite 时自动同步到数据库，无需手动配置。
-      请在“世界观&角色”标签页中管理角色，导出时会自动将角色 ID 和名称写入 binding_chr 表。
-    </SparkAlert>
-
-    <n-collapse style="margin-bottom: 16px">
-      <n-collapse-item title="💡 完整使用示例" name="example">
-        <n-card size="small">
-          <strong>1. 在剧本中编写对话：</strong>
-          <pre style="background: rgba(128,128,128,0.1); padding: 12px; border-radius: 4px; margin: 8px 0; overflow-x: auto;"><code>{
-  "id": 10001,
-  "chr": 0,
-  "txt": "欢迎来到{player_name}的冒险之旅！",
-  "act": {
-    "bgm": "town_theme",
-    "weather": ["sunny", "12h", "{place}"]
-  }
-}</code></pre>
-
-          <strong>2. 配置行为函数绑定：</strong>
-          <ul style="margin: 8px 0;">
-            <li><code>bgm</code> → <code>PlayBGM(string musicName)</code></li>
-            <li><code>weather</code> → <code>ChangeWeather(string type, string duration, string location)</code></li>
-          </ul>
-
-          <strong>3. 配置全局注册表：</strong>
-          <ul style="margin: 8px 0;">
-            <li><code>player_name</code> = <code>["艾莉"]</code></li>
-            <li><code>place</code> = <code>["沃森区", "太平洲", "狗镇"]</code></li>
-          </ul>
-
-          <strong>4. Unity C# 实现示例：</strong>
-          <pre style="background: rgba(128,128,128,0.1); padding: 12px; border-radius: 4px; margin: 8px 0; overflow-x: auto;"><code>// 从数据库读取行为绑定
-var actBinding = db.Query&lt;BindAct&gt;("SELECT * FROM binding_act WHERE act_name = 'bgm'");
-// 调用：PlayBGM("town_theme")
-
-// 替换占位符
-var registry = db.Query&lt;Registry&gt;("SELECT * FROM registry WHERE name = 'player_name'");
-string text = dialogue.txt.Replace("{player_name}", registry.value[0]);
-// 结果："欢迎来到艾莉的冒险之旅！"</code></pre>
-        </n-card>
-      </n-collapse-item>
-    </n-collapse>
-
     <n-space vertical :size="16">
       <!-- 行为函数绑定 -->
       <n-card 
-        title="行为函数绑定 (Unity)" 
         :segmented="{ content: true }"
         :bordered="false"
         size="small"
       >
+        <template #header>
+          <n-space align="center" :size="4">
+            <span>行为函数绑定 (Unity)</span>
+            <n-tooltip trigger="hover" placement="right">
+              <template #trigger>
+                <n-icon :component="Info" size="16" style="cursor: pointer; opacity: 0.6; display: flex;" />
+              </template>
+              配置对话中的 act 行为节点与 Unity C# 函数的映射关系
+            </n-tooltip>
+          </n-space>
+        </template>
         <template #header-extra>
           <n-space align="center" :size="8">
             <input
@@ -61,6 +27,12 @@ string text = dialogue.txt.Replace("{player_name}", registry.value[0]);
               style="display: none"
               @change="importActionManifest"
             />
+            <n-tooltip trigger="hover" placement="top" style="max-width: 320px">
+              <template #trigger>
+                <n-icon :component="Info" size="16" style="cursor: pointer; opacity: 0.6; display: flex;" />
+              </template>
+              导入由 Unity 编辑器导出的行为清单 JSON 文件（在 Unity 菜单中执行 SparkArc -> Actions -> Export Action Manifest 导出）。这能够将 C# 代码中带有 [SparkArcAction] 标记的 Handler 方法自动同步到此处，省去手动创建映射的步骤。
+            </n-tooltip>
             <n-button size="small" secondary strong @click="openManifestPicker">
               <template #icon>
                 <n-icon :component="Upload" />
@@ -70,10 +42,6 @@ string text = dialogue.txt.Replace("{player_name}", registry.value[0]);
             <n-icon :component="Code" size="20" />
           </n-space>
         </template>
-
-        <SparkAlert type="info" style="margin-bottom: 12px">
-          配置对话中的 act 行为节点与 Unity C# 函数的映射关系
-        </SparkAlert>
 
         <n-space vertical :size="12">
           <!-- 添加行为绑定 -->
@@ -184,18 +152,24 @@ string text = dialogue.txt.Replace("{player_name}", registry.value[0]);
 
       <!-- 全局注册表 -->
       <n-card 
-        title="全局注册表 (Unity)" 
         :segmented="{ content: true }"
         :bordered="false"
         size="small"
       >
+        <template #header>
+          <n-space align="center" :size="4">
+            <span>全局注册表 (Unity)</span>
+            <n-tooltip trigger="hover" placement="right">
+              <template #trigger>
+                <n-icon :component="Info" size="16" style="cursor: pointer; opacity: 0.6; display: flex;" />
+              </template>
+              注册全局变量和枚举列表，可在对话中用 {"{name}"} 占位符引用
+            </n-tooltip>
+          </n-space>
+        </template>
         <template #header-extra>
           <n-icon :component="List" size="20" />
         </template>
-
-        <SparkAlert type="info" style="margin-bottom: 12px">
-          注册全局变量和枚举列表，可在对话中用 {"{name}"} 占位符引用
-        </SparkAlert>
 
         <n-space vertical :size="12">
           <!-- 添加注册项 -->
@@ -274,10 +248,10 @@ import { storeToRefs } from 'pinia';
 import { useI18n } from 'vue-i18n';
 import {
   NCard, NSpace, NInput, NButton, NIcon,
-  NCollapse, NCollapseItem, NForm, NFormItem, NEmpty
+  NCollapse, NCollapseItem, NForm, NFormItem, NEmpty, NTooltip
 } from 'naive-ui';
 import SparkAlert from '@/components/share/SparkAlert.vue';
-import { Code, List, Plus, Trash, Upload } from '@lucide/vue';
+import { Code, List, Plus, Trash, Upload, Info } from '@lucide/vue';
 import { useProjectStore } from '@/components/stores/projectStore';
 import { useActionBindingStore } from '@/components/stores/actionBindingStore';
 import bus from '@/eventBus';
@@ -500,7 +474,7 @@ watch(() => projectStore.currentProject, () => {
 
 <style scoped>
 .binding-editor-container {
-  padding: var(--spark-panel-padding);
+  padding-bottom: var(--spark-panel-padding);
   max-width: 1200px;
   margin: 0 auto;
 }

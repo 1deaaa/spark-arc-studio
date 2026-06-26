@@ -13,9 +13,10 @@
 SparkArc can drive a massive volume of API calls for your platform.
 
 *  **Provider-Based Model Management**:
-Users can freely add multiple models from your platform and bind them to different purposes.
+Users can freely add multiple models from your platform and bind them to different purposes.**Click the top-up icon to jump directly to your top-up page.**
 Additionally, **users can conveniently deploy the service to the public internet and designate your platform as the system provider for their downstream users.**
 ![alt text](support-model-image.png)
+![alt text](support-charge-image.png)
 *   **High-Frequency Multi-Agent Orchestration**: After a user inputs an idea, the backend Director agent dispatches tasks to multiple specialized agents for world-building, outlining, writing, and logical auditing. A single creative session can trigger dozens of concurrent API calls.
 *   **Deep Long-Text Analysis**:
     *   **Critic Audit**: Audits tens of thousands of words in novels or scripts for plot coherence and character consistency, heavily relying on long-context reasoning.

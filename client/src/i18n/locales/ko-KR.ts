@@ -663,7 +663,7 @@ const koKR = {
         billingOff: '과금 정지 상태',
         billingOnTitle: '성냥(크레딧) 결제 시스템 켜짐',
         billingOffTitle: '성냥(크레딧) 결제 시스템 꺼짐',
-        billingOnDesc: '서비스 이용 시 사용자의 성냥 잔액과 모델별 단가를 체크 및 차감 처리합니다.',
+        billingOnDesc: '서비스 이용 시 사용자의 성냥 잔액과 모델별 단가를 체크 및 차감 처리합니다. 자체 API 키를 설정하지 않은 모든 시스템 플랫폼의 AI 크레딧 비용은 관리자가 부담합니다.',
         billingOffDesc: '비용 처리가 수행되지 않으며, 무료로 추론 모델 사용이 가능합니다.',
       },
       actions: {
@@ -799,9 +799,13 @@ const koKR = {
       },
       alerts: {
         savedKeyNotReadableTitle: '보안 정책 상 이미 저장된 원본 키 정보는 다시 노출되지 않습니다',
+        savedKeyNotReadableMessage: '저장된 키 정보가 있지만, 현재 읽을 수 없습니다. API Key를 다시 입력해 주세요.',
         managedNeedsReconfigureTitle: '연동된 사이트 제공 공용 결제 키 설정에 오류가 있습니다',
+        managedNeedsReconfigureMessage: '관리 키가 아직 준비되지 않았습니다. 이 플랫폼의 API Key를 입력해 주세요.',
         savedKeyDecryptFailedTitle: '마스터 비밀번호 암호 복호화에 실패했습니다. 키 정보 재설정이 필요합니다.',
-        managedLockedTitle: '운영자가 공용 결제 추론 채널의 일반 이용자 접근 권한을 막아둔 상태입니다',
+        savedKeyDecryptFailedMessage: '저장된 API Key를 더 이상 사용할 수 없습니다. 다시 입력해 주세요.',
+        managedLockedTitle: 'API Key 설정 필요',
+        managedLockedMessage: '이 플랫폼을 사용하려면 개인 API Key를 설정해 주세요.',
       },
       pricing: {
         inputPrefix: '입력',

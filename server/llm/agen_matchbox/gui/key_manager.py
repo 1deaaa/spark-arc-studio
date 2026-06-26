@@ -1,10 +1,8 @@
-"""
-密钥管理 Mixin — LLM_KEY 检查/设置、API Key 管理
-"""
 import os
 import sys
 import tkinter as tk
-from tkinter import messagebox, simpledialog
+from tkinter import messagebox
+import customtkinter as ctk
 
 if __package__ in (None, "", "gui"):
     _GUI_DIR = os.path.dirname(os.path.abspath(__file__))
@@ -16,6 +14,7 @@ if __package__ in (None, "", "gui"):
 
 from ..env_utils import get_env_var, get_env_path
 from ..manager import MasterKeyMigrationRequiredError
+from .dpi import prepare_toplevel_window
 
 
 class KeyManagerMixin:
@@ -24,6 +23,70 @@ class KeyManagerMixin:
     # ------------------------------------------------------------------ #
     #  内部工具                                                             #
     # ------------------------------------------------------------------ #
+
+    def _ask_password(self, title: str, prompt: str) -> str | None:
+        """创建一个美观且带遮罩的安全密码/密钥输入框。"""
+        result = [None]
+        dialog = ctk.CTkToplevel(self.root)
+        dialog.title(title)
+        dialog.transient(self.root)
+        dialog.grab_set()
+        
+        # 居中和大小设定
+        prepare_toplevel_window(
+            dialog,
+            self.root,
+            base_size=(440, 220),
+            min_size=(440, 220),
+            ui_scale=getattr(self, "ui_scale", 1.0),
+        )
+        dialog.columnconfigure(0, weight=1)
+        
+        ctk.CTkLabel(
+            dialog, 
+            text=prompt, 
+            font=("Microsoft YaHei UI", 11), 
+            wraplength=380, 
+            justify="left"
+        ).grid(row=0, column=0, padx=20, pady=(20, 10), sticky="ew")
+        
+        entry = ctk.CTkEntry(dialog, show="*")
+        entry.grid(row=1, column=0, padx=20, pady=10, sticky="ew")
+        entry.focus()
+        
+        def on_ok():
+            result[0] = entry.get()
+            dialog.destroy()
+            
+        def on_cancel():
+            dialog.destroy()
+            
+        btn_frame = ctk.CTkFrame(dialog, fg_color="transparent")
+        btn_frame.grid(row=2, column=0, padx=20, pady=10, sticky="e")
+        
+        ctk.CTkButton(
+            btn_frame, 
+            text="确定", 
+            command=on_ok, 
+            width=80, 
+            fg_color="#3667D6", 
+            hover_color="#2E57B5",
+            font=("Microsoft YaHei UI", 11),
+        ).pack(side="left", padx=5)
+        
+        ctk.CTkButton(
+            btn_frame, 
+            text="取消", 
+            command=on_cancel, 
+            width=80,
+            font=("Microsoft YaHei UI", 11),
+        ).pack(side="left", padx=5)
+        
+        dialog.bind("<Return>", lambda e: on_ok())
+        dialog.bind("<Escape>", lambda e: on_cancel())
+        
+        self.root.wait_window(dialog)
+        return result[0]
 
     def _format_master_key_summary(self, result: dict) -> str:
         """格式化主密钥迁移结果。"""
@@ -41,14 +104,12 @@ class KeyManagerMixin:
     def _prompt_master_key_recovery(self, error_message: str, require_success: bool) -> str | None:
         """提示输入旧主密钥，或允许用户确认清除历史密钥。"""
         while True:
-            old_key = simpledialog.askstring(
+            old_key = self._ask_password(
                 "迁移历史密钥",
                 "当前主密钥无法解密部分历史 API Key。\n\n"
                 f"{error_message}\n\n"
                 "请输入旧主密钥以迁移历史密钥。\n"
-                "如果这些历史密钥本来就不需要保留，可以直接留空并点击确定，随后确认清除。",
-                parent=self.root,
-                show='*',
+                "如果这些历史密钥本来就不需要保留，可以直接留空并点击确定，随后确认清除。"
             )
 
             if old_key is None:
@@ -155,11 +216,9 @@ class KeyManagerMixin:
         """手动设置或轮换主密钥 LLM_KEY。"""
 
         while True:
-            key = simpledialog.askstring(
+            key = self._ask_password(
                 "设置主密钥",
-                "请输入新的 LLM_KEY（将写入 agen_matchbox/.env）：",
-                parent=self.root,
-                show='*'
+                "请输入新的 LLM_KEY（将写入 agen_matchbox/.env）："
             )
             if key is None:
                 if require_success:
@@ -180,3 +239,4 @@ class KeyManagerMixin:
 
             if not require_success:
                 return False
+

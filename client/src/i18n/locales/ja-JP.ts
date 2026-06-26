@@ -665,7 +665,7 @@ const jaJP = {
         billingOff: '課金オフ',
         billingOnTitle: 'マッチ課金が有効です',
         billingOffTitle: 'マッチ課金が無効です',
-        billingOnDesc: 'システム托管モデルで、モデル価格・ユーザーマッチ・プラットフォーム予算を確認します。',
+        billingOnDesc: 'システム托管モデルで、モデル価格・ユーザーマッチ・プラットフォーム予算を確認します。独自のAPIキーが設定されていないすべてのシステムプラットフォームのAIクレジット費用は、管理者が負担します。',
         billingOffDesc: '価格確認とマッチ消費は行われず、モデル価格編集もロックされます。',
       },
       actions: {
@@ -801,9 +801,13 @@ const jaJP = {
       },
       alerts: {
         savedKeyNotReadableTitle: '保存済みキーを今は直接読み出せません',
+        savedKeyNotReadableMessage: '保存済みのキー情報がありますが、現在読み取れません。API Key を再入力してください。',
         managedNeedsReconfigureTitle: 'このプラットフォームの托管キー設定が必要です',
+        managedNeedsReconfigureMessage: '托管キーの準備ができていません。このプラットフォームの API Key を入力してください。',
         savedKeyDecryptFailedTitle: 'このプラットフォームの API Key 設定が必要です',
-        managedLockedTitle: '管理者托管キーは現在全ユーザー向けに開放されていません',
+        savedKeyDecryptFailedMessage: '保存済みの API Key が利用できなくなりました。再入力してください。',
+        managedLockedTitle: 'API Key の設定が必要です',
+        managedLockedMessage: 'このプラットフォームを利用するには、ご自身の API Key を設定してください。',
       },
       pricing: {
         inputPrefix: '↑',

@@ -1,31 +1,3 @@
-1dea AIStudio:
-  base_url: https://ai.1dea.top/v1
-  models:
-    gemini-3.5-flash-high:
-      model_name: gemini-3.5-flash
-      extra_body:
-        reasoning_effort: high
-      max_context_tokens: 1048576
-      max_output_tokens: 65536
-    gemini-3.1-pro-high:
-      model_name: gemini-3.1-pro-preview
-      extra_body:
-        reasoning_effort: high
-      max_context_tokens: 1048576
-      max_output_tokens: 65536
-    gemini-3.1-flash-lite-high:
-      model_name: gemini-3.1-flash-lite-preview
-      extra_body:
-        reasoning_effort: high
-      max_context_tokens: 1048576
-      max_output_tokens: 65536
-1dea Gemini Fast:
-  base_url: https://api.1dea.top/v1
-  models:
-    gemini-3-flash-preview:
-      model_name: gemini-3-flash-preview
-      max_context_tokens: 1048576
-      max_output_tokens: 65536
 DeepSeek:
   base_url: https://api.deepseek.com/v1
   models:
@@ -35,25 +7,23 @@ DeepSeek:
         reasoning_effort: high
       sys_credit_input_price_per_million: 1.0
       sys_credit_output_price_per_million: 2.0
+  recharge_url: https://platform.deepseek.com/top_up
 Mimo Token Plan:
   base_url: https://token-plan-cn.xiaomimimo.com/v1
   models:
-    mimo-v2.5-pro:
-      model_name: mimo-v2.5-pro
-      max_context_tokens: 256000
-      max_output_tokens: 64000
+    mimo-v2.5-pro: mimo-v2.5-pro
     mimo-v2.5: mimo-v2.5
 Siliconflow:
   base_url: https://api.siliconflow.cn/v1
   models:
     Qwen/Qwen3-Embedding-0.6B:
       model_name: Qwen/Qwen3-Embedding-0.6B
-      is_embedding: true
       extra_body:
         dimensions: 1024
         encoding_format: float
       max_context_tokens: 32768
-      max_output_tokens: 0
+      max_output_tokens: 64000
+      is_embedding: true
 Alibaba Dashscope:
   base_url: https://dashscope.aliyuncs.com/compatible-mode/v1
   models:

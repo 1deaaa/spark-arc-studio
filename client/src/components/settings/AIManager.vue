@@ -655,11 +655,8 @@
                         {{ keyAlertMeta(editingPlatform)?.message || '' }}
                     </SparkAlert>
                     <n-form-item :label="t('components.aiManager.form.platformName')">
-                        <n-input v-model:value="editingPlatform.name" :disabled="editingPlatform.is_sys && !isAdmin" />
-                    </n-form-item>
-                    <n-form-item :label="t('components.aiManager.form.baseUrl')">
                         <n-input-group>
-                            <n-input v-model:value="editingPlatform.baseUrl" :input-props="{ autocomplete: 'off' }" :disabled="editingPlatform.is_sys && !isAdmin" />
+                            <n-input v-model:value="editingPlatform.name" :disabled="editingPlatform.is_sys && !isAdmin" />
                             <n-tooltip v-if="editingPlatform.rechargeUrl && editingPlatform.rechargeUrl.trim()" trigger="hover">
                                 <template #trigger>
                                     <n-button class="recharge-link-btn" secondary @click="openRechargeUrl(editingPlatform.rechargeUrl)">
@@ -670,7 +667,10 @@
                             </n-tooltip>
                         </n-input-group>
                     </n-form-item>
-                    <n-form-item :label="t('components.aiManager.form.rechargeUrl')">
+                    <n-form-item v-if="!(editingPlatform.is_sys && !isAdmin)" :label="t('components.aiManager.form.baseUrl')">
+                        <n-input v-model:value="editingPlatform.baseUrl" :input-props="{ autocomplete: 'off' }" :disabled="editingPlatform.is_sys && !isAdmin" />
+                    </n-form-item>
+                    <n-form-item v-if="!(editingPlatform.is_sys && !isAdmin)" :label="t('components.aiManager.form.rechargeUrl')">
                         <n-input
                             v-model:value="editingPlatform.rechargeUrl"
                             :placeholder="t('components.aiManager.form.rechargeUrlPlaceholder')"
@@ -1155,13 +1155,13 @@ function platformStatusBadge(plat: AiPlatform): BadgeMeta | null {
 }
 
 function keyAlertMeta(plat: KeyAlertTarget | null | undefined): AlertMeta | null {
-    if (!plat?.api_key_message) return null;
+    if (!plat?.api_key_status) return null;
 
     if (plat.api_key_status === 'managed_missing_key' || plat.api_key_status === 'missing_key' || plat.api_key_status === 'user_override_missing_key') {
         return {
             type: 'warning',
             title: t('components.aiManager.alerts.savedKeyNotReadableTitle'),
-            message: plat.api_key_message,
+            message: t('components.aiManager.alerts.savedKeyNotReadableMessage'),
         };
     }
 
@@ -1169,7 +1169,7 @@ function keyAlertMeta(plat: KeyAlertTarget | null | undefined): AlertMeta | null
         return {
             type: 'warning',
             title: t('components.aiManager.alerts.managedNeedsReconfigureTitle'),
-            message: plat.api_key_message,
+            message: t('components.aiManager.alerts.managedNeedsReconfigureMessage'),
         };
     }
 
@@ -1177,7 +1177,7 @@ function keyAlertMeta(plat: KeyAlertTarget | null | undefined): AlertMeta | null
         return {
             type: 'warning',
             title: t('components.aiManager.alerts.savedKeyDecryptFailedTitle'),
-            message: plat.api_key_message,
+            message: t('components.aiManager.alerts.savedKeyDecryptFailedMessage'),
         };
     }
 
@@ -1185,7 +1185,7 @@ function keyAlertMeta(plat: KeyAlertTarget | null | undefined): AlertMeta | null
         return {
             type: 'info',
             title: t('components.aiManager.alerts.managedLockedTitle'),
-            message: plat.api_key_message,
+            message: t('components.aiManager.alerts.managedLockedMessage'),
         };
     }
 

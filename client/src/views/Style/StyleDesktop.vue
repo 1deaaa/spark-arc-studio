@@ -28,14 +28,6 @@
 
     <!-- Main Content: Grid Layout -->
     <div class="style-content">
-      <!-- Project Status Bar -->
-      <div class="status-bar" v-if="projectStore.currentProject && !isLoadingList">
-        <SparkAlert :type="hasProjectStyle ? 'success' : 'warning'" class="mb-4">
-          <span class="status-title">{{ projectStyleTitle }}</span>
-          <span class="status-desc">{{ projectStyleMessage }}</span>
-        </SparkAlert>
-      </div>
-
       <div v-if="isLoadingList" class="loading-state">
         <n-spin size="large" :description="t('views.style.desktop.loadingStyles')" />
       </div>
@@ -102,7 +94,7 @@
       </div>
 
       <div class="runtime-panel">
-        <n-collapse>
+        <n-collapse class="runtime-collapse">
           <n-collapse-item :title="t('views.style.desktop.runtimeBindings')" name="runtime-bindings">
             <BindingEditor />
           </n-collapse-item>
@@ -528,4 +520,12 @@ const profileSections = computed(() => {
   text-align: center;
 }
 
+.runtime-collapse :deep(.n-collapse-item__header) {
+  user-select: none;
+}
+.runtime-collapse :deep(.n-collapse-item__content-wrapper),
+.runtime-collapse :deep(.n-collapse-item__content-inner) {
+  padding-left: 0 !important;
+  margin-left: 0 !important;
+}
 </style>

@@ -368,4 +368,13 @@ const profileSections = computed(() => {
 }
 
 /* 任务浮层（屏幕居中） */
+
+.runtime-collapse :deep(.n-collapse-item__header) {
+  user-select: none;
+}
+.runtime-collapse :deep(.n-collapse-item__content-wrapper),
+.runtime-collapse :deep(.n-collapse-item__content-inner) {
+  padding-left: 0 !important;
+  margin-left: 0 !important;
+}
 </style>

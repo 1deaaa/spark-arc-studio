@@ -10,6 +10,9 @@ from pathlib import Path
 if __package__ in (None, ""):
     _PACKAGE_DIR = Path(__file__).resolve().parent
     _PARENT_DIR = str(_PACKAGE_DIR.parent)
+    _SERVER_DIR = str(_PACKAGE_DIR.parent.parent)
+    if _SERVER_DIR not in sys.path:
+        sys.path.insert(0, _SERVER_DIR)
     if _PARENT_DIR not in sys.path:
         sys.path.insert(0, _PARENT_DIR)
     __package__ = _PACKAGE_DIR.name

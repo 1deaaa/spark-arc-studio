@@ -5,48 +5,19 @@ from __future__ import annotations
 
 import sys
 
-try:
-    import ctypes
-except Exception:  # pragma: no cover - 极端环境兜底
-    ctypes = None
-
 
 _BASE_DPI = 96.0
 _BASE_TK_SCALING = _BASE_DPI / 72.0
 
 
 def enable_high_dpi_awareness() -> None:
-    """在 Windows 上尽量启用高分屏感知。"""
-    if sys.platform != "win32" or ctypes is None:
-        return
-
-    try:
-        ctypes.windll.shcore.SetProcessDpiAwareness(2)
-        return
-    except Exception:
-        pass
-
-    try:
-        ctypes.windll.user32.SetProcessDPIAware()
-    except Exception:
-        pass
+    """在 Windows 上尽量启用高分屏感知（由 CustomTkinter 内部处理，此处留空以防冲突）。"""
+    pass
 
 
 def configure_tk_scaling(root) -> float:
-    """根据当前屏幕 DPI 调整 Tk 缩放，并返回 UI 缩放倍率。"""
-    root.update_idletasks()
-
-    try:
-        pixels_per_inch = float(root.winfo_fpixels("1i"))
-    except Exception:
-        pixels_per_inch = _BASE_DPI
-
-    pixels_per_inch = max(pixels_per_inch, _BASE_DPI)
-    try:
-        root.tk.call("tk", "scaling", pixels_per_inch / 72.0)
-    except Exception:
-        pass
-    return pixels_per_inch / _BASE_DPI
+    """根据当前屏幕 DPI 调整 Tk 缩放（由 CustomTkinter 内部处理，此处仅返回 1.0 兼容老代码）。"""
+    return 1.0
 
 
 def _scaled_pair(size: tuple[int, int], ui_scale: float, *, upper: float = 1.2) -> tuple[int, int]:
@@ -161,3 +132,4 @@ __all__ = [
     "prepare_root_window",
     "prepare_toplevel_window",
 ]
+

@@ -663,7 +663,7 @@ const zhCN = {
         billingOff: '关闭',
         billingOnTitle: '火柴计费已开启',
         billingOffTitle: '火柴计费已关闭',
-        billingOnDesc: '系统托管模型会检查模型价格、用户火柴和平台火柴预算。',
+        billingOnDesc: '系统托管模型会检查模型价格、用户火柴和平台火柴预算。站长会承担你未配置密钥的所有系统平台的AI额度开销。',
         billingOffDesc: '当前不会检查价格或扣减火柴，模型价格设置也会被锁定。',
       },
       actions: {
@@ -799,9 +799,13 @@ const zhCN = {
       },
       alerts: {
         savedKeyNotReadableTitle: '当前还不能直接读取已保存密钥',
+        savedKeyNotReadableMessage: '检测到已保存的密钥记录，但当前无法直接读取。请重新填写 API Key。',
         managedNeedsReconfigureTitle: '该平台托管密钥需要配置',
+        managedNeedsReconfigureMessage: '托管密钥尚未就绪，请为该平台填写 API Key。',
         savedKeyDecryptFailedTitle: '该平台 API Key 需要配置',
-        managedLockedTitle: '站长托管密钥当前未对全体用户开放',
+        savedKeyDecryptFailedMessage: '已保存的 API Key 无法正常使用，请重新填写。',
+        managedLockedTitle: '需要配置 API Key',
+        managedLockedMessage: '该平台需要您配置自己的 API Key 后才可使用。',
       },
       pricing: {
         inputPrefix: '↑',

@@ -5,11 +5,15 @@ import os
 import sys
 import tkinter as tk
 from tkinter import messagebox, ttk
+import customtkinter as ctk
 
 if __package__ in (None, "", "gui"):
     _GUI_DIR = os.path.dirname(os.path.abspath(__file__))
     _PKG_DIR = os.path.dirname(_GUI_DIR)
     _PARENT_DIR = os.path.dirname(_PKG_DIR)
+    _SERVER_DIR = os.path.dirname(_PARENT_DIR)
+    if _SERVER_DIR not in sys.path:
+        sys.path.insert(0, _SERVER_DIR)
     if _PARENT_DIR not in sys.path:
         sys.path.insert(0, _PARENT_DIR)
     __package__ = f"{os.path.basename(_PKG_DIR)}.{os.path.basename(_GUI_DIR)}"
@@ -34,9 +38,8 @@ class LLMConfigGUI(
 ):
     """LLM 配置管理器主窗口。"""
 
-    def __init__(self, root: tk.Tk):
+    def __init__(self, root: ctk.CTk):
         self.root = root
-        self.root.option_add("*tearOff", False)
         self.ui_scale = configure_tk_scaling(self.root)
 
         self.current_config: dict = {}
@@ -61,12 +64,13 @@ class LLMConfigGUI(
         prepare_root_window(
             self.root,
             title="火柴Agent网关 · LLM 配置台",
-            base_size=(1360,820),
-            min_size=(1360,820),
+            base_size=(1360, 820),
+            min_size=(1360, 820),
             ui_scale=self.ui_scale,
         )
         self._build_ui()
         self.root.after(100, self._bootstrap_startup)
+
 
     def _scale(self, value: int) -> int:
         scale = min(max(self.ui_scale, 1.0), 1.35)
@@ -96,11 +100,7 @@ class LLMConfigGUI(
             self.load_config_from_db()
         except Exception as e:
             messagebox.showerror("初始化失败", f"GUI 启动失败: {e}")
-            self.root.after(0, self.root.destroy)
-
-    # ------------------------------------------------------------------ #
-    #  样式与布局                                                           #
-    # ------------------------------------------------------------------ #
+            self.root.destroy()
 
     def _build_styles(self):
         """配置 ttk 样式。"""
@@ -108,20 +108,23 @@ class LLMConfigGUI(
 
     def _build_ui(self):
         """构建主界面布局。"""
-        shell = ttk.Frame(self.root, style="Shell.TFrame", padding=self._scale(12))
-        shell.pack(fill=tk.BOTH, expand=True)
+        shell = ctk.CTkFrame(self.root, fg_color="transparent")
+        shell.pack(fill=tk.BOTH, expand=True, padx=self._scale(12), pady=self._scale(12))
         shell.columnconfigure(0, weight=1)
         shell.rowconfigure(1, weight=1)
 
         self._build_header(shell)
 
-        workspace = ttk.PanedWindow(shell, orient=tk.HORIZONTAL)
+        workspace = ctk.CTkFrame(shell, fg_color="transparent")
         workspace.grid(row=1, column=0, sticky="nsew")
+        workspace.columnconfigure(0, weight=65, uniform="group1")
+        workspace.columnconfigure(1, weight=35, uniform="group1")
+        workspace.rowconfigure(0, weight=1)
 
-        left_frame = ttk.Frame(workspace, style="Shell.TFrame")
-        right_frame = ttk.Frame(workspace, style="Shell.TFrame")
-        workspace.add(left_frame, weight=13)
-        workspace.add(right_frame, weight=15)
+        left_frame = ctk.CTkFrame(workspace, fg_color="transparent")
+        left_frame.grid(row=0, column=0, sticky="nsew", padx=(0, self._scale(6)))
+        right_frame = ctk.CTkFrame(workspace, fg_color="transparent")
+        right_frame.grid(row=0, column=1, sticky="nsew", padx=(self._scale(6), 0))
 
         self._build_left_panel(left_frame)
         self._build_right_panel(right_frame)
@@ -129,128 +132,150 @@ class LLMConfigGUI(
 
     def _build_header(self, parent):
         """构建顶部品牌头部与全局操作区。"""
-        header = ttk.Frame(parent, style="Hero.TFrame", padding=(self._scale(16), self._scale(12)))
-        header.grid(row=0, column=0, sticky="ew", pady=(0, self._scale(10)))
+        header = ctk.CTkFrame(parent, fg_color=("white", "#202020"), corner_radius=8)
+        header.grid(row=0, column=0, sticky="ew", pady=(0, self._scale(8)))
         header.columnconfigure(0, weight=1)
         header.columnconfigure(1, weight=1)
 
-        text_frame = ttk.Frame(header, style="Hero.TFrame")
-        text_frame.grid(row=0, column=0, sticky="nw", padx=(0, self._scale(18)))
+        text_frame = ctk.CTkFrame(header, fg_color="transparent")
+        text_frame.grid(row=0, column=0, sticky="w", padx=self._scale(16), pady=(self._scale(10), self._scale(10)))
 
-        ttk.Label(text_frame, text="火柴Agent网关 · LLM 配置台", style="HeroTitle.TLabel").pack(anchor=tk.W)
-        ttk.Label(
-            text_frame,
-            text="为 Agent 场景打造的轻量化配置工作台，集中管理平台、模型、用途与配额。",
-            style="HeroSubtitle.TLabel",
-            wraplength=self._scale(560),
-            justify=tk.LEFT,
-        ).pack(anchor=tk.W, pady=(self._scale(4), self._scale(6)))
-        ttk.Label(text_frame, textvariable=self.header_status_var, style="Accent.TLabel").pack(anchor=tk.W)
+        ctk.CTkLabel(text_frame, text="火柴Agent网关 · LLM 配置台", font=("Microsoft YaHei UI", 18, "bold")).pack(anchor=tk.W)
+        ctk.CTkLabel(text_frame, textvariable=self.header_status_var, text_color="#3667D6", font=("Microsoft YaHei UI", 11, "bold")).pack(anchor=tk.W, pady=(self._scale(4), 0))
 
-        actions_frame = ttk.Frame(header, style="Hero.TFrame")
-        actions_frame.grid(row=0, column=1, sticky="nsew")
-        for col in range(3):
-            actions_frame.columnconfigure(col, weight=1)
+        actions_frame = ctk.CTkFrame(header, fg_color="transparent")
+        actions_frame.grid(row=0, column=1, sticky="e", padx=self._scale(16))
 
         buttons = [
-            ("刷新配置", self.load_config_from_db, "Primary.TButton"),
-            ("从配置文件重置", self.reload_from_yaml, "TButton"),
-            ("导出到配置文件", self.export_db_to_yaml, "TButton"),
-            ("设置主密钥", self.open_set_llm_key_dialog, "TButton"),
-            ("系统用途管理", self.edit_system_model, "TButton"),
-            ("用户配额管理", self.open_quota_manager_dialog, "TButton"),
+            ("刷新配置", self.load_config_from_db, "primary"),
+            ("从配置文件重置", self.reload_from_yaml, "normal"),
+            ("导出到配置文件", self.export_db_to_yaml, "normal"),
+            ("设置主密钥", self.open_set_llm_key_dialog, "normal"),
+            ("系统用途管理", self.edit_system_model, "normal"),
+            ("用户配额管理", self.open_quota_manager_dialog, "normal"),
         ]
-        for index, (text, command, style_name) in enumerate(buttons):
+        for index, (text, command, btn_type) in enumerate(buttons):
             row = index // 3
             col = index % 3
-            ttk.Button(actions_frame, text=text, command=command, style=style_name).grid(
+            if btn_type == "primary":
+                fg = "#3667D6"
+                hover = "#2E57B5"
+                txt_col = "#FFFFFF"
+            else:
+                fg = ("#eef3fb", "#2b2b2b")
+                hover = ("#e1eaf8", "#3a3a3a")
+                txt_col = ("#1e293b", "#dce4ee")
+
+            ctk.CTkButton(
+                actions_frame, 
+                text=text, 
+                command=command,
+                fg_color=fg,
+                hover_color=hover,
+                text_color=txt_col,
+                font=("Microsoft YaHei UI", 11),
+                width=self._scale(105),
+                height=self._scale(26),
+            ).grid(
                 row=row,
                 column=col,
-                sticky="ew",
-                padx=(0 if col == 0 else self._scale(8), 0),
-                pady=(0, self._scale(8) if row == 0 else 0),
+                padx=(0 if col == 0 else self._scale(6), 0),
+                pady=(0, self._scale(6) if row == 0 else 0),
             )
 
     def _build_left_panel(self, parent):
         """构建左侧工作区。"""
         parent.columnconfigure(0, weight=1)
-        parent.rowconfigure(0, weight=1)
+        parent.rowconfigure(0, weight=7)
+        parent.rowconfigure(1, weight=13)
 
-        left_paned = ttk.PanedWindow(parent, orient=tk.VERTICAL)
-        left_paned.grid(row=0, column=0, sticky="nsew")
-
-        plat_frame = ttk.LabelFrame(left_paned, text="平台配置", padding=self._scale(16), style="Card.TLabelframe")
-        left_paned.add(plat_frame, weight=7)
+        plat_frame = ctk.CTkFrame(parent)
+        plat_frame.grid(row=0, column=0, sticky="nsew", pady=(0, self._scale(8)))
+        ctk.CTkLabel(plat_frame, text="平台配置", font=("Microsoft YaHei UI", 12, "bold")).grid(row=0, column=0, columnspan=3, sticky="w", padx=16, pady=(8, 2))
         self._build_platform_panel(plat_frame)
 
-        usage_frame = ttk.LabelFrame(left_paned, text="用户调用总览（双击用户查看详情设置配额）", padding=self._scale(16), style="Card.TLabelframe")
-        left_paned.add(usage_frame, weight=13)
+        usage_frame = ctk.CTkFrame(parent)
+        usage_frame.grid(row=1, column=0, sticky="nsew")
+        ctk.CTkLabel(usage_frame, text="用户调用总览（双击用户查看详情设置配额）", font=("Microsoft YaHei UI", 12, "bold")).grid(row=0, column=0, columnspan=3, sticky="w", padx=16, pady=(8, 2))
         self._build_user_usage_panel(usage_frame)
 
     def _build_platform_panel(self, parent):
         """构建平台管理面板。"""
+        parent.columnconfigure(0, weight=0)
         parent.columnconfigure(1, weight=1)
         parent.columnconfigure(2, weight=0)
-        ttk.Label(parent, text="平台", style="Surface.TLabel").grid(row=2, column=0, sticky=tk.W, pady=(0, self._scale(10)))
+        
+        ctk.CTkLabel(parent, text="平台", font=("Microsoft YaHei UI", 11)).grid(row=2, column=0, sticky=tk.W, pady=(self._scale(2), self._scale(4)), padx=(16, 0))
         self.platform_var = tk.StringVar()
-        self.platform_combo = ttk.Combobox(parent, textvariable=self.platform_var, state="readonly")
-        self.platform_combo.grid(row=2, column=1, columnspan=2, sticky="ew", pady=(0, self._scale(10)))
-        self.platform_combo.bind("<<ComboboxSelected>>", self.on_platform_selected)
+        self.platform_combo = ctk.CTkComboBox(
+            parent, 
+            variable=self.platform_var, 
+            state="readonly",
+            command=lambda choice: self.on_platform_selected()
+        )
+        self.platform_combo.grid(row=2, column=1, columnspan=2, sticky="ew", pady=(self._scale(2), self._scale(4)), padx=(0, 16))
 
-        ttk.Label(parent, text="当前 URL", style="Surface.TLabel").grid(row=3, column=0, sticky=tk.W, pady=(0, self._scale(10)))
-        self.base_url_entry = ttk.Entry(parent, state="readonly", style="Readonly.TEntry")
-        self.base_url_entry.grid(row=3, column=1, columnspan=2, sticky="ew", pady=(0, self._scale(10)))
+        ctk.CTkLabel(parent, text="当前 URL", font=("Microsoft YaHei UI", 11)).grid(row=3, column=0, sticky=tk.W, pady=(self._scale(2), self._scale(4)), padx=(16, 0))
+        self.base_url_entry = ctk.CTkEntry(parent, state="readonly")
+        self.base_url_entry.grid(row=3, column=1, columnspan=2, sticky="ew", pady=(self._scale(2), self._scale(4)), padx=(0, 16))
 
-        ttk.Label(parent, text="编辑 URL", style="Surface.TLabel").grid(row=4, column=0, sticky=tk.W, pady=(0, self._scale(10)))
-        self.platform_url_entry = ttk.Entry(parent)
-        self.platform_url_entry.grid(row=4, column=1, sticky="ew", pady=(0, self._scale(10)), padx=(0, self._scale(8)))
-        ttk.Button(parent, text="保存 URL", command=self.save_platform_url, style="Primary.TButton").grid(row=4, column=2, sticky="ew", pady=(0, self._scale(10)))
+        ctk.CTkLabel(parent, text="编辑 URL", font=("Microsoft YaHei UI", 11)).grid(row=4, column=0, sticky=tk.W, pady=(self._scale(2), self._scale(4)), padx=(16, 0))
+        self.platform_url_entry = ctk.CTkEntry(parent)
+        self.platform_url_entry.grid(row=4, column=1, sticky="ew", pady=(self._scale(2), self._scale(4)), padx=(0, 8))
+        ctk.CTkButton(parent, text="保存 URL", command=self.save_platform_url, fg_color="#3667D6", hover_color="#2E57B5", font=("Microsoft YaHei UI", 11), width=self._scale(100)).grid(row=4, column=2, sticky="ew", pady=(self._scale(2), self._scale(4)), padx=(0, 16))
 
-        ttk.Label(parent, text="充值地址", style="Surface.TLabel").grid(row=5, column=0, sticky=tk.W, pady=(0, self._scale(10)))
-        self.recharge_url_entry = ttk.Entry(parent)
-        self.recharge_url_entry.grid(row=5, column=1, sticky="ew", pady=(0, self._scale(10)), padx=(0, self._scale(8)))
-        ttk.Button(parent, text="保存充值地址", command=self.save_recharge_url, style="Primary.TButton").grid(row=5, column=2, sticky="ew", pady=(0, self._scale(10)))
+        ctk.CTkLabel(parent, text="充值地址", font=("Microsoft YaHei UI", 11)).grid(row=5, column=0, sticky=tk.W, pady=(self._scale(2), self._scale(4)), padx=(16, 0))
+        self.recharge_url_entry = ctk.CTkEntry(parent)
+        self.recharge_url_entry.grid(row=5, column=1, sticky="ew", pady=(self._scale(2), self._scale(4)), padx=(0, 8))
+        ctk.CTkButton(parent, text="保存充值地址", command=self.save_recharge_url, fg_color="#3667D6", hover_color="#2E57B5", font=("Microsoft YaHei UI", 11), width=self._scale(100)).grid(row=5, column=2, sticky="ew", pady=(self._scale(2), self._scale(4)), padx=(0, 16))
 
-        ttk.Label(parent, text="API Key", style="Surface.TLabel").grid(row=6, column=0, sticky=tk.W, pady=(0, self._scale(12)))
-        self.api_key_entry = ttk.Entry(parent, show="*")
-        self.api_key_entry.grid(row=6, column=1, sticky="ew", pady=(0, self._scale(12)), padx=(0, self._scale(8)))
-        ttk.Button(parent, text="保存 Key", command=self.save_api_key, style="Primary.TButton").grid(row=6, column=2, sticky="ew", pady=(0, self._scale(12)))
+        ctk.CTkLabel(parent, text="API Key", font=("Microsoft YaHei UI", 11)).grid(row=6, column=0, sticky=tk.W, pady=(self._scale(2), self._scale(6)), padx=(16, 0))
+        self.api_key_entry = ctk.CTkEntry(parent, show="*")
+        self.api_key_entry.grid(row=6, column=1, sticky="ew", pady=(self._scale(2), self._scale(6)), padx=(0, 8))
+        ctk.CTkButton(parent, text="保存 Key", command=self.save_api_key, fg_color="#3667D6", hover_color="#2E57B5", font=("Microsoft YaHei UI", 11), width=self._scale(100)).grid(row=6, column=2, sticky="ew", pady=(self._scale(2), self._scale(6)), padx=(0, 16))
 
-        ttk.Separator(parent, orient=tk.HORIZONTAL).grid(row=7, column=0, columnspan=3, sticky="ew", pady=(0, self._scale(12)))
+        sep = ctk.CTkFrame(parent, height=2, fg_color=("gray85", "gray30"))
+        sep.grid(row=7, column=0, columnspan=3, sticky="ew", pady=(0, self._scale(6)), padx=16)
 
-        action_row = ttk.Frame(parent, style="Card.TFrame")
-        action_row.grid(row=8, column=0, columnspan=3, sticky="ew")
+        action_row = ctk.CTkFrame(parent, fg_color="transparent")
+        action_row.grid(row=8, column=0, columnspan=3, sticky="ew", padx=16, pady=(0, 8))
         for col in range(3):
             action_row.columnconfigure(col, weight=1)
-        ttk.Button(action_row, text="新增平台", command=self.add_platform).grid(row=0, column=0, sticky="ew")
-        ttk.Button(action_row, text="禁用平台", command=self.delete_platform, style="Danger.TButton").grid(row=0, column=1, sticky="ew", padx=self._scale(8))
-        ttk.Button(action_row, text="设为默认平台", command=self.set_as_default).grid(row=0, column=2, sticky="ew")
+        ctk.CTkButton(action_row, text="新增平台", command=self.add_platform, font=("Microsoft YaHei UI", 11)).grid(row=0, column=0, sticky="ew", padx=(0, 4))
+        ctk.CTkButton(action_row, text="禁用平台", command=self.delete_platform, fg_color="transparent", border_color="#C23B22", border_width=1, text_color="#C23B22", hover_color="#3D1A16", font=("Microsoft YaHei UI", 11)).grid(row=0, column=1, sticky="ew", padx=4)
+        ctk.CTkButton(action_row, text="设为默认平台", command=self.set_as_default, font=("Microsoft YaHei UI", 11)).grid(row=0, column=2, sticky="ew", padx=(4, 0))
 
     def _build_user_usage_panel(self, parent):
         """构建用户调用查询面板。"""
         parent.columnconfigure(0, weight=1)
-        parent.rowconfigure(0, weight=1)
+        parent.rowconfigure(1, weight=1)
 
-        table_frame = ttk.Frame(parent, style="Card.TFrame")
-        table_frame.grid(row=0, column=0, sticky="nsew")
+        table_frame = ctk.CTkFrame(parent, fg_color=("white", "#2b2b2b"), border_color=("gray85", "gray20"), border_width=1, corner_radius=6)
+        table_frame.grid(row=1, column=0, sticky="nsew", padx=16, pady=(0, 12))
         table_frame.columnconfigure(0, weight=1)
         table_frame.rowconfigure(0, weight=1)
 
         columns = ("user_id", "requests", "tokens", "prompt", "completion", "sys_paid", "self_paid", "errors")
         self.user_usage_tree = ttk.Treeview(table_frame, columns=columns, show="headings", height=10)
         headings = {
-            "user_id": ("用户 ID", self._scale(76)),
-            "requests": ("调用", self._scale(56)),
-            "tokens": ("总 Token", self._scale(92)),
-            "prompt": ("Prompt", self._scale(78)),
-            "completion": ("Completion", self._scale(92)),
-            "sys_paid": ("站长付费", self._scale(78)),
-            "self_paid": ("用户自费", self._scale(78)),
-            "errors": ("错误", self._scale(56)),
+            "user_id": ("用户 ID", self._scale(140)),
+            "requests": ("调用", self._scale(50)),
+            "tokens": ("总 Token", self._scale(85)),
+            "prompt": ("Prompt", self._scale(75)),
+            "completion": ("Completion", self._scale(85)),
+            "sys_paid": ("站长付费", self._scale(75)),
+            "self_paid": ("用户自费", self._scale(75)),
+            "errors": ("错误", self._scale(50)),
         }
         for key, (title, width) in headings.items():
             self.user_usage_tree.heading(key, text=title, command=lambda sort_key=key: self.sort_user_usage_overview(sort_key))
-            self.user_usage_tree.column(key, width=width, anchor=tk.W if key == "user_id" else tk.CENTER, stretch=False)
+            self.user_usage_tree.column(key, width=width, anchor=tk.W if key == "user_id" else tk.CENTER, stretch=True)
+
+        tree_scroll = ttk.Scrollbar(table_frame, orient=tk.VERTICAL, command=self.user_usage_tree.yview)
+        self.user_usage_tree.configure(yscrollcommand=tree_scroll.set)
+        self.user_usage_tree.grid(row=0, column=0, sticky="nsew", padx=1, pady=1)
+        tree_scroll.grid(row=0, column=1, sticky="ns", padx=(0, 1), pady=1)
+        self.user_usage_tree.bind("<Double-1>", self._on_user_usage_tree_double_click)
 
         tree_scroll = ttk.Scrollbar(table_frame, orient=tk.VERTICAL, command=self.user_usage_tree.yview)
         self.user_usage_tree.configure(yscrollcommand=tree_scroll.set)
@@ -368,7 +393,7 @@ class LLMConfigGUI(
         stats_rows = self.ai_manager.get_user_usage_stats(user_id)
         quota_payload = self.ai_manager.admin_get_user_quota_status(user_id)
 
-        dialog = tk.Toplevel(self.root)
+        dialog = ctk.CTkToplevel(self.root)
         dialog.title(f"用户详情 · {user_id}")
         dialog.transient(self.root)
         dialog.grab_set()
@@ -382,18 +407,18 @@ class LLMConfigGUI(
         dialog.columnconfigure(0, weight=1)
         dialog.rowconfigure(1, weight=1)
 
-        header = ttk.Frame(dialog, style="Card.TFrame", padding=self._scale(16))
-        header.grid(row=0, column=0, sticky="ew")
+        header = ctk.CTkFrame(dialog, fg_color="transparent")
+        header.grid(row=0, column=0, sticky="ew", padx=16, pady=16)
         header.columnconfigure(0, weight=1)
-        ttk.Label(header, text=f"用户详情 · {user_id}", style="CardTitle.TLabel").grid(row=0, column=0, sticky=tk.W)
-        ttk.Label(header, text="展示该用户的累计调用摘要、额度状态与按模型聚合的调用明细。", style="SurfaceMuted.TLabel").grid(row=1, column=0, sticky=tk.W, pady=(self._scale(4), 0))
+        ctk.CTkLabel(header, text=f"用户详情 · {user_id}", font=("Microsoft YaHei UI", 14, "bold")).grid(row=0, column=0, sticky=tk.W)
+        ctk.CTkLabel(header, text="展示该用户的累计调用摘要、额度状态与按模型聚合的调用明细。", text_color=("gray45", "gray65"), font=("Microsoft YaHei UI", 11)).grid(row=1, column=0, sticky=tk.W, pady=(self._scale(4), 0))
 
-        content = ttk.Frame(dialog, style="Card.TFrame", padding=self._scale(16))
-        content.grid(row=1, column=0, sticky="nsew")
+        content = ctk.CTkFrame(dialog, fg_color="transparent")
+        content.grid(row=1, column=0, sticky="nsew", padx=16, pady=(0, 16))
         content.columnconfigure(0, weight=1)
         content.rowconfigure(1, weight=1)
 
-        summary = ttk.Frame(content, style="Card.TFrame")
+        summary = ctk.CTkFrame(content, fg_color="transparent")
         summary.grid(row=0, column=0, sticky="ew", pady=(0, self._scale(12)))
         for col in range(4):
             summary.columnconfigure(col, weight=1)
@@ -405,18 +430,18 @@ class LLMConfigGUI(
             ("用户自费", f"{int(quota_payload.get('self_paid', {}).get('total', {}).get('usage', {}).get('requests', 0))} 次"),
         ]
         for index, (title, value) in enumerate(summary_items):
-            block = ttk.Frame(summary, style="MutedCard.TFrame", padding=(self._scale(12), self._scale(10)))
+            block = ctk.CTkFrame(summary)
             block.grid(row=0, column=index, sticky="nsew", padx=(0, self._scale(6) if index < len(summary_items) - 1 else 0))
-            ttk.Label(block, text=title, style="MutedCaption.TLabel").pack(anchor=tk.W)
-            ttk.Label(block, text=value, style="MutedValue.TLabel").pack(anchor=tk.W, pady=(self._scale(4), 0))
+            ctk.CTkLabel(block, text=title, text_color=("gray45", "gray65"), font=("Microsoft YaHei UI", 11)).pack(anchor=tk.W, padx=12, pady=(8, 0))
+            ctk.CTkLabel(block, text=value, font=("Microsoft YaHei UI", 14, "bold")).pack(anchor=tk.W, pady=(self._scale(2), 8), padx=12)
 
-        detail_frame = ttk.Frame(content, style="Card.TFrame")
+        detail_frame = ctk.CTkFrame(content, fg_color=("white", "#2b2b2b"), border_color=("gray85", "gray20"), border_width=1, corner_radius=6)
         detail_frame.grid(row=1, column=0, sticky="nsew")
         detail_frame.columnconfigure(0, weight=1)
         detail_frame.rowconfigure(0, weight=1)
 
         columns = ("platform", "display", "calls", "tokens", "prompt", "completion", "success", "error")
-        detail_tree = ttk.Treeview(detail_frame, columns=columns, show="headings", height=12)
+        detail_tree = ttk.Treeview(detail_frame, columns=columns, show="headings", height=12, style="Treeview")
         detail_rows = list(stats_rows)
         detail_sort_state = {"column": "calls", "descending": True}
         detail_headings = {
@@ -474,18 +499,18 @@ class LLMConfigGUI(
 
         for key, (title, width) in detail_headings.items():
             detail_tree.heading(key, text=title, command=lambda sort_key=key: sort_detail_rows(sort_key))
-            detail_tree.column(key, width=width, anchor=tk.W if key in {"platform", "display"} else tk.CENTER, stretch=key in {"platform", "display"})
+            detail_tree.column(key, width=width, anchor=tk.W if key in {"platform", "display"} else tk.CENTER, stretch=True)
         render_detail_rows(sorted(detail_rows, key=lambda row: int(row.get("call_count", 0)), reverse=True))
 
         detail_scroll = ttk.Scrollbar(detail_frame, orient=tk.VERTICAL, command=detail_tree.yview)
         detail_tree.configure(yscrollcommand=detail_scroll.set)
-        detail_tree.grid(row=0, column=0, sticky="nsew")
-        detail_scroll.grid(row=0, column=1, sticky="ns")
+        detail_tree.grid(row=0, column=0, sticky="nsew", padx=1, pady=1)
+        detail_scroll.grid(row=0, column=1, sticky="ns", padx=(0, 1), pady=1)
 
-        action_row = ttk.Frame(dialog, style="Card.TFrame", padding=(self._scale(16), 0, self._scale(16), self._scale(16)))
-        action_row.grid(row=2, column=0, sticky="ew")
-        ttk.Button(action_row, text="编辑额度", command=lambda uid=user_id: self.open_quota_manager_dialog(default_user_id=uid)).pack(side=tk.LEFT)
-        ttk.Button(action_row, text="关闭", command=dialog.destroy).pack(side=tk.RIGHT)
+        action_row = ctk.CTkFrame(dialog, fg_color="transparent")
+        action_row.grid(row=2, column=0, sticky="ew", padx=16, pady=16)
+        ctk.CTkButton(action_row, text="编辑额度", command=lambda uid=user_id: self.open_quota_manager_dialog(default_user_id=uid), font=("Microsoft YaHei UI", 11)).pack(side=tk.LEFT)
+        ctk.CTkButton(action_row, text="关闭", command=dialog.destroy, font=("Microsoft YaHei UI", 11)).pack(side=tk.RIGHT)
 
     def open_current_user_quota_dialog(self):
         """打开当前选中用户的额度管理对话框。"""
@@ -500,12 +525,17 @@ class LLMConfigGUI(
         parent.columnconfigure(0, weight=1)
         parent.rowconfigure(1, weight=1)
 
-        ttk.Label(parent, text="维护当前平台的已配置模型。支持拖拽排序，排序后的第一项更适合作为默认选择。", style="SurfaceMuted.TLabel", wraplength=self._scale(640), justify=tk.LEFT).grid(
-            row=0, column=0, sticky="ew", pady=(0, self._scale(12))
-        )
+        ctk.CTkLabel(
+            parent, 
+            text="维护当前平台的已配置模型。支持拖拽排序，排序后的第一项更适合作为默认选择。", 
+            text_color=("gray45", "gray65"),
+            font=("Microsoft YaHei UI", 11),
+            wraplength=self._scale(640), 
+            justify=tk.LEFT
+        ).grid(row=0, column=0, sticky="ew", pady=(0, self._scale(6)))
 
-        list_frame = ttk.Frame(parent, style="Card.TFrame")
-        list_frame.grid(row=1, column=0, sticky="nsew")
+        list_frame = ctk.CTkFrame(parent, fg_color=("white", "#2b2b2b"), border_color=("gray85", "gray20"), border_width=1, corner_radius=6)
+        list_frame.grid(row=1, column=0, sticky="nsew", padx=1, pady=(0, 4))
         list_frame.columnconfigure(0, weight=1)
         list_frame.rowconfigure(0, weight=1)
 
@@ -513,58 +543,53 @@ class LLMConfigGUI(
         style_listbox(self.model_listbox, ui_scale=self.ui_scale)
         model_scroll = ttk.Scrollbar(list_frame, orient=tk.VERTICAL, command=self.model_listbox.yview)
         self.model_listbox.configure(yscrollcommand=model_scroll.set)
-        self.model_listbox.grid(row=0, column=0, sticky="nsew")
-        model_scroll.grid(row=0, column=1, sticky="ns")
+        self.model_listbox.grid(row=0, column=0, sticky="nsew", padx=1, pady=1)
+        model_scroll.grid(row=0, column=1, sticky="ns", padx=(0, 1), pady=1)
 
         self.model_listbox.bind("<ButtonPress-1>", self.on_model_drag_start)
         self.model_listbox.bind("<B1-Motion>", self.on_model_drag_motion)
         self.model_listbox.bind("<ButtonRelease-1>", self.on_model_drag_stop)
 
-        btn_row = ttk.Frame(parent, style="Card.TFrame")
-        btn_row.grid(row=2, column=0, sticky="ew", pady=(self._scale(12), self._scale(8)))
+        actions_row = ctk.CTkFrame(parent, fg_color="transparent")
+        actions_row.grid(row=2, column=0, sticky="ew", pady=(self._scale(4), 0))
         for col in range(3):
-            btn_row.columnconfigure(col, weight=1)
-        ttk.Button(btn_row, text="新增模型", command=self.open_add_model_dialog).grid(row=0, column=0, sticky="ew")
-        ttk.Button(btn_row, text="编辑模型", command=self.edit_model).grid(row=0, column=1, sticky="ew", padx=self._scale(8))
-        ttk.Button(btn_row, text="删除模型", command=self.delete_model, style="Danger.TButton").grid(row=0, column=2, sticky="ew")
+            actions_row.columnconfigure(col, weight=1)
 
-        test_row = ttk.Frame(parent, style="Card.TFrame")
-        test_row.grid(row=3, column=0, sticky="ew")
-        for col in range(3):
-            test_row.columnconfigure(col, weight=1)
-        ttk.Button(test_row, text="测试模型", command=self.test_model, style="Primary.TButton").grid(row=0, column=0, sticky="ew")
-        ttk.Button(test_row, text="测试 Embedding", command=self.test_embedding).grid(row=0, column=1, sticky="ew", padx=self._scale(8))
-        ttk.Button(test_row, text="流式测速", command=self.speed_test_model).grid(row=0, column=2, sticky="ew")
+        ctk.CTkButton(actions_row, text="新增模型", command=self.open_add_model_dialog, font=("Microsoft YaHei UI", 11)).grid(row=0, column=0, sticky="ew", padx=(0, 4), pady=(0, 4))
+        ctk.CTkButton(actions_row, text="编辑模型", command=self.edit_model, font=("Microsoft YaHei UI", 11)).grid(row=0, column=1, sticky="ew", padx=4, pady=(0, 4))
+        ctk.CTkButton(actions_row, text="删除模型", command=self.delete_model, fg_color="transparent", border_color="#C23B22", border_width=1, text_color="#C23B22", hover_color="#3D1A16", font=("Microsoft YaHei UI", 11)).grid(row=0, column=2, sticky="ew", padx=(4, 0), pady=(0, 4))
+
+        ctk.CTkButton(actions_row, text="测试模型", command=self.test_model, fg_color="#3667D6", hover_color="#2E57B5", font=("Microsoft YaHei UI", 11)).grid(row=1, column=0, sticky="ew", padx=(0, 4))
+        ctk.CTkButton(actions_row, text="测试 Embedding", command=self.test_embedding, font=("Microsoft YaHei UI", 11)).grid(row=1, column=1, sticky="ew", padx=4)
+        ctk.CTkButton(actions_row, text="流式测速", command=self.speed_test_model, font=("Microsoft YaHei UI", 11)).grid(row=1, column=2, sticky="ew", padx=(4, 0))
 
     def _build_right_panel(self, parent):
         """构建右侧工作区。"""
         parent.columnconfigure(0, weight=1)
-        parent.rowconfigure(0, weight=3)
-        parent.rowconfigure(1, weight=2)
+        parent.rowconfigure(0, weight=1)
+        parent.rowconfigure(1, weight=1)
 
-        notebook_card = ttk.Frame(parent, style="Card.TFrame", padding=self._scale(10))
-        notebook_card.grid(row=0, column=0, sticky="nsew", pady=(0, self._scale(12)))
+        notebook_card = ctk.CTkFrame(parent)
+        notebook_card.grid(row=0, column=0, sticky="nsew", pady=(0, self._scale(8)))
         notebook_card.columnconfigure(0, weight=1)
         notebook_card.rowconfigure(0, weight=1)
 
-        notebook = ttk.Notebook(notebook_card)
-        notebook.grid(row=0, column=0, sticky="nsew")
+        notebook = ctk.CTkTabview(notebook_card)
+        notebook.grid(row=0, column=0, sticky="nsew", padx=8, pady=8)
 
-        model_tab = ttk.Frame(notebook, style="Card.TFrame", padding=self._scale(16))
+        notebook.add("已配置模型")
+        notebook.add("模型探测")
+
+        model_tab = notebook.tab("已配置模型")
         model_tab.columnconfigure(0, weight=1)
-        model_tab.rowconfigure(1, weight=1)
 
-        probe_tab = ttk.Frame(notebook, style="Card.TFrame", padding=self._scale(16))
+        probe_tab = notebook.tab("模型探测")
         probe_tab.columnconfigure(0, weight=1)
-        probe_tab.rowconfigure(1, weight=1)
-
-        notebook.add(model_tab, text="已配置模型")
-        notebook.add(probe_tab, text="模型探测")
 
         self._build_model_panel(model_tab)
         self._build_probe_panel(probe_tab)
 
-        log_card = ttk.Frame(parent, style="Card.TFrame", padding=self._scale(16))
+        log_card = ctk.CTkFrame(parent)
         log_card.grid(row=1, column=0, sticky="nsew")
         self._build_log_panel(log_card)
 
@@ -573,21 +598,26 @@ class LLMConfigGUI(
         parent.columnconfigure(0, weight=1)
         parent.rowconfigure(2, weight=1)
 
-        ttk.Label(parent, text="探测兼容 OpenAI 协议的平台模型列表，并将结果一键加入当前平台。", style="SurfaceMuted.TLabel", wraplength=self._scale(640), justify=tk.LEFT).grid(
-            row=0, column=0, sticky="ew", pady=(0, self._scale(12))
-        )
+        ctk.CTkLabel(
+            parent, 
+            text="探测兼容 OpenAI 协议的平台模型列表，并将结果一键加入当前平台。", 
+            text_color=("gray45", "gray65"),
+            font=("Microsoft YaHei UI", 11),
+            wraplength=self._scale(640), 
+            justify=tk.LEFT
+        ).grid(row=0, column=0, sticky="ew", pady=(0, self._scale(6)))
 
-        filter_row = ttk.Frame(parent, style="Card.TFrame")
-        filter_row.grid(row=1, column=0, sticky="ew", pady=(0, self._scale(12)))
+        filter_row = ctk.CTkFrame(parent, fg_color="transparent")
+        filter_row.grid(row=1, column=0, sticky="ew", pady=(0, self._scale(6)))
         filter_row.columnconfigure(1, weight=1)
-        ttk.Label(filter_row, text="筛选", style="Surface.TLabel").grid(row=0, column=0, sticky=tk.W)
-        self.filter_entry = ttk.Entry(filter_row)
+        ctk.CTkLabel(filter_row, text="筛选", font=("Microsoft YaHei UI", 11)).grid(row=0, column=0, sticky=tk.W)
+        self.filter_entry = ctk.CTkEntry(filter_row)
         self.filter_entry.grid(row=0, column=1, sticky="ew", padx=self._scale(8))
         self.filter_entry.bind("<KeyRelease>", self.on_filter_change)
-        ttk.Button(filter_row, text="清除", command=self.clear_filter).grid(row=0, column=2, sticky="e")
+        ctk.CTkButton(filter_row, text="清除", command=self.clear_filter, width=60, font=("Microsoft YaHei UI", 11)).grid(row=0, column=2, sticky="e")
 
-        list_frame = ttk.Frame(parent, style="Card.TFrame")
-        list_frame.grid(row=2, column=0, sticky="nsew")
+        list_frame = ctk.CTkFrame(parent, fg_color=("white", "#2b2b2b"), border_color=("gray85", "gray20"), border_width=1, corner_radius=6)
+        list_frame.grid(row=2, column=0, sticky="nsew", padx=1, pady=(0, 4))
         list_frame.columnconfigure(0, weight=1)
         list_frame.rowconfigure(0, weight=1)
 
@@ -595,45 +625,41 @@ class LLMConfigGUI(
         style_listbox(self.probe_listbox, ui_scale=self.ui_scale)
         probe_scroll = ttk.Scrollbar(list_frame, orient=tk.VERTICAL, command=self.probe_listbox.yview)
         self.probe_listbox.configure(yscrollcommand=probe_scroll.set)
-        self.probe_listbox.grid(row=0, column=0, sticky="nsew")
-        probe_scroll.grid(row=0, column=1, sticky="ns")
+        self.probe_listbox.grid(row=0, column=0, sticky="nsew", padx=1, pady=1)
+        probe_scroll.grid(row=0, column=1, sticky="ns", padx=(0, 1), pady=1)
 
-        btn_row = ttk.Frame(parent, style="Card.TFrame")
-        btn_row.grid(row=3, column=0, sticky="ew", pady=(self._scale(12), 0))
+        btn_row = ctk.CTkFrame(parent, fg_color="transparent")
+        btn_row.grid(row=3, column=0, sticky="ew", pady=(self._scale(4), 0))
         for col in range(3):
             btn_row.columnconfigure(col, weight=1)
-        ttk.Button(btn_row, text="开始探测", command=self.probe_models, style="Primary.TButton").grid(row=0, column=0, sticky="ew")
-        ttk.Button(btn_row, text="添加选中模型", command=self.open_add_model_dialog).grid(row=0, column=1, sticky="ew", padx=self._scale(8))
-        ttk.Button(btn_row, text="按自定义名称添加", command=self.use_custom_model_name).grid(row=0, column=2, sticky="ew")
+        ctk.CTkButton(btn_row, text="开始探测", command=self.probe_models, fg_color="#3667D6", hover_color="#2E57B5", font=("Microsoft YaHei UI", 11)).grid(row=0, column=0, sticky="ew", padx=(0, 4))
+        ctk.CTkButton(btn_row, text="添加选中模型", command=self.open_add_model_dialog, font=("Microsoft YaHei UI", 11)).grid(row=0, column=1, sticky="ew", padx=4)
+        ctk.CTkButton(btn_row, text="按自定义名称添加", command=self.use_custom_model_name, font=("Microsoft YaHei UI", 11)).grid(row=0, column=2, sticky="ew", padx=(4, 0))
 
     def _build_log_panel(self, parent):
         """构建日志面板。"""
         parent.columnconfigure(0, weight=1)
         parent.rowconfigure(1, weight=1)
 
-        header = ttk.Frame(parent, style="Card.TFrame")
-        header.grid(row=0, column=0, sticky="ew", pady=(0, self._scale(10)))
+        header = ctk.CTkFrame(parent, fg_color="transparent")
+        header.grid(row=0, column=0, sticky="ew", pady=(4, self._scale(3)), padx=16)
         header.columnconfigure(0, weight=1)
 
-        ttk.Label(header, text="操作日志", style="CardTitle.TLabel").grid(row=0, column=0, sticky=tk.W)
-        ttk.Label(header, text="记录探测、测试、导入导出与密钥处理过程。", style="SurfaceMuted.TLabel").grid(row=1, column=0, sticky=tk.W, pady=(self._scale(4), 0))
-        ttk.Button(header, text="清空日志", command=self._clear_log).grid(row=0, column=1, rowspan=2, sticky="e")
+        ctk.CTkLabel(header, text="操作日志", font=("Microsoft YaHei UI", 12, "bold")).grid(row=0, column=0, sticky=tk.W)
+        ctk.CTkLabel(header, text="记录探测、测试、导入导出与密钥处理过程。", text_color=("gray45", "gray65"), font=("Microsoft YaHei UI", 11)).grid(row=1, column=0, sticky=tk.W, pady=(self._scale(2), 0))
+        ctk.CTkButton(header, text="清空日志", command=self._clear_log, width=80, font=("Microsoft YaHei UI", 11)).grid(row=0, column=1, rowspan=2, sticky="e")
 
-        log_body = ttk.Frame(parent, style="Card.TFrame")
-        log_body.grid(row=1, column=0, sticky="nsew")
+        log_body = ctk.CTkFrame(parent, fg_color="transparent")
+        log_body.grid(row=1, column=0, sticky="nsew", padx=16, pady=(0, 8))
         log_body.columnconfigure(0, weight=1)
         log_body.rowconfigure(0, weight=1)
 
-        self.log_text = tk.Text(log_body, height=7, wrap=tk.WORD)
-        style_text_widget(self.log_text, ui_scale=self.ui_scale)
-        log_scroll = ttk.Scrollbar(log_body, orient=tk.VERTICAL, command=self.log_text.yview)
-        self.log_text.configure(yscrollcommand=log_scroll.set)
+        self.log_text = ctk.CTkTextbox(log_body, height=7, wrap=tk.WORD)
         self.log_text.grid(row=0, column=0, sticky="nsew")
-        log_scroll.grid(row=0, column=1, sticky="ns")
 
-        self.log_text.tag_configure("success", foreground=COLORS["success"])
-        self.log_text.tag_configure("error", foreground=COLORS["danger"])
-        self.log_text.tag_configure("warning", foreground=COLORS["warning"])
+        self.log_text.tag_config("success", foreground=COLORS["success"])
+        self.log_text.tag_config("error", foreground=COLORS["danger"])
+        self.log_text.tag_config("warning", foreground=COLORS["warning"])
 
     def _clear_log(self):
         """清空日志。"""
@@ -733,10 +759,10 @@ class LLMConfigGUI(
                 self.model_listbox.delete(0, tk.END)
                 self.probe_listbox.delete(0, tk.END)
                 for entry in (self.base_url_entry, self.platform_url_entry, self.recharge_url_entry, self.api_key_entry):
-                    entry.config(state="normal")
+                    entry.configure(state="normal")
                     entry.delete(0, tk.END)
                     if entry is self.base_url_entry:
-                        entry.config(state="readonly")
+                        entry.configure(state="readonly")
 
             self._update_overview_state()
             self.load_user_usage_overview(silent=True)
@@ -792,8 +818,12 @@ class LLMConfigGUI(
     # ------------------------------------------------------------------ #
 
     def _resolve_platform_name(self, platform_value=None):
-        """将下拉框显示值解析为实际平台 key（优先使用索引）。"""
-        current_index = self.platform_combo.current() if hasattr(self, "platform_combo") else -1
+        """将下拉框显示值解析为实际平台 key（优先使用值索引）。"""
+        try:
+            val = self.platform_combo.get()
+            current_index = self.platform_keys_in_order.index(val)
+        except Exception:
+            current_index = -1
         if isinstance(current_index, int) and 0 <= current_index < len(self.platform_keys_in_order):
             return self.platform_keys_in_order[current_index]
 
@@ -812,7 +842,7 @@ class LLMConfigGUI(
         self.platform_display_to_key = {}
         self.platform_keys_in_order = list(platform_names)
 
-        self.platform_combo["values"] = platform_names
+        self.platform_combo.configure(values=platform_names)
         for name in platform_names:
             self.platform_display_to_key[name] = name
 
@@ -821,9 +851,9 @@ class LLMConfigGUI(
             target_name = platform_names[0]
 
         if target_name:
-            target_index = self.platform_keys_in_order.index(target_name)
-            self.platform_combo.current(target_index)
+            self.platform_combo.set(target_name)
         else:
+            self.platform_combo.set("")
             self.platform_var.set("")
 
     def _decrypt_api_key_strict(self, api_key_val: str) -> str:
@@ -864,10 +894,11 @@ class LLMConfigGUI(
 def main():
     """主函数：启动 GUI。"""
     enable_high_dpi_awareness()
-    root = tk.Tk()
+    root = ctk.CTk()
     LLMConfigGUI(root)
     root.mainloop()
 
 
 if __name__ == "__main__":
     main()
+

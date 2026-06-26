@@ -665,7 +665,7 @@ const enUS = {
         billingOff: 'Billing Off',
         billingOnTitle: 'Matchstick billing is enabled',
         billingOffTitle: 'Matchstick billing is disabled',
-        billingOnDesc: 'System-hosted models check model price, user matchsticks, and platform matchstick budget.',
+        billingOnDesc: 'System-hosted models check model price, user matchsticks, and platform matchstick budget. The site admin will cover AI credit expenses for all system platforms where you have not configured an API key.',
         billingOffDesc: 'Prices are ignored and matchsticks are not deducted; model price editing is locked.',
       },
       actions: {
@@ -801,9 +801,13 @@ const enUS = {
       },
       alerts: {
         savedKeyNotReadableTitle: 'Saved key cannot be read directly right now',
+        savedKeyNotReadableMessage: 'A saved key record was detected, but it cannot be read at the moment. Please re-enter your API Key.',
         managedNeedsReconfigureTitle: 'This platform needs a managed key configured',
+        managedNeedsReconfigureMessage: 'The managed key is not ready yet. Please enter an API Key for this platform.',
         savedKeyDecryptFailedTitle: 'This platform needs an API Key configured',
-        managedLockedTitle: 'Managed key is not open to all users currently',
+        savedKeyDecryptFailedMessage: 'The saved API Key is no longer usable. Please re-enter it.',
+        managedLockedTitle: 'API Key required',
+        managedLockedMessage: 'Please configure your own API Key to use this platform.',
       },
       pricing: {
         inputPrefix: '↑',

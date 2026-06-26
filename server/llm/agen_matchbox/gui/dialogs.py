@@ -5,7 +5,8 @@ import os
 import sys
 import json as json_lib
 import tkinter as tk
-from tkinter import ttk, messagebox, simpledialog
+from tkinter import ttk, messagebox
+import customtkinter as ctk
 
 if __package__ in (None, "", "gui"):
     _GUI_DIR = os.path.dirname(os.path.abspath(__file__))
@@ -17,7 +18,7 @@ if __package__ in (None, "", "gui"):
 
 from ..models import DEFAULT_MAX_CONTEXT_TOKENS, DEFAULT_MAX_OUTPUT_TOKENS
 from .dpi import prepare_toplevel_window
-from .theme import style_listbox, style_text_widget
+from .theme import style_listbox
 
 
 class DialogsMixin:
@@ -38,7 +39,7 @@ class DialogsMixin:
 
     def _create_modal_dialog(self, title: str, *, default_size=(860, 700), min_size=(680, 520)):
         """创建带有统一尺寸策略的模态对话框。"""
-        dialog = tk.Toplevel(self.root)
+        dialog = ctk.CTkToplevel(self.root)
         dialog.title(title)
         dialog.transient(self.root)
         dialog.grab_set()
@@ -69,10 +70,8 @@ class DialogsMixin:
             selection = self.probe_listbox.curselection()
             if selection:
                 raw_text = self.probe_listbox.get(selection[0])
-                # 列表项格式: "model_id  [ctx=xxx out=xxx]"，取前半部分
                 selected_model_id = raw_text.split('  [')[0].strip()
 
-        # 从探测缓存中查找该模型的 token 上限
         if selected_model_id:
             cache_key = self._get_probe_cache_key(
                 platform_name,
@@ -92,26 +91,26 @@ class DialogsMixin:
             min_size=(720, 620),
         )
 
-        ttk.Label(dialog, text="显示名称:").grid(row=0, column=0, sticky=tk.W, padx=10, pady=10)
-        display_name_entry = ttk.Entry(dialog, width=50)
-        display_name_entry.grid(row=0, column=1, padx=10, pady=10, sticky=(tk.W, tk.E))
+        ctk.CTkLabel(dialog, text="显示名称:", font=("Microsoft YaHei UI", 11)).grid(row=0, column=0, sticky=tk.W, padx=20, pady=10)
+        display_name_entry = ctk.CTkEntry(dialog, width=320)
+        display_name_entry.grid(row=0, column=1, padx=20, pady=10, sticky=tk.W)
         if selected_model_id:
             display_name_entry.insert(0, selected_model_id)
 
-        ttk.Label(dialog, text="模型ID:").grid(row=1, column=0, sticky=tk.W, padx=10, pady=10)
-        model_id_entry = ttk.Entry(dialog, width=50)
-        model_id_entry.grid(row=1, column=1, padx=10, pady=10, sticky=(tk.W, tk.E))
+        ctk.CTkLabel(dialog, text="模型ID:", font=("Microsoft YaHei UI", 11)).grid(row=1, column=0, sticky=tk.W, padx=20, pady=10)
+        model_id_entry = ctk.CTkEntry(dialog, width=320)
+        model_id_entry.grid(row=1, column=1, padx=20, pady=10, sticky=tk.W)
         if selected_model_id:
             model_id_entry.insert(0, selected_model_id)
 
         is_embedding_var = tk.BooleanVar(value=False)
-        ttk.Checkbutton(dialog, text="Embedding 模型", variable=is_embedding_var).grid(row=2, column=1, sticky=tk.W, padx=10)
+        ctk.CTkCheckBox(dialog, text="Embedding 模型", variable=is_embedding_var, font=("Microsoft YaHei UI", 11)).grid(row=2, column=1, sticky=tk.W, padx=20, pady=5)
 
         temperature_enabled_var = tk.BooleanVar(value=False)
         temperature_var = tk.DoubleVar(value=0.7)
 
-        temp_row = ttk.Frame(dialog)
-        temp_row.grid(row=3, column=1, padx=10, pady=(6, 0), sticky=(tk.W, tk.E))
+        temp_row = ctk.CTkFrame(dialog, fg_color="transparent")
+        temp_row.grid(row=3, column=1, padx=20, pady=(6, 0), sticky=(tk.W, tk.E))
 
         def on_temperature_toggle():
             enabled = bool(temperature_enabled_var.get())
@@ -121,60 +120,60 @@ class DialogsMixin:
                     "务必了解该模型temperature基准值\n部分模型在温度设置错误时会直接报错\n如果你不清楚这样做的意义\n请不要动这个参数",
                     parent=dialog,
                 )
-                temperature_entry.config(state='normal')
+                temperature_entry.configure(state='normal')
             else:
-                temperature_entry.config(state='disabled')
+                temperature_entry.configure(state='disabled')
 
-        ttk.Checkbutton(
+        ctk.CTkCheckBox(
             temp_row,
-            text="启用 Temperature（默认关闭）",
+            text="启用 Temperature",
             variable=temperature_enabled_var,
             command=on_temperature_toggle,
+            font=("Microsoft YaHei UI", 11)
         ).pack(side=tk.LEFT)
 
-        ttk.Label(dialog, text="Temperature: ").grid(row=3, column=0, sticky=tk.W, padx=10, pady=(6, 0))
-        temperature_entry = ttk.Entry(dialog, width=18, textvariable=temperature_var)
-        temperature_entry.grid(row=3, column=1, padx=(280, 10), pady=(6, 0), sticky=tk.W)
-        temperature_entry.config(state='disabled')
-        ttk.Label(dialog, text="范围 0.3 - 1.5", foreground="gray").grid(row=3, column=1, padx=(380, 10), pady=(6, 0), sticky=tk.W)
+        ctk.CTkLabel(dialog, text="Temperature: ", font=("Microsoft YaHei UI", 11)).grid(row=3, column=0, sticky=tk.W, padx=20, pady=(6, 0))
+        temperature_entry = ctk.CTkEntry(dialog, width=80, textvariable=temperature_var)
+        temperature_entry.grid(row=3, column=1, padx=(180, 20), pady=(6, 0), sticky=tk.W)
+        temperature_entry.configure(state='disabled')
+        ctk.CTkLabel(dialog, text="范围 0.3 - 1.5", text_color="gray", font=("Microsoft YaHei UI", 10)).grid(row=3, column=1, padx=(270, 20), pady=(6, 0), sticky=tk.W)
 
-        ttk.Label(dialog, text="最大上下文:").grid(row=4, column=0, sticky=tk.W, padx=10, pady=(8, 0))
-        max_context_entry = ttk.Entry(dialog, width=24)
-        max_context_entry.grid(row=4, column=1, padx=10, pady=(8, 0), sticky=tk.W)
+        ctk.CTkLabel(dialog, text="最大上下文:", font=("Microsoft YaHei UI", 11)).grid(row=4, column=0, sticky=tk.W, padx=20, pady=(8, 0))
+        max_context_entry = ctk.CTkEntry(dialog, width=150)
+        max_context_entry.grid(row=4, column=1, padx=20, pady=(8, 0), sticky=tk.W)
         _init_max_context = auto_max_context if auto_max_context is not None else DEFAULT_MAX_CONTEXT_TOKENS
         max_context_entry.insert(0, str(_init_max_context))
         _ctx_hint = f"探测值: {auto_max_context}" if auto_max_context is not None else "默认 256000"
-        ttk.Label(dialog, text=_ctx_hint, foreground="gray").grid(row=4, column=1, padx=(210, 10), pady=(8, 0), sticky=tk.W)
+        ctk.CTkLabel(dialog, text=_ctx_hint, text_color="gray", font=("Microsoft YaHei UI", 10)).grid(row=4, column=1, padx=(180, 20), pady=(8, 0), sticky=tk.W)
 
-        ttk.Label(dialog, text="最大单次输出:").grid(row=5, column=0, sticky=tk.W, padx=10, pady=(8, 0))
-        max_output_entry = ttk.Entry(dialog, width=24)
-        max_output_entry.grid(row=5, column=1, padx=10, pady=(8, 0), sticky=tk.W)
+        ctk.CTkLabel(dialog, text="最大单次输出:", font=("Microsoft YaHei UI", 11)).grid(row=5, column=0, sticky=tk.W, padx=20, pady=(8, 0))
+        max_output_entry = ctk.CTkEntry(dialog, width=150)
+        max_output_entry.grid(row=5, column=1, padx=20, pady=(8, 0), sticky=tk.W)
         _init_max_output = auto_max_output if auto_max_output is not None else DEFAULT_MAX_OUTPUT_TOKENS
         max_output_entry.insert(0, str(_init_max_output))
         _out_hint = f"探测值: {auto_max_output}" if auto_max_output is not None else "默认 64000"
-        ttk.Label(dialog, text=_out_hint, foreground="gray").grid(row=5, column=1, padx=(210, 10), pady=(8, 0), sticky=tk.W)
+        ctk.CTkLabel(dialog, text=_out_hint, text_color="gray", font=("Microsoft YaHei UI", 10)).grid(row=5, column=1, padx=(180, 20), pady=(8, 0), sticky=tk.W)
 
-        ttk.Label(dialog, text="输入价格(每1M token):").grid(row=6, column=0, sticky=tk.W, padx=10, pady=(8, 0))
-        model_input_price_entry = ttk.Entry(dialog, width=24)
-        model_input_price_entry.grid(row=6, column=1, padx=10, pady=(8, 0), sticky=tk.W)
-        ttk.Label(dialog, text="0 表示免费", foreground="gray").grid(row=6, column=1, padx=(210, 10), pady=(8, 0), sticky=tk.W)
+        ctk.CTkLabel(dialog, text="输入价格(每1M token):", font=("Microsoft YaHei UI", 11)).grid(row=6, column=0, sticky=tk.W, padx=20, pady=(8, 0))
+        model_input_price_entry = ctk.CTkEntry(dialog, width=150)
+        model_input_price_entry.grid(row=6, column=1, padx=20, pady=(8, 0), sticky=tk.W)
+        ctk.CTkLabel(dialog, text="0 表示免费", text_color="gray", font=("Microsoft YaHei UI", 10)).grid(row=6, column=1, padx=(180, 20), pady=(8, 0), sticky=tk.W)
 
-        ttk.Label(dialog, text="输出价格(每1M token):").grid(row=6, column=0, sticky=tk.W, padx=10, pady=(28, 0))
-        model_output_price_entry = ttk.Entry(dialog, width=24)
-        model_output_price_entry.grid(row=6, column=1, padx=10, pady=(28, 0), sticky=tk.W)
-        ttk.Label(dialog, text="0 表示免费", foreground="gray").grid(row=6, column=1, padx=(210, 10), pady=(28, 0), sticky=tk.W)
+        ctk.CTkLabel(dialog, text="输出价格(每1M token):", font=("Microsoft YaHei UI", 11)).grid(row=7, column=0, sticky=tk.W, padx=20, pady=(8, 0))
+        model_output_price_entry = ctk.CTkEntry(dialog, width=150)
+        model_output_price_entry.grid(row=7, column=1, padx=20, pady=(8, 0), sticky=tk.W)
+        ctk.CTkLabel(dialog, text="0 表示免费", text_color="gray", font=("Microsoft YaHei UI", 10)).grid(row=7, column=1, padx=(180, 20), pady=(8, 0), sticky=tk.W)
 
-        ttk.Label(dialog, text="Extra Body (JSON):").grid(row=7, column=0, sticky=(tk.W, tk.N), padx=10, pady=10)
-        extra_body_frame = ttk.Frame(dialog)
-        extra_body_frame.grid(row=7, column=1, padx=10, pady=10, sticky=(tk.W, tk.E, tk.N, tk.S))
-        extra_body_text = tk.Text(extra_body_frame, width=50, height=15)
-        style_text_widget(extra_body_text, ui_scale=getattr(self, "ui_scale", 1.0))
+        ctk.CTkLabel(dialog, text="Extra Body (JSON):", font=("Microsoft YaHei UI", 11)).grid(row=8, column=0, sticky=(tk.W, tk.N), padx=20, pady=10)
+        extra_body_frame = ctk.CTkFrame(dialog, fg_color="transparent")
+        extra_body_frame.grid(row=8, column=1, padx=20, pady=10, sticky=(tk.W, tk.E, tk.N, tk.S))
+        extra_body_text = ctk.CTkTextbox(extra_body_frame)
         extra_body_text.pack(fill=tk.BOTH, expand=True)
-        ttk.Label(
+        ctk.CTkLabel(
             extra_body_frame,
-            text='示例1: {"thinkingBudget": 0}\n示例2: {"thinking": {"type": "disabled"}}\n示例3: {"top_k": 40}',
-            foreground="gray",
-            font=('TkDefaultFont', 8),
+            text='示例1: {"thinkingBudget": 0} | 示例2: {"thinking": {"type": "disabled"}} | 示例3: {"top_k": 40}',
+            text_color="gray",
+            font=('Microsoft YaHei UI', 10),
             justify=tk.LEFT
         ).pack(anchor=tk.W, pady=(5, 0))
 
@@ -239,7 +238,6 @@ class DialogsMixin:
                 if not db_id:
                     raise ValueError("无法获取平台数据库 ID")
 
-                # 调用后端增量同步方法
                 model_cfg_payload = {
                     "display_name": display_name,
                     "model_name": model_id,
@@ -253,7 +251,6 @@ class DialogsMixin:
                 }
                 self.ai_manager.admin_sync_platform_models(db_id, [model_cfg_payload])
 
-                # 重新从数据库加载以获取 _db_id
                 self.load_config_from_db()
                 self.log(f"✓ 模型 '{display_name}' 已添加", tag="success")
                 dialog.destroy()
@@ -261,13 +258,13 @@ class DialogsMixin:
                 self.log(f"✗ 保存失败: {e}")
                 messagebox.showerror("错误", f"添加模型失败: {e}", parent=dialog)
 
-        button_frame = ttk.Frame(dialog)
-        button_frame.grid(row=8, column=0, columnspan=2, pady=20)
-        ttk.Button(button_frame, text="添加", command=do_add, width=15).pack(side=tk.LEFT, padx=5)
-        ttk.Button(button_frame, text="取消", command=dialog.destroy, width=15).pack(side=tk.LEFT, padx=5)
+        button_frame = ctk.CTkFrame(dialog, fg_color="transparent")
+        button_frame.grid(row=9, column=0, columnspan=2, pady=20)
+        ctk.CTkButton(button_frame, text="添加", command=do_add, width=100, fg_color="#3667D6", hover_color="#2E57B5", font=("Microsoft YaHei UI", 11)).pack(side=tk.LEFT, padx=5)
+        ctk.CTkButton(button_frame, text="取消", command=dialog.destroy, width=100, font=("Microsoft YaHei UI", 11)).pack(side=tk.LEFT, padx=5)
 
         dialog.columnconfigure(1, weight=1)
-        dialog.rowconfigure(7, weight=1)
+        dialog.rowconfigure(8, weight=1)
 
     def edit_model(self):
         """编辑选中的模型（打开编辑对话框）。"""
@@ -323,25 +320,25 @@ class DialogsMixin:
             min_size=(720, 620),
         )
 
-        ttk.Label(dialog, text="显示名称:").grid(row=0, column=0, sticky=tk.W, padx=10, pady=10)
-        display_name_entry = ttk.Entry(dialog, width=50)
-        display_name_entry.grid(row=0, column=1, padx=10, pady=10, sticky=(tk.W, tk.E))
+        ctk.CTkLabel(dialog, text="显示名称:", font=("Microsoft YaHei UI", 11)).grid(row=0, column=0, sticky=tk.W, padx=20, pady=10)
+        display_name_entry = ctk.CTkEntry(dialog, width=320)
+        display_name_entry.grid(row=0, column=1, padx=20, pady=10, sticky=tk.W)
         display_name_entry.insert(0, display_name)
 
-        ttk.Label(dialog, text="模型ID:").grid(row=1, column=0, sticky=tk.W, padx=10, pady=10)
-        model_id_entry = ttk.Entry(dialog, width=50)
-        model_id_entry.grid(row=1, column=1, padx=10, pady=10, sticky=(tk.W, tk.E))
+        ctk.CTkLabel(dialog, text="模型ID:", font=("Microsoft YaHei UI", 11)).grid(row=1, column=0, sticky=tk.W, padx=20, pady=10)
+        model_id_entry = ctk.CTkEntry(dialog, width=320)
+        model_id_entry.grid(row=1, column=1, padx=20, pady=10, sticky=tk.W)
         model_id_entry.insert(0, model_id)
-        model_id_entry.config(state='readonly')
+        model_id_entry.configure(state='readonly')
 
         is_embedding_var = tk.BooleanVar(value=is_embedding)
-        ttk.Checkbutton(dialog, text="Embedding 模型", variable=is_embedding_var).grid(row=2, column=1, sticky=tk.W, padx=10)
+        ctk.CTkCheckBox(dialog, text="Embedding 模型", variable=is_embedding_var, font=("Microsoft YaHei UI", 11)).grid(row=2, column=1, sticky=tk.W, padx=20, pady=5)
 
         temperature_enabled_var = tk.BooleanVar(value=model_temperature is not None)
         temperature_var = tk.DoubleVar(value=model_temperature if model_temperature is not None else 0.7)
 
-        temp_row = ttk.Frame(dialog)
-        temp_row.grid(row=3, column=1, padx=10, pady=(6, 0), sticky=(tk.W, tk.E))
+        temp_row = ctk.CTkFrame(dialog, fg_color="transparent")
+        temp_row.grid(row=3, column=1, padx=20, pady=(6, 0), sticky=(tk.W, tk.E))
 
         def on_temperature_toggle():
             enabled = bool(temperature_enabled_var.get())
@@ -351,63 +348,63 @@ class DialogsMixin:
                     "务必了解该模型temperature基准值\n如果你不清楚这样做的意义\n请不要动这个参数\n部分模型在温度设置错误时会直接报错",
                     parent=dialog,
                 )
-                temperature_entry.config(state='normal')
+                temperature_entry.configure(state='normal')
             else:
-                temperature_entry.config(state='disabled')
+                temperature_entry.configure(state='disabled')
 
-        ttk.Checkbutton(
+        ctk.CTkCheckBox(
             temp_row,
-            text="启用 Temperature（默认关闭）",
+            text="启用 Temperature",
             variable=temperature_enabled_var,
             command=on_temperature_toggle,
+            font=("Microsoft YaHei UI", 11)
         ).pack(side=tk.LEFT)
 
-        ttk.Label(dialog, text="Temperature: ").grid(row=3, column=0, sticky=tk.W, padx=10, pady=(6, 0))
-        temperature_entry = ttk.Entry(dialog, width=18, textvariable=temperature_var)
-        temperature_entry.grid(row=3, column=1, padx=(280, 10), pady=(6, 0), sticky=tk.W)
+        ctk.CTkLabel(dialog, text="Temperature: ", font=("Microsoft YaHei UI", 11)).grid(row=3, column=0, sticky=tk.W, padx=20, pady=(6, 0))
+        temperature_entry = ctk.CTkEntry(dialog, width=80, textvariable=temperature_var)
+        temperature_entry.grid(row=3, column=1, padx=(180, 20), pady=(6, 0), sticky=tk.W)
         if not bool(temperature_enabled_var.get()):
-            temperature_entry.config(state='disabled')
-        ttk.Label(dialog, text="范围 0.3 - 1.5", foreground="gray").grid(row=3, column=1, padx=(380, 10), pady=(6, 0), sticky=tk.W)
+            temperature_entry.configure(state='disabled')
+        ctk.CTkLabel(dialog, text="范围 0.3 - 1.5", text_color="gray", font=("Microsoft YaHei UI", 10)).grid(row=3, column=1, padx=(270, 20), pady=(6, 0), sticky=tk.W)
 
-        ttk.Label(dialog, text="最大上下文:").grid(row=4, column=0, sticky=tk.W, padx=10, pady=(8, 0))
-        max_context_entry = ttk.Entry(dialog, width=24)
-        max_context_entry.grid(row=4, column=1, padx=10, pady=(8, 0), sticky=tk.W)
+        ctk.CTkLabel(dialog, text="最大上下文:", font=("Microsoft YaHei UI", 11)).grid(row=4, column=0, sticky=tk.W, padx=20, pady=(8, 0))
+        max_context_entry = ctk.CTkEntry(dialog, width=150)
+        max_context_entry.grid(row=4, column=1, padx=20, pady=(8, 0), sticky=tk.W)
         max_context_entry.insert(0, str(model_max_context))
-        ttk.Label(dialog, text="默认 256000", foreground="gray").grid(row=4, column=1, padx=(210, 10), pady=(8, 0), sticky=tk.W)
+        ctk.CTkLabel(dialog, text="默认 256000", text_color="gray", font=("Microsoft YaHei UI", 10)).grid(row=4, column=1, padx=(180, 20), pady=(8, 0), sticky=tk.W)
 
-        ttk.Label(dialog, text="最大单次输出:").grid(row=5, column=0, sticky=tk.W, padx=10, pady=(8, 0))
-        max_output_entry = ttk.Entry(dialog, width=24)
-        max_output_entry.grid(row=5, column=1, padx=10, pady=(8, 0), sticky=tk.W)
+        ctk.CTkLabel(dialog, text="最大单次输出:", font=("Microsoft YaHei UI", 11)).grid(row=5, column=0, sticky=tk.W, padx=20, pady=(8, 0))
+        max_output_entry = ctk.CTkEntry(dialog, width=150)
+        max_output_entry.grid(row=5, column=1, padx=20, pady=(8, 0), sticky=tk.W)
         max_output_entry.insert(0, str(model_max_output))
-        ttk.Label(dialog, text="默认 64000", foreground="gray").grid(row=5, column=1, padx=(210, 10), pady=(8, 0), sticky=tk.W)
+        ctk.CTkLabel(dialog, text="默认 64000", text_color="gray", font=("Microsoft YaHei UI", 10)).grid(row=5, column=1, padx=(180, 20), pady=(8, 0), sticky=tk.W)
 
-        ttk.Label(dialog, text="输入价格(每1M token):").grid(row=6, column=0, sticky=tk.W, padx=10, pady=(8, 0))
-        model_input_price_entry = ttk.Entry(dialog, width=24)
-        model_input_price_entry.grid(row=6, column=1, padx=10, pady=(8, 0), sticky=tk.W)
+        ctk.CTkLabel(dialog, text="输入价格(每1M token):", font=("Microsoft YaHei UI", 11)).grid(row=6, column=0, sticky=tk.W, padx=20, pady=(8, 0))
+        model_input_price_entry = ctk.CTkEntry(dialog, width=150)
+        model_input_price_entry.grid(row=6, column=1, padx=20, pady=(8, 0), sticky=tk.W)
         if model_input_price is not None:
             model_input_price_entry.insert(0, str(model_input_price))
-        ttk.Label(dialog, text="0 表示免费", foreground="gray").grid(row=6, column=1, padx=(210, 10), pady=(8, 0), sticky=tk.W)
+        ctk.CTkLabel(dialog, text="0 表示免费", text_color="gray", font=("Microsoft YaHei UI", 10)).grid(row=6, column=1, padx=(180, 20), pady=(8, 0), sticky=tk.W)
 
-        ttk.Label(dialog, text="输出价格(每1M token):").grid(row=6, column=0, sticky=tk.W, padx=10, pady=(28, 0))
-        model_output_price_entry = ttk.Entry(dialog, width=24)
-        model_output_price_entry.grid(row=6, column=1, padx=10, pady=(28, 0), sticky=tk.W)
+        ctk.CTkLabel(dialog, text="输出价格(每1M token):", font=("Microsoft YaHei UI", 11)).grid(row=7, column=0, sticky=tk.W, padx=20, pady=(8, 0))
+        model_output_price_entry = ctk.CTkEntry(dialog, width=150)
+        model_output_price_entry.grid(row=7, column=1, padx=20, pady=(8, 0), sticky=tk.W)
         if model_output_price is not None:
             model_output_price_entry.insert(0, str(model_output_price))
-        ttk.Label(dialog, text="0 表示免费", foreground="gray").grid(row=6, column=1, padx=(210, 10), pady=(28, 0), sticky=tk.W)
+        ctk.CTkLabel(dialog, text="0 表示免费", text_color="gray", font=("Microsoft YaHei UI", 10)).grid(row=7, column=1, padx=(180, 20), pady=(8, 0), sticky=tk.W)
 
-        ttk.Label(dialog, text="Extra Body (JSON):").grid(row=7, column=0, sticky=(tk.W, tk.N), padx=10, pady=10)
-        extra_body_frame = ttk.Frame(dialog)
-        extra_body_frame.grid(row=7, column=1, padx=10, pady=10, sticky=(tk.W, tk.E, tk.N, tk.S))
-        extra_body_text = tk.Text(extra_body_frame, width=50, height=15)
-        style_text_widget(extra_body_text, ui_scale=getattr(self, "ui_scale", 1.0))
+        ctk.CTkLabel(dialog, text="Extra Body (JSON):", font=("Microsoft YaHei UI", 11)).grid(row=8, column=0, sticky=(tk.W, tk.N), padx=20, pady=10)
+        extra_body_frame = ctk.CTkFrame(dialog, fg_color="transparent")
+        extra_body_frame.grid(row=8, column=1, padx=20, pady=10, sticky=(tk.W, tk.E, tk.N, tk.S))
+        extra_body_text = ctk.CTkTextbox(extra_body_frame)
         extra_body_text.pack(fill=tk.BOTH, expand=True)
         if extra_body_dict:
             extra_body_text.insert("1.0", json_lib.dumps(extra_body_dict, indent=2, ensure_ascii=False))
-        ttk.Label(
+        ctk.CTkLabel(
             extra_body_frame,
-            text='示例1: {"thinkingBudget": 0}\n示例2: {"thinking": {"type": "disabled"}}\n示例3: {"top_k": 40}',
-            foreground="gray",
-            font=('TkDefaultFont', 8),
+            text='示例1: {"thinkingBudget": 0} | 示例2: {"thinking": {"type": "disabled"}} | 示例3: {"top_k": 40}',
+            text_color="gray",
+            font=('Microsoft YaHei UI', 10),
             justify=tk.LEFT
         ).pack(anchor=tk.W, pady=(5, 0))
 
@@ -478,7 +475,6 @@ class DialogsMixin:
                 if not model_db_id:
                     raise ValueError("无法获取模型数据库 ID")
 
-                # 调用后端更新方法
                 self.ai_manager.admin_update_sys_model(
                     model_id=model_db_id,
                     display_name=new_display_name,
@@ -501,13 +497,13 @@ class DialogsMixin:
                 self.log(f"✗ 保存失败: {e}")
                 messagebox.showerror("错误", f"更新模型失败: {e}", parent=dialog)
 
-        button_frame = ttk.Frame(dialog)
-        button_frame.grid(row=8, column=0, columnspan=2, pady=20)
-        ttk.Button(button_frame, text="保存", command=do_update, width=15).pack(side=tk.LEFT, padx=5)
-        ttk.Button(button_frame, text="取消", command=dialog.destroy, width=15).pack(side=tk.LEFT, padx=5)
+        button_frame = ctk.CTkFrame(dialog, fg_color="transparent")
+        button_frame.grid(row=9, column=0, columnspan=2, pady=20)
+        ctk.CTkButton(button_frame, text="保存", command=do_update, width=100, fg_color="#3667D6", hover_color="#2E57B5", font=("Microsoft YaHei UI", 11)).pack(side=tk.LEFT, padx=5)
+        ctk.CTkButton(button_frame, text="取消", command=dialog.destroy, width=100, font=("Microsoft YaHei UI", 11)).pack(side=tk.LEFT, padx=5)
 
         dialog.columnconfigure(1, weight=1)
-        dialog.rowconfigure(7, weight=1)
+        dialog.rowconfigure(8, weight=1)
 
     def edit_system_model(self):
         """编辑系统用户 (-1) 的模型选择及用途管理。"""
@@ -536,41 +532,51 @@ class DialogsMixin:
         for model_info in self.all_models:
             models_by_platform[model_info['platform_name']].append((model_info['display_name'], model_info))
 
-        paned = ttk.PanedWindow(dialog, orient=tk.HORIZONTAL)
-        paned.pack(fill=tk.BOTH, expand=True, padx=5, pady=5)
+        # 使用 ctk.CTkFrame 来进行分栏布局，体验更好
+        paned = ctk.CTkFrame(dialog, fg_color="transparent")
+        paned.pack(fill=tk.BOTH, expand=True, padx=10, pady=10)
+        paned.columnconfigure(0, weight=2)
+        paned.columnconfigure(1, weight=3)
+        paned.rowconfigure(0, weight=1)
 
-        left_frame = ttk.LabelFrame(paned, text="用途列表 (Usage Slots)", padding="5")
-        paned.add(left_frame, weight=1)
+        left_frame = ctk.CTkFrame(paned)
+        left_frame.grid(row=0, column=0, sticky="nsew", padx=(0, 10), pady=0)
+
+        ctk.CTkLabel(left_frame, text="用途列表 (Usage Slots)", font=("Microsoft YaHei UI", 11, "bold")).pack(anchor=tk.W, padx=10, pady=(10, 5))
 
         usage_listbox = tk.Listbox(left_frame, height=15)
         style_listbox(usage_listbox, ui_scale=getattr(self, "ui_scale", 1.0))
         usage_scrollbar = ttk.Scrollbar(left_frame, orient=tk.VERTICAL, command=usage_listbox.yview)
         usage_listbox.configure(yscrollcommand=usage_scrollbar.set)
-        usage_listbox.pack(side=tk.LEFT, fill=tk.BOTH, expand=True)
-        usage_scrollbar.pack(side=tk.RIGHT, fill=tk.Y)
+        usage_listbox.pack(side=tk.LEFT, fill=tk.BOTH, expand=True, padx=(10, 0), pady=(0, 10))
+        usage_scrollbar.pack(side=tk.RIGHT, fill=tk.Y, padx=(0, 10), pady=(0, 10))
 
-        right_frame = ttk.LabelFrame(paned, text="绑定模型配置", padding="10")
-        paned.add(right_frame, weight=2)
+        right_frame = ctk.CTkFrame(paned)
+        right_frame.grid(row=0, column=1, sticky="nsew", padx=0, pady=0)
+        right_frame.columnconfigure(1, weight=1)
 
-        ttk.Label(right_frame, text="用途标识 (Key):").grid(row=0, column=0, sticky=tk.W, pady=5)
-        key_label = ttk.Label(right_frame, text="-", font=("Consolas", 10, "bold"))
-        key_label.grid(row=0, column=1, sticky=tk.W, pady=5)
+        ctk.CTkLabel(right_frame, text="绑定模型配置", font=("Microsoft YaHei UI", 11, "bold")).grid(row=0, column=0, columnspan=2, sticky=tk.W, padx=16, pady=(10, 5))
 
-        ttk.Label(right_frame, text="显示名称 (Label):").grid(row=1, column=0, sticky=tk.W, pady=5)
-        label_label = ttk.Label(right_frame, text="-")
-        label_label.grid(row=1, column=1, sticky=tk.W, pady=5)
+        ctk.CTkLabel(right_frame, text="用途标识 (Key):", font=("Microsoft YaHei UI", 11)).grid(row=1, column=0, sticky=tk.W, padx=16, pady=5)
+        key_label = ctk.CTkLabel(right_frame, text="-", font=("Consolas", 11, "bold"), text_color="#3667D6")
+        key_label.grid(row=1, column=1, sticky=tk.W, padx=16, pady=5)
 
-        ttk.Separator(right_frame, orient=tk.HORIZONTAL).grid(row=2, column=0, columnspan=2, sticky="ew", pady=10)
+        ctk.CTkLabel(right_frame, text="显示名称 (Label):", font=("Microsoft YaHei UI", 11)).grid(row=2, column=0, sticky=tk.W, padx=16, pady=5)
+        label_label = ctk.CTkLabel(right_frame, text="-", font=("Microsoft YaHei UI", 11))
+        label_label.grid(row=2, column=1, sticky=tk.W, padx=16, pady=5)
 
-        ttk.Label(right_frame, text="选择平台:").grid(row=3, column=0, sticky=tk.W, pady=5)
+        sep = ctk.CTkFrame(right_frame, height=2, fg_color=("gray85", "gray30"))
+        sep.grid(row=3, column=0, columnspan=2, sticky="ew", pady=10, padx=16)
+
+        ctk.CTkLabel(right_frame, text="选择平台:", font=("Microsoft YaHei UI", 11)).grid(row=4, column=0, sticky=tk.W, padx=16, pady=5)
         platform_var = tk.StringVar()
-        platform_combo = ttk.Combobox(right_frame, textvariable=platform_var, values=platforms, state='readonly')
-        platform_combo.grid(row=3, column=1, sticky=(tk.W, tk.E), pady=5)
+        platform_combo = ctk.CTkComboBox(right_frame, variable=platform_var, values=platforms, state='readonly', command=lambda choice: on_platform_change())
+        platform_combo.grid(row=4, column=1, sticky=(tk.W, tk.E), pady=5, padx=16)
 
-        ttk.Label(right_frame, text="选择模型:").grid(row=4, column=0, sticky=tk.W, pady=5)
+        ctk.CTkLabel(right_frame, text="选择模型:", font=("Microsoft YaHei UI", 11)).grid(row=5, column=0, sticky=tk.W, padx=16, pady=5)
         model_var = tk.StringVar()
-        model_combo = ttk.Combobox(right_frame, textvariable=model_var, state='readonly')
-        model_combo.grid(row=4, column=1, sticky=(tk.W, tk.E), pady=5)
+        model_combo = ctk.CTkComboBox(right_frame, variable=model_var, state='readonly')
+        model_combo.grid(row=5, column=1, sticky=(tk.W, tk.E), pady=5, padx=16)
 
         current_usage_data = {}
 
@@ -583,11 +589,13 @@ class DialogsMixin:
         def on_platform_change(event=None):
             selected_platform = platform_var.get()
             model_display_names = [m[0] for m in models_by_platform.get(selected_platform, [])]
-            model_combo['values'] = model_display_names
+            model_combo.configure(values=model_display_names)
             if model_var.get() not in model_display_names:
                 model_var.set(model_display_names[0] if model_display_names else "")
-
-        platform_combo.bind('<<ComboboxSelected>>', on_platform_change)
+                if model_display_names:
+                    model_combo.set(model_display_names[0])
+                else:
+                    model_combo.set("")
 
         def on_select(event):
             selection = usage_listbox.curselection()
@@ -597,30 +605,43 @@ class DialogsMixin:
             usage = self.usage_list[idx]
             current_usage_data.clear()
             current_usage_data.update(usage)
-            key_label.config(text=usage['usage_key'])
-            label_label.config(text=usage['usage_label'])
+            key_label.configure(text=usage['usage_key'])
+            label_label.configure(text=usage['usage_label'])
             plat_name = usage.get('platform')
             model_name = usage.get('model_display_name')
             if plat_name in platforms:
                 platform_var.set(plat_name)
+                platform_combo.set(plat_name)
                 on_platform_change()
-                if model_name in model_combo['values']:
+                model_list = [m[0] for m in models_by_platform.get(plat_name, [])]
+                if model_name in model_list:
                     model_var.set(model_name)
+                    model_combo.set(model_name)
                 else:
                     model_var.set("")
+                    model_combo.set("")
             else:
                 platform_var.set("")
+                platform_combo.set("")
                 model_var.set("")
+                model_combo.set("")
 
         usage_listbox.bind('<<ListboxSelect>>', on_select)
 
         def add_usage():
-            key = simpledialog.askstring("新建用途", "请输入用途标识 (Key, 英文):", parent=dialog)
-            if not key:
+            dialog_key = ctk.CTkInputDialog(text="请输入用途标识 (Key, 英文):", title="新建用途")
+            key = dialog_key.get_input()
+            if not key or not key.strip():
                 return
-            label = simpledialog.askstring("新建用途", "请输入显示名称 (Label):", parent=dialog, initialvalue=key)
-            if not label:
+            key = key.strip()
+            
+            dialog_label = ctk.CTkInputDialog(text="请输入显示名称 (Label):", title="新建用途")
+            label = dialog_label.get_input()
+            if not label or not label.strip():
                 label = key
+            else:
+                label = label.strip()
+                
             try:
                 self.ai_manager.create_user_usage_slot(user_id=system_user_id, usage_key=key, usage_label=label)
                 _, self.usage_list = load_data()
@@ -642,10 +663,12 @@ class DialogsMixin:
                     self.ai_manager.delete_user_usage_slot(user_id=system_user_id, usage_key=key)
                     _, self.usage_list = load_data()
                     refresh_list()
-                    key_label.config(text="-")
-                    label_label.config(text="-")
+                    key_label.configure(text="-")
+                    label_label.configure(text="-")
                     platform_var.set("")
+                    platform_combo.set("")
                     model_var.set("")
+                    model_combo.set("")
                     self.log(f"✓ 已删除用途: {key}", tag="success")
                 except Exception as e:
                     messagebox.showerror("错误", f"删除失败: {e}", parent=dialog)
@@ -675,13 +698,14 @@ class DialogsMixin:
             except Exception as e:
                 messagebox.showerror("错误", f"保存失败: {e}", parent=dialog)
 
-        ttk.Button(left_frame, text="+ 新建用途", command=add_usage).pack(side=tk.LEFT, padx=5, pady=5)
-        ttk.Button(left_frame, text="- 删除用途", command=delete_usage).pack(side=tk.RIGHT, padx=5, pady=5)
-        ttk.Button(right_frame, text="保存绑定配置", command=save_binding).grid(row=5, column=1, sticky=tk.E, pady=20)
+        btn_left_frame = ctk.CTkFrame(left_frame, fg_color="transparent")
+        btn_left_frame.pack(fill=tk.X, padx=10, pady=5)
+        ctk.CTkButton(btn_left_frame, text="+ 新建用途", command=add_usage, width=100, font=("Microsoft YaHei UI", 11)).pack(side=tk.LEFT)
+        ctk.CTkButton(btn_left_frame, text="- 删除用途", command=delete_usage, fg_color="#D14343", hover_color="#B83636", width=100, font=("Microsoft YaHei UI", 11)).pack(side=tk.RIGHT)
+        
+        ctk.CTkButton(right_frame, text="保存绑定配置", command=save_binding, fg_color="#3667D6", hover_color="#2E57B5", font=("Microsoft YaHei UI", 11)).grid(row=6, column=1, sticky=tk.E, pady=20, padx=16)
 
         refresh_list()
-        dialog.columnconfigure(0, weight=1)
-        dialog.rowconfigure(0, weight=1)
 
     def open_quota_manager_dialog(self, default_user_id=None):
         """打开用户配额管理对话框。"""
@@ -691,14 +715,15 @@ class DialogsMixin:
             min_size=(820, 620),
         )
 
-        ttk.Label(dialog, text="用户ID:").grid(row=0, column=0, sticky=tk.W, padx=10, pady=(10, 6))
+        ctk.CTkLabel(dialog, text="用户ID:", font=("Microsoft YaHei UI", 11)).grid(row=0, column=0, sticky=tk.W, padx=20, pady=(15, 6))
         user_id_var = tk.StringVar()
-        ttk.Entry(dialog, width=36, textvariable=user_id_var).grid(row=0, column=1, sticky=tk.W, padx=10, pady=(10, 6))
+        user_id_entry = ctk.CTkEntry(dialog, width=280, textvariable=user_id_var)
+        user_id_entry.grid(row=0, column=1, sticky=tk.W, padx=20, pady=(15, 6))
         if default_user_id is not None:
             user_id_var.set(str(default_user_id))
 
-        policy_frame = ttk.LabelFrame(dialog, text="配额策略", padding=10)
-        policy_frame.grid(row=1, column=0, columnspan=3, sticky=(tk.N, tk.S, tk.W, tk.E), padx=10, pady=8)
+        policy_frame = ctk.CTkFrame(dialog)
+        policy_frame.grid(row=1, column=0, columnspan=3, sticky=(tk.N, tk.S, tk.W, tk.E), padx=20, pady=8)
 
         quota_fields = [
             ("sys_paid_window_hours", "sys_paid 窗口小时数"),
@@ -713,41 +738,45 @@ class DialogsMixin:
             ("self_paid_total_request_limit", "self_paid 总请求上限"),
         ]
 
+        ctk.CTkLabel(policy_frame, text="配额策略", font=("Microsoft YaHei UI", 11, "bold")).grid(row=0, column=0, columnspan=4, sticky=tk.W, padx=16, pady=(10, 5))
+
         field_entries = {}
         for idx, (field_name, label_text) in enumerate(quota_fields):
-            row = idx % 5
+            row = (idx % 5) + 1
             col = (idx // 5) * 2
-            ttk.Label(policy_frame, text=f"{label_text}:").grid(
+            ctk.CTkLabel(policy_frame, text=f"{label_text}:", font=("Microsoft YaHei UI", 11)).grid(
                 row=row,
                 column=col,
                 sticky=tk.W,
-                padx=(4, 6),
+                padx=(16, 6),
                 pady=4,
             )
-            entry = ttk.Entry(policy_frame, width=20)
-            entry.grid(row=row, column=col + 1, sticky=tk.W, padx=(0, 12), pady=4)
+            entry = ctk.CTkEntry(policy_frame, width=150)
+            entry.grid(row=row, column=col + 1, sticky=tk.W, padx=(0, 16), pady=4)
             field_entries[field_name] = entry
 
-        ttk.Label(
+        ctk.CTkLabel(
             policy_frame,
             text="留空表示不限制；小时数字段必须 >= 1，其它字段必须 >= 0",
-            foreground="gray",
-        ).grid(row=5, column=0, columnspan=4, sticky=tk.W, padx=4, pady=(8, 0))
+            text_color="gray",
+            font=("Microsoft YaHei UI", 10),
+        ).grid(row=6, column=0, columnspan=4, sticky=tk.W, padx=16, pady=(8, 10))
 
-        status_frame = ttk.LabelFrame(dialog, text="当前状态", padding=10)
-        status_frame.grid(row=2, column=0, columnspan=3, sticky=(tk.N, tk.S, tk.W, tk.E), padx=10, pady=(0, 8))
-        status_text = tk.Text(status_frame, height=16, wrap=tk.WORD)
-        style_text_widget(status_text, ui_scale=getattr(self, "ui_scale", 1.0))
-        status_scroll = ttk.Scrollbar(status_frame, orient=tk.VERTICAL, command=status_text.yview)
-        status_text.configure(yscrollcommand=status_scroll.set)
-        status_text.pack(side=tk.LEFT, fill=tk.BOTH, expand=True)
-        status_scroll.pack(side=tk.RIGHT, fill=tk.Y)
+        status_frame = ctk.CTkFrame(dialog)
+        status_frame.grid(row=2, column=0, columnspan=3, sticky=(tk.N, tk.S, tk.W, tk.E), padx=20, pady=(0, 8))
+        
+        status_label_frame = ctk.CTkFrame(status_frame, fg_color="transparent")
+        status_label_frame.pack(fill=tk.X, padx=10, pady=(10, 5))
+        ctk.CTkLabel(status_label_frame, text="当前状态", font=("Microsoft YaHei UI", 11, "bold")).pack(side=tk.LEFT)
+        
+        status_text = ctk.CTkTextbox(status_frame, height=180, wrap=tk.WORD)
+        status_text.pack(fill=tk.BOTH, expand=True, padx=10, pady=(0, 10))
 
         def render_status(status_payload):
-            status_text.config(state='normal')
+            status_text.configure(state='normal')
             status_text.delete("1.0", tk.END)
             status_text.insert(tk.END, json_lib.dumps(status_payload, ensure_ascii=False, indent=2))
-            status_text.config(state='disabled')
+            status_text.configure(state='disabled')
 
         def clear_fields():
             for entry in field_entries.values():
@@ -808,17 +837,16 @@ class DialogsMixin:
                 self.log(f"✗ 保存配额失败: {exc}")
                 messagebox.showerror("错误", f"保存配额失败: {exc}", parent=dialog)
 
-        action_row = ttk.Frame(dialog)
-        action_row.grid(row=3, column=0, columnspan=3, sticky=tk.EW, padx=10, pady=(0, 10))
-        ttk.Button(action_row, text="加载", width=12, command=load_user_quota).pack(side=tk.LEFT, padx=4)
-        ttk.Button(action_row, text="保存", width=12, command=save_user_quota).pack(side=tk.LEFT, padx=4)
-        ttk.Button(action_row, text="清空", width=12, command=clear_fields).pack(side=tk.LEFT, padx=4)
-        ttk.Button(action_row, text="关闭", width=12, command=dialog.destroy).pack(side=tk.RIGHT, padx=4)
+        action_row = ctk.CTkFrame(dialog, fg_color="transparent")
+        action_row.grid(row=3, column=0, columnspan=3, sticky=tk.EW, padx=20, pady=(10, 15))
+        ctk.CTkButton(action_row, text="加载", width=100, command=load_user_quota, font=("Microsoft YaHei UI", 11)).pack(side=tk.LEFT, padx=4)
+        ctk.CTkButton(action_row, text="保存", width=100, command=save_user_quota, fg_color="#3667D6", hover_color="#2E57B5", font=("Microsoft YaHei UI", 11)).pack(side=tk.LEFT, padx=4)
+        ctk.CTkButton(action_row, text="清空", width=100, command=clear_fields, font=("Microsoft YaHei UI", 11)).pack(side=tk.LEFT, padx=4)
+        ctk.CTkButton(action_row, text="关闭", width=100, command=dialog.destroy, font=("Microsoft YaHei UI", 11)).pack(side=tk.RIGHT, padx=4)
 
         dialog.columnconfigure(0, weight=1)
         dialog.columnconfigure(1, weight=1)
         dialog.columnconfigure(2, weight=1)
-        dialog.rowconfigure(1, weight=1)
         dialog.rowconfigure(2, weight=1)
 
         if default_user_id is not None:
