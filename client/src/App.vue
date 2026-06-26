@@ -57,6 +57,62 @@
             />
           </n-modal>
 
+          <!-- 新建项目弹窗：项目格式只允许创建时选择 -->
+          <n-modal
+            v-model:show="projectCreateModal.show"
+            preset="dialog"
+            :title="t('components.projectCreateModal.title')"
+            :positive-text="t('components.projectCreateModal.createButton')"
+            :negative-text="t('common.cancel')"
+            :mask-closable="true"
+            :close-on-esc="true"
+            @positive-click="handleProjectCreateConfirm"
+            @negative-click="handleProjectCreateCancel"
+            @mask-click="handleProjectCreateCancel"
+          >
+            <div class="project-create-dialog">
+              <label class="project-create-label" for="project-create-name">
+                {{ t('components.projectCreateModal.nameLabel') }}
+              </label>
+              <n-input
+                id="project-create-name"
+                v-model:value="projectCreateModal.name"
+                :placeholder="t('components.projectCreateModal.namePlaceholder')"
+                :input-props="{ spellcheck: false, autocorrect: 'off', autocapitalize: 'off', autocomplete: 'off' }"
+                @keydown.enter="handleProjectCreateConfirm"
+                autofocus
+              />
+
+              <div class="project-create-label project-create-mode-label">
+                {{ t('components.projectCreateModal.modeLabel') }}
+              </div>
+              <n-radio-group v-model:value="projectCreateModal.workspaceMode" class="project-create-mode-list">
+                <n-radio value="script" class="project-create-mode-option">
+                  <span class="project-create-mode-content">
+                    <n-icon :component="Clapperboard" class="project-create-mode-icon is-script" />
+                    <span class="project-create-mode-copy">
+                      <span class="project-create-mode-title">{{ t('components.projectCreateModal.modeScript') }}</span>
+                      <span class="project-create-mode-desc">{{ t('components.projectCreateModal.scriptDescription') }}</span>
+                    </span>
+                  </span>
+                </n-radio>
+                <n-radio value="novel" class="project-create-mode-option">
+                  <span class="project-create-mode-content">
+                    <n-icon :component="BookOpen" class="project-create-mode-icon is-novel" />
+                    <span class="project-create-mode-copy">
+                      <span class="project-create-mode-title">{{ t('components.projectCreateModal.modeNovel') }}</span>
+                      <span class="project-create-mode-desc">{{ t('components.projectCreateModal.novelDescription') }}</span>
+                    </span>
+                  </span>
+                </n-radio>
+              </n-radio-group>
+
+              <n-alert type="warning" :show-icon="false" class="project-create-lock-notice">
+                {{ t('components.projectCreateModal.immutableNotice') }}
+              </n-alert>
+            </div>
+          </n-modal>
+
           <!-- 全局 Loading 遮罩已移至 MainView.vue 的 GlobalLoading 组件 -->
 
         </n-notification-provider>
@@ -72,6 +128,10 @@ import {
   NGlobalStyle,
   NModal,
   NInput,
+  NRadioGroup,
+  NRadio,
+  NAlert,
+  NIcon,
   NMessageProvider,
   NDialogProvider,
   NNotificationProvider,
@@ -104,6 +164,7 @@ import { isLocalTauriShell, isTauriDesktop } from './composables/usePlatform';
 import { useSeoMeta } from './composables/useSeoMeta';
 import { useI18n } from 'vue-i18n';
 import router from './router';
+import { BookOpen, Clapperboard } from '@lucide/vue';
 
 const themeStore = useThemeStore();
 const { theme, themeOverrides } = useNaiveTheme(themeStore);
@@ -461,6 +522,26 @@ const promptModal = reactive<PromptModalState>({
   _resolve: null
 });
 
+type ProjectWorkspaceMode = 'script' | 'novel';
+type ProjectCreateResult = {
+  projectName: string;
+  workspaceMode: ProjectWorkspaceMode;
+};
+
+type ProjectCreateModalState = {
+  show: boolean;
+  name: string;
+  workspaceMode: ProjectWorkspaceMode;
+  _resolve: ((value: ProjectCreateResult | null) => Promise<boolean | void> | boolean | void) | null;
+};
+
+const projectCreateModal = reactive<ProjectCreateModalState>({
+  show: false,
+  name: '',
+  workspaceMode: 'script',
+  _resolve: null,
+});
+
 // 计算弹窗位置样式
 const promptModalStyle = computed(() => {
   if (!promptModal.hasPosition) return {};
@@ -487,7 +568,7 @@ const promptModalStyle = computed(() => {
   };
 });
 
-let onToast, onConfirm, onPrompt;
+let onToast, onConfirm, onPrompt, onProjectCreate;
 
 onMounted(() => {
   // Setup global event listeners for modals and toasts
@@ -542,6 +623,14 @@ onMounted(() => {
     promptModal.show = true;
   };
   bus.on('prompt', onPrompt);
+
+  onProjectCreate = (p) => {
+    projectCreateModal.name = '';
+    projectCreateModal.workspaceMode = 'script';
+    projectCreateModal._resolve = typeof p?.resolve === 'function' ? p.resolve : null;
+    projectCreateModal.show = true;
+  };
+  bus.on('project-create', onProjectCreate);
 });
 
 // 检查系统配置状态
@@ -637,11 +726,38 @@ function handlePromptCancel() {
   promptModal._resolve = null;
 }
 
+async function handleProjectCreateConfirm() {
+  const projectName = projectCreateModal.name.trim();
+  if (!projectName || projectName === 'undefined' || projectName === 'null') {
+    bus.emit('toast', { type: 'error', message: t('components.projectCreateModal.invalidName') });
+    return false;
+  }
+
+  const result: ProjectCreateResult = {
+    projectName,
+    workspaceMode: projectCreateModal.workspaceMode === 'novel' ? 'novel' : 'script',
+  };
+  if (typeof projectCreateModal._resolve === 'function') {
+    const success = await projectCreateModal._resolve(result);
+    if (success === false) return false;
+  }
+  projectCreateModal.show = false;
+  projectCreateModal._resolve = null;
+  return true;
+}
+
+function handleProjectCreateCancel() {
+  projectCreateModal.show = false;
+  projectCreateModal._resolve?.(null);
+  projectCreateModal._resolve = null;
+}
+
 onBeforeUnmount(() => {
   // Clean up event listeners
   if (onToast) bus.off('toast', onToast);
   if (onConfirm) bus.off('confirm', onConfirm);
   if (onPrompt) bus.off('prompt', onPrompt);
+  if (onProjectCreate) bus.off('project-create', onProjectCreate);
 });
 </script>
 
@@ -662,6 +778,90 @@ onBeforeUnmount(() => {
   flex-direction: column;
   height: 100vh;
   max-width: none;
+}
+
+.project-create-dialog {
+  display: grid;
+  gap: 12px;
+}
+
+.project-create-label {
+  font-size: 13px;
+  font-weight: 600;
+  color: var(--spark-text-primary);
+}
+
+.project-create-mode-label {
+  margin-top: 4px;
+}
+
+.project-create-mode-list {
+  display: grid;
+  gap: 8px;
+}
+
+.project-create-mode-option {
+  width: 100%;
+  align-items: flex-start;
+  padding: 10px 12px;
+  border: 1px solid var(--spark-border);
+  border-radius: 8px;
+  background: var(--spark-panel-bg);
+}
+
+.project-create-mode-option .n-radio__label {
+  min-width: 0;
+}
+
+.project-create-mode-content {
+  display: inline-flex;
+  align-items: flex-start;
+  gap: 10px;
+  min-width: 0;
+}
+
+.project-create-mode-icon {
+  flex: 0 0 auto;
+  width: 24px;
+  height: 24px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  margin-top: 1px;
+  border-radius: 7px;
+  transform: translateY(1px);
+}
+
+.project-create-mode-icon.is-script {
+  color: var(--spark-primary);
+  background: color-mix(in srgb, var(--spark-primary), transparent 86%);
+}
+
+.project-create-mode-icon.is-novel {
+  color: var(--spark-primary);
+  background: color-mix(in srgb, var(--spark-primary), transparent 86%);
+}
+
+.project-create-mode-copy {
+  display: grid;
+  gap: 4px;
+  min-width: 0;
+}
+
+.project-create-mode-title {
+  color: var(--spark-text-primary);
+  font-weight: 600;
+}
+
+.project-create-mode-desc {
+  color: var(--spark-text-secondary);
+  font-size: 12px;
+  line-height: 1.45;
+  white-space: normal;
+}
+
+.project-create-lock-notice {
+  margin-top: 2px;
 }
 main {
   display: flex;

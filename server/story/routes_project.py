@@ -67,8 +67,9 @@ def _remove_project_directory_with_retries(user_id: str, project_name: str, proj
     if last_exc:
         raise last_exc
 
-class ProjectCreate(BaseModel):
-    projectName: str
+class ProjectCreate(BaseModel):
+    projectName: str
+    workspaceMode: Optional[str] = None
 
 class ProjectRename(BaseModel):
     newName: str
@@ -101,38 +102,46 @@ async def create_project(data: ProjectCreate, user: dict = Depends(get_current_u
     """创建新项目并初始化目录结构"""
     try:
         user_id = str(user['user_id'])
-        project_name = normalize_project_name(data.projectName)
-        if not project_name:
-            return JSONResponse(status_code=400, content={"success": False, "message": "项目名称不能为空"})
-
-        project_path = get_project_path(user_id, project_name)
-        if os.path.exists(project_path):
-            return JSONResponse(status_code=409, content={"success": False, "message": "项目已存在"})
-
-        ensure_project_directory(user_id, project_name)
-        ensure_project_stories_directory(user_id, project_name)
-        ensure_project_worldview_and_character_settings(user_id, project_name)
-
-        # 按用户级默认配置初始化语义搜索开关
-        try:
-            from core.project_settings import get_default_semantic_enabled, set_project_setting
-            if get_default_semantic_enabled(user_id):
-                set_project_setting(user_id, project_name, "semantic_search_enabled", True)
+        project_name = normalize_project_name(data.projectName)
+        if not project_name:
+            return JSONResponse(status_code=400, content={"success": False, "message": "项目名称不能为空"})
+        workspace_mode = "novel" if data.workspaceMode == "novel" else "script"
+
+        project_path = get_project_path(user_id, project_name)
+        if os.path.exists(project_path):
+            return JSONResponse(status_code=409, content={"success": False, "message": "项目已存在"})
+
+        ensure_project_directory(user_id, project_name)
+        ensure_project_stories_directory(user_id, project_name)
+        ensure_project_worldview_and_character_settings(user_id, project_name)
+
+        try:
+            from core.project_settings import initialize_project_workspace_mode
+            initialize_project_workspace_mode(user_id, project_name, workspace_mode)
+        except Exception as e:
+            print(f"Failed to initialize project workspace mode: {e}")
+
+        # 按用户级默认配置初始化语义搜索开关
+        try:
+            from core.project_settings import get_default_semantic_enabled, set_project_setting
+            if get_default_semantic_enabled(user_id):
+                set_project_setting(user_id, project_name, "semantic_search_enabled", True)
         except Exception as e:
             print(f"Failed to initialize semantic search config: {e}")
 
-        # 复制示例剧本.arc
-        try:
-            server_root = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
-            template_path = os.path.join(server_root, 'ARC_Example.arc')
-            if os.path.exists(template_path):
-                target_name = build_story_filename('示例剧本', file_format='arc', group='example', order=1, free=True)
-                target_path = os.path.join(get_project_stories_path(user_id, project_name), target_name)
-                shutil.copy2(template_path, target_path)
-        except Exception as e:
-            print(f"Failed to copy template script: {e}")
-
-        return {"success": True, "message": "项目创建成功"}
+        # 剧本项目复制示例剧本；小说项目不写入 .arc，避免创建时污染格式边界。
+        try:
+            if workspace_mode == "script":
+                server_root = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+                template_path = os.path.join(server_root, 'ARC_Example.arc')
+                if os.path.exists(template_path):
+                    target_name = build_story_filename('示例剧本', file_format='arc', group='example', order=1, free=True)
+                    target_path = os.path.join(get_project_stories_path(user_id, project_name), target_name)
+                    shutil.copy2(template_path, target_path)
+        except Exception as e:
+            print(f"Failed to copy template script: {e}")
+
+        return {"success": True, "message": "项目创建成功", "workspaceMode": workspace_mode}
     except Exception as exc:
         return JSONResponse(status_code=500, content={"success": False, "message": f"项目创建失败: {exc}"})
 

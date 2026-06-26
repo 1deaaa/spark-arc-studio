@@ -371,7 +371,6 @@ type ComposeRequestPayload = {
   nextScene?: Record<string, unknown> | null;
   pacing?: string;
   mood?: string;
-  exportFormat?: 'arc' | 'novel';
 };
 
 type CriticHitItem = {
@@ -881,7 +880,6 @@ async function handleCriticReview() {
       activeContext: buildCriticActiveContext(),
       sceneName: isNovelMode.value ? '' : (sceneStore.currentScene?.scene || ''),
       filePath: currentFilePath,
-      exportFormat: isNovelMode.value ? 'novel' : 'arc',
       script_text: isNovelMode.value
         ? String(sceneStore.scriptData || '')
         : buildCurrentSceneContextForCritic(),
@@ -968,7 +966,6 @@ async function handleMultiNode() {
         sceneName: '',
         nodeId: 0,
         lastNodeText: '',
-        exportFormat: 'novel',
       }, {
         loadingText: 'AI 正在续写小说...',
         onDone: (result) => {
@@ -1047,7 +1044,6 @@ async function handleMultiNode() {
       sceneName: sceneStore.currentScene?.scene || '',
       nodeId: sceneStore.currentNode?.id || 0,
       lastNodeText,
-      exportFormat: isNovelMode.value ? 'novel' : 'arc',
     };
 
     let firstPass = await streamComposeRequest(payload, {
@@ -1147,7 +1143,6 @@ async function handleRewriteScene() {
         sceneName: '',
         nodeId: 0,
         rewrite: true,
-        exportFormat: 'novel'
       }, {
         loadingText: 'AI 正在重写小说...',
         onDone: (result) => {

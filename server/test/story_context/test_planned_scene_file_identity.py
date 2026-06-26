@@ -48,7 +48,7 @@ def test_resolve_planned_scene_file_path_overwrites_existing_identity(tmp_path: 
 
 
 def test_create_or_rewrite_script_overwrites_existing_planned_scene(monkeypatch, tmp_path: Path) -> None:
-    from core.request_context import current_project_name, current_user_id
+    from core.request_context import current_export_format, current_project_name, current_user_id
     from agents.tools.scriptwriter import create_or_rewrite_script
 
     monkeypatch.setattr("core.utils.USERDATA_ROOT", str(tmp_path))
@@ -59,16 +59,17 @@ def test_create_or_rewrite_script_overwrites_existing_planned_scene(monkeypatch,
 
     user_token = current_user_id.set("7")
     project_token = current_project_name.set("demo")
+    format_token = current_export_format.set("arc")
     try:
         result = create_or_rewrite_script.invoke(
             {
                 "chapter_name": "一 · 开端",
                 "work_name": "1-1 初遇",
                 "overwrite_content": "[-1]\n新正文",
-                "export_format": "arc",
             }
         )
     finally:
+        current_export_format.reset(format_token)
         current_project_name.reset(project_token)
         current_user_id.reset(user_token)
 

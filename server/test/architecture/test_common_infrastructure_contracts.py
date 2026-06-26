@@ -3,6 +3,8 @@ from __future__ import annotations
 import json
 from pathlib import Path
 
+import pytest
+
 from agents.tools.common import _apply_patch
 from agents.routes.context_builder import build_story_tags_hint
 from core.file_ingest.chunking import TokenTextSplitter
@@ -66,6 +68,86 @@ def test_migration_specs_keep_known_database_branches(monkeypatch, tmp_path: Pat
     assert sqlite_url(users_db).startswith("sqlite:///")
 
 
+def test_auto_migrate_stamps_head_when_duplicate_object_matches_model(monkeypatch, tmp_path: Path) -> None:
+    from core import auto_migrate
+
+    db_path = tmp_path / "llm.sqlite"
+    stamped = []
+
+    monkeypatch.setattr(auto_migrate, "get_database_url", lambda db_name: "sqlite:///fake")
+    monkeypatch.setattr(auto_migrate, "_get_db_path", lambda db_name: str(db_path))
+    monkeypatch.setattr(auto_migrate, "_get_current_db_revision", lambda path: "old")
+    monkeypatch.setattr(auto_migrate, "_get_head_revision", lambda base_dir, db_name: "head")
+    monkeypatch.setattr(auto_migrate, "_build_alembic_config", lambda base_dir, db_name: object())
+    monkeypatch.setattr(
+        auto_migrate.command,
+        "upgrade",
+        lambda cfg, target: (_ for _ in ()).throw(
+            RuntimeError("(sqlite3.OperationalError) duplicate column name: recharge_url")
+        ),
+    )
+    monkeypatch.setattr(
+        auto_migrate,
+        "_describe_schema_drift",
+        lambda db_name, db_path: {
+            "missing_tables": [],
+            "missing_columns": [],
+            "extra_tables": [],
+            "extra_columns": [],
+        },
+    )
+    monkeypatch.setattr(auto_migrate, "_stamp_head", lambda db_name, db_path, base_dir: stamped.append((db_name, db_path, base_dir)))
+    monkeypatch.setattr(
+        auto_migrate,
+        "_heal_orphan_revision",
+        lambda db_name, db_path, base_dir: pytest.fail("结构一致时不应触发结构自愈"),
+    )
+
+    auto_migrate.run_db_upgrade("llm", str(tmp_path))
+
+    assert stamped == [("llm", str(db_path), str(tmp_path))]
+
+
+def test_auto_migrate_self_heals_duplicate_object_when_model_objects_missing(monkeypatch, tmp_path: Path) -> None:
+    from core import auto_migrate
+
+    db_path = tmp_path / "llm.sqlite"
+    healed = []
+
+    monkeypatch.setattr(auto_migrate, "get_database_url", lambda db_name: "sqlite:///fake")
+    monkeypatch.setattr(auto_migrate, "_get_db_path", lambda db_name: str(db_path))
+    monkeypatch.setattr(auto_migrate, "_get_current_db_revision", lambda path: "old")
+    monkeypatch.setattr(auto_migrate, "_get_head_revision", lambda base_dir, db_name: "head")
+    monkeypatch.setattr(auto_migrate, "_build_alembic_config", lambda base_dir, db_name: object())
+    monkeypatch.setattr(
+        auto_migrate.command,
+        "upgrade",
+        lambda cfg, target: (_ for _ in ()).throw(
+            RuntimeError("(sqlite3.OperationalError) duplicate column name: recharge_url")
+        ),
+    )
+    monkeypatch.setattr(
+        auto_migrate,
+        "_describe_schema_drift",
+        lambda db_name, db_path: {
+            "missing_tables": [],
+            "missing_columns": ["llm_platforms.recharge_url"],
+            "extra_tables": [],
+            "extra_columns": [],
+        },
+    )
+    monkeypatch.setattr(
+        auto_migrate,
+        "_stamp_head",
+        lambda db_name, db_path, base_dir: pytest.fail("仍缺模型对象时不应直接 stamp"),
+    )
+    monkeypatch.setattr(auto_migrate, "_heal_orphan_revision", lambda db_name, db_path, base_dir: healed.append((db_name, db_path, base_dir)))
+
+    auto_migrate.run_db_upgrade("llm", str(tmp_path))
+
+    assert healed == [("llm", str(db_path), str(tmp_path))]
+
+
 def test_default_llm_context_baseline_matches_modern_long_context() -> None:
     assert DEFAULT_MAX_CONTEXT_TOKENS == 256_000
     assert DEFAULT_MAX_OUTPUT_TOKENS == 64_000
@@ -98,10 +180,23 @@ def test_project_story_tags_are_workspace_mode_truth_source(monkeypatch, tmp_pat
     assert tags["workspace_mode"] == "novel"
     assert tags["genres"] == ["悬疑"]
 
-    project_settings.set_project_story_tags("u1", "p1", workspace_mode="script")
+    project_settings.set_project_story_tags("u1", "p1", workspace_mode="script", genres=["冒险"])
     saved = json.loads((settings_dir / "settings.json").read_text(encoding="utf-8"))
-    assert saved["workspace_mode"] == "script"
-    assert saved["story_tags"]["workspace_mode"] == "script"
+    assert "workspace_mode" not in saved
+    assert saved["story_tags"]["workspace_mode"] == "novel"
+    assert saved["story_tags"]["genres"] == ["冒险"]
+
+    initialized = project_settings.initialize_project_workspace_mode("u1", "p1", "script")
+    assert initialized["workspace_mode"] == "script"
+    assert project_settings.get_workspace_mode("u1", "p1") == "script"
+
+
+def test_workspace_mode_route_is_folded_into_story_tags() -> None:
+    from core.routes_tags import tags_router
+
+    paths = {getattr(route, "path", "") for route in tags_router.routes}
+    assert "/api/project/workspace-mode" not in paths
+    assert "/api/project/story-tags" in paths
 
 
 def test_update_story_tags_tool_accepts_common_model_aliases() -> None:
@@ -121,3 +216,25 @@ def test_update_story_tags_tool_accepts_common_model_aliases() -> None:
     assert parsed.genres == ["悬疑", "冒险"]
     assert parsed.length_hint == "中篇"
     assert parsed.pov == "第三人称有限视角"
+
+
+def test_update_story_tags_tool_ignores_workspace_mode_after_creation(monkeypatch, tmp_path: Path) -> None:
+    from agents.tools.automation import update_project_story_tags
+    from core import project_settings
+    from core.request_context import current_project_name, current_user_id
+
+    monkeypatch.setattr(project_settings, "get_project_path", lambda user_id, project_name: str(tmp_path))
+    project_settings.initialize_project_workspace_mode("u1", "p1", "script")
+
+    user_token = current_user_id.set("u1")
+    project_token = current_project_name.set("p1")
+    try:
+        result = update_project_story_tags.invoke({"workspaceMode": "novel", "genres": ["冒险"]})
+    finally:
+        current_project_name.reset(project_token)
+        current_user_id.reset(user_token)
+
+    tags = project_settings.get_project_story_tags("u1", "p1")
+    assert tags["workspace_mode"] == "script"
+    assert tags["genres"] == ["冒险"]
+    assert "忽略修改请求" in result

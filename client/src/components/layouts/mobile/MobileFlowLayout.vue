@@ -182,7 +182,7 @@
 <script setup lang="ts">
 import { ref, computed, onMounted, onUnmounted, provide, watch, h, nextTick } from 'vue';
 import { NButton, NIcon, NDrawer, NDrawerContent, NTabs, NTabPane, NDropdown, type DropdownOption, useDialog } from 'naive-ui';
-import { Archive, CircleCheckBig, CirclePlus, FolderOpen, PaintBucket, Play, Settings, Share2, SquarePen, Trash } from '@lucide/vue';
+import { Archive, BookOpen, CircleCheckBig, CirclePlus, Clapperboard, FolderOpen, PaintBucket, Play, Settings, Share2, SquarePen, Trash } from '@lucide/vue';
 import { useI18n } from 'vue-i18n';
 
 import FlowCard from './FlowCard.vue';
@@ -274,6 +274,7 @@ const projectSwitchOptions = computed<DropdownOption[]>(() => {
   const items: DropdownOption[] = projectStore.projects.map(p => ({
     label: p === projectStore.currentProject ? `✓ ${p}` : p,
     key: `switch:${p}`,
+    icon: () => renderProjectModeIcon(projectStore.projectMode(p)),
   }));
   items.push({ type: 'divider', key: 'd1' });
   items.push({ label: t('components.projectSelector.newProject'), key: 'create', icon: () => h(NIcon, null, { default: () => h(CirclePlus) }) });
@@ -286,6 +287,26 @@ const projectSwitchOptions = computed<DropdownOption[]>(() => {
   items.push({ label: t('components.headerToolbar.importProject'), key: 'import_project', icon: () => h(NIcon, null, { default: () => h(PaintBucket) }) });
   return items;
 });
+
+function getProjectModeIcon(mode: string | undefined) {
+  return mode === 'novel' ? BookOpen : Clapperboard;
+}
+
+function renderProjectModeIcon(mode: string | undefined) {
+  const normalized = mode === 'novel' ? 'novel' : 'script';
+  return h(
+    NIcon,
+    {
+      class: ['mobile-project-mode-icon', `is-${normalized}`],
+      size: 16,
+      style: {
+        color: 'var(--spark-primary)',
+        transform: 'translateY(1.5px)',
+      },
+    },
+    { default: () => h(getProjectModeIcon(normalized)) },
+  );
+}
 
 async function handleProjectSwitch(key: string) {
   if (key === 'create') {
@@ -585,6 +606,25 @@ onUnmounted(() => {
 
 .tooltip-dropdown-trigger {
   display: inline-flex;
+}
+
+.mobile-project-mode-icon {
+  width: 22px;
+  height: 22px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  border-radius: 7px;
+}
+
+.mobile-project-mode-icon.is-script {
+  color: var(--spark-primary);
+  background: color-mix(in srgb, var(--spark-primary), transparent 86%);
+}
+
+.mobile-project-mode-icon.is-novel {
+  color: var(--spark-primary);
+  background: color-mix(in srgb, var(--spark-primary), transparent 86%);
 }
 
 

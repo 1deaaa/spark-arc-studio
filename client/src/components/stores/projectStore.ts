@@ -1,7 +1,8 @@
 import bus from '@/eventBus';
 import { defineStore } from 'pinia';
-import { fetchProjects, createProject, deleteProject, renameProject, refreshSemanticSearchProject, getInspirations } from '@/services/api';
+import { fetchProjects, createProject, deleteProject, renameProject, refreshSemanticSearchProject, getInspirations, getProjectWorkspaceMode as fetchProjectWorkspaceMode } from '@/services/api';
 import { getUserId } from '@/services/apiClient';
+import { i18n } from '@/i18n';
 import type { InspirationEntry } from '@/services/aiContracts';
 import { useFileStore } from './fileStore';
 import { useCharacterStore } from './characterStore';
@@ -58,9 +59,15 @@ type PendingStructureAdoption = {
 };
 
 type BoundInspirationEntry = Pick<InspirationEntry, 'id' | 'source' | 'content'>;
+type ProjectWorkspaceMode = 'script' | 'novel';
+type ProjectCreateResult = {
+  projectName: string;
+  workspaceMode: ProjectWorkspaceMode;
+};
 
 type ProjectStoreState = {
   projects: string[];
+  projectWorkspaceModes: Record<string, ProjectWorkspaceMode>;
   _currentProject: string | null;
   currentInspiration: string;
   currentInspirationId: string | null;
@@ -74,6 +81,7 @@ type ProjectStoreState = {
 export const useProjectStore = defineStore('project', {
   state: (): ProjectStoreState => ({
     projects: [],
+    projectWorkspaceModes: {},
     _currentProject: null,
     currentInspiration: '', // 当前灵感，供大纲页面使用
     currentInspirationId: null,
@@ -85,6 +93,14 @@ export const useProjectStore = defineStore('project', {
   }),
   getters: {
     currentProject: (state): string => state._currentProject || '',
+    currentWorkspaceMode: (state): ProjectWorkspaceMode => {
+      const projectName = state._currentProject || '';
+      return state.projectWorkspaceModes[projectName] === 'novel' ? 'novel' : 'script';
+    },
+    projectMode: (state) => (projectName: string | null | undefined): ProjectWorkspaceMode => {
+      const key = typeof projectName === 'string' ? projectName.trim() : '';
+      return state.projectWorkspaceModes[key] === 'novel' ? 'novel' : 'script';
+    },
   },
   actions: {
     async loadProjects() {
@@ -97,6 +113,7 @@ export const useProjectStore = defineStore('project', {
           return normalized && normalized !== 'undefined' && normalized !== 'null';
         });
         this.projects = projects;
+        void this.refreshProjectWorkspaceModes(projects);
         if (Array.isArray(projects) && projects.length > 0) {
           // 优先恢复上次缓存的项目（直接访问不带 URL 锁定时）
           const lastProject = localStorage.getItem(getLastProjectKey());
@@ -115,6 +132,26 @@ export const useProjectStore = defineStore('project', {
       } catch (error: unknown) {
         console.error('加载项目失败:', error);
       }
+    },
+    async refreshProjectWorkspaceModes(projects?: string[]) {
+      const targetProjects = Array.isArray(projects) ? projects : this.projects;
+      const validProjects = targetProjects
+        .map((projectName) => (typeof projectName === 'string' ? projectName.trim() : ''))
+        .filter((projectName) => projectName && projectName !== 'undefined' && projectName !== 'null');
+      const entries = await Promise.all(validProjects.map(async (projectName): Promise<[string, ProjectWorkspaceMode]> => {
+        try {
+          const mode = await fetchProjectWorkspaceMode(projectName);
+          return [projectName, mode === 'novel' ? 'novel' : 'script'];
+        } catch (error) {
+          console.warn('加载项目创作模式失败:', projectName, error);
+          return [projectName, 'script'];
+        }
+      }));
+      const nextModes: Record<string, ProjectWorkspaceMode> = {};
+      for (const [projectName, mode] of entries) {
+        nextModes[projectName] = mode;
+      }
+      this.projectWorkspaceModes = nextModes;
     },
     setCurrentProject(projectName: string | string[] | null | undefined) {
       // 纠正误传数组的情况，取第一个作为当前项目
@@ -172,9 +209,15 @@ export const useProjectStore = defineStore('project', {
       const chrStore = useCharacterStore();
       const blueprintStore = useBlueprintStore();
       if (this._currentProject) {
+        const activeProject = this._currentProject;
         // 先异步加载项目创作模式，完成后用正确格式加载文件树
-        sceneStore.loadWorkspaceMode(this._currentProject).then(() => {
-          fileStore.loadFileTree(this._currentProject!, sceneStore.workspaceMode);
+        sceneStore.loadWorkspaceMode(activeProject).then(() => {
+          if (this._currentProject !== activeProject) return;
+          this.projectWorkspaceModes = {
+            ...this.projectWorkspaceModes,
+            [activeProject]: sceneStore.workspaceMode === 'novel' ? 'novel' : 'script',
+          };
+          fileStore.loadFileTree(activeProject, sceneStore.workspaceMode);
         });
         chrStore.load(this._currentProject);
         blueprintStore.loadBlueprint(this._currentProject);
@@ -219,22 +262,24 @@ export const useProjectStore = defineStore('project', {
       }
     },
     async createProject() {
-      const projectName = await new Promise<unknown>((resolve) => bus.emit('prompt', { title: '新建项目', message: '请输入项目名称：', resolve }));
-      const finalName = typeof projectName === 'string' ? projectName.trim() : '';
+      const result = await new Promise<ProjectCreateResult | null>((resolve) => bus.emit('project-create', { resolve }));
+      const finalName = typeof result?.projectName === 'string' ? result.projectName.trim() : '';
       if (finalName && finalName !== 'undefined' && finalName !== 'null') {
         try {
-          await createProject(finalName);
+          const workspaceMode = result?.workspaceMode === 'novel' ? 'novel' : 'script';
+          await createProject(finalName, workspaceMode);
+          this.projectWorkspaceModes = { ...this.projectWorkspaceModes, [finalName]: workspaceMode };
           await this.loadProjects();
           // 创建成功后切换到新项目
           this.setCurrentProject(finalName);
           return finalName;
         } catch (error: unknown) {
           const errorMessage = error instanceof Error ? error.message : String(error || '未知错误');
-          bus.emit('toast', { type: 'error', message: `创建项目失败: ${errorMessage}` });
+          bus.emit('toast', { type: 'error', message: i18n.global.t('components.projectCreateModal.createFailed', { error: errorMessage }) });
           return null;
         }
-      } else if (projectName !== null) { // 如果不是用户取消，而是输入了无效名称
-        bus.emit('toast', { type: 'error', message: '无效的项目名称' });
+      } else if (result !== null) { // 如果不是用户取消，而是输入了无效名称
+        bus.emit('toast', { type: 'error', message: i18n.global.t('components.projectCreateModal.invalidName') });
       }
       return null;
     },
@@ -243,8 +288,12 @@ export const useProjectStore = defineStore('project', {
         bus.emit('toast', { type: 'error', message: '没有选中的项目' });
         return;
       }
+      const deletedProject = this.currentProject;
       try {
         await deleteProject(this.currentProject);
+        const nextModes = { ...this.projectWorkspaceModes };
+        delete nextModes[deletedProject];
+        this.projectWorkspaceModes = nextModes;
         await this.loadProjects();
         this.setCurrentProject(this.projects[0] ?? null);
         bus.emit('toast', { type: 'success', message: '项目已删除' });
@@ -264,9 +313,15 @@ export const useProjectStore = defineStore('project', {
         return;
       }
       if (trimmed === this.currentProject) return;
+      const oldName = this.currentProject;
       try {
         const result = await renameProject(this.currentProject, trimmed);
         const finalName = result.newName || trimmed;
+        const oldMode = this.projectWorkspaceModes[oldName];
+        const nextModes = { ...this.projectWorkspaceModes };
+        delete nextModes[oldName];
+        if (oldMode) nextModes[finalName] = oldMode;
+        this.projectWorkspaceModes = nextModes;
         await this.loadProjects();
         this.setCurrentProject(finalName);
         bus.emit('toast', { type: 'success', message: '项目已重命名' });
@@ -294,6 +349,7 @@ export const useProjectStore = defineStore('project', {
     resetForLogout() {
       this._currentProject = null;
       this.projects = [];
+      this.projectWorkspaceModes = {};
       this.currentInspiration = '';
       this.currentInspirationId = null;
       this.boundInspiration = '';

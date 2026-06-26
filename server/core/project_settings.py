@@ -10,7 +10,6 @@
   attachment_chunk_tokens: 64000  (附件分片 token 上限，等价于"按需读取"滑动窗口的窗口大小)
   story_tags: {}  (项目级故事主题参数：创作模式/风格/题材/基调/世界观/人称/篇幅)
   active_inspiration_id: null  (当前生效的灵感 ID，用于追溯来源)
-  workspace_mode: "script"  (项目默认创作模式：script=剧本 / novel=小说)
 """
 
 from __future__ import annotations
@@ -47,9 +46,6 @@ _DEFAULT_SETTINGS: Dict[str, Any] = {
     },
     # 当前生效的灵感 ID（可选，用于追溯项目参数的来源灵感）
     "active_inspiration_id": None,
-    # 项目默认创作模式：script=剧本（.arc）/ novel=小说（.md）
-    # 切换项目时前端会读取此值自动恢复到上次的创作模式
-    "workspace_mode": "script",
 }
 
 # 与 routes_import.py 的 chunk_tokens 校验保持一致，避免极端值。
@@ -112,13 +108,12 @@ def _normalize(raw: Dict[str, Any] | None) -> Dict[str, Any]:
             }
         # 规范化 active_inspiration_id
         data["active_inspiration_id"] = raw.get("active_inspiration_id", _DEFAULT_SETTINGS["active_inspiration_id"])
-        # 规范化 workspace_mode：只允许 script / novel
+        # 兼容读取旧顶层 workspace_mode，但唯一写入位置是 story_tags.workspace_mode。
         raw_mode = raw_mode_from_tags if raw_mode_from_tags is not None else raw.get(
             "workspace_mode",
-            data["story_tags"].get("workspace_mode", _DEFAULT_SETTINGS["workspace_mode"]),
+            data["story_tags"].get("workspace_mode", _DEFAULT_SETTINGS["story_tags"]["workspace_mode"]),
         )
-        data["workspace_mode"] = "novel" if raw_mode == "novel" else "script"
-        data["story_tags"]["workspace_mode"] = data["workspace_mode"]
+        data["story_tags"]["workspace_mode"] = "novel" if raw_mode == "novel" else "script"
     return data
 
 
@@ -204,15 +199,8 @@ def set_attachment_chunk_tokens(user_id: str, project_name: str, value: Any) -> 
 def get_workspace_mode(user_id: str, project_name: str) -> str:
     """快捷查询：项目默认创作模式（script=剧本 / novel=小说）。"""
     tags = get_project_story_tags(user_id, project_name)
-    mode = tags.get("workspace_mode") or get_project_setting(user_id, project_name, "workspace_mode", "script")
+    mode = tags.get("workspace_mode")
     return "novel" if mode == "novel" else "script"
-
-
-def set_workspace_mode(user_id: str, project_name: str, mode: str) -> str:
-    """设置项目默认创作模式并持久化，返回最终生效的值。"""
-    normalized = "novel" if mode == "novel" else "script"
-    set_project_story_tags(user_id, project_name, workspace_mode=normalized)
-    return normalized
 
 
 def list_projects_semantic_status(user_id: str) -> List[Dict[str, Any]]:
@@ -359,6 +347,22 @@ def get_project_story_tags(user_id: str, project_name: str) -> Dict[str, Any]:
     return dict(settings.get("story_tags", _DEFAULT_SETTINGS["story_tags"]))
 
 
+def initialize_project_workspace_mode(
+    user_id: str,
+    project_name: str,
+    workspace_mode: Optional[str] = None,
+) -> Dict[str, Any]:
+    """创建项目时初始化创作模式；项目创建后不再通过 story tags 动态切换。"""
+    with _lock:
+        project_path = get_project_path(user_id, project_name)
+        settings = _load(project_path)
+        current_tags = dict(settings.get("story_tags", _DEFAULT_SETTINGS["story_tags"]))
+        current_tags["workspace_mode"] = "novel" if workspace_mode == "novel" else "script"
+        settings["story_tags"] = current_tags
+        _save(project_path, settings)
+        return dict(current_tags)
+
+
 def set_project_story_tags(
     user_id: str,
     project_name: str,
@@ -382,7 +386,7 @@ def set_project_story_tags(
         worldviews: 世界观（多选，如["修真"]）
         pov: 人称视角（单选，如"第一人称"）
         length_hint: 篇幅（单选，如"中篇"）
-        workspace_mode: 创作模式（script=剧本 / novel=小说）
+        workspace_mode: 创作模式只读兼容参数；创建项目后会被忽略
         active_inspiration_id: 当前生效的灵感 ID（可选）
     
     Returns:
@@ -406,11 +410,7 @@ def set_project_story_tags(
             current_tags["pov"] = pov
         if length_hint is not None:
             current_tags["length_hint"] = length_hint
-        if workspace_mode is not None:
-            current_tags["workspace_mode"] = "novel" if workspace_mode == "novel" else "script"
-        
         settings["story_tags"] = current_tags
-        settings["workspace_mode"] = current_tags.get("workspace_mode", _DEFAULT_SETTINGS["workspace_mode"])
         
         # 更新 active_inspiration_id（如果传入）
         if active_inspiration_id is not None:

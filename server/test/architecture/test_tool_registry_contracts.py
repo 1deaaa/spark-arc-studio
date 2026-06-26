@@ -41,6 +41,15 @@ def test_core_agent_tool_boundaries() -> None:
     assert tool_names("agent_style") == set()
 
 
+def test_story_format_is_not_exposed_as_tool_switch() -> None:
+    from agents.tools.automation import CheckScriptwriterStatusInput, TriggerAutoWriteInput
+    from agents.tools.scriptwriter import CreateOrRewriteScriptInput
+
+    assert "export_format" not in TriggerAutoWriteInput.model_fields
+    assert "export_format" not in CheckScriptwriterStatusInput.model_fields
+    assert "export_format" not in CreateOrRewriteScriptInput.model_fields
+
+
 def test_skill_tools_are_exposed_only_when_user_has_skills(tmp_path, monkeypatch) -> None:
     monkeypatch.setattr("agents.skill_packs.USERDATA_ROOT", str(tmp_path))
 

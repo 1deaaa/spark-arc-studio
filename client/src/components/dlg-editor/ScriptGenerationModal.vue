@@ -90,14 +90,6 @@
               :options="[{value:'chapter_by_chapter',label:t('components.scriptGenModal.chapterByChapter')},{value:'all',label:t('components.scriptGenModal.continuousAll')}]"
             />
           </n-form-item>
-          
-          <n-form-item :label="t('components.scriptGenModal.exportFormat')">
-            <SparkSegment
-              v-model="config.exportFormat"
-              :options="[{value:'arc',label:t('components.scriptGenModal.formatArc')},{value:'novel',label:t('components.scriptGenModal.formatNovel')}]"
-            />
-          </n-form-item>
-          
            <n-form-item :label="t('components.scriptGenModal.startChapter')" v-if="outlineNodes.length > 0">
              <n-select
                v-model:value="config.startChapterIndex"
@@ -199,7 +191,6 @@ import SparkAlert from '../share/SparkAlert.vue';
 import SparkSegment from '../share/SparkSegment.vue';
 import { Pause, Play, SkipForward, TriangleAlert } from '@lucide/vue';
 import { useProjectStore } from '../stores/projectStore';
-import { useSceneStore } from '../stores/sceneStore';
 import { fetchEventSource } from '@microsoft/fetch-event-source';
 import { fetchWithAuth, resolveApiUrl } from '@/services/apiClient';
 import { useMobile } from '@/composables/useMobile';
@@ -217,7 +208,6 @@ const emit = defineEmits(['update:show', 'refresh-files']);
 const { t } = useI18n();
 
 const projectStore = useProjectStore();
-const sceneStore = useSceneStore();
 const dialog = useDialog();
 const message = useMessage();
 const consoleRef = ref<HTMLElement | null>(null);
@@ -245,7 +235,6 @@ const loadingRemoteState = ref(false);
 const config = ref({
   mode: 'chapter_by_chapter',
   startChapterIndex: 0,
-  exportFormat: sceneStore.fileFormat === 'novel' ? 'novel' : 'arc'
 });
 
 // Computed properties for UI
@@ -324,7 +313,7 @@ async function refreshGenerationState() {
 
   loadingRemoteState.value = true;
   try {
-    const response = await fetchWithAuth(`/api/outline/${encodeURIComponent(projectStore.currentProject)}/auto-write-state?export_format=${encodeURIComponent(config.value.exportFormat)}`);
+    const response = await fetchWithAuth(`/api/outline/${encodeURIComponent(projectStore.currentProject)}/auto-write-state`);
     if (!response.ok) {
       throw new Error(`HTTP ${response.status}`);
     }
@@ -432,7 +421,6 @@ async function runStream() {
       body: JSON.stringify({
         mode: config.value.mode,
         start_chapter_index: config.value.startChapterIndex,
-        export_format: config.value.exportFormat,
         auto_review: false
       }),
       signal: activeController.signal,
@@ -699,18 +687,6 @@ function closeModal() {
 
 watch(() => visible.value, (show) => {
   if (show) {
-    refreshGenerationState();
-  }
-});
-
-watch(() => sceneStore.fileFormat, (fmt) => {
-  if (fmt === 'novel' || fmt === 'arc') {
-    config.value.exportFormat = fmt;
-  }
-});
-
-watch(() => config.value.exportFormat, () => {
-  if (visible.value) {
     refreshGenerationState();
   }
 });

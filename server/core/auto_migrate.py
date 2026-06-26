@@ -165,6 +165,22 @@ def _is_missing_object_error(err_msg: str) -> bool:
     return False
 
 
+def _is_duplicate_object_error(err_msg: str) -> bool:
+    """判断错误是否由迁移重复创建已存在的数据库对象导致。"""
+    duplicate_indicators = [
+        # SQLite: "duplicate column name: xxx"
+        "duplicate column name",
+        # SQLAlchemy / 其它方言常见表达
+        "duplicatecolumn",
+        "column already exists",
+        "table already exists",
+        "index already exists",
+        "already exists",
+    ]
+    err_lower = err_msg.lower()
+    return any(indicator in err_lower for indicator in duplicate_indicators)
+
+
 def _describe_schema_drift(db_name: str, db_path: str) -> dict[str, list[str]]:
     """检查数据库结构与当前模型的表/列差异。
 
@@ -564,6 +580,31 @@ def run_db_upgrade(db_name: str, base_dir: str) -> None:
             )
             os.chdir(original_cwd)
             _heal_orphan_revision(db_name, db_path, base_dir)
+        elif _is_duplicate_object_error(err_msg):
+            # 迁移试图创建已存在的列/表。若当前 DB 已满足模型表/列结构，
+            # 说明只是版本号落后，直接 stamp 到 head；否则仍交给结构自愈补齐缺口。
+            os.chdir(original_cwd)
+            drift = _describe_schema_drift(db_name, db_path)
+            if _has_missing_model_objects(drift):
+                logger.warning(
+                    f"⚠️  [{db_name}] Migration tried to create an existing database object, "
+                    f"but model-required objects are still missing; triggering structural self-heal: "
+                    f"{_format_schema_drift(drift)}; original error: {err_msg}"
+                )
+                _heal_orphan_revision(db_name, db_path, base_dir)
+            else:
+                if drift.get("extra_tables") or drift.get("extra_columns"):
+                    logger.warning(
+                        f"⚠️  [{db_name}] Migration tried to create an existing database object; "
+                        f"DB has no missing model objects but contains extra structures, retaining them and "
+                        f"stamping version to head: {_format_schema_drift(drift)}; original error: {err_msg}"
+                    )
+                else:
+                    logger.warning(
+                        f"⚠️  [{db_name}] Migration tried to create an existing database object, "
+                        f"but DB structure already matches the current model; stamping version to head: {err_msg}"
+                    )
+                _stamp_head(db_name, db_path, base_dir)
         else:
             logger.error(f"❌ [{db_name}] Upgrade failed: {e}")
             raise e

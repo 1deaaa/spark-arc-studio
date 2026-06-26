@@ -137,6 +137,11 @@ _auto_write_stop_events: Dict[str, threading.Event] = {}
 _auto_write_progress_queues: Dict[str, queue.Queue] = {}
 
 
+def _resolve_export_format(user_id: str, project_name: str) -> str:
+    """根据项目 story tags 解析自动写作输出格式。"""
+    return "novel" if get_workspace_mode(user_id, project_name) == "novel" else "arc"
+
+
 async def generate_script_stream(
     user_id: str,
     project_name: str,
@@ -916,9 +921,7 @@ async def auto_write_start(
     mode = data.get("mode", "chapter_by_chapter")
     start_chapter_index = data.get("start_chapter_index", 0)
     start_scene_index = data.get("start_scene_index", 0)
-    export_format = data.get("export_format")
-    if export_format not in ("arc", "novel"):
-        export_format = "novel" if get_workspace_mode(user_id, project_name) == "novel" else "arc"
+    export_format = _resolve_export_format(user_id, project_name)
     auto_review = bool(data.get("auto_review", False))
 
     # 检查是否已有运行中的任务
@@ -980,7 +983,7 @@ async def auto_write_start(
     thread = threading.Thread(target=_run_background, daemon=True, name=f"auto_write_bg_{project_name}")
     thread.start()
 
-    return {"success": True}
+    return {"success": True, "export_format": export_format}
 
 
 @auto_write_router.get("/api/outline/{project_name}/auto-write-progress-stream")
@@ -998,15 +1001,15 @@ async def auto_write_progress_stream(
 @auto_write_router.get("/api/outline/{project_name}/auto-write-state")
 async def get_auto_write_state(
     project_name: str,
-    export_format: str = "arc",
     user: dict = Depends(get_current_user),
 ):
     user_id = str(user["user_id"])
+    resolved_export_format = _resolve_export_format(user_id, project_name)
     from story.outline_parser import parse_outline_markup
     outline_path = os.path.join(get_project_path(user_id, project_name), "大纲.txt")
     if not os.path.exists(outline_path):
         return {
-            **build_auto_write_state_payload(user_id, project_name, {"nodes": []}, export_format=export_format),
+            **build_auto_write_state_payload(user_id, project_name, {"nodes": []}, export_format=resolved_export_format),
             "outlineExists": False,
         }
 
@@ -1018,7 +1021,7 @@ async def get_auto_write_state(
             user_id,
             project_name,
             outline,
-            export_format=export_format,
+            export_format=resolved_export_format,
         ),
         "outlineExists": True,
     }
@@ -1037,7 +1040,7 @@ async def auto_write_stream(
     mode = data.get("mode", "chapter_by_chapter")
     start_chapter_index = data.get("start_chapter_index", 0)
     start_scene_index = data.get("start_scene_index", 0)
-    export_format = data.get("export_format", "arc")
+    export_format = _resolve_export_format(user_id, project_name)
     auto_review = bool(data.get("auto_review", False))
 
     # Load Outline

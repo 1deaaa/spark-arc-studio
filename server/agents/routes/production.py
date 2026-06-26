@@ -463,10 +463,11 @@ async def run_critic_review(
     bundle = load_project_context_bundle(user_id, project_name)
     style_profile = load_project_style_profile(user_id=user_id, project_name=project_name)
     effective_context = (data.activeContext or data.context or "").strip()
-    review_target = data.sceneName or data.filePath or ("当前小说文本" if (data.exportFormat or "arc") == "novel" else "当前场景剧本")
 
     # 读取项目级故事主题参数，注入审稿上下文
     story_tags = get_project_story_tags(user_id, project_name)
+    effective_export_format = "novel" if story_tags.get("workspace_mode") == "novel" else "arc"
+    review_target = data.sceneName or data.filePath or ("当前小说文本" if effective_export_format == "novel" else "当前场景剧本")
     story_tags_hint = build_story_tags_hint(story_tags)
 
     try:
@@ -528,12 +529,13 @@ async def scriptwriter_compose_stream(
     mode = (data.mode or "multi-node").strip()
     set_agent_context(user_id, project_name)
 
-    from core.request_context import set_current_export_format
-    set_current_export_format(data.exportFormat or "arc")
-
     # 读取项目级故事主题参数，注入专有工作模式上下文
     story_tags = get_project_story_tags(user_id, project_name)
+    effective_export_format = "novel" if story_tags.get("workspace_mode") == "novel" else "arc"
     story_tags_hint = build_story_tags_hint(story_tags)
+
+    from core.request_context import set_current_export_format
+    set_current_export_format(effective_export_format)
 
     context_pack = build_scriptwriter_context_pack(
         user_id=user_id,
@@ -766,7 +768,7 @@ async def scriptwriter_compose_stream(
                 style_profile=style_profile,
                 chr_map=context_pack.get("chr_map") or None,
                 last_node_text=data.lastNodeText or "",
-                export_format=data.exportFormat or "arc",
+                export_format=effective_export_format,
                 story_tags=story_tags_hint,
             )
 
@@ -812,7 +814,7 @@ async def scriptwriter_compose_stream(
 
             final_nodes = (
                 parse_arc_to_dialogues(full_arc_script)
-                if full_arc_script and (data.exportFormat or "arc") != "novel"
+                if full_arc_script and effective_export_format != "novel"
                 else []
             )
             if stop_event.is_set():
@@ -825,7 +827,7 @@ async def scriptwriter_compose_stream(
                 )
                 return
             if mode != "single-node" and data.filePath:
-                if (data.exportFormat or "arc") == "novel":
+                if effective_export_format == "novel":
                     _persist_generated_text(
                         user_id=user_id,
                         project_name=project_name,

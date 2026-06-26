@@ -110,8 +110,7 @@ def _apply_request_runtime_meta(
     export_format = None
     if isinstance(active_meta, dict):
         inspiration_id = active_meta.get('inspirationId') or active_meta.get('inspiration_id')
-        export_format = active_meta.get('exportFormat') or active_meta.get('export_format')
-    if not export_format and user_id and project_name:
+    if user_id and project_name:
         try:
             from core.project_settings import get_workspace_mode
 

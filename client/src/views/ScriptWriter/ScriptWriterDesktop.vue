@@ -24,14 +24,6 @@
             <div class="sidebar-section file-section">
               <div class="file-section-header">
                 <span class="file-section-title">{{ t('views.scriptWriter.desktop.workspaceManager') }}</span>
-                <div class="workspace-mode-switch" :title="t('views.scriptWriter.desktop.modeSwitchHint')">
-                  <SparkSegment
-                    :model-value="workspaceMode"
-                    :options="workspaceModeOptions"
-                    size="small"
-                    @update:model-value="handleWorkspaceModeChange"
-                  />
-                </div>
               </div>
               <div class="workspace-mode-desc">
                 {{ isNovelWorkspace ? t('views.scriptWriter.desktop.modeSwitchNovelDesc') : t('views.scriptWriter.desktop.modeSwitchScriptDesc') }}
@@ -98,7 +90,6 @@ import { computed, onMounted, onUnmounted, nextTick } from 'vue';
 import { NModal } from 'naive-ui';
 import { useI18n } from 'vue-i18n';
 import { useOnboarding } from '../../onboarding';
-import SparkSegment from '../../components/share/SparkSegment.vue';
 import VersionManager from '../../components/dlg-editor/VersionManager.vue';
 import HeaderToolbar from '../../components/layouts/desktop/HeaderToolbar.vue';
 import FileTree from '../../components/file-explorer/FileTree.vue';
@@ -168,37 +159,9 @@ function openVersionManager() {
   versionManagerVisible.value = true;
 }
 
-const workspaceMode = computed({
-  get: () => sceneStore.workspaceMode || 'script',
-  set: (mode) => {
-    sceneStore.setWorkspaceMode(mode);
-  }
-});
+const workspaceMode = computed(() => sceneStore.workspaceMode || 'script');
 
 const isNovelWorkspace = computed(() => workspaceMode.value === 'novel');
-
-const workspaceModeOptions = computed(() => [
-  { value: 'script', label: t('views.scriptWriter.desktop.modeScript') },
-  { value: 'novel', label: t('views.scriptWriter.desktop.modeNovel') }
-]);
-
-async function handleWorkspaceModeChange(mode) {
-  const normalized = mode === 'novel' ? 'novel' : 'script';
-  if (projectStore.currentProject) {
-    await sceneStore.persistWorkspaceMode(projectStore.currentProject, normalized);
-  } else {
-    sceneStore.setWorkspaceMode(normalized);
-  }
-  if (projectStore.currentProject) {
-    await fileStore.loadFileTree(projectStore.currentProject, normalized);
-  }
-
-  const expectedFormat = normalized === 'novel' ? 'novel' : 'arc';
-  if (!fileStore.selectedFile?.format || fileStore.selectedFile.format !== expectedFormat) {
-    fileStore.selectedFile = null;
-    sceneStore.resetForWorkspaceMode(normalized);
-  }
-}
 
 const activeComponent = computed(() => {
   switch (viewStore.currentView) {
@@ -370,12 +333,6 @@ h2 {
   font-size: var(--spark-fs-base);
   padding: 0;
   margin: 0;
-}
-
-.workspace-mode-switch {
-  display: flex;
-  align-items: center;
-  gap: 8px;
 }
 
 .workspace-mode-desc {

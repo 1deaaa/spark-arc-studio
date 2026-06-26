@@ -15,7 +15,6 @@ class CreateOrRewriteScriptInput(BaseModel):
     overwrite_content: str = Field(description="完整的剧本/小说正文。若目标场景文件尚不存在，系统将自动创建；若已存在则覆盖。必须只包含最终可保存的正文，不得混入解释、确认话术或元话语。")
     chapter_name: str | None = Field(default=None, description="目标章节名称（即文件夹名称），格式为「中文数字 · 标题」（如「一 · 开端」「二 · 相遇」）。【CRITICAL】剧本将保存到该章节目录下。写剧本/小说前，必须先调用 create_chapter 确保该章节目录存在，并在此传入一致的章节名。严禁在不指定章节的情况下调用此工具往根目录写入孤儿场景文件。")
     work_name: str | None = Field(default=None, description="场景文件的显示名称（不含扩展名），格式为「章节号-场景号 场景名」（如「1-1 初遇」「2-3 决战」）。若不提供，系统将自动根据内容或上下文命名。")
-    export_format: str | None = Field(default=None, description="输出格式：'arc' 为互动剧本（默认），'novel' 为纯文学小说。决定文件扩展名与格式规范。")
 
 
 class CreateChapterInput(BaseModel):
@@ -120,7 +119,6 @@ def create_or_rewrite_script(
     overwrite_content: str,
     chapter_name: str | None = None,
     work_name: str | None = None,
-    export_format: str | None = None,
 ) -> str:
     """创建或覆盖剧本文件。"""
     from core.utils import get_project_stories_path
@@ -132,12 +130,9 @@ def create_or_rewrite_script(
         sanitize_story_display_name,
     )
 
-    if export_format in ("arc", "novel"):
-        effective_format = export_format
-    else:
-        from core.request_context import get_current_export_format
+    from core.request_context import get_current_export_format
 
-        effective_format = get_current_export_format()
+    effective_format = get_current_export_format()
 
     content = (overwrite_content or "").strip()
     if not content:

@@ -6,17 +6,19 @@ type ProjectApiResult = {
   [key: string]: unknown;
 };
 
+type ProjectWorkspaceMode = 'script' | 'novel';
+
 export async function fetchProjects(): Promise<string[]> {
   const response = await fetchWithAuth('/api/projects');
   if (!response.ok) throw new Error('无法加载项目列表');
   return await response.json() as string[];
 }
 
-export async function createProject(projectName: string): Promise<ProjectApiResult> {
+export async function createProject(projectName: string, workspaceMode: ProjectWorkspaceMode = 'script'): Promise<ProjectApiResult> {
   const response = await fetchWithAuth('/api/projects', {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({ projectName }),
+    body: JSON.stringify({ projectName, workspaceMode }),
   });
   if (!response.ok) {
     const result = await response.json() as ProjectApiResult;

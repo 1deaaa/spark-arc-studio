@@ -33,7 +33,6 @@ class ScriptwriterComposeRequest(BaseModel):
     nextScene: Optional[Dict[str, Any]] = None
     pacing: str = "normal"
     mood: str = ""
-    exportFormat: str = "arc"
 
 
 class ScriptwriterFeedbackRequest(BaseModel):
@@ -52,7 +51,6 @@ class CriticReviewRequest(BaseModel):
     script_text: str = ""
     sceneName: str = ""
     filePath: str = ""
-    exportFormat: str = "arc"
 
 
 class AgentChatRequest(BaseModel):

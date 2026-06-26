@@ -547,9 +547,15 @@ def sub_agent_node(state: DirectorState) -> Dict[str, Any]:
         HANDOFF_CONFIRMATION_NOT_REQUIRED,
     }
     
-    # 传递 export_format 到子 Agent 的 ContextVar
+    # 子 Agent 输出格式由项目 story tags 统一决定，payload 中的旧字段只作兼容。
     from core.request_context import set_current_export_format
-    set_current_export_format(delegate.get("export_format"))
+    try:
+        from core.project_settings import get_workspace_mode
+
+        resolved_export_format = "novel" if get_workspace_mode(str(user_id), str(project_name)) == "novel" else "arc"
+    except Exception:
+        resolved_export_format = delegate.get("export_format")
+    set_current_export_format(resolved_export_format)
     
     if not target_agent or not task_description:
         return {"sub_agent_result": "Delegation failed: missing target agent or task description"}

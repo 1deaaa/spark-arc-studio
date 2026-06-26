@@ -167,14 +167,14 @@ def test_context_window_stats_merges_agent_cache_usage() -> None:
     assert merged["cache_hit_rate"] == 0.75
 
 
-def test_chat_runtime_meta_falls_back_to_project_workspace_mode(monkeypatch) -> None:
+def test_chat_runtime_meta_uses_project_workspace_mode(monkeypatch) -> None:
     from agents.routes.chat import _apply_request_runtime_meta
 
     monkeypatch.setattr("core.project_settings.get_workspace_mode", lambda user_id, project_name: "novel")
 
     token = current_export_format.set(None)
     try:
-        _apply_request_runtime_meta({}, user_id="u1", project_name="p1")
+        _apply_request_runtime_meta({"exportFormat": "arc"}, user_id="u1", project_name="p1")
         assert get_current_export_format() == "novel"
     finally:
         current_export_format.reset(token)

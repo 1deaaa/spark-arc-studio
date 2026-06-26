@@ -13,7 +13,7 @@ import json
 
 from core.auth import get_current_user
 from core.utils import USERDATA_ROOT
-from core.project_settings import get_project_story_tags, set_project_story_tags, get_workspace_mode, set_workspace_mode
+from core.project_settings import get_project_story_tags, set_project_story_tags
 
 
 tags_router = APIRouter()
@@ -179,7 +179,6 @@ async def get_project_story_tags_api(
             content={"success": False, "error": str(e)}
         )
 
-
 @tags_router.post('/api/project/story-tags')
 async def set_project_story_tags_api(
     data: ProjectStoryTagsRequest,
@@ -201,7 +200,6 @@ async def set_project_story_tags_api(
             worldviews=data.worldviews,
             pov=data.pov,
             length_hint=data.lengthHint,
-            workspace_mode=data.workspaceMode,
             active_inspiration_id=data.activeInspirationId
         )
         return {
@@ -210,54 +208,6 @@ async def set_project_story_tags_api(
         }
     except Exception as e:
         print(f"Error saving project story tags: {e}")
-        return JSONResponse(
-            status_code=500,
-            content={"success": False, "error": str(e)}
-        )
-
-
-# ==================== 项目级创作模式（Workspace Mode）====================
-
-
-class ProjectWorkspaceModeRequest(BaseModel):
-    """项目级创作模式请求体"""
-    projectName: str
-    mode: str  # script | novel
-
-
-@tags_router.get('/api/project/workspace-mode')
-async def get_project_workspace_mode_api(
-    projectName: str,
-    user: dict = Depends(get_current_user)
-):
-    """读取项目默认创作模式（script=剧本 / novel=小说）。
-
-    切换项目时前端读取此值自动恢复到上次的创作模式。
-    """
-    user_id = str(user['user_id'])
-    try:
-        mode = get_workspace_mode(user_id, projectName)
-        return {"success": True, "mode": mode}
-    except Exception as e:
-        print(f"Error loading project workspace mode: {e}")
-        return JSONResponse(
-            status_code=500,
-            content={"success": False, "error": str(e)}
-        )
-
-
-@tags_router.post('/api/project/workspace-mode')
-async def set_project_workspace_mode_api(
-    data: ProjectWorkspaceModeRequest,
-    user: dict = Depends(get_current_user)
-):
-    """设置项目默认创作模式并持久化。"""
-    user_id = str(user['user_id'])
-    try:
-        mode = set_workspace_mode(user_id, data.projectName, data.mode)
-        return {"success": True, "mode": mode}
-    except Exception as e:
-        print(f"Error saving project workspace mode: {e}")
         return JSONResponse(
             status_code=500,
             content={"success": False, "error": str(e)}

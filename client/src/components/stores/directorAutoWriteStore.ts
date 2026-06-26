@@ -125,10 +125,8 @@ export const useDirectorAutoWriteStore = defineStore('directorAutoWrite', () => 
 
   async function _pollSnapshot(projectName: string): Promise<void> {
     try {
-      const task = tasks.value[projectName];
-      const exportFormat = task?.snapshot.exportFormat || 'arc';
       const res = await fetchWithAuth(
-        `/api/outline/${encodeURIComponent(projectName)}/auto-write-state?export_format=${encodeURIComponent(exportFormat)}`,
+        `/api/outline/${encodeURIComponent(projectName)}/auto-write-state`,
       );
       if (!res.ok) return;
       const data = await res.json();
@@ -249,10 +247,8 @@ export const useDirectorAutoWriteStore = defineStore('directorAutoWrite', () => 
    */
   async function refreshSnapshot(projectName: string): Promise<void> {
     try {
-      const task = tasks.value[projectName];
-      const exportFormat = task?.snapshot.exportFormat || 'arc';
       const res = await fetchWithAuth(
-        `/api/outline/${encodeURIComponent(projectName)}/auto-write-state?export_format=${encodeURIComponent(exportFormat)}`,
+        `/api/outline/${encodeURIComponent(projectName)}/auto-write-state`,
       );
       if (!res.ok) return;
       const data = await res.json();
@@ -276,7 +272,7 @@ export const useDirectorAutoWriteStore = defineStore('directorAutoWrite', () => 
           snapshot: {
             status: 'idle',
             mode: 'continuous_write',
-            exportFormat: exportFormat,
+            exportFormat: data.exportFormat || data.export_format || 'arc',
             currentChapterIndex: null,
             currentChapterTitle: '',
             currentSceneIndex: null,
@@ -394,15 +390,14 @@ export const useDirectorAutoWriteStore = defineStore('directorAutoWrite', () => 
       mode?: string;
       startChapterIndex?: number;
       startSceneIndex?: number;
-      exportFormat?: string;
       autoReview?: boolean;
     } = {},
   ): Promise<{ success: boolean; error?: string }> {
     const mode = config.mode || 'chapter_by_chapter';
     const startChapterIndex = config.startChapterIndex ?? 0;
     const startSceneIndex = config.startSceneIndex ?? 0;
-    const exportFormat = config.exportFormat || 'arc';
     const autoReview = config.autoReview === true;
+    let exportFormat = 'arc';
 
     try {
       const res = await fetchWithAuth(
@@ -414,7 +409,6 @@ export const useDirectorAutoWriteStore = defineStore('directorAutoWrite', () => 
             mode,
             start_chapter_index: startChapterIndex,
             start_scene_index: startSceneIndex,
-            export_format: exportFormat,
             auto_review: autoReview,
           }),
         },
@@ -423,6 +417,7 @@ export const useDirectorAutoWriteStore = defineStore('directorAutoWrite', () => 
       if (!data.success) {
         return { success: false, error: data.error || '启动失败' };
       }
+      exportFormat = data.export_format || data.exportFormat || exportFormat;
     } catch (e: unknown) {
       const msg = e instanceof Error ? e.message : String(e || '网络错误');
       return { success: false, error: msg };

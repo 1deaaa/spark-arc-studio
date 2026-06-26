@@ -97,16 +97,6 @@
                 ]"
               />
             </div>
-            <div class="daw-form-item">
-              <span class="daw-form-label">{{ t('components.directorAutoWrite.exportFormat') }}</span>
-              <SparkSegment
-                v-model="config.exportFormat"
-                :options="[
-                  { value: 'arc', label: t('components.directorAutoWrite.formatArc') },
-                  { value: 'novel', label: t('components.directorAutoWrite.formatNovel') },
-                ]"
-              />
-            </div>
             <div v-if="chapterOptions.length > 1" class="daw-form-item">
               <span class="daw-form-label">{{ t('components.directorAutoWrite.startChapter') }}</span>
               <select v-model="config.startChapterIndex" class="daw-select" @change="config.startSceneIndex = 0">
@@ -289,7 +279,6 @@ const starting = ref(false);
 /** 配置表单 */
 const config = reactive({
   mode: 'chapter_by_chapter',
-  exportFormat: 'arc',
   startChapterIndex: 0,
   startSceneIndex: 0,
   autoReview: false,
@@ -474,7 +463,7 @@ async function openSetup(): Promise<void> {
   try {
     const [outlineRes, stateRes] = await Promise.all([
       fetchWithAuth(`/api/outline/${encodeURIComponent(proj)}`),
-      fetchWithAuth(`/api/outline/${encodeURIComponent(proj)}/auto-write-state?export_format=${config.exportFormat}`),
+      fetchWithAuth(`/api/outline/${encodeURIComponent(proj)}/auto-write-state`),
     ]);
     if (outlineRes.ok) outlineData.value = await outlineRes.json();
     if (stateRes.ok) autoWriteState.value = await stateRes.json();
@@ -488,9 +477,7 @@ async function refreshSetupState(): Promise<void> {
   const proj = projectStore.currentProject;
   if (!proj) return;
   try {
-    const stateRes = await fetchWithAuth(
-      `/api/outline/${encodeURIComponent(proj)}/auto-write-state?export_format=${encodeURIComponent(config.exportFormat)}`,
-    );
+    const stateRes = await fetchWithAuth(`/api/outline/${encodeURIComponent(proj)}/auto-write-state`);
     if (stateRes.ok) autoWriteState.value = await stateRes.json();
   } catch {
     // 静默
@@ -506,7 +493,6 @@ async function handleStart(): Promise<void> {
       mode: config.mode,
       startChapterIndex: config.startChapterIndex,
       startSceneIndex: config.startSceneIndex,
-      exportFormat: config.exportFormat,
       autoReview: config.autoReview,
     });
     if (result.success) {
@@ -540,7 +526,6 @@ async function handleContinue(): Promise<void> {
       mode: config.mode,
       startChapterIndex: nextIdx,
       startSceneIndex: 0,
-      exportFormat: config.exportFormat,
       autoReview: config.autoReview,
     });
   } finally {
@@ -588,14 +573,6 @@ watch(
         autoCloseTimer = null;
       }, 2000);
     }
-  },
-);
-
-watch(
-  () => config.exportFormat,
-  () => {
-    config.startSceneIndex = 0;
-    void refreshSetupState();
   },
 );
 

@@ -1,5 +1,5 @@
 import { defineStore } from 'pinia';
-import { fetchStoryFile, saveStory, getProjectWorkspaceMode, setProjectWorkspaceMode } from '@/services/api';
+import { fetchStoryFile, saveStory, getProjectWorkspaceMode } from '@/services/api';
 import { useProjectStore } from './projectStore';
 import bus from '@/eventBus';
 import { parseArc, serializeToArc, type ActValue, type ArcDialogueNode, type ArcOptionNode, type ArcScene } from '@/services/arcParser';
@@ -46,7 +46,6 @@ type SceneStoreState = {
 type StoryCacheSnapshot = {
   currentFilePath: string;
   fileFormat: 'arc' | 'novel';
-  workspaceMode: 'script' | 'novel';
   scriptData: SceneWithClientId[] | string;
 };
 
@@ -76,7 +75,6 @@ function normalizeStoryResponse(filePath: string, data: unknown): StoryCacheSnap
     return {
       currentFilePath: filePath,
       fileFormat: 'novel',
-      workspaceMode: 'novel',
       scriptData: typeof data === 'string'
         ? data
         : data && typeof data === 'object' && 'content' in (data as Record<string, unknown>) && typeof (data as Record<string, unknown>).content === 'string'
@@ -94,7 +92,6 @@ function normalizeStoryResponse(filePath: string, data: unknown): StoryCacheSnap
   return {
     currentFilePath: filePath,
     fileFormat: 'arc',
-    workspaceMode: 'script',
     scriptData: assignSceneClientIds(parseArc(arcText)),
   };
 }
@@ -110,7 +107,6 @@ function buildStorySnapshot(filePath: string, store: SceneStoreState): StoryCach
   return {
     currentFilePath: filePath,
     fileFormat: filePath.endsWith('.md') ? 'novel' : 'arc',
-    workspaceMode: filePath.endsWith('.md') ? 'novel' : 'script',
     scriptData: filePath.endsWith('.md')
       ? String(store.scriptData ?? '')
       : assignSceneClientIds(Array.isArray(store.scriptData) ? store.scriptData : []),
@@ -134,7 +130,6 @@ export const useSceneStore = defineStore('scene', {
       const previousSceneName = this.currentScene?.scene;
       this.currentFilePath = snapshot.currentFilePath;
       this.fileFormat = snapshot.fileFormat;
-      this.workspaceMode = snapshot.workspaceMode;
 
       if (snapshot.fileFormat === 'novel') {
         this.scriptData = String(snapshot.scriptData ?? '');
@@ -181,17 +176,6 @@ export const useSceneStore = defineStore('scene', {
         }
       } catch (error) {
         console.warn('[sceneStore] 加载项目创作模式失败:', error);
-      }
-    },
-    async persistWorkspaceMode(projectName: string, mode: string) {
-      const normalized = mode === 'novel' ? 'novel' : 'script';
-      this.workspaceMode = normalized;
-      this.fileFormat = normalized === 'novel' ? 'novel' : 'arc';
-      if (!projectName) return;
-      try {
-        await setProjectWorkspaceMode(projectName, normalized);
-      } catch (error) {
-        console.warn('[sceneStore] 保存项目创作模式失败:', error);
       }
     },
     resetForWorkspaceMode(mode: string) {

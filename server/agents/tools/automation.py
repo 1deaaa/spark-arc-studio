@@ -8,7 +8,7 @@ from pydantic import AliasChoices, BaseModel, ConfigDict, Field, field_validator
 
 from agents.auto_write_service import load_auto_write_status, start_auto_write_background
 from core.utils import get_project_path
-from core.project_settings import get_project_story_tags, set_project_story_tags
+from core.project_settings import get_project_story_tags, get_workspace_mode, set_project_story_tags
 
 from .common import ToolExecutionContext
 
@@ -16,7 +16,6 @@ from .common import ToolExecutionContext
 class TriggerAutoWriteInput(BaseModel):
     start_chapter: int = Field(default=1, description="从第几章开始写作（1=第一章）。若要续写未完成的任务，请基于已完成章节向后推算")
     start_scene: int = Field(default=1, description="在起始章内从第几个场景开始写作（1=该章第一个场景）。仅对起始章有效，后续章节总是从第 1 个场景开始")
-    export_format: str = Field(default="arc", description="输出格式：arc=互动小说剧本格式；novel=普通小说纯文本格式")
     mode: str = Field(default="continuous_write", description="写作模式：continuous_write=连续写作全部章节（无人值守直达结束）；chapter_by_chapter=逐章写作（写完一章后暂停断开）")
     auto_review: bool = Field(default=False, description="是否在每个场景保存后自动触发 Critic 轻量审稿，并将修订工单写入 StoryMemory。默认关闭；只有用户明确要求边写边审时才开启，且不会自动改写正文。")
 
@@ -31,13 +30,13 @@ class WorkTrackerInput(BaseModel):
 
 
 class CheckScriptwriterStatusInput(BaseModel):
-    export_format: str = Field(default="arc", description="导出格式（arc / novel），用于读取匹配的自动写作状态")
+    model_config = ConfigDict(extra="forbid")
 
 
 class UpdateProjectStoryTagsInput(BaseModel):
     model_config = ConfigDict(extra="forbid", populate_by_name=True)
 
-    workspace_mode: str | None = Field(default=None, validation_alias=AliasChoices("workspace_mode", "workspaceMode", "mode"), description="创作模式，必须是字符串：script=ARC/剧本模式，novel=纯文字小说模式。")
+    workspace_mode: str | None = Field(default=None, validation_alias=AliasChoices("workspace_mode", "workspaceMode", "mode"), description="只读兼容字段：项目创作模式只能在创建项目时决定，创建后不可通过此工具修改。")
     style: str | None = Field(default=None, description="风格，单选字符串，如 '治愈'、'悬疑'。")
     genres: list[str] | None = Field(default=None, description="题材，多选字符串数组，如 ['仙侠', '冒险']；即使只有一个也必须传数组。")
     tones: list[str] | None = Field(default=None, description="基调，多选字符串数组，如 ['暗黑', '治愈']；即使只有一个也必须传数组。")
@@ -76,7 +75,6 @@ class UpdateProjectStoryTagsInput(BaseModel):
 def trigger_auto_write(
     start_chapter: int = 1,
     start_scene: int = 1,
-    export_format: str = "arc",
     mode: str = "continuous_write",
     auto_review: bool = False,
 ) -> str:
@@ -85,6 +83,8 @@ def trigger_auto_write(
     start_scene_index = max(0, start_scene - 1)
 
     user_id, project_name = ToolExecutionContext.get_context()
+    workspace_mode = get_workspace_mode(str(user_id), project_name)
+    export_format = "novel" if workspace_mode == "novel" else "arc"
     project_path = get_project_path(user_id, project_name)
     from story.outline_parser import parse_outline_markup
 
@@ -143,7 +143,7 @@ def trigger_auto_write(
         f"自动写作任务已在后台启动。\n"
         f"- 项目：{project_name}\n"
         f"- 从第 {start_chapter_index + 1} 章第 {start_scene_index + 1} 场景开始，共 {remaining_chapters} 章，{total_scenes} 个场景\n"
-        f"- 输出格式：{export_format}\n"
+        f"- 输出格式：{export_format}（由项目 story tags 创作模式决定）\n"
         f"- 模式：{mode}\n"
         f"- 自动审稿：{'开启' if auto_review else '关闭'}\n"
         f"写作已在后台进行，前端顶部状态条将实时显示进度，你可以在进度面板中随时中断任务。"
@@ -151,7 +151,7 @@ def trigger_auto_write(
 
 
 @tool(args_schema=CheckScriptwriterStatusInput)
-def check_scriptwriter_status(export_format: str = "arc") -> str:
+def check_scriptwriter_status() -> str:
     """查询自动写作状态与编剧任务板。"""
     user_id, project_name = ToolExecutionContext.get_context()
 
@@ -376,7 +376,7 @@ def read_project_story_tags() -> str:
 
     workspace_mode = tags.get("workspace_mode", "script")
     mode_label = "小说模式（novel）" if workspace_mode == "novel" else "剧本模式（script）"
-    lines.append(f"创作模式：{mode_label}")
+    lines.append(f"创作模式：{mode_label}（创建项目时锁定，不可通过 story tags 修改）")
     
     # POV 醒目展示
     pov = tags.get("pov")
@@ -432,7 +432,6 @@ def update_project_story_tags(
             worldviews=worldviews,
             pov=pov,
             length_hint=length_hint,
-            workspace_mode=workspace_mode,
             active_inspiration_id=active_inspiration_id,
         )
     except Exception as e:
@@ -441,8 +440,9 @@ def update_project_story_tags(
     # 构建更新摘要
     updated_fields = []
     if workspace_mode is not None:
-        normalized_mode = "novel" if workspace_mode == "novel" else "script"
-        updated_fields.append(f"创作模式={normalized_mode}")
+        locked_mode = tags.get("workspace_mode", get_workspace_mode(str(user_id), project_name))
+        locked_label = "novel" if locked_mode == "novel" else "script"
+        updated_fields.append(f"创作模式已锁定为 {locked_label}，忽略修改请求")
     if style is not None:
         updated_fields.append(f"风格={style}")
     if genres is not None:
