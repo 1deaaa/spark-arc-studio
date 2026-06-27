@@ -671,7 +671,7 @@ export async function analyzeStyleStream(
     throw new Error('浏览器不支持流式响应 (response.body 为空)');
   }
 
-  let finalProfile: JsonObject | null = null;
+  let finalProfile: JsonObject | string | null = null;
   await consumeSSEReader(response.body.getReader(), {
     signal: options.signal,
     onEvent: async (evt) => {

@@ -29,6 +29,14 @@ function readerFromEvents(events: Record<string, unknown>[]): ReadableStreamDefa
   }).getReader();
 }
 
+type ConsumeStreamState = {
+  agentId: string;
+  contextKey: string;
+  streamEpoch: number;
+  lastSeq?: number;
+  receivedTaskDone?: boolean;
+};
+
 describe('chatStore NDJSON 消费契约', () => {
   beforeEach(() => {
     setActivePinia(createPinia());
@@ -142,7 +150,7 @@ describe('chatStore NDJSON 消费契约', () => {
       },
     ]);
 
-    const streamState = {
+    const streamState: ConsumeStreamState = {
       agentId: 'agent_director',
       contextKey: 'global',
       streamEpoch: 1,
