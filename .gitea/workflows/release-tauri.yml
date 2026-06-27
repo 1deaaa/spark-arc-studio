@@ -282,6 +282,10 @@ jobs:
         working-directory: client
         run: npm run tauri icon src-tauri/icons/app-icon-source.png
 
+      - name: Re-initialize Android project (after icon regeneration)
+        working-directory: client
+        run: npm run tauri -- android init
+
       - name: Patch Android adaptive foreground safe zone
         run: python3 scripts/patch-android-adaptive-foreground.py
 
@@ -316,6 +320,15 @@ jobs:
         shell: bash
         run: |
           set -uo pipefail
+          ensure_android_gradle_scaffold() {
+            if [ -f "tauri.settings.gradle" ]; then
+              return 0
+            fi
+
+            echo "检测到 tauri.settings.gradle 缺失，重新执行 tauri android init..."
+            (cd ../../../ && npm run tauri -- android init)
+          }
+
           repair_gradle_workspace_metadata_cache() {
             local gradle_cache_root="${GRADLE_USER_HOME}/caches"
             echo "检测到 Gradle workspace metadata 缓存损坏，开始清理 transforms 缓存..."
@@ -332,6 +345,7 @@ jobs:
           warmup_ok=0
           for attempt in 1 2 3 4 5; do
             echo "Gradle warmup attempt ${attempt}/5"
+            ensure_android_gradle_scaffold
             warmup_log="$RUNNER_TEMP/gradle-warmup-${attempt}.log"
             if ./gradlew --no-daemon help --stacktrace --refresh-dependencies 2>&1 | tee "$warmup_log"; then
               warmup_ok=1
@@ -389,10 +403,6 @@ jobs:
               text = text.replace(release_marker, release_marker + "\n            signingConfig = signingConfigs.getByName(\"release\")", 1)
           gradle_path.write_text(text, encoding="utf-8")
           '
-
-      - name: Re-initialize Android project (after icon regeneration)
-        working-directory: client
-        run: npm run tauri -- android init
 
       - name: Build Android APK (retry on transient network)
         working-directory: client
