@@ -33,7 +33,6 @@ from agents.agent_style.utils import (
     save_user_default_style_binding,
     list_all_authors,
     delete_author_style,
-    get_style_filepath,
     make_unique_style_name,
     normalize_style_name,
     save_style_profile_to_file,
@@ -51,28 +50,11 @@ from .stream_semantics import (
 
 style_router = APIRouter()
 
-_STYLE_EXPORT_KIND = "sparkarc.style_profile"
-_STYLE_EXPORT_VERSION = 1
-
-
-def _extract_imported_style_payload(payload: object) -> tuple[str | None, dict]:
-    """兼容直接风格 JSON 与 SparkArc 风格包两种导入格式。"""
-    if not isinstance(payload, dict):
-        raise ValueError("风格文件必须是 JSON 对象")
-
-    if isinstance(payload.get("style_profile"), dict):
-        raw_name = payload.get("style_name") or payload.get("name")
-        return str(raw_name).strip() if raw_name else None, payload["style_profile"]
-
-    # 直接导出的风格档案没有包裹层，直接作为 profile 使用。
-    return None, payload
-
-
 def _style_download_headers(style_name: str) -> dict[str, str]:
-    """构建同时兼容中文文件名与 ASCII 兜底的下载头。"""
+    """构建同时兼容中文文件名与 ASCII 兜底的 .md 下载头。"""
     safe_name = normalize_style_name(style_name, fallback="style") or "style"
-    filename = f"{safe_name}.sparkarc-style.json"
-    ascii_filename = "style.sparkarc-style.json"
+    filename = f"{safe_name}.md"
+    ascii_filename = "style.md"
     return {
         "Content-Disposition": (
             f"attachment; filename=\"{ascii_filename}\"; "
@@ -267,22 +249,24 @@ async def list_styles(user: dict = Depends(get_current_user)):
 
 @style_router.get("/api/ai/styles/{style_name}/export")
 async def export_style_profile(style_name: str, user: dict = Depends(get_current_user)):
-    """导出单个风格档案为可移植 JSON。"""
+    """导出单个 Markdown 风格档案,带最小化 yaml frontmatter。"""
     user_id = str(user["user_id"])
     profile = load_style_profile_from_file(style_name, user_id=user_id)
     if not profile:
         return JSONResponse(status_code=404, content={"success": False, "error": "风格档案不存在"})
 
-    payload = {
-        "kind": _STYLE_EXPORT_KIND,
-        "version": _STYLE_EXPORT_VERSION,
-        "style_name": style_name,
-        "exported_at": datetime.now().isoformat(timespec="seconds"),
-        "style_profile": profile,
-    }
+    timestamp = datetime.now().isoformat(timespec="seconds")
+    safe_id = (style_name or "").replace("'", "''")
+    frontmatter = (
+        "---\n"
+        f"style_name: '{safe_id}'\n"
+        f"exported_at: '{timestamp}'\n"
+        "format_version: 2\n"
+        "---\n\n"
+    )
     return Response(
-        content=json.dumps(payload, ensure_ascii=False, indent=2),
-        media_type="application/json; charset=utf-8",
+        content=frontmatter + profile.strip() + "\n",
+        media_type="text/markdown; charset=utf-8",
         headers=_style_download_headers(style_name),
     )
 
@@ -293,19 +277,33 @@ async def import_style_profile(
     styleName: str | None = Form(None),
     user: dict = Depends(get_current_user),
 ):
-    """导入风格档案 JSON，自动命名去重后写入用户风格库。"""
+    """导入 Markdown 风格档案,自动命名去重后写入用户风格库。"""
     user_id = str(user["user_id"])
     try:
         raw = await file.read()
-        payload = json.loads(raw.decode("utf-8-sig"))
-        source_name, profile = _extract_imported_style_payload(payload)
+        text = raw.decode("utf-8-sig").strip()
+        if not text:
+            return JSONResponse(status_code=400, content={"success": False, "error": "Markdown 文件为空"})
+
+        # 尝试从 frontmatter 里挖出 style_name
+        source_name: str | None = None
+        if text.startswith("---"):
+            rest = text[3:]
+            sep = rest.find("\n---")
+            if sep != -1:
+                for line in rest[:sep].splitlines():
+                    m = line.strip()
+                    if m.lower().startswith("style_name:"):
+                        value = m.split(":", 1)[1].strip().strip("'\"")
+                        if value:
+                            source_name = value
+                            break
+
         filename_stem = os.path.splitext(file.filename or "")[0]
         preferred_name = styleName or source_name or filename_stem or "导入风格"
         final_name = make_unique_style_name(user_id, preferred_name)
-        save_style_profile_to_file(final_name, profile, user_id=user_id)
+        save_style_profile_to_file(final_name, text, user_id=user_id)
         return {"success": True, "style_name": final_name}
-    except json.JSONDecodeError:
-        return JSONResponse(status_code=400, content={"success": False, "error": "风格文件不是有效 JSON"})
     except ValueError as e:
         return JSONResponse(status_code=400, content={"success": False, "error": str(e)})
     except Exception as e:

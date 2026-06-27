@@ -79,7 +79,7 @@
   
 
         <n-modal v-model:show="versionManagerVisible" preset="card" :title="t('views.scriptWriter.desktop.versionManager')" style="width: 800px; max-height: 90vh;">
-          <VersionManager :projectId="projectStore.currentProject || undefined" :content-format="workspaceMode" />
+          <VersionManager :projectId="projectStore.currentProject || undefined" :content-format="workspaceMode" hide-title />
         </n-modal>
 
       <GlobalChatFloat />

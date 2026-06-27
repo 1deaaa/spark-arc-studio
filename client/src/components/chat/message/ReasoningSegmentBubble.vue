@@ -66,7 +66,8 @@ import MarkdownRenderer from '@/components/share/MarkdownRenderer.vue';
 
 type RevealPhase = '' | 'opening' | 'closing';
 
-const STREAMING_REASONING_MAX_HEIGHT = 108;
+const STREAMING_REASONING_MAX_LINES = 5;
+const STREAMING_REASONING_FALLBACK_MAX_HEIGHT = 108;
 const REASONING_REVEAL_TIMER_MS = 360;
 const REASONING_HEIGHT_STABLE_FRAMES = 2;
 const REASONING_HEIGHT_MAX_SAMPLES = 5;
@@ -153,19 +154,63 @@ function measureRenderedContentHeight(root: HTMLElement | null) {
   return Math.ceil(root.getBoundingClientRect().height || 0);
 }
 
+function parseCssPx(value: string | null | undefined) {
+  const parsed = Number.parseFloat(value || '');
+  return Number.isFinite(parsed) ? parsed : 0;
+}
+
+function resolveLineHeightPx(style: CSSStyleDeclaration) {
+  const rawLineHeight = (style.lineHeight || '').trim();
+  const fontSize = parseCssPx(style.fontSize);
+  const parsedLineHeight = Number.parseFloat(rawLineHeight);
+
+  if (Number.isFinite(parsedLineHeight) && parsedLineHeight > 0) {
+    if (rawLineHeight.endsWith('px')) return parsedLineHeight;
+    if (rawLineHeight.endsWith('%') && fontSize > 0) return fontSize * (parsedLineHeight / 100);
+    if (parsedLineHeight <= 4 && fontSize > 0) return fontSize * parsedLineHeight;
+    return parsedLineHeight;
+  }
+
+  return fontSize > 0 ? fontSize * 1.32 : 0;
+}
+
+function measureStreamingContentMaxHeight(root: HTMLElement | null) {
+  if (!root || typeof window === 'undefined' || typeof window.getComputedStyle !== 'function') {
+    return STREAMING_REASONING_FALLBACK_MAX_HEIGHT;
+  }
+
+  const inner = (root.querySelector('.reasoning-inner') as HTMLElement | null) || root;
+  const markdown = (inner.querySelector('.reasoning-markdown') as HTMLElement | null) || inner;
+  const innerStyle = window.getComputedStyle(inner);
+  const markdownStyle = window.getComputedStyle(markdown);
+  const lineHeight = resolveLineHeightPx(markdownStyle) || resolveLineHeightPx(innerStyle);
+
+  if (lineHeight <= 0) return STREAMING_REASONING_FALLBACK_MAX_HEIGHT;
+
+  const verticalExtra = (
+    parseCssPx(innerStyle.paddingTop)
+    + parseCssPx(innerStyle.paddingBottom)
+    + parseCssPx(innerStyle.borderTopWidth)
+    + parseCssPx(innerStyle.borderBottomWidth)
+  );
+
+  return Math.ceil((lineHeight * STREAMING_REASONING_MAX_LINES) + verticalExtra);
+}
+
 function measurePanelHeight(streaming = props.streaming) {
   const fullHeight = measureRenderedContentHeight(contentRef.value);
   if (!streaming) return fullHeight;
-  return STREAMING_REASONING_MAX_HEIGHT;
+  if (fullHeight <= 0) return 0;
+  return Math.min(fullHeight, measureStreamingContentMaxHeight(contentRef.value));
 }
 
 function getTargetHeight(streaming = props.streaming) {
   const measured = measurePanelHeight(streaming);
   if (measured > 0) return measured;
   if (measuredHeight.value > 0) {
-    return streaming ? Math.min(measuredHeight.value, STREAMING_REASONING_MAX_HEIGHT) : measuredHeight.value;
+    return streaming ? Math.min(measuredHeight.value, measureStreamingContentMaxHeight(contentRef.value)) : measuredHeight.value;
   }
-  return streaming ? STREAMING_REASONING_MAX_HEIGHT : 0;
+  return streaming ? measureStreamingContentMaxHeight(contentRef.value) : 0;
 }
 
 function finishRevealAnimation(nextHeight: number) {

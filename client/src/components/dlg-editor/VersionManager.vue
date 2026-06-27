@@ -3,10 +3,11 @@
     <div class="vm-toolbar">
       <div class="vm-toolbar__info">
         <div class="title-row">
-          <h3 class="vm-title">{{ t('components.versionManager.title') }}</h3>
-          <n-tag size="small" :type="contentFormat === 'novel' ? 'warning' : 'info'">
-            {{ t('components.versionManager.currentMode') }}：{{ contentFormat === 'novel' ? t('components.versionManager.modeNovel') : t('components.versionManager.modeScript') }}
-          </n-tag>
+          <h3 v-if="!hideTitle" class="vm-title">{{ t('components.versionManager.title') }}</h3>
+          <SparkTag v-if="currentFormatTagVisible" size="small" type="primary" class="vm-format-tag">
+            <n-icon :component="formatIcon(currentDisplayFormat)" size="14" class="vm-format-tag__icon" />
+            {{ formatProjectLabel(currentDisplayFormat) }}
+          </SparkTag>
         </div>
         <n-text depth="3" class="subtitle">{{ t('components.versionManager.subtitle') }}</n-text>
       </div>
@@ -40,9 +41,10 @@
             <div class="version-card-header">
               <div class="version-card-header__main">
                 <span class="version-title">{{ ver.version_name }}</span>
-                <n-tag size="small" :type="ver.content_format === 'novel' ? 'warning' : 'info'">
-                  {{ ver.content_format === 'novel' ? t('components.versionManager.modeNovel') : t('components.versionManager.modeScript') }}
-                </n-tag>
+                <SparkTag size="tiny" type="primary" class="vm-format-tag">
+                  <n-icon :component="formatIcon(ver.content_format)" size="13" class="vm-format-tag__icon" />
+                  {{ formatProjectLabel(ver.content_format) }}
+                </SparkTag>
               </div>
               <div class="version-card-header__meta">
                 <n-text depth="3" size="small" class="version-date">{{ formatDate(ver.created_at) }}</n-text>
@@ -156,9 +158,6 @@
         <n-form-item :label="t('components.versionManager.versionName')">
           <n-input v-model:value="formModel.versionName" :placeholder="t('components.versionManager.versionNamePlaceholder')" />
         </n-form-item>
-        <n-form-item v-if="!isEditing" :label="t('components.versionManager.versionType')">
-          <n-select v-model:value="formModel.contentFormat" :options="formatOptions" />
-        </n-form-item>
         <n-form-item :label="t('components.versionManager.descriptionOptional')">
           <n-input v-model:value="formModel.description" type="textarea" :placeholder="t('components.versionManager.descriptionPlaceholder')" />
         </n-form-item>
@@ -179,14 +178,15 @@
 import { ref, onMounted, onBeforeUnmount, computed, watch, h } from 'vue';
 import { useI18n } from 'vue-i18n';
 import { 
-  NButton, NIcon, NCard, NEmpty, NTag, NSpace, NPopconfirm, NModal, NAlert,
+  NButton, NIcon, NCard, NEmpty, NSpace, NPopconfirm, NModal, NAlert,
   NForm, NFormItem, NSelect, NInput, NSwitch, NSpin,
   NText, NTooltip, useMessage, useDialog
 } from 'naive-ui';
-import { CloudDownload, Copy, Play, RefreshCw, Save, SquarePen, Trash } from '@lucide/vue';
+import { BookOpen, Clapperboard, CloudDownload, Copy, Play, RefreshCw, Save, SquarePen, Trash } from '@lucide/vue';
 import { fetchWithAuth } from '@/services/api';
 import { useMainlandComplianceLocale } from '@/i18n/compliance';
 import { useProjectStore } from '@/components/stores/projectStore';
+import SparkTag from '@/components/share/SparkTag.vue';
 import bus from '@/eventBus';
 
 type ContentFormat = 'script' | 'novel';
@@ -223,12 +223,12 @@ type VersionFormModel = {
   projectName: string | null;
   versionName: string;
   description: string;
-  contentFormat: ContentFormat;
 };
 
 const props = defineProps({
   projectId: { type: String, default: null },
-  contentFormat: { type: String, default: 'script' }
+  contentFormat: { type: String, default: 'script' },
+  hideTitle: { type: Boolean, default: false },
 });
 
 const message = useMessage();
@@ -254,18 +254,18 @@ const formModel = ref<VersionFormModel>({
   projectName: null,
   versionName: '',
   description: '',
-  contentFormat: props.contentFormat === 'novel' ? 'novel' : 'script'
 });
 
 const contentFormat = computed(() => props.contentFormat === 'novel' ? 'novel' : 'script');
 
-const formatOptions = computed(() => [
-  { label: t('components.versionManager.modeScript'), value: 'script' },
-  { label: t('components.versionManager.modeNovel'), value: 'novel' },
-]);
-
 const projectOptions = computed(() => {
   return projectStore.projects.map(p => ({ label: p, value: p }));
+});
+
+const hideTitle = computed(() => props.hideTitle);
+const currentFormatTagVisible = computed(() => !!(props.projectId || filterProject.value));
+const currentDisplayFormat = computed<ContentFormat>(() => {
+  return resolveProjectContentFormat(props.projectId || filterProject.value || null);
 });
 
 const spinDescription = computed(() => {
@@ -420,7 +420,6 @@ function openCreateModal() {
     projectName: props.projectId || filterProject.value || null,
     versionName: generateDefaultTitle(),
     description: '',
-    contentFormat: contentFormat.value
   };
   showModal.value = true;
 }
@@ -438,9 +437,29 @@ function editVersion(ver: VersionListItem) {
     projectName: ver.project_name,
     versionName: ver.version_name,
     description: ver.description || '',
-    contentFormat: ver.content_format || 'script'
   };
   showModal.value = true;
+}
+
+function normalizeContentFormat(value: unknown): ContentFormat {
+  return value === 'novel' ? 'novel' : 'script';
+}
+
+function resolveProjectContentFormat(projectName: string | null | undefined): ContentFormat {
+  const normalizedProjectName = typeof projectName === 'string' ? projectName.trim() : '';
+  const cachedMode = normalizedProjectName ? projectStore.projectWorkspaceModes[normalizedProjectName] : null;
+  if (cachedMode === 'novel' || cachedMode === 'script') return cachedMode;
+  return contentFormat.value;
+}
+
+function formatProjectLabel(value: unknown) {
+  return normalizeContentFormat(value) === 'novel'
+    ? t('components.projectCreateModal.modeNovel')
+    : t('components.projectCreateModal.modeScript');
+}
+
+function formatIcon(value: unknown) {
+  return normalizeContentFormat(value) === 'novel' ? BookOpen : Clapperboard;
 }
 
 async function submitForm() {
@@ -467,13 +486,17 @@ async function submitForm() {
       }
     } else {
       // Create
-        const res = await fetchWithAuth(`/api/versions/${targetProject}`, {
+      if (targetProject && !projectStore.projectWorkspaceModes[targetProject]) {
+        await projectStore.refreshProjectWorkspaceModes([targetProject]);
+      }
+      const resolvedContentFormat = resolveProjectContentFormat(targetProject);
+      const res = await fetchWithAuth(`/api/versions/${targetProject}`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
           versionName: formModel.value.versionName,
           description: formModel.value.description,
-          contentFormat: formModel.value.contentFormat || contentFormat.value
+          contentFormat: resolvedContentFormat
         })
       });
       if (res.ok) {
@@ -673,6 +696,8 @@ onMounted(() => {
   bus.on('system-config-updated', handleSystemConfigUpdated);
   if (projectStore.projects.length === 0) {
     void projectStore.loadProjects();
+  } else {
+    void projectStore.refreshProjectWorkspaceModes();
   }
 });
 
@@ -713,6 +738,15 @@ onBeforeUnmount(() => {
   margin: 0;
   font-size: 1.1rem;
   line-height: 1.3;
+}
+
+.vm-format-tag {
+  gap: 5px;
+}
+
+.vm-format-tag__icon {
+  color: var(--spark-primary);
+  transform: translateY(0.5px);
 }
 
 .subtitle {

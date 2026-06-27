@@ -1,16 +1,12 @@
 import sys
 import os
-import io
 import json
 import re
-import time
 from pathlib import Path
-from typing import List, Dict, Any, Optional
-from dataclasses import dataclass
+from typing import List, Dict, Any
 
 import warnings
 
-from langchain_core.documents import Document
 import ebooklib
 from ebooklib import epub
 from bs4 import BeautifulSoup, XMLParsedAsHTMLWarning
@@ -42,149 +38,21 @@ except Exception:
 
 # ==================== 配置与初始化 ====================
 
-# 初始化模型 (Deprecated: Agents should use get_style_llm with user_id)
-# llm = AIManager().get_user_llm()
-# We keep it for backward compatibility if any script uses it directly, but agents should avoid it.
-# [Refactored] Use None to avoid eager DB init at persistent module level
-llm = None
-
 def get_style_llm(user_id: str):
     """
     获取 Style Agent 专用的 LLM 实例。
-    
-    Style Agent 使用 invoke() 调用，流式/非流式由调用方式决定，不需传入 streaming 参数。
+
+    Style Agent 使用 invoke() 调用,流式/非流式由调用方式决定,不需传入 streaming 参数。
     """
     return matchbox().get_user_llm(user_id, agent_name="agent_style")
 
-_embedding_cache = {}
 
-
-def get_style_embeddings(user_id: str = None):
-    """获取 Style Agent 使用的 Embedding 实例（按用户缓存）"""
-    cache_key = str(user_id) if user_id is not None else "_default"
-    if cache_key in _embedding_cache:
-        return _embedding_cache[cache_key]
-
-    emb = matchbox().get_user_embedding(user_id=user_id)
-    _embedding_cache[cache_key] = emb
-    return emb
-
-
-# 默认 Embedding（兼容旧代码，保持惰性初始化）
-embeddings = None
-
-# 向量库路径配置 (存储在 test 目录下，保持与原脚本一致的相对位置)
-# 原脚本在 server/agent_test/agent_style.py，数据在 server/test/author_style_db
-# 新脚本在 server/agents/agent_style/utils.py
-# 我们需要指向 server/test/ 目录
+# Legacy 路径:无 user_id 时风格档案的落盘位置(已极少使用)
 _SERVER_DIR = Path(__file__).resolve().parent.parent.parent
 _AGENT_TEST_DIR = _SERVER_DIR / "test"
-_AGENT_TEST_DIR.mkdir(exist_ok=True) # 确保 test 目录存在
-
-# Legacy paths for backward compatibility
+_AGENT_TEST_DIR.mkdir(exist_ok=True)
 LEGACY_STYLE_FILES_PATH = _AGENT_TEST_DIR / "author_styles"
 LEGACY_STYLE_FILES_PATH.mkdir(exist_ok=True)
-
-
-# ==================== 数据类定义 ====================
-
-@dataclass
-class ContentChunk:
-    """文本块数据类"""
-    text: str
-    metadata: Dict[str, Any]
-
-
-@dataclass
-class AgentAnalysisResult:
-    """Agent分析结果"""
-    agent_name: str
-    dimensions: List[str]
-    analysis: Dict[str, Any]
-    examples: List[str]
-    success: bool
-    error: str = None
-
-
-# ==================== 智能文本分块器 (增强版) ====================
-
-class SmartTextChunker:
-    """
-    语义保持型文本分块器
-    策略：
-    1. 保持句子完整性（3-5个完整句子为一块）
-    2. 合理的chunk大小（300-500字符）
-    3. 适当重叠避免上下文丢失
-    4. 不做类型预判，让embedding模型自己理解
-    """
-    
-    def __init__(self, chunk_size=400, chunk_overlap=80):
-        self.chunk_size = chunk_size
-        self.chunk_overlap = chunk_overlap
-    
-    def chunk_text(self, full_text: str, author_id: str) -> List[ContentChunk]:
-        """
-        基于句子的语义分块
-        """
-        chunks = []
-        
-        # 按段落分割
-        paragraphs = [p.strip() for p in full_text.split('\n') if p.strip()]
-        
-        for para_idx, paragraph in enumerate(paragraphs):
-            # 按句子分割（保持完整句子，包括标点）
-            sentences = re.split(r'([。！？；.!?;])', paragraph)
-            sentences = [''.join(sentences[i:i+2]).strip() for i in range(0, len(sentences)-1, 2) if sentences[i].strip()]
-            
-            current_chunk = ""
-            
-            for sentence in sentences:
-                # 尝试添加句子到当前chunk
-                test_chunk = current_chunk + sentence
-                
-                # 如果超过大小限制，保存当前chunk并开始新chunk
-                if len(test_chunk) > self.chunk_size and current_chunk:
-                    chunks.append(ContentChunk(
-                        text=current_chunk.strip(),
-                        metadata={
-                            "author_id": author_id,
-                            "para_idx": para_idx,
-                            "char_count": len(current_chunk),
-                            "sentence_count": current_chunk.count('。') + current_chunk.count('！') + current_chunk.count('？')
-                        }
-                    ))
-                    # 保留overlap部分
-                    if len(current_chunk) > self.chunk_overlap:
-                        overlap_text = current_chunk[-self.chunk_overlap:]
-                        # 找到最近的句子边界
-                        last_period = max(overlap_text.rfind('。'), overlap_text.rfind('！'), overlap_text.rfind('？'))
-                        if last_period > 0:
-                            current_chunk = overlap_text[last_period+1:] + sentence
-                        else:
-                            current_chunk = sentence
-                    else:
-                        current_chunk = sentence
-                else:
-                    current_chunk = test_chunk
-            
-            # 添加剩余内容
-            if current_chunk.strip():
-                chunks.append(ContentChunk(
-                    text=current_chunk.strip(),
-                    metadata={
-                        "author_id": author_id,
-                        "para_idx": para_idx,
-                        "char_count": len(current_chunk),
-                        "sentence_count": current_chunk.count('。') + current_chunk.count('！') + current_chunk.count('？')
-                    }
-                ))
-        
-        print(f"✓ Semantic chunking complete: {len(chunks)} chunks")
-        if chunks:
-            print(f"  - Avg chunk size: {sum(c.metadata['char_count'] for c in chunks) // len(chunks)} chars")
-            print(f"  - Avg sentence count: {sum(c.metadata['sentence_count'] for c in chunks) / len(chunks):.1f} sentences/chunk")
-        
-        return chunks
 
 
 # ==================== 路径与加载工具函数 ====================
@@ -198,8 +66,8 @@ def get_user_style_dir(user_id: str) -> Path:
     return path
 
 def get_style_filepath(author_id: str, user_id: str = None) -> Path:
-    """构建作者风格文件的路径"""
-    return get_user_style_dir(user_id) / f"{author_id}.json"
+    """构建作者风格文件的 .md 路径。"""
+    return get_user_style_dir(user_id) / f"{author_id}.md"
 
 
 def normalize_style_name(style_name: Any, fallback: str = "") -> str:
@@ -227,17 +95,40 @@ def make_unique_style_name(user_id: str, preferred_name: str) -> str:
     return candidate
 
 
-def save_style_profile_to_file(style_name: str, style_profile: Dict, user_id: str = None) -> Path:
-    """保存风格档案 JSON，并返回写入路径。"""
+def save_style_profile_to_file(style_name: str, style_profile: str, user_id: str = None) -> Path:
+    """把 Markdown 风格档案写入 `{name}.md`,自动补最小化 frontmatter。"""
+    if not isinstance(style_profile, str):
+        raise ValueError("风格档案内容必须为 Markdown 字符串")
+
     safe_name = normalize_style_name(style_name, fallback="导入风格")
     if not safe_name:
         raise ValueError("风格名称不能为空")
-    if not isinstance(style_profile, dict) or not style_profile:
-        raise ValueError("风格档案内容为空或格式不正确")
-    filepath = get_style_filepath(safe_name, user_id)
-    filepath.parent.mkdir(parents=True, exist_ok=True)
+
+    body = style_profile.strip()
+    if not body:
+        raise ValueError("风格档案内容为空")
+
+    style_dir = get_user_style_dir(user_id)
+    style_dir.mkdir(parents=True, exist_ok=True)
+    filepath = style_dir / f"{safe_name}.md"
+
+    if not body.startswith("---"):
+        from datetime import datetime
+        timestamp = datetime.now().isoformat(timespec="seconds")
+        safe_id = safe_name.replace("'", "''")
+        frontmatter = (
+            "---\n"
+            f"style_name: '{safe_id}'\n"
+            f"created_at: '{timestamp}'\n"
+            "format_version: 2\n"
+            "---\n\n"
+        )
+        body = frontmatter + body
+
     with open(filepath, "w", encoding="utf-8") as f:
-        json.dump(style_profile, f, ensure_ascii=False, indent=2)
+        f.write(body)
+        if not body.endswith("\n"):
+            f.write("\n")
     return filepath
 
 def get_project_style_binding_path(user_id: str, project_name: str) -> Path:
@@ -306,81 +197,19 @@ def format_style_profile_for_prompt(
     style_profile: Any,
     *,
     fallback: str = "用户未提供参考风格档案。请根据故事主题、世界观氛围和角色特质，自行选择最合适的文笔风格进行创作。",
-    raw_char_limit: int = 6000,
 ) -> str:
-    """把风格档案压成写作模型更容易执行的提示块。
+    """把风格档案注入下游 system prompt。
 
-    风格分析产物本身是 Author OS JSON。直接整段注入时，模型容易把它当
-    静态资料读过就忘。本函数保留原始档案，同时前置一张“风格执行卡”，
-    明确句子呼吸、情绪处理、感官焦点、对白机制和禁忌。
+    风格档案现在统一是 Markdown 字符串(LLM 提取时已经写好「风格执行卡」),
+    直接透传给下游即可,不再做任何二次拼装。
+
+    - None / 空字符串 → fallback
+    - 字符串 → strip 后返回
+    - 其他类型 → fallback(防御性兜底,理论上不应出现)
     """
-    if style_profile is None:
+    if not isinstance(style_profile, str):
         return fallback
-    if isinstance(style_profile, str):
-        return style_profile.strip() or fallback
-    if not isinstance(style_profile, dict):
-        try:
-            raw = json.dumps(style_profile, ensure_ascii=False, indent=2)
-            return raw.strip() or fallback
-        except Exception:
-            return fallback
-
-    def _value(path: str) -> str:
-        current: Any = style_profile
-        for key in path.split("."):
-            if not isinstance(current, dict):
-                return ""
-            current = current.get(key)
-        if isinstance(current, str):
-            return current.strip()
-        if isinstance(current, list):
-            return "；".join(str(item).strip() for item in current if str(item).strip())
-        if current is None:
-            return ""
-        return str(current).strip()
-
-    execution_items = [
-        ("标志性手法", _value("coordinator.signature_style")),
-        ("独特性摘要", _value("coordinator.distinctive_summary")),
-        ("句子呼吸", _value("verbal_physicality.sentence_weight_and_breath")),
-        ("修饰密度", _value("verbal_physicality.modifier_density")),
-        ("修辞迁移", _value("verbal_physicality.metaphor_gene")),
-        ("情绪处理", _value("emotional_processing.emotion_presentation")),
-        ("高潮处理", _value("emotional_processing.climax_handling")),
-        ("感官焦点", _value("sensory_and_attention.sensory_priority")),
-        ("注意力偏移", _value("sensory_and_attention.focus_shifting")),
-        ("对白效率", _value("interpersonal_field.dialogue_efficiency")),
-        ("沉默机制", _value("interpersonal_field.silence_mechanism")),
-        ("叙述距离", _value("interpersonal_field.narrator_temperature")),
-    ]
-    negative_constraints = _value("coordinator.negative_constraints")
-
-    lines = ["### 风格执行卡（写作时优先执行）"]
-    has_signal = False
-    for label, value in execution_items:
-        if value and value != "待后续补充":
-            has_signal = True
-            lines.append(f"- {label}：{value}")
-    if negative_constraints:
-        has_signal = True
-        lines.append(f"- 禁止/避开：{negative_constraints}")
-
-    if has_signal:
-        lines.append("")
-        lines.append("### 本次写作执行要求")
-        lines.append("- 先模仿“句子呼吸、情绪处理、感官焦点、对白机制”，不要只复制表层词汇。")
-        lines.append("- 对白、旁白和心理活动都要遵守风格执行卡；禁止在结尾额外升华或解释风格。")
-        lines.append("- 若风格档案与当前剧情类型冲突，以当前剧情真实情绪为主，只迁移底层表达方法。")
-    else:
-        lines.append("- 风格档案缺少可执行字段；请只把下方原始档案作为弱参考。")
-
-    raw = json.dumps(style_profile, ensure_ascii=False, indent=2)
-    if raw_char_limit > 0 and len(raw) > raw_char_limit:
-        raw = raw[:raw_char_limit].rstrip() + "\n...（原始风格档案已截断）"
-    lines.append("")
-    lines.append("### 原始风格档案（补充参考）")
-    lines.append(raw)
-    return "\n".join(lines).strip()
+    return style_profile.strip() or fallback
 
 
 # ==================== 用户级默认风格 ====================
@@ -421,78 +250,82 @@ def load_user_default_style_binding(user_id: str) -> str | None:
         print(f"Failed to read user default style binding: {e}")
         return None
 
-def load_style_profile_from_file(author_id: str, user_id: str = None) -> Dict | None:
-    """从本地文件加载作者风格内容"""
-    filepath = get_style_filepath(author_id, user_id)
-    if not filepath.exists():
-        # Try legacy path if user path fails and user_id is provided
-        if user_id:
-             legacy_path = get_style_filepath(author_id, None)
-             if legacy_path.exists():
-                 print(f"Found style in legacy path: {legacy_path}")
-                 filepath = legacy_path
-             else:
-                 print(f"Style file not found: {filepath}")
-                 return None
-        else:
-            print(f"Style file not found: {filepath}")
-            
-            # Check if user has other styles available and give a hint
-            if user_id:
-                style_dir = get_user_style_dir(user_id)
-                if style_dir.exists():
-                    others = [f.stem for f in style_dir.glob("*.json") if f.name != filepath.name]
-                    if others:
-                        print(f"Tip: No style bound to current project. Available styles: {', '.join(others)}")
-                        print(f"Please select a style in the Style Agent UI and click 'Apply to Current Project'.")
+def load_style_profile_from_file(author_id: str, user_id: str = None) -> str | None:
+    """从本地文件加载作者风格内容(Markdown 字符串,已剥掉 frontmatter)。"""
+    style_dir = get_user_style_dir(user_id)
+    md_path = style_dir / f"{author_id}.md"
 
-            return None
-            
+    if md_path.exists():
+        return _read_markdown_profile(md_path)
+
+    # legacy 兜底:公共目录(无 user_id 时实际上就是这条路径)
+    if user_id:
+        legacy_dir = get_user_style_dir(None)
+        legacy_md = legacy_dir / f"{author_id}.md"
+        if legacy_md.exists():
+            print(f"Found style in legacy path: {legacy_md}")
+            return _read_markdown_profile(legacy_md)
+
+    print(f"Style file not found: {md_path}")
+    if user_id and style_dir.exists():
+        others = [f.stem for f in style_dir.glob("*.md") if f.stem != author_id]
+        if others:
+            print(f"Tip: No style bound to current project. Available styles: {', '.join(others)}")
+            print("Please select a style in the Style Agent UI and click 'Apply to Current Project'.")
+    return None
+
+
+def _read_markdown_profile(path: Path) -> str | None:
+    """读取 Markdown 档案,剥掉 yaml frontmatter,只返回正文。"""
     try:
-        with open(filepath, 'r', encoding='utf-8') as f:
-            return json.load(f)
+        with open(path, "r", encoding="utf-8") as f:
+            raw = f.read()
     except Exception as e:
-        print(f"Failed to load style from {filepath}: {e}")
+        print(f"Failed to load style from {path}: {e}")
         return None
 
+    body = raw.strip()
+    if body.startswith("---"):
+        rest = body[3:]
+        sep_idx = rest.find("\n---")
+        if sep_idx != -1:
+            body = rest[sep_idx + 4:].lstrip("\n")
+    return body.strip() or None
+
 def list_all_authors(user_id: str = None) -> List[str]:
-    """列出所有已保存的作者"""
-    authors = []
-    
+    """列出所有已保存的作者(只识别 .md)。"""
+    authors: List[str] = []
     style_dir = get_user_style_dir(user_id)
-    
-    # 从风格文件目录获取
+
     if style_dir.exists():
-        for file in style_dir.glob("*.json"):
+        for file in sorted(style_dir.glob("*.md")):
             authors.append(file.stem)
-    
+
     if authors:
-        print(f"\nSaved author style list:")
+        print("\nSaved author style list:")
         for i, author_id in enumerate(authors, 1):
             print(f"  {i}. {author_id}")
         print()
     else:
         print("No saved author styles")
-    
+
     return authors
 
+
 def delete_author_style(author_id: str, user_id: str = None) -> bool:
-    """删除指定作者的风格数据"""
-    import shutil
-    
-    success = True
-    
-    # 删除风格文件
-    style_file = get_style_filepath(author_id, user_id)
-    if style_file.exists():
-        try:
-            os.remove(style_file)
-            print(f"✓ Deleted style file: {style_file}")
-        except Exception as e:
-            print(f"✗ Failed to delete style file: {e}")
-            success = False
-    
-    return success
+    """删除指定作者的 Markdown 风格档案。"""
+    style_file = get_user_style_dir(user_id) / f"{author_id}.md"
+    if not style_file.exists():
+        print(f"No style file found for: {author_id}")
+        return False
+
+    try:
+        os.remove(style_file)
+        print(f"✓ Deleted style file: {style_file}")
+        return True
+    except Exception as e:
+        print(f"✗ Failed to delete style file: {e}")
+        return False
 
 
 # ==================== EPUB文本提取函数 ====================

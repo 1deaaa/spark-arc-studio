@@ -226,19 +226,43 @@ describe('ChatMessageList 深度思考块展开性能契约', () => {
     expect(wrapper.find('.reasoning-content-wrapper').classes()).not.toContain('is-expanded');
   });
 
-  it('流式思考窗口高度保持稳定，不随内容增量撑高外层列表', async () => {
+  it('流式思考窗口随内容撑高到五行后保持稳定', async () => {
     vi.useFakeTimers();
     vi.spyOn(window, 'requestAnimationFrame').mockImplementation((callback: FrameRequestCallback) => {
       callback(performance.now());
       return 1;
     });
+    const actualGetComputedStyle = window.getComputedStyle.bind(window);
+    vi.spyOn(window, 'getComputedStyle').mockImplementation((element: Element) => {
+      const style = actualGetComputedStyle(element);
+      return new Proxy(style, {
+        get(target, property, receiver) {
+          if (element.classList?.contains('reasoning-inner')) {
+            if (property === 'paddingTop') return '4px';
+            if (property === 'paddingBottom') return '8px';
+            if (property === 'borderTopWidth') return '1px';
+            if (property === 'borderBottomWidth') return '0px';
+            if (property === 'lineHeight') return '20px';
+            if (property === 'fontSize') return '15px';
+          }
+          if (element.classList?.contains('reasoning-markdown')) {
+            if (property === 'lineHeight') return '20px';
+            if (property === 'fontSize') return '15px';
+          }
+          const value = Reflect.get(target, property, receiver);
+          return typeof value === 'function' ? value.bind(target) : value;
+        },
+      }) as CSSStyleDeclaration;
+    });
     vi.spyOn(HTMLElement.prototype, 'getBoundingClientRect').mockImplementation(function getMockRect(this: HTMLElement) {
       const el = this;
+      const lineCount = Math.max(1, (el.textContent || '').split('\n').length);
+      const contentHeight = (lineCount * 20) + 4;
       if (el.classList?.contains('reasoning-inner')) {
-        return { width: 420, height: 480, top: 0, left: 0, right: 420, bottom: 480, x: 0, y: 0, toJSON: () => ({}) } as DOMRect;
+        return { width: 420, height: contentHeight + 9, top: 0, left: 0, right: 420, bottom: contentHeight + 9, x: 0, y: 0, toJSON: () => ({}) } as DOMRect;
       }
       if (el.classList?.contains('node-slot')) {
-        return { width: 420, height: 480, top: 0, left: 0, right: 420, bottom: 480, x: 0, y: 0, toJSON: () => ({}) } as DOMRect;
+        return { width: 420, height: contentHeight, top: 0, left: 0, right: 420, bottom: contentHeight, x: 0, y: 0, toJSON: () => ({}) } as DOMRect;
       }
       return { width: 420, height: 0, top: 0, left: 0, right: 420, bottom: 0, x: 0, y: 0, toJSON: () => ({}) } as DOMRect;
     });
@@ -282,7 +306,7 @@ describe('ChatMessageList 深度思考块展开性能契约', () => {
     await nextTick();
 
     const panel = wrapper.find('.reasoning-content-wrapper');
-    expect(panel.attributes('style')).toContain('--reasoning-panel-height: 108px');
+    expect(panel.attributes('style')).toContain('--reasoning-panel-height: 32px');
 
     await wrapper.setProps({
       history: [
@@ -302,8 +326,31 @@ describe('ChatMessageList 深度思考块展开性能契约', () => {
       sending: true,
     });
     await nextTick();
+    await nextTick();
 
-    expect(wrapper.find('.reasoning-content-wrapper').attributes('style')).toContain('--reasoning-panel-height: 108px');
+    expect(wrapper.find('.reasoning-content-wrapper').attributes('style')).toContain('--reasoning-panel-height: 113px');
+
+    await wrapper.setProps({
+      history: [
+        {
+          id: 'assistant-5',
+          role: 'assistant',
+          content: '',
+          segments: [
+            {
+              type: 'reasoning',
+              text: Array.from({ length: 80 }, (_, index) => `第 ${index + 1} 段流式推理`).join('\n'),
+              source_agent: 'agent_director',
+            },
+          ],
+        },
+      ],
+      sending: true,
+    });
+    await nextTick();
+    await nextTick();
+
+    expect(wrapper.find('.reasoning-content-wrapper').attributes('style')).toContain('--reasoning-panel-height: 113px');
   });
 
   it('首次展开按实际渲染节点高度落定，且测量时不把真实面板改成 auto', async () => {

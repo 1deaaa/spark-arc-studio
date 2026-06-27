@@ -14,8 +14,6 @@ import {
 import { getStyleProfile, getStyleProfileMeta } from '../services/storyService';
 import { useProjectStore } from '../components/stores/projectStore';
 import { createStreamingTask, isAbortLikeError } from '@/utils/streamingRuntime';
-import type { JsonObject } from '../services/aiContracts';
-import { Activity, Book, Eye, Image as ImageIcon, Layers, MessageSquare, MessagesSquare, Palette, Search, Workflow } from '@lucide/vue';
 
 type StreamTaskLike = {
     signal?: AbortSignal;
@@ -54,7 +52,7 @@ export function useStyleLogic() {
     const showCreateModal = ref(false);
     const showDetailsDrawer = ref(false);
     const selectedStyleName = ref('');
-    const currentProfile = ref<JsonObject | null>(null);
+    const currentProfile = ref<string | null>(null);
     const isLoadingProfile = ref(false);
 
     // Create State（仅用于 Modal 表单输入）
@@ -115,66 +113,6 @@ export function useStyleLogic() {
         }
     };
 
-    // 顶层区块映射：对应真实 JSON 根键名
-    const sectionMap = {
-        cognitive_fingerprint:  { title: '认知指纹', icon: Workflow },
-        verbal_physicality:     { title: '语言质感', icon: Search },
-        emotional_processing:   { title: '情感处理', icon: Activity },
-        sensory_and_attention:  { title: '感官与注意力', icon: Eye },
-        interpersonal_field:    { title: '人际场域', icon: MessageSquare },
-        coordinator:            { title: '风格总览', icon: Book },
-        // 兼容旧格式（如果服务端返回 writing_style_analysis_framework 包装）
-        inner_monologue:        { title: '内心独白', icon: MessagesSquare },
-        emotional_progression:  { title: '情感推进', icon: Activity },
-        theme_tendency:         { title: '主题倾向', icon: Book },
-        subtext_layer:          { title: '潜台词层', icon: Layers },
-        dialogue_system:        { title: '对话系统', icon: MessageSquare },
-        perspective_system:     { title: '视角系统', icon: Eye },
-        scene_construction:     { title: '场景构建', icon: ImageIcon },
-        detail_craftsmanship:   { title: '细节描写', icon: Search },
-        structural_breathing:   { title: '结构节奏', icon: Workflow },
-    };
-
-    // 字段键名 → 中文文学术语映射表
-    const fieldKeyMap = {
-        // cognitive_fingerprint
-        association_pathway:       '联想路径',
-        abstraction_tendency:      '抽象化倾向',
-        causal_logic:              '因果逻辑',
-        observation_angle:         '观察视角',
-        // verbal_physicality
-        sentence_weight_and_breath:'句子重量与呼吸',
-        modifier_density:          '修饰词密度',
-        verb_subject_preference:   '动词与主语偏好',
-        metaphor_gene:             '比喻基因',
-        // emotional_processing
-        emotion_presentation:      '情感呈现方式',
-        climax_handling:           '高潮处理',
-        vulnerability_expression:  '脆弱的表达',
-        // sensory_and_attention
-        sensory_priority:          '感官优先级',
-        focus_shifting:            '焦点转移',
-        temporal_rhythm:           '时间密度节奏',
-        // interpersonal_field
-        dialogue_efficiency:       '对话效率',
-        silence_mechanism:         '沉默机制',
-        narrator_temperature:      '叙述者温度',
-        // coordinator
-        signature_style:           '标志性风格',
-        style_coherence:           '风格一致性',
-        distinctive_summary:       '独特风格摘要',
-        negative_constraints:      '反向约束（不会出现的写法）',
-    };
-
-    const getSectionTitle = (key: string) => sectionMap[key as keyof typeof sectionMap]?.title || key;
-    const getSectionIcon = (key: string) => sectionMap[key as keyof typeof sectionMap]?.icon || Palette;
-
-    // 字段名翻译：优先查中文表，找不到则做驼峰美化兜底
-    const formatKey = (key: unknown) => {
-        if (!key || typeof key !== 'string') return String(key);
-        if (fieldKeyMap[key as keyof typeof fieldKeyMap]) return fieldKeyMap[key as keyof typeof fieldKeyMap];
-        return key.split('_').map(word => word.charAt(0).toUpperCase() + word.slice(1)).join(' ');
-    };
 
     // Methods
     const loadStyles = async () => {
@@ -208,7 +146,8 @@ export function useStyleLogic() {
         isLoadingProfile.value = true;
 
         try {
-            currentProfile.value = await getStyleProfile(null, styleName);
+            const profile = await getStyleProfile(null, styleName);
+            currentProfile.value = typeof profile === 'string' ? profile : null;
         } catch (e: unknown) {
             message.error('加载风格详情失败: ' + getErrorMessage(e));
         } finally {
@@ -497,9 +436,6 @@ export function useStyleLogic() {
         isDefaultStyle,
         handleSetDefault,
         handleClearDefault,
-        getSectionTitle,
-        getSectionIcon,
-        formatKey,
         loadStyles,
         openCreateModal,
         openStyleDetails,

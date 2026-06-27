@@ -6,7 +6,7 @@
       ref="styleProfileImportInput"
       class="hidden-file-input"
       type="file"
-      accept=".json,application/json"
+      accept=".json,.md,application/json,text/markdown"
       @change="handleStyleProfileImportFile"
     />
     <div class="mobile-header">
@@ -123,25 +123,7 @@
          </div>
 
          <div v-else-if="currentProfile" class="mobile-profile-content">
-            <div 
-              v-for="(sectionData, sectionKey) in profileSections" 
-              :key="sectionKey"
-              class="mobile-profile-card"
-            >
-               <div class="card-header">
-                  <n-icon :component="getSectionIcon(sectionKey)" />
-                  <h4>{{ getSectionTitle(sectionKey) }}</h4>
-               </div>
-               <div class="card-body">
-                  <div v-for="(value, key) in sectionData" :key="key" class="attr-group">
-                      <label>{{ formatKey(key) }}</label>
-                      <div v-if="Array.isArray(value)" class="chip-group">
-                         <SparkTag v-for="tag in value" :key="tag" size="tiny" type="default" :ghost="true">{{ tag }}</SparkTag>
-                      </div>
-                      <div v-else class="attr-text">{{ value }}</div>
-                  </div>
-               </div>
-            </div>
+            <div class="mobile-profile-markdown" v-html="profileMarkdown"></div>
          </div>
        </n-drawer-content>
     </n-drawer>
@@ -181,17 +163,10 @@ import DocumentImportPicker from '../../components/import/DocumentImportPicker.v
 import { ChevronRight, Download, Plus, RefreshCw, Upload } from '@lucide/vue';
 import GlobalLoading from '../../components/share/GlobalLoading.vue';
 import { useStyleLogic } from '../../composables/useStyleLogic';
+import { renderStyleMarkdown } from '../../utils/styleMarkdown';
 
 const { t } = useI18n();
 
-// 已知的顶层区块键名
-const KNOWN_SECTION_KEYS = new Set([
-  'cognitive_fingerprint', 'verbal_physicality', 'emotional_processing',
-  'sensory_and_attention', 'interpersonal_field', 'coordinator',
-  'inner_monologue', 'emotional_progression', 'theme_tendency',
-  'subtext_layer', 'dialogue_system', 'perspective_system',
-  'scene_construction', 'detail_craftsmanship', 'structural_breathing',
-]);
 
 const {
   styles,
@@ -215,9 +190,6 @@ const {
   handleExportStyle,
   triggerStyleProfileImport,
   handleStyleProfileImportFile,
-  getSectionTitle,
-  getSectionIcon,
-  formatKey,
   loadStyles,
   openCreateModal,
   openStyleDetails,
@@ -228,24 +200,9 @@ const {
   projectStore
 } = useStyleLogic();
 
-// 适配层：兼容新旧两种 JSON 格式
-const profileSections = computed(() => {
-  if (!currentProfile.value) return null;
-  const profile = currentProfile.value;
-  const hasKnownSections = Object.keys(profile).some(k => KNOWN_SECTION_KEYS.has(k));
-  if (hasKnownSections) {
-    const sections = {};
-    for (const [k, v] of Object.entries(profile)) {
-      if (typeof v === 'object' && v !== null && !Array.isArray(v)) {
-        sections[k] = v;
-      }
-    }
-    return Object.keys(sections).length > 0 ? sections : null;
-  }
-  if (profile.writing_style_analysis_framework) {
-    return profile.writing_style_analysis_framework;
-  }
-  return null;
+const profileMarkdown = computed(() => {
+  if (!currentProfile.value) return '';
+  return renderStyleMarkdown(currentProfile.value);
 });
 </script>
 
@@ -258,6 +215,59 @@ const profileSections = computed(() => {
   gap: 10px;
   background: transparent;
   min-height: 0;
+}
+
+/* ============ Markdown 风格档案渲染样式(移动端) ============ */
+.mobile-profile-markdown {
+  font-size: 14px;
+  color: var(--text-color);
+  line-height: 1.65;
+  padding: 4px 6px;
+}
+
+.mobile-profile-markdown :deep(.style-md-h2),
+.mobile-profile-markdown :deep(.style-md-h3) {
+  margin: 18px 0 8px;
+  padding-bottom: 4px;
+  border-bottom: 1px solid var(--border-color);
+  font-weight: 600;
+  color: var(--primary-color);
+}
+
+.mobile-profile-markdown :deep(.style-md-h2) {
+  font-size: 1.05rem;
+}
+
+.mobile-profile-markdown :deep(.style-md-h3) {
+  font-size: 0.98rem;
+  color: var(--text-color);
+  border-bottom-style: dashed;
+  opacity: 0.95;
+}
+
+.mobile-profile-markdown :deep(.style-md-p) {
+  margin: 6px 0;
+}
+
+.mobile-profile-markdown :deep(.style-md-ul) {
+  margin: 6px 0;
+  padding-left: 20px;
+  list-style: disc;
+}
+
+.mobile-profile-markdown :deep(.style-md-li) {
+  margin-bottom: 4px;
+}
+
+.mobile-profile-markdown :deep(.style-md-hr) {
+  margin: 14px 0;
+  border: none;
+  border-top: 1px dashed var(--border-color);
+}
+
+.mobile-profile-markdown :deep(strong) {
+  color: var(--primary-color);
+  font-weight: 600;
 }
 
 .hidden-file-input {
@@ -362,47 +372,6 @@ const profileSections = computed(() => {
   display: flex;
   flex-direction: column;
   gap: 8px;
-}
-
-.mobile-profile-card {
-  background: var(--spark-panel-bg);
-  border: 1px solid var(--spark-border);
-  border-radius: 8px;
-  padding: 8px;
-}
-
-.card-header {
-  display: flex;
-  align-items: center;
-  gap: 8px;
-  margin-bottom: 8px;
-  color: var(--spark-primary);
-}
-
-.card-header h4 {
-  margin: 0;
-}
-
-.attr-group {
-  margin-bottom: 6px;
-}
-
-.attr-group label {
-  font-size: var(--spark-fs-2xs);
-  font-weight: bold;
-  color: var(--spark-text-muted);
-}
-
-.attr-text {
-  font-size: var(--spark-fs-base);
-  line-height: 1.5;
-}
-
-.chip-group {
-  display: flex;
-  flex-wrap: wrap;
-  gap: 4px;
-  margin-top: 4px;
 }
 
 .mobile-upload-hint {

@@ -6,44 +6,44 @@ from agents.agent_showrunner import ShowrunnerAgent
 from agents.agent_style.utils import format_style_profile_for_prompt
 
 
-SAMPLE_STYLE_PROFILE = {
-    "verbal_physicality": {
-        "sentence_weight_and_breath": "短句断奏与少量绵长复句交替。",
-        "modifier_density": "修饰克制，形容词靠后出现。",
-        "metaphor_gene": "常把空间感迁移到情绪。",
-    },
-    "emotional_processing": {
-        "emotion_presentation": "强烈情绪不直说，用不相干动作转移焦点。",
-        "climax_handling": "高潮处突然收束，保留空白。",
-    },
-    "sensory_and_attention": {
-        "sensory_priority": "视觉与触觉优先。",
-        "focus_shifting": "重大时刻转向微小物件。",
-    },
-    "interpersonal_field": {
-        "dialogue_efficiency": "对白低效率，常有误解和回避。",
-        "silence_mechanism": "沉默靠动作填充。",
-        "narrator_temperature": "叙述距离偏冷。",
-    },
-    "coordinator": {
-        "signature_style": "冷感、留白、断奏。",
-        "distinctive_summary": "用物理细节承载情绪，不做解释性总结。",
-        "negative_constraints": ["不要段尾升华", "不要完整解释人物动机"],
-    },
-}
+SAMPLE_STYLE_MARKDOWN = """## 思维与认知指纹
+
+- 联想跳跃路径:实体→记忆,如「某物的颜色让某人想起某段对话」
+- 叙述者姿态:限知第一人称,带轻度不可靠性
+
+## 语言体感
+
+- 句子呼吸:主谓宾完整的短句占七成,偶尔出现 30+ 字复句
+- 标点指纹:大量逗号链,极少使用感叹号
+
+## 风格执行卡
+
+- 主谓宾完整的短句占七成,偶尔出现 30+ 字的复句作为情绪重音
+- 心理直白严禁出现,所有情绪必须翻译成"看得到的动作"
+- 严禁使用"然而、因此、值得一提的是"等 AI 体连接词
+"""
 
 
-def test_style_profile_formatter_builds_actionable_execution_card() -> None:
-    text = format_style_profile_for_prompt(SAMPLE_STYLE_PROFILE)
+def test_style_profile_formatter_passes_through_markdown_string() -> None:
+    """markdown 字符串应被直接透传,不再做二次拼装。"""
+    text = format_style_profile_for_prompt(SAMPLE_STYLE_MARKDOWN)
 
-    assert "风格执行卡" in text
-    assert "句子呼吸：短句断奏" in text
-    assert "对白效率：对白低效率" in text
-    assert "禁止/避开：不要段尾升华；不要完整解释人物动机" in text
-    assert "原始风格档案" in text
+    assert "## 风格执行卡" in text
+    assert "主谓宾完整的短句占七成" in text
 
 
-def test_scriptwriter_main_prompt_receives_style_execution_card(monkeypatch) -> None:
+def test_style_profile_formatter_handles_empty_inputs() -> None:
+    """None / 空字符串 / 非字符串类型都走 fallback。"""
+    fallback = "DEFAULT_FALLBACK"
+    assert format_style_profile_for_prompt(None, fallback=fallback) == fallback
+    assert format_style_profile_for_prompt("", fallback=fallback) == fallback
+    assert format_style_profile_for_prompt("   \n  ", fallback=fallback) == fallback
+    # 非字符串(防御性兜底)
+    assert format_style_profile_for_prompt({"any": "dict"}, fallback=fallback) == fallback
+    assert format_style_profile_for_prompt(123, fallback=fallback) == fallback
+
+
+def test_scriptwriter_main_prompt_receives_style_markdown(monkeypatch) -> None:
     captured: dict[str, str] = {}
 
     def fake_load_prompt(*args, **kwargs):
@@ -66,11 +66,11 @@ def test_scriptwriter_main_prompt_receives_style_execution_card(monkeypatch) -> 
         context="",
         worldview="",
         roles="",
-        style_profile=SAMPLE_STYLE_PROFILE,
+        style_profile=SAMPLE_STYLE_MARKDOWN,
     )
 
-    assert "风格执行卡" in captured["style_profile"]
-    assert "对白效率：对白低效率" in captured["style_profile"]
+    assert "## 风格执行卡" in captured["style_profile"]
+    assert "主谓宾完整的短句占七成" in captured["style_profile"]
 
 
 def test_scriptwriter_main_prompt_uses_specialized_budget_guard(monkeypatch) -> None:
@@ -102,7 +102,7 @@ def test_scriptwriter_main_prompt_uses_specialized_budget_guard(monkeypatch) -> 
         context="",
         worldview="",
         roles="",
-        style_profile=SAMPLE_STYLE_PROFILE,
+        style_profile=SAMPLE_STYLE_MARKDOWN,
     )
 
     assert called["count"] == 1
@@ -134,7 +134,7 @@ def test_scriptwriter_non_stream_generation_uses_invoke(monkeypatch) -> None:
     assert calls == {"invoke": 1, "stream": 0}
 
 
-def test_showrunner_planning_prompt_receives_style_execution_card(monkeypatch) -> None:
+def test_showrunner_planning_prompt_receives_style_markdown(monkeypatch) -> None:
     captured: dict[str, str] = {}
 
     def fake_load_prompt(*args, **kwargs):
@@ -157,11 +157,11 @@ def test_showrunner_planning_prompt_receives_style_execution_card(monkeypatch) -
         worldview="",
         roles="",
         guidance="",
-        style_profile=SAMPLE_STYLE_PROFILE,
+        style_profile=SAMPLE_STYLE_MARKDOWN,
     )
 
-    assert "风格执行卡" in captured["style_profile"]
-    assert "句子呼吸：短句断奏" in captured["style_profile"]
+    assert "## 风格执行卡" in captured["style_profile"]
+    assert "主谓宾完整的短句占七成" in captured["style_profile"]
 
 
 def test_showrunner_non_stream_generation_uses_invoke(monkeypatch) -> None:
@@ -188,18 +188,18 @@ def test_showrunner_non_stream_generation_uses_invoke(monkeypatch) -> None:
         worldview="",
         roles="",
         guidance="",
-        style_profile=SAMPLE_STYLE_PROFILE,
+        style_profile=SAMPLE_STYLE_MARKDOWN,
     )
 
     assert calls == {"invoke": 1, "stream": 0}
 
 
-def test_critic_uses_same_style_execution_card() -> None:
+def test_critic_receives_style_markdown() -> None:
     agent = CriticAgent.__new__(CriticAgent)
-    text = agent._stringify_style_profile(SAMPLE_STYLE_PROFILE)
+    text = agent._stringify_style_profile(SAMPLE_STYLE_MARKDOWN)
 
-    assert "风格执行卡" in text
-    assert "禁止/避开" in text
+    assert "## 风格执行卡" in text
+    assert "主谓宾完整的短句占七成" in text
 
 
 def test_critic_review_uses_budget_guard_and_invoke(monkeypatch) -> None:
@@ -227,7 +227,7 @@ def test_critic_review_uses_budget_guard_and_invoke(monkeypatch) -> None:
     agent.agent_id = "agent_critic"
     agent.llm = FakeLLM()
 
-    result = agent.evaluate(script_text="[-1] 风吹过钟楼。", style_profile=SAMPLE_STYLE_PROFILE)
+    result = agent.evaluate(script_text="[-1] 风吹过钟楼。", style_profile=SAMPLE_STYLE_MARKDOWN)
 
     assert result["decision"] == "PASS"
     assert calls == {"budget": 1, "invoke": 1, "stream": 0}

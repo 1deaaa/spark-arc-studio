@@ -16,7 +16,7 @@
           ref="styleProfileImportInput"
           class="hidden-file-input"
           type="file"
-          accept=".json,application/json"
+          accept=".json,.md,application/json,text/markdown"
           @change="handleStyleProfileImportFile"
         />
         <n-button
@@ -184,37 +184,7 @@
         </div>
         
         <div v-else-if="currentProfile" class="profile-content">
-          <template v-if="profileSections">
-            <div 
-              v-for="(sectionData, sectionKey) in profileSections" 
-              :key="sectionKey"
-              class="profile-section-card"
-            >
-              <div class="section-header">
-                <n-icon :component="getSectionIcon(sectionKey)" color="var(--primary-color)" />
-                <h4>{{ getSectionTitle(sectionKey) }}</h4>
-              </div>
-              
-              <div class="section-body">
-                <div v-for="(value, key) in sectionData" :key="key" class="attribute-row">
-                   <template v-if="Array.isArray(value)">
-                     <div class="attribute-label">{{ formatKey(key) }}</div>
-                     <ul class="attribute-list">
-                       <li v-for="(item, idx) in value" :key="idx">{{ item }}</li>
-                     </ul>
-                   </template>
-                   <template v-else-if="typeof value === 'string'">
-                     <div class="attribute-label">{{ formatKey(key) }}</div>
-                     <div class="attribute-value">{{ value }}</div>
-                   </template>
-                </div>
-              </div>
-            </div>
-          </template>
-          
-          <div v-else class="empty-profile">
-            <n-empty :description="t('views.style.desktop.noParsableStyleData')" />
-          </div>
+          <div class="profile-markdown" v-html="profileMarkdown"></div>
         </div>
       </n-drawer-content>
     </n-drawer>
@@ -234,18 +204,9 @@ import AiSettingsPanel from '../../components/lorebook/AiSettingsPanel.vue';
 import BindingEditor from '../../components/lorebook/BindingEditor.vue';
 import GlobalLoading from '../../components/share/GlobalLoading.vue';
 import { useStyleLogic } from '../../composables/useStyleLogic';
+import { renderStyleMarkdown } from '../../utils/styleMarkdown';
 
 const { t } = useI18n();
-
-// 已知的顶层区块键名（对应真实 JSON 结构）
-const KNOWN_SECTION_KEYS = new Set([
-  'cognitive_fingerprint', 'verbal_physicality', 'emotional_processing',
-  'sensory_and_attention', 'interpersonal_field', 'coordinator',
-  // 兼容旧格式
-  'inner_monologue', 'emotional_progression', 'theme_tendency',
-  'subtext_layer', 'dialogue_system', 'perspective_system',
-  'scene_construction', 'detail_craftsmanship', 'structural_breathing',
-]);
 
 const {
   styles,
@@ -267,9 +228,6 @@ const {
   isStyleAppliedToCurrentProject,
   isDefaultStyle,
   handleSetDefault,
-  getSectionTitle,
-  getSectionIcon,
-  formatKey,
   loadStyles,
   openCreateModal,
   openStyleDetails,
@@ -285,33 +243,11 @@ const {
 } = useStyleLogic();
 
 /**
- * 适配层：智能解析风格档案 JSON，兼容两种格式：
- * 1. 扁平格式（新）：{ cognitive_fingerprint: {...}, verbal_physicality: {...}, ... }
- * 2. 嵌套格式（旧）：{ writing_style_analysis_framework: { inner_monologue: {...}, ... } }
+ * 把 currentProfile(Markdown 字符串)渲染成 HTML。
  */
-const profileSections = computed(() => {
-  if (!currentProfile.value) return null;
-  const profile = currentProfile.value;
-
-  // 优先检查是否有已知顶层区块键（新格式）
-  const hasKnownSections = Object.keys(profile).some(k => KNOWN_SECTION_KEYS.has(k));
-  if (hasKnownSections) {
-    // 过滤掉非区块的元数据字段，只保留对象类型的区块
-    const sections = {};
-    for (const [k, v] of Object.entries(profile)) {
-      if (typeof v === 'object' && v !== null && !Array.isArray(v)) {
-        sections[k] = v;
-      }
-    }
-    return Object.keys(sections).length > 0 ? sections : null;
-  }
-
-  // 兼容旧嵌套格式
-  if (profile.writing_style_analysis_framework) {
-    return profile.writing_style_analysis_framework;
-  }
-
-  return null;
+const profileMarkdown = computed(() => {
+  if (!currentProfile.value) return '';
+  return renderStyleMarkdown(currentProfile.value);
 });
 </script>
 
@@ -500,61 +436,58 @@ const profileSections = computed(() => {
   padding: 12px 0;
 }
 
-.profile-section-card {
-  background: var(--bg-color-secondary);
-  padding: 20px;
-  border-radius: 12px;
-  border: 1px solid var(--border-color);
-}
-
-.section-header {
-  display: flex;
-  align-items: center;
-  gap: 10px;
-  margin-bottom: 12px;
-}
-
-.section-header h4 {
-  margin: 0;
-  font-size: var(--spark-fs-md);
-  font-weight: 600;
-  color: var(--text-color);
-}
-
-.section-body {
-  display: flex;
-  flex-direction: column;
-  gap: 12px;
-}
-
-.attribute-row {
-  display: flex;
-  flex-direction: column;
-  gap: 4px;
-}
-
-.attribute-label {
-  font-size: var(--spark-fs-xs);
-  color: var(--text-color-secondary);
-  font-weight: 600;
-}
-
-.attribute-value {
+.profile-markdown {
   font-size: var(--spark-fs-base);
   color: var(--text-color);
-  line-height: 1.6;
+  line-height: 1.7;
+  padding: 0 4px;
 }
 
-.attribute-list {
-  margin: 0;
-  padding-left: 20px;
-  font-size: var(--spark-fs-base);
+.profile-markdown :deep(.style-md-h2),
+.profile-markdown :deep(.style-md-h3) {
+  margin: 24px 0 12px;
+  padding-bottom: 6px;
+  border-bottom: 1px solid var(--border-color);
+  font-weight: 600;
+  color: var(--primary-color);
+}
+
+.profile-markdown :deep(.style-md-h2) {
+  font-size: 1.15rem;
+}
+
+.profile-markdown :deep(.style-md-h3) {
+  font-size: 1.05rem;
   color: var(--text-color);
-  line-height: 1.6;
+  border-bottom-style: dashed;
+  opacity: 0.95;
 }
 
-.attribute-list li {
+.profile-markdown :deep(.style-md-p) {
+  margin: 8px 0;
+  color: var(--text-color);
+}
+
+.profile-markdown :deep(.style-md-ul) {
+  margin: 8px 0;
+  padding-left: 22px;
+  list-style: disc;
+}
+
+.profile-markdown :deep(.style-md-li) {
   margin-bottom: 4px;
+  color: var(--text-color);
+}
+
+.profile-markdown :deep(.style-md-hr) {
+  margin: 20px 0;
+  border: none;
+  border-top: 1px dashed var(--border-color);
+}
+
+.profile-markdown :deep(strong) {
+  color: var(--primary-color);
+  font-weight: 600;
 }
 
 .loading-state, .loading-profile {

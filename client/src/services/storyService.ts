@@ -35,10 +35,10 @@ type OutlineExportResult = StoryMutationResult & {
   existing?: string[];
 };
 
-type StyleProfileLookupResult = JsonObject | { error: true } | null;
+type StyleProfileLookupResult = JsonObject | string | { error: true } | null;
 
 type StyleProfileMetaResult = {
-  style_profile: JsonObject | null;
+  style_profile: JsonObject | string | null;
   style_name: string | null;
 };
 
@@ -578,7 +578,7 @@ export async function getStyleProfile(projectName: string | null | undefined, st
 
   const response = await fetchWithAuth(url);
   if (!response.ok) return response.status === 404 ? null : { error: true };
-  const result = await response.json() as { style_profile?: JsonObject };
+  const result = await response.json() as { style_profile?: JsonObject | string };
   return result.style_profile ?? null;
 }
 
@@ -589,9 +589,9 @@ export async function getStyleProfileMeta(projectName: string | null | undefined
 
   const response = await fetchWithAuth(url);
   if (!response.ok) return null;
-  const result = await response.json() as { style_profile?: JsonObject | null; style_name?: string | null };
+  const result = await response.json() as { style_profile?: JsonObject | string | null; style_name?: string | null };
   return {
-    style_profile: result?.style_profile || null,
+    style_profile: result?.style_profile ?? null,
     style_name: result?.style_name || null,
   };
 }

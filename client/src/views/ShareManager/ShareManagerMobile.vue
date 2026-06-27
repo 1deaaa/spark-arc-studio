@@ -5,7 +5,7 @@
       <p class="subtitle">{{ t('views.shareManager.mobileSubtitle') }}</p>
     </div>
     <div class="mobile-body">
-      <VersionManager />
+      <VersionManager hide-title />
     </div>
   </div>
 </template>

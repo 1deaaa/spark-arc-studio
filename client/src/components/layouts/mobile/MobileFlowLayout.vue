@@ -143,7 +143,7 @@
             <span>{{ t('components.versionManager.title') }}</span>
           </div>
         </template>
-        <VersionManager :projectId="projectStore.currentProject || undefined" :content-format="workspaceMode" />
+        <VersionManager :projectId="projectStore.currentProject || undefined" :content-format="workspaceMode" hide-title />
       </n-drawer-content>
     </n-drawer>
 

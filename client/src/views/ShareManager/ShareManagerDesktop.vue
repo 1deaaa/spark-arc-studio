@@ -9,7 +9,7 @@
       </div>
     </div>
     <div class="share-manager-body">
-      <VersionManager />
+      <VersionManager hide-title />
     </div>
   </div>
 </template>

@@ -290,7 +290,7 @@ export type StyleAnalyzeEvent = {
   message?: string;
   current?: number;
   total?: number;
-  style_profile?: JsonObject;
+  style_profile?: JsonObject | string;
   raw?: unknown;
   [key: string]: unknown;
 };
