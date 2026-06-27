@@ -282,9 +282,13 @@ jobs:
         working-directory: client
         run: npm run tauri icon src-tauri/icons/app-icon-source.png
 
-      - name: Re-initialize Android project (after icon regeneration)
+      - name: Recreate Android project (after icon regeneration)
         working-directory: client
-        run: npm run tauri -- android init
+        shell: bash
+        run: |
+          rm -rf src-tauri/gen/android
+          npm run tauri -- android init
+          test -f src-tauri/gen/android/tauri.settings.gradle
 
       - name: Patch Android adaptive foreground safe zone
         run: python3 scripts/patch-android-adaptive-foreground.py
@@ -315,20 +319,11 @@ jobs:
             '  <color name="ic_launcher_background">#fff</color>' \
             '</resources>' > "$BG_XML"
 
-      - name: Warm Gradle cache with retry (best effort)
+      - name: Warm Gradle cache (best effort)
         working-directory: client/src-tauri/gen/android
         shell: bash
         run: |
           set -uo pipefail
-          ensure_android_gradle_scaffold() {
-            if [ -f "tauri.settings.gradle" ]; then
-              return 0
-            fi
-
-            echo "检测到 tauri.settings.gradle 缺失，重新执行 tauri android init..."
-            (cd ../../../ && npm run tauri -- android init)
-          }
-
           repair_gradle_workspace_metadata_cache() {
             local gradle_cache_root="${GRADLE_USER_HOME}/caches"
             echo "检测到 Gradle workspace metadata 缓存损坏，开始清理 transforms 缓存..."
@@ -342,28 +337,23 @@ jobs:
               -print -exec rm -rf {} +
           }
 
-          warmup_ok=0
-          for attempt in 1 2 3 4 5; do
-            echo "Gradle warmup attempt ${attempt}/5"
-            ensure_android_gradle_scaffold
-            warmup_log="$RUNNER_TEMP/gradle-warmup-${attempt}.log"
-            if ./gradlew --no-daemon help --stacktrace --refresh-dependencies 2>&1 | tee "$warmup_log"; then
-              warmup_ok=1
-              break
-            fi
-
-            if grep -Fq "Could not read workspace metadata" "$warmup_log"; then
-              repair_gradle_workspace_metadata_cache
-            fi
-
-            sleep $((attempt * 20))
-          done
-
-          if [ "$warmup_ok" -eq 1 ]; then
-            echo "Gradle warmup succeeded"
-          else
-            echo "Gradle warmup failed after retries; continue to build retry phase"
+          if [ ! -f "tauri.settings.gradle" ]; then
+            echo "检测到 tauri.settings.gradle 缺失，跳过 Gradle 预热，交由正式构建阶段处理。"
+            exit 0
           fi
+
+          echo "Gradle warmup attempt 1/1"
+          warmup_log="$RUNNER_TEMP/gradle-warmup.log"
+          if ./gradlew --no-daemon help --stacktrace --refresh-dependencies 2>&1 | tee "$warmup_log"; then
+            echo "Gradle warmup succeeded"
+            exit 0
+          fi
+
+          if grep -Fq "Could not read workspace metadata" "$warmup_log"; then
+            repair_gradle_workspace_metadata_cache
+          fi
+
+          echo "Gradle warmup failed; continue to build retry phase"
 
       - name: Configure Android signing
         shell: bash
@@ -431,6 +421,12 @@ jobs:
 
             if grep -Fq "Could not read workspace metadata" "$build_log"; then
               repair_gradle_workspace_metadata_cache
+              continue
+            fi
+
+            if grep -Fq "tauri.settings.gradle" "$build_log"; then
+              echo "Android 工程脚手架缺失，快速失败，等待下一轮 workflow 使用最新重建逻辑重新生成。"
+              exit 1
             fi
 
             if [ "$attempt" -ge 2 ]; then
@@ -443,7 +439,7 @@ jobs:
               exit 1
             fi
 
-            sleep $((attempt * 20))
+            sleep $((attempt * 10))
           done
 
       - name: Upload Android APK to Gitea Release
