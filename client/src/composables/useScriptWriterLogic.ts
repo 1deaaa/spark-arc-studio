@@ -25,7 +25,7 @@ export function useScriptWriterLogic() {
     const isSyncingUrl = ref(false);
     const settingsVisible = ref(false);
     const versionManagerVisible = ref(false);
-    const aiSidebarVisible = ref(true);
+    const aiSidebarVisible = computed(() => !!sceneStore.currentScene || settingsVisible.value);
     const isAdmin = ref(false);
     const username = ref('');
     const pendingSync = ref(false);
