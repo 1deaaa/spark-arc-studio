@@ -316,12 +316,30 @@ jobs:
         shell: bash
         run: |
           set -uo pipefail
+          repair_gradle_workspace_metadata_cache() {
+            local gradle_cache_root="${GRADLE_USER_HOME}/caches"
+            echo "检测到 Gradle workspace metadata 缓存损坏，开始清理 transforms 缓存..."
+            if [ ! -d "$gradle_cache_root" ]; then
+              echo "Gradle 缓存目录不存在，跳过清理"
+              return 0
+            fi
+
+            find "$gradle_cache_root" -mindepth 1 -maxdepth 3 \
+              \( -path "*/transforms" -o -path "*/transforms-*" \) \
+              -print -exec rm -rf {} +
+          }
+
           warmup_ok=0
           for attempt in 1 2 3 4 5; do
             echo "Gradle warmup attempt ${attempt}/5"
-            if ./gradlew --no-daemon help --stacktrace --refresh-dependencies; then
+            warmup_log="$RUNNER_TEMP/gradle-warmup-${attempt}.log"
+            if ./gradlew --no-daemon help --stacktrace --refresh-dependencies 2>&1 | tee "$warmup_log"; then
               warmup_ok=1
               break
+            fi
+
+            if grep -Fq "Could not read workspace metadata" "$warmup_log"; then
+              repair_gradle_workspace_metadata_cache
             fi
 
             sleep $((attempt * 20))
@@ -381,10 +399,28 @@ jobs:
         shell: bash
         run: |
           set -euo pipefail
+          repair_gradle_workspace_metadata_cache() {
+            local gradle_cache_root="${GRADLE_USER_HOME}/caches"
+            echo "检测到 Gradle workspace metadata 缓存损坏，开始清理 transforms 缓存..."
+            if [ ! -d "$gradle_cache_root" ]; then
+              echo "Gradle 缓存目录不存在，跳过清理"
+              return 0
+            fi
+
+            find "$gradle_cache_root" -mindepth 1 -maxdepth 3 \
+              \( -path "*/transforms" -o -path "*/transforms-*" \) \
+              -print -exec rm -rf {} +
+          }
+
           for attempt in 1 2 3 4 5; do
             echo "Android build attempt ${attempt}/5"
-            if npm run tauri -- android build --apk --target aarch64; then
+            build_log="$RUNNER_TEMP/android-build-${attempt}.log"
+            if npm run tauri -- android build --apk --target aarch64 2>&1 | tee "$build_log"; then
               exit 0
+            fi
+
+            if grep -Fq "Could not read workspace metadata" "$build_log"; then
+              repair_gradle_workspace_metadata_cache
             fi
 
             if [ "$attempt" -ge 2 ]; then
