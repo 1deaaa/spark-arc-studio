@@ -52,11 +52,11 @@
             </div>
 
             <Transition name="inspector-slide">
-              <div v-if="!isNovelWorkspace || settingsVisible" class="resizer" data-resize="center" @mousedown="handleMouseDown"></div>
+              <div v-if="(!isNovelWorkspace && !!sceneStore.currentScene) || settingsVisible" class="resizer" data-resize="center" @mousedown="handleMouseDown"></div>
             </Transition>
 
             <Transition name="inspector-slide">
-              <div v-if="!isNovelWorkspace || settingsVisible" class="panel inspector-panel" :style="{ width: inspectorWidth + 'px' }">
+              <div v-if="(!isNovelWorkspace && !!sceneStore.currentScene) || settingsVisible" class="panel inspector-panel" :style="{ width: inspectorWidth + 'px' }">
                 <template v-if="!settingsVisible">
                   <NodeEditor key="node-editor" />
                 </template>
