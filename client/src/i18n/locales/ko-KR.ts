@@ -960,6 +960,8 @@ const koKR = {
       errorTitle: '처리에 문제가 발생했습니다',
       errorSubtitle: '프롬프트를 수정하거나 다시 시도해 주세요',
       retrying: '재호출 진행 중 ({attempt}/{max})...',
+      reconnecting: '연결 복구 중 ({attempt}번째 시도)...',
+      reconnectWaiting: '연결이 끊겼습니다. 백그라운드 작업에서 진행 상황을 따라잡는 중입니다',
       retryFailed: '총 {max}회 재호출을 시도했으나 응답 확보 실패',
       backgroundTaskError: '백그라운드 연산 도중 에러 발생',
       workTrackerUpdatedAt: '{time} 에 마지막 업데이트됨',

@@ -74,11 +74,11 @@
             <div class="card-icon">
               <n-icon size="48" color="rgba(255,255,255,0.9)"><Palette /></n-icon>
             </div>
-          </div>
-          <div class="card-body">
-            <div class="card-info">
+            <div class="card-name">
               <h3>{{ style }}</h3>
             </div>
+          </div>
+          <div class="card-body">
             <div class="card-actions">
                <n-button
                  v-if="projectStore.currentProject"
@@ -349,20 +349,30 @@ const profileMarkdown = computed(() => {
   position: relative;
 }
 
+.card-name {
+  position: absolute;
+  bottom: 0;
+  left: 0;
+  right: 0;
+  padding: 8px 16px;
+  background: linear-gradient(to top, rgba(0, 0, 0, 0.5), transparent);
+}
+
+.card-name h3 {
+  margin: 0;
+  font-size: var(--spark-fs-lg);
+  font-weight: 600;
+  color: #fff;
+  text-shadow: 0 1px 2px rgba(0, 0, 0, 0.3);
+}
+
 .card-body {
   padding: 10px 16px;
   display: flex;
-  justify-content: space-between;
-  align-items: flex-start;
+  justify-content: flex-start;
+  align-items: center;
   background: var(--panel-bg);
-  gap: 12px;
-}
-
-.card-info h3 {
-  margin: 0 0 4px;
-  font-size: var(--spark-fs-lg);
-  font-weight: 600;
-  color: var(--text-color);
+  gap: 8px;
 }
 
 .card-meta {

@@ -136,7 +136,8 @@ class AdminMixin:
         sys_key_info: Optional[Dict[str, Any]],
         api_key_available: bool,
     ) -> Dict[str, str]:
-        can_use_sys_key = user_id == SYSTEM_USER_ID or self.llm_auto_key
+        can_use_sys_key = self._can_use_system_hosted_key(user_id)
+        is_owner_call = self._is_system_hosted_key_owner_call(user_id)
 
         if user_key_saved and user_key_info and user_key_info.get("available"):
             return {
@@ -147,8 +148,12 @@ class AdminMixin:
         if user_key_saved and user_key_info and not user_key_info.get("available"):
             if sys_key_info and sys_key_info.get("available") and can_use_sys_key and api_key_available:
                 return {
-                    "status": "managed_fallback",
-                    "message": f"{user_key_info.get('message')} 当前已自动回退到站长托管 API Key。",
+                    "status": "managed_owner_fallback" if is_owner_call else "managed_fallback",
+                    "message": (
+                        f"{user_key_info.get('message')} 当前已回退到您作为站长配置的托管 API Key。"
+                        if is_owner_call
+                        else f"{user_key_info.get('message')} 当前已自动回退到站长托管 API Key。"
+                    ),
                 }
             return {
                 "status": "user_override_missing_key" if user_key_info.get("status") == "missing_key" else "user_override_needs_reconfigure",
@@ -156,6 +161,11 @@ class AdminMixin:
             }
 
         if sys_key_info and sys_key_info.get("available") and can_use_sys_key and api_key_available:
+            if is_owner_call:
+                return {
+                    "status": "managed_owner_ok",
+                    "message": "当前使用您作为站长配置的托管 API Key。关闭全体用户共享不会影响站长本人使用。",
+                }
             return {
                 "status": "managed_ok",
                 "message": "当前使用站长托管 API Key。",

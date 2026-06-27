@@ -222,7 +222,14 @@ class UserDatabase:
                 ).first()
                 if row:
                     _, user = row
-                    return True, {"user_id": user.id, "username": user.username}
+                    # verify_session 是 FastAPI 认证依赖的入口；这里不能只返回展示用身份。
+                    # 后续请求上下文会用 is_admin 区分“站长本人使用托管 Key”和“普通用户使用共享 Key”，
+                    # 若在这里丢失管理员字段，LLM 配置链路会把站长误判成普通用户。
+                    return True, {
+                        "user_id": user.id,
+                        "username": user.username,
+                        "is_admin": bool(user.is_admin),
+                    }
                 return False, None
         except Exception:  # pragma: no cover
             return False, None
@@ -329,7 +336,7 @@ async def get_current_user(request: Request):
     
     # 设置上下文
     project_name = await extract_project_name(request)
-    set_current_context(str(info['user_id']), project_name)
+    set_current_context(str(info['user_id']), project_name, bool(info.get('is_admin')))
     
     # 将用户信息附加到 request state，以便后续使用
     request.state.user = info
@@ -356,7 +363,7 @@ async def get_optional_user(request: Request):
     # 设置上下文 (即使未登录也尝试提取项目名)
     project_name = await extract_project_name(request)
     user_id = str(user_info['user_id']) if user_info else None
-    set_current_context(user_id, project_name)
+    set_current_context(user_id, project_name, bool(user_info.get('is_admin')) if user_info else False)
     
     if user_info:
         request.state.user = user_info

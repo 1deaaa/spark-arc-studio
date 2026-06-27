@@ -33,6 +33,7 @@ describe('chatStore NDJSON 消费契约', () => {
   beforeEach(() => {
     setActivePinia(createPinia());
     vi.useFakeTimers();
+    vi.clearAllMocks();
   });
 
   it('消费 task_snapshot / delta / tool 事件并维护 segments 与 tool_traces', async () => {
@@ -141,17 +142,19 @@ describe('chatStore NDJSON 消费契约', () => {
       },
     ]);
 
-    await store._consumeStream(session, assistantMsg, false, reader, 0, {
+    const streamState = {
       agentId: 'agent_director',
       contextKey: 'global',
       streamEpoch: 1,
-    });
+    };
+    await store._consumeStream(session, assistantMsg, false, reader, 0, streamState);
 
     expect(assistantMsg.id).toBe(99);
     expect(assistantMsg.task_id).toBe('task-1');
     expect(assistantMsg.content).toBe('旧正文新正文');
     expect(assistantMsg.reasoning).toBe('旧推理新推理');
     expect(assistantMsg.streamSeq).toBe(3);
+    expect(streamState.lastSeq).toBe(8);
     expect(assistantMsg.tool_traces).toHaveLength(1);
     expect(assistantMsg.tool_traces[0]).toMatchObject({
       tool_name: 'rewrite_worldview',
@@ -210,5 +213,53 @@ describe('chatStore NDJSON 消费契约', () => {
     expect(stillRunning).toBe(true);
     expect(session.sending).toBe(true);
     expect(session.backgroundTaskStatus).toBe('running');
+  });
+
+  it('状态查询短暂断网时保持运行态并继续按游标恢复观察流', async () => {
+    vi.mocked(getChatTaskStatus)
+      .mockRejectedValueOnce(new TypeError('Failed to fetch'))
+      .mockResolvedValueOnce({
+        hasTask: true,
+        status: 'running',
+        agentId: 'agent_director',
+        contextKey: 'global',
+        lastSeq: 9,
+      });
+
+    const store = useChatStore();
+    const session = store.primarySession;
+    session.streamEpoch = 1;
+
+    const reconnectSpy = vi
+      .spyOn(store, '_reconnectTaskStream')
+      .mockImplementationOnce(async () => undefined);
+
+    const recovered = store._resumeChatTaskAfterTransportLoss(
+      session,
+      'agent_director',
+      'global',
+      7,
+      1,
+    );
+
+    await Promise.resolve();
+    expect(session.sending).toBe(true);
+    expect(session.backgroundTaskStatus).toBe('running');
+    expect(session.retryMode).toBe('transport');
+    expect(session.retryAttempt).toBe(1);
+
+    await vi.advanceTimersByTimeAsync(800);
+    await expect(recovered).resolves.toBe(true);
+
+    expect(reconnectSpy).toHaveBeenCalledWith(
+      session,
+      'agent_director',
+      'global',
+      7,
+      {
+        retryIndex: 0,
+        maxTransportRetries: 3,
+      },
+    );
   });
 });

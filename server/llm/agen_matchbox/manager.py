@@ -1240,6 +1240,40 @@ class AIManagerBase:
             .first()
         )
 
+    @staticmethod
+    def _get_request_caller_context() -> tuple[Optional[str], bool]:
+        """读取 Web 请求注入的调用者身份；Matchbox 本身不反向依赖用户表。"""
+        try:
+            from core.request_context import current_user_id, current_user_is_admin
+        except Exception:
+            return None, False
+        caller_user_id = current_user_id.get()
+        return (str(caller_user_id) if caller_user_id is not None else None), bool(current_user_is_admin.get())
+
+    def _is_system_hosted_key_owner_call(self, user_id: str) -> bool:
+        """判断本次调用是否是站长本人使用自己的系统托管 Key。"""
+        caller_user_id, caller_is_admin = self._get_request_caller_context()
+        if not caller_is_admin or caller_user_id is None:
+            return False
+        return str(caller_user_id) == str(user_id)
+
+    def _can_use_system_hosted_key(self, user_id: str) -> bool:
+        """系统托管 Key 的唯一访问策略。
+
+        这里刻意区分三种主体：
+        1. SYSTEM_USER_ID(-1)：内部系统/单用户模式，天然可用托管 Key。
+        2. 站长真人账号：即使关闭“向全体用户共享”，也应能使用自己配置的托管 Key。
+        3. 普通用户：只有 llm_auto_key 开启时，才可回退到托管 Key。
+
+        不要把管理员 user_id 改写成 -1，也不要复制一份 Key 到个人密钥表。
+        那会污染用途配置、Agent 绑定、用量统计和计费归属，形成难以维护的补丁扩散。
+        """
+        if str(user_id) == SYSTEM_USER_ID:
+            return True
+        if self._is_system_hosted_key_owner_call(str(user_id)):
+            return True
+        return bool(self.llm_auto_key)
+
     def _ensure_usage_slot(
         self,
         session,
@@ -1286,9 +1320,10 @@ class AIManagerBase:
         return created
 
     def _get_effective_api_access(self, session, user_id: str, platform: LLMPlatform) -> Dict[str, Optional[str]]:
-        """解析用户当前实际命中的 API Key 及其计费范围。"""
+        """解析用户当前实际命中的 API Key、来源及其计费范围。"""
         api_key = None
         quota_scope = None
+        key_source = None
         sec_mgr = SecurityManager.get_instance()
 
         if platform.is_sys:
@@ -1300,20 +1335,24 @@ class AIManagerBase:
                 api_key = sec_mgr.decrypt(cred.api_key).to_optional_plaintext()
                 if api_key:
                     quota_scope = "self_paid"
+                    key_source = "user_override"
 
-            if not api_key and (user_id == SYSTEM_USER_ID or self.llm_auto_key):
+            if not api_key and self._can_use_system_hosted_key(str(user_id)):
                 if platform.api_key:
                     api_key = sec_mgr.decrypt(platform.api_key).to_optional_plaintext()
                     if api_key:
                         quota_scope = "sys_paid"
+                        key_source = "system_hosted"
         else:
             api_key = sec_mgr.decrypt(platform.api_key).to_optional_plaintext()
             if api_key:
                 quota_scope = "self_paid"
+                key_source = "custom_platform"
 
         return {
             "api_key": api_key,
             "quota_scope": quota_scope,
+            "key_source": key_source,
         }
 
     def _get_effective_api_key(self, session, user_id: str, platform: LLMPlatform) -> Optional[str]:

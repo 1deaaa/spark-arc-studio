@@ -962,6 +962,8 @@ const jaJP = {
       errorTitle: 'エラーが発生しました',
       errorSubtitle: '再試行またはメッセージを修正してください',
       retrying: '再試行中({attempt}/{max})...',
+      reconnecting: '接続を復旧中({attempt}回目)...',
+      reconnectWaiting: '接続が切断されました。バックグラウンドタスクから進捗を同期しています',
       retryFailed: '{max}回の再試行後に失敗',
       backgroundTaskError: 'バックグラウンドタスクでエラーが発生しました',
       workTrackerUpdatedAt: '{time}に更新',

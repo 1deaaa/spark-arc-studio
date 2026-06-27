@@ -960,6 +960,8 @@ const zhCN = {
       errorTitle: '出错了',
       errorSubtitle: '请重试或修改消息',
       retrying: '正在重试({attempt}/{max})...',
+      reconnecting: '正在恢复连接(第 {attempt} 次)...',
+      reconnectWaiting: '连接中断，正在从后台任务追平进度',
       retryFailed: '重试{max}次后仍然失败',
       backgroundTaskError: '后台任务出错',
       workTrackerUpdatedAt: '更新于 {time}',

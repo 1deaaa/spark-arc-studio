@@ -35,6 +35,7 @@ def get_current_project_name() -> Optional[str]:
 
 # Global context for current request (Agent/tools can read these)
 current_user_id: ContextVar[Optional[str]] = ContextVar('current_user_id', default=None)
+current_user_is_admin: ContextVar[bool] = ContextVar('current_user_is_admin', default=False)
 current_project_name: ContextVar[Optional[str]] = ContextVar('current_project_name', default=None)
 current_inspiration_id: ContextVar[Optional[str]] = ContextVar('current_inspiration_id', default=None)
 current_agent_id: ContextVar[Optional[str]] = ContextVar('current_agent_id', default=None)
@@ -146,10 +147,16 @@ async def extract_project_name(
         return None
 
 
-def set_current_context(user_id: Optional[str], project_name: Optional[str]) -> None:
+def set_current_context(user_id: Optional[str], project_name: Optional[str], is_admin: bool = False) -> None:
     """设置当前请求的上下文信息。"""
     if user_id:
         current_user_id.set(user_id)
+    else:
+        current_user_id.set(None)
+    # 管理员身份必须随请求显式注入，不能让 Matchbox 反查用户库。
+    # 原因：Matchbox 是可独立运行的 LLM 配置层，也支持系统虚拟用户 -1；
+    # 将 Web 用户表硬塞进去会把“站长真人账号”和“内部系统用户”重新搅在一起。
+    current_user_is_admin.set(bool(is_admin))
     normalized_project_name = normalize_project_name(project_name)
     if normalized_project_name:
         current_project_name.set(normalized_project_name)

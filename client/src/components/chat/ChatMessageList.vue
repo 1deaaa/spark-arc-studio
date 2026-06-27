@@ -237,7 +237,11 @@
               <path d="M1 4v6h6" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>
               <path d="M3.51 15a9 9 0 1 0 2.13-9.36L1 10" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>
             </svg>
-            <span class="retry-text">{{ t('components.chatMessageList.retrying', { attempt: retryAttempt, max: retryMaxRetries }) }}</span>
+            <span class="retry-text">
+              {{ retryMode === 'transport'
+                ? t('components.chatMessageList.reconnecting', { attempt: retryAttempt })
+                : t('components.chatMessageList.retrying', { attempt: retryAttempt, max: retryMaxRetries }) }}
+            </span>
           </div>
           <div v-if="retryErrorSummary" class="retry-error-summary">{{ retryErrorSummary }}</div>
         </div>
@@ -341,6 +345,8 @@ const props = defineProps({
   extraClass: { type: String, default: '' },
   /** 当前重试次数（null 表示未在重试） */
   retryAttempt: { type: [Number, null], default: null },
+  /** 重试来源 */
+  retryMode: { type: [String, null], default: null },
   /** 最大重试次数 */
   retryMaxRetries: { type: Number, default: 3 },
   /** 最近一次重试的错误摘要 */

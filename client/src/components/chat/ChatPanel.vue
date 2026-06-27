@@ -93,6 +93,7 @@
         :tool-name="toolName"
         :tool-progress-text="toolProgressText"
         :retry-attempt="retryAttempt"
+        :retry-mode="retryMode"
         :retry-max-retries="retryMaxRetries"
         :retry-error-summary="retryErrorSummary"
         :editing-message-id="editingMessageId"
@@ -242,6 +243,8 @@ const props = defineProps({
   hideHeaderIcon: { type: Boolean, default: false },
   /** 当前重试次数 */
   retryAttempt: { type: [Number, null], default: null },
+  /** 重试来源 */
+  retryMode: { type: [String, null], default: null },
   /** 最大重试次数 */
   retryMaxRetries: { type: Number, default: 3 },
   /** 最近一次重试的错误摘要 */

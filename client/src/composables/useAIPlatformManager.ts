@@ -188,6 +188,9 @@ export function useAIPlatformManager(options: { syncAiStoreSilently?: () => void
         if (payload && typeof payload === 'object') {
             systemConfig.value = { ...systemConfig.value, ...(payload as Partial<SystemConfig>) };
         }
+        // 系统托管 Key 的可用性会直接影响“模型用途配置”的 missing_key 判定。
+        // 这里复用父组件传入的 aiStore 同步入口，避免左侧用途卡片停留在旧的 SWR/Pinia 状态。
+        notifyAiStoreSync();
         loadPlatforms();
     }
 

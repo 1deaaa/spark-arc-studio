@@ -73,6 +73,7 @@ import {
 type AnyRecord = Record<string, any>;
 
 type ChatSessionKind = 'primary' | 'extra';
+type RetryMode = 'model' | 'transport';
 
 type ChatSession = {
   id: number;
@@ -98,6 +99,8 @@ type ChatSession = {
   backgroundTaskStatus: 'running' | 'completed' | 'cancelled' | 'error' | null;
   /** 当前重试次数（null 表示未在重试） */
   retryAttempt: number | null;
+  /** 重试来源：模型上游重试或前端传输重连 */
+  retryMode: RetryMode | null;
   /** 最大重试次数 */
   retryMaxRetries: number;
   /** 最近一次重试的错误摘要 */
@@ -177,6 +180,7 @@ function _createSession(id: number, agentId = 'agent_director', kind: ChatSessio
     toolClearTimer: null,
     backgroundTaskStatus: null,
     retryAttempt: null,
+    retryMode: null,
     retryMaxRetries: 3,
     retryErrorSummary: '',
     attachments: [],
@@ -257,6 +261,36 @@ function _delay(ms: number) {
   return new Promise(resolve => setTimeout(resolve, ms));
 }
 
+const CHAT_TRANSPORT_RECONNECT_BASE_DELAY_MS = 800;
+const CHAT_TRANSPORT_RECONNECT_MAX_DELAY_MS = 5000;
+
+function _clearRetryState(session: ChatSession) {
+  session.retryAttempt = null;
+  session.retryMode = null;
+  session.retryMaxRetries = 3;
+  session.retryErrorSummary = '';
+}
+
+function _setTransportReconnectState(session: ChatSession, attempt: number) {
+  session.retryAttempt = Math.max(1, Number(attempt || 1));
+  session.retryMode = 'transport';
+  session.retryMaxRetries = 0;
+  session.retryErrorSummary = i18n.global.t('components.chatMessageList.reconnectWaiting');
+}
+
+function _getTransportReconnectDelay(attempt: number) {
+  const nextAttempt = Math.max(1, Number(attempt || 1));
+  return Math.min(
+    CHAT_TRANSPORT_RECONNECT_MAX_DELAY_MS,
+    CHAT_TRANSPORT_RECONNECT_BASE_DELAY_MS * Math.max(1, nextAttempt),
+  );
+}
+
+function _getRecoverySeq(message: AnyRecord | null | undefined, streamState: AnyRecord | null | undefined = null, fallback = 0) {
+  const stateSeq = Number(streamState?.lastSeq ?? 0) || 0;
+  return Math.max(Number(fallback || 0), _getAssistantStreamSeq(message), stateSeq);
+}
+
 // ==================== Store 定义 ====================
 
 export const useChatStore = defineStore('chat', {
@@ -318,6 +352,10 @@ export const useChatStore = defineStore('chat', {
     retryAttempt: (state: ChatStoreState) => {
       const sessionId = state.primarySessionBindings[_getPrimaryScopeKey(state.primaryAgentId, state.primaryContextKey)];
       return state.sessions[sessionId]?.retryAttempt ?? null;
+    },
+    retryMode: (state: ChatStoreState) => {
+      const sessionId = state.primarySessionBindings[_getPrimaryScopeKey(state.primaryAgentId, state.primaryContextKey)];
+      return state.sessions[sessionId]?.retryMode ?? null;
     },
     retryMaxRetries: (state: ChatStoreState) => {
       const sessionId = state.primarySessionBindings[_getPrimaryScopeKey(state.primaryAgentId, state.primaryContextKey)];
@@ -383,8 +421,7 @@ export const useChatStore = defineStore('chat', {
       session.toolName = '';
       session.toolProgressText = '';
       session.toolStateStartedAt = 0;
-      session.retryAttempt = null;
-      session.retryErrorSummary = '';
+      _clearRetryState(session);
 
       if (wasRunning && agentIdSnapshot) {
         const projectStore = useProjectStore();
@@ -839,9 +876,8 @@ export const useChatStore = defineStore('chat', {
       session.toolProgressText = '';
       session.lastError = '';
       session.backgroundTaskStatus = 'running';
-      session.retryAttempt = null;
-      session.retryMaxRetries = 3;
-      session.retryErrorSummary = '';
+      _clearRetryState(session);
+      let streamState: AnyRecord | null = null;
       try {
         const resolvedContext = contextOverride || (() => {
           const { activeContext, activeMeta } = resolveActiveContext(this._contextProvider, session.attachments);
@@ -882,7 +918,7 @@ export const useChatStore = defineStore('chat', {
         const reader = await sendChatMessageStream(projectName, agentIdAtStart, contextKeyAtStart, text, targets, activeContext, activeMeta, abortController.signal);
 
         // 统一流式处理
-        const streamState: AnyRecord = {
+        streamState = {
           signal: abortController.signal,
           agentId: agentIdAtStart,
           contextKey: contextKeyAtStart,
@@ -894,7 +930,7 @@ export const useChatStore = defineStore('chat', {
           return;
         }
         if (!streamState.receivedTaskDone) {
-          const recovered = await this._recoverChatStreamObserver(session, agentIdAtStart, contextKeyAtStart, _getAssistantStreamSeq(assistantMsg), streamEpoch);
+          const recovered = await this._recoverChatStreamObserver(session, agentIdAtStart, contextKeyAtStart, _getRecoverySeq(assistantMsg, streamState), streamEpoch);
           if (recovered) return;
         }
 
@@ -916,7 +952,14 @@ export const useChatStore = defineStore('chat', {
         }
         if (_isLikelyStreamTransportError(e)) {
           const lastAssistant = (session.history || []).slice().reverse().find(m => m?.role === 'assistant');
-          const recovered = await this._recoverChatStreamObserver(session, agentIdAtStart, contextKeyAtStart, _getAssistantStreamSeq(lastAssistant || null), streamEpoch);
+          const recovered = await this._resumeChatTaskAfterTransportLoss(
+            session,
+            agentIdAtStart,
+            contextKeyAtStart,
+            _getRecoverySeq(lastAssistant || null, streamState),
+            streamEpoch,
+            { initialError: e },
+          );
           if (recovered) return;
         }
         const errorMsg = _getErrorMessage(e, '发送失败');
@@ -973,6 +1016,11 @@ export const useChatStore = defineStore('chat', {
       try {
         status = await getChatTaskStatus(projectName, agentId, contextKey) as AnyRecord;
       } catch (e: unknown) {
+        if (_isLikelyStreamTransportError(e)) {
+          return this._resumeChatTaskAfterTransportLoss(session, agentId, contextKey, afterSeq, previousEpoch, {
+            initialError: e,
+          });
+        }
         console.warn('查询聊天任务状态失败，无法自动重连', e);
         return false;
       }
@@ -1000,6 +1048,85 @@ export const useChatStore = defineStore('chat', {
       }
 
       return false;
+    },
+
+    async _resumeChatTaskAfterTransportLoss(
+      session: ChatSession,
+      agentId: string,
+      contextKey: string,
+      afterSeq = 0,
+      previousEpoch: number | null = null,
+      options: AnyRecord = {},
+    ): Promise<boolean> {
+      const projectStore = useProjectStore();
+      const projectName = projectStore.currentProject;
+      if (!projectName) return false;
+
+      const sessionId = session.id;
+      const normalizedContextKey = contextKey || 'global';
+      let attempt = Math.max(0, Number(options.startAttempt || 0));
+      const maxTransportRetries = Number(options.maxTransportRetries ?? 3);
+      const shouldStop = () => (
+        session.abortRequested
+        || (previousEpoch != null && session.streamEpoch !== previousEpoch)
+        || session.agentId !== agentId
+        || session.contextKey !== normalizedContextKey
+      );
+
+      while (true) {
+        if (shouldStop()) return true;
+
+        attempt += 1;
+        session.backgroundTaskStatus = 'running';
+        session.sending = true;
+        session.lastError = '';
+        _setTransportReconnectState(session, attempt);
+
+        let status: AnyRecord | null = null;
+        try {
+          status = await getChatTaskStatus(projectName, agentId, normalizedContextKey) as AnyRecord;
+        } catch (e: unknown) {
+          if (_isAbortError(e) || shouldStop()) return true;
+          if (!_isLikelyStreamTransportError(e)) {
+            return false;
+          }
+          await _delay(_getTransportReconnectDelay(attempt));
+          continue;
+        }
+
+        if (shouldStop()) return true;
+
+        if (!status?.hasTask) {
+          session.backgroundTaskStatus = null;
+          session.sending = false;
+          _clearRetryState(session);
+          await this.refreshSessionHistory(sessionId, 80, { silent: true, authoritative: true });
+          return true;
+        }
+
+        applyPersistedTokenStats(session, status);
+
+        if (status.status === 'running') {
+          await this._reconnectTaskStream(session, agentId, normalizedContextKey, Number(afterSeq || 0), {
+            retryIndex: 0,
+            maxTransportRetries,
+          });
+          return true;
+        }
+
+        if (status.status === 'completed' || status.status === 'cancelled' || status.status === 'error') {
+          session.backgroundTaskStatus = null;
+          session.sending = false;
+          if (status.status === 'error') {
+            session.lastError = String(status.error || _defaultBackgroundTaskError());
+          }
+          _clearRetryState(session);
+          await this.refreshSessionHistory(sessionId, 80, { silent: true, authoritative: true });
+          return true;
+        }
+
+        await _delay(_getTransportReconnectDelay(attempt));
+      }
     },
 
     async _isChatTaskStillRunning(agentId: string, contextKey: string): Promise<boolean> {
@@ -1047,9 +1174,7 @@ export const useChatStore = defineStore('chat', {
           if (status === 'running') {
             session.backgroundTaskStatus = 'running';
             session.sending = true;
-            session.retryAttempt = null;
-            session.retryMaxRetries = 3;
-            session.retryErrorSummary = '';
+            _clearRetryState(session);
             applyPersistedTokenStats(session, task as AnyRecord);
             hasRunning = true;
 
@@ -1100,7 +1225,7 @@ export const useChatStore = defineStore('chat', {
       this._setSessionAbortController(sessionId, abortController);
 
       let assistantMsg: AnyRecord | null = null;
-      let keepBackgroundRunning = false;
+      let streamState: AnyRecord | null = null;
       const retryIndex = Number(options.retryIndex || 0);
       const maxTransportRetries = Number(options.maxTransportRetries ?? 3);
 
@@ -1124,6 +1249,9 @@ export const useChatStore = defineStore('chat', {
 
         // 返回的是 ReadableStream reader（任务仍在运行）
         const reader = result as ReadableStreamDefaultReader<Uint8Array>;
+        if (session.retryMode === 'transport') {
+          _clearRetryState(session);
+        }
 
         // 复用历史中已有的最后一条 assistant 消息，避免重复追加
         // ⚠️ 仅复用本地创建的消息（有 clientId）：DB 消息无 clientId，
@@ -1149,7 +1277,7 @@ export const useChatStore = defineStore('chat', {
           assistantMsgAdded = false;
         }
 
-        const streamState: AnyRecord = {
+        streamState = {
           signal: abortController.signal,
           agentId,
           contextKey,
@@ -1166,7 +1294,7 @@ export const useChatStore = defineStore('chat', {
             session,
             agentId,
             contextKey,
-            _getAssistantStreamSeq(assistantMsg),
+            _getRecoverySeq(assistantMsg, streamState, afterSeq),
             streamEpoch,
           );
           if (recovered) return;
@@ -1174,6 +1302,11 @@ export const useChatStore = defineStore('chat', {
       } catch (e: unknown) {
         if (_isAbortError(e) || abortController.signal.aborted) return;
         if (_isLikelyStreamTransportError(e)) {
+          session.backgroundTaskStatus = 'running';
+          session.sending = true;
+          session.lastError = '';
+          _setTransportReconnectState(session, retryIndex + 1);
+
           let taskStatus: AnyRecord | null = null;
           try {
             taskStatus = await getChatTaskStatus(projectName, agentId, contextKey) as AnyRecord;
@@ -1183,21 +1316,12 @@ export const useChatStore = defineStore('chat', {
             session.backgroundTaskStatus = 'running';
             session.sending = true;
             applyPersistedTokenStats(session, taskStatus);
-            const nextSeq = Math.max(Number(afterSeq || 0), _getAssistantStreamSeq(assistantMsg));
+            const nextSeq = _getRecoverySeq(assistantMsg, streamState, afterSeq);
             await _delay(Math.min(2500, 500 * (retryIndex + 1)));
             await this._reconnectTaskStream(session, agentId, contextKey, nextSeq, {
               retryIndex: retryIndex + 1,
               maxTransportRetries,
             });
-            return;
-          }
-
-          if (taskStatus?.status === 'running') {
-            session.backgroundTaskStatus = 'running';
-            session.sending = true;
-            applyPersistedTokenStats(session, taskStatus);
-            keepBackgroundRunning = true;
-            console.warn('聊天观察流重连失败，但后台任务仍在运行，保持运行态等待后续恢复。', e);
             return;
           }
 
@@ -1208,9 +1332,24 @@ export const useChatStore = defineStore('chat', {
             if (taskStatus.status === 'error') {
               session.lastError = String(taskStatus.error || _defaultBackgroundTaskError());
             }
+            _clearRetryState(session);
             await this.refreshSessionHistory(sessionId, 80, { silent: true, authoritative: true });
             return;
           }
+
+          const recovered = await this._resumeChatTaskAfterTransportLoss(
+            session,
+            agentId,
+            contextKey,
+            _getRecoverySeq(assistantMsg, streamState, afterSeq),
+            streamEpoch,
+            {
+              initialError: e,
+              startAttempt: retryIndex + 1,
+              maxTransportRetries,
+            },
+          );
+          if (recovered) return;
         }
         const errorMsg = _getErrorMessage(e, '重连聊天任务流失败');
         console.warn(errorMsg, e);
@@ -1220,10 +1359,6 @@ export const useChatStore = defineStore('chat', {
         bus.emit('toast', { type: 'error', message: errorMsg });
         await this.refreshSessionHistory(sessionId, 80, { silent: true });
       } finally {
-        if (keepBackgroundRunning) {
-          this._finalizeSessionAbort(sessionId, abortController);
-          return;
-        }
         if (session.streamEpoch === streamEpoch) {
           const canKeepRunning = !session.abortRequested && !abortController.signal.aborted;
           const stillRunning = canKeepRunning
@@ -1442,9 +1577,8 @@ export const useChatStore = defineStore('chat', {
       session.toolProgressText = '';
       session.lastError = '';
       session.backgroundTaskStatus = 'running';
-      session.retryAttempt = null;
-      session.retryMaxRetries = 3;
-      session.retryErrorSummary = '';
+      _clearRetryState(session);
+      let streamState: AnyRecord | null = null;
       try {
         // 立即在本地截断该消息之后的回复
         const index = session.history.findIndex(m => m.id === targetMessage.id);
@@ -1474,7 +1608,7 @@ export const useChatStore = defineStore('chat', {
         const reader = await editChatMessageStream(projectName, agentIdAtStart, contextKeyAtStart, targetMessage.id, newContent, activeContext, activeMeta, abortController.signal);
 
         // 统一流式处理
-        const streamState: AnyRecord = {
+        streamState = {
           signal: abortController.signal,
           agentId: agentIdAtStart,
           contextKey: contextKeyAtStart,
@@ -1486,7 +1620,7 @@ export const useChatStore = defineStore('chat', {
           return;
         }
         if (!streamState.receivedTaskDone) {
-          const recovered = await this._recoverChatStreamObserver(session, agentIdAtStart, contextKeyAtStart, _getAssistantStreamSeq(assistantMsg), streamEpoch);
+          const recovered = await this._recoverChatStreamObserver(session, agentIdAtStart, contextKeyAtStart, _getRecoverySeq(assistantMsg, streamState), streamEpoch);
           if (recovered) return;
         }
 
@@ -1498,7 +1632,14 @@ export const useChatStore = defineStore('chat', {
         }
         if (_isLikelyStreamTransportError(e)) {
           const lastAssistant = (session.history || []).slice().reverse().find(m => m?.role === 'assistant');
-          const recovered = await this._recoverChatStreamObserver(session, agentIdAtStart, contextKeyAtStart, _getAssistantStreamSeq(lastAssistant || null), streamEpoch);
+          const recovered = await this._resumeChatTaskAfterTransportLoss(
+            session,
+            agentIdAtStart,
+            contextKeyAtStart,
+            _getRecoverySeq(lastAssistant || null, streamState),
+            streamEpoch,
+            { initialError: e },
+          );
           if (recovered) return;
         }
         const errorMsg = _getErrorMessage(e, '编辑失败');
@@ -1966,6 +2107,7 @@ export const useChatStore = defineStore('chat', {
         }
         if (eventType === 'retry_attempt') {
           session.retryAttempt = Number(evt.attempt || 0) || null;
+          session.retryMode = 'model';
           session.retryMaxRetries = Number(evt.max_retries ?? evt.maxRetries ?? session.retryMaxRetries ?? 3) || 3;
           session.retryErrorSummary = String(evt.error_summary || evt.errorSummary || '');
           return;
@@ -1984,8 +2126,7 @@ export const useChatStore = defineStore('chat', {
           assistantMsg.streamSeq = Number(evt.seq ?? assistantMsg.streamSeq ?? 0) || assistantMsg.streamSeq;
           // 重试成功后收到正常 delta，清除重试状态
           if (session.retryAttempt != null) {
-            session.retryAttempt = null;
-            session.retryErrorSummary = '';
+            _clearRetryState(session);
           }
           const parsed = consumeThinkStreamChunk(
             pickStreamEventText(evt, ['text', 'delta', 'content', 'message', 'data']),
@@ -2170,8 +2311,7 @@ export const useChatStore = defineStore('chat', {
           streamState.receivedTaskDone = true;
           const errMsg = pickStreamEventText(evt, ['message', 'data', 'text']);
           session.lastError = errMsg;
-          session.retryAttempt = null;
-          session.retryErrorSummary = '';
+          _clearRetryState(session);
           if (errMsg) {
             bus.emit('toast', { type: 'error', message: errMsg });
           }

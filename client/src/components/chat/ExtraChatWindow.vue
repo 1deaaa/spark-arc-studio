@@ -38,6 +38,7 @@
           :tool-name="session.toolName"
           :tool-progress-text="session.toolProgressText"
           :retry-attempt="session.retryAttempt"
+          :retry-mode="session.retryMode"
           :retry-max-retries="session.retryMaxRetries"
           :retry-error-summary="session.retryErrorSummary"
           :context-token-count="session.contextTokenCount"

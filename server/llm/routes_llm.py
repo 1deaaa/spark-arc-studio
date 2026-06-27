@@ -13,6 +13,7 @@ from pydantic import BaseModel, ConfigDict
 
 
 from core.auth import get_current_user
+from core.request_context import set_current_context
 
 from llm.agen_matchbox import matchbox
 
@@ -21,6 +22,20 @@ from llm.agen_matchbox.utils import parse_extra_body as _parse_extra_body_util
 
 
 llm_router = APIRouter()
+
+
+def _run_with_user_context(user: dict, callback, *args, **kwargs):
+
+    """在线程池里恢复当前用户身份。
+
+    设置页有些 Matchbox 调用会通过 run_in_threadpool 执行。不同线程不能假定
+    ContextVar 一定沿用主请求线程的值；如果漏掉 is_admin，站长在关闭“全体用户共享”
+    后会被当成普通用户，从而误报系统托管 Key 不可用。
+    """
+
+    set_current_context(str(user["user_id"]), None, bool(user.get("is_admin")))
+
+    return callback(*args, **kwargs)
 
 
 
@@ -476,7 +491,13 @@ async def list_remote_models(
 
         user_id = str(user['user_id'])
 
-        models = await run_in_threadpool(matchbox().proxy_list_models, user_id, platform_id)
+        models = await run_in_threadpool(
+            _run_with_user_context,
+            user,
+            matchbox().proxy_list_models,
+            user_id,
+            platform_id,
+        )
 
         return {"models": models}
 
@@ -657,9 +678,11 @@ async def get_user_selection(
         user_id = str(user['user_id'])
 
         selection = await run_in_threadpool(
-
-            matchbox().get_user_selection_detail, user_id, usage_key=usage_key
-
+            _run_with_user_context,
+            user,
+            matchbox().get_user_selection_detail,
+            user_id,
+            usage_key=usage_key,
         )
 
         return selection

@@ -962,6 +962,8 @@ const enUS = {
       errorTitle: 'Error occurred',
       errorSubtitle: 'Please retry or modify the message',
       retrying: 'Retrying ({attempt}/{max})...',
+      reconnecting: 'Restoring connection (attempt {attempt})...',
+      reconnectWaiting: 'Connection lost. Catching up from the background task',
       retryFailed: 'Failed after {max} retries',
       backgroundTaskError: 'Background task failed',
       workTrackerUpdatedAt: 'Updated {time}',

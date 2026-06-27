@@ -125,14 +125,18 @@ def _run_chat_background_context(
     *,
     user_id: str,
     project_name: str,
+    is_admin: bool,
     locale: str,
     llm_usage_context: str,
     callback: Any,
 ) -> Any:
     """在聊天后台线程中恢复请求级上下文。"""
-    from core.request_context import current_user_id, current_project_name
+    from core.request_context import current_user_id, current_user_is_admin, current_project_name
 
     current_user_id.set(str(user_id))
+    # 后台线程不能只恢复 user_id：管理员是否可使用系统托管 Key
+    # 取决于这个标记。漏掉它会让站长在关闭共享后被误判为普通用户。
+    current_user_is_admin.set(bool(is_admin))
     current_project_name.set(project_name)
     locale_token = set_current_locale(locale)
     usage_token = current_llm_usage_context.set(llm_usage_context)
@@ -1118,6 +1122,7 @@ async def edit_chat_message_stream(request: Request, data: ChatMessageEditReques
             _run_chat_background_context,
             user_id=str(user_id),
             project_name=project_name,
+            is_admin=bool(user.get('is_admin')),
             locale=request_locale,
             llm_usage_context=_make_llm_usage_context(entry.task_id),
             callback=_in_context,
@@ -1341,6 +1346,7 @@ async def send_chat_message_stream(request: Request, data: ChatSendRequest, user
             _run_chat_background_context,
             user_id=str(user_id),
             project_name=project_name,
+            is_admin=bool(user.get('is_admin')),
             locale=request_locale,
             llm_usage_context=_make_llm_usage_context(entry.task_id),
             callback=_in_context,
