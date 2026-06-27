@@ -19,59 +19,61 @@
           </keep-alive>
         </transition>
 
-        <div v-show="viewStore.currentView === 'production'" class="production-layout">
-          <div class="panel sidebar-panel" :style="{ width: sidebarWidth + 'px' }">
-            <div class="sidebar-section file-section">
-              <div class="file-section-header">
-                <span class="file-section-title">{{ t('views.scriptWriter.desktop.workspaceManager') }}</span>
+        <div v-show="viewStore.currentView === 'production'" class="production-shell">
+          <div class="production-layout">
+            <div class="panel sidebar-panel" :style="{ width: sidebarWidth + 'px' }">
+              <div class="sidebar-section file-section">
+                <div class="file-section-header">
+                  <span class="file-section-title">{{ t('views.scriptWriter.desktop.workspaceManager') }}</span>
+                </div>
+                <div class="workspace-mode-desc">
+                  {{ isNovelWorkspace ? t('views.scriptWriter.desktop.modeSwitchNovelDesc') : t('views.scriptWriter.desktop.modeSwitchScriptDesc') }}
+                </div>
+                <FileTree :key="workspaceMode" />
               </div>
-              <div class="workspace-mode-desc">
-                {{ isNovelWorkspace ? t('views.scriptWriter.desktop.modeSwitchNovelDesc') : t('views.scriptWriter.desktop.modeSwitchScriptDesc') }}
+            </div>
+
+            <div class="resizer" data-resize="sidebar" @mousedown="handleMouseDown"></div>
+
+            <div class="panel center-panel" style="position: relative;">
+              <div class="center-panel-header">
+                <h2 v-if="settingsVisible">{{ t('views.scriptWriter.desktop.settingEditor') }}</h2>
+                <h2 v-else-if="!isNovelWorkspace">{{ t('views.scriptWriter.desktop.dialogueTree') }}</h2>
+                <h2 v-else>{{ t('views.scriptWriter.desktop.modeNovel') }}</h2>
               </div>
-              <FileTree :key="workspaceMode" />
-            </div>
-          </div>
 
-          <div class="resizer" data-resize="sidebar" @mousedown="handleMouseDown"></div>
+              <Transition name="workspace-mode" mode="out-in">
+                <LorebookEditor v-if="settingsVisible" key="settings" :visible="true" @close="settingsVisible = false" />
+                <NovelReader v-else-if="isNovelWorkspace" key="novel-editor" :content="typeof sceneStore.scriptData === 'string' ? sceneStore.scriptData : ''" />
+                <DialogueTree v-else key="dialogue-tree" />
+              </Transition>
 
-          <div class="panel center-panel" style="position: relative;">
-            <div class="center-panel-header">
-              <h2 v-if="settingsVisible">{{ t('views.scriptWriter.desktop.settingEditor') }}</h2>
-              <h2 v-else-if="!isNovelWorkspace">{{ t('views.scriptWriter.desktop.dialogueTree') }}</h2>
-              <h2 v-else>{{ t('views.scriptWriter.desktop.modeNovel') }}</h2>
+              <GlobalLoading scope="production" />
             </div>
-            
-            <Transition name="workspace-mode" mode="out-in">
-              <LorebookEditor v-if="settingsVisible" key="settings" :visible="true" @close="settingsVisible = false" />
-              <NovelReader v-else-if="isNovelWorkspace" key="novel-editor" :content="typeof sceneStore.scriptData === 'string' ? sceneStore.scriptData : ''" />
-              <DialogueTree v-else key="dialogue-tree" />
+
+            <Transition name="inspector-slide">
+              <div v-if="!isNovelWorkspace || settingsVisible" class="resizer" data-resize="center" @mousedown="handleMouseDown"></div>
             </Transition>
-            
-            <GlobalLoading scope="production" />
-          </div>
 
-          <Transition name="inspector-slide">
-            <div v-if="!isNovelWorkspace || settingsVisible" class="resizer" data-resize="center" @mousedown="handleMouseDown"></div>
-          </Transition>
-
-          <Transition name="inspector-slide">
-            <div v-if="!isNovelWorkspace || settingsVisible" class="panel inspector-panel" :style="{ width: inspectorWidth + 'px' }">
-              <template v-if="!settingsVisible">
-                <NodeEditor key="node-editor" />
-              </template>
-              <div v-else class="settings-right-panel">
-                <AiSettingsPanel :visible="true" />
-                <CharacterGeneratorPanel :visible="true" />
+            <Transition name="inspector-slide">
+              <div v-if="!isNovelWorkspace || settingsVisible" class="panel inspector-panel" :style="{ width: inspectorWidth + 'px' }">
+                <template v-if="!settingsVisible">
+                  <NodeEditor key="node-editor" />
+                </template>
+                <div v-else class="settings-right-panel">
+                  <AiSettingsPanel :visible="true" />
+                  <CharacterGeneratorPanel :visible="true" />
+                </div>
               </div>
-            </div>
-          </Transition>
+            </Transition>
 
-          <template v-if="aiSidebarVisible">
-            <div class="resizer" data-resize="inspector" @mousedown="handleMouseDown"></div>
-            <div class="panel ai-sidebar" :style="{ width: aiSidebarWidth + 'px' }">
-              <AiPanel />
-            </div>
-          </template>
+            <template v-if="aiSidebarVisible">
+              <div class="resizer" data-resize="inspector" @mousedown="handleMouseDown"></div>
+              <div class="panel ai-sidebar" :style="{ width: aiSidebarWidth + 'px' }">
+                <AiPanel />
+              </div>
+            </template>
+          </div>
         </div>
       </div>
   
@@ -118,18 +120,15 @@ import ChatDesktopView from '../ChatDesktop/ChatDesktopIndex.vue';
 import bus from '../../eventBus';
 import { useResizer } from '../../hooks/useResizer';
 import { useScriptWriterLogic } from '../../composables/useScriptWriterLogic';
-import { useFileStore } from '../../components/stores/fileStore';
 import { useSceneStore } from '../../components/stores/sceneStore';
 
 const { t } = useI18n();
-const fileStore = useFileStore();
 const sceneStore = useSceneStore();
 const { sidebarWidth, inspectorWidth, aiSidebarWidth, handleMouseDown } = useResizer();
 const {
   viewStore,
   projectStore,
   username,
-  autoSaveEnabled,
   settingsVisible,
   versionManagerVisible,
   aiSidebarVisible,
@@ -207,14 +206,26 @@ main {
   position: relative;
 }
 
+.production-shell {
+  display: flex;
+  flex-direction: column;
+  flex: 1;
+  width: 100%;
+  min-width: 0;
+  min-height: 0;
+  height: 100%;
+  overflow: hidden;
+  background: var(--spark-bg);
+}
+
 .production-layout {
   display: flex;
   flex: 1;
   width: 100%;
   min-width: 0;
+  min-height: 0;
   height: 100%;
   overflow: hidden;
-  background: var(--spark-bg);
 }
 
 .sidebar-panel {

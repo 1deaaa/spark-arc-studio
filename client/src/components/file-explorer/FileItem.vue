@@ -16,8 +16,8 @@
       <span class="file-icon">
         <n-icon :component="FolderOpen" v-if="item.type === 'folder' && isOpen" class="icon-folder icon-folder--open" />
         <n-icon :component="Folder" v-else-if="item.type === 'folder'" class="icon-folder" />
-        <n-icon :component="Newspaper" v-else-if="item.format === 'novel'" class="icon-file icon-file--novel" />
-        <n-icon :component="BookOpen" v-else class="icon-file icon-file--arc" />
+        <n-icon :component="BookOpen" v-else-if="item.format === 'novel'" class="icon-file icon-file--novel" />
+        <n-icon :component="Clapperboard" v-else class="icon-file icon-file--arc" />
       </span>
       <span class="file-name">{{ item.name }}</span>
       <span v-if="item.type === 'story'" class="file-format-badge" :class="`format-${item.format || 'arc'}`">
@@ -59,7 +59,7 @@
 import { ref, computed, reactive, onMounted, onBeforeUnmount, watch, h, type Component } from 'vue';
 import { NDropdown, NIcon } from 'naive-ui';
 import draggable from 'vuedraggable';
-import { BookOpen, ChevronDown, ChevronRight, Folder, FolderOpen, Newspaper, Pencil, Plus, SquarePen, Trash } from '@lucide/vue';
+import { BookOpen, ChevronDown, ChevronRight, Clapperboard, Folder, FolderOpen, Pencil, Plus, SquarePen, Trash } from '@lucide/vue';
 import { useI18n } from 'vue-i18n';
 import { useSceneStore } from '@/components/stores/sceneStore';
 import { useFileStore, flattenFileTree } from '@/components/stores/fileStore';

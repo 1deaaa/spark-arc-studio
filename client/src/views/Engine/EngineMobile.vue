@@ -11,8 +11,9 @@
     <!-- Agent 模型配置 -->
     <div class="prompt-guide">{{ t('views.engine.mobile.promptGuide') }}</div>
     <AgentModelCard />
-    <div class="mobile-skill-manager">
+    <div class="mobile-agent-tools">
       <AgentSkillManager />
+      <MCPConnectCard />
     </div>
     
     <!-- 状态展示 -->
@@ -51,9 +52,10 @@ import { ref } from 'vue';
 import { NIcon, NButton, useMessage } from 'naive-ui';
 import { useI18n } from 'vue-i18n';
 import SparkTag from '../../components/share/SparkTag.vue';
-import { Copy, Gamepad2, Monitor } from '@lucide/vue';
+import { Gamepad2, Monitor } from '@lucide/vue';
 import AgentModelCard from '../../components/settings/AgentModelCard.vue';
 import AgentSkillManager from '../../components/settings/AgentSkillManager.vue';
+import MCPConnectCard from '../../components/settings/MCPConnectCard.vue';
 
 const { t } = useI18n();
 const message = useMessage();
@@ -73,11 +75,12 @@ function copyDesktopUrl() {
 
 <style scoped>
 .engine-mobile {
-  padding: 0 6px;
+  padding: 0 4px;
+  min-height: 0;
 }
 
 .mobile-section {
-  margin-bottom: 20px;
+  margin-bottom: 12px;
 }
 
 .section-title {
@@ -107,8 +110,11 @@ function copyDesktopUrl() {
   border-radius: 8px;
 }
 
-.mobile-skill-manager {
-  margin: 14px 0 24px;
+.mobile-agent-tools {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  margin: 12px 0 18px;
 }
 
 .feature-grid {
@@ -157,7 +163,7 @@ function copyDesktopUrl() {
 }
 
 .status-section {
-  margin-bottom: 24px;
+  margin-bottom: 18px;
 }
 
 .status-title {
@@ -209,6 +215,7 @@ function copyDesktopUrl() {
   border: 1px dashed rgba(var(--spark-primary-rgb), 0.3);
   border-radius: 12px;
   margin-top: 10px;
+  gap: 12px;
 }
 
 .cta-left {
@@ -232,5 +239,23 @@ function copyDesktopUrl() {
   margin: 0;
   font-size: var(--spark-fs-2xs);
   color: var(--spark-text-muted);
+}
+
+.desktop-cta :deep(.n-button) {
+  flex: 0 0 auto;
+}
+
+@media (max-width: 420px) {
+  .desktop-cta {
+    align-items: stretch;
+  }
+
+  .cta-left {
+    min-width: 0;
+  }
+
+  .desktop-cta :deep(.n-button) {
+    width: 96px;
+  }
 }
 </style>

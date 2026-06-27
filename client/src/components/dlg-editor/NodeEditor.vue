@@ -89,53 +89,92 @@
             </div>
           </n-form-item>
 
-          <!-- Unity 运行时配置（可折叠，仅游戏开发使用） -->
+          <!-- 内容编排：把底层触发字段包装成创作者可理解的内容类型。 -->
           <n-collapse style="margin-top: 8px;">
-            <n-collapse-item name="unity-scene">
+            <n-collapse-item name="scene-content">
               <template #header>
-                <span class="unity-collapse-title">
-                  <n-icon :component="Gamepad2" size="16" />
-                  <span>Unity 运行时配置</span>
+                <span class="content-runtime-title">
+                  <n-icon :component="Layers3" size="16" />
+                  <span>{{ t('nodeEditor.sceneRuntime.title') }}</span>
                 </span>
               </template>
+              <template #header-extra>
+                <SparkTag :type="contentKindTagType(sceneRuntimeSummary.kind)" size="small">
+                  {{ contentKindLabel(sceneRuntimeSummary.kind) }}
+                </SparkTag>
+              </template>
 
-              <n-form label-placement="top" size="small" style="margin-top: 4px;">
+              <div class="content-runtime-panel">
+                <p class="content-runtime-lede">{{ t('nodeEditor.sceneRuntime.subtitle') }}</p>
+
+                <div class="content-kind-grid">
+                  <button
+                    v-for="option in contentKindOptions"
+                    :key="option.kind"
+                    type="button"
+                    class="content-kind-card"
+                    :class="{ 'is-active': sceneRuntimeSummary.kind === option.kind }"
+                    @click="applyContentKindPreset(option.kind)"
+                  >
+                    <span class="content-kind-card__icon">
+                      <n-icon :component="option.icon" size="16" />
+                    </span>
+                    <span class="content-kind-card__body">
+                      <strong>{{ option.label }}</strong>
+                      <small>{{ option.description }}</small>
+                    </span>
+                  </button>
+                </div>
+
+                <div class="content-runtime-summary">
+                  <SparkTag
+                    v-for="chip in sceneRuntimeChips"
+                    :key="chip.key"
+                    :type="chip.type"
+                    size="tiny"
+                    ghost
+                  >
+                    {{ chip.label }}
+                  </SparkTag>
+                </div>
+
+                <n-form label-placement="top" size="small" class="content-runtime-fields">
 
                 <n-form-item>
                   <template #label>
-                    <div class="unity-label">
-                      <span>交互按钮文案</span>
-                      <n-text depth="3" class="unity-label__hint">接近角色时显示的对话按钮文本</n-text>
+                    <div class="content-runtime-label">
+                      <span>{{ t('nodeEditor.sceneRuntime.buttonText') }}</span>
+                      <n-text depth="3" class="content-runtime-label__hint">{{ t('nodeEditor.sceneRuntime.buttonTextHint') }}</n-text>
                     </div>
                   </template>
                   <n-input
                     v-model:value="sceneDraft.button_text"
                     @input="applyScene"
                     clearable
-                    placeholder="例如：启动机关"
+                    :placeholder="t('nodeEditor.sceneRuntime.buttonTextPlaceholder')"
                   />
                 </n-form-item>
 
                 <n-form-item>
                   <template #label>
-                    <div class="unity-label">
-                      <span>外部触发事件</span>
-                      <n-text depth="3" class="unity-label__hint">非玩家触碰触发时填写</n-text>
+                    <div class="content-runtime-label">
+                      <span>{{ t('nodeEditor.sceneRuntime.triggerEvent') }}</span>
+                      <n-text depth="3" class="content-runtime-label__hint">{{ t('nodeEditor.sceneRuntime.triggerEventHint') }}</n-text>
                     </div>
                   </template>
                   <n-input
                     v-model:value="sceneDraft.trigger_event"
                     @input="applyScene"
                     clearable
-                    placeholder="例如：battle.end.camp_01"
+                    :placeholder="t('nodeEditor.sceneRuntime.triggerEventPlaceholder')"
                   />
                 </n-form-item>
 
                 <n-form-item>
                   <template #label>
-                    <div class="unity-label">
-                      <span>播放优先级</span>
-                      <n-text depth="3" class="unity-label__hint">多场景同时满足时数值越大越先触发</n-text>
+                    <div class="content-runtime-label">
+                      <span>{{ t('nodeEditor.sceneRuntime.priority') }}</span>
+                      <n-text depth="3" class="content-runtime-label__hint">{{ t('nodeEditor.sceneRuntime.priorityHint') }}</n-text>
                     </div>
                   </template>
                   <n-input-number
@@ -149,24 +188,24 @@
 
                 <n-form-item>
                   <template #label>
-                    <div class="unity-label">
-                      <span>一次性标记键</span>
-                      <n-text depth="3" class="unity-label__hint">场景完成后自动写入状态，防重放</n-text>
+                    <div class="content-runtime-label">
+                      <span>{{ t('nodeEditor.sceneRuntime.onceKey') }}</span>
+                      <n-text depth="3" class="content-runtime-label__hint">{{ t('nodeEditor.sceneRuntime.onceKeyHint') }}</n-text>
                     </div>
                   </template>
                   <n-input
                     v-model:value="sceneDraft.once_key"
                     @input="applyScene"
                     clearable
-                    placeholder="例如：cutscene.windrise_intro"
+                    :placeholder="t('nodeEditor.sceneRuntime.onceKeyPlaceholder')"
                   />
                 </n-form-item>
 
                 <n-form-item>
                   <template #label>
-                    <div class="unity-label">
-                      <span>隐藏场景</span>
-                      <n-text depth="3" class="unity-label__hint">开启后不在触发列表中显示，仅可由条件或事件激活</n-text>
+                    <div class="content-runtime-label">
+                      <span>{{ t('nodeEditor.sceneRuntime.hiddenScene') }}</span>
+                      <n-text depth="3" class="content-runtime-label__hint">{{ t('nodeEditor.sceneRuntime.hiddenSceneHint') }}</n-text>
                     </div>
                   </template>
                   <n-switch v-model:value="sceneDraft.hiden" @update:value="applyScene" />
@@ -174,9 +213,9 @@
 
                 <n-form-item>
                   <template #label>
-                    <div class="unity-label">
-                      <span>触发条件</span>
-                      <n-text depth="3" class="unity-label__hint">满足条件才可见/可触发</n-text>
+                    <div class="content-runtime-label">
+                      <span>{{ t('nodeEditor.sceneRuntime.conditions') }}</span>
+                      <n-text depth="3" class="content-runtime-label__hint">{{ t('nodeEditor.sceneRuntime.conditionsHint') }}</n-text>
                     </div>
                   </template>
                   <conditions-editor
@@ -188,9 +227,9 @@
 
                 <n-form-item>
                   <template #label>
-                    <div class="unity-label">
-                      <span>场景完成后状态写入</span>
-                      <n-text depth="3" class="unity-label__hint">场景结束后写回状态（不触发函数，只记状态）</n-text>
+                    <div class="content-runtime-label">
+                      <span>{{ t('nodeEditor.sceneRuntime.effects') }}</span>
+                      <n-text depth="3" class="content-runtime-label__hint">{{ t('nodeEditor.sceneRuntime.effectsHint') }}</n-text>
                     </div>
                   </template>
                   <effects-editor
@@ -200,7 +239,8 @@
                   />
                 </n-form-item>
 
-              </n-form>
+                </n-form>
+              </div>
             </n-collapse-item>
           </n-collapse>
         </n-form>
@@ -286,11 +326,11 @@
               <template #header>
                 <span class="unity-collapse-title">
                   <n-icon :component="Gamepad2" size="16" />
-                  <span>Unity 行为绑定</span>
+                  <span>{{ t('nodeEditor.actBinding') }}</span>
                 </span>
               </template>
               <template #header-extra>
-                <SparkTag v-if="currentActCount > 0" type="info" size="small">{{ currentActCount }} 个</SparkTag>
+                <SparkTag v-if="currentActCount > 0" type="info" size="small">{{ t('nodeEditor.actCount', { count: currentActCount }) }}</SparkTag>
               </template>
 
               <!-- ActEditor 组件 -->
@@ -351,10 +391,11 @@
 </template>
 
 <script setup lang="ts">
-import { computed, reactive, ref, watch, getCurrentInstance, onMounted, onBeforeUnmount } from 'vue';
+import { computed, reactive, ref, watch, onMounted, onBeforeUnmount, type Component } from 'vue';
 import { NCard, NForm, NFormItem, NInput, NInputNumber, NSwitch, NSelect, NButton, NIcon, NDivider, NSpace, NPopconfirm, NEmpty, NCollapse, NCollapseItem, NText } from 'naive-ui';
 import SparkTag from '../share/SparkTag.vue';
-import { ArrowDown, ChartColumn, CircleDot, CircleHelp, CirclePlus, Film, Gamepad2, MessageCircle, Plus, Trash, User } from '@lucide/vue';
+import { ArrowDown, CircleDot, CircleHelp, CirclePlus, Film, Flag, Gamepad2, Layers3, MessageCircle, PanelTopOpen, Plus, RadioTower, Route, Trash } from '@lucide/vue';
+import { useI18n } from 'vue-i18n';
 import bus from '@/eventBus';
 import ConditionsEditor from './ConditionsEditor.vue';
 import EffectsEditor from './EffectsEditor.vue';
@@ -365,9 +406,11 @@ import { useFileStore } from '@/components/stores/fileStore';
 import { useCharacterStore } from '@/components/stores/characterStore';
 import { useActionBindingStore } from '@/components/stores/actionBindingStore';
 import MarkdownRenderer from '@/components/share/MarkdownRenderer.vue';
-import type { ArcDialogueNode, ArcOptionNode, ArcScene, SceneEffectItem } from '@/services/arcParser';
+import type { ArcDialogueNode, ArcOptionNode, ArcScene } from '@/services/arcParser';
 import { autoSaveEnabled } from '@/utils/autoSaveState';
+import { getSceneRuntimeSummary, type SceneContentKind } from '@/utils/sceneContentRuntime';
 
+const { t } = useI18n();
 const sceneStore = useSceneStore();
 const projectStore = useProjectStore();
 const fileStore = useFileStore();
@@ -399,8 +442,6 @@ const sceneSelectOptions = computed(() =>
     .filter(Boolean)
     .map(name => ({ label: name, value: name }))
 );
-const vm = getCurrentInstance();
-
 async function maybeAutoSave() {
   if (!autoSaveEnabled.value) return;
   if (!fileStore.selectedFile?.path || !projectStore.currentProject) return;
@@ -459,6 +500,146 @@ const sceneDraft = reactive<{
   conditions: null,
   effects: null,
 });
+
+type SparkTagType = 'primary' | 'info' | 'success' | 'warning' | 'danger' | 'error' | 'default';
+
+type SceneContentKindOption = {
+  kind: SceneContentKind;
+  icon: Component;
+  label: string;
+  description: string;
+};
+
+const contentKindOptions = computed<SceneContentKindOption[]>(() => [
+  {
+    kind: 'mainline',
+    icon: Route,
+    label: contentKindLabel('mainline'),
+    description: t('nodeEditor.sceneRuntime.kind.mainline.description'),
+  },
+  {
+    kind: 'side',
+    icon: Flag,
+    label: contentKindLabel('side'),
+    description: t('nodeEditor.sceneRuntime.kind.side.description'),
+  },
+  {
+    kind: 'panel',
+    icon: PanelTopOpen,
+    label: contentKindLabel('panel'),
+    description: t('nodeEditor.sceneRuntime.kind.panel.description'),
+  },
+  {
+    kind: 'system',
+    icon: RadioTower,
+    label: contentKindLabel('system'),
+    description: t('nodeEditor.sceneRuntime.kind.system.description'),
+  },
+]);
+
+const sceneRuntimeSummary = computed(() => getSceneRuntimeSummary(sceneDraft));
+
+const sceneRuntimeChips = computed<Array<{ key: string; label: string; type: SparkTagType }>>(() => {
+  const summary = sceneRuntimeSummary.value;
+  const chips: Array<{ key: string; label: string; type: SparkTagType }> = [
+    {
+      key: 'visibility',
+      label: summary.hidden ? t('nodeEditor.sceneRuntime.hidden') : t('nodeEditor.sceneRuntime.visible'),
+      type: summary.hidden ? 'warning' : 'success',
+    },
+  ];
+  if (summary.triggerEvent) {
+    chips.push({
+      key: 'trigger',
+      label: t('nodeEditor.sceneRuntime.summaryTrigger', { value: summary.triggerEvent }),
+      type: 'primary',
+    });
+  }
+  if (summary.buttonText) {
+    chips.push({
+      key: 'button',
+      label: t('nodeEditor.sceneRuntime.summaryButton', { value: summary.buttonText }),
+      type: 'primary',
+    });
+  }
+  if (summary.priority > 0) {
+    chips.push({
+      key: 'priority',
+      label: t('nodeEditor.sceneRuntime.summaryPriority', { value: summary.priority }),
+      type: 'warning',
+    });
+  }
+  if (summary.onceKey) {
+    chips.push({
+      key: 'once',
+      label: t('nodeEditor.sceneRuntime.summaryOnce', { value: summary.onceKey }),
+      type: 'default',
+    });
+  }
+  chips.push({
+    key: 'conditions',
+    label: t('nodeEditor.sceneRuntime.summaryConditions', { count: summary.conditionCount }),
+    type: summary.conditionCount > 0 ? 'warning' : 'default',
+  });
+  chips.push({
+    key: 'effects',
+    label: t('nodeEditor.sceneRuntime.summaryEffects', { count: summary.effectCount }),
+    type: summary.effectCount > 0 ? 'success' : 'default',
+  });
+  return chips;
+});
+
+function contentKindLabel(kind: SceneContentKind) {
+  return t(`nodeEditor.sceneRuntime.kind.${kind}.label`);
+}
+
+function contentKindTagType(kind: SceneContentKind): SparkTagType {
+  if (kind === 'mainline') return 'success';
+  if (kind === 'side') return 'warning';
+  if (kind === 'panel') return 'primary';
+  return 'danger';
+}
+
+function sceneRuntimeSeed() {
+  const scenes = Array.isArray(sceneStore.scriptData) ? sceneStore.scriptData : [];
+  const index = sceneStore.currentScene ? scenes.indexOf(sceneStore.currentScene as any) + 1 : 0;
+  const raw = (sceneDraft.scene || `scene-${index || 1}`).trim().toLowerCase();
+  const slug = raw
+    .replace(/[^a-z0-9]+/g, '.')
+    .replace(/^\.+|\.+$/g, '')
+    .replace(/\.+/g, '.');
+  return slug || `scene.${index || Date.now().toString(36)}`;
+}
+
+function applyContentKindPreset(kind: SceneContentKind) {
+  const seed = sceneRuntimeSeed();
+  if (kind === 'mainline') {
+    sceneDraft.button_text = '';
+    sceneDraft.trigger_event = '';
+    sceneDraft.priority = 0;
+    sceneDraft.once_key = '';
+    sceneDraft.hiden = false;
+    sceneDraft.conditions = null;
+    sceneDraft.effects = null;
+  } else if (kind === 'side') {
+    sceneDraft.button_text = '';
+    sceneDraft.trigger_event = '';
+    sceneDraft.priority = 0;
+    sceneDraft.hiden = false;
+    if (!sceneDraft.once_key.trim()) sceneDraft.once_key = `side.${seed}`;
+  } else if (kind === 'panel') {
+    sceneDraft.trigger_event = '';
+    sceneDraft.priority = 0;
+    sceneDraft.hiden = true;
+    if (!sceneDraft.button_text.trim()) sceneDraft.button_text = t('nodeEditor.sceneRuntime.panelButtonDefault');
+  } else {
+    sceneDraft.button_text = '';
+    sceneDraft.hiden = true;
+    if (!sceneDraft.trigger_event.trim()) sceneDraft.trigger_event = `event.${seed}`;
+    if (!Number.isFinite(Number(sceneDraft.priority)) || Number(sceneDraft.priority) < 1) sceneDraft.priority = 1;
+  }
+  applyScene();
+}
 
 watch([
   () => sceneStore.currentScene,
@@ -532,9 +713,6 @@ function applyDialogue() {
   });
   debouncedAutoSave();
 }
-
-// 场景名选项（用于 next 选择）
-const sceneNameOptions = computed(() => (Array.isArray(sceneStore.scriptData) ? sceneStore.scriptData : []).map(s => s?.scene).filter(Boolean));
 
 // ──────────────────────────────────────────
 // 行为(act)编辑 — 委托给 ActEditor 组件
@@ -780,18 +958,121 @@ watch(
   white-space: nowrap;
 }
 
-/* Unity 配置区 label：标题与说明横向排列，窄宽度下说明可换行但标题不拆 */
-.unity-label {
+.content-runtime-title {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  font-size: var(--spark-fs-sm);
+  font-weight: 650;
+  color: var(--spark-text);
+  white-space: nowrap;
+}
+
+.content-runtime-panel {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  min-width: 0;
+}
+
+.content-runtime-lede {
+  margin: 0;
+  color: var(--spark-text-muted);
+  font-size: var(--spark-fs-xs);
+  line-height: 1.5;
+}
+
+.content-kind-grid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 8px;
+}
+
+.content-kind-card {
+  min-width: 0;
+  min-height: 84px;
+  display: flex;
+  align-items: flex-start;
+  gap: 8px;
+  padding: 9px;
+  border: 1px solid color-mix(in srgb, var(--spark-border), transparent 8%);
+  border-radius: 8px;
+  background: color-mix(in srgb, var(--spark-bg) 46%, transparent);
+  color: var(--spark-text);
+  cursor: pointer;
+  text-align: left;
+  transition: border-color 0.16s ease, background 0.16s ease, transform 0.16s ease;
+}
+
+.content-kind-card:hover,
+.content-kind-card.is-active {
+  border-color: color-mix(in srgb, var(--spark-primary), transparent 36%);
+  background: color-mix(in srgb, var(--spark-primary), transparent 90%);
+}
+
+.content-kind-card:active {
+  transform: translateY(1px);
+}
+
+.content-kind-card__icon {
+  flex: 0 0 auto;
+  width: 24px;
+  height: 24px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  border-radius: 7px;
+  background: color-mix(in srgb, var(--spark-primary), transparent 88%);
+  color: var(--spark-primary);
+}
+
+.content-kind-card__body {
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+
+.content-kind-card__body strong {
+  font-size: var(--spark-fs-xs);
+  font-weight: 650;
+  line-height: 1.2;
+}
+
+.content-kind-card__body small {
+  color: var(--spark-text-muted);
+  font-size: var(--spark-fs-3xs);
+  line-height: 1.35;
+}
+
+.content-runtime-summary {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  min-width: 0;
+}
+
+.content-runtime-summary :deep(.spark-tag) {
+  max-width: 100%;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.content-runtime-fields {
+  gap: 8px !important;
+}
+
+.content-runtime-label {
   display: flex;
   align-items: baseline;
   flex-wrap: wrap;
   gap: 2px 8px;
 }
-.unity-label > span {
+.content-runtime-label > span {
   font-weight: 500;
   white-space: nowrap;
 }
-.unity-label__hint {
+.content-runtime-label__hint {
   font-size: var(--spark-fs-2xs);
   font-weight: normal;
   line-height: 1.4;

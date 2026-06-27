@@ -1,7 +1,16 @@
 
 import { ref, onMounted, onActivated, computed, watch } from 'vue';
 import { useMessage } from 'naive-ui';
-import { analyzeStyleStream, getStyles, deleteStyle, applyStyle, setDefaultStyle } from '../services/aiService';
+import { useI18n } from 'vue-i18n';
+import {
+    analyzeStyleStream,
+    getStyles,
+    deleteStyle,
+    applyStyle,
+    setDefaultStyle,
+    exportStyleProfile,
+    importStyleProfile,
+} from '../services/aiService';
 import { getStyleProfile, getStyleProfileMeta } from '../services/storyService';
 import { useProjectStore } from '../components/stores/projectStore';
 import { createStreamingTask, isAbortLikeError } from '@/utils/streamingRuntime';
@@ -35,10 +44,13 @@ const currentAnalysisTask = ref<StyleAnalysisTask | null>(null);
 export function useStyleLogic() {
     const projectStore = useProjectStore();
     const message = useMessage();
+    const { t } = useI18n();
 
     // State
     const styles = ref<string[]>([]);
     const isLoadingList = ref(false);
+    const isImportingStyleProfile = ref(false);
+    const styleProfileImportInput = ref<HTMLInputElement | null>(null);
     const showCreateModal = ref(false);
     const showDetailsDrawer = ref(false);
     const selectedStyleName = ref('');
@@ -214,6 +226,42 @@ export function useStyleLogic() {
             await loadStyles();
         } catch (e: unknown) {
             message.error('删除失败: ' + getErrorMessage(e));
+        }
+    };
+
+    const handleExportStyle = async (styleName: string) => {
+        if (!styleName) return;
+        try {
+            await exportStyleProfile(styleName);
+            message.success(t('views.style.messages.exportSuccess', { name: styleName }));
+        } catch (e: unknown) {
+            message.error(t('views.style.messages.exportFailed', { reason: getErrorMessage(e) }));
+        }
+    };
+
+    const triggerStyleProfileImport = () => {
+        styleProfileImportInput.value?.click();
+    };
+
+    const handleStyleProfileImportFile = async (event: Event) => {
+        const input = event.target as HTMLInputElement | null;
+        const file = input?.files?.[0];
+        if (input) input.value = '';
+        if (!file) return;
+        if (!file.name.toLowerCase().endsWith('.json')) {
+            message.warning(t('views.style.messages.importJsonOnly'));
+            return;
+        }
+
+        isImportingStyleProfile.value = true;
+        try {
+            const result = await importStyleProfile(file);
+            await loadStyles();
+            message.success(t('views.style.messages.importSuccess', { name: result.style_name || file.name }));
+        } catch (e: unknown) {
+            message.error(t('views.style.messages.importFailed', { reason: getErrorMessage(e) }));
+        } finally {
+            isImportingStyleProfile.value = false;
         }
     };
 
@@ -430,6 +478,8 @@ export function useStyleLogic() {
     return {
         styles,
         isLoadingList,
+        isImportingStyleProfile,
+        styleProfileImportInput,
         showCreateModal,
         showDetailsDrawer,
         selectedStyleName,
@@ -454,6 +504,9 @@ export function useStyleLogic() {
         openCreateModal,
         openStyleDetails,
         handleDelete,
+        handleExportStyle,
+        triggerStyleProfileImport,
+        handleStyleProfileImportFile,
         handleApplyToProject,
         handleImportedFile,
         handleInvalidImportedFile,

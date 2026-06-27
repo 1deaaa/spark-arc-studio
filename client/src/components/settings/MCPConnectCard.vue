@@ -7,7 +7,7 @@
         <span class="title">{{ t('components.mcpConnectCard.title') }}</span>
         <div class="header-controls">
            <SparkTag :type="hasKey ? 'success' : 'default'" size="small">
-             {{ hasKey ? 'Running' : 'Not Configured' }}
+             {{ hasKey ? t('components.mcpConnectCard.running') : t('components.mcpConnectCard.notConfigured') }}
            </SparkTag>
            <n-icon size="20" :component="ChevronDown" class="fold-icon" :class="{ folded: isFolded }" />
         </div>
@@ -23,7 +23,7 @@
             <!-- API Key Section -->
             <div class="key-section">
                 <div class="section-label">{{ t('components.mcpConnectCard.yourApiKey') }}</div>
-                <n-input-group>
+                <n-input-group class="key-input-group">
                     <n-input 
                         :value="displayKey" 
                         readonly 
@@ -47,7 +47,7 @@
             <!-- Config Guide -->
             <div class="guide-section">
                 <n-tabs type="segment" v-model:value="activeTab" size="small" class="config-tabs spark-segment-tabs">
-                    <n-tab-pane name="json" tab="JSON">
+                    <n-tab-pane name="json" :tab="t('components.mcpConnectCard.jsonConfig')">
                         <div class="code-wrapper">
                             <n-code :code="claudeConfigJson" language="json" word-wrap />
                             <n-button size="tiny" secondary class="copy-btn" @click="copyText(claudeConfigJson)">
@@ -59,18 +59,18 @@
                     <n-tab-pane name="cursor" :tab="t('components.mcpConnectCard.textConfig')">
                          <div class="info-block">
                             <n-descriptions label-placement="left" size="small" :column="1" :label-style="{ width: '50px' }">
-                                <n-descriptions-item label="Type">
-                                    Streamable HTTP (SSE)
+                                <n-descriptions-item :label="t('components.mcpConnectCard.typeLabel')">
+                                    {{ t('components.mcpConnectCard.streamableHttp') }}
                                 </n-descriptions-item>
-                                <n-descriptions-item label="URL">
+                                <n-descriptions-item :label="t('components.mcpConnectCard.urlLabel')">
                                     <n-input-group style="width: 100%">
-                                        <n-input :value="mcpUrl" readonly size="small" style="flex: 1; min-width: 300px; font-family: var(--spark-mono);" />
+                                        <n-input :value="mcpUrl" readonly size="small" class="mcp-config-input" />
                                         <n-button size="small" @click="copyText(mcpUrl)">
                                             <template #icon><n-icon :component="Copy" /></template>
                                         </n-button>
                                     </n-input-group>
                                 </n-descriptions-item>
-                                <n-descriptions-item label="Headers">
+                                <n-descriptions-item :label="t('components.mcpConnectCard.headersLabel')">
                                     <n-input-group style="width: 100%">
                                         <n-input
                                             type="textarea"
@@ -78,7 +78,7 @@
                                             :value="`Authorization=${apiKey || 'YOUR_KEY'}`"
                                             readonly
                                             size="small"
-                                            style="flex: 1; min-width: 300px; font-family: var(--spark-mono);"
+                                            class="mcp-config-input"
                                         />
                                         <n-button size="small" style="height: auto" @click="copyText(`Authorization=${apiKey}`)">
                                             <template #icon><n-icon :component="Copy" /></template>
@@ -183,7 +183,7 @@ function copyKey() {
     message.success(t('components.mcpConnectCard.keyCopied'));
 }
 
-function copyText(text) {
+function copyText(text: string) {
     navigator.clipboard.writeText(text);
     message.success(t('components.mcpConnectCard.copied'));
 }
@@ -243,6 +243,10 @@ onMounted(() => {
     margin-bottom: 20px;
 }
 
+.key-input-group {
+    width: 100%;
+}
+
 .section-label {
     font-size: var(--spark-fs-xs);
     color: var(--spark-text-muted);
@@ -270,5 +274,76 @@ onMounted(() => {
 
 .mt-2 {
     margin-top: 8px;
+}
+
+.mcp-config-input {
+    flex: 1;
+    min-width: 0;
+    font-family: var(--spark-mono);
+}
+
+@media (max-width: 720px) {
+    .mcp-card {
+        margin-bottom: 0;
+    }
+
+    .card-header {
+        gap: 8px;
+    }
+
+    .card-header .title {
+        min-width: 0;
+        overflow: hidden;
+        text-overflow: ellipsis;
+        white-space: nowrap;
+    }
+
+    .header-controls {
+        gap: 8px;
+        flex-shrink: 0;
+    }
+
+    .card-content {
+        padding-top: 8px;
+    }
+
+    .desc-alert {
+        margin-bottom: 12px;
+    }
+
+    .key-section {
+        margin-bottom: 14px;
+    }
+
+    .key-input-group :deep(.n-input) {
+        min-width: 0;
+    }
+
+    .key-input-group :deep(.n-button) {
+        width: 40px;
+        padding: 0;
+        flex: 0 0 40px;
+    }
+
+    .guide-section {
+        padding-top: 12px;
+    }
+
+    .code-wrapper {
+        padding: 10px;
+        max-height: 260px;
+        overflow: auto;
+    }
+
+    .copy-btn {
+        position: sticky;
+        top: 0;
+        float: right;
+        margin-left: 8px;
+    }
+
+    .info-block :deep(.n-descriptions-table-wrapper) {
+        overflow: visible;
+    }
 }
 </style>

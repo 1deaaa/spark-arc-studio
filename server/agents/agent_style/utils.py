@@ -201,6 +201,45 @@ def get_style_filepath(author_id: str, user_id: str = None) -> Path:
     """构建作者风格文件的路径"""
     return get_user_style_dir(user_id) / f"{author_id}.json"
 
+
+def normalize_style_name(style_name: Any, fallback: str = "") -> str:
+    """规范化风格名称，避免导入/导出文件名穿越用户风格目录。"""
+    raw = str(style_name or "").strip()
+    if not raw:
+        raw = fallback
+    raw = str(raw or "").strip()
+    # Windows 文件名非法字符与路径分隔符统一替换，保留中文、空格与常见标点。
+    normalized = re.sub(r'[\\/:*?"<>|\x00-\x1f]+', "-", raw)
+    normalized = re.sub(r"\s+", " ", normalized).strip(" .")
+    if not normalized:
+        normalized = str(fallback or "").strip(" .")
+    return normalized[:120].strip(" .")
+
+
+def make_unique_style_name(user_id: str, preferred_name: str) -> str:
+    """基于期望名称生成用户风格库内不冲突的风格名。"""
+    base = normalize_style_name(preferred_name, fallback="导入风格") or "导入风格"
+    candidate = base
+    index = 2
+    while get_style_filepath(candidate, user_id).exists():
+        candidate = normalize_style_name(f"{base}-{index}", fallback=f"导入风格-{index}") or f"导入风格-{index}"
+        index += 1
+    return candidate
+
+
+def save_style_profile_to_file(style_name: str, style_profile: Dict, user_id: str = None) -> Path:
+    """保存风格档案 JSON，并返回写入路径。"""
+    safe_name = normalize_style_name(style_name, fallback="导入风格")
+    if not safe_name:
+        raise ValueError("风格名称不能为空")
+    if not isinstance(style_profile, dict) or not style_profile:
+        raise ValueError("风格档案内容为空或格式不正确")
+    filepath = get_style_filepath(safe_name, user_id)
+    filepath.parent.mkdir(parents=True, exist_ok=True)
+    with open(filepath, "w", encoding="utf-8") as f:
+        json.dump(style_profile, f, ensure_ascii=False, indent=2)
+    return filepath
+
 def get_project_style_binding_path(user_id: str, project_name: str) -> Path:
     """获取项目风格绑定文件路径"""
     project_path = Path(get_project_path(user_id, project_name))

@@ -297,6 +297,20 @@ async function handleSparkImport(file: File) {
       projectStore.setCurrentProject(newProjectName);
     }
     bus.emit('toast', { type: 'success', message: t('components.headerToolbar.importProjectSuccess', { name: newProjectName }) });
+    const importedStyle = result.importedStyle as { styleName?: string } | undefined;
+    if (importedStyle?.styleName) {
+      bus.emit('toast', {
+        type: 'success',
+        message: t('components.headerToolbar.importProjectStyleRestored', { name: importedStyle.styleName }),
+      });
+    }
+    const warnings = Array.isArray(result.warnings) ? result.warnings : [];
+    for (const warning of warnings) {
+      bus.emit('toast', {
+        type: 'warning',
+        message: t('components.headerToolbar.importProjectWarning', { reason: String(warning) }),
+      });
+    }
   } catch (e: unknown) {
     const errorMessage = e instanceof Error ? e.message : String(e || 'Unknown error');
     bus.emit('toast', { type: 'error', message: `${t('components.headerToolbar.importProjectFailed')}: ${errorMessage}` });

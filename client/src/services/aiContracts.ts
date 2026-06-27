@@ -13,7 +13,7 @@ export type StoryFileTreeNode = {
   format?: StoryFormat;
   filename?: string;
   meta?: JsonObject | null;
-  sortKey?: string | number;
+  sortKey?: string | number | Array<string | number | null> | null;
 };
 
 export type StoryFileContentResponse = {

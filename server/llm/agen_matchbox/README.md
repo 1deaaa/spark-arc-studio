@@ -1,6 +1,7 @@
 # 火柴Agent网关——为Agent而生的全功能大模型网关
-[简体中文](README.md) | [English](README.en.md) | [日本語](README.ja.md)
+[简体中文](README.md) | [English](README.en.md)
 
+![MatchGateway App](./app.png)
 ![MatchGateway App](./app.png)
 
 火柴Agent网关面向 Agent 开发而生，是一个功能强大且极其灵活的大模型路由与配额控制中心。**它轻量、无需部署，深度融入到 agent 开发管理中**。它面向当今最专业、最通用的 Agent 编排框架**LangChain/LangGraph**，但**可以非常轻松的迁移至AutoGen、CrewAI等其他同样强大的Agent框架**，仅需对你的Coding Assistant说一句话即可适配你的框架。
@@ -427,6 +428,10 @@ POST   /api/ai/admin/reload-from-yaml       # 从配置文件强制重置数据�
     - **⚠️ 严正警告：绝对禁止**将包含明文 API Key 的 `matchbox_key.yaml` 或 `.env` 文件提交到公共代码仓库（如 GitHub）。
     - **必须使用 `.gitignore`**：请确保项目根目录下的 `.gitignore` 文件中包含 `*.env`，以防止意外泄露。
     - **最佳实践**：始终使用环境变量。GUI 工具可以帮你轻松实现这一点。
+    - **💡 为什么需要加密密钥存储？（设计思路）**：
+      有些开发者可能会问：“既然我已经通过 `.gitignore` 忽略了敏感配置，为什么还需要加密解密这种多此一举的操作呢？”
+      实际上，这一设计的主要目的是**在发生意外泄露的情况下，提升被破解的成本**。目前互联网上 99.9% 的 API 密钥泄露，都是由恶意脚本使用正则表达式自动扫描明文搜出来的。
+      如果发生了泄露，且主密钥（`LLM_KEY`）和加密后的密钥文件同时暴露，真人或有针对性的 AI 确实能够破解它。但这已经极大地增加了攻击者的成本，能够完美规避绝大多数普通泄露被自动化机器人直接扫出明文的情况。
 
 3. **数据库文件**
     - 默认会在同目录下生成 `llm_config.db`。这是一个 SQLite 文件，包含了所有用户数据和同步后的系统平台数据。请妥善保管。
@@ -694,7 +699,7 @@ CrewAI 仍然高度兼容 LangChain 对象，但它也提供了原生 `LLM` 类�
   )
   ```
 
-### 3. 完全去 LangChain 化 (推荐方案)
+### 3. 完全去 LangChain 化
 
 如果你想做一个完全不依赖 LangChain 的通用后端，推荐使用 **LiteLLM** 作为中间件：
 
@@ -707,5 +712,3 @@ CrewAI 仍然高度兼容 LangChain 对象，但它也提供了原生 `LLM` 类�
 ## 📄 许可证
 
 火柴 Agent 网关按本目录内 `LICENSE` 以 Apache License 2.0 单独授权，可作为独立组件复用。
-
-该授权仅适用于 `server/llm/agen_matchbox` 目录中明确受其覆盖的组件，不改变 SparkArc 主项目其他部分的 AGPL-3.0-only 授权。

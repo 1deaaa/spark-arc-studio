@@ -151,15 +151,15 @@
     <input type="file" ref="importSparkInput" @change="onSparkFileChange" accept=".spark" style="display:none;">
 
     <!-- 设置抽屉 (包含 AI配置、风格、引擎等辅助功能) -->
-    <n-drawer v-model:show="settingsDrawerVisible" placement="bottom" height="90%">
-      <n-drawer-content closable>
+    <n-drawer v-model:show="settingsDrawerVisible" placement="bottom" height="90%" class="mobile-settings-drawer">
+      <n-drawer-content closable :native-scrollbar="false">
         <template #header>
           <div class="drawer-header">
             <span>{{ t('mobileFlow.drawer.title') }}</span>
           </div>
         </template>
         
-        <n-tabs type="line" animated>
+        <n-tabs type="segment" :animated="false" class="mobile-settings-tabs spark-segment-tabs">
           <n-tab-pane name="settings" :tab="t('mobileFlow.drawer.tabs.settings')">
             <SettingsMobile />
           </n-tab-pane>
@@ -395,6 +395,20 @@ async function handleSparkImport(file: File) {
       projectStore.setCurrentProject(newProjectName);
     }
     bus.emit('toast', { type: 'success', message: t('components.headerToolbar.importProjectSuccess', { name: newProjectName }) });
+    const importedStyle = result.importedStyle as { styleName?: string } | undefined;
+    if (importedStyle?.styleName) {
+      bus.emit('toast', {
+        type: 'success',
+        message: t('components.headerToolbar.importProjectStyleRestored', { name: importedStyle.styleName }),
+      });
+    }
+    const warnings = Array.isArray(result.warnings) ? result.warnings : [];
+    for (const warning of warnings) {
+      bus.emit('toast', {
+        type: 'warning',
+        message: t('components.headerToolbar.importProjectWarning', { reason: String(warning) }),
+      });
+    }
   } catch (e: unknown) {
     const errorMessage = e instanceof Error ? e.message : String(e || 'Unknown error');
     bus.emit('toast', { type: 'error', message: `${t('components.headerToolbar.importProjectFailed')}: ${errorMessage}` });
@@ -696,6 +710,16 @@ onUnmounted(() => {
   padding: 0 8px !important;
 }
 
+.mobile-settings-drawer :deep(.n-drawer-body) {
+  min-height: 0;
+}
+
+.mobile-settings-drawer :deep(.n-drawer-body-content-wrapper) {
+  height: 100%;
+  min-height: 0;
+  overflow: hidden;
+}
+
 :deep(.n-tabs-nav) {
   padding: 0 4px;
 }
@@ -714,5 +738,28 @@ onUnmounted(() => {
 :deep(.n-tab-pane) {
   padding: 12px 0;
   padding-bottom: 100px;
+}
+
+.mobile-settings-tabs {
+  height: 100%;
+  min-height: 0;
+  display: flex;
+  flex-direction: column;
+}
+
+.mobile-settings-tabs :deep(.n-tabs-nav) {
+  flex: 0 0 auto;
+  padding: 8px 0 6px;
+}
+
+.mobile-settings-tabs :deep(.n-tabs-pane-wrapper) {
+  flex: 1 1 auto;
+  min-height: 0;
+  overflow-y: auto;
+  -webkit-overflow-scrolling: touch;
+}
+
+.mobile-settings-tabs :deep(.n-tab-pane) {
+  padding: 8px 0 calc(84px + var(--sab, 0px));
 }
 </style>

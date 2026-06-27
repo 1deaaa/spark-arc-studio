@@ -1,16 +1,41 @@
 <template>
   <div class="blueprint-mobile-new">
-    <!-- 文件选择 -->
-    <div class="file-selector-bar">
-      <n-select
-        v-model:value="selectedFilePath"
-        :options="groupedStoryOptions"
-        :placeholder="t('views.blueprint.mobileNew.selectFile')"
-        size="small"
-        clearable
-        @update:value="handleFileChange"
-      />
-    </div>
+    <section class="blueprint-check-panel">
+      <div class="blueprint-heading">
+        <div class="blueprint-copy">
+          <span class="blueprint-kicker">{{ t('views.blueprint.mobileNew.checkerKicker') }}</span>
+          <h3>{{ t('views.blueprint.mobileNew.checkerTitle') }}</h3>
+          <p>{{ t('views.blueprint.mobileNew.checkerSubtitle') }}</p>
+        </div>
+        <SparkTag type="info" size="small">{{ t('views.blueprint.mobileNew.readOnlyBadge') }}</SparkTag>
+      </div>
+
+      <div class="file-selector-bar">
+        <n-select
+          v-model:value="selectedFilePath"
+          :options="groupedStoryOptions"
+          :placeholder="t('views.blueprint.mobileNew.selectFile')"
+          size="small"
+          clearable
+          @update:value="handleFileChange"
+        />
+      </div>
+
+      <div class="blueprint-stats">
+        <div class="blueprint-stat">
+          <span>{{ t('views.blueprint.mobileNew.sceneCount') }}</span>
+          <strong>{{ relationStats.sceneCount }}</strong>
+        </div>
+        <div class="blueprint-stat">
+          <span>{{ t('views.blueprint.mobileNew.jumpCount') }}</span>
+          <strong>{{ relationStats.jumpCount }}</strong>
+        </div>
+        <div class="blueprint-stat">
+          <span>{{ t('views.blueprint.mobileNew.isolatedCount') }}</span>
+          <strong>{{ relationStats.isolatedCount }}</strong>
+        </div>
+      </div>
+    </section>
 
     <!-- 场景关系列表 -->
     <div v-if="scenes.length > 0" class="scene-relation-list">
@@ -30,6 +55,9 @@
               <SparkTag v-if="scene.dia?.length" type="info" size="small">{{ scene.dia.length }} {{ t('views.blueprint.mobileNew.dialogues') }}</SparkTag>
             </div>
           </div>
+          <n-button text size="tiny" class="open-writing-btn" @click.stop="openSceneInProduction(scene)">
+            {{ t('views.blueprint.mobileNew.openInWriting') }}
+          </n-button>
         </div>
 
         <!-- 连线指示器：显示跳转关系 -->
@@ -38,7 +66,6 @@
             v-for="jump in getSceneJumps(scene)"
             :key="jump.target"
             class="jump-indicator"
-            @click.stop="editJump(scene, jump)"
           >
             <n-icon :component="ArrowRight" size="14" />
             <span class="jump-target">{{ jump.target }}</span>
@@ -46,6 +73,9 @@
               {{ jump.type === 'option' ? t('views.blueprint.mobileNew.optionJump') : t('views.blueprint.mobileNew.directJump') }}
             </n-tag>
           </div>
+        </div>
+        <div v-else class="no-jump-hint">
+          {{ t('views.blueprint.mobileNew.noJump') }}
         </div>
 
         <!-- 连接线 -->
@@ -59,77 +89,40 @@
         <template #icon>
           <n-icon :component="GitBranch" size="48" />
         </template>
+        <template #extra>
+          <n-button type="primary" secondary size="small" @click="openSceneInProduction()">
+            {{ t('views.blueprint.mobileNew.goProduction') }}
+          </n-button>
+        </template>
       </n-empty>
     </div>
-
-    <!-- 新建场景 FAB -->
-    <button class="fab-add" @click="createScene" :disabled="!selectedFilePath">
-      <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-        <line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/>
-      </svg>
-    </button>
-
-    <!-- 跳转编辑抽屉 -->
-    <n-drawer v-model:show="showJumpEditor" placement="bottom" height="40%">
-      <n-drawer-content closable>
-        <template #header>{{ t('views.blueprint.mobileNew.editJump') }}</template>
-        <div v-if="editingJumpScene" class="jump-editor-form">
-          <div class="form-item">
-            <label>{{ t('views.blueprint.mobileNew.sourceScene') }}</label>
-            <n-input :value="editingJumpScene.scene" disabled />
-          </div>
-          <div class="form-item">
-            <label>{{ t('views.blueprint.mobileNew.jumpTarget') }}</label>
-            <n-select
-              v-model:value="editingJumpTarget"
-              :options="sceneNameOptions"
-              :placeholder="t('views.blueprint.mobileNew.selectJumpTarget')"
-              clearable
-            />
-          </div>
-          <n-button type="primary" block @click="saveJumpEdit">
-            {{ t('views.blueprint.mobileNew.saveJump') }}
-          </n-button>
-        </div>
-      </n-drawer-content>
-    </n-drawer>
   </div>
 </template>
 
 <script setup lang="ts">
-import { ref, computed, inject, watch, onMounted, type Ref } from 'vue';
-import { NSelect, NDrawer, NDrawerContent, NInput, NButton, NIcon, NEmpty, NTag } from 'naive-ui';
+import { ref, computed, inject, watch, onMounted, nextTick, type Ref } from 'vue';
+import { NButton, NIcon, NEmpty, NSelect, NTag } from 'naive-ui';
 import { ArrowRight, GitBranch } from '@lucide/vue';
 import { useI18n } from 'vue-i18n';
 import { useSceneStore, type SceneWithClientId } from '../../components/stores/sceneStore';
 import { useFileStore } from '../../components/stores/fileStore';
-import { useProjectStore } from '../../components/stores/projectStore';
+import { useViewStore } from '../../components/stores/viewStore';
 import SparkTag from '../../components/share/SparkTag.vue';
 import { useStoryFileOptions } from '../../composables/useStoryFileOptions';
 
 const { t } = useI18n();
 const sceneStore = useSceneStore();
 const fileStore = useFileStore();
-const projectStore = useProjectStore();
+const viewStore = useViewStore();
 const projectId = inject<Ref<string | null>>('projectId', ref<string | null>(null));
 
 const selectedFilePath = ref('');
 const selectedSceneName = ref<string | null>(null);
-const showJumpEditor = ref(false);
-const editingJumpScene = ref<SceneWithClientId | null>(null);
-const editingJumpTarget = ref('');
-const editingJumpSourceNodeId = ref('');
-
-type SelectOption = { label: string; value: string };
 
 const scenes = computed<SceneWithClientId[]>(() => Array.isArray(sceneStore.scriptData) ? sceneStore.scriptData : []);
 
-const { groupedOptions } = useStoryFileOptions(() => t('views.production.mobile.rootFiles'));
+const { flatOptions, groupedOptions } = useStoryFileOptions(() => t('views.production.mobile.rootFiles'));
 const groupedStoryOptions = computed(() => groupedOptions.value);
-
-const sceneNameOptions = computed<SelectOption[]>(() =>
-  scenes.value.map(s => ({ label: s.scene || '', value: s.scene || '' }))
-);
 
 // ── 跳转关系提取 ──
 type JumpInfo = { target: string; type: 'direct' | 'option'; sourceNodeId?: string };
@@ -161,6 +154,31 @@ function getSceneJumps(scene: SceneWithClientId): JumpInfo[] {
   });
 }
 
+const relationStats = computed(() => {
+  const names = scenes.value
+    .map(scene => scene.scene || '')
+    .filter(Boolean);
+  const linked = new Set<string>();
+  let jumpCount = 0;
+
+  scenes.value.forEach(scene => {
+    const jumps = getSceneJumps(scene);
+    jumpCount += jumps.length;
+    if (jumps.length > 0 && scene.scene) {
+      linked.add(scene.scene);
+    }
+    jumps.forEach(jump => {
+      if (jump.target) linked.add(jump.target);
+    });
+  });
+
+  return {
+    sceneCount: scenes.value.length,
+    jumpCount,
+    isolatedCount: names.filter(name => !linked.has(name)).length,
+  };
+});
+
 // ── 文件选择 ──
 async function handleFileChange(val: string | null) {
   if (!val || !projectId.value) return;
@@ -174,25 +192,13 @@ function selectScene(scene: SceneWithClientId) {
   sceneStore.selectScene(scene);
 }
 
-// ── 创建场景 ──
-async function createScene() {
-  if (!selectedFilePath.value) return;
-  const scene = await sceneStore.createNewScene();
+async function openSceneInProduction(scene?: SceneWithClientId) {
   if (scene) {
-    selectedSceneName.value = scene.scene || null;
+    selectScene(scene);
   }
-}
-
-// ── 跳转编辑 ──
-function editJump(scene: SceneWithClientId, jump: JumpInfo) {
-  editingJumpScene.value = scene;
-  editingJumpTarget.value = jump.target;
-  showJumpEditor.value = true;
-}
-
-function saveJumpEdit() {
-  // 跳转编辑目前是只读展示，后续可扩展修改 next 字段
-  showJumpEditor.value = false;
+  viewStore.setView('production');
+  await nextTick();
+  document.getElementById('step-5')?.scrollIntoView({ behavior: 'smooth', block: 'start' });
 }
 
 // ── 初始化 ──
@@ -201,6 +207,8 @@ onMounted(async () => {
     await fileStore.loadFileTree(projectId.value);
     if (fileStore.selectedFile?.path) {
       selectedFilePath.value = fileStore.selectedFile.path;
+    } else if (flatOptions.value[0]?.value) {
+      await handleFileChange(flatOptions.value[0].value);
     }
   }
 });
@@ -228,10 +236,85 @@ watch(() => fileStore.selectedFile?.path, (p) => {
   overflow: hidden;
 }
 
-.file-selector-bar {
-  padding: 8px 12px;
+.blueprint-check-panel {
+  flex: 0 0 auto;
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  padding: 12px;
   border-bottom: 1px solid var(--spark-border);
-  flex-shrink: 0;
+  background: color-mix(in srgb, var(--spark-panel-bg) 94%, var(--spark-primary) 6%);
+}
+
+.blueprint-heading {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 12px;
+}
+
+.blueprint-copy {
+  min-width: 0;
+}
+
+.blueprint-kicker {
+  display: block;
+  margin-bottom: 2px;
+  font-size: var(--spark-fs-3xs);
+  font-weight: 700;
+  color: var(--spark-primary);
+}
+
+.blueprint-copy h3 {
+  margin: 0;
+  font-size: var(--spark-fs-md);
+  font-weight: 650;
+  color: var(--spark-text);
+}
+
+.blueprint-copy p {
+  margin: 3px 0 0;
+  font-size: var(--spark-fs-xs);
+  line-height: 1.45;
+  color: var(--spark-text-muted);
+}
+
+.file-selector-bar {
+  min-width: 0;
+}
+
+.blueprint-stats {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 8px;
+}
+
+.blueprint-stat {
+  min-width: 0;
+  padding: 8px 10px;
+  border: 1px solid color-mix(in srgb, var(--spark-border) 80%, transparent);
+  border-radius: 8px;
+  background: color-mix(in srgb, var(--spark-bg) 38%, transparent);
+}
+
+.blueprint-stat span,
+.blueprint-stat strong {
+  display: block;
+  min-width: 0;
+  overflow: hidden;
+  white-space: nowrap;
+  text-overflow: ellipsis;
+}
+
+.blueprint-stat span {
+  font-size: var(--spark-fs-3xs);
+  color: var(--spark-text-muted);
+}
+
+.blueprint-stat strong {
+  margin-top: 2px;
+  font-size: var(--spark-fs-xs);
+  color: var(--spark-text);
 }
 
 .scene-relation-list {
@@ -303,6 +386,12 @@ watch(() => fileStore.selectedFile?.path, (p) => {
   flex-wrap: wrap;
 }
 
+.open-writing-btn {
+  flex: 0 0 auto;
+  margin-top: -2px;
+  white-space: nowrap;
+}
+
 .jump-indicators {
   margin-top: 8px;
   padding-top: 8px;
@@ -321,16 +410,20 @@ watch(() => fileStore.selectedFile?.path, (p) => {
   border-radius: 6px;
   font-size: var(--spark-fs-xs);
   color: var(--spark-text);
-  cursor: pointer;
   transition: background 0.2s;
-}
-
-.jump-indicator:active {
-  background: rgba(var(--spark-primary-rgb), 0.15);
 }
 
 .jump-target {
   font-weight: 500;
+}
+
+.no-jump-hint {
+  margin-top: 8px;
+  padding: 7px 8px;
+  border-radius: 6px;
+  background: color-mix(in srgb, var(--spark-warning) 10%, transparent);
+  color: var(--spark-text-muted);
+  font-size: var(--spark-fs-xs);
 }
 
 .connector-line {
@@ -348,44 +441,13 @@ watch(() => fileStore.selectedFile?.path, (p) => {
   padding: 40px 20px;
 }
 
-.fab-add {
-  position: absolute;
-  bottom: 20px;
-  right: 20px;
-  width: 48px;
-  height: 48px;
-  border-radius: 50%;
-  background: var(--spark-primary);
-  color: white;
-  border: none;
-  box-shadow: 0 4px 12px rgba(0,0,0,0.2);
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  cursor: pointer;
-  z-index: 10;
-}
+@media (max-width: 380px) {
+  .blueprint-stats {
+    gap: 6px;
+  }
 
-.fab-add:disabled {
-  opacity: 0.4;
-  cursor: not-allowed;
-}
-
-.jump-editor-form {
-  display: flex;
-  flex-direction: column;
-  gap: 14px;
-}
-
-.form-item {
-  display: flex;
-  flex-direction: column;
-  gap: 6px;
-}
-
-.form-item label {
-  font-size: var(--spark-fs-sm);
-  font-weight: 600;
-  color: var(--spark-text-muted);
+  .blueprint-stat {
+    padding: 7px 8px;
+  }
 }
 </style>

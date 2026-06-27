@@ -12,6 +12,21 @@
         </div>
       </div>
       <div class="header-right spark-desktop-header__actions">
+        <input
+          ref="styleProfileImportInput"
+          class="hidden-file-input"
+          type="file"
+          accept=".json,application/json"
+          @change="handleStyleProfileImportFile"
+        />
+        <n-button
+          secondary
+          :loading="isImportingStyleProfile"
+          @click="triggerStyleProfileImport"
+        >
+          <template #icon><n-icon><Upload /></n-icon></template>
+          {{ t('views.style.common.importProfile') }}
+        </n-button>
         <n-button
           type="primary"
           :disabled="hasRunningAnalysis"
@@ -35,9 +50,15 @@
       <div v-else-if="styles.length === 0" class="empty-state">
         <n-empty :description="t('views.style.desktop.noStyles')" size="large">
           <template #extra>
-            <n-button type="primary" @click="openCreateModal">
-              {{ t('views.style.desktop.createFirstStyle') }}
-            </n-button>
+            <div class="empty-actions">
+              <n-button secondary :loading="isImportingStyleProfile" @click="triggerStyleProfileImport">
+                <template #icon><n-icon><Upload /></n-icon></template>
+                {{ t('views.style.common.importProfile') }}
+              </n-button>
+              <n-button type="primary" @click="openCreateModal">
+                {{ t('views.style.desktop.createFirstStyle') }}
+              </n-button>
+            </div>
           </template>
         </n-empty>
       </div>
@@ -57,7 +78,6 @@
           <div class="card-body">
             <div class="card-info">
               <h3>{{ style }}</h3>
-              <p class="card-meta">{{ t('views.style.mobile.tapToViewReport') }}</p>
             </div>
             <div class="card-actions">
                <n-button
@@ -77,12 +97,21 @@
                  secondary
                  :disabled="isDefaultStyle(style)"
                  @click.stop="handleSetDefault(style)"
+                >
+                  {{ isDefaultStyle(style) ? t('views.style.common.isDefault') : t('views.style.common.setDefault') }}
+                </n-button>
+               <n-button
+                 size="small"
+                 quaternary
+                 circle
+                 :title="t('views.style.common.exportProfile')"
+                 @click.stop="handleExportStyle(style)"
                >
-                 {{ isDefaultStyle(style) ? t('views.style.common.isDefault') : t('views.style.common.setDefault') }}
+                 <template #icon><n-icon><Download /></n-icon></template>
                </n-button>
-               <n-popconfirm @positive-click.stop="handleDelete(style)">
-                  <template #trigger>
-                    <n-button size="small" quaternary circle type="error" @click.stop>
+                <n-popconfirm @positive-click.stop="handleDelete(style)">
+                   <template #trigger>
+                     <n-button size="small" quaternary circle type="error" @click.stop>
                       <template #icon><n-icon><Trash /></n-icon></template>
                     </n-button>
                   </template>
@@ -129,15 +158,25 @@
       <n-drawer-content :title="selectedStyleName" closable>
         <!-- @vue-ignore -->
         <template #header-extra>
-           <n-button 
-             type="primary" 
-             size="small" 
-             @click="handleApplyToProject()"
-             :loading="isApplying && applyingStyleName === selectedStyleName"
-             :disabled="isApplying || isStyleAppliedToCurrentProject(selectedStyleName)"
-           >
-             {{ isStyleAppliedToCurrentProject(selectedStyleName) ? t('views.style.desktop.appliedToCurrentProject') : t('views.style.desktop.applyToCurrentProject') }}
-           </n-button>
+          <div class="drawer-header-actions">
+            <n-button
+              secondary
+              size="small"
+              @click="handleExportStyle(selectedStyleName)"
+            >
+              <template #icon><n-icon><Download /></n-icon></template>
+              {{ t('views.style.common.exportProfile') }}
+            </n-button>
+            <n-button
+              type="primary"
+              size="small"
+              @click="handleApplyToProject()"
+              :loading="isApplying && applyingStyleName === selectedStyleName"
+              :disabled="isApplying || isStyleAppliedToCurrentProject(selectedStyleName)"
+            >
+              {{ isStyleAppliedToCurrentProject(selectedStyleName) ? t('views.style.desktop.appliedToCurrentProject') : t('views.style.desktop.applyToCurrentProject') }}
+            </n-button>
+          </div>
         </template>
 
         <div v-if="isLoadingProfile" class="loading-profile">
@@ -190,7 +229,7 @@ import {
 } from 'naive-ui';
 import SparkAlert from '../../components/share/SparkAlert.vue';
 import DocumentImportPicker from '../../components/import/DocumentImportPicker.vue';
-import { Bookmark, Palette, Plus, RefreshCw, Trash } from '@lucide/vue';
+import { Bookmark, Download, Palette, Plus, RefreshCw, Trash, Upload } from '@lucide/vue';
 import AiSettingsPanel from '../../components/lorebook/AiSettingsPanel.vue';
 import BindingEditor from '../../components/lorebook/BindingEditor.vue';
 import GlobalLoading from '../../components/share/GlobalLoading.vue';
@@ -211,6 +250,8 @@ const KNOWN_SECTION_KEYS = new Set([
 const {
   styles,
   isLoadingList,
+  isImportingStyleProfile,
+  styleProfileImportInput,
   showCreateModal,
   showDetailsDrawer,
   selectedStyleName,
@@ -233,6 +274,9 @@ const {
   openCreateModal,
   openStyleDetails,
   handleDelete,
+  handleExportStyle,
+  triggerStyleProfileImport,
+  handleStyleProfileImportFile,
   handleApplyToProject,
   handleImportedFile,
   handleInvalidImportedFile,
@@ -291,6 +335,18 @@ const profileSections = computed(() => {
   align-items: center;
 }
 
+.hidden-file-input {
+  display: none;
+}
+
+.empty-actions,
+.drawer-header-actions {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  flex-wrap: wrap;
+}
+
 .style-content {
   flex: 1;
   /* 关键布局修复：防止Flex在无内容时坍缩 */
@@ -342,7 +398,6 @@ const profileSections = computed(() => {
   border: 1px solid var(--border-color);
   display: flex;
   flex-direction: column;
-  height: 240px;
 }
 
 .style-card:hover {
@@ -351,21 +406,19 @@ const profileSections = computed(() => {
 }
 
 .card-preview {
-  height: 140px;
+  height: 120px;
   display: flex;
   align-items: center;
   justify-content: center;
   position: relative;
 }
 
-
 .card-body {
-  padding: 16px;
+  padding: 10px 16px;
   display: flex;
   justify-content: space-between;
   align-items: flex-start;
   background: var(--panel-bg);
-  flex: 1;
   gap: 12px;
 }
 

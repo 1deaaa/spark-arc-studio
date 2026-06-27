@@ -17,7 +17,7 @@
 
     <div v-if="fileTreeData.length === 0" class="file-tree-empty">
       <div class="file-tree-empty__icon">
-        <n-icon :component="Book" :size="36" />
+        <n-icon :component="emptyIcon" :size="36" />
       </div>
       <div class="file-tree-empty__title">{{ $t('components.fileExplorer.emptyTitle') }}</div>
       <div class="file-tree-empty__hint">{{ isNovelMode ? $t('components.fileExplorer.emptyHintNovel') : $t('components.fileExplorer.emptyHintScript') }}</div>
@@ -49,7 +49,7 @@
 import { computed, reactive, onMounted, onBeforeUnmount, h, type Component } from 'vue';
 import { NDropdown, NIcon } from 'naive-ui';
 import draggable from 'vuedraggable';
-import { Book, Plus, SquarePen } from '@lucide/vue';
+import { BookOpen, Clapperboard, Plus, SquarePen } from '@lucide/vue';
 import { useI18n } from 'vue-i18n';
 import FileItem from './FileItem.vue';
 import { useFileStore } from '@/components/stores/fileStore';
@@ -70,6 +70,7 @@ const rootList = computed({
 });
 
 const isNovelMode = computed(() => sceneStore.workspaceMode === 'novel');
+const emptyIcon = computed(() => isNovelMode.value ? BookOpen : Clapperboard);
 
 const blankMenu = reactive({ visible: false, x: 0, y: 0 });
 

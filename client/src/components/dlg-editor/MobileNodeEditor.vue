@@ -52,7 +52,7 @@
         </div>
 
         <!-- 高级配置（折叠） -->
-        <n-collapse>
+        <n-collapse v-if="showRuntimeFields">
           <n-collapse-item name="scene-advanced">
             <template #header>
               <n-space align="center" :size="6">
@@ -146,7 +146,7 @@
         </div>
 
         <!-- 行为绑定（折叠） -->
-        <n-collapse>
+        <n-collapse v-if="showRuntimeFields">
           <n-collapse-item name="dialogue-act">
             <template #header>
               <n-space align="center" :size="6">
@@ -249,6 +249,7 @@ const drawerHeight = computed(() => {
 const type = computed(() => sceneStore.selectionType);
 const currentScene = computed(() => sceneStore.currentScene);
 const currentNode = computed(() => sceneStore.currentNode);
+const showRuntimeFields = false;
 
 const headerIcon = computed(() => {
   if (type.value === 'scene') return Film;

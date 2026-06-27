@@ -2,14 +2,16 @@
 Style API - 风格分析
 """
 
-from fastapi import APIRouter, Depends, Request, File, UploadFile
-from fastapi.responses import JSONResponse
+from fastapi import APIRouter, Depends, Request, File, Form, UploadFile
+from fastapi.responses import JSONResponse, Response
 from starlette.concurrency import run_in_threadpool
 from sse_starlette.sse import EventSourceResponse
 import os
 import shutil
 import tempfile
 import json
+from datetime import datetime
+from urllib.parse import quote
 
 from core.auth import get_current_user
 from core.file_ingest.service import (
@@ -32,6 +34,9 @@ from agents.agent_style.utils import (
     list_all_authors,
     delete_author_style,
     get_style_filepath,
+    make_unique_style_name,
+    normalize_style_name,
+    save_style_profile_to_file,
 )
 
 from .schemas import StyleApplyRequest
@@ -45,6 +50,35 @@ from .stream_semantics import (
 )
 
 style_router = APIRouter()
+
+_STYLE_EXPORT_KIND = "sparkarc.style_profile"
+_STYLE_EXPORT_VERSION = 1
+
+
+def _extract_imported_style_payload(payload: object) -> tuple[str | None, dict]:
+    """兼容直接风格 JSON 与 SparkArc 风格包两种导入格式。"""
+    if not isinstance(payload, dict):
+        raise ValueError("风格文件必须是 JSON 对象")
+
+    if isinstance(payload.get("style_profile"), dict):
+        raw_name = payload.get("style_name") or payload.get("name")
+        return str(raw_name).strip() if raw_name else None, payload["style_profile"]
+
+    # 直接导出的风格档案没有包裹层，直接作为 profile 使用。
+    return None, payload
+
+
+def _style_download_headers(style_name: str) -> dict[str, str]:
+    """构建同时兼容中文文件名与 ASCII 兜底的下载头。"""
+    safe_name = normalize_style_name(style_name, fallback="style") or "style"
+    filename = f"{safe_name}.sparkarc-style.json"
+    ascii_filename = "style.sparkarc-style.json"
+    return {
+        "Content-Disposition": (
+            f"attachment; filename=\"{ascii_filename}\"; "
+            f"filename*=UTF-8''{quote(filename, safe='')}"
+        )
+    }
 
 
 @style_router.post("/api/ai/style-apply")
@@ -229,6 +263,53 @@ async def list_styles(user: dict = Depends(get_current_user)):
     # 附带用户级默认风格名称
     default_style_name = load_user_default_style_binding(user_id)
     return {"success": True, "styles": styles, "default_style_name": default_style_name or ""}
+
+
+@style_router.get("/api/ai/styles/{style_name}/export")
+async def export_style_profile(style_name: str, user: dict = Depends(get_current_user)):
+    """导出单个风格档案为可移植 JSON。"""
+    user_id = str(user["user_id"])
+    profile = load_style_profile_from_file(style_name, user_id=user_id)
+    if not profile:
+        return JSONResponse(status_code=404, content={"success": False, "error": "风格档案不存在"})
+
+    payload = {
+        "kind": _STYLE_EXPORT_KIND,
+        "version": _STYLE_EXPORT_VERSION,
+        "style_name": style_name,
+        "exported_at": datetime.now().isoformat(timespec="seconds"),
+        "style_profile": profile,
+    }
+    return Response(
+        content=json.dumps(payload, ensure_ascii=False, indent=2),
+        media_type="application/json; charset=utf-8",
+        headers=_style_download_headers(style_name),
+    )
+
+
+@style_router.post("/api/ai/styles/import")
+async def import_style_profile(
+    file: UploadFile = File(...),
+    styleName: str | None = Form(None),
+    user: dict = Depends(get_current_user),
+):
+    """导入风格档案 JSON，自动命名去重后写入用户风格库。"""
+    user_id = str(user["user_id"])
+    try:
+        raw = await file.read()
+        payload = json.loads(raw.decode("utf-8-sig"))
+        source_name, profile = _extract_imported_style_payload(payload)
+        filename_stem = os.path.splitext(file.filename or "")[0]
+        preferred_name = styleName or source_name or filename_stem or "导入风格"
+        final_name = make_unique_style_name(user_id, preferred_name)
+        save_style_profile_to_file(final_name, profile, user_id=user_id)
+        return {"success": True, "style_name": final_name}
+    except json.JSONDecodeError:
+        return JSONResponse(status_code=400, content={"success": False, "error": "风格文件不是有效 JSON"})
+    except ValueError as e:
+        return JSONResponse(status_code=400, content={"success": False, "error": str(e)})
+    except Exception as e:
+        return JSONResponse(status_code=500, content={"success": False, "error": str(e)})
 
 
 @style_router.delete("/api/ai/styles/{style_name}")

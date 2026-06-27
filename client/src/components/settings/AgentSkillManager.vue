@@ -27,6 +27,7 @@
           {{ t('components.agentSkillManager.importUrl') }}
         </n-button>
         <n-upload
+          class="skill-upload-action"
           :show-file-list="false"
           :custom-request="handleUpload"
           accept=".md,.txt,.zip"
@@ -292,8 +293,55 @@ onMounted(loadSkills);
 }
 
 @media (max-width: 720px) {
+  .agent-skill-manager {
+    height: auto;
+  }
+
+  .agent-skill-manager :deep(.n-card__content) {
+    display: block;
+  }
+
+  .skill-intro {
+    margin-bottom: 10px;
+    line-height: 1.55;
+  }
+
+  .skill-actions {
+    gap: 8px;
+    margin-bottom: 10px;
+  }
+
+  .skill-action-row {
+    display: grid;
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    gap: 8px;
+  }
+
+  .skill-upload-action,
+  .skill-action-row :deep(.n-button) {
+    width: 100%;
+    min-width: 0;
+  }
+
+  .skill-action-row :deep(.n-upload-trigger) {
+    width: 100%;
+  }
+
+  .skill-action-row :deep(.n-button__content) {
+    min-width: 0;
+    max-width: 100%;
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+  }
+
   .skill-list {
     max-height: none;
+  }
+
+  .skill-empty,
+  .skill-error {
+    padding: 12px 8px 6px;
   }
 }
 </style>

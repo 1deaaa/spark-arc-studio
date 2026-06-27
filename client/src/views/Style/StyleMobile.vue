@@ -2,18 +2,23 @@
 <template>
   <div class="mobile-style-view">
     <GlobalLoading scope="style" />
+    <input
+      ref="styleProfileImportInput"
+      class="hidden-file-input"
+      type="file"
+      accept=".json,application/json"
+      @change="handleStyleProfileImportFile"
+    />
     <div class="mobile-header">
-       <div style="flex:1"></div>
-       <n-button circle quaternary @click="loadStyles">
-         <template #icon><n-icon><RefreshCw /></n-icon></template>
-       </n-button>
-    </div>
-
-    <!-- Status -->
-    <div class="status-summary" v-if="projectStore.currentProject">
+       <div class="status-summary" v-if="projectStore.currentProject">
         <SparkTag :type="hasProjectStyle ? 'success' : 'warning'">
             {{ projectStyleTitle }}
         </SparkTag>
+       </div>
+       <div class="status-summary-placeholder" v-else></div>
+       <n-button circle quaternary size="small" @click="loadStyles">
+         <template #icon><n-icon><RefreshCw /></n-icon></template>
+       </n-button>
     </div>
 
     <!-- Content -->
@@ -30,39 +35,52 @@
            <div class="style-indicator" :style="{ background: getGradient(style) }"></div>
            <div class="style-info">
               <span class="style-name">{{ style }}</span>
-              <span class="style-sub">{{ t('views.style.mobile.tapToViewReport') }}</span>
-           </div>
-            <n-button
-             v-if="projectStore.currentProject"
-             size="tiny"
-             type="primary"
-             secondary
-             :disabled="isApplying || isStyleAppliedToCurrentProject(style)"
-             :loading="isApplying && applyingStyleName === style"
-             @click.stop="handleApplyToProject(style)"
-            >
-             {{ isStyleAppliedToCurrentProject(style) ? t('views.style.common.applied') : t('views.style.common.apply') }}
-            </n-button>
-            <n-button
-             size="tiny"
-             :type="isDefaultStyle(style) ? 'warning' : 'default'"
-             secondary
-             :disabled="isDefaultStyle(style)"
-             @click.stop="handleSetDefault(style)"
-            >
-             {{ isDefaultStyle(style) ? t('views.style.common.isDefault') : t('views.style.common.setDefault') }}
-            </n-button>
-           <n-icon class="chevron"><ChevronRight /></n-icon>
-        </div>
-    </div>
+            </div>
+            <div class="mobile-style-actions">
+             <n-button
+               v-if="projectStore.currentProject"
+               size="tiny"
+               type="primary"
+               secondary
+               :disabled="isApplying || isStyleAppliedToCurrentProject(style)"
+               :loading="isApplying && applyingStyleName === style"
+               @click.stop="handleApplyToProject(style)"
+             >
+               {{ isStyleAppliedToCurrentProject(style) ? t('views.style.common.applied') : t('views.style.common.apply') }}
+             </n-button>
+             <n-button
+               size="tiny"
+               :type="isDefaultStyle(style) ? 'warning' : 'default'"
+               secondary
+               :disabled="isDefaultStyle(style)"
+               @click.stop="handleSetDefault(style)"
+             >
+               {{ isDefaultStyle(style) ? t('views.style.common.isDefault') : t('views.style.common.setDefault') }}
+             </n-button>
+             <n-button
+               size="tiny"
+               quaternary
+               circle
+               :title="t('views.style.common.exportProfile')"
+               @click.stop="handleExportStyle(style)"
+             >
+               <template #icon><n-icon><Download /></n-icon></template>
+             </n-button>
+            </div>
+            <n-icon class="chevron"><ChevronRight /></n-icon>
+         </div>
+     </div>
 
-    <n-collapse class="runtime-collapse">
-      <n-collapse-item :title="t('views.style.desktop.runtimeBindings')" name="runtime-bindings">
-        <BindingEditor />
-      </n-collapse-item>
-    </n-collapse>
-
-    <div class="mobile-footer-actions">
+     <div class="mobile-footer-actions">
+       <n-button
+         secondary
+         block
+         :loading="isImportingStyleProfile"
+         @click="triggerStyleProfileImport"
+       >
+         <template #icon><n-icon><Upload /></n-icon></template>
+         {{ t('views.style.common.importProfile') }}
+       </n-button>
        <n-button
          type="primary"
          block
@@ -79,16 +97,26 @@
        <n-drawer-content :title="selectedStyleName" closable>
          <!-- @vue-ignore -->
          <template #header-extra>
-            <n-button
-              type="primary"
-              size="small"
-              @click="handleApplyToProject()"
-              :loading="isApplying && applyingStyleName === selectedStyleName"
-              :disabled="isApplying || isStyleAppliedToCurrentProject(selectedStyleName)"
-            >
-              {{ isStyleAppliedToCurrentProject(selectedStyleName) ? t('views.style.common.applied') : t('views.style.common.apply') }}
-            </n-button>
-         </template>
+             <div class="mobile-drawer-actions">
+               <n-button
+                 secondary
+                 size="small"
+                 @click="handleExportStyle(selectedStyleName)"
+               >
+                 <template #icon><n-icon><Download /></n-icon></template>
+                 {{ t('views.style.common.exportProfile') }}
+               </n-button>
+               <n-button
+                 type="primary"
+                 size="small"
+                 @click="handleApplyToProject()"
+                 :loading="isApplying && applyingStyleName === selectedStyleName"
+                 :disabled="isApplying || isStyleAppliedToCurrentProject(selectedStyleName)"
+               >
+                 {{ isStyleAppliedToCurrentProject(selectedStyleName) ? t('views.style.common.applied') : t('views.style.common.apply') }}
+               </n-button>
+             </div>
+          </template>
 
          <div v-if="isLoadingProfile" class="loading-state">
             <n-spin size="medium" />
@@ -147,11 +175,10 @@
 <script setup lang="ts">
 import { computed } from 'vue';
 import { useI18n } from 'vue-i18n';
-import { NIcon, NSpin, NButton, NInput, NEmpty, NDrawer, NDrawerContent, NModal, NFormItem, NCollapse, NCollapseItem } from 'naive-ui';
+import { NIcon, NSpin, NButton, NInput, NEmpty, NDrawer, NDrawerContent, NModal, NFormItem } from 'naive-ui';
 import SparkTag from '../../components/share/SparkTag.vue';
 import DocumentImportPicker from '../../components/import/DocumentImportPicker.vue';
-import BindingEditor from '../../components/lorebook/BindingEditor.vue';
-import { ChevronRight, Plus, RefreshCw } from '@lucide/vue';
+import { ChevronRight, Download, Plus, RefreshCw, Upload } from '@lucide/vue';
 import GlobalLoading from '../../components/share/GlobalLoading.vue';
 import { useStyleLogic } from '../../composables/useStyleLogic';
 
@@ -169,6 +196,8 @@ const KNOWN_SECTION_KEYS = new Set([
 const {
   styles,
   isLoadingList,
+  isImportingStyleProfile,
+  styleProfileImportInput,
   showCreateModal,
   showDetailsDrawer,
   selectedStyleName,
@@ -183,6 +212,9 @@ const {
   isStyleAppliedToCurrentProject,
   isDefaultStyle,
   handleSetDefault,
+  handleExportStyle,
+  triggerStyleProfileImport,
+  handleStyleProfileImportFile,
   getSectionTitle,
   getSectionIcon,
   formatKey,
@@ -222,31 +254,42 @@ const profileSections = computed(() => {
   height: 100%;
   display: flex;
   flex-direction: column;
-  padding: 10px 6px;
-  gap: 12px;
+  padding: 0 4px;
+  gap: 10px;
   background: transparent;
+  min-height: 0;
+}
+
+.hidden-file-input {
+  display: none;
 }
 
 .mobile-header {
   display: flex;
-  justify-content: flex-end;
+  justify-content: space-between;
   align-items: center;
+  gap: 10px;
+  min-height: 34px;
 }
 
 .status-summary {
   display: flex;
-  justify-content: center;
+  justify-content: flex-start;
+  min-width: 0;
 }
 
-.runtime-collapse {
-  background: var(--spark-panel-bg);
-  border: 1px solid var(--spark-border);
-  border-radius: 10px;
-  padding: 0 8px;
+.status-summary :deep(.spark-tag) {
+  max-width: 100%;
+}
+
+.status-summary-placeholder {
+  flex: 1;
+  min-width: 0;
 }
 
 .style-list-mobile {
   flex: 1;
+  min-height: 0;
   overflow-y: auto;
   display: flex;
   flex-direction: column;
@@ -272,6 +315,7 @@ const profileSections = computed(() => {
 
 .style-info {
   flex: 1;
+  min-width: 0;
   display: flex;
   flex-direction: column;
 }
@@ -279,6 +323,9 @@ const profileSections = computed(() => {
 .style-name {
   font-weight: 600;
   color: var(--spark-text-bright);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
 }
 
 .style-sub {
@@ -288,10 +335,27 @@ const profileSections = computed(() => {
 
 .chevron {
   color: var(--spark-text-muted);
+  flex-shrink: 0;
+}
+
+.mobile-style-actions,
+.mobile-drawer-actions {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  flex-shrink: 0;
+  flex-wrap: wrap;
 }
 
 .mobile-footer-actions {
   padding-bottom: 24px;
+  display: flex;
+  gap: 8px;
+}
+
+.mobile-footer-actions :deep(.n-button) {
+  flex: 1;
+  min-width: 0;
 }
 
 .mobile-profile-content {
@@ -368,13 +432,4 @@ const profileSections = computed(() => {
 }
 
 /* 任务浮层（屏幕居中） */
-
-.runtime-collapse :deep(.n-collapse-item__header) {
-  user-select: none;
-}
-.runtime-collapse :deep(.n-collapse-item__content-wrapper),
-.runtime-collapse :deep(.n-collapse-item__content-inner) {
-  padding-left: 0 !important;
-  margin-left: 0 !important;
-}
 </style>

@@ -21,13 +21,6 @@
     </template>
     <div class="story-tags-popover">
       <div class="popover-body">
-        <div class="workspace-mode-field">
-          <div class="field-label">{{ t('components.storyTagsPanel.workspaceMode') }}</div>
-          <div class="workspace-mode-readonly">
-            <div class="workspace-mode-chip">{{ workspaceModeLabel }}</div>
-            <div class="workspace-mode-note">{{ t('components.storyTagsPanel.workspaceModeLocked') }}</div>
-          </div>
-        </div>
         <InspireTagSelector
           :default-open="true"
           v-model:genres="selectedGenres"
@@ -64,13 +57,6 @@
         >
           <div class="story-tags-mobile-panel" @click.stop>
             <div class="popover-body">
-              <div class="workspace-mode-field">
-                <div class="field-label">{{ t('components.storyTagsPanel.workspaceMode') }}</div>
-                <div class="workspace-mode-readonly">
-                  <div class="workspace-mode-chip">{{ workspaceModeLabel }}</div>
-                  <div class="workspace-mode-note">{{ t('components.storyTagsPanel.workspaceModeLocked') }}</div>
-                </div>
-              </div>
               <InspireTagSelector
                 :default-open="true"
                 v-model:genres="selectedGenres"
@@ -90,7 +76,7 @@
 </template>
 
 <script setup lang="ts">
-import { computed, ref, watch, onMounted, onBeforeUnmount } from 'vue';
+import { ref, watch, onMounted, onBeforeUnmount } from 'vue';
 import { useI18n } from 'vue-i18n';
 import { NPopover, NButton, NIcon, NTooltip } from 'naive-ui';
 import { Tags } from '@lucide/vue';
@@ -112,7 +98,6 @@ const { t } = useI18n();
 const projectStore = useProjectStore();
 const sceneStore = useSceneStore();
 
-const selectedWorkspaceMode = ref<'script' | 'novel'>('script');
 const selectedGenres = ref<string[]>([]);
 const selectedTones = ref<string[]>([]);
 const selectedWorldviews = ref<string[]>([]);
@@ -121,11 +106,6 @@ const selectedLength = ref<string | undefined>(undefined);
 
 // 移动端弹出菜单的显示状态（脱离按钮锚点的居中弹出）
 const show = ref(false);
-const workspaceModeLabel = computed(() => (
-  selectedWorkspaceMode.value === 'novel'
-    ? t('components.storyTagsPanel.modeNovelProject')
-    : t('components.storyTagsPanel.modeScriptProject')
-));
 
 // Escape 键关闭移动端弹出菜单
 function onKeydown(e: KeyboardEvent) {
@@ -141,7 +121,6 @@ async function loadFromBackend() {
       const data = await response.json();
       if (data.success && data.tags) {
         const mode = data.tags.workspace_mode === 'novel' ? 'novel' : 'script';
-        selectedWorkspaceMode.value = mode;
         sceneStore.setWorkspaceMode(mode);
         selectedGenres.value = data.tags.genres || [];
         selectedTones.value = data.tags.tones || [];
@@ -224,43 +203,6 @@ onBeforeUnmount(() => {
   padding: 12px 16px;
   max-height: 50vh;
   overflow-y: auto;
-}
-
-.workspace-mode-field {
-  display: grid;
-  gap: 6px;
-  margin-bottom: 10px;
-}
-
-.field-label {
-  font-size: 12px;
-  color: var(--spark-text-secondary);
-}
-
-.workspace-mode-readonly {
-  display: grid;
-  gap: 5px;
-}
-
-.workspace-mode-chip {
-  display: inline-flex;
-  width: fit-content;
-  max-width: 100%;
-  align-items: center;
-  min-height: 28px;
-  padding: 0 10px;
-  border: 1px solid var(--spark-border);
-  border-radius: 8px;
-  background: var(--spark-surface-soft);
-  color: var(--spark-text-primary);
-  font-size: 13px;
-  font-weight: 600;
-}
-
-.workspace-mode-note {
-  color: var(--spark-text-secondary);
-  font-size: 12px;
-  line-height: 1.45;
 }
 
 /* ── 移动端：标题栏下方居中弹出 ── */

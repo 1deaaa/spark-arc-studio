@@ -1,12 +1,13 @@
 from fastapi import APIRouter, Depends, UploadFile, File
 from fastapi.responses import JSONResponse, Response
-from pydantic import BaseModel
-from typing import Optional
+from pydantic import BaseModel
+from typing import Optional
 import io
-import os
-import re
-import shutil
-import time
+import json
+import os
+import re
+import shutil
+import time
 import zipfile
 from datetime import datetime
 from urllib.parse import quote
@@ -27,6 +28,10 @@ from story.file_naming import build_story_filename
 from agents.project_background_builds import cancel_project_background_builds
 
 project_router = APIRouter()
+
+_STYLE_EXPORT_SNAPSHOT_PATH = ".sparkarc/exported_style_profile.json"
+_STYLE_EXPORT_SNAPSHOT_KIND = "sparkarc.project_style_snapshot"
+_STYLE_EXPORT_SNAPSHOT_VERSION = 1
 
 
 def _cancel_project_background_builds(
@@ -249,10 +254,106 @@ def _xor_transform(data: bytes, key: bytes) -> bytes:
     return bytes(b ^ key[i % kl] for i, b in enumerate(data))
 
 
-def _make_timestamp_key() -> bytes:
-    """生成当前时间戳密钥（精确到秒，16 字节右补零）"""
-    ts = datetime.now().strftime("%Y%m%d%H%M%S")
-    return ts.encode("ascii").ljust(_SPARK_XOR_KEY_LEN, b"\x00")
+def _make_timestamp_key() -> bytes:
+    """生成当前时间戳密钥（精确到秒，16 字节右补零）"""
+    ts = datetime.now().strftime("%Y%m%d%H%M%S")
+    return ts.encode("ascii").ljust(_SPARK_XOR_KEY_LEN, b"\x00")
+
+
+def _build_project_style_snapshot(user_id: str, project_name: str) -> dict | None:
+    """导出项目当前生效风格的快照；只写进导出包，不写回项目目录。"""
+    try:
+        from agents.agent_style.utils import (
+            load_project_style_binding,
+            load_style_profile_from_file,
+            load_user_default_style_binding,
+            normalize_style_name,
+            resolve_project_style_author_id,
+        )
+
+        author_id = resolve_project_style_author_id(user_id, project_name)
+        if not author_id:
+            return None
+        profile = load_style_profile_from_file(author_id, user_id=user_id)
+        if not isinstance(profile, dict) or not profile:
+            return None
+
+        explicit_binding = load_project_style_binding(user_id, project_name)
+        default_binding = load_user_default_style_binding(user_id)
+        if explicit_binding == author_id:
+            binding_source = "project"
+        elif default_binding == author_id:
+            binding_source = "user_default"
+        elif author_id == f"{user_id}_{project_name}":
+            binding_source = "legacy_project"
+        else:
+            binding_source = "resolved"
+
+        return {
+            "kind": _STYLE_EXPORT_SNAPSHOT_KIND,
+            "version": _STYLE_EXPORT_SNAPSHOT_VERSION,
+            "source_project_name": project_name,
+            "style_name": normalize_style_name(author_id, fallback="风格") or "风格",
+            "binding_source": binding_source,
+            "exported_at": datetime.now().isoformat(timespec="seconds"),
+            "style_profile": profile,
+        }
+    except Exception as exc:
+        print(f"Failed to build project style snapshot: {exc}")
+        return None
+
+
+def _restore_project_style_snapshot(user_id: str, project_name: str, project_path: str) -> dict | None:
+    """导入项目后，把导出包里的风格快照复制到当前用户风格库并重绑定项目。"""
+    snapshot_path = os.path.join(project_path, _STYLE_EXPORT_SNAPSHOT_PATH)
+    if not os.path.exists(snapshot_path):
+        return None
+
+    try:
+        from agents.agent_style.utils import (
+            make_unique_style_name,
+            normalize_style_name,
+            save_project_style_binding,
+            save_style_profile_to_file,
+        )
+
+        with open(snapshot_path, "r", encoding="utf-8") as f:
+            payload = json.load(f) or {}
+        profile = payload.get("style_profile")
+        if not isinstance(profile, dict) or not profile:
+            return None
+
+        source_name = normalize_style_name(payload.get("style_name"), fallback="风格") or "风格"
+        source_project = normalize_style_name(payload.get("source_project_name"), fallback="") or ""
+        looks_like_legacy_project_style = bool(source_project and source_name.endswith(f"_{source_project}"))
+        suffix = "风格" if source_name == source_project or looks_like_legacy_project_style else source_name
+        imported_style_name = make_unique_style_name(user_id, f"{project_name}-{suffix}")
+
+        save_style_profile_to_file(imported_style_name, profile, user_id=user_id)
+        save_project_style_binding(user_id, project_name, imported_style_name)
+        try:
+            os.remove(snapshot_path)
+        except Exception:
+            pass
+
+        return {
+            "styleName": imported_style_name,
+            "sourceStyleName": source_name,
+            "bindingSource": payload.get("binding_source") or "",
+        }
+    except Exception as exc:
+        print(f"Failed to restore project style snapshot: {exc}")
+        return {"warning": str(exc)}
+
+
+def _safe_extract_project_zip(zf: zipfile.ZipFile, target_dir: str) -> None:
+    """安全解压项目包，禁止 ZIP 内路径逃逸到目标目录外。"""
+    target_root = os.path.abspath(target_dir)
+    for member in zf.infolist():
+        destination = os.path.abspath(os.path.join(target_root, member.filename))
+        if destination != target_root and not destination.startswith(target_root + os.sep):
+            raise ValueError(f"项目包包含非法路径: {member.filename}")
+    zf.extractall(target_dir)
 
 
 # ── 导出项目 ──
@@ -267,7 +368,7 @@ async def export_project(project_name: str, user: dict = Depends(get_current_use
         return JSONResponse(status_code=404, content={"success": False, "message": "项目不存在"})
 
     # 在内存中创建 ZIP（排除派生/缓存文件）
-    _EXPORT_SKIP_DIRS = {"exports", "__pycache__"}
+    _EXPORT_SKIP_DIRS = {"exports", "__pycache__", ".vector_index_lancedb", ".graphrag", ".story_memory"}
     _EXPORT_SKIP_FILES = {"stories.db"}
     buf = io.BytesIO()
     with zipfile.ZipFile(buf, "w", zipfile.ZIP_DEFLATED) as zf:
@@ -277,9 +378,18 @@ async def export_project(project_name: str, user: dict = Depends(get_current_use
             for fname in files:
                 if fname in _EXPORT_SKIP_FILES:
                     continue
-                full_path = os.path.join(root, fname)
-                arcname = os.path.relpath(full_path, project_path)
-                zf.write(full_path, arcname)
+                full_path = os.path.join(root, fname)
+                arcname = os.path.relpath(full_path, project_path).replace(os.sep, "/")
+                if arcname == _STYLE_EXPORT_SNAPSHOT_PATH:
+                    continue
+                zf.write(full_path, arcname)
+
+        style_snapshot = _build_project_style_snapshot(user_id, project_name)
+        if style_snapshot:
+            zf.writestr(
+                _STYLE_EXPORT_SNAPSHOT_PATH,
+                json.dumps(style_snapshot, ensure_ascii=False, indent=2),
+            )
 
     zip_bytes = buf.getvalue()
 
@@ -322,12 +432,13 @@ async def import_project(file: UploadFile = File(...), user: dict = Depends(get_
     zip_bytes = _xor_transform(encrypted_zip, key)
 
     # 解压到临时目录
-    tmp_dir = os.path.join(get_user_projects_root(user_id), "_spark_import_tmp")
-    os.makedirs(tmp_dir, exist_ok=True)
-    try:
-        buf = io.BytesIO(zip_bytes)
-        with zipfile.ZipFile(buf, "r") as zf:
-            zf.extractall(tmp_dir)
+    tmp_dir = os.path.join(get_user_projects_root(user_id), "_spark_import_tmp")
+    shutil.rmtree(tmp_dir, ignore_errors=True)
+    os.makedirs(tmp_dir, exist_ok=True)
+    try:
+        buf = io.BytesIO(zip_bytes)
+        with zipfile.ZipFile(buf, "r") as zf:
+            _safe_extract_project_zip(zf, tmp_dir)
     except (zipfile.BadZipFile, Exception) as e:
         shutil.rmtree(tmp_dir, ignore_errors=True)
         return JSONResponse(status_code=400, content={"success": False, "message": f"解压失败: {e}"})
@@ -354,8 +465,29 @@ async def import_project(file: UploadFile = File(...), user: dict = Depends(get_
     target_path = os.path.join(projects_root, final_name)
     shutil.move(tmp_dir, target_path)
 
-    # 确保目录结构完整
-    ensure_project_worldview_and_character_settings(user_id, final_name)
-    ensure_project_stories_directory(user_id, final_name)
-
-    return {"success": True, "message": "项目导入成功", "projectName": final_name}
+    # 确保目录结构完整
+    ensure_project_worldview_and_character_settings(user_id, final_name)
+    ensure_project_stories_directory(user_id, final_name)
+
+    imported_style = _restore_project_style_snapshot(user_id, final_name, target_path)
+    warnings = []
+    if isinstance(imported_style, dict) and imported_style.get("warning"):
+        warnings.append(f"风格导入失败: {imported_style.get('warning')}")
+        imported_style = None
+
+    sqlite_result = None
+    try:
+        from story.importer import import_project_stories_to_db
+
+        sqlite_result = import_project_stories_to_db(user_id, final_name, reset=True)
+    except Exception as exc:
+        warnings.append(f"运行时数据库重建失败: {exc}")
+
+    return {
+        "success": True,
+        "message": "项目导入成功",
+        "projectName": final_name,
+        "importedStyle": imported_style,
+        "runtimeDb": sqlite_result,
+        "warnings": warnings,
+    }

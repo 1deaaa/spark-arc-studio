@@ -709,6 +709,48 @@ export async function deleteStyle(styleName: string) {
   return result;
 }
 
+export async function exportStyleProfile(styleName: string): Promise<void> {
+  const response = await fetchWithAuth(`/api/ai/styles/${encodeURIComponent(styleName)}/export`);
+  if (!response.ok) {
+    const result = await response.json().catch(() => ({ error: '导出风格失败' }));
+    throw new Error(result.error || result.message || '导出风格失败');
+  }
+
+  const disposition = response.headers.get('Content-Disposition') || '';
+  let filename = `${styleName}.sparkarc-style.json`;
+  const utf8Match = disposition.match(/filename\*=UTF-8''(.+?)(?:;|$)/);
+  if (utf8Match) {
+    filename = decodeURIComponent(utf8Match[1]);
+  } else {
+    const match = disposition.match(/filename="?([^"]+)"?/);
+    if (match) filename = match[1];
+  }
+
+  const blob = await response.blob();
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement('a');
+  a.href = url;
+  a.download = filename;
+  document.body.appendChild(a);
+  a.click();
+  document.body.removeChild(a);
+  URL.revokeObjectURL(url);
+}
+
+export async function importStyleProfile(file: File, styleName?: string): Promise<{ style_name: string }> {
+  const formData = new FormData();
+  formData.append('file', file);
+  if (styleName) formData.append('styleName', styleName);
+
+  const response = await fetchWithAuth('/api/ai/styles/import', {
+    method: 'POST',
+    body: formData,
+  });
+  const result = await response.json();
+  if (!response.ok || result.success === false) throw new Error(result.error || result.message || '导入风格失败');
+  return { style_name: result.style_name || '' };
+}
+
 export async function applyStyle(styleName: string, projectName: string) {
   const response = await fetchWithAuth('/api/ai/style-apply', {
     method: 'POST',
