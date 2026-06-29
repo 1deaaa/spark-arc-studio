@@ -271,9 +271,12 @@ jobs:
         working-directory: client
         run: npm run build:launcher
 
-      - name: Initialize Android project
+      - name: Recreate Android project
         working-directory: client
-        run: npm run tauri -- android init
+        shell: bash
+        run: |
+          rm -rf src-tauri/gen/android
+          npm run tauri -- android init
 
       - name: Install icon processing dependencies
         run: pip3 install -r scripts/requirements-icon.txt -q --cache-dir "$PIP_CACHE_DIR" --break-system-packages
@@ -284,13 +287,6 @@ jobs:
       - name: Regenerate Android icons
         working-directory: client
         run: npm run tauri icon src-tauri/icons/app-icon-source.png
-
-      - name: Recreate Android project (after icon regeneration)
-        working-directory: client
-        shell: bash
-        run: |
-          rm -rf src-tauri/gen/android
-          npm run tauri -- android init
 
       - name: Patch Android adaptive foreground safe zone
         run: python3 scripts/patch-android-adaptive-foreground.py
@@ -408,6 +404,8 @@ jobs:
           release_marker = "        getByName(\"release\") {"
           if "signingConfig = signingConfigs.getByName(\"release\")" not in text:
               text = text.replace(release_marker, release_marker + "\n            signingConfig = signingConfigs.getByName(\"release\")", 1)
+          text = text.replace("            isMinifyEnabled = true", "            isMinifyEnabled = false")
+          text = text.replace("            isShrinkResources = true", "            isShrinkResources = false")
           gradle_path.write_text(text, encoding="utf-8")
           '
 

@@ -136,6 +136,10 @@ fn find_sibling_backend() -> Option<PathBuf> {
 /// 命令：检查本地后端目录是否存在且有效。
 #[tauri::command]
 fn check_local_backend_dir() -> Result<bool, String> {
+    if is_mobile_runtime() {
+        return Ok(false);
+    }
+
     // 优先读取用户目录记录
     if let Some(record) = read_service_record()? {
         if is_record_valid(&record) {
@@ -149,6 +153,10 @@ fn check_local_backend_dir() -> Result<bool, String> {
 /// 命令：读取部署日志的最后 N 行。
 #[tauri::command]
 fn read_deployment_log(lines: Option<usize>) -> Result<String, String> {
+    if is_mobile_runtime() {
+        return Ok(String::new());
+    }
+
     let path = deploy_log_path()?;
     if !path.is_file() {
         return Ok(String::new());
@@ -166,6 +174,14 @@ fn read_deployment_log(lines: Option<usize>) -> Result<String, String> {
 
 /// 全局部署子进程句柄，用于避免重复启动。
 static DEPLOYMENT_CHILD: Mutex<Option<std::process::Child>> = Mutex::new(None);
+
+fn is_mobile_runtime() -> bool {
+    cfg!(mobile)
+        || matches!(
+            tauri_plugin_os::type_(),
+            tauri_plugin_os::OsType::Android | tauri_plugin_os::OsType::IOS
+        )
+}
 
 fn deployment_child_is_running() -> Result<bool, String> {
     let mut guard = DEPLOYMENT_CHILD.lock().map_err(|err| err.to_string())?;
@@ -190,6 +206,10 @@ fn deployment_child_is_running() -> Result<bool, String> {
 /// 4. 克隆完成后运行平台对应的 start 脚本。
 #[tauri::command]
 async fn start_local_deployment(_app: AppHandle) -> Result<(), String> {
+    if is_mobile_runtime() {
+        return Err("移动端不支持本地部署后端，请填写远程或局域网后端地址。".to_string());
+    }
+
     // 幂等：如果已经有部署进程在跑，直接返回
     if deployment_child_is_running()? {
         return Ok(());
