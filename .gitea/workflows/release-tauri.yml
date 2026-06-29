@@ -20,9 +20,11 @@ jobs:
     timeout-minutes: 90
     env:
       CARGO_HOME: /opt/android-sdk/ci-cache/cargo
+      CARGO_TARGET_DIR: /opt/android-sdk/ci-cache/cargo-target/android-release
       RUSTUP_HOME: /opt/android-sdk/ci-cache/rustup
       GRADLE_USER_HOME: /opt/android-sdk/ci-cache/gradle
       NPM_CONFIG_CACHE: /opt/android-sdk/ci-cache/npm
+      PIP_CACHE_DIR: /opt/android-sdk/ci-cache/pip
     steps:
       - name: Install build dependencies
         run: |
@@ -69,7 +71,7 @@ jobs:
 
       - name: Ensure cache directories exist
         run: |
-          mkdir -p "$CARGO_HOME/registry" "$CARGO_HOME/git" "$RUSTUP_HOME" "$NPM_CONFIG_CACHE" "$GRADLE_USER_HOME"
+          mkdir -p "$CARGO_HOME/registry" "$CARGO_HOME/git" "$CARGO_TARGET_DIR" "$RUSTUP_HOME" "$NPM_CONFIG_CACHE" "$PIP_CACHE_DIR" "$GRADLE_USER_HOME"
 
       - name: Configure Gradle network resilience
         shell: bash
@@ -87,6 +89,7 @@ jobs:
 
           gradle_properties_lines = [
               "org.gradle.daemon=false",
+              "org.gradle.caching=true",
               "org.gradle.parallel=false",
               "org.gradle.workers.max=2",
               "org.gradle.jvmargs=-Xmx2g -Dfile.encoding=UTF-8 -Djava.net.preferIPv4Stack=true -Dhttps.protocols=TLSv1.2,TLSv1.3 -Djdk.tls.client.protocols=TLSv1.2,TLSv1.3",
@@ -273,7 +276,7 @@ jobs:
         run: npm run tauri -- android init
 
       - name: Install icon processing dependencies
-        run: pip3 install -r scripts/requirements-icon.txt -q --break-system-packages
+        run: pip3 install -r scripts/requirements-icon.txt -q --cache-dir "$PIP_CACHE_DIR" --break-system-packages
 
       - name: Prepare app icon from source
         run: python3 scripts/prepare-icon.py
@@ -323,6 +326,10 @@ jobs:
         shell: bash
         run: |
           set -uo pipefail
+          android_project_ready() {
+            [ -f "settings.gradle" ] && [ -f "gradlew" ] && [ -f "app/build.gradle.kts" ]
+          }
+
           recreate_android_project() {
             echo "重新生成 Android 工程脚手架..."
             (cd ../../../ && npm run tauri -- android init)
@@ -341,13 +348,13 @@ jobs:
               -print -exec rm -rf {} +
           }
 
-          if [ ! -f "tauri.settings.gradle" ]; then
-            echo "检测到 tauri.settings.gradle 缺失，先尝试重建 Android 工程。"
+          if ! android_project_ready; then
+            echo "检测到 Android Gradle 脚手架关键文件缺失，先尝试重建 Android 工程。"
             recreate_android_project
           fi
 
-          if [ ! -f "tauri.settings.gradle" ]; then
-            echo "重建后仍缺少 tauri.settings.gradle，跳过 Gradle 预热，交由正式构建阶段处理。"
+          if ! android_project_ready; then
+            echo "重建后仍缺少 Android Gradle 脚手架关键文件，跳过 Gradle 预热，交由正式构建阶段处理。"
             find . -maxdepth 2 -type f | sort
             exit 0
           fi
@@ -409,10 +416,26 @@ jobs:
         shell: bash
         run: |
           set -euo pipefail
+          android_project_ready() {
+            [ -f "src-tauri/gen/android/settings.gradle" ] && \
+            [ -f "src-tauri/gen/android/gradlew" ] && \
+            [ -f "src-tauri/gen/android/app/build.gradle.kts" ]
+          }
+
           recreate_android_project() {
             echo "重新生成 Android 工程脚手架..."
             rm -rf src-tauri/gen/android
             npm run tauri -- android init
+          }
+
+          is_transient_gradle_failure() {
+            local log_path="$1"
+            grep -Eq "Could not GET|Read timed out|Connection reset|502 Bad Gateway|503 Service Unavailable|504 Gateway Timeout|unexpected EOF|Remote host terminated the handshake|No route to host|Connection timed out|Temporary failure in name resolution|Network is unreachable" "$log_path"
+          }
+
+          is_android_project_scaffold_failure() {
+            local log_path="$1"
+            grep -Eq "tauri\\.settings\\.gradle|settings\\.gradle.*does not exist|build\\.gradle\\.kts.*does not exist|gradlew: .*No such file|src-tauri/gen/android.*No such file or directory" "$log_path"
           }
 
           repair_gradle_workspace_metadata_cache() {
@@ -430,8 +453,8 @@ jobs:
 
           for attempt in 1 2 3 4 5; do
             echo "Android build attempt ${attempt}/5"
-            if [ ! -f "src-tauri/gen/android/tauri.settings.gradle" ]; then
-              echo "检测到 tauri.settings.gradle 缺失，先尝试重建 Android 工程。"
+            if ! android_project_ready; then
+              echo "检测到 Android Gradle 脚手架关键文件缺失，先尝试重建 Android 工程。"
               recreate_android_project
             fi
             build_log="$RUNNER_TEMP/android-build-${attempt}.log"
@@ -444,10 +467,15 @@ jobs:
               continue
             fi
 
-            if grep -Fq "tauri.settings.gradle" "$build_log"; then
-              echo "构建阶段仍提示 tauri.settings.gradle 缺失，立即重建后再试。"
+            if is_android_project_scaffold_failure "$build_log"; then
+              echo "构建阶段提示 Android Gradle 脚手架异常，立即重建后再试。"
               recreate_android_project
               continue
+            fi
+
+            if ! is_transient_gradle_failure "$build_log"; then
+              echo "检测到非瞬时构建失败，停止重试以保留首个失败日志。"
+              exit 1
             fi
 
             if [ "$attempt" -ge 2 ]; then
