@@ -288,7 +288,6 @@ jobs:
         run: |
           rm -rf src-tauri/gen/android
           npm run tauri -- android init
-          test -f src-tauri/gen/android/tauri.settings.gradle
 
       - name: Patch Android adaptive foreground safe zone
         run: python3 scripts/patch-android-adaptive-foreground.py
@@ -324,6 +323,11 @@ jobs:
         shell: bash
         run: |
           set -uo pipefail
+          recreate_android_project() {
+            echo "重新生成 Android 工程脚手架..."
+            (cd ../../../ && npm run tauri -- android init)
+          }
+
           repair_gradle_workspace_metadata_cache() {
             local gradle_cache_root="${GRADLE_USER_HOME}/caches"
             echo "检测到 Gradle workspace metadata 缓存损坏，开始清理 transforms 缓存..."
@@ -338,7 +342,13 @@ jobs:
           }
 
           if [ ! -f "tauri.settings.gradle" ]; then
-            echo "检测到 tauri.settings.gradle 缺失，跳过 Gradle 预热，交由正式构建阶段处理。"
+            echo "检测到 tauri.settings.gradle 缺失，先尝试重建 Android 工程。"
+            recreate_android_project
+          fi
+
+          if [ ! -f "tauri.settings.gradle" ]; then
+            echo "重建后仍缺少 tauri.settings.gradle，跳过 Gradle 预热，交由正式构建阶段处理。"
+            find . -maxdepth 2 -type f | sort
             exit 0
           fi
 
@@ -399,6 +409,12 @@ jobs:
         shell: bash
         run: |
           set -euo pipefail
+          recreate_android_project() {
+            echo "重新生成 Android 工程脚手架..."
+            rm -rf src-tauri/gen/android
+            npm run tauri -- android init
+          }
+
           repair_gradle_workspace_metadata_cache() {
             local gradle_cache_root="${GRADLE_USER_HOME}/caches"
             echo "检测到 Gradle workspace metadata 缓存损坏，开始清理 transforms 缓存..."
@@ -414,6 +430,10 @@ jobs:
 
           for attempt in 1 2 3 4 5; do
             echo "Android build attempt ${attempt}/5"
+            if [ ! -f "src-tauri/gen/android/tauri.settings.gradle" ]; then
+              echo "检测到 tauri.settings.gradle 缺失，先尝试重建 Android 工程。"
+              recreate_android_project
+            fi
             build_log="$RUNNER_TEMP/android-build-${attempt}.log"
             if npm run tauri -- android build --apk --target aarch64 2>&1 | tee "$build_log"; then
               exit 0
@@ -425,8 +445,9 @@ jobs:
             fi
 
             if grep -Fq "tauri.settings.gradle" "$build_log"; then
-              echo "Android 工程脚手架缺失，快速失败，等待下一轮 workflow 使用最新重建逻辑重新生成。"
-              exit 1
+              echo "构建阶段仍提示 tauri.settings.gradle 缺失，立即重建后再试。"
+              recreate_android_project
+              continue
             fi
 
             if [ "$attempt" -ge 2 ]; then
