@@ -550,7 +550,7 @@ where
 
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
 pub fn run() {
-    tauri::Builder::default()
+    let builder = tauri::Builder::default()
         .invoke_handler(tauri::generate_handler![
             get_launcher_theme_state,
             set_launcher_theme_state,
@@ -559,9 +559,14 @@ pub fn run() {
             start_local_deployment
         ])
         .plugin(tauri_plugin_opener::init())
-        .plugin(tauri_plugin_os::init())
+        .plugin(tauri_plugin_os::init());
+
+    #[cfg(not(mobile))]
+    let builder = builder
         .plugin(tauri_plugin_shell::init())
-        .plugin(tauri_plugin_fs::init())
+        .plugin(tauri_plugin_fs::init());
+
+    builder
         .run(tauri::generate_context!())
         .expect("error while running tauri application");
 }
