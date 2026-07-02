@@ -27,6 +27,7 @@ from ..models import (
     CAP_VISION_INPUT,
     normalize_model_capabilities,
 )
+from ..image_adapters import strip_internal_image_generation_fields
 from .dpi import prepare_toplevel_window
 from .theme import style_listbox
 
@@ -36,6 +37,7 @@ class DialogsMixin:
 
     IMAGE_ADAPTER_OPTIONS = {
         "OpenAI Images / 兼容协议": "openai_images",
+        "OpenAI Chat 图片 / 兼容网关": "openai_chat_image",
         "Gemini Image / Nano Banana": "gemini_interactions",
         "Grok Image": "xai_images",
     }
@@ -47,6 +49,8 @@ class DialogsMixin:
             return "gemini_interactions"
         if text in {"xai", "xai_images", "grok", "grok_image", "grok_images", "grok_imagine"}:
             return "xai_images"
+        if text in {"openai_chat", "openai_chat_image", "openai_chat_completions", "chat_completions", "chat_image", "compatible_chat_image"}:
+            return "openai_chat_image"
         if text in {"openai", "openai_images", "openai_compatible", "gpt_image", "gpt-image"}:
             return "openai_images"
         return self.DEFAULT_IMAGE_ADAPTER
@@ -64,7 +68,9 @@ class DialogsMixin:
             self._normalize_image_adapter(label_or_value),
         )
 
-    def _extract_image_adapter(self, extra_body) -> str:
+    def _extract_image_adapter(self, adapter_value=None, extra_body=None) -> str:
+        if adapter_value:
+            return self._normalize_image_adapter(adapter_value)
         if not isinstance(extra_body, dict):
             return self.DEFAULT_IMAGE_ADAPTER
         image_config = extra_body.get("image_generation")
@@ -72,20 +78,11 @@ class DialogsMixin:
             return self._normalize_image_adapter(image_config.get("adapter"))
         return self.DEFAULT_IMAGE_ADAPTER
 
-    def _merge_image_adapter(self, extra_body, capabilities, adapter):
+    def _image_adapter_for_capabilities(self, capabilities, adapter):
         normalized_capabilities = normalize_model_capabilities(capabilities)
         if CAP_IMAGE_GENERATION not in normalized_capabilities:
-            return extra_body
-
-        merged = dict(extra_body or {})
-        image_config = merged.get("image_generation")
-        if not isinstance(image_config, dict):
-            image_config = {}
-        else:
-            image_config = dict(image_config)
-        image_config["adapter"] = self._image_adapter_value(adapter)
-        merged["image_generation"] = image_config
-        return merged
+            return None
+        return self._image_adapter_value(adapter)
 
     def _capabilities_to_model_type_label(self, raw_capabilities=None, *, legacy_is_embedding=False) -> str:
         capabilities = normalize_model_capabilities(
@@ -380,8 +377,7 @@ class DialogsMixin:
                 temperature_value = temp_value
 
             capabilities = self._capability_vars_to_capabilities(capability_vars)
-            extra_body = self._merge_image_adapter(
-                extra_body,
+            image_generation_adapter = self._image_adapter_for_capabilities(
                 capabilities,
                 image_adapter_var.get(),
             )
@@ -423,6 +419,7 @@ class DialogsMixin:
                     "model_name": model_id,
                     "capabilities": capabilities,
                     "extra_body": extra_body,
+                    "image_generation_adapter": image_generation_adapter,
                     "temperature": temperature_value,
                     "max_context_tokens": max_context_tokens,
                     "max_output_tokens": max_output_tokens,
@@ -469,6 +466,7 @@ class DialogsMixin:
         if isinstance(model_config, str):
             model_id = model_config
             extra_body_dict = None
+            model_image_adapter = None
             model_capabilities = normalize_model_capabilities()
             model_temperature = None
             model_disabled = False
@@ -480,6 +478,7 @@ class DialogsMixin:
         else:
             model_id = model_config.get("model_name", "")
             extra_body_dict = model_config.get("extra_body")
+            model_image_adapter = model_config.get("image_generation_adapter")
             model_capabilities = normalize_model_capabilities(
                 model_config.get("capabilities"),
                 legacy_is_embedding=bool(model_config.get("is_embedding")),
@@ -491,6 +490,8 @@ class DialogsMixin:
             model_output_price = model_config.get("sys_credit_output_price_per_million")
             model_max_context = model_config.get("max_context_tokens", DEFAULT_MAX_CONTEXT_TOKENS)
             model_max_output = model_config.get("max_output_tokens", DEFAULT_MAX_OUTPUT_TOKENS)
+            if isinstance(extra_body_dict, dict):
+                extra_body_dict = strip_internal_image_generation_fields(extra_body_dict)
 
         if model_temperature is None and isinstance(extra_body_dict, dict) and "temperature" in extra_body_dict:
             try:
@@ -525,7 +526,7 @@ class DialogsMixin:
         )
 
         ctk.CTkLabel(dialog, text="生图协议:", font=("Microsoft YaHei UI", 11)).grid(row=3, column=0, sticky=tk.W, padx=20, pady=5)
-        image_adapter_var = tk.StringVar(value=self._image_adapter_label(self._extract_image_adapter(extra_body_dict)))
+        image_adapter_var = tk.StringVar(value=self._image_adapter_label(self._extract_image_adapter(model_image_adapter, extra_body_dict)))
         image_adapter_combo = ctk.CTkComboBox(
             dialog,
             variable=image_adapter_var,
@@ -698,8 +699,7 @@ class DialogsMixin:
                 capability_vars,
                 initial_capabilities=model_capabilities,
             )
-            extra_body = self._merge_image_adapter(
-                extra_body,
+            image_generation_adapter = self._image_adapter_for_capabilities(
                 updated_capabilities,
                 image_adapter_var.get(),
             )
@@ -717,6 +717,8 @@ class DialogsMixin:
                     model_id=model_db_id,
                     display_name=new_display_name,
                     extra_body=extra_body,
+                    image_generation_adapter=image_generation_adapter,
+                    update_image_generation_adapter=True,
                     temperature=temperature_value,
                     capabilities=updated_capabilities,
                     update_capabilities=True,

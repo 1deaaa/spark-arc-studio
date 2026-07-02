@@ -26,7 +26,7 @@ import {
 } from '../services/modelCapabilities';
 
 type SpeedResult = { speed: number; ftl: number };
-export type ImageGenerationAdapterKey = 'openai_images' | 'gemini_interactions' | 'xai_images';
+export type ImageGenerationAdapterKey = 'openai_images' | 'openai_chat_image' | 'gemini_interactions' | 'xai_images';
 const DEFAULT_IMAGE_ADAPTER: ImageGenerationAdapterKey = 'openai_images';
 
 type ModelCacheRecord = {
@@ -160,13 +160,18 @@ export function useAIModelManager(
         if (['xai', 'xai_images', 'grok', 'grok_image', 'grok_images', 'grok_imagine'].includes(text)) {
             return 'xai_images';
         }
+        if (['openai_chat', 'openai_chat_image', 'openai_chat_completions', 'chat_completions', 'chat_image', 'compatible_chat_image'].includes(text)) {
+            return 'openai_chat_image';
+        }
         if (['openai', 'openai_images', 'openai_compatible', 'gpt_image', 'gpt-image'].includes(text)) {
             return 'openai_images';
         }
         return DEFAULT_IMAGE_ADAPTER;
     }
 
-    function extractImageAdapter(extraObj: Record<string, unknown> | null | undefined): ImageGenerationAdapterKey {
+    function extractImageAdapter(adapterValue: unknown, extraObj: Record<string, unknown> | null | undefined): ImageGenerationAdapterKey {
+        const normalized = normalizeImageAdapter(adapterValue);
+        if (adapterValue && normalized) return normalized;
         if (!extraObj) return DEFAULT_IMAGE_ADAPTER;
         const imageConfig = extraObj.image_generation;
         if (isPlainObject(imageConfig)) {
@@ -175,24 +180,18 @@ export function useAIModelManager(
         return DEFAULT_IMAGE_ADAPTER;
     }
 
-    function buildExtraBodyObjectForCapabilities(
-        baseExtra: Record<string, unknown>,
-        capabilities: ModelCapability[],
-        imageAdapter: ImageGenerationAdapterKey,
-    ): Record<string, unknown> {
-        if (!isImageModel(capabilities)) {
-            return baseExtra;
+    function sanitizeExtraBodyObject(baseExtra: Record<string, unknown>): Record<string, unknown> {
+        const cleaned: Record<string, unknown> = { ...baseExtra };
+        if (isPlainObject(cleaned.image_generation)) {
+            const imageConfig = { ...cleaned.image_generation };
+            delete imageConfig.adapter;
+            if (Object.keys(imageConfig).length > 0) {
+                cleaned.image_generation = imageConfig;
+            } else {
+                delete cleaned.image_generation;
+            }
         }
-
-        const existingImageConfig = isPlainObject(baseExtra.image_generation)
-            ? baseExtra.image_generation
-            : baseExtra;
-        const imageConfig: Record<string, unknown> = { ...existingImageConfig, adapter: imageAdapter };
-
-        if (isPlainObject(baseExtra.image_generation)) {
-            return { ...baseExtra, image_generation: imageConfig };
-        }
-        return { image_generation: imageConfig };
+        return cleaned;
     }
 
     const filteredRemoteModels = computed(() => {
@@ -228,7 +227,8 @@ export function useAIModelManager(
     function parseExtraBodyForView(extraBodyText: string) {
         const raw = (extraBodyText || '').trim();
         if (!raw) return null;
-        return parseExtraBodyObject(raw);
+        const parsed = sanitizeExtraBodyObject(parseExtraBodyObject(raw));
+        return Object.keys(parsed).length > 0 ? parsed : null;
     }
 
     function findModelInPlatform(platformId: ApiId | null | undefined, modelId: ApiId | null | undefined) {
@@ -295,30 +295,21 @@ export function useAIModelManager(
         return parsed;
     }
 
-    function serializeExtraBodyForModel(
-        extraBodyText: string,
-        capabilities: ModelCapability[],
-        imageAdapter: ImageGenerationAdapterKey,
-    ) {
-        const extraObj = parseExtraBodyObject(extraBodyText);
-        const merged = buildExtraBodyObjectForCapabilities(extraObj, capabilities, imageAdapter);
-        return Object.keys(merged).length > 0 ? JSON.stringify(merged) : null;
+    function serializeExtraBodyForModel(extraBodyText: string) {
+        const extraObj = sanitizeExtraBodyObject(parseExtraBodyObject(extraBodyText));
+        return Object.keys(extraObj).length > 0 ? JSON.stringify(extraObj) : null;
+    }
+
+    function imageAdapterForCapabilities(capabilities: ModelCapability[], adapter: ImageGenerationAdapterKey) {
+        return isImageModel(capabilities) ? adapter : null;
     }
 
     function buildExtraBodyForNewModel() {
-        return serializeExtraBodyForModel(
-            newModel.value.extraBody,
-            normalizeModelCapabilities(newModel.value.capabilities),
-            newModel.value.imageAdapter,
-        );
+        return serializeExtraBodyForModel(newModel.value.extraBody);
     }
 
-    function buildExtraBodyForEditingModel(capabilities: ModelCapability[]) {
-        return serializeExtraBodyForModel(
-            editingModel.value.extraBody,
-            capabilities,
-            editingModel.value.imageAdapter,
-        );
+    function buildExtraBodyForEditingModel() {
+        return serializeExtraBodyForModel(editingModel.value.extraBody);
     }
 
     function buildTemperatureForNewModel() {
@@ -341,27 +332,21 @@ export function useAIModelManager(
 
     function openEditModelModal(plat: AiPlatform, model: AiModelItem) {
         currentPlatform.value = plat;
-        let extraBodyStr = '';
+        let rawExtraObj: Record<string, unknown> | null = null;
         if (model.extra_body != null) {
             if (typeof model.extra_body === 'object') {
-                extraBodyStr = JSON.stringify(model.extra_body, null, 2);
-            } else if (typeof model.extra_body === 'string' && model.extra_body !== 'null') {
-                extraBodyStr = model.extra_body;
-            }
-        }
-        let modelTemp = model.temperature;
-        let extraObj: Record<string, unknown> | null = null;
-        if (model.extra_body != null) {
-            if (typeof model.extra_body === 'object') {
-                extraObj = { ...model.extra_body };
+                rawExtraObj = { ...model.extra_body };
             } else if (typeof model.extra_body === 'string' && model.extra_body !== 'null') {
                 try {
-                    extraObj = JSON.parse(model.extra_body);
+                    const parsed = JSON.parse(model.extra_body);
+                    rawExtraObj = isPlainObject(parsed) ? parsed : null;
                 } catch {
-                    extraObj = null;
+                    rawExtraObj = null;
                 }
             }
         }
+        let modelTemp = model.temperature;
+        let extraObj: Record<string, unknown> | null = rawExtraObj ? sanitizeExtraBodyObject(rawExtraObj) : null;
 
         if ((modelTemp === null || modelTemp === undefined) && extraObj && Object.prototype.hasOwnProperty.call(extraObj, 'temperature')) {
             const legacyTemp = Number(extraObj.temperature);
@@ -369,8 +354,8 @@ export function useAIModelManager(
                 modelTemp = legacyTemp;
             }
             delete extraObj.temperature;
-            extraBodyStr = Object.keys(extraObj).length > 0 ? JSON.stringify(extraObj, null, 2) : '';
         }
+        const extraBodyStr = extraObj && Object.keys(extraObj).length > 0 ? JSON.stringify(extraObj, null, 2) : '';
 
         editingModel.value = {
             id: model.model_id,
@@ -378,7 +363,7 @@ export function useAIModelManager(
             displayName: model.display_name,
             extraBody: extraBodyStr,
             capabilities: normalizeModelCapabilities(model.capabilities),
-            imageAdapter: extractImageAdapter(extraObj),
+            imageAdapter: extractImageAdapter(model.image_generation_adapter, rawExtraObj),
             temperatureEnabled: modelTemp !== null && modelTemp !== undefined,
             temperature: modelTemp ?? 0.7,
             maxContextTokens: model.max_context_tokens ?? null,
@@ -578,6 +563,7 @@ export function useAIModelManager(
             const extraBodyPayload = buildExtraBodyForNewModel();
             const textModel = isTextModel(capabilities);
             const temperature = buildTemperatureForNewModel();
+            const imageGenerationAdapter = imageAdapterForCapabilities(capabilities, newModel.value.imageAdapter);
 
             if (textModel) {
                 validateSystemModelPricing(
@@ -604,6 +590,7 @@ export function useAIModelManager(
                     textModel ? newModel.value.maxContextTokens : null,
                     textModel ? newModel.value.maxOutputTokens : null,
                     capabilities,
+                    imageGenerationAdapter,
                 );
             } else {
                 result = await createModel(
@@ -615,6 +602,7 @@ export function useAIModelManager(
                     textModel ? newModel.value.maxContextTokens : null,
                     textModel ? newModel.value.maxOutputTokens : null,
                     capabilities,
+                    imageGenerationAdapter,
                 );
             }
             targetPlatform.models = targetPlatform.models || [];
@@ -623,6 +611,7 @@ export function useAIModelManager(
                 model_name: newModel.value.modelName,
                 display_name: displayName,
                 capabilities,
+                image_generation_adapter: imageGenerationAdapter,
                 extra_body: parseExtraBodyForView(extraBodyPayload || ''),
                 temperature: textModel ? temperature ?? null : null,
                 max_context_tokens: textModel ? newModel.value.maxContextTokens ?? null : null,
@@ -663,7 +652,8 @@ export function useAIModelManager(
             }
             const targetModelId = editingModel.value.id;
             const displayName = editingModel.value.displayName;
-            const extraBodyInput = buildExtraBodyForEditingModel(capabilities);
+            const extraBodyInput = buildExtraBodyForEditingModel();
+            const imageGenerationAdapter = imageAdapterForCapabilities(capabilities, editingModel.value.imageAdapter);
             if (currentPlatform.value?.is_sys && isBillingEnabled() && textModel) {
                 validateSystemModelPricing(
                     editingModel.value.inputPricePerMillion,
@@ -688,6 +678,8 @@ export function useAIModelManager(
                         maxOutputTokens: textModel ? editingModel.value.maxOutputTokens : null,
                         includeCapabilities: true,
                         capabilities,
+                        includeImageGenerationAdapter: true,
+                        imageGenerationAdapter,
                     }
                 );
             } else {
@@ -703,6 +695,8 @@ export function useAIModelManager(
                         maxOutputTokens: textModel ? editingModel.value.maxOutputTokens : null,
                         includeCapabilities: true,
                         capabilities,
+                        includeImageGenerationAdapter: true,
+                        imageGenerationAdapter,
                     }
                 );
             }
@@ -710,6 +704,7 @@ export function useAIModelManager(
             if (model) {
                 model.display_name = displayName;
                 model.capabilities = capabilities;
+                model.image_generation_adapter = imageGenerationAdapter;
                 model.extra_body = parseExtraBodyForView(extraBodyInput || '');
                 model.temperature = textModel ? temperature : null;
                 model.max_context_tokens = textModel ? editingModel.value.maxContextTokens ?? null : null;

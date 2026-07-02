@@ -267,10 +267,10 @@ const activeCharacterSpriteAssets = computed(() => {
 });
 
 const styleReferenceOptions = computed(() => Object.values(manifestAssets.value)
-  .filter(asset => asset.type === 'style_reference' || asset.type === 'scene_reference')
+  .filter(asset => asset.type === 'style_reference')
   .sort((a, b) => String(b.createdAt || '').localeCompare(String(a.createdAt || '')))
   .map(asset => ({
-    label: `${asset.type === 'style_reference' ? t('nodeEditor.presentation.styleReference') : t('nodeEditor.presentation.sceneReference')} · ${asset.title || asset.id}`,
+    label: `${t('nodeEditor.presentation.styleReference')} · ${asset.title || asset.id}`,
     value: asset.id,
   })));
 
@@ -467,7 +467,7 @@ function buildCharacterSpritePrompt() {
     '你正在为 Web 视觉小说生成角色立绘。请优先保持角色一致性、项目画风一致性和后续图生图可复用性。',
     '立绘用途：角色会叠加在视觉小说背景上，因此主体清晰、轮廓干净、中心安全区稳定；不要画 UI、对话框、水印或大段文字。',
     '画幅：1024x1536，竖版，半身或七分身均可，角色位于中心。',
-    styleAsset ? `风格参考：${styleAsset.title || styleAsset.id}` : '',
+    styleAsset ? `风格种子：${styleAsset.title || styleAsset.id}` : '',
     ch?.name ? `角色名称：${ch.name}` : '',
     ch?.content ? `角色设定：${ch.content}` : '',
     `用户具体要求：${characterSpritePrompt.value.trim()}`,

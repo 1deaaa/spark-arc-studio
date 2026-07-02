@@ -211,6 +211,7 @@ class LLModels(Base):
     model_name = Column(String(120), nullable=False, index=True)
     display_name = Column(String(120), nullable=True)
     extra_body = Column(String(1024), nullable=True)
+    image_generation_adapter = Column(String(64), nullable=True)
     temperature = Column(Float, nullable=True)
     # 模型上下文上限与单次输出上限，供业务侧在发起调用前进行长度校验。
     max_context_tokens = Column(

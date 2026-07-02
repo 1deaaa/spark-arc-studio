@@ -245,7 +245,7 @@ for model in platform_views[0]["models"]:
     assert "生图模型=image_generation,image_reference_input,image_edit" in output
 
 
-def test_matchbox_image_adapter_is_preserved_as_explicit_nested_protocol(tmp_path: Path) -> None:
+def test_matchbox_image_adapter_is_preserved_as_model_field_not_extra_body(tmp_path: Path) -> None:
     code = r"""
 from llm.agen_matchbox.manager import AIManager
 from llm.agen_matchbox.image_generation import _select_adapter
@@ -280,12 +280,14 @@ resolved = manager.resolve_user_image_generation_model(
     model_id=model.id,
 )
 print(f"resolved_extra={resolved['extra_body']}")
+print(f"resolved_adapter={resolved['image_generation_adapter']}")
 print(f"selected_adapter={_select_adapter(resolved)}")
 """
 
     output = _run_probe(code, tmp_path)
 
-    assert "resolved_extra={'image_generation': {'adapter': 'gemini_interactions', 'quality': 'high'}}" in output
+    assert "resolved_extra={'provider': 'xai', 'adapter': 'xai_images', 'image_generation': {'quality': 'high'}}" in output
+    assert "resolved_adapter=gemini_interactions" in output
     assert "selected_adapter=gemini_interactions" in output
 
 

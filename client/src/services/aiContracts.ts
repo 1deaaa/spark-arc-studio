@@ -98,6 +98,7 @@ export type AiModelItem = {
   model_name: string;
   display_name: string;
   capabilities?: string[];
+  image_generation_adapter?: string | null;
   extra_body?: JsonObject | null;
   temperature?: number | null;
   max_context_tokens?: number | null;
@@ -160,6 +161,7 @@ export type AiFlattenedModelItem = {
   model_name: string;
   display_name: string;
   capabilities?: string[];
+  image_generation_adapter?: string | null;
   extra_body?: JsonObject | null;
   temperature?: number | null;
   max_context_tokens?: number | null;

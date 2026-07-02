@@ -19,12 +19,32 @@ from .models import (
     get_model_capabilities,
     is_chat_model,
     is_embedding_model,
+    is_image_generation_model,
     normalize_model_capabilities,
     set_model_capabilities,
 )
 from .config import DEFAULT_PLATFORM_CONFIGS, SYSTEM_USER_ID
+from .image_adapters import (
+    DEFAULT_IMAGE_GENERATION_ADAPTER,
+    extract_legacy_image_generation_adapter,
+    normalize_image_generation_adapter,
+    strip_internal_image_generation_fields,
+)
 from .security import SecurityManager
 from .utils import normalize_base_url, normalize_recharge_url
+
+
+def _parse_extra_body_raw(extra_body_str: Optional[str]) -> Optional[Dict[str, Any]]:
+    """解析数据库中的 extra_body 原始对象，仅供内部迁移兜底读取。"""
+    if not extra_body_str:
+        return None
+    try:
+        parsed = json.loads(extra_body_str)
+        if parsed is None or parsed == {} or not isinstance(parsed, dict):
+            return None
+        return parsed
+    except (json.JSONDecodeError, TypeError):
+        return None
 
 
 def _parse_extra_body_for_response(extra_body_str: Optional[str]) -> Optional[Dict]:
@@ -34,16 +54,25 @@ def _parse_extra_body_for_response(extra_body_str: Optional[str]) -> Optional[Di
         - None: 如果输入为 None、空字符串、"null" 或 "{}"
         - dict: 解析后的 JSON 对象
     """
-    if not extra_body_str:
+    return strip_internal_image_generation_fields(_parse_extra_body_raw(extra_body_str))
+
+
+def _normalize_model_image_generation_adapter(
+    *,
+    capabilities: Optional[List[str]],
+    image_generation_adapter: Optional[str],
+    extra_body: Optional[Dict[str, Any]] = None,
+    existing_value: Optional[str] = None,
+) -> Optional[str]:
+    """按模型能力决定是否保存生图协议字段。"""
+    if "image_generation" not in normalize_model_capabilities(capabilities):
         return None
-    try:
-        parsed = json.loads(extra_body_str)
-        # 如果解析后是 None 或空字典，统一返回 None
-        if parsed is None or parsed == {}:
-            return None
-        return parsed
-    except (json.JSONDecodeError, TypeError):
-        return None
+    return (
+        normalize_image_generation_adapter(image_generation_adapter)
+        or normalize_image_generation_adapter(existing_value)
+        or extract_legacy_image_generation_adapter(extra_body)
+        or DEFAULT_IMAGE_GENERATION_ADAPTER
+    )
 
 
 def _normalize_non_negative_limit(raw_value: Optional[int], *, field_label: str, default_value: int) -> int:
@@ -74,12 +103,19 @@ def _normalize_nullable_credit_balance(raw_value: Optional[float], *, field_labe
 
 def _model_payload_for_response(model: LLModels) -> Dict[str, Any]:
     """构建前端与 GUI 共用的模型响应字段。"""
+    raw_extra_body = _parse_extra_body_raw(model.extra_body)
+    response_extra_body = strip_internal_image_generation_fields(raw_extra_body)
     return {
         "model_id": model.id,
         "model_name": model.model_name,
         "display_name": model.display_name,
         "capabilities": get_model_capabilities(model),
-        "extra_body": _parse_extra_body_for_response(model.extra_body),
+        "extra_body": response_extra_body,
+        "image_generation_adapter": _normalize_model_image_generation_adapter(
+            capabilities=get_model_capabilities(model),
+            image_generation_adapter=getattr(model, "image_generation_adapter", None),
+            extra_body=raw_extra_body,
+        ),
         "temperature": model.temperature,
         "max_context_tokens": int(model.max_context_tokens or DEFAULT_MAX_CONTEXT_TOKENS),
         "max_output_tokens": int(model.max_output_tokens or DEFAULT_MAX_OUTPUT_TOKENS),
@@ -653,6 +689,7 @@ class AdminMixin:
         max_context_tokens: Optional[int] = DEFAULT_MAX_CONTEXT_TOKENS,
         max_output_tokens: Optional[int] = DEFAULT_MAX_OUTPUT_TOKENS,
         capabilities: Optional[List[str]] = None,
+        image_generation_adapter: Optional[str] = None,
     ):
         """
         添加模型（统一入口）
@@ -674,6 +711,12 @@ class AdminMixin:
             default_value=DEFAULT_MAX_OUTPUT_TOKENS,
         )
         normalized_capabilities = normalize_model_capabilities(capabilities)
+        cleaned_extra_body = strip_internal_image_generation_fields(extra_body)
+        normalized_image_adapter = _normalize_model_image_generation_adapter(
+            capabilities=normalized_capabilities,
+            image_generation_adapter=image_generation_adapter,
+            extra_body=extra_body,
+        )
         is_text_capable = CAP_TEXT_GENERATION in normalized_capabilities
         if not is_text_capable:
             temperature = None
@@ -715,7 +758,8 @@ class AdminMixin:
                     existing_display.model_name = model_name
                     existing_display.display_name = display_name
                     set_model_capabilities(existing_display, normalized_capabilities)
-                    existing_display.extra_body = json.dumps(extra_body) if extra_body else None
+                    existing_display.extra_body = json.dumps(cleaned_extra_body) if cleaned_extra_body else None
+                    existing_display.image_generation_adapter = normalized_image_adapter
                     existing_display.temperature = temperature
                     existing_display.max_context_tokens = normalized_max_context_tokens
                     existing_display.max_output_tokens = normalized_max_output_tokens
@@ -738,13 +782,14 @@ class AdminMixin:
                 existing_plat = session.query(LLMPlatform).filter_by(id=existing_display.platform_id).first()
                 raise ValueError(f"模型显示名称 '{display_name}' 已存在于平台 '{existing_plat.name}'")
 
-            extra_body_json = json.dumps(extra_body) if extra_body else None
+            extra_body_json = json.dumps(cleaned_extra_body) if cleaned_extra_body else None
 
             m = LLModels(
                 platform_id=plat.id,
                 model_name=model_name,
                 display_name=display_name,
                 extra_body=extra_body_json,
+                image_generation_adapter=normalized_image_adapter,
                 temperature=temperature,
                 max_context_tokens=normalized_max_context_tokens,
                 max_output_tokens=normalized_max_output_tokens,
@@ -818,6 +863,8 @@ class AdminMixin:
         update_max_output_tokens: bool = False,
         capabilities: Optional[List[str]] = None,
         update_capabilities: bool = False,
+        image_generation_adapter: Optional[str] = None,
+        update_image_generation_adapter: bool = False,
     ):
         """
         更新模型（统一入口）
@@ -853,14 +900,28 @@ class AdminMixin:
                     raise ValueError(f"显示名称 '{new_display_name}' 已被使用")
                 model.display_name = new_display_name
 
+            legacy_image_adapter = None
             if new_extra_body is not None:
-                model.extra_body = json.dumps(new_extra_body) if new_extra_body else None
+                legacy_image_adapter = extract_legacy_image_generation_adapter(new_extra_body)
+                cleaned_extra_body = strip_internal_image_generation_fields(new_extra_body)
+                model.extra_body = json.dumps(cleaned_extra_body) if cleaned_extra_body else None
 
             if update_temperature:
                 model.temperature = new_temperature
 
             if update_capabilities:
                 set_model_capabilities(model, capabilities)
+
+            if is_image_generation_model(model):
+                if update_image_generation_adapter or legacy_image_adapter or not getattr(model, "image_generation_adapter", None):
+                    model.image_generation_adapter = _normalize_model_image_generation_adapter(
+                        capabilities=get_model_capabilities(model),
+                        image_generation_adapter=image_generation_adapter,
+                        extra_body=new_extra_body,
+                        existing_value=legacy_image_adapter or getattr(model, "image_generation_adapter", None),
+                    )
+            else:
+                model.image_generation_adapter = None
 
             if not is_chat_model(model):
                 model.temperature = None
@@ -1101,17 +1162,24 @@ class AdminMixin:
                     entry["api_key"] = api_key_raw
                     models_list = []
                     for m in sorted(plat.models, key=lambda x: x.sort_order):
-                        extra_body = None
+                        raw_extra_body = None
                         if m.extra_body:
                             try:
-                                extra_body = _json.loads(m.extra_body)
+                                parsed_extra_body = _json.loads(m.extra_body)
+                                raw_extra_body = parsed_extra_body if isinstance(parsed_extra_body, dict) else None
                             except Exception:
                                 pass
+                        extra_body = strip_internal_image_generation_fields(raw_extra_body)
                         models_list.append({
                             "_db_id": m.id,
                             "display_name": m.display_name,
                             "model_name": m.model_name,
                             "capabilities": get_model_capabilities(m),
+                            "image_generation_adapter": _normalize_model_image_generation_adapter(
+                                capabilities=get_model_capabilities(m),
+                                image_generation_adapter=getattr(m, "image_generation_adapter", None),
+                                extra_body=raw_extra_body,
+                            ),
                             "is_embedding": is_embedding_model(m),
                             "disabled": bool(m.disable),
                             "temperature": m.temperature,
@@ -1380,6 +1448,7 @@ class AdminMixin:
                 "model_name": "gpt-4o",
                 "display_name": "GPT-4o",
                 "extra_body": {...} or None,
+                "image_generation_adapter": "openai_images" or None,
                 "temperature": 0.7 or None,
                 "max_context_tokens": 256000,
                 "max_output_tokens": 64000,
@@ -1440,7 +1509,14 @@ class AdminMixin:
                 model_max_context = cfg.get("max_context_tokens") if has_max_context_field else None
                 model_max_output = cfg.get("max_output_tokens") if has_max_output_field else None
 
-                extra_body_json = json.dumps(extra_body) if extra_body else None
+                cleaned_extra_body = strip_internal_image_generation_fields(extra_body)
+                image_generation_adapter = _normalize_model_image_generation_adapter(
+                    capabilities=capabilities,
+                    image_generation_adapter=cfg.get("image_generation_adapter"),
+                    extra_body=extra_body,
+                    existing_value=getattr(existing_map.get((model_name, tuple(capabilities))), "image_generation_adapter", None),
+                )
+                extra_body_json = json.dumps(cleaned_extra_body) if cleaned_extra_body else None
                 key = (model_name, tuple(capabilities))
                 seen_keys.add(key)
 
@@ -1450,6 +1526,7 @@ class AdminMixin:
                     existing.display_name = display_name
                     set_model_capabilities(existing, capabilities)
                     existing.extra_body = extra_body_json
+                    existing.image_generation_adapter = image_generation_adapter
                     existing.temperature = temperature
                     if has_input_price or has_cached_input_price or has_output_price or has_legacy_price:
                         existing.sys_credit_input_price_per_million = (
@@ -1482,6 +1559,7 @@ class AdminMixin:
                         model_name=model_name,
                         display_name=display_name,
                         extra_body=extra_body_json,
+                        image_generation_adapter=image_generation_adapter,
                         temperature=temperature,
                         sys_credit_input_price_per_million=(
                             None if model_input_price is None else max(float(model_input_price), 0)
@@ -1534,6 +1612,8 @@ class AdminMixin:
         is_embedding: bool = False,
         capabilities: Optional[List[str]] = None,
         update_capabilities: bool = False,
+        image_generation_adapter: Optional[str] = None,
+        update_image_generation_adapter: bool = False,
         max_context_tokens: Optional[int] = None,
         max_output_tokens: Optional[int] = None,
         update_max_context_tokens: bool = False,
@@ -1571,6 +1651,8 @@ class AdminMixin:
             update_max_output_tokens=update_max_output_tokens,
             capabilities=capabilities,
             update_capabilities=update_capabilities,
+            image_generation_adapter=image_generation_adapter,
+            update_image_generation_adapter=update_image_generation_adapter,
             admin_mode=True,
         )
 

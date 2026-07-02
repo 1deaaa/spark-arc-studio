@@ -171,6 +171,8 @@ class ModelCreateRequest(BaseModel):
 
     extra_body: Optional[str] = None
 
+    image_generation_adapter: Optional[str] = None
+
     temperature: Optional[float] = None
 
     max_context_tokens: Optional[int] = None
@@ -188,6 +190,8 @@ class ModelUpdateRequest(BaseModel):
     display_name: Optional[str] = None
 
     extra_body: Optional[str] = None
+
+    image_generation_adapter: Optional[str] = None
 
     temperature: Optional[float] = None
 
@@ -1043,6 +1047,7 @@ async def create_model(
             user_id=user_id, 
 
             extra_body=extra_body_dict,
+            image_generation_adapter=data.image_generation_adapter,
 
             temperature=temperature,
 
@@ -1188,6 +1193,8 @@ async def update_model(
 
     update_capabilities = 'capabilities' in fields_set
 
+    update_image_generation_adapter = 'image_generation_adapter' in fields_set
+
 
 
     try:
@@ -1217,6 +1224,10 @@ async def update_model(
             capabilities=data.capabilities if update_capabilities else None,
 
             update_capabilities=update_capabilities,
+
+            image_generation_adapter=data.image_generation_adapter if update_image_generation_adapter else None,
+
+            update_image_generation_adapter=update_image_generation_adapter,
 
         )
 
@@ -1552,6 +1563,8 @@ class AdminSysModelRequest(BaseModel):
 
     extra_body: Optional[str] = None
 
+    image_generation_adapter: Optional[str] = None
+
     temperature: Optional[float] = None
     sys_credit_input_price_per_million: Optional[float] = None
     sys_credit_cached_input_price_per_million: Optional[float] = None
@@ -1573,6 +1586,8 @@ class AdminSysModelUpdateRequest(BaseModel):
     display_name: Optional[str] = None
 
     extra_body: Optional[str] = None
+
+    image_generation_adapter: Optional[str] = None
 
     temperature: Optional[float] = None
     sys_credit_input_price_per_million: Optional[float] = None
@@ -1627,6 +1642,7 @@ async def admin_create_sys_model(
             data.display_name,
 
             extra_body=extra_body_dict,
+            image_generation_adapter=data.image_generation_adapter,
 
             temperature=temperature,
             sys_credit_input_price_per_million=data.sys_credit_input_price_per_million,
@@ -1713,6 +1729,8 @@ async def admin_update_sys_model(
 
     update_capabilities = 'capabilities' in fields_set
 
+    update_image_generation_adapter = 'image_generation_adapter' in fields_set
+
 
 
     try:
@@ -1746,6 +1764,10 @@ async def admin_update_sys_model(
             capabilities=data.capabilities if update_capabilities else None,
 
             update_capabilities=update_capabilities,
+
+            image_generation_adapter=data.image_generation_adapter if update_image_generation_adapter else None,
+
+            update_image_generation_adapter=update_image_generation_adapter,
 
         )
 

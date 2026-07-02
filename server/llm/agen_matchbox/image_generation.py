@@ -9,6 +9,16 @@ from typing import Any, Optional
 from urllib.parse import quote, urlparse
 
 from . import matchbox
+from .image_adapters import (
+    DEFAULT_IMAGE_GENERATION_ADAPTER,
+    IMAGE_ADAPTER_GEMINI_GENERATE_CONTENT,
+    IMAGE_ADAPTER_GEMINI_INTERACTIONS,
+    IMAGE_ADAPTER_OPENAI_CHAT_IMAGE,
+    IMAGE_ADAPTER_OPENAI_IMAGES,
+    IMAGE_ADAPTER_XAI_IMAGES,
+    normalize_image_generation_adapter,
+    strip_internal_image_generation_fields,
+)
 from .models import CAP_IMAGE_EDIT, CAP_IMAGE_REFERENCE_INPUT
 from .utils import _build_endpoint
 
@@ -68,7 +78,7 @@ def _normalize_size(size: str) -> str:
 
 
 def _image_extra(config: dict[str, Any]) -> dict[str, Any]:
-    extra = config.get("extra_body")
+    extra = strip_internal_image_generation_fields(config.get("extra_body")) or {}
     if not isinstance(extra, dict):
         return {}
     image_extra = extra.get("image_generation")
@@ -79,23 +89,15 @@ def _image_extra(config: dict[str, Any]) -> dict[str, Any]:
 
 
 def _select_adapter(config: dict[str, Any]) -> str:
-    extra = config.get("extra_body")
-    image_extra = extra.get("image_generation") if isinstance(extra, dict) else None
-    explicit = str(image_extra.get("adapter") if isinstance(image_extra, dict) else "").strip().lower()
-    if explicit in {"openai", "openai_images", "openai_compatible"}:
-        return "openai_images"
-    if explicit in {"xai", "xai_images", "grok", "grok_image", "grok_images", "grok_imagine"}:
-        return "xai_images"
-    if explicit in {"gemini", "google", "google_gemini", "gemini_interactions", "google_interactions"}:
-        return "gemini_interactions"
-    if explicit in {"gemini_generate_content", "google_generate_content"}:
-        return "gemini_generate_content"
+    explicit = normalize_image_generation_adapter(config.get("image_generation_adapter"))
+    if explicit:
+        return explicit
 
     # 不按域名或模型名推断供应商：大量用户会使用中转站、反代、自托管网关。
-    # 协议适配器必须由模型配置中的 extra_body.image_generation.adapter 显式指定。
-    # 旧的 provider/top-level adapter 字段不会参与选择，避免把供应商概念和真实协议混在一起。
+    # 协议适配器必须由模型配置中的 image_generation_adapter 显式指定。
+    # extra_body 是用户透传给上游的参数，不再承载 SparkArc 内部协议控制字段。
     # 未配置时使用 OpenAI Images 兼容协议作为低惊讶默认值。
-    return "openai_images"
+    return DEFAULT_IMAGE_GENERATION_ADAPTER
 
 
 def _request_timeout(config: dict[str, Any]) -> float:
@@ -182,9 +184,29 @@ def _allowed_openai_extra(extra: dict[str, Any]) -> dict[str, Any]:
         "timeout",
         "image_generation",
         "endpoint",
+        "chat_endpoint",
         "generation_endpoint",
         "edit_endpoint",
         "reference_mode",
+    }
+    return {key: value for key, value in extra.items() if key not in blocked}
+
+
+def _allowed_openai_chat_image_extra(extra: dict[str, Any]) -> dict[str, Any]:
+    blocked = {
+        "adapter",
+        "provider",
+        "timeout",
+        "image_generation",
+        "endpoint",
+        "chat_endpoint",
+        "generation_endpoint",
+        "edit_endpoint",
+        "reference_mode",
+        "model",
+        "messages",
+        "prompt",
+        "stream",
     }
     return {key: value for key, value in extra.items() if key not in blocked}
 
@@ -207,6 +229,96 @@ def _reference_to_data_uri(reference: ImageReference) -> str:
     mime_type = reference.mime_type or "image/png"
     payload = base64.b64encode(reference.data).decode("ascii")
     return f"data:{mime_type};base64,{payload}"
+
+
+def _collect_data_uri_images(value: Any) -> list[tuple[str, str]]:
+    found: list[tuple[str, str]] = []
+    if isinstance(value, str):
+        for match in re.finditer(r"data:(image/[a-zA-Z0-9.+-]+);base64,([A-Za-z0-9+/=\r\n]+)", value):
+            found.append((match.group(2), match.group(1)))
+    elif isinstance(value, dict):
+        b64_json = value.get("b64_json")
+        if isinstance(b64_json, str) and b64_json.strip():
+            found.append((b64_json, str(value.get("mime_type") or value.get("mimeType") or "image/png")))
+
+        image_url = value.get("image_url") or value.get("imageUrl")
+        if isinstance(image_url, dict):
+            url = image_url.get("url")
+            if isinstance(url, str) and url.startswith("data:"):
+                found.extend(_collect_data_uri_images(url))
+        elif isinstance(image_url, str) and image_url.startswith("data:"):
+            found.extend(_collect_data_uri_images(image_url))
+
+        url = value.get("url")
+        if isinstance(url, str) and url.startswith("data:"):
+            found.extend(_collect_data_uri_images(url))
+
+        for child in value.values():
+            if child is image_url or child is url:
+                continue
+            found.extend(_collect_data_uri_images(child))
+    elif isinstance(value, list):
+        for item in value:
+            found.extend(_collect_data_uri_images(item))
+    return found
+
+
+def _collect_image_urls(value: Any) -> list[str]:
+    found: list[str] = []
+    if isinstance(value, str):
+        found.extend(match.group(1) for match in re.finditer(r"!\[[^\]]*\]\((https?://[^)\s]+)\)", value))
+    elif isinstance(value, dict):
+        image_url = value.get("image_url") or value.get("imageUrl")
+        if isinstance(image_url, dict):
+            url = image_url.get("url")
+            if isinstance(url, str) and url.startswith(("http://", "https://")):
+                found.append(url)
+        elif isinstance(image_url, str) and image_url.startswith(("http://", "https://")):
+            found.append(image_url)
+        url = value.get("url")
+        if isinstance(url, str) and url.startswith(("http://", "https://")):
+            found.append(url)
+        for child in value.values():
+            found.extend(_collect_image_urls(child))
+    elif isinstance(value, list):
+        for item in value:
+            found.extend(_collect_image_urls(item))
+    return found
+
+
+def _parse_openai_chat_image_response(data: dict[str, Any], *, timeout: float) -> tuple[bytes, str, str]:
+    choices = data.get("choices") if isinstance(data, dict) else None
+    if not isinstance(choices, list) or not choices:
+        raise ImageGenerationError("Chat 生图接口没有返回 choices")
+
+    message = choices[0].get("message") if isinstance(choices[0], dict) else None
+    if not isinstance(message, dict):
+        raise ImageGenerationError("Chat 生图接口返回格式无法识别")
+
+    images = _collect_data_uri_images(message)
+    if images:
+        image, mime_type = _decode_b64_image(images[0][0], images[0][1])
+        return image, mime_type, str(message.get("revised_prompt") or "")
+
+    inline_images = _collect_inline_images(message)
+    if inline_images:
+        image, mime_type = _decode_b64_image(inline_images[0][0], inline_images[0][1])
+        return image, mime_type, str(message.get("revised_prompt") or "")
+
+    urls = _collect_image_urls(message)
+    if urls:
+        image, mime_type = _download_image_url(urls[0], timeout=timeout)
+        return image, mime_type, str(message.get("revised_prompt") or "")
+
+    raise ImageGenerationError("Chat 生图接口没有返回可解析的图片")
+
+
+def _chat_image_prompt(request: SparkImageRequest) -> str:
+    return (
+        f"{request.prompt}\n\n"
+        f"请生成一张适合 {request.size} 的图片。"
+        "如果接口支持内联图片结果，请直接返回图片，不要只返回文字说明。"
+    )
 
 
 def _generate_openai_compatible_image(
@@ -278,6 +390,73 @@ def _generate_openai_compatible_image(
         platform_id=config.get("platform_id"),
         revised_prompt=revised_prompt,
         raw={"response_shape": provider},
+    )
+
+
+def _generate_openai_chat_image(config: dict[str, Any], request: SparkImageRequest) -> SparkImageResult:
+    try:
+        import requests
+    except ImportError as exc:
+        raise ImageGenerationError("缺少 requests 库，无法调用 Chat 生图接口") from exc
+
+    timeout = _request_timeout(config)
+    extra = _image_extra(config)
+    model_name = str(config["model_name"])
+    endpoint = str(extra.get("chat_endpoint") or extra.get("endpoint") or "").strip() or _build_endpoint(
+        config["base_url"],
+        "/chat/completions",
+    )
+
+    content: str | list[dict[str, Any]]
+    if request.references:
+        capabilities = set(config.get("capabilities") or [])
+        if CAP_IMAGE_REFERENCE_INPUT not in capabilities and CAP_IMAGE_EDIT not in capabilities:
+            raise ImageGenerationError("该生图模型未标记为支持参考图，请在模型设置中勾选参考图/编辑能力")
+        content = [{"type": "text", "text": _chat_image_prompt(request)}]
+        content.extend(
+            {
+                "type": "image_url",
+                "image_url": {"url": _reference_to_data_uri(reference)},
+            }
+            for reference in request.references
+        )
+    else:
+        content = _chat_image_prompt(request)
+
+    payload: dict[str, Any] = {
+        "model": model_name,
+        "messages": [{"role": "user", "content": content}],
+        "stream": False,
+    }
+    payload.update(_allowed_openai_chat_image_extra(extra))
+
+    response = requests.post(
+        endpoint,
+        headers={
+            "Authorization": f"Bearer {config['api_key']}",
+            "Content-Type": "application/json",
+        },
+        json=payload,
+        timeout=timeout,
+    )
+    if not response.ok:
+        raise ImageGenerationError(f"Chat 生图接口调用失败: HTTP {response.status_code}: {_compact_error_response(response)}")
+
+    try:
+        data = response.json()
+    except Exception as exc:
+        raise ImageGenerationError("Chat 生图接口返回的不是 JSON") from exc
+
+    image, mime_type, revised_prompt = _parse_openai_chat_image_response(data, timeout=timeout)
+    return SparkImageResult(
+        image=image,
+        mime_type=mime_type,
+        provider=IMAGE_ADAPTER_OPENAI_CHAT_IMAGE,
+        model_name=model_name,
+        model_id=config.get("model_id"),
+        platform_id=config.get("platform_id"),
+        revised_prompt=revised_prompt,
+        raw={"response_shape": IMAGE_ADAPTER_OPENAI_CHAT_IMAGE},
     )
 
 
@@ -562,7 +741,7 @@ def _generate_gemini_generate_content_image(config: dict[str, Any], request: Spa
 
 
 def _generate_gemini_image(config: dict[str, Any], request: SparkImageRequest, *, adapter: str) -> SparkImageResult:
-    if adapter == "gemini_generate_content":
+    if adapter == IMAGE_ADAPTER_GEMINI_GENERATE_CONTENT:
         return _generate_gemini_generate_content_image(config, request)
     return _generate_gemini_interactions_image(config, request)
 
@@ -589,8 +768,10 @@ def generate_image_for_user(
         references=list(references or []),
     )
     adapter = _select_adapter(config)
-    if adapter in {"gemini_interactions", "gemini_generate_content"}:
+    if adapter in {IMAGE_ADAPTER_GEMINI_INTERACTIONS, IMAGE_ADAPTER_GEMINI_GENERATE_CONTENT}:
         return _generate_gemini_image(config, request, adapter=adapter)
-    if adapter == "xai_images":
+    if adapter == IMAGE_ADAPTER_XAI_IMAGES:
         return _generate_xai_image(config, request)
-    return _generate_openai_compatible_image(config, request, provider="openai_images")
+    if adapter == IMAGE_ADAPTER_OPENAI_CHAT_IMAGE:
+        return _generate_openai_chat_image(config, request)
+    return _generate_openai_compatible_image(config, request, provider=IMAGE_ADAPTER_OPENAI_IMAGES)

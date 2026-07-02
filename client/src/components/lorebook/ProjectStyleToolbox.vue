@@ -67,12 +67,6 @@
         />
 
         <n-space justify="end" :size="8" wrap>
-          <n-button secondary @click="rollStyleReferencePrompt">
-            <template #icon>
-              <n-icon :component="Sparkles" />
-            </template>
-            {{ t('nodeEditor.presentation.rollStyleReference') }}
-          </n-button>
           <n-button secondary :loading="styleReferenceUploading" @click="triggerStyleReferenceUpload">
             <template #icon>
               <n-icon :component="Upload" />
@@ -141,10 +135,10 @@ const projectStyleReferenceAssets = computed(() => Object.values(manifestAssets.
   .sort((a, b) => String(b.createdAt || '').localeCompare(String(a.createdAt || ''))));
 
 const styleReferenceOptions = computed(() => Object.values(manifestAssets.value)
-  .filter(asset => asset.type === 'style_reference' || asset.type === 'scene_reference')
+  .filter(asset => asset.type === 'style_reference')
   .sort((a, b) => String(b.createdAt || '').localeCompare(String(a.createdAt || '')))
   .map(asset => ({
-    label: `${asset.type === 'style_reference' ? t('nodeEditor.presentation.styleReference') : t('nodeEditor.presentation.sceneReference')} · ${asset.title || asset.id}`,
+    label: `${t('nodeEditor.presentation.styleReference')} · ${asset.title || asset.id}`,
     value: asset.id,
   })));
 
@@ -245,19 +239,6 @@ function updatePresentationManifest(manifest: PresentationManifest | undefined |
   }
 }
 
-const STYLE_REFERENCE_SEEDS = [
-  '现代都市悬疑视觉小说风格，冷暖对比明显，雨夜霓虹，电影感镜头，细腻写实插画。',
-  '青春校园奇幻风格，柔和日光，干净线条，轻微胶片颗粒，温暖但带一点神秘感。',
-  '近未来低饱和科幻风格，玻璃与金属材质，蓝绿环境光，静谧、克制、精密。',
-  '东方幻想志怪风格，雾气、纸灯、木质建筑、低对比水墨色彩，细节精致。',
-  '治愈系日常视觉小说风格，明亮自然光，浅景深，空气感强，色彩清透。',
-];
-
-function rollStyleReferencePrompt() {
-  const index = Math.floor(Math.random() * STYLE_REFERENCE_SEEDS.length);
-  styleReferencePrompt.value = STYLE_REFERENCE_SEEDS[index];
-}
-
 async function buildActiveContext() {
   const projectName = projectStore.currentProject;
   if (!projectName) return { worldview: '', characters: [] as StoryCharacterDetail[] };
@@ -291,14 +272,15 @@ async function buildProjectStyleReferencePrompt() {
     .map(ch => `- ${ch.name || t('components.lorebookEditor.characterN', { n: ch.id })}：${compactPromptText(ch.content, 220)}`)
     .join('\n');
   return [
-    '你正在为整个 Web 视觉小说项目生成项目级风格参考图。它不是正式背景，也不是角色立绘，而是后续背景、场景参考、角色立绘图生图时用于固定画风的一张锚点图。',
-    '请优先利用自然语言语义理解，把项目主题、世界观气质、角色群像倾向转化为稳定的视觉语言。',
+    '你正在为整个 Web 视觉小说项目生成项目级风格种子图。它不是正式背景，也不是角色立绘，而是后续背景、场景参考、角色立绘图生图时用于固定画风的一张锚点图。',
+    '用户提供的“风格种子文本”是最高优先级：请围绕它生成候选种子图，不要擅自切换到另一种画风。',
+    '请利用自然语言语义理解，把项目主题、世界观气质、角色群像倾向转化为稳定的视觉语言。',
     '画面重点：色彩体系、光照、材质、时代感、镜头语言、整体情绪和绘制/摄影质感；可以出现一处代表性空间或氛围场景，但不要出现 UI、字幕、水印、标题字或大段文字。',
     '画幅：1536x1024，横版；主体与关键视觉信息保持在中心安全区，方便后续 PC 与手机端演出复用。',
-    styleAsset ? `已有风格参考：${styleAsset.title || styleAsset.id}` : '',
+    styleAsset ? `当前选中的风格种子图：${styleAsset.title || styleAsset.id}` : '',
     worldview ? `世界观设定：${compactPromptText(worldview, 2600)}` : '',
     characterSummary ? `主要角色摘要：\n${characterSummary}` : '',
-    `用户具体风格要求：${styleReferencePrompt.value.trim()}`,
+    `用户输入的风格种子文本：${styleReferencePrompt.value.trim()}`,
   ].filter(Boolean).join('\n');
 }
 

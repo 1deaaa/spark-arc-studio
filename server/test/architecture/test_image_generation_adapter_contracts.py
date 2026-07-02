@@ -8,6 +8,7 @@ from llm.agen_matchbox.image_generation import (
     ImageReference,
     SparkImageRequest,
     _generate_gemini_interactions_image,
+    _generate_openai_chat_image,
     _generate_openai_compatible_image,
     _generate_xai_image,
     _select_adapter,
@@ -48,19 +49,26 @@ def test_image_adapter_selection_keeps_supported_provider_names_explicit() -> No
     assert _select_adapter({"base_url": "https://generativelanguage.googleapis.com/v1beta", "extra_body": {}}) == "openai_images"
     assert _select_adapter({
         "base_url": "https://ai.1dea.top/v1",
-        "extra_body": {"image_generation": {"adapter": "xai"}},
+        "image_generation_adapter": "xai",
+        "extra_body": {},
     }) == "xai_images"
     assert _select_adapter({
         "base_url": "https://ai.1dea.top/v1",
-        "extra_body": {"image_generation": {"adapter": "gemini_generate_content"}},
+        "image_generation_adapter": "gemini_generate_content",
+        "extra_body": {},
     }) == "gemini_generate_content"
+    assert _select_adapter({
+        "base_url": "https://ai.1dea.top/v1",
+        "image_generation_adapter": "openai_chat_image",
+        "extra_body": {},
+    }) == "openai_chat_image"
     assert _select_adapter({
         "base_url": "https://ai.1dea.top/v1",
         "extra_body": {"provider": "xai", "adapter": "gemini_interactions"},
     }) == "openai_images"
     assert _select_adapter({
         "base_url": "https://ai.1dea.top/v1",
-        "extra_body": {"image_generation": {"provider": "xai"}},
+        "extra_body": {"image_generation": {"adapter": "xai", "provider": "xai"}},
     }) == "openai_images"
 
 
@@ -92,6 +100,43 @@ def test_openai_compatible_adapter_uses_generation_endpoint_without_leaking_cont
     assert call["json"]["quality"] == "high"
     assert "generation_endpoint" not in call["json"]
     assert "adapter" not in call["json"]
+
+
+def test_openai_chat_image_adapter_preserves_model_name_and_parses_markdown_data_image(monkeypatch) -> None:
+    fake = _FakeRequests({
+        "choices": [
+            {
+                "message": {
+                    "role": "assistant",
+                    "content": f"![Generated Image](data:image/jpeg;base64,{_png_b64()})",
+                }
+            }
+        ]
+    })
+    monkeypatch.setitem(sys.modules, "requests", fake)
+
+    result = _generate_openai_chat_image(
+        {
+            "base_url": "https://ai.1dea.top/v1",
+            "api_key": "sk-test",
+            "model_name": "gemini-3.1-flash-lite-image-fake",
+            "extra_body": {
+                "chat_endpoint": "https://ai.1dea.top/v1/chat/completions",
+                "temperature": 0.1,
+            },
+        },
+        SparkImageRequest(prompt="横版雨夜书店", size="1536x1024"),
+    )
+
+    assert result.provider == "openai_chat_image"
+    assert result.model_name == "gemini-3.1-flash-lite-image-fake"
+    assert result.mime_type == "image/jpeg"
+    call = fake.calls[0]
+    assert call["url"] == "https://ai.1dea.top/v1/chat/completions"
+    assert call["json"]["model"] == "gemini-3.1-flash-lite-image-fake"
+    assert call["json"]["temperature"] == 0.1
+    assert call["json"]["stream"] is False
+    assert "chat_endpoint" not in call["json"]
 
 
 def test_xai_grok_adapter_is_openai_compatible_but_keeps_provider_identity(monkeypatch) -> None:

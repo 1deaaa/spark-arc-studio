@@ -469,7 +469,7 @@ export async function renameUserUsageSlot(usageKey: string, newUsageKey: string 
  * @param {string} displayName - 显示名称
  * @param {string|null} extraBody - extra_body JSON 字符串 (可选)
  */
-export async function createModel(platformId: ApiId, modelName: string, displayName: string, extraBody: string | null = null, temperature: number | undefined = undefined, maxContextTokens?: number | null, maxOutputTokens?: number | null, capabilities?: string[]) {
+export async function createModel(platformId: ApiId, modelName: string, displayName: string, extraBody: string | null = null, temperature: number | undefined = undefined, maxContextTokens?: number | null, maxOutputTokens?: number | null, capabilities?: string[], imageGenerationAdapter?: string | null) {
   const payload: MutablePayload = {
     platform_id: platformId,
     model_name: modelName,
@@ -488,6 +488,9 @@ export async function createModel(platformId: ApiId, modelName: string, displayN
   if (capabilities && capabilities.length > 0) {
     payload.capabilities = capabilities;
   }
+  if (imageGenerationAdapter) {
+    payload.image_generation_adapter = imageGenerationAdapter;
+  }
   const response = await fetchWithAuth('/api/ai/model', {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
@@ -505,7 +508,7 @@ export async function createModel(platformId: ApiId, modelName: string, displayN
  * @param {string|null} displayName - 新的显示名称 (可选)
  * @param {string|null} extraBody - extra_body JSON 字符串 (可选)
  */
-export async function updateModel(modelId: ApiId, displayName: string | null = null, extraBody: string | null = null, options: { includeTemperature?: boolean; temperature?: number | null; includeMaxTokens?: boolean; maxContextTokens?: number | null; maxOutputTokens?: number | null; includeCapabilities?: boolean; capabilities?: string[] } = {}) {
+export async function updateModel(modelId: ApiId, displayName: string | null = null, extraBody: string | null = null, options: { includeTemperature?: boolean; temperature?: number | null; includeMaxTokens?: boolean; maxContextTokens?: number | null; maxOutputTokens?: number | null; includeCapabilities?: boolean; capabilities?: string[]; includeImageGenerationAdapter?: boolean; imageGenerationAdapter?: string | null } = {}) {
   const payload: MutablePayload = {
     id: modelId,
     display_name: displayName,
@@ -520,6 +523,9 @@ export async function updateModel(modelId: ApiId, displayName: string | null = n
   }
   if (options?.includeCapabilities) {
     payload.capabilities = options.capabilities ?? [];
+  }
+  if (options?.includeImageGenerationAdapter) {
+    payload.image_generation_adapter = options.imageGenerationAdapter ?? null;
   }
   const response = await fetchWithAuth('/api/ai/model', {
     method: 'PUT',
@@ -953,6 +959,7 @@ export async function adminCreateSysModel(
   maxContextTokens?: number | null,
   maxOutputTokens?: number | null,
   capabilities?: string[],
+  imageGenerationAdapter?: string | null,
 ) {
   const payload: MutablePayload = {
     platform_id: platformId,
@@ -981,6 +988,9 @@ export async function adminCreateSysModel(
   if (capabilities && capabilities.length > 0) {
     payload.capabilities = capabilities;
   }
+  if (imageGenerationAdapter) {
+    payload.image_generation_adapter = imageGenerationAdapter;
+  }
   const response = await fetchWithAuth('/api/ai/admin/sys-model', {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
@@ -1007,6 +1017,8 @@ export async function adminUpdateSysModel(modelId: ApiId, displayName: string | 
   maxOutputTokens?: number | null;
   includeCapabilities?: boolean;
   capabilities?: string[];
+  includeImageGenerationAdapter?: boolean;
+  imageGenerationAdapter?: string | null;
 } = {}) {
   const payload: MutablePayload = {
     id: modelId,
@@ -1027,6 +1039,9 @@ export async function adminUpdateSysModel(modelId: ApiId, displayName: string | 
   }
   if (options?.includeCapabilities) {
     payload.capabilities = options.capabilities ?? [];
+  }
+  if (options?.includeImageGenerationAdapter) {
+    payload.image_generation_adapter = options.imageGenerationAdapter ?? null;
   }
   const response = await fetchWithAuth('/api/ai/admin/sys-model', {
     method: 'PUT',

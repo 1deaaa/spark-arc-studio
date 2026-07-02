@@ -996,6 +996,7 @@ const capabilityOptions = computed<{ label: string; value: ModelCapability }[]>(
 
 const imageAdapterOptions = computed(() => [
     { label: t('components.aiManager.imageAdapters.openaiImages'), value: 'openai_images' },
+    { label: t('components.aiManager.imageAdapters.openaiChatImage'), value: 'openai_chat_image' },
     { label: t('components.aiManager.imageAdapters.geminiImage'), value: 'gemini_interactions' },
     { label: t('components.aiManager.imageAdapters.grokImage'), value: 'xai_images' },
 ]);

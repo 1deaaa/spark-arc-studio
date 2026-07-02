@@ -782,10 +782,10 @@ const manifestAssets = computed<Record<string, PresentationAsset>>(() => {
 });
 
 const styleReferenceOptions = computed(() => Object.values(manifestAssets.value)
-  .filter(asset => asset.type === 'style_reference' || asset.type === 'scene_reference')
+  .filter(asset => asset.type === 'style_reference')
   .sort((a, b) => String(b.createdAt || '').localeCompare(String(a.createdAt || '')))
   .map(asset => ({
-    label: `${asset.type === 'style_reference' ? t('nodeEditor.presentation.styleReference') : t('nodeEditor.presentation.sceneReference')} · ${asset.title || asset.id}`,
+    label: `${t('nodeEditor.presentation.styleReference')} · ${asset.title || asset.id}`,
     value: asset.id,
   })));
 
@@ -945,7 +945,7 @@ function buildPresentationImagePrompt(kind: 'background' | 'sprite', userPrompt:
     '你正在为一部 Web 视觉小说生成演出素材。请优先使用自然语言语义理解，不要把以下内容画成界面、字幕或水印。',
     '统一画风要求：画面需要能与同一项目内的其他素材保持一致；若提供了参考图，请优先继承其构图语言、色彩倾向、笔触/摄影质感与角色一致性。',
     '跨端构图要求：默认生成横版素材，适合 PC 舞台；移动端会居中显示，并使用同图的模糊扩展填充上下区域，所以主体和关键视觉信息必须放在安全中心区域，不要贴边。',
-    styleReference ? `已选风格参考：${styleReference.title || styleReference.id}` : '',
+    styleReference ? `已选风格种子：${styleReference.title || styleReference.id}` : '',
     scene?.scene ? `当前场景：${scene.scene}` : '',
     scene?.intro ? `场景引言：${scene.intro}` : '',
     scene?.thought ? `场景构思：${scene.thought}` : '',

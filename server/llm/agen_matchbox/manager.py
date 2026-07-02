@@ -49,6 +49,12 @@ from .config import (
     is_api_key_placeholder,
 )
 from .env_utils import get_env_var
+from .image_adapters import (
+    DEFAULT_IMAGE_GENERATION_ADAPTER,
+    extract_legacy_image_generation_adapter,
+    normalize_image_generation_adapter,
+    strip_internal_image_generation_fields,
+)
 from .paths import get_db_file_path, get_state_file_path, get_config_file_path, get_key_file_path, get_mgr_home
 from .security import SecurityManager
 from .utils import normalize_recharge_url
@@ -388,6 +394,7 @@ class AIManagerBase:
                 extra_body = None
                 temperature = None
                 capabilities = normalize_model_capabilities()
+                image_generation_adapter = None
             elif isinstance(model_config, dict):
                 model_name = model_config.get("model_name")
                 extra_body = model_config.get("extra_body")
@@ -396,6 +403,10 @@ class AIManagerBase:
                     model_config.get("capabilities"),
                     legacy_is_embedding=bool(model_config.get("is_embedding")),
                 )
+                image_generation_adapter = (
+                    normalize_image_generation_adapter(model_config.get("image_generation_adapter"))
+                    or extract_legacy_image_generation_adapter(extra_body)
+                )
             else:
                 continue
 
@@ -403,11 +414,15 @@ class AIManagerBase:
                 continue
 
             max_context_tokens, max_output_tokens = self._resolve_seed_model_limits(model_config)
+            cleaned_extra_body = strip_internal_image_generation_fields(extra_body)
+            if "image_generation" in capabilities and not image_generation_adapter:
+                image_generation_adapter = DEFAULT_IMAGE_GENERATION_ADAPTER
             specs.append({
                 "display_name": display_name,
                 "model_name": model_name,
                 "capabilities": capabilities,
-                "extra_body_json": json.dumps(extra_body) if extra_body else None,
+                "extra_body_json": json.dumps(cleaned_extra_body) if cleaned_extra_body else None,
+                "image_generation_adapter": image_generation_adapter if "image_generation" in capabilities else None,
                 "temperature": temperature,
                 "max_context_tokens": max_context_tokens,
                 "max_output_tokens": max_output_tokens,
@@ -494,6 +509,7 @@ class AIManagerBase:
         """把 YAML 模型规格写回已有数据库模型。"""
         model.display_name = spec["display_name"]
         model.extra_body = spec["extra_body_json"]
+        model.image_generation_adapter = spec.get("image_generation_adapter")
         model.temperature = spec["temperature"]
         model.max_context_tokens = spec["max_context_tokens"]
         model.max_output_tokens = spec["max_output_tokens"]
@@ -509,6 +525,7 @@ class AIManagerBase:
             model_name=spec["model_name"],
             display_name=spec["display_name"],
             extra_body=spec["extra_body_json"],
+            image_generation_adapter=spec.get("image_generation_adapter"),
             temperature=spec["temperature"],
             max_context_tokens=spec["max_context_tokens"],
             max_output_tokens=spec["max_output_tokens"],
@@ -1024,9 +1041,16 @@ class AIManagerBase:
                     else:
                         entry: Dict[str, Any] = {"model_name": model.model_name}
                         entry["capabilities"] = capabilities
+                        image_generation_adapter = normalize_image_generation_adapter(
+                            getattr(model, "image_generation_adapter", None)
+                        )
+                        if "image_generation" in capabilities and image_generation_adapter:
+                            entry["image_generation_adapter"] = image_generation_adapter
                         if model.extra_body:
                             try:
-                                entry["extra_body"] = json.loads(model.extra_body)
+                                cleaned_extra_body = strip_internal_image_generation_fields(json.loads(model.extra_body))
+                                if cleaned_extra_body:
+                                    entry["extra_body"] = cleaned_extra_body
                             except Exception:
                                 pass
                         if model.temperature is not None:

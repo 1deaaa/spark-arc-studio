@@ -726,8 +726,11 @@ class LLMConfigGUI(
                         "max_context_tokens": m.get("max_context_tokens", 256000),
                         "max_output_tokens": m.get("max_output_tokens", 64000),
                         "sys_credit_input_price_per_million": m.get("sys_credit_input_price_per_million"),
+                        "sys_credit_cached_input_price_per_million": m.get("sys_credit_cached_input_price_per_million"),
                         "sys_credit_output_price_per_million": m.get("sys_credit_output_price_per_million"),
                     }
+                    if m.get("image_generation_adapter"):
+                        model_cfg["image_generation_adapter"] = m["image_generation_adapter"]
                     if m.get("temperature") is not None:
                         model_cfg["temperature"] = m["temperature"]
                     if m.get("extra_body"):
