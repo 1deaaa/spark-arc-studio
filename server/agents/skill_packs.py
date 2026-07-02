@@ -324,6 +324,36 @@ def _github_download_url(url: str) -> str:
     return url
 
 
+def _github_tree_subpath(url: str) -> str:
+    parsed = urlparse(url or "")
+    host = (parsed.netloc or "").lower()
+    if host not in {"github.com", "www.github.com"}:
+        return ""
+    parts = [part for part in parsed.path.strip("/").split("/") if part]
+    if len(parts) >= 5 and parts[2] == "tree":
+        return "/".join(parts[4:]).strip("/")
+    return ""
+
+
+def _detect_archive_root(extract_root: Path) -> Path:
+    entries = [path for path in extract_root.iterdir()]
+    dirs = [path for path in entries if path.is_dir()]
+    files = [path for path in entries if path.is_file()]
+    if len(dirs) == 1 and not files:
+        return dirs[0]
+    return extract_root
+
+
+def _resolve_archive_scope_root(archive_root: Path, source_url: str) -> Path:
+    subpath = _github_tree_subpath(source_url)
+    if not subpath:
+        return archive_root
+    candidate = archive_root.joinpath(*[part for part in subpath.split("/") if part])
+    if candidate.exists() and candidate.is_dir():
+        return candidate
+    return archive_root
+
+
 def _skill_id(domain: str, normalized_name: str, content_hash: str) -> str:
     return f"{domain}:{normalized_name}:{content_hash[:12]}"
 
@@ -441,7 +471,14 @@ def _find_skill_roots(extract_root: Path) -> list[Path]:
     return sorted(set(roots), key=lambda p: len(p.parts))
 
 
-def _import_directory(user_id: str | int, domain: str, skill_root: Path, *, source_url: str = "") -> ImportedSkill:
+def _import_directory(
+    user_id: str | int,
+    domain: str,
+    skill_root: Path,
+    *,
+    source_url: str = "",
+    source_key: str = "",
+) -> ImportedSkill:
     files = _collect_text_files(skill_root)
     normalized: list[dict[str, str]] = []
     for item in files:
@@ -454,6 +491,7 @@ def _import_directory(user_id: str | int, domain: str, skill_root: Path, *, sour
         domain=domain,
         files=normalized,
         source_url=source_url,
+        source_key=source_key,
         ignored_runtime_files=_has_ignored_runtime_files(skill_root),
     )
 
@@ -483,11 +521,22 @@ def import_skill_archive(user_id: str | int, raw_bytes: bytes, *, domain: str = 
                 if info.file_size > MAX_TEXT_FILE_BYTES and not name.endswith("/"):
                     continue
                 zf.extract(info, root)
-        skill_roots = _find_skill_roots(root)
+        archive_root = _detect_archive_root(root)
+        scope_root = _resolve_archive_scope_root(archive_root, source_url)
+        skill_roots = _find_skill_roots(scope_root)
         if not skill_roots:
             raise ValueError("压缩包中未找到 SKILL.md")
         for skill_root in skill_roots:
-            results.append(_import_directory(user_id, domain, skill_root, source_url=source_url))
+            source_key_path = _safe_relpath(skill_root / "SKILL.md", archive_root)
+            results.append(
+                _import_directory(
+                    user_id,
+                    domain,
+                    skill_root,
+                    source_url=source_url,
+                    source_key=_source_key_from_url(source_url, source_key_path),
+                )
+            )
     return results
 
 

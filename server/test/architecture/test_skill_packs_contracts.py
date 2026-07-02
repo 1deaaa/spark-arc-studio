@@ -1,11 +1,15 @@
 from __future__ import annotations
 
+import io
+import zipfile
 from pathlib import Path
 
 from agents.communication import SparkBaseAgent
 from agents.skill_packs import (
     build_quality_adapter_text,
+    import_skill_archive,
     import_skill_markdown,
+    list_effective_skills,
     public_skill_record,
     read_skill,
     read_skill_reference,
@@ -135,3 +139,47 @@ Use tense verbs.
     })
     assert "storage_path" not in record
     assert "content_hash" not in record
+
+
+def test_import_skill_archive_scopes_github_tree_url_and_keeps_distinct_source_keys(tmp_path: Path, monkeypatch) -> None:
+    monkeypatch.setattr("agents.skill_packs.USERDATA_ROOT", str(tmp_path))
+
+    buf = io.BytesIO()
+    with zipfile.ZipFile(buf, "w") as zf:
+        zf.writestr(
+            "demo-main/skills/alpha/SKILL.md",
+            """# Alpha
+
+## Quality
+Use precise verbs.
+""",
+        )
+        zf.writestr(
+            "demo-main/skills/beta/SKILL.md",
+            """# Beta
+
+## Quality
+Use vivid sensory detail.
+""",
+        )
+
+    tree_imports = import_skill_archive(
+        "tree-user",
+        buf.getvalue(),
+        source_url="https://github.com/acme/demo/tree/main/skills/alpha",
+    )
+    tree_skills = list_effective_skills("tree-user")
+    assert len(tree_imports) == 1
+    assert tree_imports[0].name == "Alpha"
+    assert [item.get("name") for item in tree_skills] == ["Alpha"]
+
+    root_imports = import_skill_archive(
+        "root-user",
+        buf.getvalue(),
+        source_url="https://github.com/acme/demo",
+    )
+    root_skills = list_effective_skills("root-user")
+    assert len(root_imports) == 2
+    assert {item.name for item in root_imports} == {"Alpha", "Beta"}
+    assert {item.get("name") for item in root_skills} == {"Alpha", "Beta"}
+    assert len({item.skill_id for item in root_imports}) == 2

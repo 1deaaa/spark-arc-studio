@@ -306,6 +306,42 @@ def test_explicit_absorb_story_memory_endpoint_enqueues_job(monkeypatch, tmp_pat
     assert calls[0]["file_format"] == "arc"
 
 
+def test_reabsorbing_same_scene_replaces_old_story_memory_contributions(monkeypatch, tmp_path: Path) -> None:
+    monkeypatch.setattr("core.utils.USERDATA_ROOT", str(tmp_path))
+    (tmp_path / "uid_25" / "projects" / "demo").mkdir(parents=True)
+
+    facade = StoryMemoryFacade("25", "demo")
+    facade.record_scene_write(
+        scene_text="沈棠把旧钥匙交给林烬。",
+        chapter_index=0,
+        scene_index=0,
+        scene_title="钟楼交易",
+        scene_characters=["沈棠", "林烬"],
+        use_llm_extractor=False,
+    )
+    first_state = facade.load_state()
+    assert len(first_state["scenes"]) == 1
+    assert len(first_state["relationships"]) == 1
+    assert len(first_state["events"]) == 1
+
+    facade.record_scene_write(
+        scene_text="沈棠独自收起旧钥匙。",
+        chapter_index=0,
+        scene_index=0,
+        scene_title="钟楼交易",
+        scene_characters=["沈棠"],
+        use_llm_extractor=False,
+    )
+    state = facade.load_state()
+
+    assert len(state["scenes"]) == 1
+    assert state["scenes"][0]["summary"] == "沈棠独自收起旧钥匙。"
+    assert set(state["character_states"].keys()) == {"沈棠"}
+    assert state["relationships"] == {}
+    assert len(state["events"]) == 1
+    assert state["events"][0]["summary"] == "沈棠独自收起旧钥匙。"
+
+
 def test_scriptwriter_memory_write_call_sites_are_async() -> None:
     from agents.routes import auto_write, production
     from agents.tools import scriptwriter

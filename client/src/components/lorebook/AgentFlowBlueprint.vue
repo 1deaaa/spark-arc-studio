@@ -59,7 +59,7 @@
             <n-tooltip trigger="hover">
               <template #trigger>
                 <n-button
-                  size="tiny"
+                  size="small"
                   secondary
                   circle
                   class="prompt-entry-btn"
@@ -67,7 +67,7 @@
                   @mousedown.stop
                   @click.stop="openPromptPreferenceModal(node)"
                 >
-                  <template #icon><n-icon :component="FilePenLine" /></template>
+                  <template #icon><n-icon :component="FilePenLine" size="16" /></template>
                 </n-button>
               </template>
               {{ t('components.agentModelCard.promptPreferences') }}
@@ -776,16 +776,22 @@ onBeforeUnmount(() => {
 
 .prompt-entry-btn {
   flex: 0 0 auto;
-  color: var(--spark-text-muted);
-  background: color-mix(in srgb, var(--spark-panel-bg), transparent 20%);
-  border-color: var(--spark-border);
+  width: 30px;
+  height: 30px;
+  color: color-mix(in srgb, var(--spark-text), var(--spark-primary) 16%);
+  background: color-mix(in srgb, var(--spark-primary-container), transparent 16%);
+  border-color: color-mix(in srgb, var(--spark-primary), transparent 58%);
+  box-shadow: 0 1px 2px rgba(15, 23, 42, 0.08);
 }
 
 .prompt-entry-btn:hover,
 .prompt-entry-btn.customized {
   color: var(--spark-primary);
-  background: color-mix(in srgb, var(--spark-primary-container), transparent 12%);
-  border-color: color-mix(in srgb, var(--spark-primary), transparent 36%);
+  background: color-mix(in srgb, var(--spark-primary-container), transparent 4%);
+  border-color: color-mix(in srgb, var(--spark-primary), transparent 22%);
+  box-shadow:
+    0 0 0 1px color-mix(in srgb, var(--spark-primary), transparent 70%),
+    0 4px 12px rgba(15, 23, 42, 0.08);
 }
 
 .agent-node-key {

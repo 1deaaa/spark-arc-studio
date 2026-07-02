@@ -1,22 +1,5 @@
 <template>
   <NovelBackdrop class="novel-reader" mode="panel" framed :data-save-state="saveState">
-    <template #overlay>
-      <div class="stats-dock">
-        <div class="stat-pill">
-          <span class="stat-label">字数</span>
-          <strong class="stat-value">{{ wordCount }}</strong>
-        </div>
-        <div class="stat-pill">
-          <span class="stat-label">段落</span>
-          <strong class="stat-value">{{ paragraphCount }}</strong>
-        </div>
-        <div class="stat-pill">
-          <span class="stat-label">预计阅读</span>
-          <strong class="stat-value">{{ readingMinutes }} 分钟</strong>
-        </div>
-      </div>
-    </template>
-
     <div class="reader-stage">
       <div class="reader-sheet">
         <div class="sheet-edge" aria-hidden="true"></div>
@@ -32,7 +15,7 @@
             contenteditable="true"
             role="textbox"
             aria-multiline="true"
-            aria-label="小说正文编辑器"
+            :aria-label="t('components.novelEditor.editorAria')"
             spellcheck="false"
             @input="handleInput"
             @paste="handlePaste"
@@ -44,7 +27,7 @@
 </template>
 
 <script setup lang="ts">
-import { ref, computed, watch, onMounted, nextTick, onBeforeUnmount } from 'vue';
+import { ref, watch, onMounted, nextTick, onBeforeUnmount } from 'vue';
 import { useI18n } from 'vue-i18n';
 import NovelBackdrop from '@/components/player/shared/NovelBackdrop.vue';
 import { useSceneStore } from '@/components/stores/sceneStore';
@@ -71,10 +54,6 @@ function normalizeContent(value: unknown): string {
 
 const localContent = ref(normalizeContent(props.content));
 let saveTimer: ReturnType<typeof setTimeout> | null = null;
-
-const wordCount = computed(() => normalizeContent(localContent.value).replace(/\s+/g, '').length);
-const paragraphCount = computed(() => normalizeContent(localContent.value).split(/\n+/).map(item => item.trim()).filter(Boolean).length);
-const readingMinutes = computed(() => Math.max(1, Math.ceil(wordCount.value / 500)));
 
 function getEditorText(): string {
   return (editorRef.value?.innerText || '').replace(/\r\n/g, '\n').replace(/\u00A0/g, ' ');
@@ -153,44 +132,6 @@ onBeforeUnmount(() => {
   height: 100%;
 }
 
-.stats-dock {
-  position: absolute;
-  top: 18px;
-  right: 18px;
-  z-index: 3;
-  display: flex;
-  gap: 8px;
-  align-items: center;
-}
-
-.stat-pill {
-  min-width: 88px;
-  padding: 8px 12px;
-  border-radius: 10px;
-  border: 1px solid color-mix(in srgb, var(--spark-primary), transparent 72%);
-  background: color-mix(in srgb, var(--spark-panel-bg), transparent 12%);
-  box-shadow:
-    0 8px 20px color-mix(in srgb, black, transparent 90%),
-    inset 0 1px 0 color-mix(in srgb, white, transparent 92%);
-  backdrop-filter: blur(14px);
-}
-
-.stat-label {
-  display: block;
-  font-size: var(--spark-fs-2xs);
-  line-height: 1.2;
-  color: var(--spark-text-muted);
-}
-
-.stat-value {
-  display: block;
-  margin-top: 4px;
-  font-size: var(--spark-fs-md);
-  line-height: 1.2;
-  font-weight: 700;
-  color: var(--spark-text);
-}
-
 .reader-stage {
   height: 100%;
   padding: 0;
@@ -217,9 +158,13 @@ onBeforeUnmount(() => {
 }
 
 .editor-frame {
+  --novel-editor-pad-top: 32px;
+  --novel-editor-pad-inline: 48px;
+  --novel-editor-pad-bottom: 40px;
+
   position: relative;
   height: 100%;
-  padding: 56px 48px 40px;
+  padding: var(--novel-editor-pad-top) var(--novel-editor-pad-inline) var(--novel-editor-pad-bottom);
   overflow: auto;
   background:
     radial-gradient(circle at 12% 18%, color-mix(in srgb, white, transparent 97%), transparent 18%),
@@ -252,14 +197,14 @@ onBeforeUnmount(() => {
   color: var(--spark-text);
   font-size: var(--spark-fs-h3);
   line-height: 1.9;
-  letter-spacing: 0.01em;
+  letter-spacing: 0;
   font-family: var(--spark-font);
   caret-color: var(--spark-primary);
 }
 
 .editor-placeholder {
   position: absolute;
-  inset: 56px 48px 40px;
+  inset: var(--novel-editor-pad-top) var(--novel-editor-pad-inline) var(--novel-editor-pad-bottom);
   color: color-mix(in srgb, var(--spark-text-muted), transparent 8%);
   white-space: pre-wrap;
   pointer-events: none;
@@ -281,35 +226,16 @@ onBeforeUnmount(() => {
   box-shadow: inset 0 0 0 1px color-mix(in srgb, var(--spark-success), transparent 78%);
 }
 
-:global(html.viewport-tablet-down .novel-reader .stats-dock) {
-  top: 14px;
-  right: 14px;
-}
-
 :global(html.viewport-tablet-down .novel-reader .editor-frame) {
-  padding: 72px 30px 32px;
-}
-
-:global(html.viewport-tablet-down .novel-reader .editor-placeholder) {
-  inset: 72px 30px 32px;
-}
-
-:global(html.viewport-mobile .novel-reader .stats-dock) {
-  flex-wrap: wrap;
-  justify-content: flex-end;
-  max-width: calc(100% - 24px);
-}
-
-:global(html.viewport-mobile .novel-reader .stat-pill) {
-  min-width: 78px;
+  --novel-editor-pad-top: 36px;
+  --novel-editor-pad-inline: 30px;
+  --novel-editor-pad-bottom: 32px;
 }
 
 :global(html.viewport-mobile .novel-reader .editor-frame) {
-  padding: 84px 20px 24px;
-}
-
-:global(html.viewport-mobile .novel-reader .editor-placeholder) {
-  inset: 84px 20px 24px;
+  --novel-editor-pad-top: 28px;
+  --novel-editor-pad-inline: 20px;
+  --novel-editor-pad-bottom: 24px;
 }
 
 :global(html.viewport-mobile .novel-reader .reader-editor),

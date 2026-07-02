@@ -285,6 +285,7 @@ class StoryMemoryFacade:
         scene_card["state_delta_source"] = delta.get("source") or "heuristic"
 
         state = self.load_state()
+        self._remove_scene_contributions(state, scene_id)
         scenes = [item for item in state["scenes"] if item.get("scene_id") != scene_id]
         scenes.append(scene_card)
         state["scenes"] = sorted(
@@ -370,6 +371,87 @@ class StoryMemoryFacade:
             "thread": extracted_threads[0] if extracted_threads else fallback_thread,
             "delta": delta,
         }
+
+    def _remove_scene_contributions(self, state: Dict[str, Any], scene_id: str) -> None:
+        """重新吸收同一场景前，移除旧版本留下的可替换状态。"""
+        if not scene_id:
+            return
+
+        next_character_states: dict[str, Dict[str, Any]] = {}
+        for name, card in (state.get("character_states") or {}).items():
+            if not isinstance(card, dict):
+                continue
+            recent_scene_ids = [
+                sid for sid in card.get("recent_scene_ids", [])
+                if sid != scene_id
+            ]
+            recent_evidence = [
+                item for item in card.get("recent_evidence", [])
+                if isinstance(item, dict) and item.get("scene_id") != scene_id
+            ]
+            if not recent_scene_ids and not recent_evidence:
+                continue
+            updated = dict(card)
+            updated["recent_scene_ids"] = recent_scene_ids[-MAX_RECENT_SCENES:]
+            updated["recent_evidence"] = recent_evidence[-MAX_RECENT_EVIDENCE:]
+            if updated.get("last_seen_scene") == scene_id:
+                fallback = recent_evidence[-1] if recent_evidence else {}
+                updated["last_seen_scene"] = fallback.get("scene_id") or (recent_scene_ids[-1] if recent_scene_ids else "")
+                updated["last_seen_title"] = fallback.get("scene_title") or updated.get("last_seen_scene") or ""
+                updated["current_status"] = "最近状态待后续吸收确认"
+            next_character_states[str(name)] = updated
+        state["character_states"] = next_character_states
+
+        next_relationships: dict[str, Dict[str, Any]] = {}
+        for key, rel in (state.get("relationships") or {}).items():
+            if not isinstance(rel, dict):
+                continue
+            old_evidence = [
+                item for item in rel.get("recent_evidence", [])
+                if isinstance(item, dict)
+            ]
+            had_scene = any(item.get("scene_id") == scene_id for item in old_evidence)
+            recent_evidence = [
+                item for item in old_evidence
+                if item.get("scene_id") != scene_id
+            ]
+            co_presence_count = max(0, int(rel.get("co_presence_count") or 0) - (1 if had_scene else 0))
+            if co_presence_count <= 0 and not recent_evidence:
+                continue
+            updated = dict(rel)
+            updated["co_presence_count"] = co_presence_count
+            updated["recent_evidence"] = recent_evidence[-MAX_RECENT_EVIDENCE:]
+            if updated.get("last_scene") == scene_id:
+                fallback = recent_evidence[-1] if recent_evidence else {}
+                updated["last_scene"] = fallback.get("scene_id") or ""
+            next_relationships[str(key)] = updated
+        state["relationships"] = next_relationships
+
+        for key in ("events", "fact_claims", "conflict_risks"):
+            state[key] = [
+                item for item in state.get(key) or []
+                if not isinstance(item, dict) or item.get("scene_id") != scene_id
+            ]
+
+        next_threads: list[Dict[str, Any]] = []
+        for thread in state.get("threads") or []:
+            if not isinstance(thread, dict):
+                continue
+            if thread.get("introduced_scene") == scene_id:
+                continue
+            history = [
+                item for item in thread.get("history") or []
+                if isinstance(item, dict) and item.get("scene_id") != scene_id
+            ]
+            updated = dict(thread)
+            if history != (thread.get("history") or []):
+                updated["history"] = history[-MAX_RECENT_EVIDENCE:]
+                if updated.get("last_touched_scene") == scene_id:
+                    fallback = history[-1] if history else {}
+                    updated["last_touched_scene"] = fallback.get("scene_id") or updated.get("introduced_scene") or ""
+                    updated["last_touched_title"] = fallback.get("scene_title") or updated.get("scene_title") or ""
+            next_threads.append(updated)
+        state["threads"] = next_threads
 
     def _extract_thread_candidate(self, scene_card: Dict[str, Any], characters: list[str]) -> Optional[Dict[str, Any]]:
         source = "\n".join([

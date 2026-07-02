@@ -4,29 +4,30 @@
     preset="card"
     class="agent-prompt-modal-card"
     :style="{ width: 'min(640px, calc(100vw - 32px))' }"
-    :title="modalTitle"
     :bordered="false"
     :mask-closable="!saving"
     @update:show="emit('update:show', $event)"
   >
+    <template #header>
+      <div class="prompt-modal-header">
+        <span>{{ modalTitle }}</span>
+        <n-tooltip trigger="hover">
+          <template #trigger>
+            <n-button text circle size="tiny" class="prompt-info-trigger">
+              <template #icon><n-icon :component="CircleHelp" /></template>
+            </n-button>
+          </template>
+          <div class="prompt-info-tooltip">
+            <div class="prompt-info-tooltip-title">{{ t('components.agentModelCard.promptPreferencesInfoTitle') }}</div>
+            <div>{{ t('components.agentModelCard.promptPreferencesInfoBody') }}</div>
+          </div>
+        </n-tooltip>
+      </div>
+    </template>
     <n-spin :show="loading">
       <div class="prompt-modal-body">
-        <n-alert type="info" :title="t('components.agentModelCard.promptPreferencesInfoTitle')" :bordered="false">
-          {{ t('components.agentModelCard.promptPreferencesInfoBody') }}
-        </n-alert>
-
-        <div v-if="preferences" class="prompt-summary">
-          <span class="prompt-summary-item">
-            {{ t('components.agentModelCard.systemRecommended') }}:
-            {{ preferences.default_content ? t('components.agentModelCard.promptDefaultConfigured') : t('components.agentModelCard.promptDefaultEmpty') }}
-          </span>
-          <span class="prompt-summary-item" :class="{ active: preferences.customized }">
-            {{ preferences.customized ? t('components.agentModelCard.promptCustomized') : t('components.agentModelCard.promptInherited') }}
-          </span>
-        </div>
-
         <template v-if="preferences">
-          <n-collapse class="system-recommendation" :default-expanded-names="[]">
+          <n-collapse v-if="preferences.default_content" class="system-recommendation" :default-expanded-names="[]">
             <n-collapse-item :title="t('components.agentModelCard.viewSystemRecommended')" name="system-recommended">
               <n-input
                 :value="preferences.default_content"
@@ -77,7 +78,6 @@
 import { computed, ref, watch } from 'vue';
 import { useI18n } from 'vue-i18n';
 import {
-  NAlert,
   NButton,
   NCollapse,
   NCollapseItem,
@@ -86,9 +86,10 @@ import {
   NInput,
   NModal,
   NSpin,
+  NTooltip,
   useMessage,
 } from 'naive-ui';
-import { RefreshCw, RotateCcw, Save } from '@lucide/vue';
+import { CircleHelp, RefreshCw, RotateCcw, Save } from '@lucide/vue';
 import {
   fetchAgentPromptPreferences,
   resetAgentPromptPreference,
@@ -212,25 +213,27 @@ watch(() => props.agentId, (agentId) => {
   gap: 10px;
 }
 
-.prompt-summary {
+.prompt-modal-header {
   display: flex;
-  flex-wrap: wrap;
+  align-items: center;
   gap: 8px;
-  font-size: var(--spark-fs-xs);
+}
+
+.prompt-info-trigger {
   color: var(--spark-text-muted);
 }
 
-.prompt-summary-item {
-  padding: 6px 8px;
-  border-radius: 6px;
-  background: var(--spark-bg);
-  border: 1px solid var(--spark-border);
+.prompt-info-tooltip {
+  max-width: 360px;
+  font-size: var(--spark-fs-xs);
+  line-height: 1.6;
+  color: var(--n-text-color);
 }
 
-.prompt-summary-item.active {
-  color: var(--spark-primary);
-  background: rgba(var(--spark-primary-rgb), 0.08);
-  border-color: rgba(var(--spark-primary-rgb), 0.22);
+.prompt-info-tooltip-title {
+  margin-bottom: 4px;
+  font-weight: 600;
+  color: var(--n-text-color);
 }
 
 .system-recommendation {

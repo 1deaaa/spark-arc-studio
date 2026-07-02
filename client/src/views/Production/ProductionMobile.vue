@@ -62,11 +62,30 @@
             <div class="workbench-copy">
               <span class="workbench-kicker">{{ t('views.production.mobile.workbenchKicker') }}</span>
               <h3>{{ isNovelMode ? t('views.production.mobile.workbenchTitleNovel') : t('views.production.mobile.workbenchTitleScript') }}</h3>
-              <p>{{ isNovelMode ? t('views.production.mobile.workbenchSubtitleNovel') : t('views.production.mobile.workbenchSubtitleScript') }}</p>
             </div>
-            <SparkTag :type="isNovelMode ? 'warning' : 'info'" size="small">
-              {{ isNovelMode ? t('views.scriptWriter.desktop.modeNovel') : t('views.scriptWriter.desktop.modeScript') }}
-            </SparkTag>
+            <div class="workbench-heading-actions">
+              <SparkTag :type="isNovelMode ? 'warning' : 'info'" size="small">
+                {{ isNovelMode ? t('views.scriptWriter.desktop.modeNovel') : t('views.scriptWriter.desktop.modeScript') }}
+              </SparkTag>
+              <n-dropdown
+                v-if="isNovelMode"
+                trigger="click"
+                :options="submissionExportOptions"
+                :disabled="!projectId || exportingSubmission"
+                @select="handleSubmissionExport"
+              >
+                <n-button
+                  class="submission-platform-button mobile"
+                  secondary
+                  size="small"
+                  :loading="exportingSubmission"
+                  :disabled="!projectId"
+                >
+                  <template #icon><n-icon :component="Send" /></template>
+                  {{ t('components.novelEditor.submissionExport.button') }}
+                </n-button>
+              </n-dropdown>
+            </div>
           </div>
 
           <div class="file-selector-bar">
@@ -303,10 +322,10 @@
 </template>
 
 <script setup lang="ts">
-import { ref, computed, onMounted, onUnmounted, inject, watch, type Ref } from 'vue';
-import { NIcon, NSpin, NButton, NInput, NInputNumber, NSelect, NDrawer, NDrawerContent, NTabs, NTabPane, NSwitch, NText, useMessage } from 'naive-ui';
+import { ref, computed, h, onMounted, onUnmounted, inject, watch, type Ref } from 'vue';
+import { NIcon, NSpin, NButton, NInput, NInputNumber, NSelect, NDrawer, NDrawerContent, NTabs, NTabPane, NSwitch, NText, NDropdown, useMessage, type DropdownOption } from 'naive-ui';
 import { useI18n } from 'vue-i18n';
-import { ArrowLeft, BookOpen, Clipboard, Pencil, Plus, RadioTower, Save, Sparkles, SquarePen } from '@lucide/vue';
+import { ArrowLeft, BookOpen, Clipboard, Pencil, Plus, RadioTower, Save, Send, Sparkles, SquarePen } from '@lucide/vue';
 import { useSceneStore, type SceneWithClientId } from '../../components/stores/sceneStore';
 import { useFileStore } from '../../components/stores/fileStore';
 import { getOutline } from '../../services/api';
@@ -323,6 +342,11 @@ import ConditionsEditor from '../../components/dlg-editor/ConditionsEditor.vue';
 import EffectsEditor from '../../components/dlg-editor/EffectsEditor.vue';
 import { useStoryFileOptions } from '../../composables/useStoryFileOptions';
 import { getSceneRuntimeSummary, type SceneContentKind, type SceneRuntimeSummary } from '../../utils/sceneContentRuntime';
+import {
+  NOVEL_SUBMISSION_PLATFORMS,
+  downloadNovelSubmissionExport,
+  type NovelSubmissionPlatform,
+} from '../../services/storyService';
 import bus from '../../eventBus';
 
 const { t } = useI18n();
@@ -359,6 +383,14 @@ const sceneCards = computed(() => scenes.value.map((scene, index) => ({
 const currentScene = computed(() => sceneStore.currentScene);
 const workspaceMode = computed(() => sceneStore.workspaceMode || 'script');
 const isNovelMode = computed(() => workspaceMode.value === 'novel');
+const exportingSubmission = ref(false);
+const submissionExportOptions = computed<DropdownOption[]>(() => (
+  NOVEL_SUBMISSION_PLATFORMS.map(platform => ({
+    key: platform,
+    label: t(`components.novelEditor.submissionExport.platforms.${platform}`),
+    icon: () => h(NIcon, null, { default: () => h(Send) }),
+  }))
+));
 
 const sceneTitle = ref('');
 const sceneIntro = ref('');
@@ -433,6 +465,28 @@ async function copyRuntimeTriggerEvent() {
     message.success(t('views.production.mobile.copyTriggerEventSuccess'));
   } catch {
     message.error(t('views.production.mobile.copyTriggerEventFailed'));
+  }
+}
+
+async function handleSubmissionExport(key: string | number) {
+  if (exportingSubmission.value) return;
+  if (!projectId.value) {
+    message.warning(t('components.novelEditor.submissionExport.noProject'));
+    return;
+  }
+
+  exportingSubmission.value = true;
+  try {
+    if (isNovelMode.value) {
+      await sceneStore._saveStory();
+    }
+    await downloadNovelSubmissionExport(projectId.value, key as NovelSubmissionPlatform);
+    message.success(t('components.novelEditor.submissionExport.success'));
+  } catch (error) {
+    const errorMessage = error instanceof Error ? error.message : String(error);
+    message.error(`${t('components.novelEditor.submissionExport.failed')}: ${errorMessage}`);
+  } finally {
+    exportingSubmission.value = false;
   }
 }
 
@@ -614,6 +668,15 @@ onUnmounted(() => {
   min-width: 0;
 }
 
+.workbench-heading-actions {
+  flex: 0 0 auto;
+  display: flex;
+  flex-direction: column;
+  align-items: flex-end;
+  gap: 6px;
+  max-width: 52%;
+}
+
 .workbench-kicker {
   display: block;
   margin-bottom: 2px;
@@ -629,15 +692,19 @@ onUnmounted(() => {
   color: var(--spark-text);
 }
 
-.workbench-copy p {
-  margin: 3px 0 0;
-  font-size: var(--spark-fs-xs);
-  line-height: 1.45;
-  color: var(--spark-text-muted);
-}
-
 .file-selector-bar {
   min-width: 0;
+}
+
+.submission-platform-button.mobile {
+  max-width: 100%;
+}
+
+.submission-platform-button.mobile :deep(.n-button__content) {
+  min-width: 0;
+  overflow: hidden;
+  white-space: nowrap;
+  text-overflow: ellipsis;
 }
 
 .workbench-stats {

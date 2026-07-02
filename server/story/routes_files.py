@@ -1,10 +1,11 @@
 from fastapi import APIRouter, Depends, Query
-from fastapi.responses import JSONResponse
-from pydantic import BaseModel
-from typing import List, Optional, Any
-import os
-import json
-import shutil
+from fastapi.responses import JSONResponse, Response
+from pydantic import BaseModel
+from typing import List, Optional, Any
+import os
+import json
+import shutil
+from urllib.parse import quote
 
 from core.auth import get_current_user, get_optional_user
 from core.request_context import normalize_project_name
@@ -27,7 +28,11 @@ from story.file_naming import (
     strip_story_filename_meta,
 )
 from story.importer import import_project_stories_to_db
-from story.novel_parser import aggregate_novel, get_novel_chapter_list
+from story.novel_parser import aggregate_novel, get_novel_chapter_list
+from story.novel_submission_export import (
+    NovelSubmissionExportError,
+    generate_novel_submission_zip,
+)
 
 files_router = APIRouter()
 
@@ -229,8 +234,7 @@ async def get_story_files(
                         'sortKey': story_sort_key(os.path.join(relative_path, item) if relative_path else item),
                     })
 
-            folders = [folder for folder in folders if folder.get('children') or not normalized_filter]
-            folders_sorted = reorder_by_user_order(folders, relative_path)
+            folders_sorted = reorder_by_user_order(folders, relative_path)
             files_sorted = sorted(files, key=lambda entry: entry.get('sortKey') or story_sort_key(entry.get('filename', '')))
             return folders_sorted + files_sorted
 
@@ -377,11 +381,13 @@ async def create_file_or_folder(data: FileOperation, user: dict = Depends(get_cu
         stories_path = ensure_project_stories_directory(user_id, project_name)
         file_type = data.type
         normalized_path = str(data.path or '').replace('\\', '/').strip('/')
-        file_path = os.path.join(stories_path, normalized_path)
-
-        if file_type == 'folder':
-            os.makedirs(file_path, exist_ok=True)
-        else:
+        file_path = os.path.join(stories_path, normalized_path)
+
+        if file_type == 'folder':
+            if os.path.exists(file_path):
+                return JSONResponse(status_code=409, content={"success": False, "message": f"分卷 '{os.path.basename(file_path)}' 已存在"})
+            os.makedirs(file_path, exist_ok=True)
+        else:
             file_ext = os.path.splitext(file_path)[1].lower()
             if file_ext not in {'.arc', '.txt', '.md'}:
                 file_ext = '.arc'
@@ -697,8 +703,8 @@ async def get_novel_toc(project_name: str, user: dict = Depends(get_current_user
         return JSONResponse(status_code=500, content={"success": False, "message": f"获取小说目录失败: {exc}"})
 
 
-@files_router.get('/api/story-novel/{project_name}/export')
-async def export_novel_markdown(project_name: str, user: dict = Depends(get_current_user)):
+@files_router.get('/api/story-novel/{project_name}/export')
+async def export_novel_markdown(project_name: str, user: dict = Depends(get_current_user)):
     """聚合该项目下所有的场景 Markdown，返回完整的小说文本供下载"""
     try:
         user_id = str(user['user_id'])
@@ -719,5 +725,36 @@ async def export_novel_markdown(project_name: str, user: dict = Depends(get_curr
             media_type='text/markdown',
             filename=f"{project_name}_novel.md"
         )
-    except Exception as exc:
-        return JSONResponse(status_code=500, content={"success": False, "message": f"导出小说失败: {exc}"})
+    except Exception as exc:
+        return JSONResponse(status_code=500, content={"success": False, "message": f"导出小说失败: {exc}"})
+
+
+@files_router.get('/api/story-novel/{project_name}/submission-export')
+async def export_novel_submission_package(
+    project_name: str,
+    platform: str = Query(..., description="投稿平台标识"),
+    user: dict = Depends(get_current_user),
+):
+    """导出面向小说平台作者后台的投稿 zip 包。"""
+    try:
+        user_id = str(user['user_id'])
+        normalized_project_name = normalize_project_name(project_name)
+        if not normalized_project_name:
+            return JSONResponse(status_code=400, content={"success": False, "message": "项目名称不能为空"})
+
+        toc = get_novel_chapter_list(user_id, normalized_project_name, export_format="md")
+        package = generate_novel_submission_zip(normalized_project_name, toc, platform)
+        encoded_filename = quote(package.filename, safe="")
+        return Response(
+            content=package.content,
+            media_type="application/zip",
+            headers={
+                "Content-Disposition": f"attachment; filename*=UTF-8''{encoded_filename}",
+                "X-Novel-Submission-Platform": package.platform.key,
+                "X-Novel-Submission-Chapters": str(package.chapter_count),
+            },
+        )
+    except NovelSubmissionExportError as exc:
+        return JSONResponse(status_code=400, content={"success": False, "message": str(exc)})
+    except Exception as exc:
+        return JSONResponse(status_code=500, content={"success": False, "message": f"导出投稿包失败: {exc}"})

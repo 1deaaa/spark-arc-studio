@@ -24,6 +24,7 @@ type SynopsisData = {
     themes: string[];
     pacing_guide: string;
     narrative_pov: string;
+    estimated_chapters: string;
     [key: string]: unknown;
 };
 
@@ -66,7 +67,8 @@ export function useSynopsisLogic() {
         guidance: '', // 将 guidance 移入 synopsisData 以便统一保存
         themes: [],
         pacing_guide: '',
-        narrative_pov: ''
+        narrative_pov: '',
+        estimated_chapters: '',
     });
 
     const isGenerating = ref(false);
@@ -95,6 +97,7 @@ export function useSynopsisLogic() {
                 themes: [...synopsisData.themes],
                 pacing_guide: synopsisData.pacing_guide,
                 narrative_pov: synopsisData.narrative_pov,
+                estimated_chapters: synopsisData.estimated_chapters,
             },
             beatSheet: {
                 beats: beatSheet.beats.map((beat) => ({ ...beat })),
@@ -112,6 +115,7 @@ export function useSynopsisLogic() {
         synopsisData.themes = Array.isArray(snapshot.synopsisData.themes) ? [...snapshot.synopsisData.themes] : [];
         synopsisData.pacing_guide = snapshot.synopsisData.pacing_guide || '';
         synopsisData.narrative_pov = snapshot.synopsisData.narrative_pov || '';
+        synopsisData.estimated_chapters = snapshot.synopsisData.estimated_chapters || '';
         beatSheet.beats = Array.isArray(snapshot.beatSheet.beats) ? snapshot.beatSheet.beats.map((beat) => ({ ...beat })) : [];
         beatSheet.global_emotional_arc = snapshot.beatSheet.global_emotional_arc || '';
         suppressAutoSave = false;
@@ -127,6 +131,7 @@ export function useSynopsisLogic() {
                 themes: [],
                 pacing_guide: '',
                 narrative_pov: '',
+                estimated_chapters: '',
             },
             beatSheet: {
                 beats: [],
@@ -239,6 +244,7 @@ export function useSynopsisLogic() {
                         themes: [],
                         pacing_guide: '',
                         narrative_pov: '',
+                        estimated_chapters: '',
                     },
                 beatSheet: bMarkup && bMarkup.trim()
                     ? parseBeatSheetMarkup(bMarkup)
@@ -266,7 +272,7 @@ export function useSynopsisLogic() {
                 themes: synopsisData.themes,
                 pacing_guide: synopsisData.pacing_guide,
                 narrative_pov: synopsisData.narrative_pov,
-                estimated_chapters: '',
+                estimated_chapters: synopsisData.estimated_chapters,
             });
             const bMarkup = serializeBeatSheetToMarkup(beatSheet);
             await Promise.all([
@@ -340,6 +346,7 @@ export function useSynopsisLogic() {
                 if (parsed.themes && parsed.themes.length > 0) synopsisData.themes = parsed.themes;
                 if (parsed.pacing_guide) synopsisData.pacing_guide = parsed.pacing_guide;
                 if (parsed.narrative_pov) synopsisData.narrative_pov = parsed.narrative_pov;
+                if (parsed.estimated_chapters) synopsisData.estimated_chapters = parsed.estimated_chapters;
             } catch (parseError: unknown) {
                 console.warn('梗概 Markup 解析失败:', getErrorMessage(parseError));
             }
@@ -463,6 +470,7 @@ export function useSynopsisLogic() {
             projectName: projectStore.currentProject,
             context: synopsisContext,
             guidance: synopsisGuidance,
+            lengthHint: synopsisData.estimated_chapters || currentLengthHint.value || null,
             autoGenerateOutline: !!options.autoGenerateOutline,
         };
 
@@ -524,7 +532,7 @@ export function useSynopsisLogic() {
                 themes: synopsisData.themes,
                 pacing_guide: synopsisData.pacing_guide,
                 narrative_pov: synopsisData.narrative_pov,
-                estimated_chapters: '',
+                estimated_chapters: synopsisData.estimated_chapters,
             });
             const bMarkup = serializeBeatSheetToMarkup(beatSheet);
             await Promise.all([

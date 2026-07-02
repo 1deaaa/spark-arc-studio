@@ -1,28 +1,22 @@
 <template>
-  <n-card class="agent-skill-manager" size="small">
-    <template #header>
-      <div class="skill-header">
-        <n-icon :component="BrainCircuit" size="18" />
-        <span>{{ t('components.agentSkillManager.title') }}</span>
-      </div>
-    </template>
-    <template #header-extra>
-      <n-button text size="tiny" :loading="loading" @click="loadSkills">
+  <div class="agent-skill-manager">
+    <div class="skill-toolbar">
+      <div class="skill-intro">{{ t('components.agentSkillManager.description') }}</div>
+      <n-button text size="tiny" :loading="loading" class="skill-refresh-btn" @click="loadSkills">
         <template #icon><n-icon :component="RefreshCw" /></template>
       </n-button>
-    </template>
-
-    <div class="skill-intro">{{ t('components.agentSkillManager.description') }}</div>
+    </div>
 
     <div class="skill-actions">
-      <n-input
-        v-model:value="urlInput"
-        size="small"
-        :placeholder="t('components.agentSkillManager.urlPlaceholder')"
-        clearable
-      />
-      <div class="skill-action-row">
-        <n-button size="small" secondary :loading="importing" @click="importFromUrl">
+      <div class="skill-action-grid">
+        <n-input
+          v-model:value="urlInput"
+          size="small"
+          class="skill-url-input"
+          :placeholder="t('components.agentSkillManager.urlPlaceholder')"
+          clearable
+        />
+        <n-button size="small" secondary :loading="importing" class="skill-action-btn" @click="importFromUrl">
           <template #icon><n-icon :component="CloudDownload" /></template>
           {{ t('components.agentSkillManager.importUrl') }}
         </n-button>
@@ -32,18 +26,24 @@
           :custom-request="handleUpload"
           accept=".md,.txt,.zip"
         >
-          <n-button size="small" secondary :loading="uploading">
+          <n-button size="small" secondary :loading="uploading" class="skill-action-btn">
             <template #icon><n-icon :component="CloudUpload" /></template>
             {{ t('components.agentSkillManager.upload') }}
           </n-button>
         </n-upload>
       </div>
-      <n-checkbox v-if="isAdmin" v-model:checked="publishGlobal" size="small">
+        <n-checkbox v-if="isAdmin" v-model:checked="publishGlobal" size="small">
         {{ t('components.agentSkillManager.publishGlobal') }}
       </n-checkbox>
+      <div class="skill-guidance">
+        <div class="skill-guidance-title">{{ t('components.agentSkillManager.guidanceTitle') }}</div>
+        <div class="skill-guidance-line">{{ t('components.agentSkillManager.guidanceGood') }}</div>
+        <div class="skill-guidance-line">{{ t('components.agentSkillManager.guidanceBad') }}</div>
+        <div class="skill-guidance-line">{{ t('components.agentSkillManager.guidanceRule') }}</div>
+      </div>
     </div>
 
-    <n-spin :show="loading">
+    <n-spin :show="loading" class="skill-content">
       <div v-if="error" class="skill-error">{{ error }}</div>
       <div v-else-if="!skills.length" class="skill-empty">
         {{ t('components.agentSkillManager.empty') }}
@@ -83,15 +83,15 @@
         </div>
       </div>
     </n-spin>
-  </n-card>
+  </div>
 </template>
 
 <script setup lang="ts">
 import { onMounted, ref } from 'vue';
 import { useI18n } from 'vue-i18n';
-import { NButton, NCard, NCheckbox, NIcon, NInput, NPopconfirm, NSpin, NUpload, useMessage } from 'naive-ui';
+import { NButton, NCheckbox, NIcon, NInput, NPopconfirm, NSpin, NUpload, useMessage } from 'naive-ui';
 import type { UploadCustomRequestOptions } from 'naive-ui';
-import { BrainCircuit, CloudDownload, CloudUpload, RefreshCw, Trash2 } from '@lucide/vue';
+import { CloudDownload, CloudUpload, RefreshCw, Trash2 } from '@lucide/vue';
 import SparkTag from '@/components/share/SparkTag.vue';
 import {
   deleteAgentSkill,
@@ -185,52 +185,87 @@ onMounted(loadSkills);
 
 <style scoped>
 .agent-skill-manager {
-  height: 100%;
-  min-height: 0;
   display: flex;
   flex-direction: column;
+  gap: 14px;
+  min-height: 320px;
 }
 
-.agent-skill-manager :deep(.n-card__content) {
-  flex: 1 1 auto;
-  min-height: 0;
+.skill-toolbar {
   display: flex;
-  flex-direction: column;
-}
-
-.skill-header {
-  display: flex;
-  align-items: center;
-  gap: 8px;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 12px;
 }
 
 .skill-intro {
-  margin-bottom: 12px;
+  flex: 1 1 auto;
   color: var(--spark-text-muted);
   font-size: var(--spark-fs-xs);
   line-height: 1.5;
 }
 
+.skill-refresh-btn {
+  flex: 0 0 auto;
+  margin-top: -2px;
+}
+
 .skill-actions {
   display: flex;
   flex-direction: column;
-  gap: 8px;
-  margin-bottom: 12px;
+  gap: 10px;
 }
 
-.skill-action-row {
+.skill-guidance {
   display: flex;
-  flex-wrap: wrap;
+  flex-direction: column;
+  gap: 4px;
+  padding: 10px 12px;
+  border: 1px solid color-mix(in srgb, var(--spark-primary), transparent 78%);
+  border-radius: 8px;
+  background: color-mix(in srgb, var(--spark-primary-container), transparent 58%);
+}
+
+.skill-guidance-title {
+  color: var(--spark-text);
+  font-size: var(--spark-fs-xs);
+  font-weight: 600;
+}
+
+.skill-guidance-line {
+  color: var(--spark-text-muted);
+  font-size: var(--spark-fs-xs);
+  line-height: 1.5;
+}
+
+.skill-action-grid {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto auto;
   gap: 8px;
-  align-items: center;
+  align-items: stretch;
+}
+
+.skill-url-input {
+  min-width: 0;
+}
+
+.skill-upload-action,
+.skill-action-grid :deep(.n-upload-trigger),
+.skill-action-btn {
+  width: 100%;
+}
+
+.skill-content {
+  flex: 1 1 auto;
+  min-height: 0;
 }
 
 .skill-list {
   display: flex;
   flex-direction: column;
   gap: 8px;
-  flex: 1 1 auto;
   min-height: 0;
+  max-height: min(48vh, 420px);
   overflow: auto;
 }
 
@@ -278,10 +313,13 @@ onMounted(loadSkills);
 
 .skill-empty,
 .skill-error {
-  padding: 14px 10px;
+  padding: 40px 12px;
   color: var(--spark-text-muted);
   font-size: var(--spark-fs-sm);
   text-align: center;
+  border: 1px dashed var(--spark-border);
+  border-radius: 8px;
+  background: color-mix(in srgb, var(--spark-panel-bg), transparent 16%);
 }
 
 .skill-error {
@@ -294,40 +332,37 @@ onMounted(loadSkills);
 
 @media (max-width: 720px) {
   .agent-skill-manager {
-    height: auto;
+    min-height: 0;
+    gap: 12px;
   }
 
-  .agent-skill-manager :deep(.n-card__content) {
-    display: block;
-  }
-
-  .skill-intro {
-    margin-bottom: 10px;
-    line-height: 1.55;
+  .skill-toolbar {
+    gap: 10px;
   }
 
   .skill-actions {
     gap: 8px;
-    margin-bottom: 10px;
   }
 
-  .skill-action-row {
-    display: grid;
+  .skill-action-grid {
     grid-template-columns: repeat(2, minmax(0, 1fr));
-    gap: 8px;
+  }
+
+  .skill-url-input {
+    grid-column: 1 / -1;
   }
 
   .skill-upload-action,
-  .skill-action-row :deep(.n-button) {
+  .skill-action-grid :deep(.n-button) {
     width: 100%;
     min-width: 0;
   }
 
-  .skill-action-row :deep(.n-upload-trigger) {
+  .skill-action-grid :deep(.n-upload-trigger) {
     width: 100%;
   }
 
-  .skill-action-row :deep(.n-button__content) {
+  .skill-action-grid :deep(.n-button__content) {
     min-width: 0;
     max-width: 100%;
     white-space: nowrap;
@@ -335,13 +370,9 @@ onMounted(loadSkills);
     text-overflow: ellipsis;
   }
 
-  .skill-list {
-    max-height: none;
-  }
-
   .skill-empty,
   .skill-error {
-    padding: 12px 8px 6px;
+    padding: 28px 10px;
   }
 }
 </style>

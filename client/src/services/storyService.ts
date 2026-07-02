@@ -207,6 +207,57 @@ export async function saveStoriesOrder(projectName: string, dirPath: string, ord
   return result;
 }
 
+export const NOVEL_SUBMISSION_PLATFORMS = ['fanqie', 'qidian', 'qimao', 'jinjiang', 'zongheng'] as const;
+export type NovelSubmissionPlatform = typeof NOVEL_SUBMISSION_PLATFORMS[number];
+
+function extractDownloadFilename(disposition: string, fallback: string): string {
+  const utf8Match = disposition.match(/filename\*=UTF-8''(.+?)(?:;|$)/);
+  if (utf8Match) return decodeURIComponent(utf8Match[1]);
+  const match = disposition.match(/filename="?([^"]+)"?/);
+  return match?.[1] || fallback;
+}
+
+async function parseDownloadError(response: Response, fallback: string): Promise<string> {
+  try {
+    const contentType = response.headers.get('Content-Type') || '';
+    if (contentType.includes('application/json')) {
+      const result = await response.json() as StoryMutationResult & { error?: string };
+      return result.message || result.error || fallback;
+    }
+    const text = await response.text();
+    return text || fallback;
+  } catch {
+    return fallback;
+  }
+}
+
+export async function downloadNovelSubmissionExport(
+  projectName: string,
+  platform: NovelSubmissionPlatform,
+): Promise<void> {
+  const response = await fetchWithAuth(
+    `/api/story-novel/${encodeURIComponent(projectName)}/submission-export?platform=${encodeURIComponent(platform)}`,
+  );
+
+  if (!response.ok) {
+    throw new Error(await parseDownloadError(response, '导出投稿包失败'));
+  }
+
+  const filename = extractDownloadFilename(
+    response.headers.get('Content-Disposition') || '',
+    `${projectName}_${platform}_submission.zip`,
+  );
+  const blob = await response.blob();
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement('a');
+  a.href = url;
+  a.download = filename;
+  document.body.appendChild(a);
+  a.click();
+  document.body.removeChild(a);
+  URL.revokeObjectURL(url);
+}
+
 // --- 角色、蓝图、绑定、注册表 ---
 
 /**

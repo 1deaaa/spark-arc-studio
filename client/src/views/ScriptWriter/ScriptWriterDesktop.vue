@@ -25,9 +25,28 @@
               <div class="sidebar-section file-section">
                 <div class="file-section-header">
                   <span class="file-section-title">{{ t('views.scriptWriter.desktop.workspaceManager') }}</span>
-                </div>
-                <div class="workspace-mode-desc">
-                  {{ isNovelWorkspace ? t('views.scriptWriter.desktop.modeSwitchNovelDesc') : t('views.scriptWriter.desktop.modeSwitchScriptDesc') }}
+                  <n-dropdown
+                    v-if="isNovelWorkspace"
+                    trigger="click"
+                    :options="submissionExportOptions"
+                    :disabled="!projectStore.currentProject || exportingSubmission"
+                    @select="handleSubmissionExport"
+                  >
+                    <n-button
+                      class="submission-platform-button"
+                      secondary
+                      size="small"
+                      :loading="exportingSubmission"
+                      :disabled="!projectStore.currentProject"
+                    >
+                      <template #icon>
+                        <n-icon>
+                          <Send />
+                        </n-icon>
+                      </template>
+                      {{ t('components.novelEditor.submissionExport.button') }}
+                    </n-button>
+                  </n-dropdown>
                 </div>
                 <FileTree :key="workspaceMode" />
               </div>
@@ -88,8 +107,8 @@
 </template>
 
 <script setup lang="ts">
-import { computed, onMounted, onUnmounted, nextTick } from 'vue';
-import { NModal } from 'naive-ui';
+import { computed, h, nextTick, onMounted, onUnmounted, ref } from 'vue';
+import { NButton, NDropdown, NIcon, NModal, type DropdownOption } from 'naive-ui';
 import { useI18n } from 'vue-i18n';
 import { useOnboarding } from '../../onboarding';
 import VersionManager from '../../components/dlg-editor/VersionManager.vue';
@@ -121,6 +140,12 @@ import bus from '../../eventBus';
 import { useResizer } from '../../hooks/useResizer';
 import { useScriptWriterLogic } from '../../composables/useScriptWriterLogic';
 import { useSceneStore } from '../../components/stores/sceneStore';
+import { Send } from '@lucide/vue';
+import {
+  NOVEL_SUBMISSION_PLATFORMS,
+  downloadNovelSubmissionExport,
+  type NovelSubmissionPlatform,
+} from '../../services/storyService';
 
 const { t } = useI18n();
 const sceneStore = useSceneStore();
@@ -161,6 +186,39 @@ function openVersionManager() {
 const workspaceMode = computed(() => sceneStore.workspaceMode || 'script');
 
 const isNovelWorkspace = computed(() => workspaceMode.value === 'novel');
+const exportingSubmission = ref(false);
+const submissionExportOptions = computed<DropdownOption[]>(() => (
+  NOVEL_SUBMISSION_PLATFORMS.map(platform => ({
+    key: platform,
+    label: t(`components.novelEditor.submissionExport.platforms.${platform}`),
+    icon: () => h(NIcon, null, { default: () => h(Send) }),
+  }))
+));
+
+async function handleSubmissionExport(key: string | number) {
+  if (exportingSubmission.value) return;
+  if (!projectStore.currentProject) {
+    bus.emit('toast', { type: 'warning', message: t('components.novelEditor.submissionExport.noProject') });
+    return;
+  }
+
+  exportingSubmission.value = true;
+  try {
+    if (sceneStore.workspaceMode === 'novel') {
+      await sceneStore._saveStory();
+    }
+    await downloadNovelSubmissionExport(projectStore.currentProject, key as NovelSubmissionPlatform);
+    bus.emit('toast', { type: 'success', message: t('components.novelEditor.submissionExport.success') });
+  } catch (error) {
+    const errorMessage = error instanceof Error ? error.message : String(error);
+    bus.emit('toast', {
+      type: 'error',
+      message: `${t('components.novelEditor.submissionExport.failed')}: ${errorMessage}`,
+    });
+  } finally {
+    exportingSubmission.value = false;
+  }
+}
 
 const activeComponent = computed(() => {
   switch (viewStore.currentView) {
@@ -260,10 +318,26 @@ main {
 }
 
 .file-section-title {
+  flex: 1 1 auto;
+  min-width: 0;
   font-size: var(--spark-fs-base);
   font-weight: 600;
   color: var(--spark-text);
   white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.submission-platform-button {
+  flex: 0 1 auto;
+  max-width: 100%;
+}
+
+.submission-platform-button :deep(.n-button__content) {
+  min-width: 0;
+  overflow: hidden;
+  white-space: nowrap;
+  text-overflow: ellipsis;
 }
 
 .sidebar-divider {
@@ -344,15 +418,6 @@ h2 {
   font-size: var(--spark-fs-base);
   padding: 0;
   margin: 0;
-}
-
-.workspace-mode-desc {
-  padding: 4px 16px 6px;
-  font-size: var(--spark-fs-2xs);
-  color: var(--spark-text-muted);
-  line-height: 1.4;
-  border-bottom: 1px solid var(--spark-border);
-  flex-shrink: 0;
 }
 
 .workspace-mode-enter-from,

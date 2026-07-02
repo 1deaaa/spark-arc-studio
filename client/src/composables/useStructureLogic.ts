@@ -5,11 +5,12 @@ import {
     generateOutline,
     getOutline,
     saveOutline,
-    fetchSynopsis
+    fetchSynopsis,
+    fetchWithAuth,
 } from '../services/api';
 import { getStyleProfile } from '../services/storyService';
 import { fetchBeatSheet } from '../services/aiService';
-import { parseOutlineMarkup } from '../utils/markupSerializer';
+import { parseOutlineMarkup, parseSynopsisMarkup } from '../utils/markupSerializer';
 import { useProjectStore } from '../components/stores/projectStore';
 import bus from '../eventBus';
 import { i18n } from '@/i18n';
@@ -21,6 +22,7 @@ type StructureAdoptionPayload = {
     projectName?: string;
     context?: string;
     guidance?: string;
+    lengthHint?: unknown;
     autoGenerateOutline?: boolean;
     [key: string]: unknown;
 };
@@ -39,6 +41,25 @@ function getErrorMessage(error: unknown): string {
     return String(error || '未知错误');
 }
 
+const DEFAULT_CHAPTER_COUNT = 5;
+const DEFAULT_SCENE_COUNT = 3;
+const DEFAULT_LENGTH_TYPE = 'short';
+
+function resolveLengthTypeFromHint(raw: unknown): string | null {
+    const value = String(raw || '').trim();
+    if (!value) return null;
+    if (value.includes('短')) return 'short';
+    if (value.includes('中')) return 'medium';
+    if (value.includes('长')) return 'long';
+    if (value.includes('不限')) return 'unlimited';
+    const lower = value.toLowerCase();
+    if (lower.includes('short')) return 'short';
+    if (lower.includes('medium')) return 'medium';
+    if (lower.includes('long')) return 'long';
+    if (lower.includes('unlimit')) return 'unlimited';
+    return null;
+}
+
 export function useStructureLogic() {
     const projectStore = useProjectStore();
     const message = useMessage();
@@ -50,9 +71,9 @@ export function useStructureLogic() {
     const isLoading = ref(false);
     const currentOutline = ref<OutlineData | null>(null);
     const outlineHistoryRef = ref<{ refresh?: () => void } | null>(null);
-    const chapterCount = ref(5);  // 默认5章
-    const sceneCount = ref(3);    // 默认场景密度参考约3场/章
-    const lengthType = ref('short'); // 默认短篇
+    const chapterCount = ref(DEFAULT_CHAPTER_COUNT);
+    const sceneCount = ref(DEFAULT_SCENE_COUNT);
+    const lengthType = ref(DEFAULT_LENGTH_TYPE);
 
     const lengthOptions = computed(() => [
         { label: i18n.global.t('views.structure.lengthOptions.short'), value: 'short' },
@@ -81,9 +102,9 @@ export function useStructureLogic() {
         if (!snapshot) return;
         context.value = snapshot.context || '';
         guidance.value = snapshot.guidance || '';
-        chapterCount.value = Number.isFinite(Number(snapshot.chapterCount)) ? Number(snapshot.chapterCount) : 5;
-        sceneCount.value = Number.isFinite(Number(snapshot.sceneCount)) ? Number(snapshot.sceneCount) : 3;
-        lengthType.value = snapshot.lengthType || 'short';
+        chapterCount.value = Number.isFinite(Number(snapshot.chapterCount)) ? Number(snapshot.chapterCount) : DEFAULT_CHAPTER_COUNT;
+        sceneCount.value = Number.isFinite(Number(snapshot.sceneCount)) ? Number(snapshot.sceneCount) : DEFAULT_SCENE_COUNT;
+        lengthType.value = snapshot.lengthType || DEFAULT_LENGTH_TYPE;
         currentOutline.value = snapshot.currentOutline ? JSON.parse(JSON.stringify(snapshot.currentOutline)) as OutlineData : null;
     }
 
@@ -92,10 +113,36 @@ export function useStructureLogic() {
         saveCreativeCache(buildStructureCacheKey(), getStructureSnapshot());
     }
 
+    function isStructureLengthPristine() {
+        return (
+            lengthType.value === DEFAULT_LENGTH_TYPE
+            && chapterCount.value === DEFAULT_CHAPTER_COUNT
+            && sceneCount.value === DEFAULT_SCENE_COUNT
+        );
+    }
+
+    function applyLengthHintIfPristine(raw: unknown) {
+        const nextLengthType = resolveLengthTypeFromHint(raw);
+        if (!nextLengthType || !isStructureLengthPristine()) return;
+        lengthType.value = nextLengthType;
+    }
+
+    async function loadProjectLengthHint(projectName: string) {
+        try {
+            const response = await fetchWithAuth(`/api/project/story-tags?projectName=${encodeURIComponent(projectName)}`);
+            if (!response.ok) return null;
+            const data = await response.json();
+            return data?.success ? data?.tags?.length_hint || null : null;
+        } catch (error) {
+            console.warn('加载结构页篇幅偏好失败:', error);
+            return null;
+        }
+    }
+
     watch(lengthType, (newVal) => {
         if (newVal === 'short') {
-            chapterCount.value = 5;
-            sceneCount.value = 3;
+            chapterCount.value = DEFAULT_CHAPTER_COUNT;
+            sceneCount.value = DEFAULT_SCENE_COUNT;
         } else if (newVal === 'medium') {
             chapterCount.value = 10;
             sceneCount.value = 4;
@@ -268,12 +315,13 @@ export function useStructureLogic() {
         context.value = '';
         guidance.value = '';
         currentOutline.value = null;
-        lengthType.value = 'short';
-        chapterCount.value = 5;
-        sceneCount.value = 3;
+        lengthType.value = DEFAULT_LENGTH_TYPE;
+        chapterCount.value = DEFAULT_CHAPTER_COUNT;
+        sceneCount.value = DEFAULT_SCENE_COUNT;
 
         if (newProject) {
             applyStructureSnapshot(loadCreativeCache<StructureCacheSnapshot>(buildStructureCacheKey()));
+            applyLengthHintIfPristine(await loadProjectLengthHint(newProject));
             await loadCurrentOutline();
 
             // 仅加载“详细梗概”为上下文，不再回退灵感
@@ -282,6 +330,10 @@ export function useStructureLogic() {
                 if (synMarkup && synMarkup.trim() && !context.value.trim()) {
                     // fetchSynopsis 现在返回 Markup 文本，直接用作上下文
                     context.value = synMarkup;
+                }
+                if (synMarkup && synMarkup.trim()) {
+                    const synopsisMeta = parseSynopsisMarkup(synMarkup);
+                    applyLengthHintIfPristine(synopsisMeta.estimated_chapters);
                 }
             } catch (e) {
                 console.warn('Failed to pre-load synopsis', e);
@@ -304,6 +356,7 @@ export function useStructureLogic() {
         if (typeof data?.guidance === 'string') {
             guidance.value = data.guidance;
         }
+        applyLengthHintIfPristine(data?.lengthHint);
         saveStructureSnapshot();
     }
 

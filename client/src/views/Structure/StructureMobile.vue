@@ -28,23 +28,39 @@
     
     <!-- 章节数量 + 生成 -->
     <div class="flow-section control-section">
-      <div class="chapter-setting">
+      <div class="length-preset-group">
         <span class="setting-label">{{ t('views.structure.mobile.lengthPreset') }}</span>
-        <n-select v-model:value="lengthType" :options="lengthOptions" size="small" style="flex: 1; min-width: 120px" />
+        <div class="preset-grid">
+          <button
+            v-for="option in mobileLengthOptions"
+            :key="option.value"
+            type="button"
+            class="preset-chip"
+            :class="{ 'is-active': lengthType === option.value }"
+            @click="lengthType = option.value"
+          >
+            <span class="preset-chip-label">{{ option.label }}</span>
+          </button>
+        </div>
+        <p class="preset-description">{{ activeMobileLengthOption.description }}</p>
       </div>
-      <div class="chapter-setting" v-if="lengthType === 'custom'">
-        <span class="setting-label">{{ t('views.structure.mobile.plannedChapterCount') }}</span>
-        <n-input-number v-model:value="chapterCount" :min="1" :max="50" size="small" style="width: 100px" />
-      </div>
-      <div class="chapter-setting" v-if="lengthType === 'custom'">
-        <span class="setting-label">{{ t('views.structure.mobile.scenesPerChapter') }}</span>
-        <n-input-number v-model:value="sceneCount" :min="1" :max="10" size="small" style="width: 100px" />
+
+      <div class="custom-setting-grid" v-if="lengthType === 'custom'">
+        <label class="custom-setting-card">
+          <span class="custom-setting-label">{{ t('views.structure.mobile.plannedChapterCount') }}</span>
+          <n-input-number v-model:value="chapterCount" :min="1" :max="50" size="small" class="compact-number-input" />
+        </label>
+        <label class="custom-setting-card">
+          <span class="custom-setting-label">{{ t('views.structure.mobile.scenesPerChapter') }}</span>
+          <n-input-number v-model:value="sceneCount" :min="1" :max="10" size="small" class="compact-number-input" />
+        </label>
       </div>
       
       <n-button 
         type="primary" 
         block 
         size="medium"
+        class="generate-outline-btn"
         :loading="isLoading"
         :disabled="!context?.trim()"
         @click="handleGenerateOutlineClick"
@@ -144,7 +160,7 @@
 
 <script setup lang="ts">
 import { ref, computed } from 'vue';
-import { NButton, NIcon, NInputNumber, NEmpty, NDrawer, NDrawerContent, NSelect } from 'naive-ui';
+import { NButton, NIcon, NInputNumber, NEmpty, NDrawer, NDrawerContent } from 'naive-ui';
 import { useI18n } from 'vue-i18n';
 import SparkTag from '../../components/share/SparkTag.vue';
 import GlobalLoading from '../../components/share/GlobalLoading.vue';
@@ -168,7 +184,6 @@ const {
   chapterCount,
   sceneCount,
   lengthType,
-  lengthOptions,
   handleGenerateOutline,
   handleOutlineHistorySelect,
   handleOutlineRestore
@@ -176,6 +191,38 @@ const {
 
 const outlineChapters = computed(() => {
   return currentOutline?.value?.nodes || [];
+});
+
+const mobileLengthOptions = computed(() => [
+  {
+    value: 'short',
+    label: t('views.structure.mobile.lengthPresetOptions.short'),
+    description: t('views.structure.mobile.lengthPresetDescriptions.short'),
+  },
+  {
+    value: 'medium',
+    label: t('views.structure.mobile.lengthPresetOptions.medium'),
+    description: t('views.structure.mobile.lengthPresetDescriptions.medium'),
+  },
+  {
+    value: 'long',
+    label: t('views.structure.mobile.lengthPresetOptions.long'),
+    description: t('views.structure.mobile.lengthPresetDescriptions.long'),
+  },
+  {
+    value: 'unlimited',
+    label: t('views.structure.mobile.lengthPresetOptions.unlimited'),
+    description: t('views.structure.mobile.lengthPresetDescriptions.unlimited'),
+  },
+  {
+    value: 'custom',
+    label: t('views.structure.mobile.lengthPresetOptions.custom'),
+    description: t('views.structure.mobile.lengthPresetDescriptions.custom'),
+  },
+]);
+
+const activeMobileLengthOption = computed(() => {
+  return mobileLengthOptions.value.find((option) => option.value === lengthType.value) || mobileLengthOptions.value[0];
 });
 
 function handleGenerateOutlineClick() {
@@ -227,22 +274,96 @@ function openAutoWrite() {
 }
 
 .control-section {
-  padding: 16px;
+  gap: 14px;
+  padding: 14px;
   background: var(--spark-panel-bg);
   border: 1px solid var(--spark-border);
   border-radius: 12px;
 }
 
-.chapter-setting {
+.length-preset-group {
   display: flex;
-  justify-content: space-between;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.preset-grid {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 8px;
+}
+
+.preset-chip {
+  min-height: 38px;
+  padding: 8px 10px;
+  border: 1px solid color-mix(in srgb, var(--spark-border), transparent 10%);
+  border-radius: 10px;
+  background: color-mix(in srgb, var(--spark-panel-bg), var(--spark-primary) 3%);
+  color: var(--spark-text-muted);
+  display: flex;
   align-items: center;
-  margin-bottom: 12px;
+  justify-content: center;
+  text-align: center;
+  transition: border-color 0.18s ease, background 0.18s ease, color 0.18s ease, box-shadow 0.18s ease;
+}
+
+.preset-chip.is-active {
+  border-color: color-mix(in srgb, var(--spark-primary), transparent 35%);
+  background: color-mix(in srgb, var(--spark-primary), white 84%);
+  color: var(--spark-primary);
+  box-shadow: 0 4px 14px color-mix(in srgb, var(--spark-primary), transparent 82%);
+}
+
+.preset-chip-label {
+  font-size: var(--spark-fs-sm);
+  font-weight: 600;
+  line-height: 1.2;
+  white-space: normal;
+  word-break: break-word;
 }
 
 .setting-label {
-  font-size: var(--spark-fs-base);
+  font-size: var(--spark-fs-sm);
+  font-weight: 600;
   color: var(--spark-text);
+}
+
+.preset-description {
+  margin: 0;
+  font-size: var(--spark-fs-xs);
+  line-height: 1.5;
+  color: var(--spark-text-muted);
+}
+
+.custom-setting-grid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 10px;
+}
+
+.custom-setting-card {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  min-width: 0;
+  padding: 10px 12px;
+  border: 1px solid color-mix(in srgb, var(--spark-border), transparent 10%);
+  border-radius: 10px;
+  background: color-mix(in srgb, var(--spark-panel-bg), var(--spark-primary) 2%);
+}
+
+.custom-setting-label {
+  font-size: var(--spark-fs-xs);
+  line-height: 1.4;
+  color: var(--spark-text-muted);
+}
+
+.compact-number-input {
+  width: 100%;
+}
+
+.generate-outline-btn {
+  min-height: 42px;
 }
 
 .chapter-list {
@@ -359,5 +480,12 @@ function openAutoWrite() {
 :deep(.n-input__textarea-el) {
   height: 100% !important;
   overflow-y: auto !important;
+}
+
+@media (max-width: 360px) {
+  .preset-grid,
+  .custom-setting-grid {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
 }
 </style>

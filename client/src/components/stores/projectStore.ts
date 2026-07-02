@@ -54,6 +54,7 @@ type PendingStructureAdoption = {
   projectName?: string;
   context?: string;
   guidance?: string;
+  lengthHint?: unknown;
   autoGenerateOutline?: boolean;
   [key: string]: unknown;
 };
