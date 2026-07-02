@@ -22,6 +22,7 @@ get_spec_sys_llm()：轻量入口，按显示名称直接指定系统模型，�
 from __future__ import annotations
 
 from typing import Optional, Dict, Any
+import json
 
 from .models import (
     LLMPlatform,
@@ -31,6 +32,10 @@ from .models import (
     UserEmbeddingSelection,
     DEFAULT_MAX_CONTEXT_TOKENS,
     DEFAULT_MAX_OUTPUT_TOKENS,
+    get_model_capabilities,
+    is_chat_model,
+    is_embedding_model,
+    is_image_generation_model,
 )
 from .config import SYSTEM_USER_ID, DEFAULT_USAGE_KEY
 
@@ -98,7 +103,7 @@ class LLMBuilderMixin:
             # 按 sort_order 排序获取第一个可用模型
             sorted_models = sorted(plat.models, key=lambda m: m.sort_order)
             for m in sorted_models:
-                if not m.is_embedding and not self._is_model_disabled(m):
+                if is_chat_model(m) and not self._is_model_disabled(m):
                     return plat, m
         
         raise RuntimeError("无法找到可用的默认平台和模型")
@@ -148,7 +153,7 @@ class LLMBuilderMixin:
             if auto_fix:
                 # 尝试使用平台的第一个模型
                 if plat.models:
-                    model = next((m for m in plat.models if not m.is_embedding and not self._is_model_disabled(m)), None)
+                    model = next((m for m in plat.models if is_chat_model(m) and not self._is_model_disabled(m)), None)
                     if not model:
                         raise ValueError(f"平台 '{plat.name}' 没有可用的 LLM 模型")
                     if usage_slot:
@@ -158,21 +163,21 @@ class LLMBuilderMixin:
             else:
                 raise ValueError(f"模型 '{model.display_name}' 不属于平台 '{plat.name}'")
 
-        # 防止 embedding 模型进入 LLM 解析
-        if model.is_embedding:
+        # 防止非文本生成模型进入 LLM 解析
+        if not is_chat_model(model):
             if auto_fix:
-                fallback = next((m for m in plat.models if not m.is_embedding and not self._is_model_disabled(m)), None)
+                fallback = next((m for m in plat.models if is_chat_model(m) and not self._is_model_disabled(m)), None)
                 if not fallback:
                     raise ValueError(f"平台 '{plat.name}' 没有可用的 LLM 模型")
                 model = fallback
                 if usage_slot:
                     usage_slot.selected_model_id = model.id
             else:
-                raise ValueError("Embedding 模型不可用于 LLM")
+                raise ValueError("该模型不可用于文本生成")
 
         if self._is_model_disabled(model):
             if auto_fix:
-                fallback = next((m for m in plat.models if not m.is_embedding and not self._is_model_disabled(m)), None)
+                fallback = next((m for m in plat.models if is_chat_model(m) and not self._is_model_disabled(m)), None)
                 if not fallback:
                     raise ValueError(f"平台 '{plat.name}' 没有可用的 LLM 模型")
                 model = fallback
@@ -402,14 +407,14 @@ class LLMBuilderMixin:
             plat = session.query(LLMPlatform).filter_by(id=platform_id).first() if platform_id else None
             model = session.query(LLModels).filter_by(id=model_id).first() if model_id else None
 
-            if not plat or not model or not model.is_embedding:
+            if not plat or not model or not is_embedding_model(model):
                 # 回退：找第一个可用的 embedding
                 plat = None
                 model = None
                 platforms = session.query(LLMPlatform).all()
                 for p in platforms:
                     for m in p.models:
-                        if m.is_embedding and not self._is_model_disabled(m):
+                        if is_embedding_model(m) and not self._is_model_disabled(m):
                             api_key = self._get_effective_api_key(session, effective_user_id, p)
                             if api_key:
                                 plat = p
@@ -437,6 +442,130 @@ class LLMBuilderMixin:
                 check_embedding_ctx_length=False,
                 **kwargs,
             )
+
+    def list_user_image_generation_models(self, user_id: Optional[str] = None) -> list[dict[str, Any]]:
+        """列出当前用户可见的生图模型。"""
+        effective_user_id = str(user_id if user_id is not None else SYSTEM_USER_ID)
+        rows: list[dict[str, Any]] = []
+
+        with self.Session() as session:
+            platforms = (
+                session.query(LLMPlatform)
+                .all()
+            )
+            for platform in sorted(platforms, key=lambda item: int(getattr(item, "sort_order", 0) or 0)):
+                if self._is_platform_disabled(session, effective_user_id, platform):
+                    continue
+                if not platform.is_sys and str(platform.user_id) != effective_user_id:
+                    continue
+
+                api_access = self._get_effective_api_access(session, effective_user_id, platform)
+                models = sorted(platform.models, key=lambda item: int(getattr(item, "sort_order", 0) or 0))
+                for model in models:
+                    if self._is_model_disabled(model) or not is_image_generation_model(model):
+                        continue
+                    rows.append({
+                        "platform_id": platform.id,
+                        "platform_name": platform.name,
+                        "platform_is_sys": bool(platform.is_sys),
+                        "base_url": platform.base_url,
+                        "api_key_set": bool(api_access.get("api_key")),
+                        "model_id": model.id,
+                        "model_name": model.model_name,
+                        "display_name": model.display_name or model.model_name,
+                        "capabilities": get_model_capabilities(model),
+                    })
+        return rows
+
+    def resolve_user_image_generation_model(
+        self,
+        user_id: Optional[str] = None,
+        platform_id: Optional[int] = None,
+        model_id: Optional[int] = None,
+    ) -> dict[str, Any]:
+        """解析当前用户可用的生图模型与凭据，供图片适配层调用。"""
+        effective_user_id = str(user_id if user_id is not None else SYSTEM_USER_ID)
+
+        with self.Session() as session:
+            platform = session.query(LLMPlatform).filter_by(id=platform_id).first() if platform_id else None
+            model = session.query(LLModels).filter_by(id=model_id).first() if model_id else None
+
+            if platform is not None and self._is_platform_disabled(session, effective_user_id, platform):
+                raise ValueError("平台已禁用")
+            if platform is not None and not platform.is_sys and str(platform.user_id) != effective_user_id:
+                raise ValueError("无权访问该平台")
+            if model is not None and self._is_model_disabled(model):
+                raise ValueError("模型已禁用")
+            if platform is not None and model is not None and model.platform_id != platform.id:
+                raise ValueError("模型不属于该平台")
+            if model is not None and not is_image_generation_model(model):
+                raise ValueError("目标模型不具备生图能力")
+
+            if platform is None or model is None:
+                platform = None
+                model = None
+                platforms = (
+                    session.query(LLMPlatform)
+                    .all()
+                )
+                for candidate_platform in sorted(platforms, key=lambda item: int(getattr(item, "sort_order", 0) or 0)):
+                    if self._is_platform_disabled(session, effective_user_id, candidate_platform):
+                        continue
+                    if not candidate_platform.is_sys and str(candidate_platform.user_id) != effective_user_id:
+                        continue
+                    api_access = self._get_effective_api_access(session, effective_user_id, candidate_platform)
+                    if not api_access.get("api_key"):
+                        continue
+                    for candidate_model in sorted(candidate_platform.models, key=lambda item: int(getattr(item, "sort_order", 0) or 0)):
+                        if self._is_model_disabled(candidate_model):
+                            continue
+                        if is_image_generation_model(candidate_model):
+                            platform = candidate_platform
+                            model = candidate_model
+                            break
+                    if platform is not None and model is not None:
+                        break
+
+            if platform is None or model is None:
+                raise ValueError("未找到可用的生图模型，请先在模型设置中添加具备生图能力的模型")
+
+            api_access = self._get_effective_api_access(session, effective_user_id, platform)
+            api_key = api_access.get("api_key")
+            quota_scope = api_access.get("quota_scope")
+            if not api_key:
+                raise ValueError(f"平台 '{platform.name}' 的 API Key 未设置")
+
+            self.enforce_user_credit(
+                session,
+                effective_user_id,
+                platform.id,
+                model.id,
+                quota_scope,
+            )
+
+            extra_body: dict[str, Any] = {}
+            if model.extra_body:
+                try:
+                    parsed_extra = json.loads(model.extra_body)
+                    if isinstance(parsed_extra, dict):
+                        image_extra = parsed_extra.get("image_generation")
+                        extra_body = {"image_generation": image_extra} if isinstance(image_extra, dict) else {}
+                except json.JSONDecodeError:
+                    extra_body = {}
+
+            return {
+                "user_id": effective_user_id,
+                "platform_id": platform.id,
+                "platform_name": platform.name,
+                "base_url": platform.base_url,
+                "model_id": model.id,
+                "model_name": model.model_name,
+                "display_name": model.display_name or model.model_name,
+                "api_key": api_key,
+                "quota_scope": quota_scope,
+                "capabilities": get_model_capabilities(model),
+                "extra_body": extra_body,
+            }
 
     def get_spec_sys_llm(
         self,

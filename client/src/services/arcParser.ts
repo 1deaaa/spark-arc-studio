@@ -12,6 +12,11 @@
  * @returns {Array} 解析后的场景数组
  */
 export type ActValue = string | string[];
+export type PresentationCue = {
+  bg?: ActValue;
+  sprite?: ActValue;
+  [key: string]: ActValue | undefined;
+};
 export type ArcSpeaker = number | string;
 
 export type ArcDialogueNode = {
@@ -21,6 +26,7 @@ export type ArcDialogueNode = {
   txt: string;
   thought?: string;
   next?: string;
+  presentation?: PresentationCue;
   act?: Record<string, ActValue>;
   opt?: ArcOptionNode[];
 };
@@ -402,6 +408,7 @@ function parseDialogueContent(
       const dialogueLines: string[] = [];
       let nextTarget: string | null = null;
       let actCommands: Record<string, ActValue> = {};
+      let presentationCommands: PresentationCue = {};
       let thought = '';
       i++;
       
@@ -435,7 +442,24 @@ function parseDialogueContent(
           if (value.includes(',')) {
             value = value.split(',').map(v => v.trim());
           }
-          actCommands[key] = value;
+          if (key === 'bg' || key === 'sprite') {
+            presentationCommands[key] = value;
+          } else {
+            actCommands[key] = value;
+          }
+          i++;
+          continue;
+        }
+
+        // 检查 Web 演出指令。旧的 @act bg/sprite 会在读取时迁移到同一字段。
+        const presentationMatch = nextLine.match(/^@(?:web|presentation)\s+(\w+):([^<]+)/);
+        if (presentationMatch) {
+          const key = presentationMatch[1].trim();
+          let value: ActValue = presentationMatch[2].trim();
+          if (value.includes(',')) {
+            value = value.split(',').map(v => v.trim());
+          }
+          presentationCommands[key] = value;
           i++;
           continue;
         }
@@ -458,6 +482,7 @@ function parseDialogueContent(
           };
           
           if (index === 0) {
+            if (Object.keys(presentationCommands).length > 0) node.presentation = presentationCommands;
             if (Object.keys(actCommands).length > 0) node.act = actCommands;
             if (thought) node.thought = thought;
           }
@@ -468,6 +493,23 @@ function parseDialogueContent(
           
           dialogues.push(node);
         });
+      } else if (
+        Object.keys(presentationCommands).length > 0 ||
+        Object.keys(actCommands).length > 0 ||
+        nextTarget ||
+        thought
+      ) {
+        const node: ArcDialogueNode = {
+          id: state.idCounter++,
+          chr,
+          speaker,
+          txt: ''
+        };
+        if (Object.keys(presentationCommands).length > 0) node.presentation = presentationCommands;
+        if (Object.keys(actCommands).length > 0) node.act = actCommands;
+        if (nextTarget) node.next = nextTarget;
+        if (thought) node.thought = thought;
+        dialogues.push(node);
       }
       continue;
     }
@@ -718,6 +760,15 @@ function serializeDialogues(dialogues: ArcDialogueNode[], chrMap: Record<string 
     }
     lines.push(`${indentStr}${d.txt}`);
 
+    // Web 演出指令与通用行为分离，避免 Unity 侧误把背景/立绘当 act。
+    if (d.presentation && Object.keys(d.presentation).length > 0) {
+      for (const [key, value] of Object.entries(d.presentation)) {
+        if (value === undefined || value === null || value === '') continue;
+        const valStr = Array.isArray(value) ? value.join(',') : value;
+        lines.push(`${indentStr}@web ${key}:${valStr}`);
+      }
+    }
+
     // @next
     if (d.next) {
       lines.push(`${indentStr}@next ${d.next}`);
@@ -726,6 +777,7 @@ function serializeDialogues(dialogues: ArcDialogueNode[], chrMap: Record<string 
     // @act
     if (d.act && Object.keys(d.act).length > 0) {
       for (const [key, value] of Object.entries(d.act)) {
+        if (key === 'bg' || key === 'sprite') continue;
         const valStr = Array.isArray(value) ? value.join(',') : value;
         lines.push(`${indentStr}@act ${key}:${valStr}`);
       }

@@ -8,6 +8,7 @@ export * from './authService';
 export * from './projectService';
 export * from './storyService';
 export * from './aiService';
+export * from './presentationService';
 export * from './chatService';
 export * from './adminService';
 export * from './semanticSearchService';

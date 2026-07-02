@@ -11,9 +11,10 @@ from core.utils import (
     ensure_project_directory,
     ensure_project_stories_directory,
 )
-from .file_naming import parse_story_filename, story_sort_key
-from .project_files import _coerce_character_name
-from .scene_loader import load_story_file
+from .file_naming import parse_story_filename, story_sort_key
+from .presentation_manifest import filter_act_for_target, get_ignored_node_keys, load_manifest_from_root
+from .project_files import _coerce_character_name
+from .scene_loader import load_story_file
 
 
 def _collect_char_ids_from_dialogues(dialogues: list, collected: set):
@@ -51,6 +52,28 @@ def _normalize_registry_value(value) -> list:
     return [value]
 
 
+def _filter_dialogue_acts_for_target(dialogues: list, manifest: dict, target: str) -> list:
+    """按目标端过滤对话树中的运行时字段，避免 Web 专用表现泄漏到 Unity。"""
+    if not isinstance(dialogues, list):
+        return []
+    ignored_node_keys = get_ignored_node_keys(manifest, target)
+    for dialogue in dialogues:
+        if not isinstance(dialogue, dict):
+            continue
+        for key in ignored_node_keys:
+            dialogue.pop(key, None)
+        if isinstance(dialogue.get("act"), dict):
+            filtered_act = filter_act_for_target(dialogue.get("act"), manifest, target)
+            if filtered_act:
+                dialogue["act"] = filtered_act
+            else:
+                dialogue.pop("act", None)
+        for option in dialogue.get("opt") or []:
+            if isinstance(option, dict):
+                _filter_dialogue_acts_for_target(option.get("dia") or [], manifest, target)
+    return dialogues
+
+
 def _load_chr_bindings(project_root: str) -> dict:
     """读取项目角色绑定，供 ARC 说话人名反查隐藏 ID。"""
     chr_bind_path = os.path.join(project_root, 'chr', 'chr.bind')
@@ -78,8 +101,8 @@ def _chr_map_from_bindings(chr_bindings: dict) -> dict[int, str]:
     return result
 
 
-def import_project_stories_to_db(user_id: str, project_name: str, *, reset: bool = True) -> dict:
-    """将项目 stories 目录导入独立的 SQLite 数据库。"""
+def import_project_stories_to_db(user_id: str, project_name: str, *, reset: bool = True, target: str = "web") -> dict:
+    """将项目 stories 目录导入独立 SQLite 数据库，按目标端过滤扩展 act。"""
     from core.models import BindAct, BindChr, Character, Registry
 
     project_root = ensure_project_directory(user_id, project_name)
@@ -87,6 +110,8 @@ def import_project_stories_to_db(user_id: str, project_name: str, *, reset: bool
     db_path = os.path.join(project_root, 'stories.db')
     chr_bindings = _load_chr_bindings(project_root)
     chr_map_for_parse = _chr_map_from_bindings(chr_bindings)
+    presentation_manifest = load_manifest_from_root(project_root)
+    runtime_target = str(target or "web").strip().lower() or "web"
 
     # 使用 NullPool 确保连接用完后立即真正关闭，避免 Windows 上 SQLite 文件锁残留
     # 导致后续的 shutil.copy2 快照复制失败（第一次创建分享/版本必定失败的根因）
@@ -145,8 +170,12 @@ def import_project_stories_to_db(user_id: str, project_name: str, *, reset: bool
                 guide = scene_model.guide or ''
                 scene_name = scene_model.name or default_scene_name
 
-                progress_counter += 1.0
-                dlg_payload = scene_model.to_dict().get('dia', [])
+                progress_counter += 1.0
+                dlg_payload = _filter_dialogue_acts_for_target(
+                    scene_model.to_dict().get('dia', []),
+                    presentation_manifest,
+                    runtime_target,
+                )
 
                 seen_chapters.add(chapter_num)
 

@@ -21,6 +21,162 @@
           />
         </n-form-item>
 
+        <div v-if="canEditPresentation" class="presentation-tools">
+          <div class="presentation-section-heading">
+            <n-icon :component="ImagePlus" />
+            <span>{{ t('nodeEditor.presentation.webCue') }}</span>
+          </div>
+
+          <div class="presentation-tool-stack">
+            <div class="presentation-style-card presentation-reference-card">
+              <div class="presentation-tool-heading">
+                <n-icon :component="Palette" />
+                <span>{{ t('nodeEditor.presentation.styleReference') }}</span>
+              </div>
+              <n-select
+                v-model:value="selectedStyleReferenceId"
+                class="presentation-wide-select"
+                size="small"
+                clearable
+                :options="styleReferenceOptions"
+                :placeholder="t('nodeEditor.presentation.styleReferenceSelect')"
+              />
+              <n-text depth="3" class="presentation-tool-tip">
+                {{ selectedStyleReferenceLabel || t('nodeEditor.presentation.nodeStyleReferenceHint') }}
+              </n-text>
+            </div>
+
+            <div class="presentation-control-grid">
+              <div class="presentation-control-card">
+                <div class="presentation-tool-heading">
+                  <n-icon :component="ImagePlus" />
+                  <span>{{ t('nodeEditor.presentation.background') }}</span>
+                </div>
+                <div class="presentation-current-line" :class="{ 'is-empty': !currentBackgroundId }">
+                  {{ currentBackgroundId || t('nodeEditor.presentation.noBackground') }}
+                </div>
+                <n-input
+                  v-model:value="backgroundPrompt"
+                  type="textarea"
+                  size="small"
+                  :autosize="{ minRows: 2, maxRows: 4 }"
+                  :placeholder="t('nodeEditor.presentation.generatePromptPlaceholder')"
+                />
+                <n-space :size="8" wrap align="center">
+                  <n-button size="small" secondary :loading="backgroundUploading" @click="triggerBackgroundUpload">
+                    <template #icon>
+                      <n-icon :component="Upload" />
+                    </template>
+                    {{ t('nodeEditor.presentation.uploadBackground') }}
+                  </n-button>
+                  <n-button
+                    v-if="currentBackgroundId"
+                    size="small"
+                    secondary
+                    type="warning"
+                    @click="clearDialogueBackground"
+                  >
+                    <template #icon>
+                      <n-icon :component="Eraser" />
+                    </template>
+                    {{ t('nodeEditor.presentation.clearBackground') }}
+                  </n-button>
+                  <n-button
+                    size="small"
+                    type="primary"
+                    secondary
+                    :disabled="!canGenerateBackground"
+                    :loading="backgroundGenerating"
+                    @click="generateBackgroundByAI"
+                  >
+                    <template #icon>
+                      <n-icon :component="Sparkles" />
+                    </template>
+                    {{ t('nodeEditor.presentation.generateBackground') }}
+                  </n-button>
+                </n-space>
+                <input
+                  ref="backgroundFileInputRef"
+                  class="presentation-hidden-input"
+                  type="file"
+                  accept="image/png,image/jpeg,image/webp"
+                  @change="onBackgroundFileChange"
+                />
+              </div>
+
+              <div class="presentation-control-card">
+                <div class="presentation-tool-heading">
+                  <n-icon :component="UserRound" />
+                  <span>{{ t('nodeEditor.presentation.sprite') }}</span>
+                </div>
+                <div class="presentation-current-line" :class="{ 'is-empty': !currentSpriteId }">
+                  {{ currentSpriteId || t('nodeEditor.presentation.noSprite') }}
+                </div>
+                <n-input
+                  v-model:value="spritePrompt"
+                  type="textarea"
+                  size="small"
+                  :autosize="{ minRows: 2, maxRows: 4 }"
+                  :placeholder="t('nodeEditor.presentation.generateSpritePromptPlaceholder')"
+                />
+                <n-space :size="8" wrap align="center">
+                  <n-button size="small" secondary :loading="spriteUploading" @click="triggerSpriteUpload">
+                    <template #icon>
+                      <n-icon :component="Upload" />
+                    </template>
+                    {{ t('nodeEditor.presentation.uploadSprite') }}
+                  </n-button>
+                  <n-button
+                    v-if="currentSpriteId"
+                    size="small"
+                    secondary
+                    type="warning"
+                    @click="clearDialogueSprite"
+                  >
+                    <template #icon>
+                      <n-icon :component="Eraser" />
+                    </template>
+                    {{ t('nodeEditor.presentation.clearSprite') }}
+                  </n-button>
+                  <n-button
+                    size="small"
+                    type="primary"
+                    secondary
+                    :disabled="!canGenerateSprite"
+                    :loading="spriteGenerating"
+                    @click="generateSpriteByAI"
+                  >
+                    <template #icon>
+                      <n-icon :component="Sparkles" />
+                    </template>
+                    {{ t('nodeEditor.presentation.generateSprite') }}
+                  </n-button>
+                </n-space>
+                <input
+                  ref="spriteFileInputRef"
+                  class="presentation-hidden-input"
+                  type="file"
+                  accept="image/png,image/jpeg,image/webp"
+                  @change="onSpriteFileChange"
+                />
+              </div>
+            </div>
+
+            <n-select
+              v-model:value="selectedImageModelKey"
+              class="presentation-wide-select"
+              size="small"
+              clearable
+              :loading="imageModelsLoading"
+              :options="imageModelSelectOptions"
+              :placeholder="t('nodeEditor.presentation.imageModelPlaceholder')"
+            />
+            <n-text v-if="!imageModelsLoading && availableImageModels.length === 0" depth="3" class="presentation-tool-tip">
+              {{ t('nodeEditor.presentation.imageModelMissing') }}
+            </n-text>
+          </div>
+        </div>
+
         <!-- 单段续写控件 -->
         <div v-show="mode === 'single-node'" class="mode-content">
           <n-form-item label="长度">
@@ -329,9 +485,10 @@
 
 <script setup lang="ts">
 import { computed, onMounted, ref, watch } from 'vue';
-import { NCard, NForm, NFormItem, NSelect, NInputNumber, NButton, NInput, NIcon, NSpace, NTag, NDivider, NCollapse, NCollapseItem, useDialog } from 'naive-ui';
+import { useI18n } from 'vue-i18n';
+import { NCard, NForm, NFormItem, NSelect, NInputNumber, NButton, NInput, NIcon, NSpace, NTag, NDivider, NText, useDialog } from 'naive-ui';
 import SparkAlert from '@/components/share/SparkAlert.vue';
-import { ChartColumn, CircleCheck, FileText, Files, GitBranch, RefreshCw, SquarePen, TriangleAlert, User, Zap } from '@lucide/vue';
+import { ChartColumn, CircleCheck, Eraser, FileText, Files, GitBranch, ImagePlus, Palette, RefreshCw, Sparkles, SquarePen, Upload, UserRound, Zap } from '@lucide/vue';
 import bus from '@/eventBus';
 import MarkdownRenderer from '@/components/share/MarkdownRenderer.vue';
 import { useSceneStore } from '@/components/stores/sceneStore';
@@ -339,10 +496,21 @@ import { useProjectStore } from '@/components/stores/projectStore';
 import { useFileStore } from '@/components/stores/fileStore';
 import { useCharacterStore } from '@/components/stores/characterStore';
 import { fetchWithAuth, fetchCharacters } from '@/services/api';
+import {
+  fetchPresentationImageModels,
+  fetchPresentationManifest,
+  generatePresentationBackground,
+  generatePresentationSprite,
+  uploadPresentationBackground,
+  uploadPresentationSprite,
+  type PresentationAsset,
+  type PresentationImageModel,
+  type PresentationManifest,
+} from '@/services/presentationService';
 import { createStreamingTask, consumeSSEReader, isAbortLikeError, parseSSEEventPayload } from '@/utils/streamingRuntime';
 import type { CancelLoadingPayload } from '@/eventBus';
 import type { StoryCharacterDetail } from '@/services/aiContracts';
-import { formatSpeakerMarker, type ArcDialogueNode } from '@/services/arcParser';
+import { formatSpeakerMarker, type ArcDialogueNode, type PresentationCue } from '@/services/arcParser';
 
 type PanelMode = 'single-node' | 'multi-node' | 'critic' | 'rewrite-scene' | 'bridge';
 
@@ -456,6 +624,7 @@ const projectStore = useProjectStore();
 const fileStore = useFileStore();
 const characterStore = useCharacterStore();
 const dialog = useDialog();
+const { t } = useI18n();
 
 const props = withDefaults(defineProps<PanelProps>(), {
   defaultMode: '',
@@ -505,6 +674,20 @@ const multiSegments = ref(0);
 const characters = ref<StoryCharacterDetail[]>([]);
 const selectedCharacterIds = ref<string[]>([]);
 let abortController: AbortController | null = null;
+
+const backgroundFileInputRef = ref<HTMLInputElement | null>(null);
+const spriteFileInputRef = ref<HTMLInputElement | null>(null);
+const backgroundUploading = ref(false);
+const backgroundGenerating = ref(false);
+const spriteUploading = ref(false);
+const spriteGenerating = ref(false);
+const backgroundPrompt = ref('');
+const spritePrompt = ref('');
+const imageModels = ref<PresentationImageModel[]>([]);
+const imageModelsLoading = ref(false);
+const selectedImageModelKey = ref<string | null>(null);
+const presentationManifest = ref<PresentationManifest | null>(null);
+const selectedStyleReferenceId = ref<string | null>(null);
 
 // 重写场景
 const rewriteThought = ref('');
@@ -568,6 +751,386 @@ const criticTargetLabel = computed(() => {
   }
   return sceneStore.currentScene?.scene ? `将审查当前场景：${sceneStore.currentScene.scene}` : '将审查当前场景';
 });
+
+const canEditPresentation = computed(() => sceneStore.selectionType === 'dialogue' && !!currentDialogueNode.value && !isNovelMode.value);
+
+const currentDialogueNode = computed<ArcDialogueNode | null>(() => {
+  if (sceneStore.selectionType !== 'dialogue') return null;
+  const node = sceneStore.currentNode;
+  if (!node || typeof node !== 'object' || !('id' in node)) return null;
+  return node as ArcDialogueNode;
+});
+
+const currentPresentation = computed<Record<string, unknown>>(() => {
+  const cue = currentDialogueNode.value?.presentation;
+  return cue && typeof cue === 'object' ? cue as Record<string, unknown> : {};
+});
+
+const currentBackgroundId = computed(() => normalizePresentationValue(currentPresentation.value.bg));
+const currentSpriteId = computed(() => normalizePresentationValue(currentPresentation.value.sprite));
+
+const currentSpriteCharacterId = computed(() => {
+  const node = currentDialogueNode.value;
+  const value = node?.speaker || node?.chr;
+  if (value === undefined || value === null || value === '旁白' || value === -1 || value === '-1') return '';
+  return String(value).trim();
+});
+
+const manifestAssets = computed<Record<string, PresentationAsset>>(() => {
+  const assets = presentationManifest.value?.assets;
+  return assets && typeof assets === 'object' ? assets : {};
+});
+
+const styleReferenceOptions = computed(() => Object.values(manifestAssets.value)
+  .filter(asset => asset.type === 'style_reference' || asset.type === 'scene_reference')
+  .sort((a, b) => String(b.createdAt || '').localeCompare(String(a.createdAt || '')))
+  .map(asset => ({
+    label: `${asset.type === 'style_reference' ? t('nodeEditor.presentation.styleReference') : t('nodeEditor.presentation.sceneReference')} · ${asset.title || asset.id}`,
+    value: asset.id,
+  })));
+
+const selectedStyleReferenceLabel = computed(() => {
+  const id = selectedStyleReferenceId.value;
+  if (!id) return '';
+  const asset = manifestAssets.value[id];
+  return asset ? t('nodeEditor.presentation.activeStyleReference', { value: asset.title || asset.id }) : '';
+});
+
+const availableImageModels = computed(() => imageModels.value.filter(model => model.api_key_set !== false));
+
+const imageModelSelectOptions = computed(() => availableImageModels.value.map(model => ({
+  label: `${model.platform_name} · ${model.display_name || model.model_name}`,
+  value: imageModelKey(model),
+})));
+
+const selectedImageModel = computed(() => {
+  const key = selectedImageModelKey.value;
+  if (key) {
+    const matched = availableImageModels.value.find(model => imageModelKey(model) === key);
+    if (matched) return matched;
+  }
+  return availableImageModels.value[0] || null;
+});
+
+const canGenerateBackground = computed(() =>
+  !!projectStore.currentProject
+  && !!backgroundPrompt.value.trim()
+  && !!selectedImageModel.value
+);
+
+const canGenerateSprite = computed(() =>
+  !!projectStore.currentProject
+  && !!spritePrompt.value.trim()
+  && !!selectedImageModel.value
+  && !!currentSpriteCharacterId.value
+);
+
+function normalizePresentationValue(value: unknown): string {
+  const raw = Array.isArray(value) ? value[0] : value;
+  return typeof raw === 'string' ? raw.trim() : '';
+}
+
+function imageModelKey(model: PresentationImageModel) {
+  return `${model.platform_id}:${model.model_id}`;
+}
+
+function imageModelSupportsReference(model: PresentationImageModel | null) {
+  const capabilities = Array.isArray(model?.capabilities) ? model.capabilities : [];
+  return capabilities.includes('image_reference_input') || capabilities.includes('image_edit');
+}
+
+function presentationErrorMessage(error: unknown, fallback: string) {
+  if (error instanceof Error && error.message.trim()) return error.message;
+  const raw = String(error || '').trim();
+  return raw || fallback;
+}
+
+function updateManifest(manifest: PresentationManifest | undefined | null) {
+  if (manifest) presentationManifest.value = manifest;
+}
+
+async function loadPresentationImageModels() {
+  imageModelsLoading.value = true;
+  try {
+    const result = await fetchPresentationImageModels();
+    imageModels.value = Array.isArray(result.models) ? result.models : [];
+    if (!selectedImageModelKey.value && availableImageModels.value.length > 0) {
+      selectedImageModelKey.value = imageModelKey(availableImageModels.value[0]);
+    }
+  } catch (error: unknown) {
+    imageModels.value = [];
+    bus.emit('toast', { type: 'warning', message: presentationErrorMessage(error, t('nodeEditor.presentation.imageModelLoadFailed')) });
+  } finally {
+    imageModelsLoading.value = false;
+  }
+}
+
+async function loadPresentationManifest() {
+  if (!projectStore.currentProject) {
+    presentationManifest.value = null;
+    selectedStyleReferenceId.value = null;
+    return;
+  }
+  try {
+    const result = await fetchPresentationManifest(projectStore.currentProject);
+    presentationManifest.value = result.manifest || null;
+    if (selectedStyleReferenceId.value && !manifestAssets.value[selectedStyleReferenceId.value]) {
+      selectedStyleReferenceId.value = null;
+    }
+  } catch (_error: unknown) {
+    presentationManifest.value = null;
+  }
+}
+
+async function savePresentationBinding() {
+  try {
+    await sceneStore._saveStory?.();
+  } catch (error: unknown) {
+    bus.emit('toast', { type: 'warning', message: presentationErrorMessage(error, t('nodeEditor.presentation.bindingSaveFailed')) });
+  }
+}
+
+function setDialoguePresentationValue(key: 'bg' | 'sprite', value: string | null) {
+  const node = currentDialogueNode.value;
+  if (!node) return;
+  const nextPresentation: PresentationCue = { ...(node.presentation || {}) };
+  if (!value) delete nextPresentation[key];
+  else nextPresentation[key] = value;
+  sceneStore.updateCurrentDialogue({
+    presentation: Object.keys(nextPresentation).length > 0 ? nextPresentation : undefined,
+  });
+  void savePresentationBinding();
+}
+
+function collectDialogueContextNodes(): ArcDialogueNode[] {
+  const scene = sceneStore.currentScene;
+  const result: ArcDialogueNode[] = [];
+  const walk = (nodes: ArcDialogueNode[] | undefined) => {
+    for (const node of nodes || []) {
+      result.push(node);
+      for (const option of node.opt || []) walk(option.dia || []);
+    }
+  };
+  walk(scene?.dia || []);
+  return result;
+}
+
+function getCurrentDialogueWindow() {
+  const nodes = collectDialogueContextNodes();
+  const current = currentDialogueNode.value;
+  const index = current ? nodes.indexOf(current) : -1;
+  if (index < 0) return [];
+  return nodes.slice(Math.max(0, index - 2), Math.min(nodes.length, index + 3));
+}
+
+function currentCharacterDetail() {
+  const id = currentSpriteCharacterId.value;
+  if (!id) return null;
+  const byId = characters.value.find(ch => String(ch.id) === id);
+  if (byId) return byId;
+  const name = chrName(id);
+  return characters.value.find(ch => ch.name === name) || null;
+}
+
+function buildPresentationImagePrompt(kind: 'background' | 'sprite', userPrompt: string) {
+  const scene = sceneStore.currentScene;
+  const node = currentDialogueNode.value;
+  const contextNodes = getCurrentDialogueWindow()
+    .map(item => `${chrName(item.speaker || item.chr)}：${String(item.txt || '').trim()}`)
+    .filter(line => !line.endsWith('：'))
+    .join('\n');
+  const character = currentCharacterDetail();
+  const styleReference = selectedStyleReferenceId.value ? manifestAssets.value[selectedStyleReferenceId.value] : null;
+  const lines = [
+    '你正在为一部 Web 视觉小说生成演出素材。请优先使用自然语言语义理解，不要把以下内容画成界面、字幕或水印。',
+    '统一画风要求：画面需要能与同一项目内的其他素材保持一致；若提供了参考图，请优先继承其构图语言、色彩倾向、笔触/摄影质感与角色一致性。',
+    '跨端构图要求：默认生成横版素材，适合 PC 舞台；移动端会居中显示，并使用同图的模糊扩展填充上下区域，所以主体和关键视觉信息必须放在安全中心区域，不要贴边。',
+    styleReference ? `已选风格参考：${styleReference.title || styleReference.id}` : '',
+    scene?.scene ? `当前场景：${scene.scene}` : '',
+    scene?.intro ? `场景引言：${scene.intro}` : '',
+    scene?.thought ? `场景构思：${scene.thought}` : '',
+    node?.txt ? `当前节点文本：${chrName(node.speaker || node.chr)}：${node.txt}` : '',
+    contextNodes ? `邻近剧情片段：\n${contextNodes}` : '',
+  ];
+
+  if (kind === 'background') {
+    lines.push(
+      '任务：生成背景图。不要出现角色立绘、对话框、UI、标题字、漫画分镜格或大段文字；画面应像可用于视觉小说舞台的场景背景。',
+      '画幅：1536x1024，横版，电影感构图，中心安全区清晰。',
+    );
+  } else if (kind === 'sprite') {
+    lines.push(
+      `任务：生成角色立绘。目标角色：${character?.name || chrName(currentSpriteCharacterId.value)}。`,
+      character?.content ? `角色设定：${character.content}` : '',
+      '立绘要求：角色主体清晰，适合叠加在视觉小说背景上；避免复杂背景、UI、文字、水印；尽量保持透明或纯净背景感。',
+      '画幅：1024x1536，竖版，角色位于中心安全区。',
+    );
+  }
+  lines.push(`用户具体要求：${userPrompt.trim()}`);
+  return lines.filter(Boolean).join('\n');
+}
+
+function referenceAssetIdsFor(kind: 'background' | 'sprite') {
+  const model = selectedImageModel.value;
+  if (!imageModelSupportsReference(model)) return [];
+  const ids = new Set<string>();
+  if (selectedStyleReferenceId.value) ids.add(selectedStyleReferenceId.value);
+  if (kind === 'background' && currentBackgroundId.value.startsWith('bg_')) ids.add(currentBackgroundId.value);
+  if (kind === 'sprite' && currentSpriteId.value.startsWith('sprite_')) ids.add(currentSpriteId.value);
+  return Array.from(ids).slice(0, 4);
+}
+
+function triggerBackgroundUpload() {
+  if (!projectStore.currentProject) {
+    bus.emit('toast', { type: 'warning', message: t('nodeEditor.presentation.projectRequired') });
+    return;
+  }
+  backgroundFileInputRef.value?.click();
+}
+
+async function onBackgroundFileChange(event: Event) {
+  const input = event.target as HTMLInputElement | null;
+  const file = input?.files?.[0];
+  if (input) input.value = '';
+  if (!file || !projectStore.currentProject) return;
+  backgroundUploading.value = true;
+  try {
+    const result = await uploadPresentationBackground(projectStore.currentProject, file, file.name);
+    if (!result.asset?.id) throw new Error(t('nodeEditor.presentation.uploadInvalidResult'));
+    updateManifest(result.manifest);
+    setDialoguePresentationValue('bg', result.asset.id);
+    bus.emit('toast', { type: 'success', message: t('nodeEditor.presentation.uploadSuccess') });
+  } catch (error: unknown) {
+    bus.emit('toast', { type: 'error', message: presentationErrorMessage(error, t('nodeEditor.presentation.uploadFailed')) });
+  } finally {
+    backgroundUploading.value = false;
+  }
+}
+
+function clearDialogueBackground() {
+  setDialoguePresentationValue('bg', null);
+  bus.emit('toast', { type: 'success', message: t('nodeEditor.presentation.clearSuccess') });
+}
+
+async function generateBackgroundByAI() {
+  if (!projectStore.currentProject) {
+    bus.emit('toast', { type: 'warning', message: t('nodeEditor.presentation.projectRequired') });
+    return;
+  }
+  const prompt = backgroundPrompt.value.trim();
+  const model = selectedImageModel.value;
+  if (!prompt) {
+    bus.emit('toast', { type: 'warning', message: t('nodeEditor.presentation.promptRequired') });
+    return;
+  }
+  if (!model) {
+    bus.emit('toast', { type: 'warning', message: t('nodeEditor.presentation.imageModelMissing') });
+    return;
+  }
+  backgroundGenerating.value = true;
+  try {
+    const result = await generatePresentationBackground(projectStore.currentProject, {
+      prompt: buildPresentationImagePrompt('background', prompt),
+      title: currentDialogueNode.value?.txt?.trim().slice(0, 18) || t('nodeEditor.presentation.generatedBackgroundTitle'),
+      size: '1536x1024',
+      platformId: Number(model.platform_id),
+      modelId: Number(model.model_id),
+      referenceAssetIds: referenceAssetIdsFor('background'),
+    });
+    if (!result.asset?.id) throw new Error(t('nodeEditor.presentation.uploadInvalidResult'));
+    updateManifest(result.manifest);
+    setDialoguePresentationValue('bg', result.asset.id);
+    backgroundPrompt.value = '';
+    bus.emit('toast', { type: 'success', message: t('nodeEditor.presentation.generateSuccess') });
+  } catch (error: unknown) {
+    bus.emit('toast', { type: 'error', message: presentationErrorMessage(error, t('nodeEditor.presentation.generateFailed')) });
+  } finally {
+    backgroundGenerating.value = false;
+  }
+}
+
+function triggerSpriteUpload() {
+  if (!projectStore.currentProject) {
+    bus.emit('toast', { type: 'warning', message: t('nodeEditor.presentation.projectRequired') });
+    return;
+  }
+  if (!currentSpriteCharacterId.value) {
+    bus.emit('toast', { type: 'warning', message: t('nodeEditor.presentation.characterRequired') });
+    return;
+  }
+  spriteFileInputRef.value?.click();
+}
+
+async function onSpriteFileChange(event: Event) {
+  const input = event.target as HTMLInputElement | null;
+  const file = input?.files?.[0];
+  if (input) input.value = '';
+  if (!file || !projectStore.currentProject) return;
+  spriteUploading.value = true;
+  try {
+    const result = await uploadPresentationSprite(projectStore.currentProject, file, {
+      title: `${currentSpriteCharacterId.value}-${file.name}`,
+      characterId: currentSpriteCharacterId.value,
+      expression: 'default',
+    });
+    if (!result.asset?.id) throw new Error(t('nodeEditor.presentation.uploadInvalidResult'));
+    updateManifest(result.manifest);
+    setDialoguePresentationValue('sprite', result.asset.id);
+    bus.emit('toast', { type: 'success', message: t('nodeEditor.presentation.spriteUploadSuccess') });
+  } catch (error: unknown) {
+    bus.emit('toast', { type: 'error', message: presentationErrorMessage(error, t('nodeEditor.presentation.spriteUploadFailed')) });
+  } finally {
+    spriteUploading.value = false;
+  }
+}
+
+function clearDialogueSprite() {
+  setDialoguePresentationValue('sprite', null);
+  bus.emit('toast', { type: 'success', message: t('nodeEditor.presentation.spriteClearSuccess') });
+}
+
+async function generateSpriteByAI() {
+  if (!projectStore.currentProject) {
+    bus.emit('toast', { type: 'warning', message: t('nodeEditor.presentation.projectRequired') });
+    return;
+  }
+  if (!currentSpriteCharacterId.value) {
+    bus.emit('toast', { type: 'warning', message: t('nodeEditor.presentation.characterRequired') });
+    return;
+  }
+  const prompt = spritePrompt.value.trim();
+  const model = selectedImageModel.value;
+  if (!prompt) {
+    bus.emit('toast', { type: 'warning', message: t('nodeEditor.presentation.promptRequired') });
+    return;
+  }
+  if (!model) {
+    bus.emit('toast', { type: 'warning', message: t('nodeEditor.presentation.imageModelMissing') });
+    return;
+  }
+  spriteGenerating.value = true;
+  try {
+    const result = await generatePresentationSprite(projectStore.currentProject, {
+      prompt: buildPresentationImagePrompt('sprite', prompt),
+      title: currentCharacterDetail()?.name || currentSpriteCharacterId.value || t('nodeEditor.presentation.generatedSpriteTitle'),
+      characterId: currentSpriteCharacterId.value,
+      expression: 'default',
+      size: '1024x1536',
+      platformId: Number(model.platform_id),
+      modelId: Number(model.model_id),
+      referenceAssetIds: referenceAssetIdsFor('sprite'),
+    });
+    if (!result.asset?.id) throw new Error(t('nodeEditor.presentation.uploadInvalidResult'));
+    updateManifest(result.manifest);
+    setDialoguePresentationValue('sprite', result.asset.id);
+    spritePrompt.value = '';
+    bus.emit('toast', { type: 'success', message: t('nodeEditor.presentation.spriteGenerateSuccess') });
+  } catch (error: unknown) {
+    bus.emit('toast', { type: 'error', message: presentationErrorMessage(error, t('nodeEditor.presentation.spriteGenerateFailed')) });
+  } finally {
+    spriteGenerating.value = false;
+  }
+}
 
 const criticHits = computed<CriticHitViewItem[]>(() => {
   if (!Array.isArray(criticResult.value?.hits)) return [];
@@ -654,8 +1217,13 @@ async function loadCharacters() {
 
 onMounted(() => {
   loadCharacters();
+  void loadPresentationImageModels();
+  void loadPresentationManifest();
 });
-watch(() => projectStore.currentProject, () => loadCharacters());
+watch(() => projectStore.currentProject, () => {
+  loadCharacters();
+  void loadPresentationManifest();
+});
 
 // 监听外部触发的 Bridge 请求（从蓝图连线）
 bus.on('trigger-bridge', (payload: unknown) => {
@@ -1344,6 +1912,101 @@ function insertBridgeResult() {
   display: flex;
   flex-direction: column;
   gap: 16px;
+}
+
+.presentation-tools {
+  margin-bottom: 12px;
+  padding: 10px;
+  border: 1px solid color-mix(in srgb, var(--spark-border), transparent 8%);
+  border-radius: 8px;
+  background: color-mix(in srgb, var(--spark-bg) 38%, transparent);
+}
+
+.presentation-section-heading {
+  display: inline-flex;
+  align-items: center;
+  gap: 7px;
+  margin-bottom: 10px;
+  font-size: var(--spark-fs-xs);
+  font-weight: 700;
+  color: var(--spark-text);
+}
+
+.presentation-tool-stack {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  min-width: 0;
+}
+
+.presentation-style-card,
+.presentation-control-card {
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  padding: 9px;
+  border: 1px solid color-mix(in srgb, var(--spark-border), transparent 12%);
+  border-radius: 8px;
+  background: color-mix(in srgb, var(--spark-panel-bg), var(--spark-primary) 2%);
+}
+
+.presentation-tool-heading {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  font-size: var(--spark-fs-xs);
+  font-weight: 650;
+  color: var(--spark-text);
+}
+
+.presentation-control-grid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 10px;
+}
+
+.presentation-current-line {
+  min-width: 0;
+  padding: 6px 8px;
+  border-radius: 7px;
+  border: 1px solid color-mix(in srgb, var(--spark-primary), transparent 72%);
+  background: color-mix(in srgb, var(--spark-primary), transparent 92%);
+  color: var(--spark-text);
+  font-size: var(--spark-fs-2xs);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.presentation-current-line.is-empty {
+  border-color: color-mix(in srgb, var(--spark-border), transparent 8%);
+  background: color-mix(in srgb, var(--spark-bg) 44%, transparent);
+  color: var(--spark-text-muted);
+}
+
+.presentation-model-select {
+  width: min(100%, 230px);
+  flex: 1 1 180px;
+}
+
+.presentation-wide-select {
+  width: 100%;
+}
+
+.presentation-tool-tip {
+  font-size: var(--spark-fs-2xs);
+  line-height: 1.45;
+}
+
+.presentation-hidden-input {
+  display: none;
+}
+
+@media (max-width: 1280px) {
+  .presentation-control-grid {
+    grid-template-columns: 1fr;
+  }
 }
 
 /* Bridge 结果样式 */

@@ -19,6 +19,7 @@ from story.public_share_review import (
 )
 from story.importer import import_project_stories_to_db
 from story.novel_parser import aggregate_novel
+from story.presentation_manifest import copy_presentation_snapshot, remove_presentation_snapshot
 
 version_router = APIRouter()
 
@@ -64,8 +65,18 @@ def _build_preview_version_name() -> str:
 def _create_snapshot_for_format(user_id: str, project_name: str, content_format: str, version_id: str):
     if content_format == 'novel':
         snapshot_path = os.path.join(_get_shares_dir(), f'ver_{version_id}.md')
-        with open(snapshot_path, 'w', encoding='utf-8') as f:
-            f.write(aggregate_novel(user_id, project_name, export_format='md'))
+        try:
+            with open(snapshot_path, 'w', encoding='utf-8') as f:
+                f.write(aggregate_novel(user_id, project_name, export_format='md'))
+            copy_presentation_snapshot(user_id, project_name, snapshot_path)
+        except Exception:
+            if os.path.exists(snapshot_path):
+                try:
+                    os.remove(snapshot_path)
+                except OSError:
+                    pass
+            remove_presentation_snapshot(snapshot_path)
+            raise
         return snapshot_path, None
 
     import_project_stories_to_db(user_id, project_name, reset=True)
@@ -76,7 +87,17 @@ def _create_snapshot_for_format(user_id: str, project_name: str, content_format:
         return None, JSONResponse(status_code=404, content={'error': '项目数据库尚未生成'})
 
     snapshot_path = os.path.join(_get_shares_dir(), f'ver_{version_id}.db')
-    shutil.copy2(db_path, snapshot_path)
+    try:
+        shutil.copy2(db_path, snapshot_path)
+        copy_presentation_snapshot(user_id, project_name, snapshot_path)
+    except Exception:
+        if os.path.exists(snapshot_path):
+            try:
+                os.remove(snapshot_path)
+            except OSError:
+                pass
+        remove_presentation_snapshot(snapshot_path)
+        raise
     return snapshot_path, None
 
 class VersionCreate(BaseModel):
@@ -191,6 +212,7 @@ async def create_preview_version(project_name: str, data: VersionPreviewCreate, 
                     os.remove(snapshot_path)
                 except OSError:
                     pass
+            remove_presentation_snapshot(snapshot_path)
             return JSONResponse(status_code=500, content={'error': str(exc)})
         finally:
             session.close()
@@ -269,6 +291,7 @@ async def delete_version(version_id: str, user: dict = Depends(get_current_user)
                 os.remove(snapshot_path)
             except OSError:
                 pass
+        remove_presentation_snapshot(snapshot_path)
         return {'success': True}
     except Exception as exc:
         session.rollback()

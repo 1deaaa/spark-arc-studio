@@ -18,6 +18,7 @@ from .routes_files import files_router
 from .routes_version import version_router
 from .routes_share import share_router
 from .routes_blueprint import blueprint_router
+from .routes_presentation import presentation_router
 
 # 创建主路由器
 story_router = APIRouter()
@@ -28,3 +29,4 @@ story_router.include_router(files_router)
 story_router.include_router(version_router)
 story_router.include_router(share_router)
 story_router.include_router(blueprint_router)
+story_router.include_router(presentation_router)

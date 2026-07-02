@@ -299,11 +299,11 @@
                                         :disabled="!(!plat.is_sys || isAdmin)"
                                     >
                                         <template #trigger>
-                                            <span
-                                                class="model-display-name editable-name"
-                                                :class="{ 'can-edit': !plat.is_sys || isAdmin }"
-                                                @click="(!plat.is_sys || isAdmin) && startEditDisplayName(plat, model)"
-                                            >{{ model.display_name }}</span>
+                                    <span
+                                        class="model-display-name editable-name"
+                                        :class="{ 'can-edit': !plat.is_sys || isAdmin }"
+                                        @click="(!plat.is_sys || isAdmin) && startEditDisplayName(plat, model)"
+                                    >{{ model.display_name }}</span>
                                         </template>
                                         {{ t('components.aiManager.tooltips.clickToEditDisplayName') }}
                                     </n-tooltip>
@@ -318,13 +318,29 @@
                                         ref="inlineInputRef"
                                         autofocus
                                     />
+                                    <div class="model-capability-badges" aria-label="model capabilities">
+                                        <n-tooltip
+                                            v-for="badge in modelCapabilityBadges(model)"
+                                            :key="badge.key"
+                                            trigger="hover"
+                                        >
+                                            <template #trigger>
+                                                <SparkTag
+                                                    class="model-capability-badge"
+                                                    size="small"
+                                                    :type="badge.type"
+                                                >{{ badge.text }}</SparkTag>
+                                            </template>
+                                            {{ badge.title }}
+                                        </n-tooltip>
+                                    </div>
                                     <n-tooltip v-if="model.extra_body" trigger="hover">
                                         <template #trigger>
                                             <SparkTag class="extra-tag-desktop" size="small" type="primary">{{ t('components.aiManager.badges.extraBodyBadge') }}</SparkTag>
                                         </template>
                                         {{ t('components.aiManager.badges.extraBodyTooltip') }}
                                     </n-tooltip>
-                                    <n-tooltip v-if="plat.is_sys" trigger="hover">
+                                    <n-tooltip v-if="plat.is_sys && isTextModel(model.capabilities)" trigger="hover">
                                         <template #trigger>
                                             <SparkTag
                                                 class="model-credit-tag"
@@ -342,7 +358,7 @@
                                         </template>
                                         {{ t('components.aiManager.badges.extraBodyTooltip') }}
                                     </n-tooltip>
-                                    <n-tooltip v-if="plat.is_sys" trigger="hover">
+                                    <n-tooltip v-if="plat.is_sys && isTextModel(model.capabilities)" trigger="hover">
                                         <template #trigger>
                                             <SparkTag
                                                 class="model-credit-tag-mobile"
@@ -390,7 +406,7 @@
                                     </n-tooltip>
 
                                     <!-- 测速按钮 -->
-                                    <n-tooltip trigger="hover">
+                                    <n-tooltip v-if="isTextModel(model.capabilities)" trigger="hover">
                                         <template #trigger>
                                             <n-button
                                                 size="tiny"
@@ -407,7 +423,7 @@
                                     </n-tooltip>
 
                                     <!-- 测试按钮 -->
-                                    <n-tooltip trigger="hover">
+                                    <n-tooltip v-if="isTextModel(model.capabilities)" trigger="hover">
                                         <template #trigger>
                                             <n-button
                                                 size="tiny"
@@ -417,6 +433,29 @@
                                                 :loading="testingModelId === model.model_id"
                                                 :disabled="speedTestingModelIds.has(model.model_id)"
                                             >
+                                                <template #icon><n-icon><CircleCheck /></n-icon></template>
+                                            </n-button>
+                                        </template>
+                                        {{ t('components.aiManager.actions.testConnection') }}
+                                    </n-tooltip>
+                                    <n-tooltip v-if="isEmbeddingModel(model.capabilities)" trigger="hover">
+                                        <template #trigger>
+                                            <n-button
+                                                size="tiny"
+                                                quaternary
+                                                class="action-btn icon-btn btn-green"
+                                                @click="saveUserEmbeddingSelection(plat.platform_id, model.model_id)"
+                                                :loading="embeddingSaving"
+                                                :disabled="embeddingSelection.platform_id === plat.platform_id && embeddingSelection.model_id === model.model_id"
+                                            >
+                                                <template #icon><n-icon><Zap /></n-icon></template>
+                                            </n-button>
+                                        </template>
+                                        {{ t('components.aiManager.embedding.setDefault') }}
+                                    </n-tooltip>
+                                    <n-tooltip v-if="isEmbeddingModel(model.capabilities)" trigger="hover">
+                                        <template #trigger>
+                                            <n-button size="tiny" quaternary class="action-btn icon-btn btn-green" @click="testEmbeddingModel(plat, model)">
                                                 <template #icon><n-icon><CircleCheck /></n-icon></template>
                                             </n-button>
                                         </template>
@@ -458,90 +497,6 @@
                         <n-text v-else depth="3" style="font-size: var(--spark-fs-xs);">{{ t('components.aiManager.empty.noModels') }}</n-text>
                     </div>
 
-                    <!-- Embedding 列表（与平台同级展示） -->
-                    <div class="model-section" v-if="plat.embeddings">
-                        <div v-if="plat.embeddings.length > 0" class="model-list">
-                            <div v-for="model in plat.embeddings" :key="model.model_id" class="model-row">
-                                <div class="model-info">
-                                    <span class="model-display-name">{{ model.display_name }}</span>
-                                    <n-tag size="small" :bordered="false" type="error" round>{{ t('components.aiManager.embedding.tag') }}</n-tag>
-                                    <n-tooltip v-if="model.extra_body" trigger="hover">
-                                        <template #trigger>
-                                            <n-tag class="extra-tag-desktop" size="small" :bordered="false" type="info" round>{{ t('components.aiManager.badges.extraBodyBadge') }}</n-tag>
-                                        </template>
-                                        {{ t('components.aiManager.badges.extraBodyTooltip') }}
-                                    </n-tooltip>
-                                </div>
-                                <div class="model-actions" @click.stop>
-                                    <n-tooltip v-if="model.extra_body" trigger="hover">
-                                        <template #trigger>
-                                            <n-tag class="extra-tag-mobile" size="small" :bordered="false" type="info" round>{{ t('components.aiManager.badges.extraBodyBadge') }}</n-tag>
-                                        </template>
-                                        {{ t('components.aiManager.badges.extraBodyTooltip') }}
-                                    </n-tooltip>
-                                    <n-text 
-                                        v-if="embeddingSelection.platform_id === plat.platform_id && embeddingSelection.model_id === model.model_id" 
-                                        depth="3" 
-                                        style="margin-right: 8px; font-size: var(--spark-fs-xs); color: #67c23a; font-weight: bold;"
-                                    >
-                                        {{ t('components.aiManager.embedding.defaultVector') }}
-                                    </n-text>
-                                    <n-text 
-                                        v-else-if="currentEmbeddingName" 
-                                        depth="3" 
-                                        style="margin-right: 8px; font-size: var(--spark-fs-2xs); opacity: 0.5;"
-                                    >
-                                        ({{ t('components.aiManager.embedding.current') }}: {{ currentEmbeddingName }})
-                                    </n-text>
-                                    <n-tooltip trigger="hover">
-                                        <template #trigger>
-                                            <n-button
-                                                size="tiny"
-                                                quaternary
-                                                class="action-btn icon-btn btn-green"
-                                                @click="saveUserEmbeddingSelection(plat.platform_id, model.model_id)"
-                                                :loading="embeddingSaving"
-                                                :disabled="embeddingSelection.platform_id === plat.platform_id && embeddingSelection.model_id === model.model_id"
-                                            >
-                                                <template #icon><n-icon><Zap /></n-icon></template>
-                                            </n-button>
-                                        </template>
-                                        {{ t('components.aiManager.embedding.setDefault') }}
-                                    </n-tooltip>
-                                    <n-tooltip trigger="hover">
-                                        <template #trigger>
-                                            <n-button size="tiny" quaternary class="action-btn icon-btn btn-green" @click="testEmbeddingModel(plat, model)">
-                                                <template #icon><n-icon><CircleCheck /></n-icon></template>
-                                            </n-button>
-                                        </template>
-                                        {{ t('components.aiManager.actions.testConnection') }}
-                                    </n-tooltip>
-                                    <n-tooltip v-if="!plat.is_sys || isAdmin" trigger="hover">
-                                        <template #trigger>
-                                            <n-button size="tiny" quaternary class="action-btn icon-btn btn-blue" @click="openEditEmbeddingModal(plat, model)">
-                                                <template #icon><n-icon><SquarePen /></n-icon></template>
-                                            </n-button>
-                                        </template>
-                                        {{ t('views.common.edit') }}
-                                    </n-tooltip>
-                                    <n-tooltip v-if="!plat.is_sys || isAdmin" trigger="hover">
-                                        <template #trigger>
-                                            <n-button
-                                                size="tiny"
-                                                quaternary
-                                                class="action-btn icon-btn btn-red"
-                                                @click="confirmDeleteEmbedding(model, plat)"
-                                            >
-                                                <template #icon><n-icon><Trash /></n-icon></template>
-                                            </n-button>
-                                        </template>
-                                        {{ t('views.common.delete') }}
-                                    </n-tooltip>
-                                </div>
-                            </div>
-                        </div>
-                        <n-text v-else depth="3" style="font-size: var(--spark-fs-xs);">{{ t('components.aiManager.empty.noEmbeddings') }}</n-text>
-                    </div>
                 </n-collapse-item>
             </n-collapse>
             
@@ -615,33 +570,6 @@
             </n-card>
         </n-modal>
 
-        <!-- 编辑 Embedding 弹窗 -->
-        <n-modal v-model:show="showEditEmbeddingModal">
-            <n-card style="width: 600px" :title="t('components.aiManager.modal.editEmbeddingTitle')" :bordered="false" size="huge">
-                <n-form>
-                    <n-form-item :label="t('components.aiManager.form.modelIdentifier')">
-                        <n-input :value="editingEmbedding.modelName" disabled />
-                    </n-form-item>
-                    <n-form-item :label="t('components.aiManager.form.displayName')">
-                        <n-input v-model:value="editingEmbedding.displayName" />
-                    </n-form-item>
-                    <n-form-item :label="t('components.aiManager.form.extraBody')">
-                        <n-input
-                            v-model:value="editingEmbedding.extraBody"
-                            type="textarea"
-                            :autosize="{ minRows: 2, maxRows: 10 }"
-                        />
-                    </n-form-item>
-                </n-form>
-                <template #footer>
-                    <div style="display: flex; justify-content: flex-end; gap: 10px;">
-                        <n-button @click="showEditEmbeddingModal = false">{{ t('views.common.cancel') }}</n-button>
-                        <n-button type="primary" @click="handleUpdateEmbedding" :loading="embeddingSaving">{{ t('views.common.save') }}</n-button>
-                    </div>
-                </template>
-            </n-card>
-        </n-modal>
-
         <!-- 编辑平台弹窗（含密钥配置） -->
         <n-modal v-model:show="showEditPlatformModal">
             <n-card style="width: 500px" :title="t('components.aiManager.modal.editPlatformTitle')" :bordered="false" size="huge">
@@ -709,7 +637,7 @@
 
         <!-- 添加模型弹窗 -->
         <n-modal v-model:show="showAddModelModal">
-            <n-card style="width: 600px" :title="newModel.isEmbedding ? t('components.aiManager.modal.addEmbeddingFor', { platform: currentPlatform?.name || '' }) : t('components.aiManager.modal.addModelFor', { platform: currentPlatform?.name || '' })" :bordered="false" size="huge" header-style="padding-bottom: 8px;" content-style="padding-top: 0;">
+            <n-card style="width: 680px" :title="t('components.aiManager.modal.addModelFor', { platform: currentPlatform?.name || '' })" :bordered="false" size="huge" header-style="padding-bottom: 8px;" content-style="padding-top: 0;">
                 <template #header-extra>
                     <n-tooltip trigger="hover">
                         <template #trigger>
@@ -721,21 +649,30 @@
                     </n-tooltip>
                 </template>
                 <n-form style="display: flex; flex-direction: column;">
-                    <!-- 嵌入模型勾选 -->
-                    <n-form-item class="add-model-mode-toggle" :show-feedback="false" style="margin-bottom: 0; order: 99; --n-blank-height: 0px; --n-feedback-height: 0px; --n-feedback-padding: 0;">
-                        <div style="display: flex; align-items: center; gap: 8px;">
-                            <n-switch v-model:value="newModel.isEmbedding" />
-                            <span style="font-size: var(--spark-fs-sm); opacity: 0.85;">{{ t('components.aiManager.form.isEmbeddingModel') }}</span>
-                            <n-tooltip trigger="hover" placement="top">
-                                <template #trigger>
-                                    <n-icon size="16" style="cursor: help; opacity: 0.5;"><Info /></n-icon>
-                                </template>
-                                {{ t('components.aiManager.form.isEmbeddingHint') }}
-                            </n-tooltip>
+                    <n-form-item :label="t('components.aiManager.form.modelCapabilities')">
+                        <div class="capability-check-row">
+                            <n-checkbox
+                                v-for="option in capabilityOptions"
+                                :key="option.value"
+                                :checked="isCapabilityChecked(newModel, option.value)"
+                                @update:checked="checked => toggleModelCapability(newModel, option.value, checked)"
+                            >
+                                {{ option.label }}
+                            </n-checkbox>
                         </div>
                     </n-form-item>
-                    <!-- 搜索框 + 探测按钮（仅 LLM 模型显示） -->
-                    <n-form-item v-if="!newModel.isEmbedding" :label="t('components.aiManager.form.searchModel')">
+                    <n-form-item v-if="isImageModel(newModel.capabilities)" :label="t('components.aiManager.form.imageAdapter')">
+                        <n-select
+                            v-model:value="newModel.imageAdapter"
+                            :options="imageAdapterOptions"
+                            :placeholder="t('components.aiManager.form.imageAdapterPlaceholder')"
+                        />
+                        <template #feedback>
+                            <span class="form-hint">{{ t('components.aiManager.form.imageAdapterHint') }}</span>
+                        </template>
+                    </n-form-item>
+                    <!-- 搜索框 + 探测按钮（仅文本模型显示） -->
+                    <n-form-item v-if="isNewModelText" :label="t('components.aiManager.form.searchModel')">
                         <n-input-group>
                             <n-input v-model:value="searchKeyword" :placeholder="t('components.aiManager.form.searchModelPlaceholder')" clearable />
                             <n-button @click="fetchRemoteModels(true)" :loading="fetching" type="info" ghost>
@@ -744,7 +681,7 @@
                         </n-input-group>
                     </n-form-item>
                     
-                    <SparkCollapseTransition :show="!newModel.isEmbedding && remoteModels.length > 0">
+                    <SparkCollapseTransition :show="isNewModelText && remoteModels.length > 0">
                         <div class="remote-models-box">
                             <div class="remote-models-header">
                                 <n-text depth="3" style="font-size: var(--spark-fs-xs);">
@@ -782,19 +719,17 @@
                     <n-form-item :label="t('components.aiManager.form.displayName')">
                         <n-input v-model:value="newModel.displayName" :placeholder="t('components.aiManager.form.displayNamePlaceholder')" />
                     </n-form-item>
-                    <n-form-item v-if="currentPlatform?.is_sys && !newModel.isEmbedding" :label="t('components.aiManager.form.modelInputPrice')">
-                        <n-input-number v-model:value="newModel.inputPricePerMillion" :min="0" :precision="2" :step="0.01" style="width: 100%" :placeholder="t('components.aiManager.form.zeroIsFree')" :disabled="!systemConfig.billing_enabled" />
+                    <n-form-item v-if="currentPlatform?.is_sys && isNewModelText" :label="t('components.aiManager.form.modelPricing')">
+                        <div class="compact-field-row compact-field-row--triple">
+                            <n-input-number v-model:value="newModel.inputPricePerMillion" :min="0" :precision="2" :step="0.01" :placeholder="t('components.aiManager.form.modelInputPriceShort')" :disabled="!systemConfig.billing_enabled" />
+                            <n-input-number v-model:value="newModel.cachedInputPricePerMillion" :min="0" :precision="2" :step="0.01" :placeholder="t('components.aiManager.form.modelCachedInputPriceShort')" :disabled="!systemConfig.billing_enabled" />
+                            <n-input-number v-model:value="newModel.outputPricePerMillion" :min="0" :precision="2" :step="0.01" :placeholder="t('components.aiManager.form.modelOutputPriceShort')" :disabled="!systemConfig.billing_enabled" />
+                        </div>
                         <template #feedback>
                             <span v-if="!systemConfig.billing_enabled" class="form-hint">{{ t('components.aiManager.form.enableBillingBeforePricing') }}</span>
                         </template>
                     </n-form-item>
-                    <n-form-item v-if="currentPlatform?.is_sys && !newModel.isEmbedding" :label="t('components.aiManager.form.modelCachedInputPrice')">
-                        <n-input-number v-model:value="newModel.cachedInputPricePerMillion" :min="0" :precision="2" :step="0.01" style="width: 100%" :placeholder="t('components.aiManager.form.zeroIsFree')" :disabled="!systemConfig.billing_enabled" />
-                    </n-form-item>
-                    <n-form-item v-if="currentPlatform?.is_sys && !newModel.isEmbedding" :label="t('components.aiManager.form.modelOutputPrice')">
-                        <n-input-number v-model:value="newModel.outputPricePerMillion" :min="0" :precision="2" :step="0.01" style="width: 100%" :placeholder="t('components.aiManager.form.zeroIsFree')" :disabled="!systemConfig.billing_enabled" />
-                    </n-form-item>
-                    <n-form-item v-if="!newModel.isEmbedding" :label="t('components.aiManager.form.temperatureOptional')">
+                    <n-form-item v-if="isNewModelText" :label="t('components.aiManager.form.temperatureOptional')">
                         <n-space vertical :size="6" class="temp-setting-block">
                             <div class="temp-setting-row">
                                 <n-switch v-model:value="newModel.temperatureEnabled">
@@ -822,36 +757,34 @@
                             </div>
                         </n-space>
                     </n-form-item>
-                    <n-form-item v-if="!newModel.isEmbedding" :label="t('components.aiManager.form.maxContextTokens')">
-                        <n-input
-                            v-model:value="tokenTexts.addContext"
-                            style="width: 100%"
-                            :placeholder="t('components.aiManager.form.maxTokensAutoHint')"
-                            clearable
-                            @blur="onTokenBlur('addContext', newModel as any, 'maxContextTokens')"
-                            @clear="onTokenClear('addContext', newModel as any, 'maxContextTokens')"
-                        >
-                            <template #suffix><span style="opacity:0.45;font-size:11px">100K~2M</span></template>
-                        </n-input>
-                    </n-form-item>
-                    <n-form-item v-if="!newModel.isEmbedding" :label="t('components.aiManager.form.maxOutputTokens')">
-                        <n-input
-                            v-model:value="tokenTexts.addOutput"
-                            style="width: 100%"
-                            :placeholder="t('components.aiManager.form.maxTokensAutoHint')"
-                            clearable
-                            @blur="onTokenBlur('addOutput', newModel as any, 'maxOutputTokens')"
-                            @clear="onTokenClear('addOutput', newModel as any, 'maxOutputTokens')"
-                        >
-                            <template #suffix><span style="opacity:0.45;font-size:11px">8K~256K</span></template>
-                        </n-input>
+                    <n-form-item v-if="isNewModelText" :label="t('components.aiManager.form.tokenLimits')">
+                        <div class="compact-field-row compact-field-row--double">
+                            <n-input
+                                v-model:value="tokenTexts.addContext"
+                                :placeholder="t('components.aiManager.form.maxContextTokens')"
+                                clearable
+                                @blur="onTokenBlur('addContext', newModel as any, 'maxContextTokens')"
+                                @clear="onTokenClear('addContext', newModel as any, 'maxContextTokens')"
+                            >
+                                <template #suffix><span style="opacity:0.45;font-size:11px">100K~2M</span></template>
+                            </n-input>
+                            <n-input
+                                v-model:value="tokenTexts.addOutput"
+                                :placeholder="t('components.aiManager.form.maxOutputTokens')"
+                                clearable
+                                @blur="onTokenBlur('addOutput', newModel as any, 'maxOutputTokens')"
+                                @clear="onTokenClear('addOutput', newModel as any, 'maxOutputTokens')"
+                            >
+                                <template #suffix><span style="opacity:0.45;font-size:11px">8K~256K</span></template>
+                            </n-input>
+                        </div>
                     </n-form-item>
                     <n-form-item class="add-model-extra-body" :show-feedback="false" :label="t('components.aiManager.form.extraBodyOptional')">
                         <n-input 
                             v-model:value="newModel.extraBody" 
                             type="textarea" 
                             :autosize="{ minRows: 2, maxRows: 10 }"
-                            :placeholder="newModel.isEmbedding ? t('components.aiManager.form.extraBodyEmbeddingPlaceholder') : t('components.aiManager.form.extraBodyModelPlaceholder')"
+                            :placeholder="addModelExtraBodyPlaceholder"
                         />
                     </n-form-item>
                 </n-form>
@@ -869,7 +802,7 @@
 
         <!-- 编辑模型弹窗 -->
         <n-modal v-model:show="showEditModelModal">
-            <n-card style="width: 600px" :title="t('components.aiManager.modal.editModelTitle')" :bordered="false" size="huge">
+            <n-card style="width: 680px" :title="t('components.aiManager.modal.editModelTitle')" :bordered="false" size="huge">
                 <n-form>
                     <n-form-item :label="t('components.aiManager.form.modelIdentifier')">
                         <n-input :value="editingModel.modelName" disabled />
@@ -877,19 +810,39 @@
                     <n-form-item :label="t('components.aiManager.form.displayName')">
                         <n-input v-model:value="editingModel.displayName" />
                     </n-form-item>
-                    <n-form-item v-if="currentPlatform?.is_sys" :label="t('components.aiManager.form.modelInputPrice')">
-                        <n-input-number v-model:value="editingModel.inputPricePerMillion" :min="0" :precision="2" :step="0.01" style="width: 100%" :placeholder="t('components.aiManager.form.zeroIsFree')" :disabled="!systemConfig.billing_enabled" />
+                    <n-form-item :label="t('components.aiManager.form.modelCapabilities')">
+                        <div class="capability-check-row">
+                            <n-checkbox
+                                v-for="option in capabilityOptions"
+                                :key="option.value"
+                                :checked="isCapabilityChecked(editingModel, option.value)"
+                                @update:checked="checked => toggleModelCapability(editingModel, option.value, checked)"
+                            >
+                                {{ option.label }}
+                            </n-checkbox>
+                        </div>
+                    </n-form-item>
+                    <n-form-item v-if="isImageModel(editingModel.capabilities)" :label="t('components.aiManager.form.imageAdapter')">
+                        <n-select
+                            v-model:value="editingModel.imageAdapter"
+                            :options="imageAdapterOptions"
+                            :placeholder="t('components.aiManager.form.imageAdapterPlaceholder')"
+                        />
+                        <template #feedback>
+                            <span class="form-hint">{{ t('components.aiManager.form.imageAdapterHint') }}</span>
+                        </template>
+                    </n-form-item>
+                    <n-form-item v-if="currentPlatform?.is_sys && isEditModelText" :label="t('components.aiManager.form.modelPricing')">
+                        <div class="compact-field-row compact-field-row--triple">
+                            <n-input-number v-model:value="editingModel.inputPricePerMillion" :min="0" :precision="2" :step="0.01" :placeholder="t('components.aiManager.form.modelInputPriceShort')" :disabled="!systemConfig.billing_enabled" />
+                            <n-input-number v-model:value="editingModel.cachedInputPricePerMillion" :min="0" :precision="2" :step="0.01" :placeholder="t('components.aiManager.form.modelCachedInputPriceShort')" :disabled="!systemConfig.billing_enabled" />
+                            <n-input-number v-model:value="editingModel.outputPricePerMillion" :min="0" :precision="2" :step="0.01" :placeholder="t('components.aiManager.form.modelOutputPriceShort')" :disabled="!systemConfig.billing_enabled" />
+                        </div>
                         <template #feedback>
                             <span v-if="!systemConfig.billing_enabled" class="form-hint">{{ t('components.aiManager.form.enableBillingBeforePricing') }}</span>
                         </template>
                     </n-form-item>
-                    <n-form-item v-if="currentPlatform?.is_sys" :label="t('components.aiManager.form.modelCachedInputPrice')">
-                        <n-input-number v-model:value="editingModel.cachedInputPricePerMillion" :min="0" :precision="2" :step="0.01" style="width: 100%" :placeholder="t('components.aiManager.form.zeroIsFree')" :disabled="!systemConfig.billing_enabled" />
-                    </n-form-item>
-                    <n-form-item v-if="currentPlatform?.is_sys" :label="t('components.aiManager.form.modelOutputPrice')">
-                        <n-input-number v-model:value="editingModel.outputPricePerMillion" :min="0" :precision="2" :step="0.01" style="width: 100%" :placeholder="t('components.aiManager.form.zeroIsFree')" :disabled="!systemConfig.billing_enabled" />
-                    </n-form-item>
-                    <n-form-item :label="t('components.aiManager.form.temperatureOptional')">
+                    <n-form-item v-if="isEditModelText" :label="t('components.aiManager.form.temperatureOptional')">
                         <n-space vertical :size="6" class="temp-setting-block">
                             <div class="temp-setting-row">
                                 <n-switch v-model:value="editingModel.temperatureEnabled">
@@ -917,36 +870,34 @@
                             </div>
                         </n-space>
                     </n-form-item>
-                    <n-form-item :label="t('components.aiManager.form.maxContextTokens')">
-                        <n-input
-                            v-model:value="tokenTexts.editContext"
-                            style="width: 100%"
-                            :placeholder="t('components.aiManager.form.maxTokensAutoHint')"
-                            clearable
-                            @blur="onTokenBlur('editContext', editingModel as any, 'maxContextTokens')"
-                            @clear="onTokenClear('editContext', editingModel as any, 'maxContextTokens')"
-                        >
-                            <template #suffix><span style="opacity:0.45;font-size:11px">100K~2M</span></template>
-                        </n-input>
-                    </n-form-item>
-                    <n-form-item :label="t('components.aiManager.form.maxOutputTokens')">
-                        <n-input
-                            v-model:value="tokenTexts.editOutput"
-                            style="width: 100%"
-                            :placeholder="t('components.aiManager.form.maxTokensAutoHint')"
-                            clearable
-                            @blur="onTokenBlur('editOutput', editingModel as any, 'maxOutputTokens')"
-                            @clear="onTokenClear('editOutput', editingModel as any, 'maxOutputTokens')"
-                        >
-                            <template #suffix><span style="opacity:0.45;font-size:11px">8K~256K</span></template>
-                        </n-input>
+                    <n-form-item v-if="isEditModelText" :label="t('components.aiManager.form.tokenLimits')">
+                        <div class="compact-field-row compact-field-row--double">
+                            <n-input
+                                v-model:value="tokenTexts.editContext"
+                                :placeholder="t('components.aiManager.form.maxContextTokens')"
+                                clearable
+                                @blur="onTokenBlur('editContext', editingModel as any, 'maxContextTokens')"
+                                @clear="onTokenClear('editContext', editingModel as any, 'maxContextTokens')"
+                            >
+                                <template #suffix><span style="opacity:0.45;font-size:11px">100K~2M</span></template>
+                            </n-input>
+                            <n-input
+                                v-model:value="tokenTexts.editOutput"
+                                :placeholder="t('components.aiManager.form.maxOutputTokens')"
+                                clearable
+                                @blur="onTokenBlur('editOutput', editingModel as any, 'maxOutputTokens')"
+                                @clear="onTokenClear('editOutput', editingModel as any, 'maxOutputTokens')"
+                            >
+                                <template #suffix><span style="opacity:0.45;font-size:11px">8K~256K</span></template>
+                            </n-input>
+                        </div>
                     </n-form-item>
                     <n-form-item :show-feedback="false" :label="t('components.aiManager.form.extraBody')">
                         <n-input 
                             v-model:value="editingModel.extraBody" 
                             type="textarea" 
                             :autosize="{ minRows: 2, maxRows: 10 }"
-                            :placeholder="t('components.aiManager.form.extraBodyModelPlaceholder')"
+                            :placeholder="editModelExtraBodyPlaceholder"
                         />
                     </n-form-item>
                 </n-form>
@@ -968,14 +919,14 @@
  * 业务逻辑已提取到 3 个 composable：
  * - useAIPlatformManager: 平台 CRUD、系统配置、数据加载
  * - useAIModelManager: 模型 CRUD、测速、远程探测、内联编辑
- * - useAIEmbeddingManager: Embedding CRUD、选择管理
+ * - useAIEmbeddingManager: Embedding 选择与测试
  */
-import { ref, reactive, watch, onMounted, nextTick } from 'vue';
+import { computed, ref, reactive, watch, onMounted, nextTick } from 'vue';
 import { useI18n } from 'vue-i18n';
 import {
     NSpin, NCollapse, NCollapseItem, NText, NSpace, NButton, NIcon, NModal, NCard,
     NForm, NFormItem, NInput, NInputGroup, NInputNumber, NEmpty, NTooltip, NPopconfirm,
-    NSwitch, NTag, useDialog, useMessage,
+    NSwitch, NTag, NCheckbox, NSelect, useDialog, useMessage,
 } from 'naive-ui';
 import SparkAlert from '@/components/share/SparkAlert.vue';
 import SparkCollapseTransition from '@/components/share/SparkCollapseTransition.vue';
@@ -991,6 +942,15 @@ import Sortable from 'sortablejs';
 import { useAiStore } from '@/components/stores/aiStore';
 import type { AiPlatform, AiModelItem, ApiId } from '@/services/aiContracts';
 import { fetchWithAuth } from '@/services/api';
+import {
+    MODEL_CAPABILITIES,
+    capabilitiesToModelType,
+    isEmbeddingModel,
+    isImageModel,
+    isTextModel,
+    normalizeModelCapabilities,
+    type ModelCapability,
+} from '@/services/modelCapabilities';
 
 const aiStore = useAiStore();
 const { t } = useI18n();
@@ -1020,6 +980,120 @@ type CreditTagMeta = {
     text: string;
     title: string;
 };
+
+type CapabilityBadgeMeta = {
+    key: string;
+    text: string;
+    title: string;
+    type: TagKind;
+};
+
+const capabilityOptions = computed<{ label: string; value: ModelCapability }[]>(() => [
+    { label: t('components.aiManager.capabilities.visionInput'), value: MODEL_CAPABILITIES.visionInput },
+    { label: t('components.aiManager.capabilities.imageGeneration'), value: MODEL_CAPABILITIES.imageGeneration },
+    { label: t('components.aiManager.capabilities.embedding'), value: MODEL_CAPABILITIES.embedding },
+]);
+
+const imageAdapterOptions = computed(() => [
+    { label: t('components.aiManager.imageAdapters.openaiImages'), value: 'openai_images' },
+    { label: t('components.aiManager.imageAdapters.geminiImage'), value: 'gemini_interactions' },
+    { label: t('components.aiManager.imageAdapters.grokImage'), value: 'xai_images' },
+]);
+
+function modelCapabilityBadges(model: AiModelItem): CapabilityBadgeMeta[] {
+    const capabilities = normalizeModelCapabilities(model.capabilities);
+    if (capabilities.includes(MODEL_CAPABILITIES.embedding)) {
+        return [{
+            key: 'embedding',
+            text: 'E',
+            title: t('components.aiManager.modelTypes.embedding'),
+            type: 'error',
+        }];
+    }
+
+    const badges: CapabilityBadgeMeta[] = [];
+    if (capabilities.includes(MODEL_CAPABILITIES.textGeneration)) {
+        badges.push({
+            key: 'text',
+            text: 'T',
+            title: t('components.aiManager.modelTypes.text'),
+            type: 'default',
+        });
+    }
+    if (capabilities.includes(MODEL_CAPABILITIES.imageGeneration)) {
+        badges.push({
+            key: 'image',
+            text: 'I',
+            title: t('components.aiManager.modelTypes.imageGeneration'),
+            type: 'success',
+        });
+    }
+    if (capabilities.includes(MODEL_CAPABILITIES.visionInput)) {
+        badges.push({
+            key: 'vision',
+            text: 'V',
+            title: t('components.aiManager.modelTypes.visionText'),
+            type: 'info',
+        });
+    }
+    return badges.length > 0 ? badges : [{
+        key: 'text',
+        text: 'T',
+        title: t('components.aiManager.modelTypes.text'),
+        type: 'default',
+    }];
+}
+
+function extraBodyPlaceholderForCapabilities(rawCapabilities: unknown): string {
+    const type = capabilitiesToModelType(rawCapabilities);
+    if (type === 'embedding') {
+        return t('components.aiManager.form.extraBodyEmbeddingPlaceholder');
+    }
+    if (type === 'image_generation' || type === 'image_reference') {
+        return t('components.aiManager.form.extraBodyImagePlaceholder');
+    }
+    return t('components.aiManager.form.extraBodyModelPlaceholder');
+}
+
+type CapabilityFormTarget = {
+    capabilities: ModelCapability[];
+};
+
+const IMAGE_CAPABILITIES: ModelCapability[] = [
+    MODEL_CAPABILITIES.imageGeneration,
+    MODEL_CAPABILITIES.imageReferenceInput,
+    MODEL_CAPABILITIES.imageEdit,
+];
+
+function isCapabilityChecked(target: CapabilityFormTarget, capability: ModelCapability): boolean {
+    return normalizeModelCapabilities(target.capabilities).includes(capability);
+}
+
+function toggleModelCapability(target: CapabilityFormTarget, capability: ModelCapability, checked: boolean) {
+    const set = new Set(normalizeModelCapabilities(target.capabilities));
+
+    if (capability === MODEL_CAPABILITIES.embedding) {
+        target.capabilities = checked
+            ? [MODEL_CAPABILITIES.embedding]
+            : [MODEL_CAPABILITIES.textGeneration];
+        return;
+    }
+
+    set.delete(MODEL_CAPABILITIES.embedding);
+    if (capability === MODEL_CAPABILITIES.imageGeneration) {
+        IMAGE_CAPABILITIES.forEach(item => checked ? set.add(item) : set.delete(item));
+        target.capabilities = normalizeModelCapabilities([...set]);
+        return;
+    }
+
+    if (checked) {
+        set.add(capability);
+    } else {
+        set.delete(capability);
+    }
+
+    target.capabilities = normalizeModelCapabilities([...set]);
+}
 
 // === Token 输入 K/M 单位支持 ===
 function formatTokenDisplay(value: number | null | undefined): string {
@@ -1502,6 +1576,11 @@ const {
     confirmEditDisplayName,
 } = useAIModelManager(platforms, syncAiStoreSilently, systemConfig);
 
+const isNewModelText = computed(() => isTextModel(newModel.value.capabilities));
+const isEditModelText = computed(() => isTextModel(editingModel.value.capabilities));
+const addModelExtraBodyPlaceholder = computed(() => extraBodyPlaceholderForCapabilities(newModel.value.capabilities));
+const editModelExtraBodyPlaceholder = computed(() => extraBodyPlaceholderForCapabilities(editingModel.value.capabilities));
+
 watch(() => showAddModelModal.value, (open) => { if (open) nextTick(syncAddTokenTexts); });
 watch(() => showEditModelModal.value, (open) => { if (open) nextTick(syncEditTexts); });
 
@@ -1510,13 +1589,6 @@ const embedding = useAIEmbeddingManager(platforms, syncAiStoreSilently);
 const {
     embeddingSelection,
     embeddingSaving,
-    showEditEmbeddingModal,
-    editingEmbedding,
-    currentEmbeddingName,
-    openEditEmbeddingModal,
-    handleUpdateEmbedding,
-    confirmDeleteEmbedding,
-    doDeleteEmbedding,
     testEmbeddingModel,
     saveUserEmbeddingSelection,
 } = embedding;

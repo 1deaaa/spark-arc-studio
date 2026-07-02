@@ -21,10 +21,24 @@ from ..utils import (
     test_platform_embedding,
     test_platform_chat,
 )
+from ..models import (
+    CAP_EMBEDDING,
+    CAP_TEXT_GENERATION,
+    normalize_model_capabilities,
+)
 
 
 class ProbeMixin:
     """模型探测与测试功能 Mixin，需与 LLMConfigGUI 混入使用。"""
+
+    @staticmethod
+    def _model_capabilities_from_config(model_config):
+        if isinstance(model_config, str):
+            return normalize_model_capabilities()
+        return normalize_model_capabilities(
+            model_config.get("capabilities"),
+            legacy_is_embedding=bool(model_config.get("is_embedding")),
+        )
 
     def test_model(self):
         """测试选中的模型是否可用。"""
@@ -50,14 +64,13 @@ class ProbeMixin:
         if isinstance(model_config, str):
             model_id = model_config
             extra_body = None
-            is_embedding = False
         else:
             model_id = model_config.get("model_name", "")
             extra_body = model_config.get("extra_body")
-            is_embedding = bool(model_config.get("is_embedding"))
+        capabilities = self._model_capabilities_from_config(model_config)
 
-        if is_embedding:
-            messagebox.showwarning("提示", "当前为 Embedding 模型，请使用『测试Embedding』按钮")
+        if CAP_TEXT_GENERATION not in capabilities:
+            messagebox.showwarning("提示", "当前模型不支持文本对话测试")
             return
 
         base_url = self.current_config[platform_name].get("base_url", "").strip()
@@ -111,12 +124,11 @@ class ProbeMixin:
 
         if isinstance(model_config, str):
             model_id = model_config
-            is_embedding = False
         else:
             model_id = model_config.get("model_name", "")
-            is_embedding = bool(model_config.get("is_embedding"))
+        capabilities = self._model_capabilities_from_config(model_config)
 
-        if not is_embedding:
+        if CAP_EMBEDDING not in capabilities:
             messagebox.showwarning("提示", "当前模型不是 Embedding")
             return
 
@@ -182,14 +194,13 @@ class ProbeMixin:
         if isinstance(model_config, str):
             model_id = model_config
             extra_body = None
-            is_embedding = False
         else:
             model_id = model_config.get("model_name", "")
             extra_body = model_config.get("extra_body")
-            is_embedding = bool(model_config.get("is_embedding"))
+        capabilities = self._model_capabilities_from_config(model_config)
 
-        if is_embedding:
-            messagebox.showwarning("提示", "Embedding 模型不支持测速")
+        if CAP_TEXT_GENERATION not in capabilities:
+            messagebox.showwarning("提示", "当前模型不支持文本测速")
             return
 
         base_url = self.current_config[platform_name].get("base_url", "").strip()

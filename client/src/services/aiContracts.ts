@@ -97,6 +97,7 @@ export type AiModelItem = {
   model_id: ApiId;
   model_name: string;
   display_name: string;
+  capabilities?: string[];
   extra_body?: JsonObject | null;
   temperature?: number | null;
   max_context_tokens?: number | null;
@@ -110,6 +111,7 @@ export type AiEmbeddingItem = {
   model_id: ApiId;
   model_name: string;
   display_name: string;
+  capabilities?: string[];
   extra_body?: JsonObject | null;
   temperature?: number | null;
 };
@@ -157,6 +159,7 @@ export type AiFlattenedModelItem = {
   model_id: ApiId;
   model_name: string;
   display_name: string;
+  capabilities?: string[];
   extra_body?: JsonObject | null;
   temperature?: number | null;
   max_context_tokens?: number | null;
@@ -191,6 +194,7 @@ export type EmbeddingSelectionCurrent = {
   model_id: ApiId;
   model_name: string;
   display_name: string;
+  capabilities?: string[];
   api_key_set: boolean;
 };
 

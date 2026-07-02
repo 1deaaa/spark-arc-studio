@@ -18,6 +18,7 @@ from core.utils import (
     get_project_characters_path,
     is_system_character_id,
 )
+from story.arc_safety import sanitize_arc_for_ai_context
 from story.outline_parser import parse_outline_markup
 
 
@@ -302,15 +303,15 @@ def enrich_arc_content_for_model(
     raw_content: str,
     character_map: dict,
 ) -> str:
-    """给模型/检索使用的 ARC 文本补一段角色索引并渲染可读说话人。
+    """给模型/检索使用的 ARC 文本补一段可用说话人清单并渲染可读说话人。
 
-    新 ARC 正文以 ``[角色名]`` 保存；这里仍保留开发期数字标记的只读容错，
-    让 GraphRAG、向量检索和 grep 不会把 ``[0]`` 当成无意义符号。
+    新 ARC 正文以 ``[角色名]`` 保存；角色 ID 只属于 ``stories.db`` 等运行时结构。
+    这里仍保留历史数字标记的只读容错，但不会把角色 ID 注入给 AI。
     """
-    text = str(raw_content or "")
+    text = sanitize_arc_for_ai_context(str(raw_content or ""))
     if not text.strip():
         return text
-    if text.lstrip().startswith(("【角色索引】", "【可用说话人】")):
+    if text.lstrip().startswith(("【可用说话人】", "【角色索引】")):
         return text
 
     named_characters = _iter_named_story_characters(character_map)
@@ -348,7 +349,7 @@ def collect_project_files(
       下游（vector_index、GraphRAG、grep）由此可以识别"沈逐流"对应
       ``chr/0.txt``，而不必各自再写一份 ID→名字解析。
       对 ``format_key == "arc"`` 的文件，会在模型可见文本头部注入紧凑
-      角色索引（参见 :func:`enrich_arc_content_for_model`），但不修改原始
+      可用说话人清单（参见 :func:`enrich_arc_content_for_model`），但不修改原始
       ``.arc`` 文件，也不改变运行时解析协议。
     """
     project_path = get_project_path(user_id, project_name)

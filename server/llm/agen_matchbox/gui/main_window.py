@@ -720,6 +720,7 @@ class LLMConfigGUI(
                     display_name = m["display_name"]
                     model_cfg = {
                         "model_name": m["model_name"],
+                        "capabilities": m.get("capabilities", []),
                         "is_embedding": bool(m["is_embedding"]),
                         "_db_id": m["_db_id"],
                         "max_context_tokens": m.get("max_context_tokens", 256000),

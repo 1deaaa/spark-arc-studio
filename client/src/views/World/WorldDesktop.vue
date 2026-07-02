@@ -165,6 +165,7 @@
       <aside class="world-panel world-panel-right">
         <div class="world-panel-content">
           <h3 class="world-panel-title">{{ t('views.world.desktop.toolbox') }}</h3>
+          <ProjectStyleToolbox :embedded="true" />
           <CharacterGeneratorPanel :visible="true" :embedded="true" />
           <WorldGeneratorPanel :embedded="true" />
         </div>
@@ -182,6 +183,7 @@ import LorebookEditor from '../../components/lorebook/LorebookEditor.vue';
 import CharacterGeneratorPanel from '../../components/lorebook/CharacterGeneratorPanel.vue';
 import AiSettingsPanel from '../../components/lorebook/AiSettingsPanel.vue';
 import WorldGeneratorPanel from '../../components/lorebook/WorldGeneratorPanel.vue';
+import ProjectStyleToolbox from '../../components/lorebook/ProjectStyleToolbox.vue';
 import HistoryPanel from '../../components/dlg-editor/HistoryPanel.vue';
 import GlobalLoading from '../../components/share/GlobalLoading.vue';
 import InspireTagSelector from '../../components/lorebook/InspireTagSelector.vue';

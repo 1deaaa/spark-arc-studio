@@ -2,7 +2,7 @@ from fastapi import APIRouter, Depends, HTTPException, Query, Body, File, Upload
 from fastapi.responses import StreamingResponse
 from starlette.concurrency import run_in_threadpool
 
-from typing import Optional, Dict, Any
+from typing import Optional, Dict, Any, List
 
 import json
 
@@ -177,6 +177,8 @@ class ModelCreateRequest(BaseModel):
 
     max_output_tokens: Optional[int] = None
 
+    capabilities: Optional[List[str]] = None
+
 
 
 class ModelUpdateRequest(BaseModel):
@@ -192,6 +194,8 @@ class ModelUpdateRequest(BaseModel):
     max_context_tokens: Optional[int] = None
 
     max_output_tokens: Optional[int] = None
+
+    capabilities: Optional[List[str]] = None
 
 
 
@@ -1046,6 +1050,8 @@ async def create_model(
 
             max_output_tokens=data.max_output_tokens,
 
+            capabilities=data.capabilities,
+
         )
 
         return {"success": True, "id": model.id}
@@ -1180,6 +1186,8 @@ async def update_model(
 
     update_max_output = 'max_output_tokens' in fields_set
 
+    update_capabilities = 'capabilities' in fields_set
+
 
 
     try:
@@ -1205,6 +1213,10 @@ async def update_model(
             update_max_context_tokens=update_max_context,
 
             update_max_output_tokens=update_max_output,
+
+            capabilities=data.capabilities if update_capabilities else None,
+
+            update_capabilities=update_capabilities,
 
         )
 
@@ -1548,6 +1560,8 @@ class AdminSysModelRequest(BaseModel):
 
     max_output_tokens: Optional[int] = None
 
+    capabilities: Optional[List[str]] = None
+
 
 
 class AdminSysModelUpdateRequest(BaseModel):
@@ -1567,6 +1581,8 @@ class AdminSysModelUpdateRequest(BaseModel):
     max_context_tokens: Optional[int] = None
 
     max_output_tokens: Optional[int] = None
+
+    capabilities: Optional[List[str]] = None
 
 
 
@@ -1621,6 +1637,8 @@ async def admin_create_sys_model(
             max_context_tokens=data.max_context_tokens,
 
             max_output_tokens=data.max_output_tokens,
+
+            capabilities=data.capabilities,
 
         )
 
@@ -1693,6 +1711,8 @@ async def admin_update_sys_model(
 
     update_max_output = 'max_output_tokens' in fields_set
 
+    update_capabilities = 'capabilities' in fields_set
+
 
 
     try:
@@ -1722,6 +1742,10 @@ async def admin_update_sys_model(
             update_max_context_tokens=update_max_context,
 
             update_max_output_tokens=update_max_output,
+
+            capabilities=data.capabilities if update_capabilities else None,
+
+            update_capabilities=update_capabilities,
 
         )
 

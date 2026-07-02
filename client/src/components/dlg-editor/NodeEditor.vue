@@ -8,42 +8,42 @@
     >
       <template #header-extra>
         <n-icon 
-          :component="type === 'scene' ? Film : type === 'dialogue' ? MessageCircle : type === 'option' ? CircleDot : CircleHelp" 
+          :component="editorType === 'scene' ? Film : editorType === 'dialogue' ? MessageCircle : editorType === 'option' ? CircleDot : CircleHelp"
           size="20" 
         />
       </template>
 
       <div id="node-editor-content">
         <!-- 场景编辑器 -->
-        <n-form v-if="type === 'scene'" label-placement="top" size="medium">
-          <n-form-item label="场景名称">
+        <n-form v-if="editorType === 'scene'" label-placement="top" size="medium">
+          <n-form-item :label="t('nodeEditor.sceneName')">
             <n-input 
               id="scene-name" 
               v-model:value="sceneDraft.scene" 
               @input="applyScene"
               clearable
-              placeholder="输入场景名称"
+              :placeholder="t('nodeEditor.sceneNamePlaceholder')"
             />
           </n-form-item>
 
-          <n-form-item label="导演意图">
+          <n-form-item :label="t('nodeEditor.sceneGuide')">
             <n-input
               id="scene-guide"
               v-model:value="sceneDraft.guide"
               @input="applyScene"
               clearable
-              placeholder="输入场景引导"
+              :placeholder="t('nodeEditor.sceneGuidePlaceholder')"
             />
           </n-form-item>
 
-          <n-form-item label="场景引言(用于场景描述)">
+          <n-form-item :label="t('nodeEditor.sceneIntro')">
             <n-input
               id="scene-intro"
               v-model:value="sceneDraft.intro"
               type="textarea"
               :autosize="{ minRows: 3, maxRows: 8 }"
               @input="applyScene"
-              placeholder="可选：本场景引言/目标/氛围/铺垫（对应 .arc 的 @intro）"
+              :placeholder="t('nodeEditor.sceneIntroPlaceholder')"
             />
           </n-form-item>
 
@@ -52,37 +52,37 @@
               <template #icon>
                 <n-icon :component="Plus" />
               </template>
-              添加对话节点
+              {{ t('nodeEditor.addDialogue') }}
             </n-button>
             <n-popconfirm
               @positive-click="deleteScene"
-              positive-text="删除"
-              negative-text="取消"
+              :positive-text="t('nodeEditor.delete')"
+              :negative-text="t('nodeEditor.cancel')"
             >
               <template #trigger>
                 <n-button type="error" block>
                   <template #icon>
                     <n-icon :component="Trash" />
                   </template>
-                  删除场景
+                  {{ t('nodeEditor.deleteScene') }}
                 </n-button>
               </template>
               <template #default>
-                确定要删除这个场景吗？
+                {{ t('nodeEditor.confirmDeleteScene') }}
               </template>
             </n-popconfirm>
           </n-space>
 
-          <n-form-item label="场景思路">
+          <n-form-item :label="t('nodeEditor.sceneThought')">
             <n-input
               v-model:value="sceneDraft.thought"
               type="textarea"
               :autosize="{ minRows: 2, maxRows: 10 }"
-              placeholder="编辑场景思维链..."
+              :placeholder="t('nodeEditor.sceneThoughtPlaceholder')"
               @input="applyScene"
             />
             <div v-if="!sceneDraft.thought && scriptwriterThought" class="thought-hint" style="margin-top: 8px; opacity: 0.8;">
-              <n-text depth="3" size="small">最近一次 AI 思维链:</n-text>
+              <n-text depth="3" size="small">{{ t('nodeEditor.latestAiThought') }}</n-text>
               <div style="padding: 8px; background: rgba(0,0,0,0.05); border-radius: 4px; margin-top: 4px; font-size: var(--spark-fs-xs);">
                 <MarkdownRenderer :content="scriptwriterThought" />
               </div>
@@ -181,7 +181,7 @@
                     v-model:value="sceneDraft.priority"
                     @update:value="applyScene"
                     :show-button="true"
-                    placeholder="默认 0"
+                    :placeholder="t('nodeEditor.sceneRuntime.priorityPlaceholder')"
                     style="width: 100%"
                   />
                 </n-form-item>
@@ -246,23 +246,23 @@
         </n-form>
 
         <!-- 对话编辑器 -->
-        <n-form v-else-if="type === 'dialogue'" label-placement="top" size="medium">
-          <n-form-item label="对话 ID">
+        <n-form v-else-if="editorType === 'dialogue'" label-placement="top" size="medium">
+          <n-form-item :label="t('nodeEditor.dialogueId')">
             <n-input id="dialogue-id" :value="String(dialogueDraft.id)" disabled />
           </n-form-item>
 
-          <n-form-item label="角色">
+          <n-form-item :label="t('nodeEditor.character')">
             <n-select
               id="dialogue-chr"
               v-model:value="dialogueDraft.chr"
               @update:value="applyDialogue"
-              placeholder="选择或搜索角色"
+              :placeholder="t('nodeEditor.selectCharacter')"
               filterable
               :options="characterSelectOptions"
             />
           </n-form-item>
 
-          <n-form-item label="对话文本">
+          <n-form-item :label="t('nodeEditor.dialogueText')">
             <n-input 
               id="dialogue-txt" 
               v-model:value="dialogueDraft.txt" 
@@ -270,20 +270,37 @@
               :autosize="{ minRows: 5, maxRows: 12 }"
               @input="applyDialogue" 
               @keydown.enter.prevent="onEnterAddNextDialogue"
-              placeholder="输入对话内容，按 Enter 添加下一对话"
+              :placeholder="t('nodeEditor.dialogueTextPlaceholder')"
             />
           </n-form-item>
 
-          <n-form-item label="跳转场景">
+          <n-form-item :label="t('nodeEditor.jumpToScene')">
             <n-select
               id="dialogue-next"
               v-model:value="dialogueDraft.next"
               @update:value="applyDialogue"
-              placeholder="选择跳转场景（可清除）"
+              :placeholder="t('nodeEditor.selectJumpScene')"
               filterable
               clearable
               :options="sceneSelectOptions"
             />
+          </n-form-item>
+
+          <n-form-item v-if="hasPresentationCue">
+            <template #label>
+              <div class="content-runtime-label">
+                <span>{{ t('nodeEditor.presentation.webCue') }}</span>
+                <n-text depth="3" class="content-runtime-label__hint">{{ t('nodeEditor.presentation.movedToAiPanel') }}</n-text>
+              </div>
+            </template>
+            <div class="presentation-cue-panel">
+              <SparkTag v-if="currentBackgroundId" type="primary" size="small">
+                {{ t('nodeEditor.presentation.backgroundShort', { value: currentBackgroundId }) }}
+              </SparkTag>
+              <SparkTag v-if="currentSpriteId" type="info" size="small">
+                {{ t('nodeEditor.presentation.spriteShort', { value: currentSpriteId }) }}
+              </SparkTag>
+            </div>
           </n-form-item>
 
           <n-divider />
@@ -293,29 +310,29 @@
               <template #icon>
                 <n-icon :component="CirclePlus" />
               </template>
-              添加选项
+              {{ t('nodeEditor.addOption') }}
             </n-button>
             <n-button @click="addDialogueAfterCurrent" block>
               <template #icon>
                 <n-icon :component="ArrowDown" />
               </template>
-              添加下一对话
+              {{ t('nodeEditor.addNextDialogue') }}
             </n-button>
             <n-popconfirm 
               @positive-click="deleteDialogue"
-              positive-text="删除"
-              negative-text="取消"
+              :positive-text="t('nodeEditor.delete')"
+              :negative-text="t('nodeEditor.cancel')"
             >
               <template #trigger>
                 <n-button type="error" block>
                   <template #icon>
                     <n-icon :component="Trash" />
                   </template>
-                  删除对话
+                  {{ t('nodeEditor.deleteDialogue') }}
                 </n-button>
               </template>
               <template #default>
-                确定要删除这个对话吗？
+                {{ t('nodeEditor.confirmDeleteDialogue') }}
               </template>
             </n-popconfirm>
           </n-space>
@@ -343,14 +360,14 @@
         </n-form>
 
         <!-- 选项编辑器 -->
-        <n-form v-else-if="type === 'option'" label-placement="top" size="medium">
-          <n-form-item label="选项文本">
+        <n-form v-else-if="editorType === 'option'" label-placement="top" size="medium">
+          <n-form-item :label="t('nodeEditor.optionText')">
             <n-input 
               id="option-text" 
               v-model:value="optionDraft.optn" 
               @input="applyOption"
               clearable
-              placeholder="输入选项文本"
+              :placeholder="t('nodeEditor.optionTextPlaceholder')"
             />
           </n-form-item>
 
@@ -359,30 +376,30 @@
               <template #icon>
                 <n-icon :component="Plus" />
               </template>
-              添加子对话
+              {{ t('nodeEditor.addChildDialogue') }}
             </n-button>
             <n-popconfirm 
               @positive-click="deleteOption"
-              positive-text="删除"
-              negative-text="取消"
+              :positive-text="t('nodeEditor.delete')"
+              :negative-text="t('nodeEditor.cancel')"
             >
               <template #trigger>
                 <n-button type="error" block>
                   <template #icon>
                     <n-icon :component="Trash" />
                   </template>
-                  删除选项
+                  {{ t('nodeEditor.deleteOption') }}
                 </n-button>
               </template>
               <template #default>
-                确定要删除这个选项吗？
+                {{ t('nodeEditor.confirmDeleteOption') }}
               </template>
             </n-popconfirm>
           </n-space>
         </n-form>
 
         <div v-else class="no-selection">
-          <n-empty description="请选择一个节点" />
+          <n-empty :description="t('nodeEditor.selectNode')" />
         </div>
       </div>
     </n-card>
@@ -391,7 +408,7 @@
 </template>
 
 <script setup lang="ts">
-import { computed, reactive, ref, watch, onMounted, onBeforeUnmount, type Component } from 'vue';
+import { computed, reactive, watch, onMounted, onBeforeUnmount, type Component } from 'vue';
 import { NCard, NForm, NFormItem, NInput, NInputNumber, NSwitch, NSelect, NButton, NIcon, NDivider, NSpace, NPopconfirm, NEmpty, NCollapse, NCollapseItem, NText } from 'naive-ui';
 import SparkTag from '../share/SparkTag.vue';
 import { ArrowDown, CircleDot, CircleHelp, CirclePlus, Film, Flag, Gamepad2, Layers3, MessageCircle, PanelTopOpen, Plus, RadioTower, Route, Trash } from '@lucide/vue';
@@ -430,7 +447,7 @@ function isOptionNode(node: unknown): node is ArcOptionNode {
 // 角色选项（Naive UI format）
 const characterSelectOptions = computed(() => 
   characterOptions.value.map(c => ({
-    label: c.name || `角色 ${c.id}`,
+    label: c.name || t('nodeEditor.characterFallback', { id: c.id }),
     value: c.name || String(c.id)
   }))
 );
@@ -465,11 +482,17 @@ import { AUTO_SAVE_DEBOUNCE_TIME } from '@/config';
 const debouncedAutoSave = useDebounce(maybeAutoSave, AUTO_SAVE_DEBOUNCE_TIME);
 
 const type = computed(() => sceneStore.selectionType);
+const editorType = computed<'' | 'scene' | 'dialogue' | 'option'>(() => {
+  if (type.value === 'scene' && sceneStore.currentScene) return 'scene';
+  if (type.value === 'dialogue' && isDialogueNode(sceneStore.currentNode)) return 'dialogue';
+  if (type.value === 'option' && isOptionNode(sceneStore.currentNode)) return 'option';
+  return '';
+});
 const title = computed(() => {
-  if (type.value === 'scene') return '场景编辑';
-  if (type.value === 'dialogue') return '对话编辑';
-  if (type.value === 'option') return '选项编辑';
-  return '请选择一个节点';
+  if (editorType.value === 'scene') return t('nodeEditor.sceneEdit');
+  if (editorType.value === 'dialogue') return t('nodeEditor.dialogueEdit');
+  if (editorType.value === 'option') return t('nodeEditor.optionEdit');
+  return t('nodeEditor.selectNode');
 });
 
 const scriptwriterThought = computed(() => (sceneStore.lastScriptwriterThought || '').trim());
@@ -734,6 +757,25 @@ const currentActCount = computed(() => {
   if (!isDialogueNode(sceneStore.currentNode) || sceneStore.selectionType !== 'dialogue') return 0;
   return Object.keys(sceneStore.currentNode.act || {}).length;
 });
+
+const currentDialoguePresentation = computed(() => {
+  if (!isDialogueNode(sceneStore.currentNode) || sceneStore.selectionType !== 'dialogue') return null;
+  return sceneStore.currentNode.presentation ?? null;
+});
+
+const currentBackgroundId = computed(() => {
+  const bg = currentDialoguePresentation.value?.bg;
+  if (Array.isArray(bg)) return String(bg[0] || '').trim();
+  return typeof bg === 'string' ? bg.trim() : '';
+});
+
+const currentSpriteId = computed(() => {
+  const sprite = currentDialoguePresentation.value?.sprite;
+  if (Array.isArray(sprite)) return String(sprite[0] || '').trim();
+  return typeof sprite === 'string' ? sprite.trim() : '';
+});
+
+const hasPresentationCue = computed(() => !!currentBackgroundId.value || !!currentSpriteId.value);
 
 function onActChange(val: Record<string, string | string[]> | null) {
   if (!isDialogueNode(sceneStore.currentNode) || sceneStore.selectionType !== 'dialogue') return;
@@ -1084,5 +1126,13 @@ watch(
   font-size: var(--spark-fs-2xs);
   font-weight: normal;
   line-height: 1.4;
+}
+
+.presentation-cue-panel {
+  width: 100%;
+  min-width: 0;
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
 }
 </style>

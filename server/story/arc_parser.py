@@ -367,6 +367,7 @@ def _parse_dialogue_content(
             dialogue_lines = []
             next_target = None
             act_commands = {}
+            presentation_commands = {}
             thought = ''
             i += 1
             
@@ -397,7 +398,21 @@ def _parse_dialogue_content(
                     value = act_match.group(2).strip()
                     if ',' in value:
                         value = [v.strip() for v in value.split(',')]
-                    act_commands[key] = value
+                    if key in {"bg", "sprite"}:
+                        presentation_commands[key] = value
+                    else:
+                        act_commands[key] = value
+                    i += 1
+                    continue
+
+                # Web 演出指令。旧的 @act bg/sprite 会在读取时迁移到同一字段。
+                presentation_match = re.match(r'^@(?:web|presentation)\s+(\w+):([^<]+)', next_line)
+                if presentation_match:
+                    key = presentation_match.group(1).strip()
+                    value = presentation_match.group(2).strip()
+                    if ',' in value:
+                        value = [v.strip() for v in value.split(',')]
+                    presentation_commands[key] = value
                     i += 1
                     continue
                 
@@ -419,6 +434,8 @@ def _parse_dialogue_content(
                     id_counter[0] += 1
                     
                     if idx == 0:
+                        if presentation_commands:
+                            node['presentation'] = presentation_commands
                         if act_commands:
                             node['act'] = act_commands
                         if thought:
@@ -429,7 +446,7 @@ def _parse_dialogue_content(
                             node['next'] = next_target
                     
                     dialogues.append(node)
-            elif act_commands or next_target or thought:
+            elif presentation_commands or act_commands or next_target or thought:
                 # 处理只有行为、跳转或思维链而没有文本内容的节点
                 node = {
                     'id': id_counter[0],
@@ -439,6 +456,8 @@ def _parse_dialogue_content(
                 if speaker:
                     node['speaker'] = speaker
                 id_counter[0] += 1
+                if presentation_commands:
+                    node['presentation'] = presentation_commands
                 if act_commands:
                     node['act'] = act_commands
                 if next_target:
@@ -666,6 +685,14 @@ def _serialize_dialogues(dialogues: List[Dict[str, Any]], chr_map: Dict[int, str
         # 文本内容
         lines.append(f"{indent_str}{d.get('txt', '')}")
         
+        # Web 演出指令与通用行为分离，避免 Unity 侧误把背景/立绘当 act。
+        if d.get('presentation'):
+            for key, value in d['presentation'].items():
+                if value in (None, ''):
+                    continue
+                val_str = ','.join(value) if isinstance(value, list) else value
+                lines.append(f"{indent_str}@web {key}:{val_str}")
+
         # @next
         if d.get('next'):
             lines.append(f"{indent_str}@next {d['next']}")
@@ -673,6 +700,8 @@ def _serialize_dialogues(dialogues: List[Dict[str, Any]], chr_map: Dict[int, str
         # @act
         if d.get('act'):
             for key, value in d['act'].items():
+                if key in {"bg", "sprite"}:
+                    continue
                 val_str = ','.join(value) if isinstance(value, list) else value
                 lines.append(f"{indent_str}@act {key}:{val_str}")
         

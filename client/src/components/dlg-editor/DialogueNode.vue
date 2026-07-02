@@ -28,6 +28,14 @@
             </template>
             {{ Array.isArray(val) ? val.join(', ') : val }}
           </n-tooltip>
+          <n-tooltip v-for="badge in presentationBadges" :key="badge.key" trigger="hover">
+            <template #trigger>
+              <n-tag type="info" size="small" :bordered="false" class="presentation-badge">
+                {{ badge.label }}
+              </n-tag>
+            </template>
+            {{ badge.value }}
+          </n-tooltip>
           <n-button 
             v-if="isSelected"
             size="tiny" 
@@ -120,6 +128,7 @@ type DialogueNodeData = {
   speaker?: string;
   opt?: DialogueOption[];
   act?: Record<string, unknown>;
+  presentation?: Record<string, unknown>;
   next?: string | number;
   [key: string]: unknown;
 };
@@ -144,7 +153,21 @@ const characterName = computed(() => {
 
 const isSelected = computed(() => props.selectionType === 'dialogue' && props.selectedNode === props.node);
 const isSelectedOption = (o: DialogueOption) => props.selectionType === 'option' && props.selectedNode === o;
-const hasAnyBadge = computed(() => (props.node?.opt?.length) || (props.node?.act && Object.keys(props.node.act).length) || props.node?.next);
+const presentationBadges = computed(() => {
+  const cue = props.node.presentation || {};
+  const badges: Array<{ key: string; label: string; value: string }> = [];
+  const bg = normalizePresentationValue(cue.bg);
+  const sprite = normalizePresentationValue(cue.sprite);
+  if (bg) badges.push({ key: 'bg', label: 'BG', value: bg });
+  if (sprite) badges.push({ key: 'sprite', label: '立绘', value: sprite });
+  return badges;
+});
+const hasAnyBadge = computed(() => (props.node?.opt?.length) || (props.node?.act && Object.keys(props.node.act).length) || presentationBadges.value.length || props.node?.next);
+
+function normalizePresentationValue(value: unknown): string {
+  const raw = Array.isArray(value) ? value[0] : value;
+  return typeof raw === 'string' ? raw.trim() : '';
+}
 
 const getOptionKey = (option: DialogueOption) => {
   const optionList = Array.isArray(props.node.opt) ? props.node.opt : [];
@@ -225,6 +248,10 @@ const getOptionKey = (option: DialogueOption) => {
 
 .badges {
   margin-top: 8px;
+}
+
+.presentation-badge {
+  opacity: 0.82;
 }
 
 /* 拖拽态样式 */

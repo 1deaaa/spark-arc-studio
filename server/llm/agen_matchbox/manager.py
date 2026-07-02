@@ -31,6 +31,11 @@ from .models import (
     Base, LLMPlatform, LLModels, LLMSysPlatformKey,
     UserModelUsage, AgentModelBinding, ModelUsageStats, UserEmbeddingSelection,
     DEFAULT_MAX_CONTEXT_TOKENS, DEFAULT_MAX_OUTPUT_TOKENS,
+    get_model_capabilities,
+    is_chat_model,
+    is_embedding_model,
+    normalize_model_capabilities,
+    set_model_capabilities,
 )
 from .config import (
     DEFAULT_PLATFORM_CONFIGS, SYSTEM_USER_ID, DEFAULT_USAGE_KEY,
@@ -287,12 +292,28 @@ class AIManagerBase:
         self.ensure_database_schema()
         self.initialize_defaults(ensure_schema=False)
 
+    def _backfill_model_capabilities(self) -> None:
+        """为旧数据库中缺失 capabilities 的模型补齐能力集合。"""
+        with self.Session() as session:
+            changed = False
+            for model in session.query(LLModels).all():
+                if getattr(model, "capabilities", None):
+                    continue
+                set_model_capabilities(
+                    model,
+                    None,
+                    legacy_is_embedding=bool(getattr(model, "is_embedding", 0)),
+                )
+                changed = True
+            if changed:
+                session.commit()
+
     def _resolve_default_ids_from_db(self, session) -> None:
         """从数据库 sort_order 确定默认平台 ID 和默认模型 ID。
 
         优先级：
         1. 数据库中 sort_order 最小的未禁用系统平台
-        2. 该平台内 sort_order 最小的未禁用非 Embedding 模型
+        2. 该平台内 sort_order 最小的未禁用文本生成模型
         """
         from sqlalchemy.orm import selectinload
 
@@ -310,7 +331,7 @@ class AIManagerBase:
 
         sorted_models = sorted(default_plat.models, key=lambda m: m.sort_order)
         default_model = next(
-            (m for m in sorted_models if not m.is_embedding and not self._is_model_disabled(m)),
+            (m for m in sorted_models if is_chat_model(m) and not self._is_model_disabled(m)),
             None,
         )
         if not default_model:
@@ -326,6 +347,7 @@ class AIManagerBase:
         self._ensure_sys_platform_keys_unique_constraint()
 
         self._sync_default_platforms()
+        self._backfill_model_capabilities()
 
         with self.Session() as session:
             self._resolve_default_ids_from_db(session)
@@ -365,12 +387,15 @@ class AIManagerBase:
                 model_name = model_config
                 extra_body = None
                 temperature = None
-                is_embedding = 0
+                capabilities = normalize_model_capabilities()
             elif isinstance(model_config, dict):
                 model_name = model_config.get("model_name")
                 extra_body = model_config.get("extra_body")
                 temperature = model_config.get("temperature")
-                is_embedding = 1 if model_config.get("is_embedding") else 0
+                capabilities = normalize_model_capabilities(
+                    model_config.get("capabilities"),
+                    legacy_is_embedding=bool(model_config.get("is_embedding")),
+                )
             else:
                 continue
 
@@ -381,7 +406,7 @@ class AIManagerBase:
             specs.append({
                 "display_name": display_name,
                 "model_name": model_name,
-                "is_embedding": is_embedding,
+                "capabilities": capabilities,
                 "extra_body_json": json.dumps(extra_body) if extra_body else None,
                 "temperature": temperature,
                 "max_context_tokens": max_context_tokens,
@@ -399,7 +424,7 @@ class AIManagerBase:
         matched_pairs: Dict[int, LLModels] = {}
         matched_db_ids: set[int] = set()
 
-        # 第一阶段：完美匹配 (display_name, model_name, is_embedding)
+        # 第一阶段：完美匹配 (display_name, model_name, capabilities)
         for idx, seed in enumerate(seed_models):
             for db_model in db_models_pool:
                 if db_model.id in matched_db_ids:
@@ -407,7 +432,7 @@ class AIManagerBase:
                 if (
                     db_model.display_name == seed["display_name"]
                     and db_model.model_name == seed["model_name"]
-                    and db_model.is_embedding == seed["is_embedding"]
+                    and get_model_capabilities(db_model) == seed["capabilities"]
                 ):
                     matched_pairs[idx] = db_model
                     matched_db_ids.add(db_model.id)
@@ -420,24 +445,24 @@ class AIManagerBase:
             for db_model in db_models_pool:
                 if db_model.id in matched_db_ids:
                     continue
-                if db_model.display_name == seed["display_name"] and db_model.is_embedding == seed["is_embedding"]:
+                if db_model.display_name == seed["display_name"] and get_model_capabilities(db_model) == seed["capabilities"]:
                     matched_pairs[idx] = db_model
                     matched_db_ids.add(db_model.id)
                     break
 
-        # 第三阶段：唯一 model_name + is_embedding 改名匹配。
-        seed_key_counter = Counter((seed["model_name"], seed["is_embedding"]) for seed in seed_models)
+        # 第三阶段：唯一 model_name + capabilities 改名匹配。
+        seed_key_counter = Counter((seed["model_name"], tuple(seed["capabilities"])) for seed in seed_models)
         for idx, seed in enumerate(seed_models):
             if idx in matched_pairs:
                 continue
-            key = (seed["model_name"], seed["is_embedding"])
+            key = (seed["model_name"], tuple(seed["capabilities"]))
             if seed_key_counter[key] != 1:
                 continue
             candidates = [
                 db_model for db_model in db_models_pool
                 if db_model.id not in matched_db_ids
                 and db_model.model_name == seed["model_name"]
-                and db_model.is_embedding == seed["is_embedding"]
+                and get_model_capabilities(db_model) == seed["capabilities"]
             ]
             if len(candidates) == 1:
                 db_model = candidates[0]
@@ -452,7 +477,7 @@ class AIManagerBase:
                 db_model for db_model in db_models_pool
                 if db_model.id not in matched_db_ids
                 and db_model.model_name == seed["model_name"]
-                and db_model.is_embedding == seed["is_embedding"]
+                and get_model_capabilities(db_model) == seed["capabilities"]
             ]
             best_match = next(
                 (candidate for candidate in candidates if candidate.extra_body == seed["extra_body_json"]),
@@ -472,13 +497,14 @@ class AIManagerBase:
         model.temperature = spec["temperature"]
         model.max_context_tokens = spec["max_context_tokens"]
         model.max_output_tokens = spec["max_output_tokens"]
+        set_model_capabilities(model, spec["capabilities"])
         if sync_order:
             model.sort_order = spec["sort_order"]
 
     @staticmethod
     def _create_seed_model(platform_id: int, spec: Dict[str, Any], *, sort_order: int) -> LLModels:
         """根据 YAML 模型规格创建数据库模型对象。"""
-        return LLModels(
+        model = LLModels(
             platform_id=platform_id,
             model_name=spec["model_name"],
             display_name=spec["display_name"],
@@ -486,9 +512,10 @@ class AIManagerBase:
             temperature=spec["temperature"],
             max_context_tokens=spec["max_context_tokens"],
             max_output_tokens=spec["max_output_tokens"],
-            is_embedding=spec["is_embedding"],
             sort_order=sort_order,
         )
+        set_model_capabilities(model, spec["capabilities"])
+        return model
 
     def _sync_seed_models_for_platform(
         self,
@@ -990,11 +1017,13 @@ class AIManagerBase:
                         and int(model.max_output_tokens or DEFAULT_MAX_OUTPUT_TOKENS) == DEFAULT_MAX_OUTPUT_TOKENS
                     )
 
-                    if not model.extra_body and not model.is_embedding and model.temperature is None and has_default_limits:
+                    capabilities = get_model_capabilities(model)
+                    if not model.extra_body and capabilities == ["text_generation"] and model.temperature is None and has_default_limits:
                         # 简单形式：DisplayName -> ModelID 字符串
                         plat_config["models"][model.display_name] = model.model_name
                     else:
                         entry: Dict[str, Any] = {"model_name": model.model_name}
+                        entry["capabilities"] = capabilities
                         if model.extra_body:
                             try:
                                 entry["extra_body"] = json.loads(model.extra_body)
@@ -1005,8 +1034,6 @@ class AIManagerBase:
                         if not has_default_limits:
                             entry["max_context_tokens"] = int(model.max_context_tokens or DEFAULT_MAX_CONTEXT_TOKENS)
                             entry["max_output_tokens"] = int(model.max_output_tokens or DEFAULT_MAX_OUTPUT_TOKENS)
-                        if model.is_embedding:
-                            entry["is_embedding"] = True
                         if model.sys_credit_input_price_per_million is not None:
                             entry["sys_credit_input_price_per_million"] = model.sys_credit_input_price_per_million
                         if model.sys_credit_cached_input_price_per_million is not None:
@@ -1446,7 +1473,14 @@ class AIManagerBase:
             
             # 如果没有覆盖，则尝试从数据库查找模型配置以获取 extra_body
             if extra_body is None:
-                model_obj = session.query(LLModels).filter_by(platform_id=platform_id, model_name=model_name).first()
+                model_obj = next(
+                    (
+                        model
+                        for model in session.query(LLModels).filter_by(platform_id=platform_id, model_name=model_name).all()
+                        if is_chat_model(model) and not self._is_model_disabled(model)
+                    ),
+                    None,
+                )
                 if model_obj and model_obj.extra_body:
                     try:
                         extra_body = json.loads(model_obj.extra_body)
@@ -1483,7 +1517,14 @@ class AIManagerBase:
                 raise ValueError("无权访问此平台")
 
             # 尝试查找模型配置以获取 extra_body
-            model_obj = session.query(LLModels).filter_by(platform_id=platform_id, model_name=model_name).first()
+            model_obj = next(
+                (
+                    model
+                    for model in session.query(LLModels).filter_by(platform_id=platform_id, model_name=model_name).all()
+                    if is_chat_model(model) and not self._is_model_disabled(model)
+                ),
+                None,
+            )
             if model_obj and model_obj.extra_body:
                 try:
                     extra_body = json.loads(model_obj.extra_body)

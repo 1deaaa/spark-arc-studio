@@ -13,14 +13,21 @@ import {
     adminCreateSysModel,
     adminUpdateSysModel,
     adminDeleteSysModel,
-    createEmbedding,
-    adminCreateSysEmbedding,
     getFriendlyErrorMessage
 } from '../services/api';
 import { consumeSSEReader } from '@/utils/streamingRuntime';
 import type { AiModelItem, AiPlatform, ApiId, SpeedTestEvent, RemoteModelInfo } from '../services/aiContracts';
+import {
+    isEmbeddingModel,
+    isImageModel,
+    isTextModel,
+    normalizeModelCapabilities,
+    type ModelCapability,
+} from '../services/modelCapabilities';
 
 type SpeedResult = { speed: number; ftl: number };
+export type ImageGenerationAdapterKey = 'openai_images' | 'gemini_interactions' | 'xai_images';
+const DEFAULT_IMAGE_ADAPTER: ImageGenerationAdapterKey = 'openai_images';
 
 type ModelCacheRecord = {
     models: RemoteModelInfo[];
@@ -31,7 +38,8 @@ type NewModelForm = {
     modelName: string;
     displayName: string;
     extraBody: string;
-    isEmbedding: boolean;
+    capabilities: ModelCapability[];
+    imageAdapter: ImageGenerationAdapterKey;
     temperatureEnabled: boolean;
     temperature: number;
     maxContextTokens: number | null;
@@ -46,6 +54,8 @@ type EditingModelForm = {
     modelName: string;
     displayName: string;
     extraBody: string;
+    capabilities: ModelCapability[];
+    imageAdapter: ImageGenerationAdapterKey;
     temperatureEnabled: boolean;
     temperature: number;
     maxContextTokens: number | null;
@@ -94,7 +104,8 @@ export function useAIModelManager(
         modelName: '',
         displayName: '',
         extraBody: '',
-        isEmbedding: false,
+        capabilities: defaultModelCapabilities(),
+        imageAdapter: DEFAULT_IMAGE_ADAPTER,
         temperatureEnabled: false,
         temperature: 0.7,
         maxContextTokens: null,
@@ -108,6 +119,8 @@ export function useAIModelManager(
         modelName: '',
         displayName: '',
         extraBody: '',
+        capabilities: defaultModelCapabilities(),
+        imageAdapter: DEFAULT_IMAGE_ADAPTER,
         temperatureEnabled: false,
         temperature: 0.7,
         maxContextTokens: null,
@@ -131,6 +144,56 @@ export function useAIModelManager(
     const CACHE_KEY = 'sparkarc_speed_test_results';
     const TEMP_MIN = 0.3;
     const TEMP_MAX = 1.5;
+    function defaultModelCapabilities() {
+        return normalizeModelCapabilities([]);
+    }
+
+    function isPlainObject(value: unknown): value is Record<string, unknown> {
+        return typeof value === 'object' && value !== null && !Array.isArray(value);
+    }
+
+    function normalizeImageAdapter(value: unknown): ImageGenerationAdapterKey {
+        const text = String(value || '').trim().toLowerCase();
+        if (['gemini', 'google', 'google_gemini', 'gemini_interactions', 'google_interactions'].includes(text)) {
+            return 'gemini_interactions';
+        }
+        if (['xai', 'xai_images', 'grok', 'grok_image', 'grok_images', 'grok_imagine'].includes(text)) {
+            return 'xai_images';
+        }
+        if (['openai', 'openai_images', 'openai_compatible', 'gpt_image', 'gpt-image'].includes(text)) {
+            return 'openai_images';
+        }
+        return DEFAULT_IMAGE_ADAPTER;
+    }
+
+    function extractImageAdapter(extraObj: Record<string, unknown> | null | undefined): ImageGenerationAdapterKey {
+        if (!extraObj) return DEFAULT_IMAGE_ADAPTER;
+        const imageConfig = extraObj.image_generation;
+        if (isPlainObject(imageConfig)) {
+            return normalizeImageAdapter(imageConfig.adapter);
+        }
+        return DEFAULT_IMAGE_ADAPTER;
+    }
+
+    function buildExtraBodyObjectForCapabilities(
+        baseExtra: Record<string, unknown>,
+        capabilities: ModelCapability[],
+        imageAdapter: ImageGenerationAdapterKey,
+    ): Record<string, unknown> {
+        if (!isImageModel(capabilities)) {
+            return baseExtra;
+        }
+
+        const existingImageConfig = isPlainObject(baseExtra.image_generation)
+            ? baseExtra.image_generation
+            : baseExtra;
+        const imageConfig: Record<string, unknown> = { ...existingImageConfig, adapter: imageAdapter };
+
+        if (isPlainObject(baseExtra.image_generation)) {
+            return { ...baseExtra, image_generation: imageConfig };
+        }
+        return { image_generation: imageConfig };
+    }
 
     const filteredRemoteModels = computed(() => {
         if (!searchKeyword.value) return remoteModels.value;
@@ -203,7 +266,8 @@ export function useAIModelManager(
             modelName: '',
             displayName: '',
             extraBody: '',
-            isEmbedding: false,
+            capabilities: defaultModelCapabilities(),
+            imageAdapter: DEFAULT_IMAGE_ADAPTER,
             temperatureEnabled: false,
             temperature: 0.7,
             maxContextTokens: null,
@@ -225,19 +289,40 @@ export function useAIModelManager(
         const raw = (extraBodyText || '').trim();
         if (!raw) return {};
         const parsed = JSON.parse(raw);
-        if (typeof parsed !== 'object' || parsed === null || Array.isArray(parsed)) {
+        if (!isPlainObject(parsed)) {
             throw new Error('Extra Body 必须是 JSON 对象');
         }
         return parsed;
     }
 
-    function buildExtraBodyForNewModel() {
-        const extraObj = parseExtraBodyObject(newModel.value.extraBody);
+    function serializeExtraBodyForModel(
+        extraBodyText: string,
+        capabilities: ModelCapability[],
+        imageAdapter: ImageGenerationAdapterKey,
+    ) {
+        const extraObj = parseExtraBodyObject(extraBodyText);
+        const merged = buildExtraBodyObjectForCapabilities(extraObj, capabilities, imageAdapter);
+        return Object.keys(merged).length > 0 ? JSON.stringify(merged) : null;
+    }
 
-        return Object.keys(extraObj).length > 0 ? JSON.stringify(extraObj) : null;
+    function buildExtraBodyForNewModel() {
+        return serializeExtraBodyForModel(
+            newModel.value.extraBody,
+            normalizeModelCapabilities(newModel.value.capabilities),
+            newModel.value.imageAdapter,
+        );
+    }
+
+    function buildExtraBodyForEditingModel(capabilities: ModelCapability[]) {
+        return serializeExtraBodyForModel(
+            editingModel.value.extraBody,
+            capabilities,
+            editingModel.value.imageAdapter,
+        );
     }
 
     function buildTemperatureForNewModel() {
+        if (!isTextModel(newModel.value.capabilities)) return undefined;
         if (!newModel.value.temperatureEnabled) return undefined;
         const temp = Number(newModel.value.temperature);
         if (!Number.isFinite(temp) || temp < TEMP_MIN || temp > TEMP_MAX) {
@@ -292,6 +377,8 @@ export function useAIModelManager(
             modelName: model.model_name,
             displayName: model.display_name,
             extraBody: extraBodyStr,
+            capabilities: normalizeModelCapabilities(model.capabilities),
+            imageAdapter: extractImageAdapter(extraObj),
             temperatureEnabled: modelTemp !== null && modelTemp !== undefined,
             temperature: modelTemp ?? 0.7,
             maxContextTokens: model.max_context_tokens ?? null,
@@ -344,10 +431,16 @@ export function useAIModelManager(
 
     async function testModelConnection() {
         if (!currentPlatform.value || !newModel.value.modelName) return;
+        const capabilities = normalizeModelCapabilities(newModel.value.capabilities);
+        if (isImageModel(capabilities)) {
+            message.info(t('components.aiManager.messages.imageModelTestPending'));
+            return;
+        }
         testing.value = true;
         try {
             const extraBodyPayload = buildExtraBodyForNewModel();
-            const res = await fetchWithAuth(`/api/ai/platform/${currentPlatform.value.platform_id}/test-model`, {
+            const endpoint = isEmbeddingModel(capabilities) ? 'test-embedding' : 'test-model';
+            const res = await fetchWithAuth(`/api/ai/platform/${currentPlatform.value.platform_id}/${endpoint}`, {
                 method: 'POST',
                 body: JSON.stringify({
                     model_name: newModel.value.modelName,
@@ -376,6 +469,7 @@ export function useAIModelManager(
     }
 
     async function speedTestModel(plat: AiPlatform, model: AiModelItem) {
+        if (!isTextModel(model.capabilities)) return;
         if (speedTestingModelIds.value.has(model.model_id)) return;
 
         const modelKey = String(model.model_id);
@@ -439,6 +533,7 @@ export function useAIModelManager(
     }
 
     async function testExistingModel(plat: AiPlatform, model: AiModelItem) {
+        if (!isTextModel(model.capabilities)) return;
         testingModelId.value = model.model_id;
         try {
             const res = await fetchWithAuth(`/api/ai/platform/${plat.platform_id}/test-model`, {
@@ -477,85 +572,65 @@ export function useAIModelManager(
         }
         saving.value = true;
         try {
-            const extraBodyPayload = buildExtraBodyForNewModel();
             const displayName = newModel.value.displayName || newModel.value.modelName;
             const targetPlatform = currentPlatform.value;
+            const capabilities = normalizeModelCapabilities(newModel.value.capabilities);
+            const extraBodyPayload = buildExtraBodyForNewModel();
+            const textModel = isTextModel(capabilities);
+            const temperature = buildTemperatureForNewModel();
 
-            if (newModel.value.isEmbedding) {
-                // 嵌入模型创建逻辑
-                let result;
-                if (currentPlatform.value.is_sys) {
-                    result = await adminCreateSysEmbedding(
-                        currentPlatform.value.platform_id,
-                        newModel.value.modelName,
-                        displayName,
-                        extraBodyPayload
-                    );
-                } else {
-                    result = await createEmbedding(
-                        currentPlatform.value.platform_id,
-                        newModel.value.modelName,
-                        displayName,
-                        extraBodyPayload
-                    );
-                }
-                targetPlatform.embeddings = targetPlatform.embeddings || [];
-                targetPlatform.embeddings.push({
-                    model_id: result.id,
-                    model_name: newModel.value.modelName,
-                    display_name: displayName,
-                    extra_body: parseExtraBodyForView(newModel.value.extraBody),
-                });
-            } else {
-                // LLM 模型创建逻辑
-                const temperature = buildTemperatureForNewModel();
+            if (textModel) {
                 validateSystemModelPricing(
                     newModel.value.inputPricePerMillion,
                     newModel.value.cachedInputPricePerMillion,
                     newModel.value.outputPricePerMillion,
                 );
-                const inputPrice = isBillingEnabled() ? newModel.value.inputPricePerMillion ?? undefined : undefined;
-                const cachedInputPrice = isBillingEnabled() ? newModel.value.cachedInputPricePerMillion ?? undefined : undefined;
-                const outputPrice = isBillingEnabled() ? newModel.value.outputPricePerMillion ?? undefined : undefined;
-                let result;
-                if (currentPlatform.value.is_sys) {
-                    result = await adminCreateSysModel(
-                        currentPlatform.value.platform_id,
-                        newModel.value.modelName,
-                        displayName,
-                        extraBodyPayload,
-                        temperature,
-                        inputPrice,
-                        cachedInputPrice,
-                        outputPrice,
-                        newModel.value.maxContextTokens,
-                        newModel.value.maxOutputTokens,
-                    );
-                } else {
-                    result = await createModel(
-                        currentPlatform.value.platform_id,
-                        newModel.value.modelName,
-                        displayName,
-                        extraBodyPayload,
-                        temperature,
-                        newModel.value.maxContextTokens,
-                        newModel.value.maxOutputTokens,
-                    );
-                }
-                targetPlatform.models = targetPlatform.models || [];
-                targetPlatform.models.push({
-                    model_id: result.id,
-                    model_name: newModel.value.modelName,
-                    display_name: displayName,
-                    extra_body: parseExtraBodyForView(newModel.value.extraBody),
-                    temperature: temperature ?? null,
-                    max_context_tokens: newModel.value.maxContextTokens ?? null,
-                    max_output_tokens: newModel.value.maxOutputTokens ?? null,
-                    sys_credit_input_price_per_million: newModel.value.inputPricePerMillion ?? null,
-                    sys_credit_cached_input_price_per_million: newModel.value.cachedInputPricePerMillion ?? null,
-                    sys_credit_output_price_per_million: newModel.value.outputPricePerMillion ?? null,
-                });
             }
+
+            const inputPrice = textModel && isBillingEnabled() ? newModel.value.inputPricePerMillion ?? undefined : undefined;
+            const cachedInputPrice = textModel && isBillingEnabled() ? newModel.value.cachedInputPricePerMillion ?? undefined : undefined;
+            const outputPrice = textModel && isBillingEnabled() ? newModel.value.outputPricePerMillion ?? undefined : undefined;
+            let result;
+            if (currentPlatform.value.is_sys) {
+                result = await adminCreateSysModel(
+                    currentPlatform.value.platform_id,
+                    newModel.value.modelName,
+                    displayName,
+                    extraBodyPayload,
+                    temperature,
+                    inputPrice,
+                    cachedInputPrice,
+                    outputPrice,
+                    textModel ? newModel.value.maxContextTokens : null,
+                    textModel ? newModel.value.maxOutputTokens : null,
+                    capabilities,
+                );
+            } else {
+                result = await createModel(
+                    currentPlatform.value.platform_id,
+                    newModel.value.modelName,
+                    displayName,
+                    extraBodyPayload,
+                    temperature,
+                    textModel ? newModel.value.maxContextTokens : null,
+                    textModel ? newModel.value.maxOutputTokens : null,
+                    capabilities,
+                );
+            }
+            targetPlatform.models = targetPlatform.models || [];
+            targetPlatform.models.push({
+                model_id: result.id,
+                model_name: newModel.value.modelName,
+                display_name: displayName,
+                capabilities,
+                extra_body: parseExtraBodyForView(extraBodyPayload || ''),
+                temperature: textModel ? temperature ?? null : null,
+                max_context_tokens: textModel ? newModel.value.maxContextTokens ?? null : null,
+                max_output_tokens: textModel ? newModel.value.maxOutputTokens ?? null : null,
+                sys_credit_input_price_per_million: textModel ? newModel.value.inputPricePerMillion ?? null : null,
+                sys_credit_cached_input_price_per_million: textModel ? newModel.value.cachedInputPricePerMillion ?? null : null,
+                sys_credit_output_price_per_million: textModel ? newModel.value.outputPricePerMillion ?? null : null,
+            });
             showAddModelModal.value = false;
             notifyAiStoreSync();
         } catch (e: unknown) {
@@ -576,8 +651,10 @@ export function useAIModelManager(
         }
         saving.value = true;
         try {
+            const capabilities = normalizeModelCapabilities(editingModel.value.capabilities);
+            const textModel = isTextModel(capabilities);
             let temperature: number | null = null;
-            if (editingModel.value.temperatureEnabled) {
+            if (textModel && editingModel.value.temperatureEnabled) {
                 const temp = Number(editingModel.value.temperature);
                 if (!Number.isFinite(temp) || temp < TEMP_MIN || temp > TEMP_MAX) {
                     throw new Error(`Temperature 必须在 ${TEMP_MIN} 到 ${TEMP_MAX} 之间`);
@@ -586,8 +663,8 @@ export function useAIModelManager(
             }
             const targetModelId = editingModel.value.id;
             const displayName = editingModel.value.displayName;
-            const extraBodyInput = editingModel.value.extraBody || null;
-            if (currentPlatform.value?.is_sys && isBillingEnabled()) {
+            const extraBodyInput = buildExtraBodyForEditingModel(capabilities);
+            if (currentPlatform.value?.is_sys && isBillingEnabled() && textModel) {
                 validateSystemModelPricing(
                     editingModel.value.inputPricePerMillion,
                     editingModel.value.cachedInputPricePerMillion,
@@ -602,13 +679,15 @@ export function useAIModelManager(
                     {
                         includeTemperature: true,
                         temperature,
-                        includeSysCreditPrices: isBillingEnabled(),
-                        inputPricePerMillion: isBillingEnabled() ? editingModel.value.inputPricePerMillion ?? null : null,
-                        cachedInputPricePerMillion: isBillingEnabled() ? editingModel.value.cachedInputPricePerMillion ?? null : null,
-                        outputPricePerMillion: isBillingEnabled() ? editingModel.value.outputPricePerMillion ?? null : null,
+                        includeSysCreditPrices: isBillingEnabled() && textModel,
+                        inputPricePerMillion: isBillingEnabled() && textModel ? editingModel.value.inputPricePerMillion ?? null : null,
+                        cachedInputPricePerMillion: isBillingEnabled() && textModel ? editingModel.value.cachedInputPricePerMillion ?? null : null,
+                        outputPricePerMillion: isBillingEnabled() && textModel ? editingModel.value.outputPricePerMillion ?? null : null,
                         includeMaxTokens: true,
-                        maxContextTokens: editingModel.value.maxContextTokens,
-                        maxOutputTokens: editingModel.value.maxOutputTokens,
+                        maxContextTokens: textModel ? editingModel.value.maxContextTokens : null,
+                        maxOutputTokens: textModel ? editingModel.value.maxOutputTokens : null,
+                        includeCapabilities: true,
+                        capabilities,
                     }
                 );
             } else {
@@ -620,21 +699,24 @@ export function useAIModelManager(
                         includeTemperature: true,
                         temperature,
                         includeMaxTokens: true,
-                        maxContextTokens: editingModel.value.maxContextTokens,
-                        maxOutputTokens: editingModel.value.maxOutputTokens,
+                        maxContextTokens: textModel ? editingModel.value.maxContextTokens : null,
+                        maxOutputTokens: textModel ? editingModel.value.maxOutputTokens : null,
+                        includeCapabilities: true,
+                        capabilities,
                     }
                 );
             }
             const { plat, model } = findModelInPlatform(currentPlatform.value?.platform_id, targetModelId);
             if (model) {
                 model.display_name = displayName;
-                model.extra_body = parseExtraBodyForView(editingModel.value.extraBody);
-                model.temperature = temperature;
-                model.max_context_tokens = editingModel.value.maxContextTokens ?? null;
-                model.max_output_tokens = editingModel.value.maxOutputTokens ?? null;
-                model.sys_credit_input_price_per_million = editingModel.value.inputPricePerMillion ?? null;
-                model.sys_credit_cached_input_price_per_million = editingModel.value.cachedInputPricePerMillion ?? null;
-                model.sys_credit_output_price_per_million = editingModel.value.outputPricePerMillion ?? null;
+                model.capabilities = capabilities;
+                model.extra_body = parseExtraBodyForView(extraBodyInput || '');
+                model.temperature = textModel ? temperature : null;
+                model.max_context_tokens = textModel ? editingModel.value.maxContextTokens ?? null : null;
+                model.max_output_tokens = textModel ? editingModel.value.maxOutputTokens ?? null : null;
+                model.sys_credit_input_price_per_million = textModel ? editingModel.value.inputPricePerMillion ?? null : null;
+                model.sys_credit_cached_input_price_per_million = textModel ? editingModel.value.cachedInputPricePerMillion ?? null : null;
+                model.sys_credit_output_price_per_million = textModel ? editingModel.value.outputPricePerMillion ?? null : null;
             }
             showEditModelModal.value = false;
             notifyAiStoreSync();

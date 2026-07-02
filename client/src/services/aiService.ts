@@ -469,7 +469,7 @@ export async function renameUserUsageSlot(usageKey: string, newUsageKey: string 
  * @param {string} displayName - 显示名称
  * @param {string|null} extraBody - extra_body JSON 字符串 (可选)
  */
-export async function createModel(platformId: ApiId, modelName: string, displayName: string, extraBody: string | null = null, temperature: number | undefined = undefined, maxContextTokens?: number | null, maxOutputTokens?: number | null) {
+export async function createModel(platformId: ApiId, modelName: string, displayName: string, extraBody: string | null = null, temperature: number | undefined = undefined, maxContextTokens?: number | null, maxOutputTokens?: number | null, capabilities?: string[]) {
   const payload: MutablePayload = {
     platform_id: platformId,
     model_name: modelName,
@@ -484,6 +484,9 @@ export async function createModel(platformId: ApiId, modelName: string, displayN
   }
   if (maxOutputTokens != null) {
     payload.max_output_tokens = maxOutputTokens;
+  }
+  if (capabilities && capabilities.length > 0) {
+    payload.capabilities = capabilities;
   }
   const response = await fetchWithAuth('/api/ai/model', {
     method: 'POST',
@@ -502,7 +505,7 @@ export async function createModel(platformId: ApiId, modelName: string, displayN
  * @param {string|null} displayName - 新的显示名称 (可选)
  * @param {string|null} extraBody - extra_body JSON 字符串 (可选)
  */
-export async function updateModel(modelId: ApiId, displayName: string | null = null, extraBody: string | null = null, options: { includeTemperature?: boolean; temperature?: number | null; includeMaxTokens?: boolean; maxContextTokens?: number | null; maxOutputTokens?: number | null } = {}) {
+export async function updateModel(modelId: ApiId, displayName: string | null = null, extraBody: string | null = null, options: { includeTemperature?: boolean; temperature?: number | null; includeMaxTokens?: boolean; maxContextTokens?: number | null; maxOutputTokens?: number | null; includeCapabilities?: boolean; capabilities?: string[] } = {}) {
   const payload: MutablePayload = {
     id: modelId,
     display_name: displayName,
@@ -514,6 +517,9 @@ export async function updateModel(modelId: ApiId, displayName: string | null = n
   if (options?.includeMaxTokens) {
     payload.max_context_tokens = options.maxContextTokens ?? null;
     payload.max_output_tokens = options.maxOutputTokens ?? null;
+  }
+  if (options?.includeCapabilities) {
+    payload.capabilities = options.capabilities ?? [];
   }
   const response = await fetchWithAuth('/api/ai/model', {
     method: 'PUT',
@@ -946,6 +952,7 @@ export async function adminCreateSysModel(
   outputPricePerMillion: number | undefined = undefined,
   maxContextTokens?: number | null,
   maxOutputTokens?: number | null,
+  capabilities?: string[],
 ) {
   const payload: MutablePayload = {
     platform_id: platformId,
@@ -971,6 +978,9 @@ export async function adminCreateSysModel(
   if (maxOutputTokens != null) {
     payload.max_output_tokens = maxOutputTokens;
   }
+  if (capabilities && capabilities.length > 0) {
+    payload.capabilities = capabilities;
+  }
   const response = await fetchWithAuth('/api/ai/admin/sys-model', {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
@@ -995,6 +1005,8 @@ export async function adminUpdateSysModel(modelId: ApiId, displayName: string | 
   includeMaxTokens?: boolean;
   maxContextTokens?: number | null;
   maxOutputTokens?: number | null;
+  includeCapabilities?: boolean;
+  capabilities?: string[];
 } = {}) {
   const payload: MutablePayload = {
     id: modelId,
@@ -1012,6 +1024,9 @@ export async function adminUpdateSysModel(modelId: ApiId, displayName: string | 
   if (options?.includeMaxTokens) {
     payload.max_context_tokens = options.maxContextTokens ?? null;
     payload.max_output_tokens = options.maxOutputTokens ?? null;
+  }
+  if (options?.includeCapabilities) {
+    payload.capabilities = options.capabilities ?? [];
   }
   const response = await fetchWithAuth('/api/ai/admin/sys-model', {
     method: 'PUT',

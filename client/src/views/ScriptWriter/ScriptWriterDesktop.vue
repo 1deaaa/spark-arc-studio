@@ -71,11 +71,11 @@
             </div>
 
             <Transition name="inspector-slide">
-              <div v-if="(!isNovelWorkspace && !!sceneStore.currentScene) || settingsVisible" class="resizer" data-resize="center" @mousedown="handleMouseDown"></div>
+              <div v-if="showInspectorPanel" class="resizer" data-resize="center" @mousedown="handleMouseDown"></div>
             </Transition>
 
             <Transition name="inspector-slide">
-              <div v-if="(!isNovelWorkspace && !!sceneStore.currentScene) || settingsVisible" class="panel inspector-panel" :style="{ width: inspectorWidth + 'px' }">
+              <div v-show="showInspectorPanel" class="panel inspector-panel" :style="{ width: inspectorWidth + 'px' }">
                 <template v-if="!settingsVisible">
                   <NodeEditor key="node-editor" />
                 </template>
@@ -141,6 +141,7 @@ import { useResizer } from '../../hooks/useResizer';
 import { useScriptWriterLogic } from '../../composables/useScriptWriterLogic';
 import { useSceneStore } from '../../components/stores/sceneStore';
 import { Send } from '@lucide/vue';
+import { shouldShowProductionInspector } from './productionInspector';
 import {
   NOVEL_SUBMISSION_PLATFORMS,
   downloadNovelSubmissionExport,
@@ -186,6 +187,13 @@ function openVersionManager() {
 const workspaceMode = computed(() => sceneStore.workspaceMode || 'script');
 
 const isNovelWorkspace = computed(() => workspaceMode.value === 'novel');
+const showInspectorPanel = computed(() => shouldShowProductionInspector({
+  isNovelWorkspace: isNovelWorkspace.value,
+  settingsVisible: settingsVisible.value,
+  hasOpenScriptFile: !!sceneStore.currentFilePath,
+  hasCurrentScene: !!sceneStore.currentScene,
+  selectionType: sceneStore.selectionType,
+}));
 const exportingSubmission = ref(false);
 const submissionExportOptions = computed<DropdownOption[]>(() => (
   NOVEL_SUBMISSION_PLATFORMS.map(platform => ({

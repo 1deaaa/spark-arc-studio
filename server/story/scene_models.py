@@ -3,7 +3,7 @@ from dataclasses import dataclass, field
 from typing import Any, Dict, List, Optional
 
 LEGACY_SCENE_KEYS = {"guide", "intro", "scene", "dia", "button_text", "buttonText", "btn", "conditions", "cond", "effects", "trigger_event", "priority", "once_key", "hiden", "hidden"}
-LEGACY_DIALOG_KEYS = {"id", "chr", "speaker", "txt", "opt", "act", "next"}
+LEGACY_DIALOG_KEYS = {"id", "chr", "speaker", "txt", "opt", "act", "next", "presentation"}
 LEGACY_OPTION_KEYS = {"optn", "dia"}
 
 
@@ -51,6 +51,7 @@ class DialogueNode:
     speaker: Optional[str] = None
     options: List[DialogueOption] = field(default_factory=list)
     act: Optional[Dict[str, Any]] = None
+    presentation: Optional[Dict[str, Any]] = None
     next_scene: Optional[str] = None
 
     @classmethod
@@ -69,6 +70,7 @@ class DialogueNode:
         options_payload = payload.get("opt") or []
         options = [DialogueOption.from_dict(opt) for opt in options_payload if isinstance(opt, dict)]
         act_payload = payload.get("act") if isinstance(payload.get("act"), dict) else None
+        presentation_payload = payload.get("presentation") if isinstance(payload.get("presentation"), dict) else None
         next_scene = payload.get("next")
         return cls(
             identifier=identifier,
@@ -77,6 +79,7 @@ class DialogueNode:
             speaker=speaker or None,
             options=options,
             act=_deepcopy(act_payload) if act_payload else None,
+            presentation=_deepcopy(presentation_payload) if presentation_payload else None,
             next_scene=str(next_scene) if isinstance(next_scene, str) else None,
         )
 
@@ -92,6 +95,8 @@ class DialogueNode:
             node["opt"] = [option.to_dict() for option in self.options]
         if self.act:
             node["act"] = _deepcopy(self.act)
+        if self.presentation:
+            node["presentation"] = _deepcopy(self.presentation)
         if self.next_scene:
             node["next"] = self.next_scene
         return node

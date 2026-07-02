@@ -23,13 +23,15 @@ Siliconflow:
         encoding_format: float
       max_context_tokens: 32768
       max_output_tokens: 64000
-      is_embedding: true
+      capabilities:
+        - embedding
 Alibaba Dashscope:
   base_url: https://dashscope.aliyuncs.com/compatible-mode/v1
   models:
     通义向量-v4:
       model_name: text-embedding-v4
-      is_embedding: true
+      capabilities:
+        - embedding
     deepseek-v4-flash-max:
       model_name: deepseek-v4-flash
       extra_body:

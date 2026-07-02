@@ -10,10 +10,9 @@
           size="small"
           class="lorebook-card worldview-card"
         >
-          
-          <n-input 
-            v-model:value="worldview" 
-            @input="onWorldviewInput" 
+          <n-input
+            v-model:value="worldview"
+            @input="onWorldviewInput"
             type="textarea"
             class="full-width-input worldview-input"
             :placeholder="t('components.lorebookEditor.worldviewPlaceholder')"
@@ -46,9 +45,9 @@
                 </template>
                 <template #header-extra>
                   <n-space :size="4">
-                    <n-button size="tiny" type="primary" @click="saveCharacter(ch)" :disabled="ch.id === -1">
+                    <n-button size="tiny" type="primary" @click="openCharacterSpriteModal(ch)" :disabled="ch.id === -1">
                       <template #icon>
-                        <n-icon :component="Save" />
+                        <n-icon :component="ImagePlus" />
                       </template>
                     </n-button>
                     <n-button size="tiny" @click="renameCharacter(ch)" :disabled="ch.id === -1">
@@ -100,6 +99,89 @@
         </n-card>
       </div>
     </div>
+
+    <n-modal
+      v-model:show="characterSpriteModalVisible"
+      preset="card"
+      :title="activeSpriteCharacter ? t('components.lorebookEditor.spriteModalTitle', { name: activeSpriteCharacter.name || t('components.lorebookEditor.characterN', { n: activeSpriteCharacter.id }) }) : t('components.lorebookEditor.spriteModalFallbackTitle')"
+      class="character-sprite-modal"
+      :bordered="false"
+      style="max-width: 680px;"
+    >
+      <div v-if="activeSpriteCharacter" class="character-sprite-panel">
+        <n-text depth="3" class="sprite-panel-tip">
+          {{ t('components.lorebookEditor.spriteModalHint') }}
+        </n-text>
+
+        <div class="sprite-existing-list">
+          <n-tag
+            v-for="asset in activeCharacterSpriteAssets"
+            :key="asset.id"
+            size="small"
+            :bordered="false"
+            type="info"
+          >
+            {{ asset.title || asset.id }}
+          </n-tag>
+          <n-text v-if="activeCharacterSpriteAssets.length === 0" depth="3">
+            {{ t('components.lorebookEditor.noSpriteAssets') }}
+          </n-text>
+        </div>
+
+        <n-select
+          v-model:value="selectedSpriteStyleReferenceId"
+          size="small"
+          clearable
+          :options="styleReferenceOptions"
+          :placeholder="t('components.lorebookEditor.styleReferencePlaceholder')"
+        />
+
+        <n-select
+          v-model:value="selectedImageModelKey"
+          size="small"
+          clearable
+          :loading="imageModelsLoading"
+          :options="imageModelOptions"
+          :placeholder="t('nodeEditor.presentation.imageModelPlaceholder')"
+        />
+
+        <n-input
+          v-model:value="characterSpritePrompt"
+          type="textarea"
+          :autosize="{ minRows: 4, maxRows: 7 }"
+          :placeholder="t('components.lorebookEditor.spritePromptPlaceholder')"
+        />
+
+        <n-space justify="end" :size="8" wrap>
+          <n-button secondary :loading="characterSpriteUploading" @click="triggerCharacterSpriteUpload">
+            <template #icon>
+              <n-icon :component="Upload" />
+            </template>
+            {{ t('components.lorebookEditor.uploadSprite') }}
+          </n-button>
+          <n-button
+            type="primary"
+            secondary
+            :disabled="!canGenerateCharacterSprite"
+            :loading="characterSpriteGenerating"
+            @click="generateCharacterSpriteByAI"
+          >
+            <template #icon>
+              <n-icon :component="Sparkles" />
+            </template>
+            {{ t('components.lorebookEditor.generateSprite') }}
+          </n-button>
+        </n-space>
+
+        <input
+          ref="characterSpriteFileInputRef"
+          class="sprite-hidden-input"
+          type="file"
+          accept="image/png,image/jpeg,image/webp"
+          @change="onCharacterSpriteFileChange"
+        />
+      </div>
+    </n-modal>
   </div>
 </template>
 
@@ -107,8 +189,8 @@
 import { ref, onMounted, onBeforeUnmount, computed, onActivated, watch } from 'vue';
 import { useI18n } from 'vue-i18n';
 import { useRoute } from 'vue-router';
-import { NCard, NInput, NButton, NIcon, NSpace, NPopconfirm } from 'naive-ui';
-import { Plus, Save, SquarePen, Trash } from '@lucide/vue';
+import { NCard, NInput, NButton, NIcon, NSpace, NPopconfirm, NModal, NSelect, NText, NTag } from 'naive-ui';
+import { ImagePlus, Plus, Sparkles, SquarePen, Trash, Upload } from '@lucide/vue';
 import StudioSeamlessTextarea from '../editors/StudioSeamlessTextarea.vue';
 import bus from '../../eventBus';
 import GlobalLoading from '../share/GlobalLoading.vue';
@@ -117,6 +199,15 @@ import { useFileStore } from '../stores/fileStore';
 import { useCharacterStore } from '../stores/characterStore';
 import { useSceneStore } from '../stores/sceneStore';
 import { fetchWithAuth, fetchCharacters, createCharacter, saveCharacter as saveCharacterApi, renameCharacter as renameCharacterApi, deleteCharacter as deleteCharacterApi } from '../../services/api';
+import {
+  fetchPresentationImageModels,
+  fetchPresentationManifest,
+  generatePresentationSprite,
+  uploadPresentationSprite,
+  type PresentationAsset,
+  type PresentationImageModel,
+  type PresentationManifest,
+} from '@/services/presentationService';
 import { AUTO_SAVE_DEBOUNCE_TIME } from '../../config';
 import { autoSaveEnabled } from '@/utils/autoSaveState';
 import { buildCreativeCacheKey, isCreativeCacheEqual, loadCreativeCache, saveCreativeCache } from '@/utils/creativeLocalCache';
@@ -143,9 +234,68 @@ const worldview = ref('');
 const { t } = useI18n();
 
 const characters = ref([]); // [{id, name, content}]
+const characterSpriteModalVisible = ref(false);
+const activeSpriteCharacter = ref<any | null>(null);
+const characterSpritePrompt = ref('');
+const characterSpriteFileInputRef = ref<HTMLInputElement | null>(null);
+const characterSpriteUploading = ref(false);
+const characterSpriteGenerating = ref(false);
+const imageModels = ref<PresentationImageModel[]>([]);
+const imageModelsLoading = ref(false);
+const selectedImageModelKey = ref<string | null>(null);
+const presentationManifest = ref<PresentationManifest | null>(null);
+const selectedSpriteStyleReferenceId = ref<string | null>(null);
 const SYSTEM_CHARACTER_IDS = new Set([-1, -2]);
 const isSystemCharacter = (ch: any) => SYSTEM_CHARACTER_IDS.has(Number(ch?.id));
 const userCharactersOnly = (items: any[]) => (Array.isArray(items) ? items.filter(ch => !isSystemCharacter(ch)) : []);
+
+const manifestAssets = computed<Record<string, PresentationAsset>>(() => {
+  const assets = presentationManifest.value?.assets;
+  return assets && typeof assets === 'object' ? assets : {};
+});
+
+const activeCharacterSpriteAssets = computed(() => {
+  const characterKeys = new Set(
+    [activeSpriteCharacter.value?.name, activeSpriteCharacter.value?.id]
+      .filter(value => value !== undefined && value !== null && String(value).trim())
+      .map(value => String(value).trim()),
+  );
+  if (characterKeys.size === 0) return [];
+  return Object.values(manifestAssets.value)
+    .filter(asset => asset.type === 'character_sprite' && characterKeys.has(String(asset.characterId || '').trim()))
+    .sort((a, b) => String(b.createdAt || '').localeCompare(String(a.createdAt || '')));
+});
+
+const styleReferenceOptions = computed(() => Object.values(manifestAssets.value)
+  .filter(asset => asset.type === 'style_reference' || asset.type === 'scene_reference')
+  .sort((a, b) => String(b.createdAt || '').localeCompare(String(a.createdAt || '')))
+  .map(asset => ({
+    label: `${asset.type === 'style_reference' ? t('nodeEditor.presentation.styleReference') : t('nodeEditor.presentation.sceneReference')} · ${asset.title || asset.id}`,
+    value: asset.id,
+  })));
+
+const availableImageModels = computed(() => imageModels.value.filter(model => model.api_key_set !== false));
+
+const imageModelOptions = computed(() => availableImageModels.value.map(model => ({
+  label: `${model.platform_name} · ${model.display_name || model.model_name}`,
+  value: imageModelKey(model),
+})));
+
+const selectedImageModel = computed(() => {
+  const key = selectedImageModelKey.value;
+  if (key) {
+    const matched = availableImageModels.value.find(model => imageModelKey(model) === key);
+    if (matched) return matched;
+  }
+  return availableImageModels.value[0] || null;
+});
+
+const canGenerateCharacterSprite = computed(() =>
+  !!projectStore.currentProject
+  && !!activeSpriteCharacter.value
+  && !!characterSpritePrompt.value.trim()
+  && !!selectedImageModel.value
+);
 
 type LorebookCacheSnapshot = {
   worldview: string;
@@ -245,6 +395,160 @@ async function loadCharacters() {
   saveLorebookSnapshot();
 }
 
+function imageModelKey(model: PresentationImageModel) {
+  return `${model.platform_id}:${model.model_id}`;
+}
+
+function imageModelSupportsReference(model: PresentationImageModel | null) {
+  const capabilities = Array.isArray(model?.capabilities) ? model.capabilities : [];
+  return capabilities.includes('image_reference_input') || capabilities.includes('image_edit');
+}
+
+function presentationErrorMessage(error: unknown, fallback: string) {
+  if (error instanceof Error && error.message.trim()) return error.message;
+  const raw = String(error || '').trim();
+  return raw || fallback;
+}
+
+async function loadPresentationImageModels() {
+  imageModelsLoading.value = true;
+  try {
+    const result = await fetchPresentationImageModels();
+    imageModels.value = Array.isArray(result.models) ? result.models : [];
+    if (!selectedImageModelKey.value && availableImageModels.value.length > 0) {
+      selectedImageModelKey.value = imageModelKey(availableImageModels.value[0]);
+    }
+  } catch (error: unknown) {
+    imageModels.value = [];
+    bus.emit('toast', { type: 'warning', message: presentationErrorMessage(error, t('nodeEditor.presentation.imageModelLoadFailed')) });
+  } finally {
+    imageModelsLoading.value = false;
+  }
+}
+
+async function loadPresentationManifest() {
+  if (!projectStore.currentProject) {
+    presentationManifest.value = null;
+    selectedSpriteStyleReferenceId.value = null;
+    return;
+  }
+  try {
+    const result = await fetchPresentationManifest(projectStore.currentProject);
+    presentationManifest.value = result.manifest || null;
+    if (selectedSpriteStyleReferenceId.value && !manifestAssets.value[selectedSpriteStyleReferenceId.value]) {
+      selectedSpriteStyleReferenceId.value = null;
+    }
+  } catch {
+    presentationManifest.value = null;
+  }
+}
+
+function updatePresentationManifest(manifest: PresentationManifest | undefined | null) {
+  if (manifest) presentationManifest.value = manifest;
+}
+
+function characterAssetKey(ch: any) {
+  return String(ch?.name || ch?.id || '').trim();
+}
+
+function openCharacterSpriteModal(ch) {
+  if (isSystemCharacter(ch)) return;
+  activeSpriteCharacter.value = ch;
+  characterSpritePrompt.value = '';
+  characterSpriteModalVisible.value = true;
+  void loadPresentationManifest();
+  void loadPresentationImageModels();
+}
+
+function buildCharacterSpritePrompt() {
+  const ch = activeSpriteCharacter.value;
+  const styleAsset = selectedSpriteStyleReferenceId.value ? manifestAssets.value[selectedSpriteStyleReferenceId.value] : null;
+  return [
+    '你正在为 Web 视觉小说生成角色立绘。请优先保持角色一致性、项目画风一致性和后续图生图可复用性。',
+    '立绘用途：角色会叠加在视觉小说背景上，因此主体清晰、轮廓干净、中心安全区稳定；不要画 UI、对话框、水印或大段文字。',
+    '画幅：1024x1536，竖版，半身或七分身均可，角色位于中心。',
+    styleAsset ? `风格参考：${styleAsset.title || styleAsset.id}` : '',
+    ch?.name ? `角色名称：${ch.name}` : '',
+    ch?.content ? `角色设定：${ch.content}` : '',
+    `用户具体要求：${characterSpritePrompt.value.trim()}`,
+  ].filter(Boolean).join('\n');
+}
+
+function characterSpriteReferenceAssetIds() {
+  const model = selectedImageModel.value;
+  if (!imageModelSupportsReference(model)) return [];
+  const ids = new Set<string>();
+  if (selectedSpriteStyleReferenceId.value) ids.add(selectedSpriteStyleReferenceId.value);
+  const latestSprite = activeCharacterSpriteAssets.value[0];
+  if (latestSprite?.id) ids.add(latestSprite.id);
+  return Array.from(ids).slice(0, 4);
+}
+
+function triggerCharacterSpriteUpload() {
+  if (!projectStore.currentProject) {
+    bus.emit('toast', { type: 'warning', message: t('nodeEditor.presentation.projectRequired') });
+    return;
+  }
+  characterSpriteFileInputRef.value?.click();
+}
+
+async function onCharacterSpriteFileChange(event: Event) {
+  const input = event.target as HTMLInputElement | null;
+  const file = input?.files?.[0];
+  if (input) input.value = '';
+  if (!file || !projectStore.currentProject || !activeSpriteCharacter.value) return;
+  characterSpriteUploading.value = true;
+  try {
+    const result = await uploadPresentationSprite(projectStore.currentProject, file, {
+      title: `${activeSpriteCharacter.value.name || activeSpriteCharacter.value.id}-${file.name}`,
+      characterId: characterAssetKey(activeSpriteCharacter.value),
+      expression: 'default',
+    });
+    updatePresentationManifest(result.manifest);
+    bus.emit('toast', { type: 'success', message: t('nodeEditor.presentation.spriteUploadSuccess') });
+  } catch (error: unknown) {
+    bus.emit('toast', { type: 'error', message: presentationErrorMessage(error, t('nodeEditor.presentation.spriteUploadFailed')) });
+  } finally {
+    characterSpriteUploading.value = false;
+  }
+}
+
+async function generateCharacterSpriteByAI() {
+  if (!projectStore.currentProject || !activeSpriteCharacter.value) {
+    bus.emit('toast', { type: 'warning', message: t('nodeEditor.presentation.projectRequired') });
+    return;
+  }
+  const model = selectedImageModel.value;
+  if (!model) {
+    bus.emit('toast', { type: 'warning', message: t('nodeEditor.presentation.imageModelMissing') });
+    return;
+  }
+  if (!characterSpritePrompt.value.trim()) {
+    bus.emit('toast', { type: 'warning', message: t('nodeEditor.presentation.promptRequired') });
+    return;
+  }
+  characterSpriteGenerating.value = true;
+  try {
+    const result = await generatePresentationSprite(projectStore.currentProject, {
+      prompt: buildCharacterSpritePrompt(),
+      title: activeSpriteCharacter.value.name || t('components.lorebookEditor.characterN', { n: activeSpriteCharacter.value.id }),
+      characterId: characterAssetKey(activeSpriteCharacter.value),
+      expression: 'default',
+      size: '1024x1536',
+      platformId: Number(model.platform_id),
+      modelId: Number(model.model_id),
+      referenceAssetIds: characterSpriteReferenceAssetIds(),
+    });
+    updatePresentationManifest(result.manifest);
+    characterSpritePrompt.value = '';
+    bus.emit('toast', { type: 'success', message: t('nodeEditor.presentation.spriteGenerateSuccess') });
+  } catch (error: unknown) {
+    bus.emit('toast', { type: 'error', message: presentationErrorMessage(error, t('nodeEditor.presentation.spriteGenerateFailed')) });
+  } finally {
+    characterSpriteGenerating.value = false;
+  }
+}
+
 // 添加角色（通过弹窗输入名称）
 async function handleAddCharacter() {
   const name = await new Promise<string | null>(resolve => {
@@ -327,6 +631,8 @@ onMounted(() => {
   hydrateLorebookFromCache();
   loadWorldview();
   loadCharacters();
+  loadPresentationManifest();
+  loadPresentationImageModels();
   bus.on('lorebook-refresh', onLorebookRefresh);
   bus.on('character-streamed', onStreamedCharacter);
   bus.on('characters-cleared', onCharactersCleared);
@@ -335,6 +641,7 @@ onMounted(() => {
   bus.on('worldview-stream-end', onWorldviewStreamEnd);
   bus.on('lorebook-refresh-worldview', onLorebookRefreshWorldview);
   bus.on('lorebook-refresh-characters', onLorebookRefreshCharacters);
+  bus.on('presentation-manifest-updated', onPresentationManifestUpdated);
 });
 
 watch(() => projectStore.currentProject, (nextProject, prevProject) => {
@@ -342,6 +649,8 @@ watch(() => projectStore.currentProject, (nextProject, prevProject) => {
   hydrateLorebookFromCache();
   loadWorldview();
   loadCharacters();
+  loadPresentationManifest();
+  loadPresentationImageModels();
 });
 
 onBeforeUnmount(() => {
@@ -353,17 +662,21 @@ onBeforeUnmount(() => {
   bus.off('worldview-stream-end', onWorldviewStreamEnd);
   bus.off('lorebook-refresh-worldview', onLorebookRefreshWorldview);
   bus.off('lorebook-refresh-characters', onLorebookRefreshCharacters);
+  bus.off('presentation-manifest-updated', onPresentationManifestUpdated);
 });
 
 onActivated(() => {
   // Silently refresh data when view is reactivated
   loadWorldview();
   loadCharacters();
+  loadPresentationManifest();
+  loadPresentationImageModels();
 });
 
 function onLorebookRefresh() {
   loadWorldview();
   loadCharacters();
+  loadPresentationManifest();
 }
 
 function onLorebookRefreshWorldview() {
@@ -372,6 +685,10 @@ function onLorebookRefreshWorldview() {
 
 function onLorebookRefreshCharacters() {
   loadCharacters();
+}
+
+function onPresentationManifestUpdated() {
+  loadPresentationManifest();
 }
 
 function onWorldviewStreamStart() {
@@ -769,5 +1086,36 @@ function onStreamedCharacter(payload) {
 .settings-editor-container :deep(.n-space) {
   width: 100% !important;
   display: flex !important;
+}
+
+.character-sprite-panel {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+
+.sprite-panel-tip {
+  font-size: var(--spark-fs-xs);
+  line-height: 1.55;
+}
+
+.sprite-existing-list {
+  min-height: 30px;
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 6px;
+  padding: 8px;
+  border: 1px solid color-mix(in srgb, var(--spark-border), transparent 8%);
+  border-radius: 8px;
+  background: color-mix(in srgb, var(--spark-bg) 42%, transparent);
+}
+
+.sprite-hidden-input {
+  display: none;
+}
+
+:global(.character-sprite-modal.n-card) {
+  border-radius: 8px;
 }
 </style>

@@ -1,5 +1,5 @@
 from fastapi import APIRouter, Depends, Query, Request
-from fastapi.responses import JSONResponse
+from fastapi.responses import FileResponse, JSONResponse
 from pydantic import BaseModel
 from typing import Optional
 import uuid
@@ -18,6 +18,13 @@ from story.public_share_review import (
 )
 from story.importer import import_project_stories_to_db
 from story.routes_version import _decode_version_description
+from story.presentation_manifest import (
+    PresentationAssetError,
+    copy_presentation_snapshot,
+    get_snapshot_asset_path,
+    load_snapshot_manifest,
+    remove_presentation_snapshot,
+)
 from sqlalchemy import create_engine
 from sqlalchemy.orm import sessionmaker
 
@@ -54,6 +61,23 @@ def _can_access_version(version: ProjectVersion, current_user: Optional[dict]) -
     if version.is_shared and not get_disable_public_share():
         return True
     return _is_owner(version.user_id, current_user)
+
+
+def _presentation_payload(snapshot_path: str, asset_base_url: str) -> dict:
+    return {
+        'manifest': load_snapshot_manifest(snapshot_path),
+        'assetBaseUrl': asset_base_url,
+    }
+
+
+def _serve_snapshot_asset(snapshot_path: str, asset_path: str):
+    try:
+        path = get_snapshot_asset_path(snapshot_path, asset_path)
+    except PresentationAssetError as exc:
+        return JSONResponse(status_code=400, content={'error': str(exc)})
+    if not path or not os.path.isfile(path):
+        return JSONResponse(status_code=404, content={'error': '资源不存在'})
+    return FileResponse(path)
 
 class ShareCreate(BaseModel):
     projectName: str
@@ -142,7 +166,14 @@ async def create_share(data: ShareCreate, user: dict = Depends(get_current_user)
     snapshot_path = os.path.join(_get_shares_dir(), f'{share_id}.db')
     try:
         shutil.copy2(db_path, snapshot_path)
+        copy_presentation_snapshot(user_id, project_name, snapshot_path)
     except Exception as exc:
+        if os.path.exists(snapshot_path):
+            try:
+                os.remove(snapshot_path)
+            except OSError:
+                pass
+        remove_presentation_snapshot(snapshot_path)
         return JSONResponse(status_code=500, content={'error': f'写入快照失败: {exc}'})
 
     session = UserInfoSession()
@@ -228,6 +259,7 @@ async def delete_share(share_id: str, user: dict = Depends(get_current_user)):
                 os.remove(snapshot_path)
             except OSError:
                 pass
+        remove_presentation_snapshot(snapshot_path)
         return {'success': True}
     except Exception as exc:
         session.rollback()
@@ -302,6 +334,10 @@ async def get_share_data(share_id: str, request: Request):
             'stories': story_list,
             'characters': char_map,
             'registry': registry,
+            'presentation': _presentation_payload(
+                share.snapshot_path,
+                f'/api/play/{share_id}/presentation/assets',
+            ),
         }
     except Exception as exc:
         return JSONResponse(status_code=500, content={'error': f'读取快照失败: {exc}'})
@@ -406,9 +442,55 @@ async def get_version_share_data(share_id: str, request: Request):
             'stories': story_list,
             'characters': char_map,
             'registry': registry,
+            'presentation': _presentation_payload(
+                snapshot_path,
+                f'/api/play/v/{share_id}/presentation/assets',
+            ),
         }
     except Exception as exc:
         return JSONResponse(status_code=500, content={'error': f'读取快照失败: {exc}'})
     finally:
         snapshot_session.close()
         engine.dispose()
+
+
+@share_router.get('/api/play/{share_id}/presentation/assets/{asset_path:path}')
+async def get_share_presentation_asset(share_id: str, asset_path: str, request: Request):
+    session = UserInfoSession()
+    try:
+        current_user = _get_optional_current_user(request)
+        share = session.query(Share).filter_by(id=share_id, is_active=True).first()
+        if not share:
+            return JSONResponse(status_code=404, content={'error': '分享不存在'})
+        if not _can_access_share(share, current_user):
+            if get_disable_public_share() and share.is_shared:
+                return JSONResponse(status_code=403, content={'error': '管理员已禁用公开分享'})
+            return JSONResponse(status_code=404, content={'error': '分享不存在或未公开'})
+        if not share.snapshot_path:
+            return JSONResponse(status_code=404, content={'error': '分享数据缺失'})
+        snapshot_path = share.snapshot_path
+    finally:
+        session.close()
+    return _serve_snapshot_asset(snapshot_path, asset_path)
+
+
+@share_router.get('/api/play/v/{share_id}/presentation/assets/{asset_path:path}')
+async def get_version_presentation_asset(share_id: str, asset_path: str, request: Request):
+    session = UserInfoSession()
+    try:
+        current_user = _get_optional_current_user(request)
+        version = session.query(ProjectVersion).filter(
+            (ProjectVersion.share_id == share_id) | (ProjectVersion.id == share_id)
+        ).first()
+        if not version:
+            return JSONResponse(status_code=404, content={'error': '分享不存在'})
+        if not _can_access_version(version, current_user):
+            if get_disable_public_share() and version.is_shared:
+                return JSONResponse(status_code=403, content={'error': '管理员已禁用公开分享'})
+            return JSONResponse(status_code=404, content={'error': '分享不存在'})
+        if not version.snapshot_path:
+            return JSONResponse(status_code=404, content={'error': '分享数据缺失'})
+        snapshot_path = version.snapshot_path
+    finally:
+        session.close()
+    return _serve_snapshot_asset(snapshot_path, asset_path)

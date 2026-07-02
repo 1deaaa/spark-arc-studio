@@ -1,11 +1,18 @@
 <template>
-  <div class="player-container" :class="{ 'loading': loading }">
+  <div class="player-container" :class="{ 'loading': loading }" :style="playerPresentationStyle">
     
     <!-- 0. 常驻免责标签（仅简体中文可见） -->
     <ZhOnlyTag type="disclaimer" class="persistent-disclaimer"><template v-if="disclaimerParts">{{ disclaimerParts.before }}<a :href="SPARKARC_GITHUB_URL" target="_blank" rel="noopener" class="disclaimer-brand-link">SparkArc</a>{{ disclaimerParts.after }}</template><template v-else>{{ t('views.player.desktop.zhDisclaimer') }}</template></ZhOnlyTag>
 
     <!-- 1. 背景层：氛围动画 -->
     <PlayerAmbient />
+    <transition name="fade-slow">
+      <div v-if="activeBackgroundUrl" class="presentation-bg-layer" aria-hidden="true">
+        <div class="presentation-bg-blur" :style="presentationBackgroundImageStyle"></div>
+        <div class="presentation-bg-image" :style="presentationBackgroundImageStyle"></div>
+        <div class="presentation-bg-vignette"></div>
+      </div>
+    </transition>
 
     <!-- 2. 加载界面 -->
     <transition name="fade">
@@ -62,8 +69,8 @@
         <!-- 角色层 (预留) -->
         <div class="layer characters">
            <transition name="fade">
-              <div v-if="currentCharacter" class="character-sprite">
-                  <!-- 角色立绘占位 -->
+              <div v-if="currentCharacter" class="character-sprite" :class="`character-sprite--${currentCharacter.position}`">
+                  <img :src="currentCharacter.url" :alt="currentCharacter.name" draggable="false" />
               </div>
            </transition>
         </div>
@@ -176,6 +183,7 @@ import { computed, onBeforeUnmount, onMounted, ref, watch } from 'vue';
 import { useRoute, useRouter } from 'vue-router';
 import { useI18n } from 'vue-i18n';
 import { fetchWithAuth } from '@/services/apiClient';
+import type { PresentationAsset, PresentationManifest, PresentationPayload } from '@/services/presentationService';
 import PlayerAmbient from './PlayerAmbient.vue';
 import ZhOnlyTag from '@/components/player/shared/ZhOnlyTag.vue';
 import BookNavButton from '@/components/player/shared/BookNavButton.vue';
@@ -189,6 +197,7 @@ type PlayerDataResponse = {
   stories?: StoryScene[];
   characters?: Record<string, string>;
   registry?: Record<string, unknown>;
+  presentation?: PresentationPayload;
 };
 
 type StoryChoice = {
@@ -203,6 +212,7 @@ type StoryDialogue = {
   thought?: string;
   opt?: StoryChoice[];
   act?: Record<string, unknown>;
+  presentation?: Record<string, unknown>;
   next?: string;
 };
 
@@ -303,6 +313,11 @@ const gameEnded = ref(false);
 const storyData = ref<StoryScene[]>([]);
 const charMap = ref<Record<string, string>>({});
 const registry = ref<Record<string, unknown>>({});
+const presentationManifest = ref<PresentationManifest | null>(null);
+const presentationAssetBaseUrl = ref('');
+const activeBackgroundUrl = ref('');
+const stageBackgroundColor = ref<string | null>(null);
+const activeSprite = ref<{ url: string; name: string; position: string } | null>(null);
 const contentFormat = ref('script');
 const novelContent = ref('');
 const titleText = ref(t('views.player.desktop.publicContent'));
@@ -342,6 +357,8 @@ function handleSceneNavSelect(item: NavItem) {
     currentSceneIndex.value = idx;
     currentDialogueIndex.value = 0;
     dialogueStack.value = [];
+    resetPresentationBackground();
+    resetPresentationSprite();
     showSceneTitle();
     processCurrentNode();
   }
@@ -376,10 +393,117 @@ const currentChoices = computed(() => {
   return currentDialogue.value.opt || [];
 });
 
-const currentCharacter = computed(() => {
-  // TODO: Determine which character is visible based on speaker
-  return null;
+const currentCharacter = computed(() => activeSprite.value);
+
+const playerPresentationStyle = computed<Record<string, string>>(() => {
+  if (!stageBackgroundColor.value) return {} as Record<string, string>;
+  return { '--presentation-bg-color': stageBackgroundColor.value };
 });
+
+const presentationBackgroundImageStyle = computed<Record<string, string>>(() => {
+  if (!activeBackgroundUrl.value) return {} as Record<string, string>;
+  return { backgroundImage: `url("${activeBackgroundUrl.value.replace(/"/g, '\\"')}")` };
+});
+
+function encodeAssetPath(path: string): string {
+  return String(path || '')
+    .replace(/\\/g, '/')
+    .split('/')
+    .filter(Boolean)
+    .map(part => encodeURIComponent(part))
+    .join('/');
+}
+
+function getManifestAssets(manifest: PresentationManifest | null): Record<string, PresentationAsset> {
+  const assets = manifest?.assets;
+  return assets && typeof assets === 'object' && !Array.isArray(assets) ? assets : {};
+}
+
+function resolvePresentationAssetUrl(assetId: string): string {
+  const id = String(assetId || '').trim();
+  if (!id) return '';
+  const asset = getManifestAssets(presentationManifest.value)[id];
+  if (!asset) return '';
+  if (asset.url) return asset.url;
+  if (!asset.path || !presentationAssetBaseUrl.value) return '';
+  return `${presentationAssetBaseUrl.value.replace(/\/+$/, '')}/${encodeAssetPath(asset.path)}`;
+}
+
+function isCssColorValue(value: string): boolean {
+  const text = String(value || '').trim();
+  if (!text) return false;
+  if (typeof CSS !== 'undefined' && typeof CSS.supports === 'function') {
+    return CSS.supports('color', text);
+  }
+  return /^(#|rgb\(|rgba\(|hsl\(|hsla\()/i.test(text);
+}
+
+function resetPresentationBackground() {
+  activeBackgroundUrl.value = '';
+  stageBackgroundColor.value = null;
+}
+
+function resetPresentationSprite() {
+  activeSprite.value = null;
+}
+
+function applyBackgroundValue(rawValue: unknown) {
+  const value = Array.isArray(rawValue) ? rawValue[0] : rawValue;
+  const text = typeof value === 'string' ? value.trim() : '';
+  if (!text) return;
+  if (isCssColorValue(text)) {
+    stageBackgroundColor.value = text;
+    activeBackgroundUrl.value = '';
+    return;
+  }
+  const url = resolvePresentationAssetUrl(text);
+  if (url) {
+    activeBackgroundUrl.value = url;
+    stageBackgroundColor.value = null;
+  }
+}
+
+function applySpriteValue(rawValue: unknown) {
+  const value = Array.isArray(rawValue) ? rawValue[0] : rawValue;
+  if (value === false || value === null) {
+    resetPresentationSprite();
+    return;
+  }
+  const text = typeof value === 'string' ? value.trim() : '';
+  if (!text || ['clear', 'none', 'hide', 'off'].includes(text.toLowerCase())) {
+    resetPresentationSprite();
+    return;
+  }
+  const url = resolvePresentationAssetUrl(text);
+  if (!url) return;
+  const asset = getManifestAssets(presentationManifest.value)[text];
+  activeSprite.value = {
+    url,
+    name: String(asset?.title || currentSpeakerName.value || ''),
+    position: String((asset as Record<string, unknown> | undefined)?.position || 'center'),
+  };
+}
+
+function primeBackgroundForProgress(progress: ScriptProgressState) {
+  resetPresentationBackground();
+  resetPresentationSprite();
+  const scene = storyData.value[progress.sceneIndex];
+  const dialogues = scene?.dlg || [];
+  const end = Math.min(progress.dialogueIndex, dialogues.length - 1);
+  for (let i = 0; i <= end; i += 1) {
+    const bg = dialogues[i]?.act?.bg;
+    if (bg !== undefined) applyBackgroundValue(bg);
+    const sprite = dialogues[i]?.act?.sprite;
+    if (sprite !== undefined) applySpriteValue(sprite);
+    applyPresentationCue(dialogues[i]?.presentation);
+  }
+}
+
+function applyPresentationCue(cue: Record<string, unknown> | null | undefined) {
+  if (!cue || typeof cue !== 'object') return;
+  if (cue.bg !== undefined) applyBackgroundValue(cue.bg);
+  if (cue.sprite !== undefined) applySpriteValue(cue.sprite);
+}
 
 function clearTitleTimer() {
   if (titleTimerId.value !== null) {
@@ -560,11 +684,17 @@ async function loadGame() {
     }
     const data = await res.json() as PlayerDataResponse;
     contentFormat.value = data.format || 'script';
+    const presentation = data.presentation || {};
+    presentationManifest.value = presentation.manifest || null;
+    presentationAssetBaseUrl.value = String(
+      presentation.assetBaseUrl || (presentation as Record<string, unknown>).asset_base_url || ''
+    );
     if (contentFormat.value === 'novel') {
       novelContent.value = data.content || '';
       storyData.value = [];
       charMap.value = {};
       registry.value = {};
+      resetPresentationBackground();
       titleText.value = t('views.player.desktop.publicNovel');
       return;
     }
@@ -594,6 +724,7 @@ function startGame(initialProgress: ScriptProgressState | null = null) {
   waitingForChoice.value = false;
   showThought.value = false;
   gameEnded.value = false;
+  primeBackgroundForProgress(progress);
   showSceneTitle();
   processCurrentNode();
 }
@@ -620,6 +751,7 @@ function processCurrentNode() {
       executeAction(key, value);
     }
   }
+  applyPresentationCue(node.presentation);
 
   if (node.opt && node.opt.length > 0) {
     waitingForChoice.value = true;
@@ -637,10 +769,11 @@ function executeAction(key: string, value: unknown) {
 
   switch (key.toLowerCase()) {
     case 'bg': {
-      const colorValue = Array.isArray(value) ? value[0] : value;
-      if (typeof colorValue === 'string') {
-        document.body.style.backgroundColor = colorValue;
-      }
+      applyBackgroundValue(value);
+      break;
+    }
+    case 'sprite': {
+      applySpriteValue(value);
       break;
     }
     case 'shake': {
@@ -738,6 +871,8 @@ function nextScene() {
     currentSceneIndex.value++;
     currentDialogueIndex.value = 0;
     dialogueStack.value = [];
+    resetPresentationBackground();
+    resetPresentationSprite();
     showSceneTitle();
     processCurrentNode();
   } else {
@@ -752,6 +887,8 @@ function jumpToScene(sceneName: string) {
     currentSceneIndex.value = idx;
     currentDialogueIndex.value = 0;
     dialogueStack.value = [];
+    resetPresentationBackground();
+    resetPresentationSprite();
     showSceneTitle();
     processCurrentNode();
   } else {

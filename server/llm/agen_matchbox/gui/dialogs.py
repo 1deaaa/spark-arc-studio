@@ -16,13 +16,146 @@ if __package__ in (None, "", "gui"):
         sys.path.insert(0, _PARENT_DIR)
     __package__ = f"{os.path.basename(_PKG_DIR)}.{os.path.basename(_GUI_DIR)}"
 
-from ..models import DEFAULT_MAX_CONTEXT_TOKENS, DEFAULT_MAX_OUTPUT_TOKENS
+from ..models import (
+    DEFAULT_MAX_CONTEXT_TOKENS,
+    DEFAULT_MAX_OUTPUT_TOKENS,
+    CAP_EMBEDDING,
+    CAP_IMAGE_EDIT,
+    CAP_IMAGE_GENERATION,
+    CAP_IMAGE_REFERENCE_INPUT,
+    CAP_TEXT_GENERATION,
+    CAP_VISION_INPUT,
+    normalize_model_capabilities,
+)
 from .dpi import prepare_toplevel_window
 from .theme import style_listbox
 
 
 class DialogsMixin:
     """对话框功能 Mixin，需与 LLMConfigGUI 混入使用。"""
+
+    IMAGE_ADAPTER_OPTIONS = {
+        "OpenAI Images / 兼容协议": "openai_images",
+        "Gemini Image / Nano Banana": "gemini_interactions",
+        "Grok Image": "xai_images",
+    }
+    DEFAULT_IMAGE_ADAPTER = "openai_images"
+
+    def _normalize_image_adapter(self, value) -> str:
+        text = str(value or "").strip().lower()
+        if text in {"gemini", "google", "google_gemini", "gemini_interactions", "google_interactions"}:
+            return "gemini_interactions"
+        if text in {"xai", "xai_images", "grok", "grok_image", "grok_images", "grok_imagine"}:
+            return "xai_images"
+        if text in {"openai", "openai_images", "openai_compatible", "gpt_image", "gpt-image"}:
+            return "openai_images"
+        return self.DEFAULT_IMAGE_ADAPTER
+
+    def _image_adapter_label(self, value) -> str:
+        normalized = self._normalize_image_adapter(value)
+        for label, adapter in self.IMAGE_ADAPTER_OPTIONS.items():
+            if adapter == normalized:
+                return label
+        return next(iter(self.IMAGE_ADAPTER_OPTIONS))
+
+    def _image_adapter_value(self, label_or_value) -> str:
+        return self.IMAGE_ADAPTER_OPTIONS.get(
+            str(label_or_value or "").strip(),
+            self._normalize_image_adapter(label_or_value),
+        )
+
+    def _extract_image_adapter(self, extra_body) -> str:
+        if not isinstance(extra_body, dict):
+            return self.DEFAULT_IMAGE_ADAPTER
+        image_config = extra_body.get("image_generation")
+        if isinstance(image_config, dict):
+            return self._normalize_image_adapter(image_config.get("adapter"))
+        return self.DEFAULT_IMAGE_ADAPTER
+
+    def _merge_image_adapter(self, extra_body, capabilities, adapter):
+        normalized_capabilities = normalize_model_capabilities(capabilities)
+        if CAP_IMAGE_GENERATION not in normalized_capabilities:
+            return extra_body
+
+        merged = dict(extra_body or {})
+        image_config = merged.get("image_generation")
+        if not isinstance(image_config, dict):
+            image_config = {}
+        else:
+            image_config = dict(image_config)
+        image_config["adapter"] = self._image_adapter_value(adapter)
+        merged["image_generation"] = image_config
+        return merged
+
+    def _capabilities_to_model_type_label(self, raw_capabilities=None, *, legacy_is_embedding=False) -> str:
+        capabilities = normalize_model_capabilities(
+            raw_capabilities,
+            legacy_is_embedding=legacy_is_embedding,
+        )
+        if CAP_EMBEDDING in capabilities:
+            return "向量模型"
+        if CAP_IMAGE_GENERATION in capabilities:
+            return "生图模型"
+        if CAP_VISION_INPUT in capabilities:
+            return "视觉文本模型"
+        return "文本模型"
+
+    def _make_model_capability_checkboxes(self, parent, *, row: int, initial_capabilities=None):
+        """创建用户可见的模型能力复选框。文本能力默认隐含，不单独展示。"""
+        capabilities = normalize_model_capabilities(initial_capabilities)
+        vars_map = {
+            "vision": tk.BooleanVar(value=CAP_VISION_INPUT in capabilities),
+            "image": tk.BooleanVar(value=CAP_IMAGE_GENERATION in capabilities),
+            "embedding": tk.BooleanVar(value=CAP_EMBEDDING in capabilities),
+        }
+
+        frame = ctk.CTkFrame(parent, fg_color="transparent")
+        frame.grid(row=row, column=1, sticky=tk.W, padx=20, pady=5)
+
+        def on_embedding_toggle():
+            if vars_map["embedding"].get():
+                vars_map["vision"].set(False)
+                vars_map["image"].set(False)
+
+        def on_regular_toggle():
+            if vars_map["vision"].get() or vars_map["image"].get():
+                vars_map["embedding"].set(False)
+
+        ctk.CTkCheckBox(
+            frame,
+            text="视觉",
+            variable=vars_map["vision"],
+            command=on_regular_toggle,
+            font=("Microsoft YaHei UI", 11),
+        ).pack(side=tk.LEFT, padx=(0, 16))
+        ctk.CTkCheckBox(
+            frame,
+            text="生图",
+            variable=vars_map["image"],
+            command=on_regular_toggle,
+            font=("Microsoft YaHei UI", 11),
+        ).pack(side=tk.LEFT, padx=(0, 16))
+        ctk.CTkCheckBox(
+            frame,
+            text="向量",
+            variable=vars_map["embedding"],
+            command=on_embedding_toggle,
+            font=("Microsoft YaHei UI", 11),
+        ).pack(side=tk.LEFT)
+        return vars_map
+
+    def _capability_vars_to_capabilities(self, vars_map, *, initial_capabilities=None):
+        if vars_map["embedding"].get():
+            return [CAP_EMBEDDING]
+
+        capabilities = [CAP_TEXT_GENERATION]
+        if vars_map["vision"].get():
+            capabilities.append(CAP_VISION_INPUT)
+        if vars_map["image"].get():
+            capabilities.append(CAP_IMAGE_GENERATION)
+            capabilities.append(CAP_IMAGE_REFERENCE_INPUT)
+            capabilities.append(CAP_IMAGE_EDIT)
+        return normalize_model_capabilities(capabilities)
 
     @staticmethod
     def _parse_optional_non_negative_int(raw_value: str, *, field_label: str):
@@ -33,6 +166,19 @@ class DialogsMixin:
             value = int(text)
         except (TypeError, ValueError):
             raise ValueError(f"{field_label} 必须是整数")
+        if value < 0:
+            raise ValueError(f"{field_label} 不能小于 0")
+        return value
+
+    @staticmethod
+    def _parse_optional_non_negative_float(raw_value: str, *, field_label: str):
+        text = str(raw_value or "").strip()
+        if not text:
+            return None
+        try:
+            value = float(text)
+        except (TypeError, ValueError):
+            raise ValueError(f"{field_label} 必须是数字")
         if value < 0:
             raise ValueError(f"{field_label} 不能小于 0")
         return value
@@ -103,14 +249,33 @@ class DialogsMixin:
         if selected_model_id:
             model_id_entry.insert(0, selected_model_id)
 
-        is_embedding_var = tk.BooleanVar(value=False)
-        ctk.CTkCheckBox(dialog, text="Embedding 模型", variable=is_embedding_var, font=("Microsoft YaHei UI", 11)).grid(row=2, column=1, sticky=tk.W, padx=20, pady=5)
+        ctk.CTkLabel(dialog, text="模型能力:", font=("Microsoft YaHei UI", 11)).grid(row=2, column=0, sticky=tk.W, padx=20, pady=5)
+        capability_vars = self._make_model_capability_checkboxes(dialog, row=2)
+
+        ctk.CTkLabel(dialog, text="生图协议:", font=("Microsoft YaHei UI", 11)).grid(row=3, column=0, sticky=tk.W, padx=20, pady=5)
+        image_adapter_var = tk.StringVar(value=self._image_adapter_label(self.DEFAULT_IMAGE_ADAPTER))
+        image_adapter_combo = ctk.CTkComboBox(
+            dialog,
+            variable=image_adapter_var,
+            values=list(self.IMAGE_ADAPTER_OPTIONS.keys()),
+            state="disabled",
+            width=260,
+            font=("Microsoft YaHei UI", 11),
+        )
+        image_adapter_combo.grid(row=3, column=1, sticky=tk.W, padx=20, pady=5)
+
+        def refresh_image_adapter_state(*_):
+            image_adapter_combo.configure(state="readonly" if capability_vars["image"].get() else "disabled")
+
+        capability_vars["image"].trace_add("write", refresh_image_adapter_state)
+        capability_vars["embedding"].trace_add("write", refresh_image_adapter_state)
+        refresh_image_adapter_state()
 
         temperature_enabled_var = tk.BooleanVar(value=False)
         temperature_var = tk.DoubleVar(value=0.7)
 
         temp_row = ctk.CTkFrame(dialog, fg_color="transparent")
-        temp_row.grid(row=3, column=1, padx=20, pady=(6, 0), sticky=(tk.W, tk.E))
+        temp_row.grid(row=4, column=1, padx=20, pady=(6, 0), sticky=(tk.W, tk.E))
 
         def on_temperature_toggle():
             enabled = bool(temperature_enabled_var.get())
@@ -132,41 +297,47 @@ class DialogsMixin:
             font=("Microsoft YaHei UI", 11)
         ).pack(side=tk.LEFT)
 
-        ctk.CTkLabel(dialog, text="Temperature: ", font=("Microsoft YaHei UI", 11)).grid(row=3, column=0, sticky=tk.W, padx=20, pady=(6, 0))
+        ctk.CTkLabel(dialog, text="Temperature: ", font=("Microsoft YaHei UI", 11)).grid(row=4, column=0, sticky=tk.W, padx=20, pady=(6, 0))
         temperature_entry = ctk.CTkEntry(dialog, width=80, textvariable=temperature_var)
-        temperature_entry.grid(row=3, column=1, padx=(180, 20), pady=(6, 0), sticky=tk.W)
+        temperature_entry.grid(row=4, column=1, padx=(180, 20), pady=(6, 0), sticky=tk.W)
         temperature_entry.configure(state='disabled')
-        ctk.CTkLabel(dialog, text="范围 0.3 - 1.5", text_color="gray", font=("Microsoft YaHei UI", 10)).grid(row=3, column=1, padx=(270, 20), pady=(6, 0), sticky=tk.W)
+        ctk.CTkLabel(dialog, text="范围 0.3 - 1.5", text_color="gray", font=("Microsoft YaHei UI", 10)).grid(row=4, column=1, padx=(270, 20), pady=(6, 0), sticky=tk.W)
 
-        ctk.CTkLabel(dialog, text="最大上下文:", font=("Microsoft YaHei UI", 11)).grid(row=4, column=0, sticky=tk.W, padx=20, pady=(8, 0))
-        max_context_entry = ctk.CTkEntry(dialog, width=150)
-        max_context_entry.grid(row=4, column=1, padx=20, pady=(8, 0), sticky=tk.W)
+        ctk.CTkLabel(dialog, text="Token 上限:", font=("Microsoft YaHei UI", 11)).grid(row=5, column=0, sticky=tk.W, padx=20, pady=(8, 0))
+        token_row = ctk.CTkFrame(dialog, fg_color="transparent")
+        token_row.grid(row=5, column=1, padx=20, pady=(8, 0), sticky=tk.W)
+        ctk.CTkLabel(token_row, text="上下文", font=("Microsoft YaHei UI", 10)).pack(side=tk.LEFT, padx=(0, 6))
+        max_context_entry = ctk.CTkEntry(token_row, width=120)
+        max_context_entry.pack(side=tk.LEFT, padx=(0, 10))
         _init_max_context = auto_max_context if auto_max_context is not None else DEFAULT_MAX_CONTEXT_TOKENS
         max_context_entry.insert(0, str(_init_max_context))
         _ctx_hint = f"探测值: {auto_max_context}" if auto_max_context is not None else "默认 256000"
-        ctk.CTkLabel(dialog, text=_ctx_hint, text_color="gray", font=("Microsoft YaHei UI", 10)).grid(row=4, column=1, padx=(180, 20), pady=(8, 0), sticky=tk.W)
-
-        ctk.CTkLabel(dialog, text="最大单次输出:", font=("Microsoft YaHei UI", 11)).grid(row=5, column=0, sticky=tk.W, padx=20, pady=(8, 0))
-        max_output_entry = ctk.CTkEntry(dialog, width=150)
-        max_output_entry.grid(row=5, column=1, padx=20, pady=(8, 0), sticky=tk.W)
+        ctk.CTkLabel(token_row, text=_ctx_hint, text_color="gray", font=("Microsoft YaHei UI", 10)).pack(side=tk.LEFT, padx=(0, 14))
+        ctk.CTkLabel(token_row, text="单次输出", font=("Microsoft YaHei UI", 10)).pack(side=tk.LEFT, padx=(0, 6))
+        max_output_entry = ctk.CTkEntry(token_row, width=120)
+        max_output_entry.pack(side=tk.LEFT, padx=(0, 10))
         _init_max_output = auto_max_output if auto_max_output is not None else DEFAULT_MAX_OUTPUT_TOKENS
         max_output_entry.insert(0, str(_init_max_output))
         _out_hint = f"探测值: {auto_max_output}" if auto_max_output is not None else "默认 64000"
-        ctk.CTkLabel(dialog, text=_out_hint, text_color="gray", font=("Microsoft YaHei UI", 10)).grid(row=5, column=1, padx=(180, 20), pady=(8, 0), sticky=tk.W)
+        ctk.CTkLabel(token_row, text=_out_hint, text_color="gray", font=("Microsoft YaHei UI", 10)).pack(side=tk.LEFT)
 
-        ctk.CTkLabel(dialog, text="输入价格(每1M token):", font=("Microsoft YaHei UI", 11)).grid(row=6, column=0, sticky=tk.W, padx=20, pady=(8, 0))
-        model_input_price_entry = ctk.CTkEntry(dialog, width=150)
-        model_input_price_entry.grid(row=6, column=1, padx=20, pady=(8, 0), sticky=tk.W)
-        ctk.CTkLabel(dialog, text="0 表示免费", text_color="gray", font=("Microsoft YaHei UI", 10)).grid(row=6, column=1, padx=(180, 20), pady=(8, 0), sticky=tk.W)
+        ctk.CTkLabel(dialog, text="价格(每1M token):", font=("Microsoft YaHei UI", 11)).grid(row=6, column=0, sticky=tk.W, padx=20, pady=(8, 0))
+        price_row = ctk.CTkFrame(dialog, fg_color="transparent")
+        price_row.grid(row=6, column=1, padx=20, pady=(8, 0), sticky=tk.W)
+        ctk.CTkLabel(price_row, text="输入", font=("Microsoft YaHei UI", 10)).pack(side=tk.LEFT, padx=(0, 6))
+        model_input_price_entry = ctk.CTkEntry(price_row, width=90)
+        model_input_price_entry.pack(side=tk.LEFT, padx=(0, 10))
+        ctk.CTkLabel(price_row, text="缓存输入", font=("Microsoft YaHei UI", 10)).pack(side=tk.LEFT, padx=(0, 6))
+        model_cached_input_price_entry = ctk.CTkEntry(price_row, width=90)
+        model_cached_input_price_entry.pack(side=tk.LEFT, padx=(0, 10))
+        ctk.CTkLabel(price_row, text="输出", font=("Microsoft YaHei UI", 10)).pack(side=tk.LEFT, padx=(0, 6))
+        model_output_price_entry = ctk.CTkEntry(price_row, width=90)
+        model_output_price_entry.pack(side=tk.LEFT, padx=(0, 10))
+        ctk.CTkLabel(price_row, text="0 表示免费", text_color="gray", font=("Microsoft YaHei UI", 10)).pack(side=tk.LEFT)
 
-        ctk.CTkLabel(dialog, text="输出价格(每1M token):", font=("Microsoft YaHei UI", 11)).grid(row=7, column=0, sticky=tk.W, padx=20, pady=(8, 0))
-        model_output_price_entry = ctk.CTkEntry(dialog, width=150)
-        model_output_price_entry.grid(row=7, column=1, padx=20, pady=(8, 0), sticky=tk.W)
-        ctk.CTkLabel(dialog, text="0 表示免费", text_color="gray", font=("Microsoft YaHei UI", 10)).grid(row=7, column=1, padx=(180, 20), pady=(8, 0), sticky=tk.W)
-
-        ctk.CTkLabel(dialog, text="Extra Body (JSON):", font=("Microsoft YaHei UI", 11)).grid(row=8, column=0, sticky=(tk.W, tk.N), padx=20, pady=10)
+        ctk.CTkLabel(dialog, text="Extra Body (JSON):", font=("Microsoft YaHei UI", 11)).grid(row=7, column=0, sticky=(tk.W, tk.N), padx=20, pady=10)
         extra_body_frame = ctk.CTkFrame(dialog, fg_color="transparent")
-        extra_body_frame.grid(row=8, column=1, padx=20, pady=10, sticky=(tk.W, tk.E, tk.N, tk.S))
+        extra_body_frame.grid(row=7, column=1, padx=20, pady=10, sticky=(tk.W, tk.E, tk.N, tk.S))
         extra_body_text = ctk.CTkTextbox(extra_body_frame)
         extra_body_text.pack(fill=tk.BOTH, expand=True)
         ctk.CTkLabel(
@@ -208,7 +379,12 @@ class DialogsMixin:
                     return
                 temperature_value = temp_value
 
-            is_embedding = bool(is_embedding_var.get())
+            capabilities = self._capability_vars_to_capabilities(capability_vars)
+            extra_body = self._merge_image_adapter(
+                extra_body,
+                capabilities,
+                image_adapter_var.get(),
+            )
             try:
                 max_context_tokens = self._parse_optional_non_negative_int(
                     max_context_entry.get(),
@@ -218,11 +394,15 @@ class DialogsMixin:
                     max_output_entry.get(),
                     field_label="最大单次输出",
                 )
-                model_input_price = self._parse_optional_non_negative_int(
+                model_input_price = self._parse_optional_non_negative_float(
                     model_input_price_entry.get(),
                     field_label="输入价格",
                 )
-                model_output_price = self._parse_optional_non_negative_int(
+                model_cached_input_price = self._parse_optional_non_negative_float(
+                    model_cached_input_price_entry.get(),
+                    field_label="缓存输入价格",
+                )
+                model_output_price = self._parse_optional_non_negative_float(
                     model_output_price_entry.get(),
                     field_label="输出价格",
                 )
@@ -241,12 +421,13 @@ class DialogsMixin:
                 model_cfg_payload = {
                     "display_name": display_name,
                     "model_name": model_id,
-                    "is_embedding": is_embedding,
+                    "capabilities": capabilities,
                     "extra_body": extra_body,
                     "temperature": temperature_value,
                     "max_context_tokens": max_context_tokens,
                     "max_output_tokens": max_output_tokens,
                     "sys_credit_input_price_per_million": model_input_price,
+                    "sys_credit_cached_input_price_per_million": model_cached_input_price,
                     "sys_credit_output_price_per_million": model_output_price,
                 }
                 self.ai_manager.admin_sync_platform_models(db_id, [model_cfg_payload])
@@ -259,12 +440,12 @@ class DialogsMixin:
                 messagebox.showerror("错误", f"添加模型失败: {e}", parent=dialog)
 
         button_frame = ctk.CTkFrame(dialog, fg_color="transparent")
-        button_frame.grid(row=9, column=0, columnspan=2, pady=20)
+        button_frame.grid(row=8, column=0, columnspan=2, pady=20)
         ctk.CTkButton(button_frame, text="添加", command=do_add, width=100, fg_color="#3667D6", hover_color="#2E57B5", font=("Microsoft YaHei UI", 11)).pack(side=tk.LEFT, padx=5)
         ctk.CTkButton(button_frame, text="取消", command=dialog.destroy, width=100, font=("Microsoft YaHei UI", 11)).pack(side=tk.LEFT, padx=5)
 
         dialog.columnconfigure(1, weight=1)
-        dialog.rowconfigure(8, weight=1)
+        dialog.rowconfigure(7, weight=1)
 
     def edit_model(self):
         """编辑选中的模型（打开编辑对话框）。"""
@@ -288,20 +469,25 @@ class DialogsMixin:
         if isinstance(model_config, str):
             model_id = model_config
             extra_body_dict = None
-            is_embedding = False
+            model_capabilities = normalize_model_capabilities()
             model_temperature = None
             model_disabled = False
             model_input_price = None
+            model_cached_input_price = None
             model_output_price = None
             model_max_context = DEFAULT_MAX_CONTEXT_TOKENS
             model_max_output = DEFAULT_MAX_OUTPUT_TOKENS
         else:
             model_id = model_config.get("model_name", "")
             extra_body_dict = model_config.get("extra_body")
-            is_embedding = bool(model_config.get("is_embedding"))
+            model_capabilities = normalize_model_capabilities(
+                model_config.get("capabilities"),
+                legacy_is_embedding=bool(model_config.get("is_embedding")),
+            )
             model_temperature = model_config.get("temperature")
             model_disabled = bool(model_config.get("disabled"))
             model_input_price = model_config.get("sys_credit_input_price_per_million")
+            model_cached_input_price = model_config.get("sys_credit_cached_input_price_per_million")
             model_output_price = model_config.get("sys_credit_output_price_per_million")
             model_max_context = model_config.get("max_context_tokens", DEFAULT_MAX_CONTEXT_TOKENS)
             model_max_output = model_config.get("max_output_tokens", DEFAULT_MAX_OUTPUT_TOKENS)
@@ -331,14 +517,37 @@ class DialogsMixin:
         model_id_entry.insert(0, model_id)
         model_id_entry.configure(state='readonly')
 
-        is_embedding_var = tk.BooleanVar(value=is_embedding)
-        ctk.CTkCheckBox(dialog, text="Embedding 模型", variable=is_embedding_var, font=("Microsoft YaHei UI", 11)).grid(row=2, column=1, sticky=tk.W, padx=20, pady=5)
+        ctk.CTkLabel(dialog, text="模型能力:", font=("Microsoft YaHei UI", 11)).grid(row=2, column=0, sticky=tk.W, padx=20, pady=5)
+        capability_vars = self._make_model_capability_checkboxes(
+            dialog,
+            row=2,
+            initial_capabilities=model_capabilities,
+        )
+
+        ctk.CTkLabel(dialog, text="生图协议:", font=("Microsoft YaHei UI", 11)).grid(row=3, column=0, sticky=tk.W, padx=20, pady=5)
+        image_adapter_var = tk.StringVar(value=self._image_adapter_label(self._extract_image_adapter(extra_body_dict)))
+        image_adapter_combo = ctk.CTkComboBox(
+            dialog,
+            variable=image_adapter_var,
+            values=list(self.IMAGE_ADAPTER_OPTIONS.keys()),
+            state="disabled",
+            width=260,
+            font=("Microsoft YaHei UI", 11),
+        )
+        image_adapter_combo.grid(row=3, column=1, sticky=tk.W, padx=20, pady=5)
+
+        def refresh_image_adapter_state(*_):
+            image_adapter_combo.configure(state="readonly" if capability_vars["image"].get() else "disabled")
+
+        capability_vars["image"].trace_add("write", refresh_image_adapter_state)
+        capability_vars["embedding"].trace_add("write", refresh_image_adapter_state)
+        refresh_image_adapter_state()
 
         temperature_enabled_var = tk.BooleanVar(value=model_temperature is not None)
         temperature_var = tk.DoubleVar(value=model_temperature if model_temperature is not None else 0.7)
 
         temp_row = ctk.CTkFrame(dialog, fg_color="transparent")
-        temp_row.grid(row=3, column=1, padx=20, pady=(6, 0), sticky=(tk.W, tk.E))
+        temp_row.grid(row=4, column=1, padx=20, pady=(6, 0), sticky=(tk.W, tk.E))
 
         def on_temperature_toggle():
             enabled = bool(temperature_enabled_var.get())
@@ -360,42 +569,50 @@ class DialogsMixin:
             font=("Microsoft YaHei UI", 11)
         ).pack(side=tk.LEFT)
 
-        ctk.CTkLabel(dialog, text="Temperature: ", font=("Microsoft YaHei UI", 11)).grid(row=3, column=0, sticky=tk.W, padx=20, pady=(6, 0))
+        ctk.CTkLabel(dialog, text="Temperature: ", font=("Microsoft YaHei UI", 11)).grid(row=4, column=0, sticky=tk.W, padx=20, pady=(6, 0))
         temperature_entry = ctk.CTkEntry(dialog, width=80, textvariable=temperature_var)
-        temperature_entry.grid(row=3, column=1, padx=(180, 20), pady=(6, 0), sticky=tk.W)
+        temperature_entry.grid(row=4, column=1, padx=(180, 20), pady=(6, 0), sticky=tk.W)
         if not bool(temperature_enabled_var.get()):
             temperature_entry.configure(state='disabled')
-        ctk.CTkLabel(dialog, text="范围 0.3 - 1.5", text_color="gray", font=("Microsoft YaHei UI", 10)).grid(row=3, column=1, padx=(270, 20), pady=(6, 0), sticky=tk.W)
+        ctk.CTkLabel(dialog, text="范围 0.3 - 1.5", text_color="gray", font=("Microsoft YaHei UI", 10)).grid(row=4, column=1, padx=(270, 20), pady=(6, 0), sticky=tk.W)
 
-        ctk.CTkLabel(dialog, text="最大上下文:", font=("Microsoft YaHei UI", 11)).grid(row=4, column=0, sticky=tk.W, padx=20, pady=(8, 0))
-        max_context_entry = ctk.CTkEntry(dialog, width=150)
-        max_context_entry.grid(row=4, column=1, padx=20, pady=(8, 0), sticky=tk.W)
+        ctk.CTkLabel(dialog, text="Token 上限:", font=("Microsoft YaHei UI", 11)).grid(row=5, column=0, sticky=tk.W, padx=20, pady=(8, 0))
+        token_row = ctk.CTkFrame(dialog, fg_color="transparent")
+        token_row.grid(row=5, column=1, padx=20, pady=(8, 0), sticky=tk.W)
+        ctk.CTkLabel(token_row, text="上下文", font=("Microsoft YaHei UI", 10)).pack(side=tk.LEFT, padx=(0, 6))
+        max_context_entry = ctk.CTkEntry(token_row, width=120)
+        max_context_entry.pack(side=tk.LEFT, padx=(0, 10))
         max_context_entry.insert(0, str(model_max_context))
-        ctk.CTkLabel(dialog, text="默认 256000", text_color="gray", font=("Microsoft YaHei UI", 10)).grid(row=4, column=1, padx=(180, 20), pady=(8, 0), sticky=tk.W)
-
-        ctk.CTkLabel(dialog, text="最大单次输出:", font=("Microsoft YaHei UI", 11)).grid(row=5, column=0, sticky=tk.W, padx=20, pady=(8, 0))
-        max_output_entry = ctk.CTkEntry(dialog, width=150)
-        max_output_entry.grid(row=5, column=1, padx=20, pady=(8, 0), sticky=tk.W)
+        ctk.CTkLabel(token_row, text="默认 256000", text_color="gray", font=("Microsoft YaHei UI", 10)).pack(side=tk.LEFT, padx=(0, 14))
+        ctk.CTkLabel(token_row, text="单次输出", font=("Microsoft YaHei UI", 10)).pack(side=tk.LEFT, padx=(0, 6))
+        max_output_entry = ctk.CTkEntry(token_row, width=120)
+        max_output_entry.pack(side=tk.LEFT, padx=(0, 10))
         max_output_entry.insert(0, str(model_max_output))
-        ctk.CTkLabel(dialog, text="默认 64000", text_color="gray", font=("Microsoft YaHei UI", 10)).grid(row=5, column=1, padx=(180, 20), pady=(8, 0), sticky=tk.W)
+        ctk.CTkLabel(token_row, text="默认 64000", text_color="gray", font=("Microsoft YaHei UI", 10)).pack(side=tk.LEFT)
 
-        ctk.CTkLabel(dialog, text="输入价格(每1M token):", font=("Microsoft YaHei UI", 11)).grid(row=6, column=0, sticky=tk.W, padx=20, pady=(8, 0))
-        model_input_price_entry = ctk.CTkEntry(dialog, width=150)
-        model_input_price_entry.grid(row=6, column=1, padx=20, pady=(8, 0), sticky=tk.W)
+        ctk.CTkLabel(dialog, text="价格(每1M token):", font=("Microsoft YaHei UI", 11)).grid(row=6, column=0, sticky=tk.W, padx=20, pady=(8, 0))
+        price_row = ctk.CTkFrame(dialog, fg_color="transparent")
+        price_row.grid(row=6, column=1, padx=20, pady=(8, 0), sticky=tk.W)
+        ctk.CTkLabel(price_row, text="输入", font=("Microsoft YaHei UI", 10)).pack(side=tk.LEFT, padx=(0, 6))
+        model_input_price_entry = ctk.CTkEntry(price_row, width=90)
+        model_input_price_entry.pack(side=tk.LEFT, padx=(0, 10))
         if model_input_price is not None:
             model_input_price_entry.insert(0, str(model_input_price))
-        ctk.CTkLabel(dialog, text="0 表示免费", text_color="gray", font=("Microsoft YaHei UI", 10)).grid(row=6, column=1, padx=(180, 20), pady=(8, 0), sticky=tk.W)
-
-        ctk.CTkLabel(dialog, text="输出价格(每1M token):", font=("Microsoft YaHei UI", 11)).grid(row=7, column=0, sticky=tk.W, padx=20, pady=(8, 0))
-        model_output_price_entry = ctk.CTkEntry(dialog, width=150)
-        model_output_price_entry.grid(row=7, column=1, padx=20, pady=(8, 0), sticky=tk.W)
+        ctk.CTkLabel(price_row, text="缓存输入", font=("Microsoft YaHei UI", 10)).pack(side=tk.LEFT, padx=(0, 6))
+        model_cached_input_price_entry = ctk.CTkEntry(price_row, width=90)
+        model_cached_input_price_entry.pack(side=tk.LEFT, padx=(0, 10))
+        if model_cached_input_price is not None:
+            model_cached_input_price_entry.insert(0, str(model_cached_input_price))
+        ctk.CTkLabel(price_row, text="输出", font=("Microsoft YaHei UI", 10)).pack(side=tk.LEFT, padx=(0, 6))
+        model_output_price_entry = ctk.CTkEntry(price_row, width=90)
+        model_output_price_entry.pack(side=tk.LEFT, padx=(0, 10))
         if model_output_price is not None:
             model_output_price_entry.insert(0, str(model_output_price))
-        ctk.CTkLabel(dialog, text="0 表示免费", text_color="gray", font=("Microsoft YaHei UI", 10)).grid(row=7, column=1, padx=(180, 20), pady=(8, 0), sticky=tk.W)
+        ctk.CTkLabel(price_row, text="0 表示免费", text_color="gray", font=("Microsoft YaHei UI", 10)).pack(side=tk.LEFT)
 
-        ctk.CTkLabel(dialog, text="Extra Body (JSON):", font=("Microsoft YaHei UI", 11)).grid(row=8, column=0, sticky=(tk.W, tk.N), padx=20, pady=10)
+        ctk.CTkLabel(dialog, text="Extra Body (JSON):", font=("Microsoft YaHei UI", 11)).grid(row=7, column=0, sticky=(tk.W, tk.N), padx=20, pady=10)
         extra_body_frame = ctk.CTkFrame(dialog, fg_color="transparent")
-        extra_body_frame.grid(row=8, column=1, padx=20, pady=10, sticky=(tk.W, tk.E, tk.N, tk.S))
+        extra_body_frame.grid(row=7, column=1, padx=20, pady=10, sticky=(tk.W, tk.E, tk.N, tk.S))
         extra_body_text = ctk.CTkTextbox(extra_body_frame)
         extra_body_text.pack(fill=tk.BOTH, expand=True)
         if extra_body_dict:
@@ -440,8 +657,16 @@ class DialogsMixin:
                 temperature_value = temp_value
 
             raw_input_price_text = model_input_price_entry.get().strip()
+            raw_cached_input_price_text = model_cached_input_price_entry.get().strip()
             raw_output_price_text = model_output_price_entry.get().strip()
-            update_credit_price = raw_input_price_text != "" or raw_output_price_text != "" or model_input_price is not None or model_output_price is not None
+            update_credit_price = (
+                raw_input_price_text != ""
+                or raw_cached_input_price_text != ""
+                or raw_output_price_text != ""
+                or model_input_price is not None
+                or model_cached_input_price is not None
+                or model_output_price is not None
+            )
             try:
                 max_context_tokens = self._parse_optional_non_negative_int(
                     max_context_entry.get(),
@@ -451,11 +676,15 @@ class DialogsMixin:
                     max_output_entry.get(),
                     field_label="最大单次输出",
                 )
-                model_input_price_value = self._parse_optional_non_negative_int(
+                model_input_price_value = self._parse_optional_non_negative_float(
                     raw_input_price_text,
                     field_label="输入价格",
                 )
-                model_output_price_value = self._parse_optional_non_negative_int(
+                model_cached_input_price_value = self._parse_optional_non_negative_float(
+                    raw_cached_input_price_text,
+                    field_label="缓存输入价格",
+                )
+                model_output_price_value = self._parse_optional_non_negative_float(
                     raw_output_price_text,
                     field_label="输出价格",
                 )
@@ -465,6 +694,15 @@ class DialogsMixin:
 
             max_context_tokens = DEFAULT_MAX_CONTEXT_TOKENS if max_context_tokens is None else max_context_tokens
             max_output_tokens = DEFAULT_MAX_OUTPUT_TOKENS if max_output_tokens is None else max_output_tokens
+            updated_capabilities = self._capability_vars_to_capabilities(
+                capability_vars,
+                initial_capabilities=model_capabilities,
+            )
+            extra_body = self._merge_image_adapter(
+                extra_body,
+                updated_capabilities,
+                image_adapter_var.get(),
+            )
 
             try:
                 db_id = self.current_config[platform_name].get("_db_id")
@@ -480,14 +718,16 @@ class DialogsMixin:
                     display_name=new_display_name,
                     extra_body=extra_body,
                     temperature=temperature_value,
+                    capabilities=updated_capabilities,
+                    update_capabilities=True,
                     max_context_tokens=max_context_tokens,
                     max_output_tokens=max_output_tokens,
                     sys_credit_input_price_per_million=model_input_price_value,
+                    sys_credit_cached_input_price_per_million=model_cached_input_price_value,
                     sys_credit_output_price_per_million=model_output_price_value,
                     update_credit_price=update_credit_price,
                     update_max_context_tokens=True,
                     update_max_output_tokens=True,
-                    is_embedding=bool(is_embedding_var.get()),
                 )
 
                 self.load_config_from_db()
@@ -498,12 +738,12 @@ class DialogsMixin:
                 messagebox.showerror("错误", f"更新模型失败: {e}", parent=dialog)
 
         button_frame = ctk.CTkFrame(dialog, fg_color="transparent")
-        button_frame.grid(row=9, column=0, columnspan=2, pady=20)
+        button_frame.grid(row=8, column=0, columnspan=2, pady=20)
         ctk.CTkButton(button_frame, text="保存", command=do_update, width=100, fg_color="#3667D6", hover_color="#2E57B5", font=("Microsoft YaHei UI", 11)).pack(side=tk.LEFT, padx=5)
         ctk.CTkButton(button_frame, text="取消", command=dialog.destroy, width=100, font=("Microsoft YaHei UI", 11)).pack(side=tk.LEFT, padx=5)
 
         dialog.columnconfigure(1, weight=1)
-        dialog.rowconfigure(8, weight=1)
+        dialog.rowconfigure(7, weight=1)
 
     def edit_system_model(self):
         """编辑系统用户 (-1) 的模型选择及用途管理。"""

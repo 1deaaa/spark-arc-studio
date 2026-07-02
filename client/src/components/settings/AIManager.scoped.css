@@ -450,6 +450,45 @@
     font-size: var(--spark-fs-xs);
 }
 
+.capability-check-row {
+    display: flex;
+    align-items: center;
+    gap: 10px 18px;
+    flex-wrap: wrap;
+    width: 100%;
+}
+
+.model-capability-badges {
+    display: inline-flex;
+    align-items: center;
+    gap: 4px;
+    flex: 0 0 auto;
+}
+
+.model-capability-badge {
+    min-width: 22px;
+    justify-content: center;
+    font-weight: 700;
+}
+
+.compact-field-row {
+    display: grid;
+    gap: 8px;
+    width: 100%;
+}
+
+.compact-field-row :deep(.n-input-number) {
+    width: 100%;
+}
+
+.compact-field-row--double {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+}
+
+.compact-field-row--triple {
+    grid-template-columns: repeat(3, minmax(0, 1fr));
+}
+
 .add-model-extra-body {
     margin-bottom: 8px;
 }
@@ -731,6 +770,16 @@
 :global(html.viewport-mobile .n-modal .n-card) {
     width: calc(100vw - 32px) !important;
     max-width: 500px;
+}
+
+:global(html.viewport-mobile .ai-manager .compact-field-row) {
+    grid-template-columns: 1fr;
+}
+
+@media (max-width: 640px) {
+    .compact-field-row {
+        grid-template-columns: 1fr;
+    }
 }
 
 /* 超窄宽度 - 小屏手机 */

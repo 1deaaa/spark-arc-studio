@@ -190,6 +190,153 @@ print(f"admin_selection_missing={bool(admin_selection['current'].get('missing_ke
     assert "shared_status=managed_ok" in output
 
 
+def test_matchbox_model_capabilities_drive_model_views(tmp_path: Path) -> None:
+    code = r"""
+from llm.agen_matchbox.manager import AIManager
+
+manager = AIManager()
+manager.ensure_database_schema()
+platform = manager.add_platform(
+    "能力集合测试平台",
+    "https://api.capability-view.test/v1",
+    user_id="user-1",
+)
+
+manager.add_model(
+    platform.id,
+    "shared-remote-model",
+    "聊天模型",
+    user_id="user-1",
+    capabilities=["text_generation"],
+)
+manager.add_model(
+    platform.id,
+    "shared-remote-model",
+    "向量模型",
+    user_id="user-1",
+    capabilities=["embedding"],
+)
+manager.add_model(
+    platform.id,
+    "shared-remote-model",
+    "生图模型",
+    user_id="user-1",
+    capabilities=["image_generation", "image_reference_input", "image_edit"],
+)
+
+platform_views = manager.get_platforms_with_models("user-1")
+flat_chat_models = manager.get_platform_models("user-1")
+embedding_views = manager.get_platforms_with_embeddings("user-1")
+
+print(f"all_model_count={len(platform_views[0]['models'])}")
+print(f"chat_model_count={len(flat_chat_models)}")
+print(f"embedding_count={len(embedding_views[0]['embeddings'])}")
+for model in platform_views[0]["models"]:
+    print(f"{model['display_name']}={','.join(model['capabilities'])}")
+"""
+
+    output = _run_probe(code, tmp_path)
+
+    assert "all_model_count=3" in output
+    assert "chat_model_count=1" in output
+    assert "embedding_count=1" in output
+    assert "聊天模型=text_generation" in output
+    assert "向量模型=embedding" in output
+    assert "生图模型=image_generation,image_reference_input,image_edit" in output
+
+
+def test_matchbox_image_adapter_is_preserved_as_explicit_nested_protocol(tmp_path: Path) -> None:
+    code = r"""
+from llm.agen_matchbox.manager import AIManager
+from llm.agen_matchbox.image_generation import _select_adapter
+
+manager = AIManager()
+manager.ensure_database_schema()
+platform = manager.add_platform(
+    "显式生图协议平台",
+    "https://api.x.ai/v1",
+    api_key="sk-image-test",
+    user_id="user-1",
+)
+model = manager.add_model(
+    platform.id,
+    "proxy-image-model",
+    "代理生图模型",
+    user_id="user-1",
+    capabilities=["image_generation", "image_reference_input", "image_edit"],
+    extra_body={
+        "provider": "xai",
+        "adapter": "xai_images",
+        "image_generation": {
+            "adapter": "gemini_interactions",
+            "quality": "high",
+        },
+    },
+)
+
+resolved = manager.resolve_user_image_generation_model(
+    "user-1",
+    platform_id=platform.id,
+    model_id=model.id,
+)
+print(f"resolved_extra={resolved['extra_body']}")
+print(f"selected_adapter={_select_adapter(resolved)}")
+"""
+
+    output = _run_probe(code, tmp_path)
+
+    assert "resolved_extra={'image_generation': {'adapter': 'gemini_interactions', 'quality': 'high'}}" in output
+    assert "selected_adapter=gemini_interactions" in output
+
+
+def test_matchbox_non_text_capability_clears_token_pricing(tmp_path: Path) -> None:
+    code = r"""
+from llm.agen_matchbox.manager import AIManager
+
+manager = AIManager()
+manager.ensure_database_schema()
+manager.billing_enabled = True
+platform = manager.admin_add_sys_platform(
+    "非文本计费清理平台",
+    "https://api.non-text-pricing.test/v1",
+    "sk-test",
+)
+model = manager.add_model(
+    platform.id,
+    "pricing-model",
+    "可切换模型",
+    admin_mode=True,
+    capabilities=["text_generation"],
+    temperature=0.8,
+    sys_credit_input_price_per_million=1,
+    sys_credit_cached_input_price_per_million=0.5,
+    sys_credit_output_price_per_million=2,
+)
+
+manager.update_model(
+    model.id,
+    admin_mode=True,
+    capabilities=["image_generation", "image_reference_input"],
+    update_capabilities=True,
+)
+
+view = manager.admin_get_sys_platforms(include_models=True)[0]["models"][0]
+print(f"capabilities={','.join(view['capabilities'])}")
+print(f"temperature={view['temperature']}")
+print(f"input_price={view['sys_credit_input_price_per_million']}")
+print(f"cached_input_price={view['sys_credit_cached_input_price_per_million']}")
+print(f"output_price={view['sys_credit_output_price_per_million']}")
+"""
+
+    output = _run_probe(code, tmp_path)
+
+    assert "capabilities=image_generation,image_reference_input" in output
+    assert "temperature=None" in output
+    assert "input_price=None" in output
+    assert "cached_input_price=None" in output
+    assert "output_price=None" in output
+
+
 def test_auth_verify_session_preserves_admin_identity(tmp_path: Path) -> None:
     auth_db = tmp_path / "auth-users.sqlite"
     code = rf"""

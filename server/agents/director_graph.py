@@ -98,6 +98,142 @@ def _is_scriptwriter_persist_tool(tool_name: str) -> bool:
     }
 
 
+def _tool_call_to_mapping(tool_call: Any) -> Dict[str, Any]:
+    if isinstance(tool_call, dict):
+        return tool_call
+    for method_name in ("model_dump", "dict"):
+        method = getattr(tool_call, method_name, None)
+        if callable(method):
+            try:
+                data = method()
+                if isinstance(data, dict):
+                    return data
+            except Exception:
+                pass
+    return {}
+
+
+def _tool_call_field(tool_call: Any, field_name: str, default: Any = None) -> Any:
+    data = _tool_call_to_mapping(tool_call)
+    if field_name in data:
+        return data.get(field_name)
+    return getattr(tool_call, field_name, default)
+
+
+def _tool_call_function_mapping(tool_call: Any) -> Dict[str, Any]:
+    function_obj = _tool_call_field(tool_call, "function")
+    if isinstance(function_obj, dict):
+        return function_obj
+    return _tool_call_to_mapping(function_obj)
+
+
+def _tool_call_id(tool_call: Any) -> str:
+    function_data = _tool_call_function_mapping(tool_call)
+    return str(
+        _tool_call_field(tool_call, "id")
+        or function_data.get("id")
+        or ""
+    )
+
+
+def _tool_call_name(tool_call: Any) -> str:
+    function_data = _tool_call_function_mapping(tool_call)
+    return normalize_tool_name(str(
+        _tool_call_field(tool_call, "name")
+        or function_data.get("name")
+        or ""
+    ))
+
+
+def _tool_call_index(tool_call: Any, fallback_index: int) -> Optional[int]:
+    value = _tool_call_field(tool_call, "index")
+    if value is None:
+        return fallback_index
+    try:
+        return int(value)
+    except Exception:
+        return fallback_index
+
+
+def _copy_tool_call_with_id(tool_call: Any, call_id: str) -> Any:
+    if isinstance(tool_call, dict):
+        cloned = dict(tool_call)
+        if call_id:
+            cloned["id"] = call_id
+        function_obj = cloned.get("function")
+        if isinstance(function_obj, dict):
+            cloned["function"] = dict(function_obj)
+        return cloned
+
+    if call_id:
+        try:
+            current_id = getattr(tool_call, "id", None)
+            if not current_id:
+                setattr(tool_call, "id", call_id)
+        except Exception:
+            pass
+    return tool_call
+
+
+def _retain_only_pending_delegate_tool_call(
+    message: Any,
+    *,
+    selected_spec: Dict[str, Any],
+    call_id: str,
+    tool_name: str = "delegate_task",
+) -> Any:
+    """委派会暂停本轮其它工具，历史里也只能保留待回填的那一个调用。"""
+    if message is None:
+        return message
+
+    selected_raw = selected_spec.get("raw") if isinstance(selected_spec, dict) else None
+    selected_index = selected_spec.get("index") if isinstance(selected_spec, dict) else None
+    try:
+        selected_index = int(selected_index) if selected_index is not None else None
+    except Exception:
+        selected_index = None
+    expected_name = normalize_tool_name(tool_name)
+
+    def _matches(candidate: Any, fallback_index: int) -> bool:
+        if selected_raw is not None and (candidate is selected_raw or candidate == selected_raw):
+            return True
+        candidate_id = _tool_call_id(candidate)
+        if call_id and candidate_id and candidate_id == call_id:
+            return True
+        candidate_index = _tool_call_index(candidate, fallback_index)
+        if selected_index is not None and candidate_index == selected_index:
+            return True
+        candidate_name = _tool_call_name(candidate)
+        return bool(expected_name and candidate_name == expected_name and not candidate_id)
+
+    def _filter(items: Any) -> list:
+        if not isinstance(items, list):
+            return []
+        for fallback_index, item in enumerate(items):
+            if _matches(item, fallback_index):
+                return [_copy_tool_call_with_id(item, call_id)]
+        return []
+
+    for attr_name in ("tool_calls", "invalid_tool_calls", "tool_call_chunks"):
+        if hasattr(message, attr_name):
+            try:
+                setattr(message, attr_name, _filter(getattr(message, attr_name, None)))
+            except Exception:
+                pass
+
+    additional_kwargs = getattr(message, "additional_kwargs", None)
+    if isinstance(additional_kwargs, dict):
+        additional = dict(additional_kwargs)
+        if isinstance(additional.get("tool_calls"), list):
+            additional["tool_calls"] = _filter(additional.get("tool_calls"))
+        try:
+            setattr(message, "additional_kwargs", additional)
+        except Exception:
+            pass
+
+    return message
+
+
 def _director_tracker_has_open_items(user_id: str, project_name: str) -> bool:
     """读取导演任务板，判断是否仍有待推进的任务。"""
     if not user_id or not project_name:
@@ -425,6 +561,14 @@ def director_node(state: DirectorState) -> Dict[str, Any]:
                     delegate_data = json.loads(tool_result.split("__DELEGATE__:", 1)[1])
                     pending_delegate = normalize_handoff_payload(delegate_data, sender_id="agent_director")
                     pending_delegate["call_id"] = call_id
+                    updates["messages"] = [
+                        _retain_only_pending_delegate_tool_call(
+                            aggregated_chunk,
+                            selected_spec=spec,
+                            call_id=call_id,
+                            tool_name=tool_name,
+                        )
+                    ] if aggregated_chunk else []
 
                     target_agent = pending_delegate.get("target_agent", "")
                     grant_baton_to = pending_delegate.get("grant_baton_to") or target_agent

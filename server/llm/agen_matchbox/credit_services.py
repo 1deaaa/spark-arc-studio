@@ -18,7 +18,7 @@ from typing import Optional, Dict, Any, List
 
 from sqlalchemy import func
 
-from .models import UserCreditAccount, UserCreditLedger, UsageLogEntry, LLModels, LLMPlatform
+from .models import UserCreditAccount, UserCreditLedger, UsageLogEntry, LLModels, LLMPlatform, is_chat_model
 
 
 class CreditBalanceExceededError(ValueError):
@@ -184,11 +184,13 @@ class CreditServicesMixin:
             rows = (
                 session.query(LLModels, LLMPlatform)
                 .join(LLMPlatform, LLMPlatform.id == LLModels.platform_id)
-                .filter(LLMPlatform.is_sys == 1, LLModels.is_embedding == 0)
+                .filter(LLMPlatform.is_sys == 1)
                 .all()
             )
             result: List[Dict[str, Any]] = []
             for model, platform in rows:
+                if not is_chat_model(model):
+                    continue
                 result.append({
                     "platform_id": platform.id,
                     "model_id": model.id,

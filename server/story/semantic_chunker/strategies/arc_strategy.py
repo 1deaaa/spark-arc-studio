@@ -116,7 +116,7 @@ class ArcChunkStrategy(ChunkStrategy):
 
     @staticmethod
     def _prepend_context_prefix(text: str, context_prefix: str) -> str:
-        """把角色索引等模型可见前缀附到每个场景块，避免单独成块。"""
+        """把可用说话人清单等模型可见前缀附到每个场景块，避免单独成块。"""
         prefix = (context_prefix or "").strip()
         if not prefix:
             return text

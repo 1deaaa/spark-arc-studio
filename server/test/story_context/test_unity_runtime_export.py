@@ -8,8 +8,8 @@ def _decode_row(row):
     return tuple(v.decode("utf-8") if isinstance(v, bytes) else v for v in row)
 
 
-def test_import_project_stories_exports_unity_runtime_bindings(tmp_path, monkeypatch):
-    """守住 Unity 运行时导出契约：行为绑定和注册表必须进入 stories.db。"""
+def test_import_project_stories_keeps_web_presentation_and_can_filter_unity(tmp_path, monkeypatch):
+    """通用 stories.db 保留 Web 演出字段；Unity 视图由 target 过滤。"""
     from core import utils as core_utils
     from story import importer
 
@@ -37,9 +37,13 @@ def test_import_project_stories_exports_unity_runtime_bindings(tmp_path, monkeyp
                 "@meta button_text:按 F 与 {npc_name} 对话",
                 "[-1]",
                 "系统准备触发行为。",
+                "@web bg:bg_school_road",
+                "@web sprite:sprite_hero_default",
                 "@act bgm:town_theme",
-                "[1]",
+                "[信使]",
                 "你好，{player_name}。",
+                "@act bg:bg_legacy_alley",
+                "@act sprite:sprite_legacy_hero",
             ]
         ),
         encoding="utf-8",
@@ -97,4 +101,18 @@ def test_import_project_stories_exports_unity_runtime_bindings(tmp_path, monkeyp
         ("place", '["风丘"]'),
         ("player_name", '["艾莉"]'),
     ]
-    assert '"act": {"bgm": "town_theme"}' in (dlg_json.decode("utf-8") if isinstance(dlg_json, bytes) else dlg_json)
+    decoded_dlg_json = dlg_json.decode("utf-8") if isinstance(dlg_json, bytes) else dlg_json
+    assert '"presentation": {"bg": "bg_school_road", "sprite": "sprite_hero_default"}' in decoded_dlg_json
+    assert '"presentation": {"bg": "bg_legacy_alley", "sprite": "sprite_legacy_hero"}' in decoded_dlg_json
+    assert '"bgm": "town_theme"' in decoded_dlg_json
+
+    unity_result = importer.import_project_stories_to_db(user_id, project_name, target="unity")
+
+    with sqlite3.connect(unity_result["db_path"]) as connection:
+        unity_dlg_json = connection.execute("select dlg_json from stories limit 1").fetchone()[0]
+
+    decoded_unity_dlg_json = unity_dlg_json.decode("utf-8") if isinstance(unity_dlg_json, bytes) else unity_dlg_json
+    assert '"act": {"bgm": "town_theme"}' in decoded_unity_dlg_json
+    assert '"presentation":' not in decoded_unity_dlg_json
+    assert '"bg":' not in decoded_unity_dlg_json
+    assert '"sprite":' not in decoded_unity_dlg_json
