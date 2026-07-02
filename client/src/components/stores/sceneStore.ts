@@ -13,7 +13,8 @@ export type SceneWithClientId = ArcScene & {
 
 type SceneSelectedNode = {
   id?: number;
-  chr?: number;
+  chr?: number | string;
+  speaker?: string;
   txt?: string;
   next?: string;
   thought?: string;
@@ -101,6 +102,31 @@ function serializeStoryDataForSave(filePath: string, scriptData: SceneWithClient
     return String(scriptData ?? '');
   }
   return serializeToArc(Array.isArray(scriptData) ? scriptData : []);
+}
+
+function renameSpeakerInDialogues(nodes: ArcDialogueNode[] | undefined, oldName: string, newName: string): number {
+  if (!Array.isArray(nodes)) return 0;
+  let changed = 0;
+  for (const node of nodes) {
+    const speaker = String(node.speaker || '').trim();
+    if (speaker === oldName) {
+      node.speaker = newName;
+      changed += 1;
+    }
+    if (typeof node.chr === 'string' && node.chr.trim() === oldName) {
+      node.chr = newName;
+      if (!node.speaker || node.speaker === oldName) {
+        node.speaker = newName;
+      }
+      changed += 1;
+    }
+    if (Array.isArray(node.opt)) {
+      for (const option of node.opt) {
+        changed += renameSpeakerInDialogues(option.dia, oldName, newName);
+      }
+    }
+  }
+  return changed;
 }
 
 function buildStorySnapshot(filePath: string, store: SceneStoreState): StoryCacheSnapshot {
@@ -281,6 +307,20 @@ export const useSceneStore = defineStore('scene', {
       if (!this.currentNode || this.selectionType !== 'option') return;
       Object.assign(this.currentNode, fields);
       this._syncCurrentStoryCache();
+    },
+    renameSpeaker(oldName: string, newName: string): number {
+      const from = String(oldName || '').trim();
+      const to = String(newName || '').trim();
+      if (!from || !to || from === to || this.fileFormat !== 'arc' || !Array.isArray(this.scriptData)) return 0;
+
+      let changed = 0;
+      for (const scene of this.scriptData) {
+        changed += renameSpeakerInDialogues(scene.dia, from, to);
+      }
+      if (changed > 0) {
+        this._syncCurrentStoryCache();
+      }
+      return changed;
     },
     async createNewScene(opts: { title?: string; message?: string } = {}) {
       const defaultTitle = this.workspaceMode === 'novel' ? '新建章节' : '新建场景';

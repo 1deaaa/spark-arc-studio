@@ -49,6 +49,26 @@ def _copy_payload(payload: dict[str, Any]) -> dict[str, Any]:
         return dict(payload)
 
 
+def _load_project_chr_map(user_id: str, project_name: str) -> dict[int, str]:
+    """后台任务内兜底加载角色表，供 ARC 说话人名和隐藏 ID 互相解析。"""
+    try:
+        from story.project_files import load_character_id_name_map
+
+        raw_map = load_character_id_name_map(user_id, project_name)
+    except Exception:
+        return {}
+    result: dict[int, str] = {}
+    for raw_id, raw_name in (raw_map or {}).items():
+        try:
+            cid = int(raw_id)
+        except (TypeError, ValueError):
+            continue
+        name = str(raw_name or "").strip()
+        if name:
+            result[cid] = name
+    return result
+
+
 def _record_scene_write_job(user_id: str, project_name: str, payload: dict[str, Any], label: str) -> None:
     try:
         from agents.story_memory import StoryMemoryFacade
@@ -93,6 +113,7 @@ def _record_story_file_job(
         from story.arc_parser import parse_arc, serialize_to_arc
         from story.file_naming import resolve_story_file_path
 
+        chr_map = chr_map or _load_project_chr_map(user_id, project_name)
         stories_path = get_project_stories_path(user_id, project_name)
         file_path, file_format, parsed = resolve_story_file_path(stories_path, current_file or "")
         if not file_path or not os.path.exists(file_path):
@@ -104,10 +125,10 @@ def _record_story_file_job(
         scene_text = file_text
         if file_format != "novel" and scene_name:
             try:
-                scenes = parse_arc(file_text)
+                scenes = parse_arc(file_text, chr_map=chr_map)
                 matched = [scene for scene in scenes if scene.get("scene") == scene_name]
                 if matched:
-                    scene_text = serialize_to_arc(matched)
+                    scene_text = serialize_to_arc(matched, chr_map=chr_map)
             except Exception:
                 scene_text = file_text
 
@@ -175,6 +196,7 @@ def _record_story_content_job(
 
         from agents.story_memory import StoryMemoryFacade
 
+        chr_map = _load_project_chr_map(user_id, project_name)
         facade = StoryMemoryFacade(user_id, project_name)
         source_path = os.path.relpath(file_path, stories_path).replace("\\", "/")
         filename_meta = parse_story_filename(os.path.basename(file_path)) or {}
@@ -203,7 +225,7 @@ def _record_story_content_job(
             )
             return
 
-        scenes = parse_arc(content)
+        scenes = parse_arc(content, chr_map=chr_map)
         if not scenes:
             facade.record_scene_write(
                 scene_text=content,
@@ -213,6 +235,7 @@ def _record_story_content_job(
                 scene_title=display_name,
                 source_path=source_path,
                 export_format="arc",
+                chr_map=chr_map,
             )
             return
 
@@ -222,7 +245,7 @@ def _record_story_content_job(
             guidance = str(scene.get("guide") or "").strip()
             intro = str(scene.get("intro") or "").strip()
             facade.record_scene_write(
-                scene_text=serialize_to_arc([scene]),
+                scene_text=serialize_to_arc([scene], chr_map=chr_map),
                 chapter_index=chapter_index,
                 scene_index=scene_index,
                 chapter_title=chapter_title,
@@ -231,6 +254,7 @@ def _record_story_content_job(
                 guidance=guidance,
                 source_path=source_path,
                 export_format="arc",
+                chr_map=chr_map,
             )
     except Exception as exc:
         print(f"[StoryMemory] {label} 异步内容状态吸收失败（不影响主流程）：{exc}")

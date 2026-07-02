@@ -71,7 +71,7 @@ def scriptwriter_node(state: StoryGenerationState):
             
         # Parse ARC to JSON nodes for the pipeline
         try:
-            nodes = parse_arc_to_dialogues(arc_text)
+            nodes = parse_arc_to_dialogues(arc_text, chr_map=state.get("chr_map"))
             # 确保 AI 生成的内容不包含 act 节点，act 必须由人类控制
             for node in nodes:
                 if 'act' in node:

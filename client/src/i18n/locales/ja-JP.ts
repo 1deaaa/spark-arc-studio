@@ -1804,6 +1804,8 @@ const jaJP = {
       },
     },
     structure: {
+      lengthPresetTooltipLabel: '分量プリセットの説明',
+      lengthPresetTooltip: 'ここでの設定は、このページで手動で「構成を生成」を押したときの目標分量にだけ反映されます。チャットでディレクターが構成生成を委任する場合は、チャット内の分量指定と現在のプロジェクト文脈が優先されます。',
       lengthOptions: {
         short: '短編（約5章、シーン密度目安 約3/章）',
         medium: '中編（約10章、シーン密度目安 約4/章）',

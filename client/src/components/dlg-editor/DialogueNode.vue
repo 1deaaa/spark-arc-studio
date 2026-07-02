@@ -117,6 +117,7 @@ type DialogueNodeData = {
   id?: string | number;
   txt?: string;
   chr?: string | number;
+  speaker?: string;
   opt?: DialogueOption[];
   act?: Record<string, unknown>;
   next?: string | number;
@@ -134,7 +135,9 @@ const props = defineProps<{
 defineEmits(['select', 'select-option', 'drag-end', 'add-act']);
 
 const characterName = computed(() => {
-  if (Number(props.node.chr) === -1) return '旁白';
+  if (props.node.speaker) return props.node.speaker;
+  if (props.node.chr === '旁白' || Number(props.node.chr) === -1) return '旁白';
+  if (typeof props.node.chr === 'string' && Number.isNaN(Number(props.node.chr))) return props.node.chr;
   const name = props.characterMap?.[Number(props.node.chr)];
   return name || props.node.chr || '';
 });

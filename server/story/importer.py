@@ -17,9 +17,10 @@ from .scene_loader import load_story_file
 
 
 def _collect_char_ids_from_dialogues(dialogues: list, collected: set):
-    """递归收集对话中的角色ID"""
+    """递归收集可导出的隐藏角色绑定 ID。"""
     for d in dialogues:
-        collected.add(d.character)
+        if isinstance(d.character, int):
+            collected.add(d.character)
         for opt in d.options:
             _collect_char_ids_from_dialogues(opt.dialogues, collected)
 
@@ -50,13 +51,42 @@ def _normalize_registry_value(value) -> list:
     return [value]
 
 
+def _load_chr_bindings(project_root: str) -> dict:
+    """读取项目角色绑定，供 ARC 说话人名反查隐藏 ID。"""
+    chr_bind_path = os.path.join(project_root, 'chr', 'chr.bind')
+    if not os.path.exists(chr_bind_path):
+        return {}
+    try:
+        with open(chr_bind_path, 'r', encoding='utf-8') as handle:
+            data = json.load(handle) or {}
+        return data if isinstance(data, dict) else {}
+    except Exception:
+        return {}
+
+
+def _chr_map_from_bindings(chr_bindings: dict) -> dict[int, str]:
+    """把 chr.bind 整理成解析器可用的 ``{id: name}``。"""
+    result: dict[int, str] = {}
+    for raw_id, raw_value in (chr_bindings or {}).items():
+        try:
+            cid = int(raw_id)
+        except (TypeError, ValueError):
+            continue
+        name = _coerce_character_name(raw_value)
+        if name:
+            result[cid] = name
+    return result
+
+
 def import_project_stories_to_db(user_id: str, project_name: str, *, reset: bool = True) -> dict:
     """将项目 stories 目录导入独立的 SQLite 数据库。"""
     from core.models import BindAct, BindChr, Character, Registry
 
-    project_root = ensure_project_directory(user_id, project_name)
-    stories_dir = ensure_project_stories_directory(user_id, project_name)
-    db_path = os.path.join(project_root, 'stories.db')
+    project_root = ensure_project_directory(user_id, project_name)
+    stories_dir = ensure_project_stories_directory(user_id, project_name)
+    db_path = os.path.join(project_root, 'stories.db')
+    chr_bindings = _load_chr_bindings(project_root)
+    chr_map_for_parse = _chr_map_from_bindings(chr_bindings)
 
     # 使用 NullPool 确保连接用完后立即真正关闭，避免 Windows 上 SQLite 文件锁残留
     # 导致后续的 shutil.copy2 快照复制失败（第一次创建分享/版本必定失败的根因）
@@ -100,7 +130,7 @@ def import_project_stories_to_db(user_id: str, project_name: str, *, reset: bool
 
         for _, rel_path, parsed in story_files:
             file_path = os.path.join(stories_dir, rel_path)
-            scene_models = load_story_file(file_path)
+            scene_models = load_story_file(file_path, chr_map=chr_map_for_parse)
             if not scene_models:
                 continue
             chapter_num = parsed.get('chapter_num') or 999
@@ -139,16 +169,7 @@ def import_project_stories_to_db(user_id: str, project_name: str, *, reset: bool
                 imported += 1
 
         # 处理角色数据
-        chr_bind_path = os.path.join(project_root, 'chr', 'chr.bind')
-        chr_bindings = {}
-        if os.path.exists(chr_bind_path):
-            try:
-                with open(chr_bind_path, 'r', encoding='utf-8') as handle:
-                    chr_bindings = json.load(handle) or {}
-            except Exception:
-                pass
-
-        # 1. 兼容旧表 BindChr
+        # 1. 兼容旧表 BindChr
         try:
             session.execute(delete(BindChr))
             for chr_id_str, raw_value in chr_bindings.items():

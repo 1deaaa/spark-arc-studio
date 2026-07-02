@@ -1802,6 +1802,8 @@ const zhCN = {
       },
     },
     structure: {
+      lengthPresetTooltipLabel: '篇幅预设说明',
+      lengthPresetTooltip: '此处只影响本页手动点击“生成大纲”时的目标篇幅。导演在聊天中自动委派生成大纲时，会以聊天里的篇幅要求和当前项目上下文为准。',
       lengthOptions: {
         short: '短篇（约5章，场景密度参考约3场/章）',
         medium: '中篇（约10章，场景密度参考约4场/章）',

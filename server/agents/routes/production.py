@@ -118,6 +118,9 @@ def build_scriptwriter_context_pack(
         try:
             cid = int(raw_id)
         except Exception:
+            raw_name = str(raw_id or "").strip()
+            if raw_name and raw_name not in {"旁白", "?"} and raw_name not in names:
+                names.append(raw_name)
             return
         name = str(chr_map.get(cid) or "").strip()
         if name and name != "旁白" and name not in names:
@@ -155,7 +158,7 @@ def build_scriptwriter_context_pack(
         if os.path.exists(absolute_file_path):
             with open(absolute_file_path, "r", encoding="utf-8") as f:
                 arc_content = f.read()
-            story_data = parse_arc(arc_content)
+            story_data = parse_arc(arc_content, chr_map=chr_map)
             strip_private_fields(story_data)
             target_index = -1
             for i, s in enumerate(story_data):
@@ -165,8 +168,8 @@ def build_scriptwriter_context_pack(
                     break
             if target_scene:
                 context_scenes = story_data[: target_index + 1]
-                canonical_context = sanitize_arc_for_ai_context(serialize_to_arc(context_scenes))
-                local_script = sanitize_arc_for_ai_context(serialize_to_arc([target_scene]))
+                canonical_context = sanitize_arc_for_ai_context(serialize_to_arc(context_scenes, chr_map=chr_map))
+                local_script = sanitize_arc_for_ai_context(serialize_to_arc([target_scene], chr_map=chr_map))
                 if (
                     context
                     and str(context).strip()
@@ -349,10 +352,10 @@ def _record_story_memory_from_story_file(
 
 def _clean_generated_nodes(final_nodes: List[Dict[str, Any]]) -> List[Dict[str, Any]]:
     """
-    清洗 AI 生成的节点列表，剥除所有非协议字段（仅保留 id/chr/txt/opt/optn/dia/act/next），
+    清洗 AI 生成的节点列表，剥除所有非协议字段（仅保留 id/chr/speaker/txt/opt/optn/dia/act/next），
     防止 AI 幻觉添加的额外字段污染落盘后的 .arc 文件。
     """
-    allowed_fields = {"id", "chr", "txt", "opt", "optn", "dia", "act", "next"}
+    allowed_fields = {"id", "chr", "speaker", "txt", "opt", "optn", "dia", "act", "next"}
 
     def clean_node(node):
         if isinstance(node, dict):
@@ -384,6 +387,7 @@ def _persist_generated_nodes(
     final_nodes: List[Dict[str, Any]],
     rewrite: bool = False,
     thought: str = "",
+    chr_map: Dict[int, str] | None = None,
 ) -> None:
     """
     ScriptWriter 局部落盘函数：将生成的节点写回 .arc 文件。
@@ -406,7 +410,7 @@ def _persist_generated_nodes(
     file_path = os.path.join(stories_path, normalized_file)
     with open(file_path, "r", encoding="utf-8") as f:
         arc_content = f.read()
-    story_data = parse_arc(arc_content)
+    story_data = parse_arc(arc_content, chr_map=chr_map)
     strip_private_fields(story_data)
 
     target_scene = None
@@ -445,7 +449,7 @@ def _persist_generated_nodes(
     if thought and not target_scene.get("thought"):
         target_scene["thought"] = thought
 
-    new_arc_content = serialize_to_arc(story_data)
+    new_arc_content = serialize_to_arc(story_data, chr_map=chr_map)
     with open(file_path, "w", encoding="utf-8") as f:
         f.write(new_arc_content)
 
@@ -645,7 +649,8 @@ async def scriptwriter_compose_stream(
                     elif chunk.get("type") == "done":
                         elapsed = max(time.monotonic() - started_at, 0.001)
                         dialogues = parse_arc_to_dialogues(
-                            chunk.get("transition_text", "") or ""
+                            chunk.get("transition_text", "") or "",
+                            chr_map=context_pack.get("chr_map") or None,
                         )
                         final_chars = chunk.get("total_chars", total_chars)
                         final_speed = round((final_chars or 0) / elapsed, 2)
@@ -813,7 +818,7 @@ async def scriptwriter_compose_stream(
                     thought = chunk.get("thought", "")
 
             final_nodes = (
-                parse_arc_to_dialogues(full_arc_script)
+                parse_arc_to_dialogues(full_arc_script, chr_map=context_pack.get("chr_map") or None)
                 if full_arc_script and effective_export_format != "novel"
                 else []
             )
@@ -853,6 +858,7 @@ async def scriptwriter_compose_stream(
                         final_nodes=final_nodes,
                         rewrite=(operation == "rewrite_scene" or data.rewrite),
                         thought=thought,
+                        chr_map=context_pack.get("chr_map") or None,
                     )
                     _record_story_memory_from_story_file(
                         user_id,

@@ -1,11 +1,10 @@
-import json
 import os
-from typing import List
+from typing import Any, Dict, List, Optional
 
 from .scene_models import SceneModel, scene_models_from_payload
 from .arc_parser import parse_arc
 
-def load_story_file(file_path: str) -> List[SceneModel]:
+def load_story_file(file_path: str, chr_map: Optional[Dict[Any, Any]] = None) -> List[SceneModel]:
     """从 .arc 文件加载剧本模型"""
     if not os.path.exists(file_path):
         return []
@@ -15,7 +14,7 @@ def load_story_file(file_path: str) -> List[SceneModel]:
             content = handle.read()
             
         # 严格解析 ARC 格式
-        payload = parse_arc(content)
+        payload = parse_arc(content, chr_map=chr_map)
                 
     except (OSError, Exception) as e:
         print(f"Error loading story file {file_path}: {e}")

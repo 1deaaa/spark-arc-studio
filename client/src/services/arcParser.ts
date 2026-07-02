@@ -12,10 +12,12 @@
  * @returns {Array} 解析后的场景数组
  */
 export type ActValue = string | string[];
+export type ArcSpeaker = number | string;
 
 export type ArcDialogueNode = {
   id: number;
-  chr: number;
+  chr: ArcSpeaker;
+  speaker?: string;
   txt: string;
   thought?: string;
   next?: string;
@@ -57,7 +59,59 @@ type ParserState = {
   idCounter: number;
 };
 
-export function parseArc(arcText: string): ArcScene[] {
+const SYSTEM_SPEAKER_ID_TO_NAME: Record<number, string> = {
+  [-1]: '旁白',
+  [-2]: '?',
+};
+const SYSTEM_SPEAKER_NAME_TO_ID: Record<string, number> = {
+  '旁白': -1,
+  '?': -2,
+};
+const SPEAKER_MARKER_RE = /^\[([^\]\r\n]+)\]$/;
+const NUMERIC_MARKER_RE = /^-?\d+$/;
+
+function normalizeChrMap(chrMap: Record<string | number, string> = {}) {
+  const normalized: Record<number, string> = {};
+  for (const [rawId, rawName] of Object.entries(chrMap || {})) {
+    const cid = Number(rawId);
+    const name = String(rawName || '').trim();
+    if (Number.isFinite(cid) && name) normalized[cid] = name;
+  }
+  return normalized;
+}
+
+function isSpeakerMarkerLine(line: string) {
+  return SPEAKER_MARKER_RE.test(String(line || '').trim());
+}
+
+function parseSpeakerMarker(line: string, chrMap: Record<string | number, string> = {}): { chr: ArcSpeaker; speaker?: string } {
+  const match = String(line || '').trim().match(SPEAKER_MARKER_RE);
+  if (!match) return { chr: '旁白', speaker: '旁白' };
+  const marker = match[1].trim();
+  const idToName = normalizeChrMap(chrMap);
+  if (NUMERIC_MARKER_RE.test(marker)) {
+    const cid = Number(marker);
+    return { chr: cid, speaker: idToName[cid] || SYSTEM_SPEAKER_ID_TO_NAME[cid] };
+  }
+  if (Object.prototype.hasOwnProperty.call(SYSTEM_SPEAKER_NAME_TO_ID, marker)) {
+    return { chr: SYSTEM_SPEAKER_NAME_TO_ID[marker], speaker: marker };
+  }
+  for (const [rawId, rawName] of Object.entries(idToName)) {
+    if (rawName === marker) return { chr: Number(rawId), speaker: marker };
+  }
+  return { chr: marker, speaker: marker };
+}
+
+export function formatSpeakerMarker(chr: ArcSpeaker | null | undefined, speaker = '', chrMap: Record<string | number, string> = {}) {
+  const speakerText = String(speaker || '').trim();
+  if (speakerText) return `[${speakerText}]`;
+  if (typeof chr === 'string') return `[${chr.trim() || '旁白'}]`;
+  if (chr === null || chr === undefined) return '[旁白]';
+  const idToName = normalizeChrMap(chrMap);
+  return `[${idToName[chr] || SYSTEM_SPEAKER_ID_TO_NAME[chr] || chr}]`;
+}
+
+export function parseArc(arcText: string, chrMap: Record<string | number, string> = {}): ArcScene[] {
   const scenes: ArcScene[] = [];
   const state: ParserState = { idCounter: 1 };
   
@@ -65,7 +119,7 @@ export function parseArc(arcText: string): ArcScene[] {
   const sceneBlocks = splitByScenes(arcText);
   
   for (const block of sceneBlocks) {
-    const scene = parseSceneBlock(block, state);
+    const scene = parseSceneBlock(block, state, chrMap);
     if (scene) {
       scenes.push(scene);
     }
@@ -159,7 +213,7 @@ function splitByScenes(text: string) {
 /**
  * 解析单个场景块
  */
-function parseSceneBlock(blockText: string, state: ParserState): ArcScene | null {
+function parseSceneBlock(blockText: string, state: ParserState, chrMap: Record<string | number, string> = {}): ArcScene | null {
   // 提取场景名（# 标题）
   const titleMatch = blockText.match(/^#\s+(.+)$/m);
   if (!titleMatch) return null;
@@ -185,7 +239,7 @@ function parseSceneBlock(blockText: string, state: ParserState): ArcScene | null
   
   const metadata = extractSceneMetadata(withoutIntroText);
   const contentText = metadata.text;
-  const dia = parseDialogueContent(contentText, state);
+  const dia = parseDialogueContent(contentText, state, chrMap);
 
   return {
     scene: sceneName,
@@ -212,8 +266,7 @@ function extractIntroBlock(text: string) {
     if (trimmed.startsWith('@guide')) return true;
     if (trimmed.startsWith('<choice')) return true;
     if (trimmed.startsWith('<conception>')) return true;
-    // 仅支持 [ID] 格式，旁白统一为 [-1]
-    if (trimmed.match(/^\[-?\d+\]$/)) return true;
+    if (isSpeakerMarkerLine(trimmed)) return true;
     return false;
   };
 
@@ -301,7 +354,11 @@ function extractSceneMetadata(text: string) {
 /**
  * 解析对话内容（包括选项分支）
  */
-function parseDialogueContent(text: string, state: ParserState = { idCounter: 1 }) {
+function parseDialogueContent(
+  text: string,
+  state: ParserState = { idCounter: 1 },
+  chrMap: Record<string | number, string> = {}
+) {
   const dialogues: ArcDialogueNode[] = [];
   
   // 先处理选项块，替换为占位符
@@ -327,7 +384,7 @@ function parseDialogueContent(text: string, state: ParserState = { idCounter: 1 
       const choiceBlock = choiceBlocks[choiceIndex];
       if (choiceBlock) {
         // 解析选项块并附加到上一个对话节点
-        const options = parseChoiceBlock(choiceBlock, state);
+        const options = parseChoiceBlock(choiceBlock, state, chrMap);
         if (dialogues.length > 0) {
           dialogues[dialogues.length - 1].opt = options.options;
         }
@@ -336,11 +393,11 @@ function parseDialogueContent(text: string, state: ParserState = { idCounter: 1 
       continue;
     }
     
-    // 匹配对话/旁白标识符 [ID]
-    const chrMatch = line.match(/^\[(-?\d+)\]$/);
+    // 匹配对话/旁白标识符 [说话人]
+    const chrMatch = line.match(SPEAKER_MARKER_RE);
     
     if (chrMatch) {
-      let chrId = parseInt(chrMatch[1]);
+      const { chr, speaker } = parseSpeakerMarker(line, chrMap);
       
       const dialogueLines: string[] = [];
       let nextTarget: string | null = null;
@@ -351,7 +408,7 @@ function parseDialogueContent(text: string, state: ParserState = { idCounter: 1 
       while (i < lines.length) {
         const nextLine = lines[i].trim();
         // 遇到下一个命令或新场景时停止
-        if (nextLine.match(/^\[-?\d+\]$/) || nextLine.startsWith('__CHOICE_') || nextLine.startsWith('# ')) {
+        if (isSpeakerMarkerLine(nextLine) || nextLine.startsWith('__CHOICE_') || nextLine.startsWith('# ')) {
           break;
         }
         // 检查 thought
@@ -395,7 +452,8 @@ function parseDialogueContent(text: string, state: ParserState = { idCounter: 1 
         dialogueLines.forEach((lineText, index) => {
           const node: ArcDialogueNode = {
             id: state.idCounter++,
-            chr: chrId,
+            chr,
+            speaker,
             txt: lineText
           };
           
@@ -479,7 +537,11 @@ function findOutermostChoice(text: string) {
 /**
  * 解析选项块内容
  */
-function parseChoiceBlock(choiceContent: string, state: ParserState) {
+function parseChoiceBlock(
+  choiceContent: string,
+  state: ParserState,
+  chrMap: Record<string | number, string> = {}
+) {
   const options: ArcOptionNode[] = [];
   
   // 更精确的 opt 匹配
@@ -494,7 +556,7 @@ function parseChoiceBlock(choiceContent: string, state: ParserState) {
     };
     
     // 递归解析选项内的内容
-    const innerDialogues = parseDialogueContent(opt.content, state);
+    const innerDialogues = parseDialogueContent(opt.content, state, chrMap);
     
     optionNode.dia = innerDialogues;
     options.push(optionNode);
@@ -570,7 +632,7 @@ function extractOptBlocks(content) {
 /**
  * 将内部数据结构序列化为 .arc 格式
  * @param {Array} scenes - 场景数组
- * @param {Object} chrMap - 角色ID到名称的映射（可选，用于注释）
+ * @param {Object} chrMap - 角色卡隐藏绑定表（仅用于把运行时旧字段渲染成可读说话人）
  * @returns {string} .arc 格式文本
  */
 export function serializeToArc(scenes: ArcScene[], chrMap: Record<string | number, string> = {}) {
@@ -650,37 +712,26 @@ function serializeDialogues(dialogues: ArcDialogueNode[], chrMap: Record<string 
   const indentStr = '  '.repeat(indent);
   
   for (const d of dialogues) {
-    // 旁白 (统一使用 [-1])
-    if (d.chr === -1 || d.chr === null || d.chr === undefined) {
-      lines.push(`${indentStr}[-1]`);
-      if (d.thought) {
-        lines.push(`${indentStr}<conception>${d.thought}</conception>`);
-      }
-      lines.push(`${indentStr}${d.txt}`);
-      lines.push('');
-    } else {
-      // 角色对话
-      lines.push(`${indentStr}[${d.chr}]`);
-      if (d.thought) {
-        lines.push(`${indentStr}<conception>${d.thought}</conception>`);
-      }
-      lines.push(`${indentStr}${d.txt}`);
-      
-      // @next
-      if (d.next) {
-        lines.push(`${indentStr}@next ${d.next}`);
-      }
-      
-      // @act
-      if (d.act && Object.keys(d.act).length > 0) {
-        for (const [key, value] of Object.entries(d.act)) {
-          const valStr = Array.isArray(value) ? value.join(',') : value;
-          lines.push(`${indentStr}@act ${key}:${valStr}`);
-        }
-      }
-      
-      lines.push('');
+    lines.push(`${indentStr}${formatSpeakerMarker(d.chr, d.speaker, chrMap)}`);
+    if (d.thought) {
+      lines.push(`${indentStr}<conception>${d.thought}</conception>`);
     }
+    lines.push(`${indentStr}${d.txt}`);
+
+    // @next
+    if (d.next) {
+      lines.push(`${indentStr}@next ${d.next}`);
+    }
+
+    // @act
+    if (d.act && Object.keys(d.act).length > 0) {
+      for (const [key, value] of Object.entries(d.act)) {
+        const valStr = Array.isArray(value) ? value.join(',') : value;
+        lines.push(`${indentStr}@act ${key}:${valStr}`);
+      }
+    }
+
+    lines.push('');
     
     // 选项
     if (d.opt && d.opt.length > 0) {

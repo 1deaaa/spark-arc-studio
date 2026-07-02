@@ -29,7 +29,21 @@
     <!-- 章节数量 + 生成 -->
     <div class="flow-section control-section">
       <div class="length-preset-group">
-        <span class="setting-label">{{ t('views.structure.mobile.lengthPreset') }}</span>
+        <div class="setting-label-row">
+          <span class="setting-label">{{ t('views.structure.mobile.lengthPreset') }}</span>
+          <n-tooltip trigger="click" placement="top">
+            <template #trigger>
+              <button
+                type="button"
+                class="length-help-button"
+                :aria-label="t('views.structure.lengthPresetTooltipLabel')"
+              >
+                <n-icon :component="Info" size="14" />
+              </button>
+            </template>
+            <div class="length-help-text">{{ t('views.structure.lengthPresetTooltip') }}</div>
+          </n-tooltip>
+        </div>
         <div class="preset-grid">
           <button
             v-for="option in mobileLengthOptions"
@@ -59,7 +73,7 @@
       <n-button 
         type="primary" 
         block 
-        size="medium"
+        size="small"
         class="generate-outline-btn"
         :loading="isLoading"
         :disabled="!context?.trim()"
@@ -160,12 +174,12 @@
 
 <script setup lang="ts">
 import { ref, computed } from 'vue';
-import { NButton, NIcon, NInputNumber, NEmpty, NDrawer, NDrawerContent } from 'naive-ui';
+import { NButton, NIcon, NInputNumber, NEmpty, NDrawer, NDrawerContent, NTooltip } from 'naive-ui';
 import { useI18n } from 'vue-i18n';
 import SparkTag from '../../components/share/SparkTag.vue';
 import GlobalLoading from '../../components/share/GlobalLoading.vue';
 import MobileTextArea from '../../components/editors/mobile/MobileTextArea.vue';
-import { ArrowRight, ChevronRight, Clock, Files, List, Sparkles } from '@lucide/vue';
+import { ArrowRight, ChevronRight, Clock, Files, Info, List, Sparkles } from '@lucide/vue';
 import HistoryPanel from '../../components/dlg-editor/HistoryPanel.vue';
 import { useStructureLogic } from '../../composables/useStructureLogic';
 import bus from '../../eventBus';
@@ -274,31 +288,32 @@ function openAutoWrite() {
 }
 
 .control-section {
-  gap: 14px;
-  padding: 14px;
+  gap: 10px;
+  padding: 10px 12px 12px;
   background: var(--spark-panel-bg);
   border: 1px solid var(--spark-border);
-  border-radius: 12px;
+  border-radius: 10px;
 }
 
 .length-preset-group {
   display: flex;
   flex-direction: column;
-  gap: 8px;
+  gap: 7px;
 }
 
 .preset-grid {
   display: grid;
-  grid-template-columns: repeat(3, minmax(0, 1fr));
-  gap: 8px;
+  grid-template-columns: repeat(5, minmax(0, 1fr));
+  gap: 6px;
 }
 
 .preset-chip {
-  min-height: 38px;
-  padding: 8px 10px;
-  border: 1px solid color-mix(in srgb, var(--spark-border), transparent 10%);
-  border-radius: 10px;
-  background: color-mix(in srgb, var(--spark-panel-bg), var(--spark-primary) 3%);
+  min-width: 0;
+  min-height: 30px;
+  padding: 5px 6px;
+  border: 1px solid color-mix(in srgb, var(--spark-border), transparent 18%);
+  border-radius: 999px;
+  background: color-mix(in srgb, var(--spark-panel-bg), var(--spark-bg) 45%);
   color: var(--spark-text-muted);
   display: flex;
   align-items: center;
@@ -308,18 +323,19 @@ function openAutoWrite() {
 }
 
 .preset-chip.is-active {
-  border-color: color-mix(in srgb, var(--spark-primary), transparent 35%);
-  background: color-mix(in srgb, var(--spark-primary), white 84%);
+  border-color: color-mix(in srgb, var(--spark-primary), transparent 20%);
+  background: color-mix(in srgb, var(--spark-primary), white 88%);
   color: var(--spark-primary);
-  box-shadow: 0 4px 14px color-mix(in srgb, var(--spark-primary), transparent 82%);
+  box-shadow: none;
 }
 
 .preset-chip-label {
-  font-size: var(--spark-fs-sm);
+  font-size: var(--spark-fs-xs);
   font-weight: 600;
-  line-height: 1.2;
-  white-space: normal;
-  word-break: break-word;
+  line-height: 1.15;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
 }
 
 .setting-label {
@@ -328,10 +344,44 @@ function openAutoWrite() {
   color: var(--spark-text);
 }
 
+.setting-label-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+}
+
+.length-help-button {
+  width: 22px;
+  height: 22px;
+  flex: 0 0 22px;
+  padding: 0;
+  border: 1px solid var(--spark-border);
+  border-radius: 50%;
+  background: var(--spark-panel-bg);
+  color: var(--spark-text-muted);
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  cursor: pointer;
+  transition: color 0.18s ease, border-color 0.18s ease, background 0.18s ease;
+}
+
+.length-help-button:active {
+  color: var(--spark-primary);
+  border-color: color-mix(in srgb, var(--spark-primary), transparent 35%);
+  background: color-mix(in srgb, var(--spark-panel-bg), var(--spark-primary) 8%);
+}
+
+.length-help-text {
+  max-width: min(280px, 72vw);
+  line-height: 1.5;
+}
+
 .preset-description {
   margin: 0;
   font-size: var(--spark-fs-xs);
-  line-height: 1.5;
+  line-height: 1.35;
   color: var(--spark-text-muted);
 }
 
@@ -363,7 +413,7 @@ function openAutoWrite() {
 }
 
 .generate-outline-btn {
-  min-height: 42px;
+  min-height: 38px;
 }
 
 .chapter-list {
@@ -482,8 +532,11 @@ function openAutoWrite() {
   overflow-y: auto !important;
 }
 
-@media (max-width: 360px) {
-  .preset-grid,
+@media (max-width: 380px) {
+  .preset-grid {
+    grid-template-columns: repeat(3, minmax(0, 1fr));
+  }
+
   .custom-setting-grid {
     grid-template-columns: repeat(2, minmax(0, 1fr));
   }

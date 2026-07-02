@@ -182,7 +182,7 @@ def load_character_bundle(user_id: str, project_name: str) -> Dict[str, Any]:
         )
 
         role_blocks.append(
-            f"--- 角色: {display_name} (ID: {cid}) ---\n{content or '(暂无详细设定)'}"
+            f"--- 角色: {display_name} ---\n{content or '(暂无详细设定)'}"
         )
 
         if cid not in (-1, -2):
@@ -766,10 +766,10 @@ def build_scene_context(
         if not raw:
             continue
         try:
-            parsed = parse_arc(raw)
+            parsed = parse_arc(raw, chr_map=chr_map)
             if parsed:
                 # 只取最后一个场景作为章末锚点
-                last_scene_arc = serialize_to_arc([parsed[-1]])
+                last_scene_arc = serialize_to_arc([parsed[-1]], chr_map=chr_map)
                 tail_scenes.append(
                     f"【第 {ci} 章 尾声 - {parsed[-1].get('scene', '')}】\n{sanitize_arc_for_ai_context(last_scene_arc)}"
                 )
@@ -793,11 +793,11 @@ def build_scene_context(
             if current_scene_index is not None:
                 # 截取到 current_scene_index 之前的所有场景
                 try:
-                    parsed = parse_arc(raw)
+                    parsed = parse_arc(raw, chr_map=chr_map)
                     before_scenes = parsed[:current_scene_index]
                     if before_scenes:
                         parts.append("=== 当前章节前文（已完成场景）===")
-                        parts.append(sanitize_arc_for_ai_context(serialize_to_arc(before_scenes)))
+                        parts.append(sanitize_arc_for_ai_context(serialize_to_arc(before_scenes, chr_map=chr_map)))
                 except Exception:
                     pass
             else:
@@ -862,7 +862,7 @@ def build_scriptwriter_context(
     返回 dict 包含：
       worldview         - 世界观全文
       roles             - 全量角色设定文本
-      chr_map           - {int: str} 角色 ID 映射
+      chr_map           - 角色卡隐藏绑定表，仅供解析/导出层派生使用
       full_outline      - 完整大纲文本
       narrative_memory  - 梗概 + 节拍表叙事记忆
       context           - 三圈记忆组装的前文剧本文本

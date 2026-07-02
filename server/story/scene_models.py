@@ -3,7 +3,7 @@ from dataclasses import dataclass, field
 from typing import Any, Dict, List, Optional
 
 LEGACY_SCENE_KEYS = {"guide", "intro", "scene", "dia", "button_text", "buttonText", "btn", "conditions", "cond", "effects", "trigger_event", "priority", "once_key", "hiden", "hidden"}
-LEGACY_DIALOG_KEYS = {"id", "chr", "txt", "opt", "act", "next"}
+LEGACY_DIALOG_KEYS = {"id", "chr", "speaker", "txt", "opt", "act", "next"}
 LEGACY_OPTION_KEYS = {"optn", "dia"}
 
 
@@ -46,8 +46,9 @@ class DialogueOption:
 @dataclass
 class DialogueNode:
     identifier: int
-    character: int
+    character: int | str
     text: str
+    speaker: Optional[str] = None
     options: List[DialogueOption] = field(default_factory=list)
     act: Optional[Dict[str, Any]] = None
     next_scene: Optional[str] = None
@@ -55,7 +56,15 @@ class DialogueNode:
     @classmethod
     def from_dict(cls, payload: Dict[str, Any]) -> "DialogueNode":
         identifier = int(payload.get("id", 0) or 0)
-        character = int(payload.get("chr", 0) or 0)
+        raw_character = payload.get("chr", payload.get("speaker", -1))
+        try:
+            character: int | str = int(raw_character)
+        except (TypeError, ValueError):
+            character = str(raw_character or "").strip() or -1
+        raw_speaker = payload.get("speaker")
+        speaker = str(raw_speaker or "").strip()
+        if not speaker and isinstance(character, str):
+            speaker = character
         text = str(payload.get("txt", ""))
         options_payload = payload.get("opt") or []
         options = [DialogueOption.from_dict(opt) for opt in options_payload if isinstance(opt, dict)]
@@ -65,6 +74,7 @@ class DialogueNode:
             identifier=identifier,
             character=character,
             text=text,
+            speaker=speaker or None,
             options=options,
             act=_deepcopy(act_payload) if act_payload else None,
             next_scene=str(next_scene) if isinstance(next_scene, str) else None,
@@ -76,6 +86,8 @@ class DialogueNode:
             "chr": self.character,
             "txt": self.text,
         }
+        if self.speaker:
+            node["speaker"] = self.speaker
         if self.options:
             node["opt"] = [option.to_dict() for option in self.options]
         if self.act:

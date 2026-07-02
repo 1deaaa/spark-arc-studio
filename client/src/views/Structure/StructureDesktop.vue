@@ -98,12 +98,26 @@
               <!-- 底部操作区 -->
               <section class="planning-field planning-field-generate">
                 <div class="generate-controls">
-                  <n-select
-                    v-model:value="lengthType"
-                    :options="lengthOptions"
-                    size="small"
-                    class="ctrl-length"
-                  />
+                  <div class="length-control">
+                    <n-select
+                      v-model:value="lengthType"
+                      :options="lengthOptions"
+                      size="small"
+                      class="ctrl-length"
+                    />
+                    <n-tooltip trigger="hover" placement="top">
+                      <template #trigger>
+                        <button
+                          type="button"
+                          class="length-help-button"
+                          :aria-label="t('views.structure.lengthPresetTooltipLabel')"
+                        >
+                          <n-icon :component="Info" size="14" />
+                        </button>
+                      </template>
+                      <div class="length-help-text">{{ t('views.structure.lengthPresetTooltip') }}</div>
+                    </n-tooltip>
+                  </div>
                   <template v-if="lengthType === 'custom'">
                     <n-input-number
                       v-model:value="chapterCount"
@@ -153,10 +167,10 @@
 
 <script setup lang="ts">
 import { ref } from 'vue';
-import { NButton, NIcon, NInput, NTabs, NTabPane, NInputNumber, NSelect } from 'naive-ui';
+import { NButton, NIcon, NInput, NTabs, NTabPane, NInputNumber, NSelect, NTooltip } from 'naive-ui';
 import { useI18n } from 'vue-i18n';
 import GlobalLoading from '../../components/share/GlobalLoading.vue';
-import { ArrowRight, Workflow, Zap } from '@lucide/vue';
+import { ArrowRight, Info, Workflow, Zap } from '@lucide/vue';
 import AiSettingsPanel from '../../components/lorebook/AiSettingsPanel.vue';
 import OutlineEditor from '../../components/dlg-editor/OutlineEditor.vue';
 import HistoryPanel from '../../components/dlg-editor/HistoryPanel.vue';
@@ -447,9 +461,44 @@ function goToScriptWriter() {
   min-width: 80px; /* 允许大幅压缩 */
 }
 
-.ctrl-length {
+.length-control {
   flex: 1.5 3 140px;
-  min-width: 90px; /* 允许大幅压缩 */
+  min-width: 118px; /* 允许大幅压缩，同时保留提示按钮空间 */
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.ctrl-length {
+  flex: 1 1 auto;
+  min-width: 0;
+}
+
+.length-help-button {
+  width: 24px;
+  height: 24px;
+  flex: 0 0 24px;
+  padding: 0;
+  border: 1px solid var(--spark-border);
+  border-radius: 50%;
+  background: var(--spark-panel-bg);
+  color: var(--spark-text-muted);
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  cursor: help;
+  transition: color 0.18s ease, border-color 0.18s ease, background 0.18s ease;
+}
+
+.length-help-button:hover {
+  color: var(--spark-primary);
+  border-color: color-mix(in srgb, var(--spark-primary), transparent 35%);
+  background: color-mix(in srgb, var(--spark-panel-bg), var(--spark-primary) 8%);
+}
+
+.length-help-text {
+  max-width: 280px;
+  line-height: 1.5;
 }
 
 .ctrl-num {

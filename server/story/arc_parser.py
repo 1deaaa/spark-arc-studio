@@ -9,7 +9,119 @@ import re
 from typing import List, Dict, Any, Optional, Tuple
 
 
-def parse_arc(arc_text: str) -> List[Dict[str, Any]]:
+SYSTEM_SPEAKER_ID_TO_NAME = {-1: "旁白", -2: "?"}
+SYSTEM_SPEAKER_NAME_TO_ID = {name: cid for cid, name in SYSTEM_SPEAKER_ID_TO_NAME.items()}
+_SPEAKER_MARKER_RE = re.compile(r'^\[([^\]\r\n]+)\]$')
+_NUMERIC_MARKER_RE = re.compile(r'^-?\d+$')
+
+
+def _normalize_chr_map(chr_map: Optional[Dict[Any, Any]]) -> Dict[int, str]:
+    """把角色映射整理为 ``{角色ID: 角色名}``，兼容字符串 key。"""
+    normalized: Dict[int, str] = {}
+    if not isinstance(chr_map, dict):
+        return normalized
+    for raw_id, raw_name in chr_map.items():
+        try:
+            cid = int(raw_id)
+        except (TypeError, ValueError):
+            continue
+        if isinstance(raw_name, dict):
+            name = str(raw_name.get("name") or raw_name.get("title") or "").strip()
+        else:
+            name = str(raw_name or "").strip()
+        if not name and cid in SYSTEM_SPEAKER_ID_TO_NAME:
+            name = SYSTEM_SPEAKER_ID_TO_NAME[cid]
+        if name:
+            normalized[cid] = name
+    return normalized
+
+
+def _build_name_to_id(chr_map: Optional[Dict[Any, Any]]) -> Dict[str, int]:
+    mapping = {name: cid for cid, name in SYSTEM_SPEAKER_ID_TO_NAME.items()}
+    for cid, name in _normalize_chr_map(chr_map).items():
+        if name:
+            mapping[name] = cid
+    return mapping
+
+
+def is_speaker_marker_line(line: str) -> bool:
+    """判断一行是否为 ARC 说话人标记。正式格式为 ``[角色名]``。"""
+    return bool(_SPEAKER_MARKER_RE.match(str(line or "").strip()))
+
+
+def parse_speaker_marker(line: str, chr_map: Optional[Dict[Any, Any]] = None) -> Tuple[Any, str]:
+    """解析 ``[说话人]`` 行，返回 ``(chr, speaker)``。
+
+    新规范中 ``speaker`` 是创作层真相；``chr`` 仅在能解析出隐藏绑定 ID 时
+    保留给导出和资源绑定。纯数字标记只作为边界脏输入兜底，不是正式写法。
+    """
+    match = _SPEAKER_MARKER_RE.match(str(line or "").strip())
+    if not match:
+        raise ValueError(f"不是有效的 ARC 说话人标记: {line!r}")
+
+    marker = match.group(1).strip()
+    id_to_name = _normalize_chr_map(chr_map)
+    name_to_id = _build_name_to_id(chr_map)
+
+    if _NUMERIC_MARKER_RE.match(marker):
+        cid = int(marker)
+        speaker = id_to_name.get(cid) or SYSTEM_SPEAKER_ID_TO_NAME.get(cid) or ""
+        return cid, speaker
+
+    cid = name_to_id.get(marker)
+    if cid is not None:
+        return cid, marker
+    return marker, marker
+
+
+def format_speaker_marker(chr_value: Any = None, speaker: str = "", chr_map: Optional[Dict[Any, Any]] = None) -> str:
+    """把内部角色字段格式化为正式 ARC 说话人标记。"""
+    speaker_text = str(speaker or "").strip()
+    if speaker_text:
+        return f"[{speaker_text}]"
+
+    try:
+        cid = int(chr_value)
+    except (TypeError, ValueError):
+        marker = str(chr_value or "").strip()
+        return f"[{marker or '旁白'}]"
+
+    name = _normalize_chr_map(chr_map).get(cid) or SYSTEM_SPEAKER_ID_TO_NAME.get(cid)
+    return f"[{name or cid}]"
+
+
+def rename_speaker_markers_in_arc_text(arc_text: str, old_name: str, new_name: str) -> Tuple[str, int]:
+    """重命名 ARC 正文里的独立说话人标记行，不替换普通正文提及。"""
+    old_marker = f"[{str(old_name or '').strip()}]"
+    new_marker = f"[{str(new_name or '').strip()}]"
+    if old_marker == "[]" or new_marker == "[]" or old_marker == new_marker:
+        return arc_text, 0
+
+    changed = 0
+    output_lines: List[str] = []
+    for raw_line in str(arc_text or "").splitlines(keepends=True):
+        if raw_line.endswith("\r\n"):
+            body, line_ending = raw_line[:-2], "\r\n"
+        elif raw_line.endswith("\n"):
+            body, line_ending = raw_line[:-1], "\n"
+        else:
+            body, line_ending = raw_line, ""
+
+        leading_len = len(body) - len(body.lstrip(" \t"))
+        trailing_len = len(body) - len(body.rstrip(" \t"))
+        leading = body[:leading_len]
+        trailing = body[len(body) - trailing_len:] if trailing_len else ""
+        marker = body[leading_len: len(body) - trailing_len if trailing_len else len(body)]
+        if marker == old_marker:
+            output_lines.append(f"{leading}{new_marker}{trailing}{line_ending}")
+            changed += 1
+        else:
+            output_lines.append(raw_line)
+
+    return "".join(output_lines), changed
+
+
+def parse_arc(arc_text: str, chr_map: Optional[Dict[Any, Any]] = None) -> List[Dict[str, Any]]:
     """
     解析 .arc 文本为场景数组
     
@@ -26,14 +138,14 @@ def parse_arc(arc_text: str) -> List[Dict[str, Any]]:
     scene_blocks = _split_by_scenes(arc_text)
     
     for block in scene_blocks:
-        scene = _parse_scene_block(block, id_counter)
+        scene = _parse_scene_block(block, id_counter, chr_map=chr_map)
         if scene:
             scenes.append(scene)
     
     return scenes
 
 
-def parse_arc_to_dialogues(arc_text: str) -> List[Dict[str, Any]]:
+def parse_arc_to_dialogues(arc_text: str, chr_map: Optional[Dict[Any, Any]] = None) -> List[Dict[str, Any]]:
     """
     解析 .arc 文本，仅返回对话数组（不包含场景信息）
     用于续写功能，直接插入到现有场景中
@@ -48,7 +160,7 @@ def parse_arc_to_dialogues(arc_text: str) -> List[Dict[str, Any]]:
     cleaned_text = re.sub(r'<conception>[\s\S]*?</conception>', '', arc_text)
     
     # 解析对话内容
-    dialogues = _parse_dialogue_content(cleaned_text)
+    dialogues = _parse_dialogue_content(cleaned_text, chr_map=chr_map)
     
     return dialogues
 
@@ -72,7 +184,7 @@ def _split_by_scenes(text: str) -> List[str]:
     return blocks
 
 
-def _parse_scene_block(block_text: str, id_counter: List[int]) -> Optional[Dict[str, Any]]:
+def _parse_scene_block(block_text: str, id_counter: List[int], chr_map: Optional[Dict[Any, Any]] = None) -> Optional[Dict[str, Any]]:
     """解析单个场景块"""
     # 提取场景名（# 标题）
     title_match = re.search(r'^#\s+(.+)$', block_text, re.MULTILINE)
@@ -100,7 +212,7 @@ def _parse_scene_block(block_text: str, id_counter: List[int]) -> Optional[Dict[
     metadata, cleaned_text = _extract_scene_metadata(cleaned_text)
     
     # 解析对话内容
-    dia = _parse_dialogue_content(cleaned_text, id_counter)
+    dia = _parse_dialogue_content(cleaned_text, id_counter, chr_map=chr_map)
 
     scene_payload = {
         'scene': scene_name,
@@ -132,8 +244,7 @@ def _extract_intro_block(text: str) -> Tuple[str, str]:
             return True
         if trimmed.startswith('<conception>'):
             return True
-        # 仅支持 [ID] 格式，旁白统一为 [-1]
-        if re.match(r'^\[-?\d+\]$', trimmed):
+        if is_speaker_marker_line(trimmed):
             return True
         return False
 
@@ -209,7 +320,11 @@ def _extract_scene_metadata(text: str) -> Tuple[Dict[str, Any], str]:
     return metadata, '\n'.join(output_lines)
 
 
-def _parse_dialogue_content(text: str, id_counter: List[int] = None) -> List[Dict[str, Any]]:
+def _parse_dialogue_content(
+    text: str,
+    id_counter: List[int] = None,
+    chr_map: Optional[Dict[Any, Any]] = None,
+) -> List[Dict[str, Any]]:
     """解析对话内容（包括选项分支）"""
     if id_counter is None:
         id_counter = [1]
@@ -237,17 +352,17 @@ def _parse_dialogue_content(text: str, id_counter: List[int] = None) -> List[Dic
             if choice_index < len(choice_blocks):
                 choice_block = choice_blocks[choice_index]
                 # 解析选项块并附加到上一个对话节点
-                options = _parse_choice_block(choice_block, id_counter)
+                options = _parse_choice_block(choice_block, id_counter, chr_map=chr_map)
                 if dialogues:
                     dialogues[-1]['opt'] = options
             i += 1
             continue
         
-        # 匹配对话/旁白标识符 [ID]
-        chr_match = re.match(r'^\[(-?\d+)\]$', line)
+        # 匹配对话/旁白标识符 [说话人]。正式格式为角色名，数字仅作开发期容错。
+        chr_match = _SPEAKER_MARKER_RE.match(line)
         
         if chr_match:
-            chr_id = int(chr_match.group(1))
+            chr_id, speaker = parse_speaker_marker(line, chr_map=chr_map)
             
             dialogue_lines = []
             next_target = None
@@ -258,7 +373,7 @@ def _parse_dialogue_content(text: str, id_counter: List[int] = None) -> List[Dic
             while i < len(lines):
                 next_line = lines[i].strip()
                 # 遇到下一个命令或新场景时停止
-                if re.match(r'^\[-?\d+\]$', next_line) or next_line.startswith('__CHOICE_') or next_line.startswith('# '):
+                if is_speaker_marker_line(next_line) or next_line.startswith('__CHOICE_') or next_line.startswith('# '):
                     break
                 
                 # 提取 thought
@@ -299,6 +414,8 @@ def _parse_dialogue_content(text: str, id_counter: List[int] = None) -> List[Dic
                         'chr': chr_id,
                         'txt': line_text
                     }
+                    if speaker:
+                        node['speaker'] = speaker
                     id_counter[0] += 1
                     
                     if idx == 0:
@@ -319,6 +436,8 @@ def _parse_dialogue_content(text: str, id_counter: List[int] = None) -> List[Dic
                     'chr': chr_id,
                     'txt': ''
                 }
+                if speaker:
+                    node['speaker'] = speaker
                 id_counter[0] += 1
                 if act_commands:
                     node['act'] = act_commands
@@ -387,7 +506,11 @@ def _find_outermost_choice(text: str) -> Optional[Dict[str, Any]]:
     return None
 
 
-def _parse_choice_block(choice_content: str, id_counter: List[int]) -> List[Dict[str, Any]]:
+def _parse_choice_block(
+    choice_content: str,
+    id_counter: List[int],
+    chr_map: Optional[Dict[Any, Any]] = None,
+) -> List[Dict[str, Any]]:
     """解析选项块内容"""
     options = []
     
@@ -401,7 +524,7 @@ def _parse_choice_block(choice_content: str, id_counter: List[int]) -> List[Dict
         }
         
         # 递归解析选项内的内容
-        inner_dialogues = _parse_dialogue_content(opt['content'], id_counter)
+        inner_dialogues = _parse_dialogue_content(opt['content'], id_counter, chr_map=chr_map)
         
         option_node['dia'] = inner_dialogues
         options.append(option_node)
@@ -469,7 +592,7 @@ def serialize_to_arc(scenes: List[Dict[str, Any]], chr_map: Dict[int, str] = Non
     
     Args:
         scenes: 场景数组
-        chr_map: 角色ID到名称的映射（可选，用于注释）
+        chr_map: 角色ID到名称的映射（可选，用于把隐藏 ID 渲染成角色名）
         
     Returns:
         .arc 格式文本
@@ -533,11 +656,8 @@ def _serialize_dialogues(dialogues: List[Dict[str, Any]], chr_map: Dict[int, str
     for d in dialogues:
         chr_id = d.get('chr')
         
-        # 角色标识符
-        if chr_id == -1 or chr_id is None:
-            lines.append(f"{indent_str}[-1]")
-        else:
-            lines.append(f"{indent_str}[{chr_id}]")
+        speaker = str(d.get('speaker') or "").strip()
+        lines.append(f"{indent_str}{format_speaker_marker(chr_id, speaker=speaker, chr_map=chr_map)}")
             
         # thought
         if d.get('thought'):
@@ -585,8 +705,8 @@ def detect_format(content: str) -> str:
     """
     trimmed = content.strip()
     
-    # ARC 格式以 # 开头或包含特征标记
-    if trimmed.startswith('#') or re.search(r'^\[-?\d+\]', trimmed, re.MULTILINE):
+    # ARC 格式以 # 开头或包含说话人标记
+    if trimmed.startswith('#') or re.search(r'^\[[^\]\r\n]+\]', trimmed, re.MULTILINE):
         return 'arc'
     
     return 'unknown'

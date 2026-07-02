@@ -9,14 +9,17 @@ from fastapi.responses import JSONResponse
 from typing import Optional
 import os
 import json
+import re
 
 from core.auth import get_current_user, get_optional_user
 from core.request_context import get_current_project_name, resolve_project_name
 from core.utils import (
     SYSTEM_CHARACTER_NAMES,
     ensure_project_characters_directory,
+    get_project_stories_path,
     is_system_character_id,
 )
+from story.arc_parser import rename_speaker_markers_in_arc_text
 
 from .schemas import (
     CharacterSettingsCreate, CharacterSettingsSave,
@@ -94,6 +97,50 @@ def _display_character_name(chr_id: str, info) -> str:
     if numeric_id in SYSTEM_CHARACTER_NAMES:
         return SYSTEM_CHARACTER_NAMES[numeric_id]
     return _coerce_bind_name(info)
+
+
+def _validate_arc_speaker_name(name: str) -> Optional[str]:
+    """校验角色名能否安全放进 ARC 的 [角色名] 标记。"""
+    value = str(name or "").strip()
+    if not value:
+        return "角色名不能为空"
+    if any(ch in value for ch in "[]\r\n"):
+        return "角色名不能包含方括号或换行"
+    if value in {"旁白", "?"}:
+        return "角色名不能使用系统保留说话人"
+    if re.fullmatch(r"-?\d+", value):
+        return "角色名不能是纯数字"
+    return None
+
+
+def _sync_story_speaker_marker_rename(user_id: str, project_name: str, old_name: str, new_name: str) -> int:
+    """同步重命名 ARC 正文中的说话人标记行，只替换 [旧名] 行。"""
+    old_name = str(old_name or "").strip()
+    new_name = str(new_name or "").strip()
+    if not old_name or not new_name or old_name == new_name:
+        return 0
+
+    stories_dir = get_project_stories_path(user_id, project_name)
+    if not os.path.isdir(stories_dir):
+        return 0
+
+    changed_files = 0
+    for root, _, files in os.walk(stories_dir):
+        for filename in files:
+            if not filename.endswith(".arc"):
+                continue
+            path = os.path.join(root, filename)
+            try:
+                with open(path, "r", encoding="utf-8") as f:
+                    text = f.read()
+                updated, replacements = rename_speaker_markers_in_arc_text(text, old_name, new_name)
+                if replacements > 0:
+                    with open(path, "w", encoding="utf-8") as f:
+                        f.write(updated)
+                    changed_files += 1
+            except Exception:
+                continue
+    return changed_files
 
 
 # ==================== 统一接口 ====================
@@ -197,7 +244,13 @@ async def create_character(
             existing_ids.append(numeric_id)
     new_id = max(existing_ids, default=-1) + 1
     
-    name = data.name or '新角色'
+    name = str(data.name or '新角色').strip()
+    validation_error = _validate_arc_speaker_name(name)
+    if validation_error:
+        return JSONResponse(status_code=400, content={'error': validation_error})
+    existing_names = {_display_character_name(raw_id, info) for raw_id, info in chr_data.items()}
+    if name in existing_names:
+        return JSONResponse(status_code=409, content={'error': '角色名已存在'})
     chr_data[str(new_id)] = name
     
     _save_bind_file(bind_file, chr_data)
@@ -250,11 +303,25 @@ async def rename_character(
     if chr_id not in chr_data:
         return JSONResponse(status_code=404, content={'error': '角色不存在'})
     
-    chr_data[chr_id] = data.newName
+    new_name = str(data.newName or "").strip()
+    validation_error = _validate_arc_speaker_name(new_name)
+    if validation_error:
+        return JSONResponse(status_code=400, content={'error': validation_error})
+    existing_names = {
+        _display_character_name(raw_id, info)
+        for raw_id, info in chr_data.items()
+        if str(raw_id) != chr_id
+    }
+    if new_name in existing_names:
+        return JSONResponse(status_code=409, content={'error': '角色名已存在'})
+
+    old_name = _display_character_name(chr_id, chr_data[chr_id])
+    chr_data[chr_id] = new_name
     
     _save_bind_file(bind_file, chr_data)
+    updated_files = _sync_story_speaker_marker_rename(user_id, project_name, old_name, new_name)
     
-    return {'success': True}
+    return {'success': True, 'updatedFiles': updated_files}
 
 
 @characters_router.delete('/api/characters')

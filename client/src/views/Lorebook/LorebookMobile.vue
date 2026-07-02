@@ -158,8 +158,10 @@ import GlobalLoading from '../../components/share/GlobalLoading.vue';
 import CharacterGeneratorPanel from '../../components/lorebook/CharacterGeneratorPanel.vue';
 import WorldGeneratorPanel from '../../components/lorebook/WorldGeneratorPanel.vue';
 import MobileTextArea from '../../components/editors/mobile/MobileTextArea.vue';
-import { fetchWithAuth, fetchCharacters, saveCharacter, deleteCharacter, createCharacter } from '../../services/api';
+import { fetchWithAuth, fetchCharacters, saveCharacter, deleteCharacter, createCharacter, renameCharacter } from '../../services/api';
 import { useProjectStore } from '../../components/stores/projectStore';
+import { useCharacterStore } from '../../components/stores/characterStore';
+import { useSceneStore } from '../../components/stores/sceneStore';
 import { useViewStore } from '../../components/stores/viewStore';
 import { scrollToFlowStep } from '../../utils/mobileFlow';
 import { extractLoglineFromInspiration } from '../../utils/inspiration';
@@ -169,6 +171,8 @@ const { t } = useI18n();
 const message = useMessage();
 const projectId = inject('projectId', ref(null));
 const projectStore = useProjectStore();
+const characterStore = useCharacterStore();
+const sceneStore = useSceneStore();
 const viewStore = useViewStore();
 
 const loading = ref(false);
@@ -353,31 +357,34 @@ function editCharacter(ch) {
   saveLorebookSnapshot();
 }
 
-// 需要引入 renameCharacter 和 createCharacter
-import { renameCharacter } from '../../services/api';
-
 async function saveSingleCharacter() {
   const pid = projectId.value;
   if (!pid) return;
   
   try {
     if (editingChar.id) {
+       const normalizedName = String(editingChar.name || '').trim();
        // Update Content
        await saveCharacter(pid, editingChar.id, editingChar.content || '');
        
        // Check if name changed
        const original = characters.value.find(c => c.id === editingChar.id);
-       if (original && original.name !== editingChar.name) {
-           await renameCharacter(pid, editingChar.id, editingChar.name);
+       const oldName = String(original?.name || '').trim();
+       if (original && normalizedName && oldName !== normalizedName) {
+           await renameCharacter(pid, editingChar.id, normalizedName);
+           sceneStore.renameSpeaker(oldName, normalizedName);
+           editingChar.name = normalizedName;
        }
     } else {
+       const normalizedName = String(editingChar.name || '').trim();
        // Create New
-       if (!editingChar.name) {
+       if (!normalizedName) {
          message.warning(t('views.lorebook.mobile.enterCharacterName'));
            return;
        }
        // 先创建角色
-       await createCharacter(pid, editingChar.name);
+       await createCharacter(pid, normalizedName);
+       editingChar.name = normalizedName;
        message.success(t('views.lorebook.mobile.characterCreated')); 
        
        // 如果有内容，尝试更新内容（需要重新获取ID）
@@ -388,7 +395,7 @@ async function saveSingleCharacter() {
        if (editingChar.content) {
           const list = await fetchCharacters(pid, false);
           // 假设没有重名，或取最后一个匹配的
-          const created = list.find(c => c.name === editingChar.name);
+          const created = list.find(c => c.name === normalizedName);
           if (created) {
              await saveCharacter(pid, created.id, editingChar.content);
           }
@@ -397,6 +404,7 @@ async function saveSingleCharacter() {
     
     // 重新加载列表
     await loadCharacters();
+    await characterStore.reload(pid);
     showSingleCharDrawer.value = false;
     saveLorebookSnapshot();
     message.success(t('views.common.saveSuccess'));

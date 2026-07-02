@@ -317,7 +317,17 @@ async def save_story(data: StoryData, user: dict = Depends(get_current_user)):
                 # 如果是结构化数据，序列化为 ARC 格式
                 if isinstance(story_data, dict):
                     story_data = [story_data]
-                content = serialize_to_arc(story_data)
+                try:
+                    from story.project_files import load_character_id_name_map
+
+                    chr_map = {
+                        int(cid): name
+                        for cid, name in load_character_id_name_map(user_id, project_name).items()
+                        if str(cid).lstrip("-").isdigit()
+                    }
+                except Exception:
+                    chr_map = {}
+                content = serialize_to_arc(story_data, chr_map=chr_map)
             else:
                 # 已经是字符串
                 content = str(story_data)
@@ -410,7 +420,7 @@ async def create_file_or_folder(data: FileOperation, user: dict = Depends(get_cu
             os.makedirs(os.path.dirname(file_path), exist_ok=True)
             if file_path.endswith('.arc'):
                 with open(file_path, 'w', encoding='utf-8') as f:
-                    f.write("# 新场景\n\n[-1]\n在这里开始你的创作...")
+                    f.write("# 新场景\n\n[旁白]\n在这里开始你的创作...")
             elif file_path.endswith('.md'):
                 with open(file_path, 'w', encoding='utf-8') as f:
                     f.write("# 新章节\n\n在这里开始你的小说创作……")

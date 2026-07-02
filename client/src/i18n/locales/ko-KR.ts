@@ -1799,6 +1799,8 @@ const koKR = {
       },
     },
     structure: {
+      lengthPresetTooltipLabel: '작성 길이 안내',
+      lengthPresetTooltip: '이 설정은 이 화면에서 수동으로 아웃라인 빌드를 눌렀을 때의 목표 길이에만 적용됩니다. 채팅에서 감독이 아웃라인 생성을 위임하는 경우에는 채팅에 적은 길이 요구와 현재 프로젝트 맥락이 우선됩니다.',
       lengthOptions: {
         short: '단편(약 5장, 씬 밀도 참고 약 3개/장)',
         medium: '중편(약 10장, 씬 밀도 참고 약 4개/장)',

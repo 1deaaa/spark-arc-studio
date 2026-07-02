@@ -7,6 +7,7 @@
 
 import json
 import os
+import re
 from dataclasses import dataclass
 from typing import Optional
 
@@ -85,11 +86,11 @@ def _read_file_text(file_path: str) -> str:
         return f.read()
 
 
-# ==================== 角色 ID ↔ 名字映射（项目级唯一真相源） ====================
+# ==================== 角色卡隐藏绑定表（项目级资源绑定真相源） ====================
 #
-# 设计原则：chr.bind 的解析仅在此处实现一次，其他模块（语义切块、GraphRAG、
-# Agent 工具、lorebook 工具、剧本工具）一律调用本节工具函数，避免散落在多
-# 处反复重写。
+# 设计原则：创作层与 ARC 正文以角色名为真相；chr.bind 只服务角色卡、
+# 资源绑定、SQLite/Unity 导出等运行时边界。绑定表解析仍集中在此处，
+# 避免其他模块散落实现。
 #
 # chr.bind 实际结构有两种历史形态，本工具一并兼容：
 #   1) {"0": "沈逐流"}                   —— 早期纯字符串
@@ -250,8 +251,7 @@ def enrich_character_content(
     - 这是 ``collect_project_files`` 内部的内容增强器；其结果会作为
       ``ProjectFile.content`` 暴露给 vector_index、GraphRAG、grep 等所有下游。
     - 即便文件本身没有写明角色名（角色 .txt 通常以"职业:xxx 性格:xxx"这种
-      字段形式开头），下游也能直接看到"# 角色：沈逐流（ID: 0）"这一行，
-      避免把陌生 ID 当成实体喂给 LLM。
+      字段形式开头），下游也能直接看到"# 角色：沈逐流"这一行。
     - 已有"角色名："前缀（用户手写场景）时不再重复添加。
     """
     text = (raw_content or "").lstrip()
@@ -271,12 +271,10 @@ def enrich_character_content(
     ):
         return raw_content
 
-    if name and cid:
-        label = f"角色：{name}（ID: {cid}）"
-    elif name:
+    if name:
         label = f"角色：{name}"
     else:
-        label = f"角色 ID: {cid}"
+        label = "角色"
 
     return f"# {label}\n\n{raw_content}"
 
@@ -304,24 +302,27 @@ def enrich_arc_content_for_model(
     raw_content: str,
     character_map: dict,
 ) -> str:
-    """给模型/检索使用的 ARC 文本补一段角色索引，不改变真实落盘格式。
+    """给模型/检索使用的 ARC 文本补一段角色索引并渲染可读说话人。
 
-    ARC 正文仍以 ``[0]`` 这类 ID 保存，Web 与 Unity 运行时也继续按 ID 解析。
-    但 GraphRAG、向量检索和 StoryMemory 看到的只读文本需要知道 ID 对应的
-    角色名，否则关系抽取容易把 ``[0]`` 当成无意义符号。
+    新 ARC 正文以 ``[角色名]`` 保存；这里仍保留开发期数字标记的只读容错，
+    让 GraphRAG、向量检索和 grep 不会把 ``[0]`` 当成无意义符号。
     """
     text = str(raw_content or "")
     if not text.strip():
         return text
-    if text.lstrip().startswith("【角色索引】"):
+    if text.lstrip().startswith(("【角色索引】", "【可用说话人】")):
         return text
 
     named_characters = _iter_named_story_characters(character_map)
     if not named_characters:
         return text
 
-    index_lines = ["【角色索引】"]
-    index_lines.extend(f"[{cid}] = {name}" for cid, name in named_characters)
+    name_map = {str(cid): name for cid, name in named_characters}
+
+    text = re.sub(r"^(\s*)\[(-?\d+)\]\s*$", lambda m: f"{m.group(1)}[{name_map.get(m.group(2), m.group(2))}]", text, flags=re.MULTILINE)
+
+    index_lines = ["【可用说话人】"]
+    index_lines.extend(f"[{name}]" for _, name in named_characters)
     index_lines.append("【剧本正文】")
     return "\n".join(index_lines) + "\n" + text
 
@@ -343,7 +344,7 @@ def collect_project_files(
 
     内容增强：
       对 ``format_key == "character"`` 的文件，会在 ``content`` 头部注入
-      "# 角色：xxx（ID: yyy）" 前缀（参见 :func:`enrich_character_content`）。
+      "# 角色：xxx" 前缀（参见 :func:`enrich_character_content`）。
       下游（vector_index、GraphRAG、grep）由此可以识别"沈逐流"对应
       ``chr/0.txt``，而不必各自再写一份 ID→名字解析。
       对 ``format_key == "arc"`` 的文件，会在模型可见文本头部注入紧凑
@@ -409,7 +410,7 @@ def collect_project_files(
         if not text:
             continue
 
-        # 角色文件：从文件名推断 ID，把"# 角色：xxx（ID: yyy）"前缀注入 content。
+        # 角色文件：从文件名推断隐藏 ID，只把"# 角色：xxx"前缀注入 content。
         # 这一步必须放在字符截断之前，避免前缀被截掉。
         if format_key == "character":
             character_id = os.path.splitext(filename)[0]

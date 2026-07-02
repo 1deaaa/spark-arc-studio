@@ -278,7 +278,7 @@ function isOptionNode(node: unknown): node is ArcOptionNode {
 const characterSelectOptions = computed(() =>
   characterStore.list.map(c => ({
     label: c.name || `角色 ${c.id}`,
-    value: Number(c.id)
+    value: c.name || String(c.id)
   }))
 );
 
@@ -372,12 +372,19 @@ function applyScene() {
 }
 
 // ── 对话草稿 ──
-const dialogueDraft = reactive({ id: 0, chr: 0, txt: '', next: '' });
+const dialogueDraft = reactive<{ id: number; chr: number | string; txt: string; next: string }>({ id: 0, chr: '旁白', txt: '', next: '' });
 
-watch(() => sceneStore.currentNode, (n) => {
+watch(
+  () => [
+    sceneStore.currentNode,
+    sceneStore.selectionType,
+    isDialogueNode(sceneStore.currentNode) ? sceneStore.currentNode.chr : undefined,
+    isDialogueNode(sceneStore.currentNode) ? sceneStore.currentNode.speaker : undefined,
+  ],
+  ([n]) => {
   if (sceneStore.selectionType !== 'dialogue' || !isDialogueNode(n)) return;
   dialogueDraft.id = n.id ?? 0;
-  dialogueDraft.chr = n.chr ?? 0;
+  dialogueDraft.chr = n.speaker || n.chr || '旁白';
   dialogueDraft.txt = n.txt ?? '';
   dialogueDraft.next = n.next ?? '';
 }, { immediate: true });
@@ -385,6 +392,7 @@ watch(() => sceneStore.currentNode, (n) => {
 function applyDialogue() {
   sceneStore.updateCurrentDialogue({
     chr: dialogueDraft.chr,
+    speaker: typeof dialogueDraft.chr === 'string' ? dialogueDraft.chr : undefined,
     txt: dialogueDraft.txt,
     next: dialogueDraft.next
   });
@@ -438,7 +446,7 @@ function nextIdFromScene(scene: ArcScene | null) {
 function addDialogue() {
   if (!sceneStore.currentScene) return;
   const nid = nextIdFromScene(sceneStore.currentScene);
-  const node = { id: nid, chr: 0, txt: t('mobileNodeEditor.newDialogueContent') };
+  const node = { id: nid, chr: '旁白', speaker: '旁白', txt: t('mobileNodeEditor.newDialogueContent') };
   sceneStore.currentScene.dia = sceneStore.currentScene.dia || [];
   sceneStore.currentScene.dia.push(node);
   sceneStore.selectDialogue(node);
@@ -455,7 +463,7 @@ function addOptionToDialogue() {
   const nid = nextIdFromScene(sceneStore.currentScene);
   const option: { optn: string; dia: ArcDialogueNode[]; __oid: string } = {
     optn: t('mobileNodeEditor.newOption'),
-    dia: [{ id: nid, chr: 0, txt: t('mobileNodeEditor.newOptionDialogue') }],
+    dia: [{ id: nid, chr: '旁白', speaker: '旁白', txt: t('mobileNodeEditor.newOptionDialogue') }],
     __oid: `oid-${Date.now()}`,
   };
   sceneStore.currentNode.opt = sceneStore.currentNode.opt || [];
@@ -467,7 +475,7 @@ function addOptionToDialogue() {
 function addDialogueAfterCurrent() {
   if (sceneStore.selectionType !== 'dialogue' || !isDialogueNode(sceneStore.currentNode)) return;
   const nid = nextIdFromScene(sceneStore.currentScene);
-  const dlg = { id: nid, chr: 0, txt: '' };
+  const dlg = { id: nid, chr: '旁白', speaker: '旁白', txt: '' };
   const parent = sceneStore.nodeParent;
   if (isOptionNode(parent) && Array.isArray(parent.dia)) {
     const arr = parent.dia;
@@ -503,7 +511,7 @@ function deleteDialogue() {
 function addDialogueToOption() {
   if (sceneStore.selectionType !== 'option' || !isOptionNode(sceneStore.currentNode)) return;
   const nid = nextIdFromScene(sceneStore.currentScene);
-  const dlg = { id: nid, chr: 0, txt: t('mobileNodeEditor.newDialogue') };
+  const dlg = { id: nid, chr: '旁白', speaker: '旁白', txt: t('mobileNodeEditor.newDialogue') };
   sceneStore.currentNode.dia = sceneStore.currentNode.dia || [];
   sceneStore.currentNode.dia.push(dlg);
   sceneStore.selectDialogue(dlg, sceneStore.currentNode);

@@ -198,6 +198,7 @@ type StoryChoice = {
 
 type StoryDialogue = {
   chr?: number | string;
+  speaker?: string;
   txt?: string;
   thought?: string;
   opt?: StoryChoice[];
@@ -361,9 +362,12 @@ const currentDialogue = computed(() => {
 
 const currentSpeakerName = computed(() => {
   if (!currentDialogue.value) return '';
+  const speaker = String(currentDialogue.value.speaker || '').trim();
+  if (speaker && speaker !== '旁白') return speaker;
   const chrId = currentDialogue.value.chr;
   if (chrId === undefined || chrId === null) return '';
-  if (chrId === -1 || chrId === '-1') return '';
+  if (chrId === -1 || chrId === '-1' || chrId === '旁白') return '';
+  if (typeof chrId === 'string' && Number.isNaN(Number(chrId))) return chrId;
   return charMap.value[chrId] || t('views.player.desktop.unknownSpeaker');
 });
 

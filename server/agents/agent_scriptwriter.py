@@ -5,8 +5,8 @@
 
  ### 格式规范 (.arc)：
   你必须严格遵守以下 .arc 语法规范：
-  - **旁白**：使用 `[-1]` 标记，后接描述文本。
-    - **对话**：使用 `[角色ID]` 标记，后接对话内容。
+  - **旁白**：使用 `[旁白]` 标记，后接描述文本。
+    - **对话**：使用 `[角色名]` 标记，后接对话内容。
     - **分支选项**：使用 `<choice>` 包裹，内部使用 `<opt text="选项文本">` 定义分支。
     - **思考过程**：在生成剧本正文前，必须将你的分析过程包裹在 `<conception>` 标签中，*分析过程禁止超过200字*。
     - **标签闭合**：所有标签（<choice>, <opt>）必须严格成对闭合，严禁交叉嵌套。
@@ -218,6 +218,24 @@ class ScriptwriterAgent(SparkBaseAgent, SparkAgentExecutor):
             },
         }
 
+    def _build_chr_reference(self, chr_map: dict | None = None) -> str:
+        """构建模型可见的说话人标记列表，不向正文暴露隐藏角色 ID。"""
+        lines = [
+            "  [旁白] = 旁白叙述",
+            "  [?] = 姓名尚未揭示的真实说话者",
+        ]
+        seen = {"旁白", "?"}
+        if chr_map:
+            for _, raw_name in chr_map.items():
+                name = str(raw_name or "").strip()
+                if not name or name in seen:
+                    continue
+                lines.append(f"  [{name}] = 角色台词")
+                seen.add(name)
+        if len(lines) == 2:
+            lines.append("  [角色名] = 使用角色卡中的正式角色名")
+        return "\n".join(lines)
+
     def _execute_tool_calls(self, tool_calls: list) -> str:
         """执行工具调用并返回结果。"""
         result = super()._execute_tool_calls(tool_calls)
@@ -378,16 +396,7 @@ class ScriptwriterAgent(SparkBaseAgent, SparkAgentExecutor):
         feedback = self._clean_model_visible_arc_text(feedback)
         last_node_text = self._clean_model_visible_arc_text(last_node_text)
 
-        chr_reference = ""
-        if chr_map:
-            if -1 not in chr_map:
-                chr_map[-1] = "旁白"
-            if -2 not in chr_map:
-                chr_map[-2] = "?"
-            chr_lines = [f"  [{cid}] = {name}" for cid, name in chr_map.items()]
-            chr_reference = "\n".join(chr_lines)
-        else:
-            chr_reference = "  [-1] = 旁白\n  [-2] = ?（姓名尚未揭示的真实说话者）\n  (其他角色ID由上下文推断)"
+        chr_reference = self._build_chr_reference(chr_map)
 
         arc_example = self._get_arc_example()
 
@@ -488,17 +497,7 @@ class ScriptwriterAgent(SparkBaseAgent, SparkAgentExecutor):
         feedback = self._clean_model_visible_arc_text(feedback)
         last_node_text = self._clean_model_visible_arc_text(last_node_text)
 
-        # 复用 write_script 的 prompt 构建逻辑
-        chr_reference = ""
-        if chr_map:
-            if -1 not in chr_map:
-                chr_map[-1] = "旁白"
-            if -2 not in chr_map:
-                chr_map[-2] = "?"
-            chr_lines = [f"  [{cid}] = {name}" for cid, name in chr_map.items()]
-            chr_reference = "\n".join(chr_lines)
-        else:
-            chr_reference = "  [-1] = 旁白\n  [-2] = ?（姓名尚未揭示的真实说话者）\n  (其他角色ID由上下文推断)"
+        chr_reference = self._build_chr_reference(chr_map)
 
         arc_example = self._get_arc_example()
 
@@ -609,7 +608,7 @@ class ScriptwriterAgent(SparkBaseAgent, SparkAgentExecutor):
             guidance=user_input or "请给出修改建议",
             style_profile="（未提供）",
             feedback="请只提供讨论、建议、诊断，不要输出落盘指令。",
-            chr_reference="  [-1] = 旁白\n  [-2] = ?（姓名尚未揭示的真实说话者）",
+            chr_reference=self._build_chr_reference(),
             arc_example=self._get_arc_example() or "",
             length_instruction="输出建议即可，无需生成完整剧本。",
         )
@@ -655,7 +654,7 @@ class ScriptwriterAgent(SparkBaseAgent, SparkAgentExecutor):
             guidance=user_input or "请给出修改建议",
             style_profile="（未提供）",
             feedback="请只提供讨论、建议、诊断，不要输出落盘指令。",
-            chr_reference="  [-1] = 旁白\n  [-2] = ?（姓名尚未揭示的真实说话者）",
+            chr_reference=self._build_chr_reference(),
             arc_example=self._get_arc_example() or "",
             length_instruction="输出建议即可，无需生成完整剧本。",
         )
@@ -733,7 +732,7 @@ class ScriptwriterAgent(SparkBaseAgent, SparkAgentExecutor):
             char_lines = []
             for c in characters:
                 char_lines.append(
-                    f"- [{c.get('id', '?')}] {c.get('name', '未知')}: {c.get('desc', '')}"
+                    f"- {c.get('name', '未知')}: {c.get('desc', '')}"
                 )
             char_info = "\n".join(char_lines)
 
@@ -799,7 +798,7 @@ class ScriptwriterAgent(SparkBaseAgent, SparkAgentExecutor):
             char_lines = []
             for c in characters:
                 char_lines.append(
-                    f"- [{c.get('id', '?')}] {c.get('name', '未知')}: {c.get('desc', '')}"
+                    f"- {c.get('name', '未知')}: {c.get('desc', '')}"
                 )
             char_info = "\n".join(char_lines)
 

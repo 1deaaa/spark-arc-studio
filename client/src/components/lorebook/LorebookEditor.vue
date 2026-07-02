@@ -114,6 +114,8 @@ import bus from '../../eventBus';
 import GlobalLoading from '../share/GlobalLoading.vue';
 import { useProjectStore } from '../stores/projectStore';
 import { useFileStore } from '../stores/fileStore';
+import { useCharacterStore } from '../stores/characterStore';
+import { useSceneStore } from '../stores/sceneStore';
 import { fetchWithAuth, fetchCharacters, createCharacter, saveCharacter as saveCharacterApi, renameCharacter as renameCharacterApi, deleteCharacter as deleteCharacterApi } from '../../services/api';
 import { AUTO_SAVE_DEBOUNCE_TIME } from '../../config';
 import { autoSaveEnabled } from '@/utils/autoSaveState';
@@ -121,6 +123,8 @@ import { buildCreativeCacheKey, isCreativeCacheEqual, loadCreativeCache, saveCre
 
 const projectStore = useProjectStore();
 const fileStore = useFileStore();
+const characterStore = useCharacterStore();
+const sceneStore = useSceneStore();
 const route = useRoute();
 
 defineProps({
@@ -255,6 +259,7 @@ async function handleAddCharacter() {
   try {
     await createCharacter(projectStore.currentProject, name.trim());
     await loadCharacters();
+    await characterStore.reload(projectStore.currentProject);
     window.dispatchEvent(new CustomEvent('saved'));
   } catch {}
 }
@@ -278,11 +283,14 @@ async function renameCharacter(ch) {
       resolve
     });
   });
-  const normalizedNewName = typeof newName === 'string' ? newName : null;
-  if (normalizedNewName === null || normalizedNewName === ch.name) return;
+  const oldName = String(ch.name || '').trim();
+  const normalizedNewName = typeof newName === 'string' ? newName.trim() : '';
+  if (!normalizedNewName || normalizedNewName === oldName) return;
   try {
     await renameCharacterApi(projectStore.currentProject, ch.id, normalizedNewName);
+    sceneStore.renameSpeaker(oldName, normalizedNewName);
     await loadCharacters();
+    await characterStore.reload(projectStore.currentProject);
     window.dispatchEvent(new CustomEvent('saved'));
   } catch {}
 }
@@ -293,6 +301,7 @@ async function deleteCharacter(ch) {
   try {
     await deleteCharacterApi(projectStore.currentProject, ch.id);
     await loadCharacters();
+    await characterStore.reload(projectStore.currentProject);
     window.dispatchEvent(new CustomEvent('saved'));
     bus.emit('toast', { type: 'success', message: t('components.lorebookEditor.characterDeleted') });
   } catch {

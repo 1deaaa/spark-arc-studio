@@ -86,13 +86,25 @@ namespace SparkArc.Unity
         private IEnumerator ProcessNode(JObject node)
         {
             // 1. 处理角色和文本
-            int chrId = node["chr"]?.Value<int>() ?? -1;
+            int chrId = -1;
+            var chrToken = node["chr"];
+            if (chrToken != null)
+            {
+                int.TryParse(chrToken.ToString(), out chrId);
+            }
+            string speaker = node["speaker"]?.ToString() ?? "";
             string txt = node["txt"]?.ToString() ?? "";
             if (StoryRepository.Instance != null)
             {
                 txt = StoryRepository.Instance.ResolveRegistryTokens(txt);
             }
-            string chrName = characterDB != null ? characterDB.GetCharacterName(chrId) : chrId.ToString();
+            string chrName = !string.IsNullOrWhiteSpace(speaker)
+                ? speaker
+                : (characterDB != null ? characterDB.GetCharacterName(chrId) : chrId.ToString());
+            if (chrName == "旁白")
+            {
+                chrName = "";
+            }
 
             // thought: 辅助AI决策的字段，运行时不需要处理
             string thought = node["thought"]?.ToString() ?? "";

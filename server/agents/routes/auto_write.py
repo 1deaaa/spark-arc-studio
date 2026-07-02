@@ -640,9 +640,9 @@ async def generate_script_stream(
                             _serialize_dialogues,
                         )
 
-                        nodes = parse_arc_to_dialogues(arc_text)
+                        nodes = parse_arc_to_dialogues(arc_text, chr_map=chr_map)
                         if nodes:
-                            clean_lines = _serialize_dialogues(nodes, {}, 0)
+                            clean_lines = _serialize_dialogues(nodes, chr_map, 0)
                             arc_text = "\n".join(clean_lines).strip()
                     except Exception as e:
                         print(f"Error cleaning arc text: {e}")

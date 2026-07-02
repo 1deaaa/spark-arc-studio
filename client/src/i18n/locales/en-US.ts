@@ -1804,6 +1804,8 @@ const enUS = {
       },
     },
     structure: {
+      lengthPresetTooltipLabel: 'Length preset note',
+      lengthPresetTooltip: 'This only affects the target length when you manually click Generate Outline on this page. If the Director delegates outline generation from chat, the length request in chat and the current project context take priority.',
       lengthOptions: {
         short: 'Short (about 5 chapters, scene density ~3/chapter)',
         medium: 'Medium (about 10 chapters, scene density ~4/chapter)',

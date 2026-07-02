@@ -89,21 +89,23 @@ def _scan_character_names(text: str, chr_map: Optional[dict]) -> list[str]:
 
 
 def _scan_character_ids_from_arc(text: str, chr_map: Optional[dict]) -> list[str]:
-    """从 ARC 的 [角色ID] 行映射登场角色名，跳过旁白和未知身份系统角色。"""
-    if not chr_map:
-        return []
+    """从 ARC 的 [说话人] 行识别登场角色名，跳过旁白和未知身份系统角色。"""
     matches: list[str] = []
-    for raw_id in re.findall(r"^\s*\[(-?\d+)\](?:\s|$)", str(text or ""), flags=re.MULTILINE):
-        try:
-            cid = int(raw_id)
-        except Exception:
+    for raw_marker in re.findall(r"^\s*\[([^\]\r\n]+)\](?:\s|$)", str(text or ""), flags=re.MULTILINE):
+        marker = str(raw_marker or "").strip()
+        if not marker or marker in {"旁白", "?"}:
             continue
-        if cid < 0:
-            continue
-        name = str(chr_map.get(cid) or chr_map.get(str(cid)) or "").strip()
-        if not name or name == "旁白" or name == "?":
-            continue
-        if name not in matches:
+        name = marker
+        if chr_map:
+            try:
+                cid = int(marker)
+            except Exception:
+                cid = None
+            if cid is not None:
+                if cid < 0:
+                    continue
+                name = str(chr_map.get(cid) or chr_map.get(str(cid)) or "").strip()
+        if name and name not in {"旁白", "?"} and name not in matches:
             matches.append(name)
     return matches
 

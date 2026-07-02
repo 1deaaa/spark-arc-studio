@@ -30,7 +30,7 @@ def _generate_arc_content(chapter_num: int, chapter_title: str, chapter_desc: st
             lines.append("@intro")
             lines.extend([l for l in str(chapter_desc).split('\n') if l.strip()])
         lines.append("")
-        lines.append("[-1]")
+        lines.append("[旁白]")
         lines.append("场景内容待填写...")
         lines.append("")
         return '\n'.join(lines)
@@ -43,7 +43,7 @@ def _generate_arc_content(chapter_num: int, chapter_title: str, chapter_desc: st
             lines.append("@intro")
             lines.extend([l for l in str(scene_desc).split('\n') if l.strip()])
         lines.append("")
-        lines.append("[-1]")
+        lines.append("[旁白]")
         lines.append("场景内容待填写...")
         lines.append("")
         if idx < len(scenes) - 1:

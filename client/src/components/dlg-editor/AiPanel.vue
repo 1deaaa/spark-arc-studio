@@ -342,7 +342,7 @@ import { fetchWithAuth, fetchCharacters } from '@/services/api';
 import { createStreamingTask, consumeSSEReader, isAbortLikeError, parseSSEEventPayload } from '@/utils/streamingRuntime';
 import type { CancelLoadingPayload } from '@/eventBus';
 import type { StoryCharacterDetail } from '@/services/aiContracts';
-import type { ArcDialogueNode } from '@/services/arcParser';
+import { formatSpeakerMarker, type ArcDialogueNode } from '@/services/arcParser';
 
 type PanelMode = 'single-node' | 'multi-node' | 'critic' | 'rewrite-scene' | 'bridge';
 
@@ -600,9 +600,10 @@ const criticDimensionItems = computed(() => {
   ];
 });
 
-// 将角色ID映射为名称
+// 将说话人标记映射为显示名
 function chrName(id: number | string | null | undefined) {
-  if (id === -1) return '旁白';
+  if (id === -1 || id === '旁白') return '旁白';
+  if (typeof id === 'string' && Number.isNaN(Number(id))) return id;
   const name = characterStore.map?.[Number(id)];
   return name ?? `角色 ${id}`;
 }
@@ -718,11 +719,7 @@ function nodesToArc(nodes: ArcDialogueNode[]) {
       text += `<conception>${String(node.thought)}</conception>\n`;
     }
     
-    if (node.chr === -1) {
-      text += `[-1]\n${node.txt}\n\n`;
-    } else {
-      text += `[${node.chr}]\n${node.txt}\n\n`;
-    }
+    text += `${formatSpeakerMarker(node.chr, node.speaker, characterStore.map)}\n${node.txt}\n\n`;
     
     if (node.opt) {
       text += `<choice>\n`;

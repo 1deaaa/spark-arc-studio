@@ -17,7 +17,7 @@ export const useCharacterStore = defineStore('characters', {
     loading: false,
   }),
   actions: {
-    async load(projectName: string | null) {
+    async load(projectName: string | null, options: { force?: boolean } = {}) {
       if (!projectName) {
         this.list = [];
         this.map = {};
@@ -25,7 +25,7 @@ export const useCharacterStore = defineStore('characters', {
         return;
       }
       // 避免重复加载
-      if (this.loadedForProject === projectName && this.list.length) return;
+      if (!options.force && this.loadedForProject === projectName && this.list.length) return;
       this.loading = true;
       try {
         const items = await fetchCharacters(projectName, false, true);
@@ -39,6 +39,9 @@ export const useCharacterStore = defineStore('characters', {
       } finally {
         this.loading = false;
       }
+    },
+    async reload(projectName: string | null) {
+      await this.load(projectName, { force: true });
     },
   },
 });
