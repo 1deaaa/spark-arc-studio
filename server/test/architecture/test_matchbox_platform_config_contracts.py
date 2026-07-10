@@ -190,7 +190,7 @@ print(f"admin_selection_missing={bool(admin_selection['current'].get('missing_ke
     assert "shared_status=managed_ok" in output
 
 
-def test_matchbox_model_capabilities_drive_model_views(tmp_path: Path) -> None:
+def test_matchbox_model_modalities_drive_model_views(tmp_path: Path) -> None:
     code = r"""
 from llm.agen_matchbox.manager import AIManager
 
@@ -207,21 +207,24 @@ manager.add_model(
     "shared-remote-model",
     "聊天模型",
     user_id="user-1",
-    capabilities=["text_generation"],
+    input_modalities=["text"],
+    output_modalities=["text"],
 )
 manager.add_model(
     platform.id,
     "shared-remote-model",
     "向量模型",
     user_id="user-1",
-    capabilities=["embedding"],
+    input_modalities=["text"],
+    output_modalities=["embedding"],
 )
 manager.add_model(
     platform.id,
     "shared-remote-model",
     "生图模型",
     user_id="user-1",
-    capabilities=["image_generation", "image_reference_input", "image_edit"],
+    input_modalities=["text", "image"],
+    output_modalities=["image"],
 )
 
 platform_views = manager.get_platforms_with_models("user-1")
@@ -232,7 +235,11 @@ print(f"all_model_count={len(platform_views[0]['models'])}")
 print(f"chat_model_count={len(flat_chat_models)}")
 print(f"embedding_count={len(embedding_views[0]['embeddings'])}")
 for model in platform_views[0]["models"]:
-    print(f"{model['display_name']}={','.join(model['capabilities'])}")
+    print(
+        f"{model['display_name']}="
+        f"in:{','.join(model['input_modalities'])}|"
+        f"out:{','.join(model['output_modalities'])}"
+    )
 """
 
     output = _run_probe(code, tmp_path)
@@ -240,9 +247,9 @@ for model in platform_views[0]["models"]:
     assert "all_model_count=3" in output
     assert "chat_model_count=1" in output
     assert "embedding_count=1" in output
-    assert "聊天模型=text_generation" in output
-    assert "向量模型=embedding" in output
-    assert "生图模型=image_generation,image_reference_input,image_edit" in output
+    assert "聊天模型=in:text|out:text" in output
+    assert "向量模型=in:text|out:embedding" in output
+    assert "生图模型=in:text,image|out:image" in output
 
 
 def test_matchbox_image_adapter_is_preserved_as_model_field_not_extra_body(tmp_path: Path) -> None:
@@ -263,7 +270,9 @@ model = manager.add_model(
     "proxy-image-model",
     "代理生图模型",
     user_id="user-1",
-    capabilities=["image_generation", "image_reference_input", "image_edit"],
+    input_modalities=["text", "image"],
+    output_modalities=["image"],
+    image_generation_adapter="gemini_interactions",
     extra_body={
         "provider": "xai",
         "adapter": "xai_images",
@@ -291,7 +300,7 @@ print(f"selected_adapter={_select_adapter(resolved)}")
     assert "selected_adapter=gemini_interactions" in output
 
 
-def test_matchbox_non_text_capability_clears_token_pricing(tmp_path: Path) -> None:
+def test_matchbox_non_text_output_clears_token_pricing(tmp_path: Path) -> None:
     code = r"""
 from llm.agen_matchbox.manager import AIManager
 
@@ -308,7 +317,8 @@ model = manager.add_model(
     "pricing-model",
     "可切换模型",
     admin_mode=True,
-    capabilities=["text_generation"],
+    input_modalities=["text"],
+    output_modalities=["text"],
     temperature=0.8,
     sys_credit_input_price_per_million=1,
     sys_credit_cached_input_price_per_million=0.5,
@@ -318,12 +328,14 @@ model = manager.add_model(
 manager.update_model(
     model.id,
     admin_mode=True,
-    capabilities=["image_generation", "image_reference_input"],
-    update_capabilities=True,
+    input_modalities=["text", "image"],
+    output_modalities=["image"],
+    update_modalities=True,
 )
 
 view = manager.admin_get_sys_platforms(include_models=True)[0]["models"][0]
-print(f"capabilities={','.join(view['capabilities'])}")
+print(f"input_modalities={','.join(view['input_modalities'])}")
+print(f"output_modalities={','.join(view['output_modalities'])}")
 print(f"temperature={view['temperature']}")
 print(f"input_price={view['sys_credit_input_price_per_million']}")
 print(f"cached_input_price={view['sys_credit_cached_input_price_per_million']}")
@@ -332,7 +344,8 @@ print(f"output_price={view['sys_credit_output_price_per_million']}")
 
     output = _run_probe(code, tmp_path)
 
-    assert "capabilities=image_generation,image_reference_input" in output
+    assert "input_modalities=text,image" in output
+    assert "output_modalities=image" in output
     assert "temperature=None" in output
     assert "input_price=None" in output
     assert "cached_input_price=None" in output

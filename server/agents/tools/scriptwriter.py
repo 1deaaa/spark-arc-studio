@@ -133,12 +133,25 @@ def create_or_rewrite_script(
     from core.request_context import get_current_export_format
 
     effective_format = get_current_export_format()
-
+    user_id, project_name = ToolExecutionContext.get_context()
     content = (overwrite_content or "").strip()
+    if effective_format != "novel":
+        from core.project_settings import (
+            get_visual_illustration_settings,
+            is_visual_illustration_enabled,
+        )
+        from story.arc_safety import sanitize_arc_ai_output
+
+        visual_settings = get_visual_illustration_settings(user_id, project_name)
+        content = sanitize_arc_ai_output(
+            content,
+            allow_visual_illustration=is_visual_illustration_enabled(user_id, project_name),
+            max_per_scene=visual_settings["max_per_scene"],
+            min_node_gap=visual_settings["min_node_gap"],
+        )
     if not content:
         return "创建/重写剧本失败：overwrite_content 为空。"
 
-    user_id, project_name = ToolExecutionContext.get_context()
     stories_path = get_project_stories_path(user_id, project_name)
     os.makedirs(stories_path, exist_ok=True)
 
@@ -220,6 +233,31 @@ def patch_script(search_text: str, replace_text: str) -> str:
     from core.utils import get_project_stories_path
 
     user_id, project_name = ToolExecutionContext.get_context()
+    from core.project_settings import (
+        get_visual_illustration_settings,
+        is_visual_illustration_enabled,
+    )
+    from story.arc_safety import (
+        sanitize_arc_ai_fragment,
+        validate_arc_visual_prompt_candidate,
+    )
+
+    visual_settings = get_visual_illustration_settings(user_id, project_name)
+    raw_replace_text = replace_text
+    replace_text = sanitize_arc_ai_fragment(
+        replace_text,
+        allow_visual_illustration=is_visual_illustration_enabled(user_id, project_name),
+    )
+    if str(raw_replace_text or "").strip() and not replace_text:
+        return "局部修改剧本失败：replace_text 只包含 AI 无权写入的运行时控制字段。"
+
+    def validate_candidate(original: str, candidate: str) -> None:
+        validate_arc_visual_prompt_candidate(
+            original,
+            candidate,
+            max_per_scene=visual_settings["max_per_scene"],
+            min_node_gap=visual_settings["min_node_gap"],
+        )
     stories_path = get_project_stories_path(user_id, project_name)
     if not os.path.exists(stories_path):
         return "局部修改剧本失败：stories 目录不存在。"
@@ -231,11 +269,23 @@ def patch_script(search_text: str, replace_text: str) -> str:
         with open(file_path, "r", encoding="utf-8") as f:
             arc_content = f.read()
         if search_text in arc_content:
-            return _apply_patch(file_path, search_text, replace_text, file_label=filename)
+            return _apply_patch(
+                file_path,
+                search_text,
+                replace_text,
+                validate_content=validate_candidate,
+                file_label=filename,
+            )
 
     for filename in arc_files:
         file_path = os.path.join(stories_path, filename)
-        result = _apply_patch(file_path, search_text, replace_text, file_label=filename)
+        result = _apply_patch(
+            file_path,
+            search_text,
+            replace_text,
+            validate_content=validate_candidate,
+            file_label=filename,
+        )
         if not result.startswith("局部修改失败"):
             return result
 

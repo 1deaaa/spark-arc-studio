@@ -18,16 +18,20 @@ import {
 import { consumeSSEReader } from '@/utils/streamingRuntime';
 import type { AiModelItem, AiPlatform, ApiId, SpeedTestEvent, RemoteModelInfo } from '../services/aiContracts';
 import {
+    getModelModalities,
     isEmbeddingModel,
     isImageModel,
     isTextModel,
-    normalizeModelCapabilities,
-    type ModelCapability,
-} from '../services/modelCapabilities';
+    normalizeModelModalities,
+    type ModelModality,
+} from '../services/modelModalities';
+import {
+    DEFAULT_IMAGE_GENERATION_ADAPTER,
+    normalizeImageGenerationAdapter,
+    type ImageGenerationAdapterKey,
+} from '../services/imageGenerationAdapters';
 
 type SpeedResult = { speed: number; ftl: number };
-export type ImageGenerationAdapterKey = 'openai_images' | 'openai_chat_image' | 'gemini_interactions' | 'xai_images';
-const DEFAULT_IMAGE_ADAPTER: ImageGenerationAdapterKey = 'openai_images';
 
 type ModelCacheRecord = {
     models: RemoteModelInfo[];
@@ -38,7 +42,8 @@ type NewModelForm = {
     modelName: string;
     displayName: string;
     extraBody: string;
-    capabilities: ModelCapability[];
+    inputModalities: ModelModality[];
+    outputModalities: ModelModality[];
     imageAdapter: ImageGenerationAdapterKey;
     temperatureEnabled: boolean;
     temperature: number;
@@ -54,7 +59,8 @@ type EditingModelForm = {
     modelName: string;
     displayName: string;
     extraBody: string;
-    capabilities: ModelCapability[];
+    inputModalities: ModelModality[];
+    outputModalities: ModelModality[];
     imageAdapter: ImageGenerationAdapterKey;
     temperatureEnabled: boolean;
     temperature: number;
@@ -104,8 +110,8 @@ export function useAIModelManager(
         modelName: '',
         displayName: '',
         extraBody: '',
-        capabilities: defaultModelCapabilities(),
-        imageAdapter: DEFAULT_IMAGE_ADAPTER,
+        ...defaultModelModalities(),
+        imageAdapter: DEFAULT_IMAGE_GENERATION_ADAPTER,
         temperatureEnabled: false,
         temperature: 0.7,
         maxContextTokens: null,
@@ -119,8 +125,8 @@ export function useAIModelManager(
         modelName: '',
         displayName: '',
         extraBody: '',
-        capabilities: defaultModelCapabilities(),
-        imageAdapter: DEFAULT_IMAGE_ADAPTER,
+        ...defaultModelModalities(),
+        imageAdapter: DEFAULT_IMAGE_GENERATION_ADAPTER,
         temperatureEnabled: false,
         temperature: 0.7,
         maxContextTokens: null,
@@ -144,40 +150,16 @@ export function useAIModelManager(
     const CACHE_KEY = 'sparkarc_speed_test_results';
     const TEMP_MIN = 0.3;
     const TEMP_MAX = 1.5;
-    function defaultModelCapabilities() {
-        return normalizeModelCapabilities([]);
+    function defaultModelModalities() {
+        return normalizeModelModalities();
     }
 
     function isPlainObject(value: unknown): value is Record<string, unknown> {
         return typeof value === 'object' && value !== null && !Array.isArray(value);
     }
 
-    function normalizeImageAdapter(value: unknown): ImageGenerationAdapterKey {
-        const text = String(value || '').trim().toLowerCase();
-        if (['gemini', 'google', 'google_gemini', 'gemini_interactions', 'google_interactions'].includes(text)) {
-            return 'gemini_interactions';
-        }
-        if (['xai', 'xai_images', 'grok', 'grok_image', 'grok_images', 'grok_imagine'].includes(text)) {
-            return 'xai_images';
-        }
-        if (['openai_chat', 'openai_chat_image', 'openai_chat_completions', 'chat_completions', 'chat_image', 'compatible_chat_image'].includes(text)) {
-            return 'openai_chat_image';
-        }
-        if (['openai', 'openai_images', 'openai_compatible', 'gpt_image', 'gpt-image'].includes(text)) {
-            return 'openai_images';
-        }
-        return DEFAULT_IMAGE_ADAPTER;
-    }
-
-    function extractImageAdapter(adapterValue: unknown, extraObj: Record<string, unknown> | null | undefined): ImageGenerationAdapterKey {
-        const normalized = normalizeImageAdapter(adapterValue);
-        if (adapterValue && normalized) return normalized;
-        if (!extraObj) return DEFAULT_IMAGE_ADAPTER;
-        const imageConfig = extraObj.image_generation;
-        if (isPlainObject(imageConfig)) {
-            return normalizeImageAdapter(imageConfig.adapter);
-        }
-        return DEFAULT_IMAGE_ADAPTER;
+    function extractImageAdapter(adapterValue: unknown): ImageGenerationAdapterKey {
+        return normalizeImageGenerationAdapter(adapterValue);
     }
 
     function sanitizeExtraBodyObject(baseExtra: Record<string, unknown>): Record<string, unknown> {
@@ -266,8 +248,8 @@ export function useAIModelManager(
             modelName: '',
             displayName: '',
             extraBody: '',
-            capabilities: defaultModelCapabilities(),
-            imageAdapter: DEFAULT_IMAGE_ADAPTER,
+            ...defaultModelModalities(),
+            imageAdapter: DEFAULT_IMAGE_GENERATION_ADAPTER,
             temperatureEnabled: false,
             temperature: 0.7,
             maxContextTokens: null,
@@ -300,8 +282,8 @@ export function useAIModelManager(
         return Object.keys(extraObj).length > 0 ? JSON.stringify(extraObj) : null;
     }
 
-    function imageAdapterForCapabilities(capabilities: ModelCapability[], adapter: ImageGenerationAdapterKey) {
-        return isImageModel(capabilities) ? adapter : null;
+    function imageAdapterForModel(model: NewModelForm | EditingModelForm, adapter: ImageGenerationAdapterKey) {
+        return isImageModel(model) ? adapter : null;
     }
 
     function buildExtraBodyForNewModel() {
@@ -313,7 +295,7 @@ export function useAIModelManager(
     }
 
     function buildTemperatureForNewModel() {
-        if (!isTextModel(newModel.value.capabilities)) return undefined;
+        if (!isTextModel(newModel.value)) return undefined;
         if (!newModel.value.temperatureEnabled) return undefined;
         const temp = Number(newModel.value.temperature);
         if (!Number.isFinite(temp) || temp < TEMP_MIN || temp > TEMP_MAX) {
@@ -357,13 +339,14 @@ export function useAIModelManager(
         }
         const extraBodyStr = extraObj && Object.keys(extraObj).length > 0 ? JSON.stringify(extraObj, null, 2) : '';
 
+        const modalities = getModelModalities(model);
         editingModel.value = {
             id: model.model_id,
             modelName: model.model_name,
             displayName: model.display_name,
             extraBody: extraBodyStr,
-            capabilities: normalizeModelCapabilities(model.capabilities),
-            imageAdapter: extractImageAdapter(model.image_generation_adapter, rawExtraObj),
+            ...modalities,
+            imageAdapter: extractImageAdapter(model.image_generation_adapter),
             temperatureEnabled: modelTemp !== null && modelTemp !== undefined,
             temperature: modelTemp ?? 0.7,
             maxContextTokens: model.max_context_tokens ?? null,
@@ -416,15 +399,14 @@ export function useAIModelManager(
 
     async function testModelConnection() {
         if (!currentPlatform.value || !newModel.value.modelName) return;
-        const capabilities = normalizeModelCapabilities(newModel.value.capabilities);
-        if (isImageModel(capabilities)) {
+        if (isImageModel(newModel.value)) {
             message.info(t('components.aiManager.messages.imageModelTestPending'));
             return;
         }
         testing.value = true;
         try {
             const extraBodyPayload = buildExtraBodyForNewModel();
-            const endpoint = isEmbeddingModel(capabilities) ? 'test-embedding' : 'test-model';
+            const endpoint = isEmbeddingModel(newModel.value) ? 'test-embedding' : 'test-model';
             const res = await fetchWithAuth(`/api/ai/platform/${currentPlatform.value.platform_id}/${endpoint}`, {
                 method: 'POST',
                 body: JSON.stringify({
@@ -454,7 +436,7 @@ export function useAIModelManager(
     }
 
     async function speedTestModel(plat: AiPlatform, model: AiModelItem) {
-        if (!isTextModel(model.capabilities)) return;
+        if (!isTextModel(model)) return;
         if (speedTestingModelIds.value.has(model.model_id)) return;
 
         const modelKey = String(model.model_id);
@@ -518,7 +500,7 @@ export function useAIModelManager(
     }
 
     async function testExistingModel(plat: AiPlatform, model: AiModelItem) {
-        if (!isTextModel(model.capabilities)) return;
+        if (!isTextModel(model)) return;
         testingModelId.value = model.model_id;
         try {
             const res = await fetchWithAuth(`/api/ai/platform/${plat.platform_id}/test-model`, {
@@ -559,11 +541,11 @@ export function useAIModelManager(
         try {
             const displayName = newModel.value.displayName || newModel.value.modelName;
             const targetPlatform = currentPlatform.value;
-            const capabilities = normalizeModelCapabilities(newModel.value.capabilities);
+            const modalities = getModelModalities(newModel.value);
             const extraBodyPayload = buildExtraBodyForNewModel();
-            const textModel = isTextModel(capabilities);
+            const textModel = isTextModel(newModel.value);
             const temperature = buildTemperatureForNewModel();
-            const imageGenerationAdapter = imageAdapterForCapabilities(capabilities, newModel.value.imageAdapter);
+            const imageGenerationAdapter = imageAdapterForModel(newModel.value, newModel.value.imageAdapter);
 
             if (textModel) {
                 validateSystemModelPricing(
@@ -589,7 +571,8 @@ export function useAIModelManager(
                     outputPrice,
                     textModel ? newModel.value.maxContextTokens : null,
                     textModel ? newModel.value.maxOutputTokens : null,
-                    capabilities,
+                    modalities.inputModalities,
+                    modalities.outputModalities,
                     imageGenerationAdapter,
                 );
             } else {
@@ -601,7 +584,8 @@ export function useAIModelManager(
                     temperature,
                     textModel ? newModel.value.maxContextTokens : null,
                     textModel ? newModel.value.maxOutputTokens : null,
-                    capabilities,
+                    modalities.inputModalities,
+                    modalities.outputModalities,
                     imageGenerationAdapter,
                 );
             }
@@ -610,7 +594,8 @@ export function useAIModelManager(
                 model_id: result.id,
                 model_name: newModel.value.modelName,
                 display_name: displayName,
-                capabilities,
+                input_modalities: modalities.inputModalities,
+                output_modalities: modalities.outputModalities,
                 image_generation_adapter: imageGenerationAdapter,
                 extra_body: parseExtraBodyForView(extraBodyPayload || ''),
                 temperature: textModel ? temperature ?? null : null,
@@ -640,8 +625,8 @@ export function useAIModelManager(
         }
         saving.value = true;
         try {
-            const capabilities = normalizeModelCapabilities(editingModel.value.capabilities);
-            const textModel = isTextModel(capabilities);
+            const modalities = getModelModalities(editingModel.value);
+            const textModel = isTextModel(editingModel.value);
             let temperature: number | null = null;
             if (textModel && editingModel.value.temperatureEnabled) {
                 const temp = Number(editingModel.value.temperature);
@@ -653,7 +638,7 @@ export function useAIModelManager(
             const targetModelId = editingModel.value.id;
             const displayName = editingModel.value.displayName;
             const extraBodyInput = buildExtraBodyForEditingModel();
-            const imageGenerationAdapter = imageAdapterForCapabilities(capabilities, editingModel.value.imageAdapter);
+            const imageGenerationAdapter = imageAdapterForModel(editingModel.value, editingModel.value.imageAdapter);
             if (currentPlatform.value?.is_sys && isBillingEnabled() && textModel) {
                 validateSystemModelPricing(
                     editingModel.value.inputPricePerMillion,
@@ -676,8 +661,9 @@ export function useAIModelManager(
                         includeMaxTokens: true,
                         maxContextTokens: textModel ? editingModel.value.maxContextTokens : null,
                         maxOutputTokens: textModel ? editingModel.value.maxOutputTokens : null,
-                        includeCapabilities: true,
-                        capabilities,
+                        includeModalities: true,
+                        inputModalities: modalities.inputModalities,
+                        outputModalities: modalities.outputModalities,
                         includeImageGenerationAdapter: true,
                         imageGenerationAdapter,
                     }
@@ -693,8 +679,9 @@ export function useAIModelManager(
                         includeMaxTokens: true,
                         maxContextTokens: textModel ? editingModel.value.maxContextTokens : null,
                         maxOutputTokens: textModel ? editingModel.value.maxOutputTokens : null,
-                        includeCapabilities: true,
-                        capabilities,
+                        includeModalities: true,
+                        inputModalities: modalities.inputModalities,
+                        outputModalities: modalities.outputModalities,
                         includeImageGenerationAdapter: true,
                         imageGenerationAdapter,
                     }
@@ -703,7 +690,8 @@ export function useAIModelManager(
             const { plat, model } = findModelInPlatform(currentPlatform.value?.platform_id, targetModelId);
             if (model) {
                 model.display_name = displayName;
-                model.capabilities = capabilities;
+                model.input_modalities = modalities.inputModalities;
+                model.output_modalities = modalities.outputModalities;
                 model.image_generation_adapter = imageGenerationAdapter;
                 model.extra_body = parseExtraBodyForView(extraBodyInput || '');
                 model.temperature = textModel ? temperature : null;

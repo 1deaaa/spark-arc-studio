@@ -45,11 +45,22 @@
                 </template>
                 <template #header-extra>
                   <n-space :size="4">
-                    <n-button size="tiny" type="primary" @click="openCharacterSpriteModal(ch)" :disabled="ch.id === -1">
-                      <template #icon>
-                        <n-icon :component="ImagePlus" />
+                    <n-tooltip v-if="isScriptMode && ch.id !== -1" trigger="hover">
+                      <template #trigger>
+                        <n-button
+                          size="tiny"
+                          type="primary"
+                          circle
+                          :aria-label="t('components.lorebookEditor.spriteModalTitle', { name: ch.name || t('components.lorebookEditor.characterN', { n: ch.id }) })"
+                          @click="openCharacterSpriteModal(ch)"
+                        >
+                          <template #icon>
+                            <n-icon :component="ImagePlus" />
+                          </template>
+                        </n-button>
                       </template>
-                    </n-button>
+                      {{ t('components.lorebookEditor.spriteModalTitle', { name: ch.name || t('components.lorebookEditor.characterN', { n: ch.id }) }) }}
+                    </n-tooltip>
                     <n-button size="tiny" @click="renameCharacter(ch)" :disabled="ch.id === -1">
                       <template #icon>
                         <n-icon :component="SquarePen" />
@@ -114,15 +125,30 @@
         </n-text>
 
         <div class="sprite-existing-list">
-          <n-tag
+          <div
             v-for="asset in activeCharacterSpriteAssets"
             :key="asset.id"
-            size="small"
-            :bordered="false"
-            type="info"
+            class="sprite-existing-item"
           >
-            {{ asset.title || asset.id }}
-          </n-tag>
+            <img :src="presentationAssetUrl(asset)" :alt="asset.title || asset.id" />
+            <n-tag size="small" :bordered="false" type="info">
+              {{ asset.title || asset.id }}
+            </n-tag>
+            <n-tooltip trigger="hover">
+              <template #trigger>
+                <n-button
+                  size="tiny"
+                  quaternary
+                  circle
+                  :loading="mattingAssetId === asset.id"
+                  @click="matteExistingSprite(asset)"
+                >
+                  <template #icon><n-icon :component="Scissors" /></template>
+                </n-button>
+              </template>
+              {{ t('components.lorebookEditor.matteSprite') }}
+            </n-tooltip>
+          </div>
           <n-text v-if="activeCharacterSpriteAssets.length === 0" depth="3">
             {{ t('components.lorebookEditor.noSpriteAssets') }}
           </n-text>
@@ -189,8 +215,8 @@
 import { ref, onMounted, onBeforeUnmount, computed, onActivated, watch } from 'vue';
 import { useI18n } from 'vue-i18n';
 import { useRoute } from 'vue-router';
-import { NCard, NInput, NButton, NIcon, NSpace, NPopconfirm, NModal, NSelect, NText, NTag } from 'naive-ui';
-import { ImagePlus, Plus, Sparkles, SquarePen, Trash, Upload } from '@lucide/vue';
+import { NCard, NInput, NButton, NIcon, NSpace, NPopconfirm, NModal, NSelect, NText, NTag, NTooltip } from 'naive-ui';
+import { ImagePlus, Plus, Scissors, Sparkles, SquarePen, Trash, Upload } from '@lucide/vue';
 import StudioSeamlessTextarea from '../editors/StudioSeamlessTextarea.vue';
 import bus from '../../eventBus';
 import GlobalLoading from '../share/GlobalLoading.vue';
@@ -207,7 +233,10 @@ import {
   type PresentationAsset,
   type PresentationImageModel,
   type PresentationManifest,
+  type PresentationReferenceDescriptor,
 } from '@/services/presentationService';
+import { supportsImageInput } from '@/services/modelModalities';
+import { matteSprite } from '@/utils/spriteMatting';
 import { AUTO_SAVE_DEBOUNCE_TIME } from '../../config';
 import { autoSaveEnabled } from '@/utils/autoSaveState';
 import { buildCreativeCacheKey, isCreativeCacheEqual, loadCreativeCache, saveCreativeCache } from '@/utils/creativeLocalCache';
@@ -245,9 +274,13 @@ const imageModelsLoading = ref(false);
 const selectedImageModelKey = ref<string | null>(null);
 const presentationManifest = ref<PresentationManifest | null>(null);
 const selectedSpriteStyleReferenceId = ref<string | null>(null);
+const spriteChromaKey = ref('#00FF00');
+const spriteMattingMode = ref('chroma_key');
+const mattingAssetId = ref('');
 const SYSTEM_CHARACTER_IDS = new Set([-1, -2]);
 const isSystemCharacter = (ch: any) => SYSTEM_CHARACTER_IDS.has(Number(ch?.id));
 const userCharactersOnly = (items: any[]) => (Array.isArray(items) ? items.filter(ch => !isSystemCharacter(ch)) : []);
+const isScriptMode = computed(() => sceneStore.workspaceMode === 'script');
 
 const manifestAssets = computed<Record<string, PresentationAsset>>(() => {
   const assets = presentationManifest.value?.assets;
@@ -291,7 +324,8 @@ const selectedImageModel = computed(() => {
 });
 
 const canGenerateCharacterSprite = computed(() =>
-  !!projectStore.currentProject
+  isScriptMode.value
+  && !!projectStore.currentProject
   && !!activeSpriteCharacter.value
   && !!characterSpritePrompt.value.trim()
   && !!selectedImageModel.value
@@ -400,8 +434,7 @@ function imageModelKey(model: PresentationImageModel) {
 }
 
 function imageModelSupportsReference(model: PresentationImageModel | null) {
-  const capabilities = Array.isArray(model?.capabilities) ? model.capabilities : [];
-  return capabilities.includes('image_reference_input') || capabilities.includes('image_edit');
+  return supportsImageInput(model);
 }
 
 function presentationErrorMessage(error: unknown, fallback: string) {
@@ -411,6 +444,11 @@ function presentationErrorMessage(error: unknown, fallback: string) {
 }
 
 async function loadPresentationImageModels() {
+  if (!isScriptMode.value) {
+    imageModels.value = [];
+    selectedImageModelKey.value = null;
+    return;
+  }
   imageModelsLoading.value = true;
   try {
     const result = await fetchPresentationImageModels();
@@ -427,7 +465,7 @@ async function loadPresentationImageModels() {
 }
 
 async function loadPresentationManifest() {
-  if (!projectStore.currentProject) {
+  if (!projectStore.currentProject || !isScriptMode.value) {
     presentationManifest.value = null;
     selectedSpriteStyleReferenceId.value = null;
     return;
@@ -435,6 +473,9 @@ async function loadPresentationManifest() {
   try {
     const result = await fetchPresentationManifest(projectStore.currentProject);
     presentationManifest.value = result.manifest || null;
+    selectedSpriteStyleReferenceId.value = result.settings?.visualStyle?.reference_asset_id || null;
+    spriteChromaKey.value = result.settings?.visualIllustration?.sprite_chroma_key || '#00FF00';
+    spriteMattingMode.value = result.settings?.visualIllustration?.sprite_matting || 'chroma_key';
     if (selectedSpriteStyleReferenceId.value && !manifestAssets.value[selectedSpriteStyleReferenceId.value]) {
       selectedSpriteStyleReferenceId.value = null;
     }
@@ -444,15 +485,18 @@ async function loadPresentationManifest() {
 }
 
 function updatePresentationManifest(manifest: PresentationManifest | undefined | null) {
-  if (manifest) presentationManifest.value = manifest;
+  if (manifest) {
+    presentationManifest.value = manifest;
+    bus.emit('presentation-manifest-updated', { projectName: projectStore.currentProject });
+  }
 }
 
 function characterAssetKey(ch: any) {
-  return String(ch?.name || ch?.id || '').trim();
+  return String(ch?.id ?? '').trim();
 }
 
 function openCharacterSpriteModal(ch) {
-  if (isSystemCharacter(ch)) return;
+  if (!isScriptMode.value || isSystemCharacter(ch)) return;
   activeSpriteCharacter.value = ch;
   characterSpritePrompt.value = '';
   characterSpriteModalVisible.value = true;
@@ -460,28 +504,57 @@ function openCharacterSpriteModal(ch) {
   void loadPresentationImageModels();
 }
 
-function buildCharacterSpritePrompt() {
-  const ch = activeSpriteCharacter.value;
-  const styleAsset = selectedSpriteStyleReferenceId.value ? manifestAssets.value[selectedSpriteStyleReferenceId.value] : null;
-  return [
-    '你正在为 Web 视觉小说生成角色立绘。请优先保持角色一致性、项目画风一致性和后续图生图可复用性。',
-    '立绘用途：角色会叠加在视觉小说背景上，因此主体清晰、轮廓干净、中心安全区稳定；不要画 UI、对话框、水印或大段文字。',
-    '画幅：1024x1536，竖版，半身或七分身均可，角色位于中心。',
-    styleAsset ? `风格种子：${styleAsset.title || styleAsset.id}` : '',
-    ch?.name ? `角色名称：${ch.name}` : '',
-    ch?.content ? `角色设定：${ch.content}` : '',
-    `用户具体要求：${characterSpritePrompt.value.trim()}`,
-  ].filter(Boolean).join('\n');
-}
-
-function characterSpriteReferenceAssetIds() {
+function characterSpriteReferences() {
   const model = selectedImageModel.value;
   if (!imageModelSupportsReference(model)) return [];
-  const ids = new Set<string>();
-  if (selectedSpriteStyleReferenceId.value) ids.add(selectedSpriteStyleReferenceId.value);
+  const result: PresentationReferenceDescriptor[] = [];
+  if (selectedSpriteStyleReferenceId.value) {
+    result.push({ assetId: selectedSpriteStyleReferenceId.value, role: 'style' });
+  }
   const latestSprite = activeCharacterSpriteAssets.value[0];
-  if (latestSprite?.id) ids.add(latestSprite.id);
-  return Array.from(ids).slice(0, 4);
+  if (latestSprite?.id && latestSprite.id !== selectedSpriteStyleReferenceId.value) {
+    result.push({ assetId: latestSprite.id, role: 'character' });
+  }
+  return result.slice(0, 4);
+}
+
+function presentationAssetUrl(asset: PresentationAsset) {
+  if (asset.url) return asset.url;
+  const projectName = encodeURIComponent(projectStore.currentProject || '');
+  const path = String(asset.path || '').replace(/\\/g, '/').split('/').filter(Boolean).map(encodeURIComponent).join('/');
+  return projectName && path ? `/api/presentation/${projectName}/assets/${path}` : '';
+}
+
+async function matteAndUploadSprite(asset: PresentationAsset) {
+  const projectName = projectStore.currentProject;
+  const character = activeSpriteCharacter.value;
+  const url = presentationAssetUrl(asset);
+  if (!projectName || !character || !url) throw new Error(t('components.lorebookEditor.matteSourceMissing'));
+  const response = await fetchWithAuth(url);
+  if (!response.ok) throw new Error(t('components.lorebookEditor.matteSourceMissing'));
+  const transparent = await matteSprite(await response.blob(), {
+    mode: spriteMattingMode.value,
+    chromaKey: spriteChromaKey.value,
+  });
+  const file = new File([transparent], `${asset.id}-transparent.png`, { type: 'image/png' });
+  return await uploadPresentationSprite(projectName, file, {
+    title: `${character.name || character.id}-${t('components.lorebookEditor.transparentSpriteTitle')}`,
+    characterId: characterAssetKey(character),
+    expression: asset.expression || 'default',
+  });
+}
+
+async function matteExistingSprite(asset: PresentationAsset) {
+  mattingAssetId.value = asset.id;
+  try {
+    const result = await matteAndUploadSprite(asset);
+    updatePresentationManifest(result.manifest);
+    bus.emit('toast', { type: 'success', message: t('components.lorebookEditor.matteSuccess') });
+  } catch (error: unknown) {
+    bus.emit('toast', { type: 'error', message: presentationErrorMessage(error, t('components.lorebookEditor.matteFailed')) });
+  } finally {
+    mattingAssetId.value = '';
+  }
 }
 
 function triggerCharacterSpriteUpload() {
@@ -530,16 +603,30 @@ async function generateCharacterSpriteByAI() {
   characterSpriteGenerating.value = true;
   try {
     const result = await generatePresentationSprite(projectStore.currentProject, {
-      prompt: buildCharacterSpritePrompt(),
+      prompt: characterSpritePrompt.value.trim(),
       title: activeSpriteCharacter.value.name || t('components.lorebookEditor.characterN', { n: activeSpriteCharacter.value.id }),
       characterId: characterAssetKey(activeSpriteCharacter.value),
       expression: 'default',
       size: '1024x1536',
       platformId: Number(model.platform_id),
       modelId: Number(model.model_id),
-      referenceAssetIds: characterSpriteReferenceAssetIds(),
+      referenceAssets: characterSpriteReferences(),
+      context: {
+        characterIds: [String(activeSpriteCharacter.value.id)],
+      },
     });
     updatePresentationManifest(result.manifest);
+    if (result.asset?.id) {
+      try {
+        mattingAssetId.value = result.asset.id;
+        const transparentResult = await matteAndUploadSprite(result.asset);
+        updatePresentationManifest(transparentResult.manifest);
+      } catch (error: unknown) {
+        bus.emit('toast', { type: 'warning', message: presentationErrorMessage(error, t('components.lorebookEditor.autoMatteFailed')) });
+      } finally {
+        mattingAssetId.value = '';
+      }
+    }
     characterSpritePrompt.value = '';
     bus.emit('toast', { type: 'success', message: t('nodeEditor.presentation.spriteGenerateSuccess') });
   } catch (error: unknown) {
@@ -1101,14 +1188,36 @@ function onStreamedCharacter(payload) {
 
 .sprite-existing-list {
   min-height: 30px;
-  display: flex;
-  flex-wrap: wrap;
-  align-items: center;
-  gap: 6px;
+  max-height: 240px;
+  overflow: auto;
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(150px, 1fr));
+  gap: 8px;
   padding: 8px;
   border: 1px solid color-mix(in srgb, var(--spark-border), transparent 8%);
   border-radius: 8px;
   background: color-mix(in srgb, var(--spark-bg) 42%, transparent);
+}
+
+.sprite-existing-item {
+  min-width: 0;
+  display: grid;
+  grid-template-columns: 48px minmax(0, 1fr) 28px;
+  align-items: center;
+  gap: 8px;
+}
+
+.sprite-existing-item img {
+  width: 48px;
+  height: 64px;
+  object-fit: contain;
+  background: var(--spark-bg);
+  border-radius: 4px;
+}
+
+.sprite-existing-item :deep(.n-tag) {
+  min-width: 0;
+  overflow: hidden;
 }
 
 .sprite-hidden-input {

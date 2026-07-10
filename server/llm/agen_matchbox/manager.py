@@ -31,11 +31,13 @@ from .models import (
     Base, LLMPlatform, LLModels, LLMSysPlatformKey,
     UserModelUsage, AgentModelBinding, ModelUsageStats, UserEmbeddingSelection,
     DEFAULT_MAX_CONTEXT_TOKENS, DEFAULT_MAX_OUTPUT_TOKENS,
-    get_model_capabilities,
+    DEFAULT_MODEL_INPUT_MODALITIES, DEFAULT_MODEL_OUTPUT_MODALITIES,
+    MODALITY_IMAGE,
+    get_model_modalities,
     is_chat_model,
     is_embedding_model,
-    normalize_model_capabilities,
-    set_model_capabilities,
+    normalize_model_modalities,
+    set_model_modalities,
 )
 from .config import (
     DEFAULT_PLATFORM_CONFIGS, SYSTEM_USER_ID, DEFAULT_USAGE_KEY,
@@ -51,7 +53,6 @@ from .config import (
 from .env_utils import get_env_var
 from .image_adapters import (
     DEFAULT_IMAGE_GENERATION_ADAPTER,
-    extract_legacy_image_generation_adapter,
     normalize_image_generation_adapter,
     strip_internal_image_generation_fields,
 )
@@ -298,22 +299,6 @@ class AIManagerBase:
         self.ensure_database_schema()
         self.initialize_defaults(ensure_schema=False)
 
-    def _backfill_model_capabilities(self) -> None:
-        """为旧数据库中缺失 capabilities 的模型补齐能力集合。"""
-        with self.Session() as session:
-            changed = False
-            for model in session.query(LLModels).all():
-                if getattr(model, "capabilities", None):
-                    continue
-                set_model_capabilities(
-                    model,
-                    None,
-                    legacy_is_embedding=bool(getattr(model, "is_embedding", 0)),
-                )
-                changed = True
-            if changed:
-                session.commit()
-
     def _resolve_default_ids_from_db(self, session) -> None:
         """从数据库 sort_order 确定默认平台 ID 和默认模型 ID。
 
@@ -353,7 +338,6 @@ class AIManagerBase:
         self._ensure_sys_platform_keys_unique_constraint()
 
         self._sync_default_platforms()
-        self._backfill_model_capabilities()
 
         with self.Session() as session:
             self._resolve_default_ids_from_db(session)
@@ -393,19 +377,18 @@ class AIManagerBase:
                 model_name = model_config
                 extra_body = None
                 temperature = None
-                capabilities = normalize_model_capabilities()
+                input_modalities, output_modalities = normalize_model_modalities()
                 image_generation_adapter = None
             elif isinstance(model_config, dict):
                 model_name = model_config.get("model_name")
                 extra_body = model_config.get("extra_body")
                 temperature = model_config.get("temperature")
-                capabilities = normalize_model_capabilities(
-                    model_config.get("capabilities"),
-                    legacy_is_embedding=bool(model_config.get("is_embedding")),
+                input_modalities, output_modalities = normalize_model_modalities(
+                    model_config.get("input_modalities"),
+                    model_config.get("output_modalities"),
                 )
                 image_generation_adapter = (
                     normalize_image_generation_adapter(model_config.get("image_generation_adapter"))
-                    or extract_legacy_image_generation_adapter(extra_body)
                 )
             else:
                 continue
@@ -415,14 +398,15 @@ class AIManagerBase:
 
             max_context_tokens, max_output_tokens = self._resolve_seed_model_limits(model_config)
             cleaned_extra_body = strip_internal_image_generation_fields(extra_body)
-            if "image_generation" in capabilities and not image_generation_adapter:
+            if MODALITY_IMAGE in output_modalities and not image_generation_adapter:
                 image_generation_adapter = DEFAULT_IMAGE_GENERATION_ADAPTER
             specs.append({
                 "display_name": display_name,
                 "model_name": model_name,
-                "capabilities": capabilities,
+                "input_modalities": input_modalities,
+                "output_modalities": output_modalities,
                 "extra_body_json": json.dumps(cleaned_extra_body) if cleaned_extra_body else None,
-                "image_generation_adapter": image_generation_adapter if "image_generation" in capabilities else None,
+                "image_generation_adapter": image_generation_adapter if MODALITY_IMAGE in output_modalities else None,
                 "temperature": temperature,
                 "max_context_tokens": max_context_tokens,
                 "max_output_tokens": max_output_tokens,
@@ -439,7 +423,14 @@ class AIManagerBase:
         matched_pairs: Dict[int, LLModels] = {}
         matched_db_ids: set[int] = set()
 
-        # 第一阶段：完美匹配 (display_name, model_name, capabilities)
+        def modalities_match(db_model: LLModels, seed: Dict[str, Any]) -> bool:
+            modalities = get_model_modalities(db_model)
+            return (
+                modalities["input_modalities"] == seed["input_modalities"]
+                and modalities["output_modalities"] == seed["output_modalities"]
+            )
+
+        # 第一阶段：完美匹配（显示名、模型名、输入/输出模态）
         for idx, seed in enumerate(seed_models):
             for db_model in db_models_pool:
                 if db_model.id in matched_db_ids:
@@ -447,7 +438,7 @@ class AIManagerBase:
                 if (
                     db_model.display_name == seed["display_name"]
                     and db_model.model_name == seed["model_name"]
-                    and get_model_capabilities(db_model) == seed["capabilities"]
+                    and modalities_match(db_model, seed)
                 ):
                     matched_pairs[idx] = db_model
                     matched_db_ids.add(db_model.id)
@@ -460,24 +451,35 @@ class AIManagerBase:
             for db_model in db_models_pool:
                 if db_model.id in matched_db_ids:
                     continue
-                if db_model.display_name == seed["display_name"] and get_model_capabilities(db_model) == seed["capabilities"]:
+                if db_model.display_name == seed["display_name"] and modalities_match(db_model, seed):
                     matched_pairs[idx] = db_model
                     matched_db_ids.add(db_model.id)
                     break
 
-        # 第三阶段：唯一 model_name + capabilities 改名匹配。
-        seed_key_counter = Counter((seed["model_name"], tuple(seed["capabilities"])) for seed in seed_models)
+        # 第三阶段：唯一 model_name + 模态组合改名匹配。
+        seed_key_counter = Counter(
+            (
+                seed["model_name"],
+                tuple(seed["input_modalities"]),
+                tuple(seed["output_modalities"]),
+            )
+            for seed in seed_models
+        )
         for idx, seed in enumerate(seed_models):
             if idx in matched_pairs:
                 continue
-            key = (seed["model_name"], tuple(seed["capabilities"]))
+            key = (
+                seed["model_name"],
+                tuple(seed["input_modalities"]),
+                tuple(seed["output_modalities"]),
+            )
             if seed_key_counter[key] != 1:
                 continue
             candidates = [
                 db_model for db_model in db_models_pool
                 if db_model.id not in matched_db_ids
                 and db_model.model_name == seed["model_name"]
-                and get_model_capabilities(db_model) == seed["capabilities"]
+                and modalities_match(db_model, seed)
             ]
             if len(candidates) == 1:
                 db_model = candidates[0]
@@ -492,7 +494,7 @@ class AIManagerBase:
                 db_model for db_model in db_models_pool
                 if db_model.id not in matched_db_ids
                 and db_model.model_name == seed["model_name"]
-                and get_model_capabilities(db_model) == seed["capabilities"]
+                and modalities_match(db_model, seed)
             ]
             best_match = next(
                 (candidate for candidate in candidates if candidate.extra_body == seed["extra_body_json"]),
@@ -513,7 +515,7 @@ class AIManagerBase:
         model.temperature = spec["temperature"]
         model.max_context_tokens = spec["max_context_tokens"]
         model.max_output_tokens = spec["max_output_tokens"]
-        set_model_capabilities(model, spec["capabilities"])
+        set_model_modalities(model, spec["input_modalities"], spec["output_modalities"])
         if sync_order:
             model.sort_order = spec["sort_order"]
 
@@ -531,7 +533,7 @@ class AIManagerBase:
             max_output_tokens=spec["max_output_tokens"],
             sort_order=sort_order,
         )
-        set_model_capabilities(model, spec["capabilities"])
+        set_model_modalities(model, spec["input_modalities"], spec["output_modalities"])
         return model
 
     def _sync_seed_models_for_platform(
@@ -1034,17 +1036,22 @@ class AIManagerBase:
                         and int(model.max_output_tokens or DEFAULT_MAX_OUTPUT_TOKENS) == DEFAULT_MAX_OUTPUT_TOKENS
                     )
 
-                    capabilities = get_model_capabilities(model)
-                    if not model.extra_body and capabilities == ["text_generation"] and model.temperature is None and has_default_limits:
+                    modalities = get_model_modalities(model)
+                    has_default_modalities = (
+                        modalities["input_modalities"] == list(DEFAULT_MODEL_INPUT_MODALITIES)
+                        and modalities["output_modalities"] == list(DEFAULT_MODEL_OUTPUT_MODALITIES)
+                    )
+                    if not model.extra_body and has_default_modalities and model.temperature is None and has_default_limits:
                         # 简单形式：DisplayName -> ModelID 字符串
                         plat_config["models"][model.display_name] = model.model_name
                     else:
                         entry: Dict[str, Any] = {"model_name": model.model_name}
-                        entry["capabilities"] = capabilities
+                        if not has_default_modalities:
+                            entry.update(modalities)
                         image_generation_adapter = normalize_image_generation_adapter(
                             getattr(model, "image_generation_adapter", None)
                         )
-                        if "image_generation" in capabilities and image_generation_adapter:
+                        if MODALITY_IMAGE in modalities["output_modalities"] and image_generation_adapter:
                             entry["image_generation_adapter"] = image_generation_adapter
                         if model.extra_body:
                             try:

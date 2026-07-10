@@ -24,7 +24,7 @@
         <div v-if="canEditPresentation" class="presentation-tools">
           <div class="presentation-section-heading">
             <n-icon :component="ImagePlus" />
-            <span>{{ t('nodeEditor.presentation.webCue') }}</span>
+            <span>{{ t('nodeEditor.presentation.presentationCue') }}</span>
           </div>
 
           <div class="presentation-tool-stack">
@@ -160,6 +160,72 @@
                   @change="onSpriteFileChange"
                 />
               </div>
+            </div>
+
+            <div v-if="visualIllustrationEnabled" class="presentation-style-card presentation-illustration-card">
+              <div class="presentation-tool-heading">
+                <n-icon :component="Images" />
+                <span>{{ t('nodeEditor.presentation.illustration') }}</span>
+              </div>
+              <div class="presentation-current-line" :class="{ 'is-empty': !currentIllustrationId }">
+                {{ currentIllustrationId || t('nodeEditor.presentation.noIllustration') }}
+              </div>
+              <n-input
+                v-model:value="illustrationPrompt"
+                type="textarea"
+                size="small"
+                :autosize="{ minRows: 3, maxRows: 7 }"
+                :placeholder="t('nodeEditor.presentation.illustrationPromptPlaceholder')"
+                @blur="saveIllustrationPrompt"
+              />
+              <n-radio-group v-model:value="illustrationBatchScope" size="small">
+                <n-radio-button value="scene">{{ t('nodeEditor.presentation.batchScopeScene') }}</n-radio-button>
+                <n-radio-button value="file">{{ t('nodeEditor.presentation.batchScopeFile') }}</n-radio-button>
+              </n-radio-group>
+              <n-space :size="8" wrap align="center">
+                <n-button size="small" secondary :loading="illustrationUploading" @click="triggerIllustrationUpload">
+                  <template #icon><n-icon :component="Upload" /></template>
+                  {{ t('nodeEditor.presentation.uploadIllustration') }}
+                </n-button>
+                <n-button
+                  v-if="currentIllustrationId"
+                  size="small"
+                  secondary
+                  type="warning"
+                  @click="clearDialogueIllustration"
+                >
+                  <template #icon><n-icon :component="Eraser" /></template>
+                  {{ t('nodeEditor.presentation.clearIllustration') }}
+                </n-button>
+                <n-button
+                  size="small"
+                  type="primary"
+                  secondary
+                  :disabled="!canGenerateIllustration"
+                  :loading="illustrationGenerating"
+                  @click="generateIllustrationByAI"
+                >
+                  <template #icon><n-icon :component="Sparkles" /></template>
+                  {{ t('nodeEditor.presentation.generateIllustration') }}
+                </n-button>
+                <n-button
+                  size="small"
+                  secondary
+                  :disabled="!canBatchGenerateIllustrations"
+                  :loading="illustrationBatchGenerating"
+                  @click="generateSceneIllustrations"
+                >
+                  <template #icon><n-icon :component="Images" /></template>
+                  {{ t('nodeEditor.presentation.generateSceneIllustrations') }}
+                </n-button>
+              </n-space>
+              <input
+                ref="illustrationFileInputRef"
+                class="presentation-hidden-input"
+                type="file"
+                accept="image/png,image/jpeg,image/webp"
+                @change="onIllustrationFileChange"
+              />
             </div>
 
             <n-select
@@ -484,11 +550,11 @@
 </template>
 
 <script setup lang="ts">
-import { computed, onMounted, ref, watch } from 'vue';
+import { computed, onBeforeUnmount, onMounted, ref, watch } from 'vue';
 import { useI18n } from 'vue-i18n';
-import { NCard, NForm, NFormItem, NSelect, NInputNumber, NButton, NInput, NIcon, NSpace, NTag, NDivider, NText, useDialog } from 'naive-ui';
+import { NCard, NForm, NFormItem, NSelect, NInputNumber, NButton, NInput, NIcon, NSpace, NTag, NDivider, NText, NRadioButton, NRadioGroup, useDialog } from 'naive-ui';
 import SparkAlert from '@/components/share/SparkAlert.vue';
-import { ChartColumn, CircleCheck, Eraser, FileText, Files, GitBranch, ImagePlus, Palette, RefreshCw, Sparkles, SquarePen, Upload, UserRound, Zap } from '@lucide/vue';
+import { ChartColumn, CircleCheck, Eraser, FileText, Files, GitBranch, ImagePlus, Images, Palette, RefreshCw, Sparkles, SquarePen, Upload, UserRound, Zap } from '@lucide/vue';
 import bus from '@/eventBus';
 import MarkdownRenderer from '@/components/share/MarkdownRenderer.vue';
 import { useSceneStore } from '@/components/stores/sceneStore';
@@ -500,17 +566,22 @@ import {
   fetchPresentationImageModels,
   fetchPresentationManifest,
   generatePresentationBackground,
+  generatePresentationIllustration,
   generatePresentationSprite,
   uploadPresentationBackground,
+  uploadPresentationIllustration,
   uploadPresentationSprite,
   type PresentationAsset,
   type PresentationImageModel,
   type PresentationManifest,
+  type PresentationReferenceDescriptor,
 } from '@/services/presentationService';
+import { supportsImageInput } from '@/services/modelModalities';
 import { createStreamingTask, consumeSSEReader, isAbortLikeError, parseSSEEventPayload } from '@/utils/streamingRuntime';
+import { matteSprite } from '@/utils/spriteMatting';
 import type { CancelLoadingPayload } from '@/eventBus';
 import type { StoryCharacterDetail } from '@/services/aiContracts';
-import { formatSpeakerMarker, type ArcDialogueNode, type PresentationCue } from '@/services/arcParser';
+import { formatSpeakerMarker, type ArcDialogueNode, type ArcScene, type PresentationCue } from '@/services/arcParser';
 
 type PanelMode = 'single-node' | 'multi-node' | 'critic' | 'rewrite-scene' | 'bridge';
 
@@ -632,7 +703,7 @@ const props = withDefaults(defineProps<PanelProps>(), {
   hideModeSelector: false,
 });
 
-const isNovelMode = computed(() => sceneStore.fileFormat === 'novel');
+const isNovelMode = computed(() => sceneStore.workspaceMode === 'novel' || sceneStore.fileFormat === 'novel');
 const visible = computed(() => sceneStore.selectionType === 'dialogue' || sceneStore.selectionType === 'scene' || sceneStore.selectionType === 'novel' || mode.value === 'bridge');
 
 // 模式选项
@@ -677,17 +748,26 @@ let abortController: AbortController | null = null;
 
 const backgroundFileInputRef = ref<HTMLInputElement | null>(null);
 const spriteFileInputRef = ref<HTMLInputElement | null>(null);
+const illustrationFileInputRef = ref<HTMLInputElement | null>(null);
 const backgroundUploading = ref(false);
 const backgroundGenerating = ref(false);
 const spriteUploading = ref(false);
 const spriteGenerating = ref(false);
+const illustrationUploading = ref(false);
+const illustrationGenerating = ref(false);
+const illustrationBatchGenerating = ref(false);
+const illustrationBatchScope = ref<'scene' | 'file'>('scene');
 const backgroundPrompt = ref('');
 const spritePrompt = ref('');
+const illustrationPrompt = ref('');
 const imageModels = ref<PresentationImageModel[]>([]);
 const imageModelsLoading = ref(false);
 const selectedImageModelKey = ref<string | null>(null);
 const presentationManifest = ref<PresentationManifest | null>(null);
 const selectedStyleReferenceId = ref<string | null>(null);
+const visualIllustrationEnabled = ref(false);
+const spriteChromaKey = ref('#00FF00');
+const spriteMattingMode = ref('chroma_key');
 
 // 重写场景
 const rewriteThought = ref('');
@@ -768,12 +848,11 @@ const currentPresentation = computed<Record<string, unknown>>(() => {
 
 const currentBackgroundId = computed(() => normalizePresentationValue(currentPresentation.value.bg));
 const currentSpriteId = computed(() => normalizePresentationValue(currentPresentation.value.sprite));
+const currentIllustrationId = computed(() => normalizePresentationValue(currentPresentation.value.illustration));
 
 const currentSpriteCharacterId = computed(() => {
   const node = currentDialogueNode.value;
-  const value = node?.speaker || node?.chr;
-  if (value === undefined || value === null || value === '旁白' || value === -1 || value === '-1') return '';
-  return String(value).trim();
+  return node ? characterIdForNode(node) : '';
 });
 
 const manifestAssets = computed<Record<string, PresentationAsset>>(() => {
@@ -825,6 +904,37 @@ const canGenerateSprite = computed(() =>
   && !!currentSpriteCharacterId.value
 );
 
+const canGenerateIllustration = computed(() =>
+  visualIllustrationEnabled.value
+  && !!projectStore.currentProject
+  && !!illustrationPrompt.value.trim()
+  && !!selectedImageModel.value
+);
+
+const illustrationCandidates = computed(() => {
+  const scenes = illustrationBatchScope.value === 'file'
+    ? (Array.isArray(sceneStore.scriptData) ? sceneStore.scriptData as ArcScene[] : [])
+    : (sceneStore.currentScene ? [sceneStore.currentScene as ArcScene] : []);
+  return scenes.flatMap(scene => collectDialogueNodes(scene)
+    .filter((node) => {
+      const cue = node.presentation;
+      return !!normalizePresentationValue(cue?.illustration_prompt)
+        && !normalizePresentationValue(cue?.illustration);
+    })
+    .map(node => ({ scene, node })));
+});
+
+const canBatchGenerateIllustrations = computed(() =>
+  visualIllustrationEnabled.value
+  && !illustrationBatchGenerating.value
+  && illustrationCandidates.value.length > 0
+  && !!selectedImageModel.value
+);
+
+watch(() => currentDialogueNode.value?.id, () => {
+  illustrationPrompt.value = normalizePresentationValue(currentPresentation.value.illustration_prompt);
+}, { immediate: true });
+
 function normalizePresentationValue(value: unknown): string {
   const raw = Array.isArray(value) ? value[0] : value;
   return typeof raw === 'string' ? raw.trim() : '';
@@ -835,8 +945,7 @@ function imageModelKey(model: PresentationImageModel) {
 }
 
 function imageModelSupportsReference(model: PresentationImageModel | null) {
-  const capabilities = Array.isArray(model?.capabilities) ? model.capabilities : [];
-  return capabilities.includes('image_reference_input') || capabilities.includes('image_edit');
+  return supportsImageInput(model);
 }
 
 function presentationErrorMessage(error: unknown, fallback: string) {
@@ -846,10 +955,18 @@ function presentationErrorMessage(error: unknown, fallback: string) {
 }
 
 function updateManifest(manifest: PresentationManifest | undefined | null) {
-  if (manifest) presentationManifest.value = manifest;
+  if (manifest) {
+    presentationManifest.value = manifest;
+    bus.emit('presentation-manifest-updated', { projectName: projectStore.currentProject });
+  }
 }
 
 async function loadPresentationImageModels() {
+  if (isNovelMode.value) {
+    imageModels.value = [];
+    selectedImageModelKey.value = null;
+    return;
+  }
   imageModelsLoading.value = true;
   try {
     const result = await fetchPresentationImageModels();
@@ -866,14 +983,19 @@ async function loadPresentationImageModels() {
 }
 
 async function loadPresentationManifest() {
-  if (!projectStore.currentProject) {
+  if (!projectStore.currentProject || isNovelMode.value) {
     presentationManifest.value = null;
     selectedStyleReferenceId.value = null;
+    visualIllustrationEnabled.value = false;
     return;
   }
   try {
     const result = await fetchPresentationManifest(projectStore.currentProject);
     presentationManifest.value = result.manifest || null;
+    selectedStyleReferenceId.value = result.settings?.visualStyle?.reference_asset_id || null;
+    visualIllustrationEnabled.value = !!result.settings?.visualIllustration?.effectiveEnabled;
+    spriteChromaKey.value = result.settings?.visualIllustration?.sprite_chroma_key || '#00FF00';
+    spriteMattingMode.value = result.settings?.visualIllustration?.sprite_matting || 'chroma_key';
     if (selectedStyleReferenceId.value && !manifestAssets.value[selectedStyleReferenceId.value]) {
       selectedStyleReferenceId.value = null;
     }
@@ -890,20 +1012,26 @@ async function savePresentationBinding() {
   }
 }
 
-function setDialoguePresentationValue(key: 'bg' | 'sprite', value: string | null) {
-  const node = currentDialogueNode.value;
+function setNodePresentationValue(
+  node: ArcDialogueNode | null,
+  key: 'bg' | 'sprite' | 'illustration_prompt' | 'illustration',
+  value: string | null,
+) {
   if (!node) return;
   const nextPresentation: PresentationCue = { ...(node.presentation || {}) };
   if (!value) delete nextPresentation[key];
   else nextPresentation[key] = value;
-  sceneStore.updateCurrentDialogue({
-    presentation: Object.keys(nextPresentation).length > 0 ? nextPresentation : undefined,
-  });
+  const presentation = Object.keys(nextPresentation).length > 0 ? nextPresentation : undefined;
+  if (node === currentDialogueNode.value) sceneStore.updateCurrentDialogue({ presentation });
+  else node.presentation = presentation;
+}
+
+function setDialoguePresentationValue(key: 'bg' | 'sprite' | 'illustration_prompt' | 'illustration', value: string | null) {
+  setNodePresentationValue(currentDialogueNode.value, key, value);
   void savePresentationBinding();
 }
 
-function collectDialogueContextNodes(): ArcDialogueNode[] {
-  const scene = sceneStore.currentScene;
+function collectDialogueNodes(scene: ArcScene | null | undefined): ArcDialogueNode[] {
   const result: ArcDialogueNode[] = [];
   const walk = (nodes: ArcDialogueNode[] | undefined) => {
     for (const node of nodes || []) {
@@ -915,12 +1043,31 @@ function collectDialogueContextNodes(): ArcDialogueNode[] {
   return result;
 }
 
-function getCurrentDialogueWindow() {
-  const nodes = collectDialogueContextNodes();
-  const current = currentDialogueNode.value;
-  const index = current ? nodes.indexOf(current) : -1;
+function collectDialogueContextNodes(): ArcDialogueNode[] {
+  return collectDialogueNodes(sceneStore.currentScene as ArcScene | null);
+}
+
+function getCurrentDialogueWindow(
+  target = currentDialogueNode.value,
+  scene: ArcScene | null = sceneStore.currentScene as ArcScene | null,
+) {
+  const nodes = collectDialogueNodes(scene);
+  const index = target ? nodes.indexOf(target) : -1;
   if (index < 0) return [];
   return nodes.slice(Math.max(0, index - 2), Math.min(nodes.length, index + 3));
+}
+
+function nearestIllustrationAssetId(
+  target = currentDialogueNode.value,
+  scene: ArcScene | null = sceneStore.currentScene as ArcScene | null,
+) {
+  const nodes = collectDialogueNodes(scene);
+  const index = target ? nodes.indexOf(target) : -1;
+  for (let cursor = index - 1; cursor >= 0; cursor -= 1) {
+    const assetId = normalizePresentationValue(nodes[cursor]?.presentation?.illustration);
+    if (assetId) return assetId;
+  }
+  return '';
 }
 
 function currentCharacterDetail() {
@@ -932,52 +1079,66 @@ function currentCharacterDetail() {
   return characters.value.find(ch => ch.name === name) || null;
 }
 
-function buildPresentationImagePrompt(kind: 'background' | 'sprite', userPrompt: string) {
-  const scene = sceneStore.currentScene;
-  const node = currentDialogueNode.value;
-  const contextNodes = getCurrentDialogueWindow()
-    .map(item => `${chrName(item.speaker || item.chr)}：${String(item.txt || '').trim()}`)
-    .filter(line => !line.endsWith('：'))
-    .join('\n');
-  const character = currentCharacterDetail();
-  const styleReference = selectedStyleReferenceId.value ? manifestAssets.value[selectedStyleReferenceId.value] : null;
-  const lines = [
-    '你正在为一部 Web 视觉小说生成演出素材。请优先使用自然语言语义理解，不要把以下内容画成界面、字幕或水印。',
-    '统一画风要求：画面需要能与同一项目内的其他素材保持一致；若提供了参考图，请优先继承其构图语言、色彩倾向、笔触/摄影质感与角色一致性。',
-    '跨端构图要求：默认生成横版素材，适合 PC 舞台；移动端会居中显示，并使用同图的模糊扩展填充上下区域，所以主体和关键视觉信息必须放在安全中心区域，不要贴边。',
-    styleReference ? `已选风格种子：${styleReference.title || styleReference.id}` : '',
-    scene?.scene ? `当前场景：${scene.scene}` : '',
-    scene?.intro ? `场景引言：${scene.intro}` : '',
-    scene?.thought ? `场景构思：${scene.thought}` : '',
-    node?.txt ? `当前节点文本：${chrName(node.speaker || node.chr)}：${node.txt}` : '',
-    contextNodes ? `邻近剧情片段：\n${contextNodes}` : '',
-  ];
-
-  if (kind === 'background') {
-    lines.push(
-      '任务：生成背景图。不要出现角色立绘、对话框、UI、标题字、漫画分镜格或大段文字；画面应像可用于视觉小说舞台的场景背景。',
-      '画幅：1536x1024，横版，电影感构图，中心安全区清晰。',
-    );
-  } else if (kind === 'sprite') {
-    lines.push(
-      `任务：生成角色立绘。目标角色：${character?.name || chrName(currentSpriteCharacterId.value)}。`,
-      character?.content ? `角色设定：${character.content}` : '',
-      '立绘要求：角色主体清晰，适合叠加在视觉小说背景上；避免复杂背景、UI、文字、水印；尽量保持透明或纯净背景感。',
-      '画幅：1024x1536，竖版，角色位于中心安全区。',
-    );
-  }
-  lines.push(`用户具体要求：${userPrompt.trim()}`);
-  return lines.filter(Boolean).join('\n');
+function characterIdForNode(node: ArcDialogueNode): string {
+  const raw = String(node.speaker ?? node.chr ?? '').trim();
+  if (!raw || raw === '-1' || raw === '旁白') return '';
+  const byId = characters.value.find(character => String(character.id) === raw);
+  if (byId) return String(byId.id);
+  const byName = characters.value.find(character => character.name === raw || character.name === chrName(raw));
+  return byName ? String(byName.id) : '';
 }
 
-function referenceAssetIdsFor(kind: 'background' | 'sprite') {
+function buildPresentationGenerationContext(
+  node = currentDialogueNode.value,
+  scene: ArcScene | null = sceneStore.currentScene as ArcScene | null,
+) {
+  const contextNodes = getCurrentDialogueWindow(node, scene);
+  const characterIds = Array.from(new Set(contextNodes.map(characterIdForNode).filter(Boolean)));
+  if (node) {
+    const currentId = characterIdForNode(node);
+    if (currentId && !characterIds.includes(currentId)) characterIds.unshift(currentId);
+  }
+  return {
+    sceneName: scene?.scene || '',
+    sceneIntro: scene?.intro || '',
+    sceneConception: scene?.thought || '',
+    nodeText: node ? `${chrName(node.speaker || node.chr)}：${String(node.txt || '').trim()}` : '',
+    nearbyDialogue: contextNodes
+      .map(item => `${chrName(item.speaker || item.chr)}：${String(item.txt || '').trim()}`)
+      .filter(line => !line.endsWith('：')),
+    characterIds,
+  };
+}
+
+function referenceAssetsFor(
+  kind: 'background' | 'sprite' | 'illustration',
+  node = currentDialogueNode.value,
+  scene: ArcScene | null = sceneStore.currentScene as ArcScene | null,
+) {
   const model = selectedImageModel.value;
   if (!imageModelSupportsReference(model)) return [];
-  const ids = new Set<string>();
-  if (selectedStyleReferenceId.value) ids.add(selectedStyleReferenceId.value);
-  if (kind === 'background' && currentBackgroundId.value.startsWith('bg_')) ids.add(currentBackgroundId.value);
-  if (kind === 'sprite' && currentSpriteId.value.startsWith('sprite_')) ids.add(currentSpriteId.value);
-  return Array.from(ids).slice(0, 4);
+  const result: PresentationReferenceDescriptor[] = [];
+  const seen = new Set<string>();
+  const add = (assetId: string, role: PresentationReferenceDescriptor['role']) => {
+    if (!assetId || seen.has(assetId) || result.length >= 4) return;
+    seen.add(assetId);
+    result.push({ assetId, role });
+  };
+
+  add(selectedStyleReferenceId.value || '', 'style');
+  const cue = node?.presentation || {};
+  if (kind !== 'sprite') add(normalizePresentationValue(cue.bg), 'scene');
+  if (kind === 'sprite') add(normalizePresentationValue(cue.sprite), 'character');
+
+  if (kind === 'illustration') {
+    const characterIds = new Set(buildPresentationGenerationContext(node, scene).characterIds);
+    Object.values(manifestAssets.value)
+      .filter(asset => asset.type === 'character_sprite' && characterIds.has(String(asset.characterId || '')))
+      .sort((a, b) => String(b.createdAt || '').localeCompare(String(a.createdAt || '')))
+      .forEach(asset => add(asset.id, 'character'));
+    add(normalizePresentationValue(cue.illustration) || nearestIllustrationAssetId(node, scene), 'continuity');
+  }
+  return result;
 }
 
 function triggerBackgroundUpload() {
@@ -1030,12 +1191,13 @@ async function generateBackgroundByAI() {
   backgroundGenerating.value = true;
   try {
     const result = await generatePresentationBackground(projectStore.currentProject, {
-      prompt: buildPresentationImagePrompt('background', prompt),
+      prompt,
       title: currentDialogueNode.value?.txt?.trim().slice(0, 18) || t('nodeEditor.presentation.generatedBackgroundTitle'),
       size: '1536x1024',
       platformId: Number(model.platform_id),
       modelId: Number(model.model_id),
-      referenceAssetIds: referenceAssetIdsFor('background'),
+      referenceAssets: referenceAssetsFor('background'),
+      context: buildPresentationGenerationContext(),
     });
     if (!result.asset?.id) throw new Error(t('nodeEditor.presentation.uploadInvalidResult'));
     updateManifest(result.manifest);
@@ -1111,24 +1273,174 @@ async function generateSpriteByAI() {
   spriteGenerating.value = true;
   try {
     const result = await generatePresentationSprite(projectStore.currentProject, {
-      prompt: buildPresentationImagePrompt('sprite', prompt),
+      prompt,
       title: currentCharacterDetail()?.name || currentSpriteCharacterId.value || t('nodeEditor.presentation.generatedSpriteTitle'),
       characterId: currentSpriteCharacterId.value,
       expression: 'default',
       size: '1024x1536',
       platformId: Number(model.platform_id),
       modelId: Number(model.model_id),
-      referenceAssetIds: referenceAssetIdsFor('sprite'),
+      referenceAssets: referenceAssetsFor('sprite'),
+      context: buildPresentationGenerationContext(),
     });
     if (!result.asset?.id) throw new Error(t('nodeEditor.presentation.uploadInvalidResult'));
     updateManifest(result.manifest);
-    setDialoguePresentationValue('sprite', result.asset.id);
+    let spriteAssetId = result.asset.id;
+    if (result.asset.url) {
+      try {
+        const response = await fetchWithAuth(result.asset.url);
+        if (!response.ok) throw new Error(t('components.lorebookEditor.matteSourceMissing'));
+        const transparent = await matteSprite(await response.blob(), {
+          mode: spriteMattingMode.value,
+          chromaKey: spriteChromaKey.value,
+        });
+        const transparentResult = await uploadPresentationSprite(
+          projectStore.currentProject,
+          new File([transparent], `${result.asset.id}-transparent.png`, { type: 'image/png' }),
+          {
+            title: `${currentCharacterDetail()?.name || currentSpriteCharacterId.value}-${t('components.lorebookEditor.transparentSpriteTitle')}`,
+            characterId: currentSpriteCharacterId.value,
+            expression: 'default',
+          },
+        );
+        if (transparentResult.asset?.id) spriteAssetId = transparentResult.asset.id;
+        updateManifest(transparentResult.manifest);
+      } catch (error: unknown) {
+        bus.emit('toast', { type: 'warning', message: presentationErrorMessage(error, t('components.lorebookEditor.autoMatteFailed')) });
+      }
+    }
+    setDialoguePresentationValue('sprite', spriteAssetId);
     spritePrompt.value = '';
     bus.emit('toast', { type: 'success', message: t('nodeEditor.presentation.spriteGenerateSuccess') });
   } catch (error: unknown) {
     bus.emit('toast', { type: 'error', message: presentationErrorMessage(error, t('nodeEditor.presentation.spriteGenerateFailed')) });
   } finally {
     spriteGenerating.value = false;
+  }
+}
+
+function saveIllustrationPrompt() {
+  setDialoguePresentationValue('illustration_prompt', illustrationPrompt.value.trim() || null);
+}
+
+function triggerIllustrationUpload() {
+  if (!projectStore.currentProject || !visualIllustrationEnabled.value) return;
+  illustrationFileInputRef.value?.click();
+}
+
+async function onIllustrationFileChange(event: Event) {
+  const input = event.target as HTMLInputElement | null;
+  const file = input?.files?.[0];
+  if (input) input.value = '';
+  if (!file || !projectStore.currentProject || !currentDialogueNode.value) return;
+  illustrationUploading.value = true;
+  try {
+    saveIllustrationPrompt();
+    const result = await uploadPresentationIllustration(projectStore.currentProject, file, {
+      title: file.name,
+      sceneName: sceneStore.currentScene?.scene || '',
+      nodeId: currentDialogueNode.value.id,
+    });
+    if (!result.asset?.id) throw new Error(t('nodeEditor.presentation.uploadInvalidResult'));
+    updateManifest(result.manifest);
+    setDialoguePresentationValue('illustration', result.asset.id);
+    bus.emit('toast', { type: 'success', message: t('nodeEditor.presentation.illustrationUploadSuccess') });
+  } catch (error: unknown) {
+    bus.emit('toast', { type: 'error', message: presentationErrorMessage(error, t('nodeEditor.presentation.illustrationUploadFailed')) });
+  } finally {
+    illustrationUploading.value = false;
+  }
+}
+
+function clearDialogueIllustration() {
+  setDialoguePresentationValue('illustration', null);
+  bus.emit('toast', { type: 'success', message: t('nodeEditor.presentation.illustrationClearSuccess') });
+}
+
+async function generateIllustrationForNode(
+  node: ArcDialogueNode,
+  scene: ArcScene,
+  signal?: AbortSignal,
+) {
+  const projectName = projectStore.currentProject;
+  const model = selectedImageModel.value;
+  const prompt = normalizePresentationValue(node.presentation?.illustration_prompt);
+  if (!projectName || !model || !prompt) throw new Error(t('nodeEditor.presentation.illustrationPromptRequired'));
+  const result = await generatePresentationIllustration(projectName, {
+    prompt,
+    title: String(node.txt || '').trim().slice(0, 18) || t('nodeEditor.presentation.generatedIllustrationTitle'),
+    sceneName: scene.scene || '',
+    nodeId: node.id,
+    size: '1536x1024',
+    platformId: Number(model.platform_id),
+    modelId: Number(model.model_id),
+    referenceAssets: referenceAssetsFor('illustration', node, scene),
+    context: buildPresentationGenerationContext(node, scene),
+  }, signal);
+  if (!result.asset?.id) throw new Error(t('nodeEditor.presentation.uploadInvalidResult'));
+  updateManifest(result.manifest);
+  setNodePresentationValue(node, 'illustration', result.asset.id);
+  await sceneStore._saveStory?.();
+  return result.asset;
+}
+
+async function generateIllustrationByAI() {
+  const node = currentDialogueNode.value;
+  const scene = sceneStore.currentScene as ArcScene | null;
+  if (!node || !scene) return;
+  saveIllustrationPrompt();
+  illustrationGenerating.value = true;
+  try {
+    await generateIllustrationForNode(node, scene);
+    bus.emit('toast', { type: 'success', message: t('nodeEditor.presentation.illustrationGenerateSuccess') });
+  } catch (error: unknown) {
+    bus.emit('toast', { type: 'error', message: presentationErrorMessage(error, t('nodeEditor.presentation.illustrationGenerateFailed')) });
+  } finally {
+    illustrationGenerating.value = false;
+  }
+}
+
+async function generateSceneIllustrations() {
+  const candidates = [...illustrationCandidates.value];
+  if (!candidates.length) return;
+  illustrationBatchGenerating.value = true;
+  const task = createStreamingTask('production', {
+    target: 'visual-illustrations',
+    text: t('nodeEditor.presentation.batchGenerating'),
+    progress: t('nodeEditor.presentation.batchProgress', { current: 0, total: candidates.length }),
+    canCancel: true,
+    statsMode: 'elapsed',
+  });
+  let completed = 0;
+  let failed = 0;
+  try {
+    for (const candidate of candidates) {
+      task.throwIfAborted();
+      task.setProgress(t('nodeEditor.presentation.batchProgress', {
+        current: completed + failed + 1,
+        total: candidates.length,
+      }));
+      try {
+        await generateIllustrationForNode(candidate.node, candidate.scene, task.signal);
+        completed += 1;
+      } catch (error: unknown) {
+        if (isAbortError(error) || task.aborted) throw error;
+        failed += 1;
+      }
+    }
+    bus.emit('toast', {
+      type: failed ? 'warning' : 'success',
+      message: t('nodeEditor.presentation.batchDone', { completed, failed }),
+    });
+  } catch (error: unknown) {
+    if (isAbortError(error) || task.aborted) {
+      bus.emit('toast', { type: 'info', message: t('nodeEditor.presentation.batchCancelled', { completed }) });
+    } else {
+      bus.emit('toast', { type: 'error', message: presentationErrorMessage(error, t('nodeEditor.presentation.batchFailed')) });
+    }
+  } finally {
+    task.dispose();
+    illustrationBatchGenerating.value = false;
   }
 }
 
@@ -1215,10 +1527,22 @@ async function loadCharacters() {
   }
 }
 
+function onPresentationSettingsUpdated(payload?: unknown) {
+  const projectName = payload && typeof payload === 'object' && 'projectName' in payload
+    ? String((payload as { projectName?: unknown }).projectName || '')
+    : '';
+  if (projectName && projectName !== projectStore.currentProject) return;
+  void loadPresentationManifest();
+}
+
 onMounted(() => {
   loadCharacters();
   void loadPresentationImageModels();
   void loadPresentationManifest();
+  bus.on('presentation-settings-updated', onPresentationSettingsUpdated);
+});
+onBeforeUnmount(() => {
+  bus.off('presentation-settings-updated', onPresentationSettingsUpdated);
 });
 watch(() => projectStore.currentProject, () => {
   loadCharacters();

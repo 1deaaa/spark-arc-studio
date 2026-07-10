@@ -6,6 +6,7 @@ from typing import Any, Optional
 
 
 IMAGE_ADAPTER_OPENAI_IMAGES = "openai_images"
+IMAGE_ADAPTER_OPENAI_RESPONSES_IMAGE = "openai_responses_image"
 IMAGE_ADAPTER_OPENAI_CHAT_IMAGE = "openai_chat_image"
 IMAGE_ADAPTER_XAI_IMAGES = "xai_images"
 IMAGE_ADAPTER_GEMINI_INTERACTIONS = "gemini_interactions"
@@ -15,6 +16,7 @@ DEFAULT_IMAGE_GENERATION_ADAPTER = IMAGE_ADAPTER_OPENAI_IMAGES
 
 IMAGE_GENERATION_ADAPTERS = {
     IMAGE_ADAPTER_OPENAI_IMAGES,
+    IMAGE_ADAPTER_OPENAI_RESPONSES_IMAGE,
     IMAGE_ADAPTER_OPENAI_CHAT_IMAGE,
     IMAGE_ADAPTER_XAI_IMAGES,
     IMAGE_ADAPTER_GEMINI_INTERACTIONS,
@@ -29,6 +31,11 @@ _ADAPTER_ALIASES = {
     "images_generations": IMAGE_ADAPTER_OPENAI_IMAGES,
     "gpt_image": IMAGE_ADAPTER_OPENAI_IMAGES,
     "gpt-image": IMAGE_ADAPTER_OPENAI_IMAGES,
+    "openai_responses": IMAGE_ADAPTER_OPENAI_RESPONSES_IMAGE,
+    "openai_responses_image": IMAGE_ADAPTER_OPENAI_RESPONSES_IMAGE,
+    "responses": IMAGE_ADAPTER_OPENAI_RESPONSES_IMAGE,
+    "responses_image": IMAGE_ADAPTER_OPENAI_RESPONSES_IMAGE,
+    "responses_image_generation": IMAGE_ADAPTER_OPENAI_RESPONSES_IMAGE,
     "openai_chat": IMAGE_ADAPTER_OPENAI_CHAT_IMAGE,
     "openai_chat_image": IMAGE_ADAPTER_OPENAI_CHAT_IMAGE,
     "openai_chat_completions": IMAGE_ADAPTER_OPENAI_CHAT_IMAGE,
@@ -57,16 +64,6 @@ def normalize_image_generation_adapter(value: Any) -> Optional[str]:
     if not text:
         return None
     return _ADAPTER_ALIASES.get(text)
-
-
-def extract_legacy_image_generation_adapter(extra_body: Any) -> Optional[str]:
-    """从旧版 extra_body.image_generation.adapter 中读取协议，仅用于迁移兜底。"""
-    if not isinstance(extra_body, dict):
-        return None
-    image_config = extra_body.get("image_generation")
-    if not isinstance(image_config, dict):
-        return None
-    return normalize_image_generation_adapter(image_config.get("adapter"))
 
 
 def strip_internal_image_generation_fields(extra_body: Any) -> Optional[dict[str, Any]]:

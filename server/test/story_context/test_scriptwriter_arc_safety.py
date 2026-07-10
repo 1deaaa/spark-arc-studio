@@ -2,7 +2,260 @@ from __future__ import annotations
 
 from pathlib import Path
 
-from story.arc_safety import sanitize_arc_for_ai_context
+from story.arc_safety import (
+    sanitize_arc_ai_fragment,
+    sanitize_arc_ai_output,
+    sanitize_arc_for_ai_context,
+    validate_arc_visual_prompt_candidate,
+)
+
+
+def test_visual_illustration_context_is_strictly_gated() -> None:
+    raw = "\n".join([
+        "# 1-1 雨夜",
+        "[旁白]",
+        "她停在门外。",
+        "@presentation illustration_prompt:雨夜书店门外，林澈回望，低机位中景",
+        "@presentation illustration:ill_secret_asset",
+        "@presentation bg:bg_secret_asset",
+        "@presentation sprite:sprite_secret_asset",
+        "@web illustration_prompt:废弃标签不可见",
+        "@act sound:rain",
+        "@next 下一场",
+    ])
+
+    disabled = sanitize_arc_for_ai_context(raw)
+    enabled = sanitize_arc_for_ai_context(raw, allow_visual_illustration=True)
+
+    assert "illustration_prompt" not in disabled
+    assert "@presentation illustration_prompt:雨夜书店门外，林澈回望，低机位中景" in enabled
+    assert "废弃标签不可见" not in enabled
+    assert "ill_secret_asset" not in enabled
+    assert "bg_secret_asset" not in enabled
+    assert "sprite_secret_asset" not in enabled
+    assert "@act" not in enabled
+    assert "@next" not in enabled
+
+
+def test_scriptwriter_visual_protocol_is_absent_when_disabled_and_shared_by_tool_reference(monkeypatch) -> None:
+    from agents.agent_scriptwriter import ScriptwriterAgent
+    from agents.communication import SparkBaseAgent
+
+    agent = object.__new__(ScriptwriterAgent)
+    agent.user_id = "u1"
+    monkeypatch.setattr(
+        SparkBaseAgent,
+        "_build_tool_prompt_reference_block",
+        lambda self: "基础工具规范",
+    )
+    monkeypatch.setattr(
+        ScriptwriterAgent,
+        "_visual_illustration_settings",
+        lambda self: {"enabled": False, "max_per_scene": 2},
+    )
+
+    assert agent._prepare_script_system_prompt("基础系统提示") == "基础系统提示"
+    assert agent._build_tool_prompt_reference_block() == "基础工具规范"
+
+    monkeypatch.setattr(
+        ScriptwriterAgent,
+        "_visual_illustration_settings",
+        lambda self: {"enabled": True, "max_per_scene": 2},
+    )
+    specialized = agent._prepare_script_system_prompt("基础系统提示")
+    tool_reference = agent._build_tool_prompt_reference_block()
+
+    for prompt in (specialized, tool_reference):
+        assert "@presentation illustration_prompt:" in prompt
+        assert "@web" not in prompt
+        assert "不得生成 `illustration`、`bg`、`sprite`、`@act` 或 `@next`" in prompt
+
+
+def test_visual_illustration_output_enforces_whitelist_scene_limit_and_gap() -> None:
+    raw = "\n".join([
+        "# 1-1 雨夜",
+        "[旁白]",
+        "节点零。",
+        "@presentation illustration_prompt:第一张",
+        "@presentation illustration:ill_fake",
+        "@web illustration_prompt:废弃标签应丢弃",
+        "[林澈]",
+        "节点一。",
+        "@presentation illustration_prompt:相邻节点应丢弃",
+        "[旁白]",
+        "节点二。",
+        "@presentation illustration_prompt:第二张，包含逗号",
+        "[林澈]",
+        "节点三。",
+        "@presentation illustration_prompt:超过上限",
+        "@act bg:forbidden",
+        "@next forbidden",
+        "# 1-2 清晨",
+        "[旁白]",
+        "新场景。",
+        "@presentation illustration_prompt:新场景重新计数",
+    ])
+
+    cleaned = sanitize_arc_ai_output(
+        raw,
+        allow_visual_illustration=True,
+        max_per_scene=2,
+        min_node_gap=1,
+    )
+
+    assert cleaned.count("@presentation illustration_prompt:") == 3
+    assert "@presentation illustration_prompt:第一张" in cleaned
+    assert "@presentation illustration_prompt:第二张，包含逗号" in cleaned
+    assert "@presentation illustration_prompt:新场景重新计数" in cleaned
+    assert "废弃标签应丢弃" not in cleaned
+    assert "相邻节点应丢弃" not in cleaned
+    assert "超过上限" not in cleaned
+    assert "ill_fake" not in cleaned
+    assert "@act" not in cleaned
+    assert "@next" not in cleaned
+
+
+def test_ai_fragment_keeps_isolated_prompt_but_removes_runtime_controls() -> None:
+    fragment = "\n".join([
+        "@act sound:rain",
+        "@next 下一场",
+        "@presentation bg:bg_secret",
+        "@presentation illustration_prompt:  雨夜书店   低机位  ",
+    ])
+
+    cleaned = sanitize_arc_ai_fragment(fragment, allow_visual_illustration=True)
+
+    assert cleaned == "@presentation illustration_prompt:雨夜书店 低机位"
+
+
+def test_incremental_visual_policy_preserves_existing_manual_violation_but_rejects_new_one() -> None:
+    original = "\n".join([
+        "# 1-1",
+        "[旁白]",
+        "节点零。",
+        "@presentation illustration_prompt:第一张",
+        "[林澈]",
+        "节点一。",
+    ])
+    safe_candidate = original.replace("节点一。", "节点一，改写。")
+    unsafe_candidate = safe_candidate + "\n@presentation illustration_prompt:相邻新增"
+
+    validate_arc_visual_prompt_candidate(
+        original,
+        safe_candidate,
+        max_per_scene=2,
+        min_node_gap=1,
+    )
+
+    try:
+        validate_arc_visual_prompt_candidate(
+            original,
+            unsafe_candidate,
+            max_per_scene=2,
+            min_node_gap=1,
+        )
+    except ValueError as exc:
+        assert "视觉插图描述" in str(exc)
+    else:
+        raise AssertionError("新增相邻插图描述应被硬门禁拒绝")
+
+
+def test_patch_script_validates_merged_scene_without_removing_manual_cues(monkeypatch, tmp_path: Path) -> None:
+    from agents.tools.scriptwriter import patch_script
+    from core.request_context import current_project_name, current_user_id
+    from core.utils import get_project_stories_path
+
+    monkeypatch.setattr("core.utils.USERDATA_ROOT", str(tmp_path))
+    monkeypatch.setattr(
+        "core.project_settings.get_visual_illustration_settings",
+        lambda user_id, project_name: {"max_per_scene": 2, "min_node_gap": 1},
+    )
+    monkeypatch.setattr(
+        "core.project_settings.is_visual_illustration_enabled",
+        lambda user_id, project_name: True,
+    )
+    stories_path = Path(get_project_stories_path("7", "demo"))
+    stories_path.mkdir(parents=True, exist_ok=True)
+    story_path = stories_path / "001_雨夜.arc"
+    original = "\n".join([
+        "# 1-1 雨夜",
+        "[旁白]",
+        "节点零。",
+        "@presentation bg:bg_keep",
+        "@presentation illustration_prompt:第一张",
+        "[林澈]",
+        "节点一。",
+        "[旁白]",
+        "节点二。",
+        "@presentation illustration_prompt:第二张",
+        "[林澈]",
+        "节点三。",
+        "@act sound:rain",
+        "@next 下一场",
+    ])
+    story_path.write_text(original, encoding="utf-8")
+
+    user_token = current_user_id.set("7")
+    project_token = current_project_name.set("demo")
+    try:
+        result = patch_script.invoke({
+            "search_text": "@presentation illustration_prompt:第二张",
+            "replace_text": "@act bg:forbidden\n@presentation illustration_prompt:第二张新描述",
+        })
+        assert "已成功局部更新" in result
+        updated = story_path.read_text(encoding="utf-8")
+        assert "@presentation illustration_prompt:第二张新描述" in updated
+        assert "forbidden" not in updated
+        assert "@presentation bg:bg_keep" in updated
+        assert "@act sound:rain" in updated
+        assert "@next 下一场" in updated
+
+        rejected = patch_script.invoke({
+            "search_text": "[林澈]\n节点三。",
+            "replace_text": "[林澈]\n节点三。\n@presentation illustration_prompt:第三张",
+        })
+        assert rejected.startswith("局部修改失败")
+        assert story_path.read_text(encoding="utf-8") == updated
+    finally:
+        current_project_name.reset(project_token)
+        current_user_id.reset(user_token)
+
+
+def test_production_node_cleaner_only_keeps_visual_prompt() -> None:
+    from agents.routes.production import _clean_generated_nodes
+
+    nodes = [{
+        "id": 1,
+        "speaker": "林澈",
+        "txt": "别回头。",
+        "act": {"bg": "forbidden"},
+        "next": "forbidden",
+        "presentation": {
+            "bg": "bg_forbidden",
+            "illustration": "ill_forbidden",
+            "illustration_prompt": "  雨夜回望  ",
+        },
+        "unknown": "forbidden",
+    }]
+
+    cleaned = _clean_generated_nodes(nodes, allow_visual_illustration=True)
+
+    assert cleaned == [{
+        "id": 1,
+        "speaker": "林澈",
+        "txt": "别回头。",
+        "presentation": {"illustration_prompt": "雨夜回望"},
+    }]
+
+
+def test_illustration_prompt_with_commas_remains_scalar_in_arc_parser() -> None:
+    from story.arc_parser import parse_arc, serialize_to_arc
+
+    raw = "# 雨夜\n[旁白]\n她停在门外。\n@presentation illustration_prompt:雨夜书店，低机位，中景"
+    parsed = parse_arc(raw)
+
+    assert parsed[0]["dia"][0]["presentation"]["illustration_prompt"] == "雨夜书店，低机位，中景"
+    assert "@presentation illustration_prompt:雨夜书店，低机位，中景" in serialize_to_arc(parsed)
 
 
 def test_arc_safety_removes_runtime_control_directives_from_ai_context() -> None:

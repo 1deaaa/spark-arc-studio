@@ -29,7 +29,7 @@ from .agent_style import (
     resolve_project_style_author_id,
 )
 from .communication import SparkBaseAgent, is_stop_event_set
-from .context_budget import prepare_chat_messages_with_budget
+from .context_budget import prepare_chat_messages_with_budget, stream_context_budget_events
 from .language_policy import prepend_prompt_language_policy
 from .prompt_layout import build_current_user_message
 
@@ -152,11 +152,12 @@ class StyleChatAgent(SparkBaseAgent):
 
         return prepend_prompt_language_policy("\n\n".join(lines))
 
-    def _build_messages(
+    def _build_budget_result(
         self,
         user_message: str,
         history: Optional[List[Dict[str, Any]]] = None,
         active_context: Optional[str] = None,
+        emit_event=None,
     ):
         return prepare_chat_messages_with_budget(
             user_id=self.user_id,
@@ -169,9 +170,27 @@ class StyleChatAgent(SparkBaseAgent):
                 active_context=active_context,
             ),
             llm_client=self.llm,
-        ).messages
+            emit_event=emit_event,
+        )
+
+    def _build_messages(
+        self,
+        user_message: str,
+        history: Optional[List[Dict[str, Any]]] = None,
+        active_context: Optional[str] = None,
+        emit_event=None,
+    ):
+        result = self._build_budget_result(
+            user_message,
+            history=history,
+            active_context=active_context,
+            emit_event=emit_event,
+        )
+        self._set_context_checkpoint_candidate(result.checkpoint)
+        return result.messages
 
     def chat(self, user_message: str, history: List[Dict[str, Any]] = None, active_context: str = None) -> str:
+        self._set_context_checkpoint_candidate(None)
         if not active_context:
             active_context = self._extract_active_context_from_history(history)
 
@@ -186,9 +205,13 @@ class StyleChatAgent(SparkBaseAgent):
         except Exception as e:
             import traceback
             traceback.print_exc()
+            from agents.context_budget import NonRetryableChatError
+            if isinstance(e, NonRetryableChatError):
+                raise
             return f"[Agent Error] 风格对话失败: {e}"
 
     def chat_stream(self, user_message: str, history: List[Dict[str, Any]] = None, active_context: str = None, **kwargs):
+        self._set_context_checkpoint_candidate(None)
         stop_event = kwargs.get("stop_event")
         if is_stop_event_set(stop_event):
             return
@@ -198,7 +221,15 @@ class StyleChatAgent(SparkBaseAgent):
 
         try:
             stream_reasoning_adapter = MessageEventStreamReasoningAdapter()
-            for chunk in self.llm.stream(self._build_messages(user_message, history=history, active_context=active_context)):
+            budget_result = yield from stream_context_budget_events(
+                self._build_budget_result,
+                user_message=user_message,
+                history=history,
+                active_context=active_context,
+            )
+            self._set_context_checkpoint_candidate(budget_result.checkpoint)
+            messages = budget_result.messages
+            for chunk in self.llm.stream(messages):
                 if is_stop_event_set(stop_event):
                     return
 
@@ -217,6 +248,10 @@ class StyleChatAgent(SparkBaseAgent):
         except Exception as e:
             import traceback
             traceback.print_exc()
+            from agents.context_budget import NonRetryableChatError
             from agents.routes.schemas import format_ai_error
+            if isinstance(e, NonRetryableChatError):
+                yield e.to_event()
+                return
             yield {"event": "error", "data": format_ai_error(e)}
 

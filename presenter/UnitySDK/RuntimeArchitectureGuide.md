@@ -6,6 +6,8 @@
 
 SparkArc 的 `act` 节点只表达剧情意图，不应该直接承载游戏系统实现。
 
+ARC 的 `presentation` 节点是 SparkArc Web 播放器专用的视觉演出协议，不属于 Unity SDK。Unity 目标导出会依据演出 manifest 的统一忽略规则移除整个字段，因此 Unity 运行时不应解析、映射或实现 `presentation`。跨端通用的音乐、镜头、Timeline、角色动作等行为统一通过 `act` 表达。
+
 推荐链路：
 
 ```text

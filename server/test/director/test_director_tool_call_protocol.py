@@ -1,8 +1,10 @@
 from __future__ import annotations
 
+import threading
+
 from langchain_core.messages import AIMessage, ToolMessage
 
-from agents.director_graph import _retain_only_pending_delegate_tool_call
+from agents.director_graph import _retain_only_pending_delegate_tool_call, run_director_stream
 
 
 def _tool_call_ids(message: AIMessage) -> set[str]:
@@ -105,3 +107,70 @@ def test_pending_delegate_history_injects_fallback_tool_call_id() -> None:
 
     assert pruned.tool_calls[0]["id"] == response.tool_call_id
     assert pruned.additional_kwargs["tool_calls"][0]["id"] == response.tool_call_id
+
+
+def test_director_uses_full_history_budget_pipeline_and_emits_checkpoint(monkeypatch) -> None:
+    class FakeLLM:
+        max_context_tokens = 2048
+        max_output_tokens = 256
+        model_name = "offline-director"
+
+    class FakeMatchbox:
+        @staticmethod
+        def get_user_llm(user_id, agent_name):
+            return FakeLLM()
+
+    captured = {}
+
+    class FakeGraph:
+        def stream(self, initial_state, **kwargs):
+            captured["state"] = initial_state
+            return iter(())
+
+    monkeypatch.setattr("llm.agen_matchbox.matchbox", lambda: FakeMatchbox())
+    monkeypatch.setattr("agents.director_graph.create_director_graph", lambda: FakeGraph())
+    monkeypatch.setattr(
+        "agents.director_graph._build_director_prompt_context",
+        lambda *args, **kwargs: ("稳定导演前缀", "动态项目现场"),
+    )
+    monkeypatch.setattr("agents.context_budget.estimate_tokens", lambda text, model=None: len(text))
+    monkeypatch.setattr(
+        "agents.utility_agent.UtilityAgent.compress_chat_history",
+        lambda self, **kwargs: {"summary": "完整早期历史摘要"},
+    )
+    history = [
+        {
+            "id": index,
+            "role": "user" if index % 2 else "assistant",
+            "content": f"历史{index}-" + "x" * 180,
+            "metadata": {},
+        }
+        for index in range(1, 15)
+    ]
+
+    events = list(run_director_stream(
+        user_id="1",
+        project_name="项目",
+        user_message="继续创作",
+        history=history,
+        active_context="编辑区",
+        stop_event=threading.Event(),
+    ))
+
+    checkpoint_events = [
+        event for event in events if event.get("event") == "context_checkpoint_ready"
+    ]
+    assert len(checkpoint_events) == 1
+    assert checkpoint_events[0]["checkpoint"]["metadata"]["compacted_through_message_id"] < history[-1]["id"]
+    state = captured["state"]
+    assert state["current_user_message"] == "继续创作"
+    assert any(
+        getattr(message, "type", "") == "system"
+        and "完整早期历史摘要" in str(message.content)
+        for message in state["messages"]
+    )
+    assert any(
+        getattr(message, "type", "") == "human"
+        and "继续创作" in str(message.content)
+        for message in state["messages"]
+    )

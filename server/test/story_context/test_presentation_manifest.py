@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import os
+from concurrent.futures import ThreadPoolExecutor
 from pathlib import Path
 
 import pytest
@@ -27,11 +28,13 @@ def test_background_asset_manifest_snapshot_and_path_guard(monkeypatch, tmp_path
     manifest = pm.load_project_manifest("u1", "p1")
     assert asset["id"].startswith("bg_")
     assert manifest["assets"][asset["id"]]["title"] == "教室黄昏"
-    assert manifest["ignore"]["unity"]["actKeys"] == ["bg", "sprite"]
+    assert manifest["ignore"]["unity"]["actKeys"] == []
     assert pm.get_ignored_node_keys(manifest, "unity") == {"presentation"}
-    assert manifest["runtime"]["web"]["actBindings"]["sprite"]["type"] == "character_sprite"
+    assert manifest["runtime"]["web"]["cueBindings"]["sprite"]["type"] == "character_sprite"
+    assert manifest["schema"] == "sparkarc.presentation.v2"
+    assert manifest["runtime"]["web"]["cueBindings"]["illustration"]["type"] == "scene_illustration"
     assert pm.filter_act_for_target(
-        {"bg": asset["id"], "sprite": "sprite_demo", "shake": "light"},
+        {"shake": "light"},
         manifest,
         "unity",
     ) == {"shake": "light"}
@@ -58,6 +61,22 @@ def test_background_asset_manifest_snapshot_and_path_guard(monkeypatch, tmp_path
     assert manifest["assets"][sprite["id"]]["type"] == "character_sprite"
     assert manifest["assets"][sprite["id"]]["characterId"] == "1"
 
+    illustration = pm.upload_scene_illustration_asset(
+        user_id="u1",
+        project_name="p1",
+        data=PNG_BYTES,
+        filename="rainy-moment.png",
+        content_type="image/png",
+        title="雨夜回望",
+        scene_name="1-1 初遇",
+        node_id="7",
+    )
+    manifest = pm.load_project_manifest("u1", "p1")
+    assert illustration["id"].startswith("ill_")
+    assert manifest["assets"][illustration["id"]]["type"] == "scene_illustration"
+    assert manifest["assets"][illustration["id"]]["sceneName"] == "1-1 初遇"
+    assert manifest["assets"][illustration["id"]]["nodeId"] == "7"
+
     with pytest.raises(pm.PresentationAssetError):
         pm.get_project_asset_path("u1", "p1", "../escape.png")
 
@@ -69,6 +88,7 @@ def test_background_asset_manifest_snapshot_and_path_guard(monkeypatch, tmp_path
     snapshot_manifest = pm.load_snapshot_manifest(str(snapshot_path))
     assert snapshot_manifest["assets"][asset["id"]]["path"] == asset["path"]
     assert snapshot_manifest["assets"][sprite["id"]]["path"] == sprite["path"]
+    assert snapshot_manifest["assets"][illustration["id"]]["path"] == illustration["path"]
     snapshot_asset_path = pm.get_snapshot_asset_path(str(snapshot_path), asset["path"])
     assert os.path.isfile(snapshot_asset_path)
     assert Path(snapshot_asset_path).read_bytes() == PNG_BYTES
@@ -76,3 +96,52 @@ def test_background_asset_manifest_snapshot_and_path_guard(monkeypatch, tmp_path
 
     pm.remove_presentation_snapshot(str(snapshot_path))
     assert not Path(sidecar).exists()
+
+
+def test_manifest_concurrent_asset_updates_are_atomic(monkeypatch, tmp_path: Path) -> None:
+    project_root = tmp_path / "project"
+    monkeypatch.setattr(pm, "get_project_path", lambda user_id, project_name: str(project_root))
+
+    def upload(index: int) -> dict:
+        return pm.upload_background_asset(
+            user_id="u1",
+            project_name="p1",
+            data=PNG_BYTES + str(index).encode("ascii"),
+            filename=f"background-{index}.png",
+            content_type="image/png",
+            title=f"背景 {index}",
+        )
+
+    with ThreadPoolExecutor(max_workers=4) as executor:
+        assets = list(executor.map(upload, range(12)))
+
+    manifest = pm.load_project_manifest("u1", "p1")
+    assert set(manifest["assets"]) == {asset["id"] for asset in assets}
+    assert not list(project_root.rglob("*.tmp"))
+
+    updated, persisted = pm.update_presentation_asset_metadata(
+        "u1",
+        "p1",
+        assets[0]["id"],
+        {"generation": {"provider": "offline-test"}},
+    )
+    assert updated["generation"]["provider"] == "offline-test"
+    assert persisted["assets"][assets[0]["id"]]["generation"]["provider"] == "offline-test"
+
+
+def test_presentation_project_guard_requires_existing_script_project(monkeypatch, tmp_path: Path) -> None:
+    from story import routes_presentation as routes
+
+    project_root = tmp_path / "project"
+    monkeypatch.setattr(routes, "get_project_path", lambda user_id, project_name: str(project_root))
+
+    missing = routes._presentation_project_error("u1", "missing")
+    assert missing is not None and missing.status_code == 404
+
+    project_root.mkdir()
+    monkeypatch.setattr(routes, "get_workspace_mode", lambda user_id, project_name: "novel")
+    novel = routes._presentation_project_error("u1", "novel")
+    assert novel is not None and novel.status_code == 409
+
+    monkeypatch.setattr(routes, "get_workspace_mode", lambda user_id, project_name: "script")
+    assert routes._presentation_project_error("u1", "script") is None

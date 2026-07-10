@@ -33,6 +33,7 @@
   - **多用户自定义平台模式**：提供最大灵活性，允许每个用户自由添加、管理自己的LLM平台和模型。
 - **统一的接口**：无论后端配置如何变化，开发者都可以通过 `matchbox().get_user_llm(user_id, usage_key="fast")` 获取对应用户/用途的 LLM 实例。
 - **智能推理流适配（拒绝空等待）**：网关**兼容 Open AI 协议**，并支持动态探测和自动将各种常见的推理字段（如 `reasoning_content` 和 `<think>` 标签）**统一转化为持续的推理流**，确保深度思考模型在运转时前端依然能拥有极佳的纯流式体验。
+- **严格工具 Schema 兼容**：所有函数工具在请求出口统一规范化为合法 JSON Schema。对象 Schema 缺少必填参数时会显式补为 `required: []`，兼容 Grok 等严格校验实现；该规则属于通用 OpenAI Compatible 协议层，不按域名或模型名分支，也不占用或改写 `extra_body`。
 - **多用途选中模型**：为每个用户维护“主模型 / 快速模型 / 推理模型”等多个用途槽位，并允许用户自定义新的用途，按需绑定不同模型。
 - **系统与用户隔离**：明确区分“系统平台”和“用户私有平台”，系统平台由配置文件 (`matchbox_cfg.yaml`) 统一管理，用户平台数据则存储在数据库中。
 - **灵活的密钥管理**：
@@ -286,6 +287,50 @@ python matchbox_cfg_gui.py
 3. 点击"探测模型"，右侧会列出该平台支持的所有模型。
 4. 从探测结果中选中模型，点击"添加选中"将其加入平台模型列表。
 5. 对不需要的平台，点击"禁用平台"会将其软禁用并从默认列表中隐藏，不会硬删除数据库记录。
+
+#### 2.1. 模型模态与生图协议
+
+模型类型不再通过 `is_embedding` 或一组不断扩张的分类能力位保存。数据库、YAML 和 API 只使用两个事实字段：
+
+- `input_modalities`：当前支持 `text`、`image`。
+- `output_modalities`：当前支持 `text`、`image`、`embedding`；`embedding` 与其他输出互斥。
+
+常见组合如下：
+
+| 模型用途 | `input_modalities` | `output_modalities` |
+|---|---|---|
+| 文本模型 | `[text]` | `[text]` |
+| 视觉文本模型 | `[text, image]` | `[text]` |
+| 文生图 | `[text]` | `[image]` |
+| 图生图 / 图片编辑 | `[text, image]` | `[image]` |
+| 文本与图片统一输出 | `[text, image]` | `[text, image]` |
+| 向量模型 | `[text]` | `[embedding]` |
+
+Web 管理页和 CustomTkinter GUI 只显示“视觉 / 生图 / 向量”三个复选框，文本输入默认隐含。勾选向量会自动取消其他选项。模型列表使用紧凑标签：`T` 表示文本输出，`I` 表示图片输出，`V` 表示接收图片输入，`E` 表示向量输出；Web 端通过 Tooltip 解释标签。
+
+```yaml
+models:
+  可编辑生图模型:
+    model_name: provider-image-model
+    input_modalities: [text, image]
+    output_modalities: [image]
+    image_generation_adapter: openai_images
+    extra_body:
+      quality: high
+```
+
+`image_generation_adapter` 是 SparkArc 内部协议选择的唯一真相源。它由用户明确选择，不根据 `base_url` 域名、模型名或 `extra_body` 猜测，也不会写入或转发到上游请求。`extra_body` 仍专门承载供应商参数；适配层只过滤 SparkArc 自己的内部控制键，其他参数会按对应协议尽力透传。生图模型未显式选择时使用 `openai_images` 默认值，不读取任何旧版嵌套 adapter。
+
+| 值 | 上游协议 | 配置中的 `model_name` | 参考图传递方式 |
+|---|---|---|---|
+| `openai_images` | `/images/generations`、`/images/edits` | GPT Image 或兼容生图模型 | multipart `image[]` |
+| `openai_responses_image` | `/responses` 的 `image_generation` 工具 | 支持该工具的主线文本模型 | 单次请求内的 `input_image` data URL，不经 Files API 持久上传 |
+| `openai_chat_image` | `/chat/completions` 兼容网关 | 网关暴露的生图模型名 | 多模态消息中的 data URL；兼容 Markdown/data URI 图片结果 |
+| `gemini_generate_content` | Gemini `models/*:generateContent` | Gemini / Nano Banana 模型 | `inline_data` |
+| `gemini_interactions` | Gemini Interactions | Gemini / Nano Banana 模型 | `input` 图片 part |
+| `xai_images` | xAI `/images/generations`、`/images/edits` | Grok Image 模型 | JSON data URL，编辑最多 3 张参考图 |
+
+默认值仍为 `openai_images`，因为它最接近当前图片 API 的公共最小集合。`openai_responses_image` 不是 GPT Image 直连协议：它会让 `model_name` 对应的主线模型调用生图工具，因此还会产生主线模型 token 成本。SparkArc 不会为了传参考图自动调用供应商 Files API；用户项目图片只在本地持久保存，调用时才按所选协议随请求发送。
 
 #### 2.2. 手动编辑 YAML（仅用于初始化/分发）
 

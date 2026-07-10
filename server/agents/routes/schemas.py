@@ -396,16 +396,39 @@ def _llm_error_mappings() -> list:
             },
             "401",
         ),
-        # 400 / content_filter / content_policy → 内容不合规
+        # 只有提供商明确返回内容安全标记时才归类为内容审计，不能用通用 400 猜测。
         (
-            lambda m: "400" in m or "content_filter" in m or "content_policy" in m or "safety" in m and "refused" in m,
+            lambda m: (
+                "content_filter" in m
+                or "content_policy" in m
+                or "moderation_blocked" in m
+                or "prohibited content" in m
+                or ("safety" in m and ("refused" in m or "blocked" in m))
+            ),
             {
-                "zh-CN": "请求被提供商拦截，可能触发了内容审计（涉黄、暴力、政治等）。请检查提示词是否合规。",
-                "en-US": "Request blocked by the provider, likely due to content moderation (sexual, violent, political, etc.). Please check your prompt for compliance.",
-                "ja-JP": "プロバイダによりリクエストがブロックされました。コンテンツモデレーション（性的・暴力的・政治的など）に抵触した可能性があります。プロンプトをご確認ください。",
-                "ko-KR": "요청이 서비스 제공업체에 의해 차단되었습니다. 콘텐츠 심의(음란, 폭력, 정치 등)에 저촉되었을 수 있으니 프롬프트가 규정을 준수하는지 확인해 주세요.",
+                "zh-CN": "请求因内容安全策略被提供商拒绝。请根据原始信息检查提示词或输入内容。",
+                "en-US": "The provider rejected the request under its content safety policy. Check the prompt or input against the original error details.",
+                "ja-JP": "コンテンツ安全ポリシーにより、プロバイダがリクエストを拒否しました。元のエラー情報をもとにプロンプトまたは入力内容をご確認ください。",
+                "ko-KR": "콘텐츠 안전 정책에 따라 제공업체가 요청을 거부했습니다. 원본 오류 정보를 바탕으로 프롬프트 또는 입력 내용을 확인해 주세요.",
             },
-            "400",
+            "content_policy",
+        ),
+        # 严格 OpenAI 兼容实现常把工具或结构化输出 Schema 错误返回为 400。
+        (
+            lambda m: (
+                "schema validation" in m
+                or "standard_violation" in m
+                or "invalid request content" in m
+                or ("required" in m and "array" in m)
+                or ("invalid-argument" in m and "schema" in m)
+            ),
+            {
+                "zh-CN": "请求参数未通过提供商的 Schema 校验。请检查工具定义、结构化输出、Extra Body 和厂商特定参数是否符合该端点要求。",
+                "en-US": "The request failed the provider's schema validation. Check tool definitions, structured output, Extra Body, and provider-specific parameters for this endpoint.",
+                "ja-JP": "リクエストパラメータがプロバイダの Schema 検証に失敗しました。ツール定義、構造化出力、Extra Body、プロバイダ固有パラメータをご確認ください。",
+                "ko-KR": "요청 매개변수가 제공업체의 Schema 검증을 통과하지 못했습니다. 도구 정의, 구조화 출력, Extra Body 및 제공업체별 매개변수를 확인해 주세요.",
+            },
+            "schema_validation",
         ),
         # 429 / rate_limit_error → 请求频率限制
         (
@@ -472,6 +495,22 @@ def _llm_error_mappings() -> list:
                 "ko-KR": "API 계정의 잔액 또는 할당량이 부족합니다. 서비스 제공업체 계정의 잔액이나 쿼터를 확인해 주세요.",
             },
             "insufficient_quota",
+        ),
+        # 其余 400 只说明请求无效，不能臆测为内容审计。
+        (
+            lambda m: (
+                "400" in m
+                or "invalid_request_error" in m
+                or "invalid argument" in m
+                or "invalid-argument" in m
+            ),
+            {
+                "zh-CN": "模型提供商认为请求无效。请根据原始信息检查模型名称、端点协议、工具或结构化输出 Schema、Extra Body 及厂商特定参数。",
+                "en-US": "The model provider rejected the request as invalid. Check the model name, endpoint protocol, tool or structured-output schema, Extra Body, and provider-specific parameters against the original error.",
+                "ja-JP": "モデルプロバイダがリクエストを無効と判断しました。元のエラー情報をもとに、モデル名、エンドポイントプロトコル、ツールまたは構造化出力の Schema、Extra Body、プロバイダ固有パラメータをご確認ください。",
+                "ko-KR": "모델 제공업체가 요청을 유효하지 않은 것으로 판단했습니다. 원본 오류를 바탕으로 모델 이름, 엔드포인트 프로토콜, 도구 또는 구조화 출력 Schema, Extra Body 및 제공업체별 매개변수를 확인해 주세요.",
+            },
+            "invalid_request",
         ),
         # connection / timeout → 网络连接问题
         (

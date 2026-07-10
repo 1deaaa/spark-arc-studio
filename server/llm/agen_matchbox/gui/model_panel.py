@@ -16,12 +16,10 @@ if __package__ in (None, "", "gui"):
     __package__ = f"{os.path.basename(_PKG_DIR)}.{os.path.basename(_GUI_DIR)}"
 
 from ..models import (
-    CAP_EMBEDDING,
-    CAP_IMAGE_EDIT,
-    CAP_IMAGE_GENERATION,
-    CAP_IMAGE_REFERENCE_INPUT,
-    CAP_VISION_INPUT,
-    normalize_model_capabilities,
+    MODALITY_EMBEDDING,
+    MODALITY_IMAGE,
+    MODALITY_TEXT,
+    normalize_model_modalities,
 )
 from ..utils import probe_platform_models
 
@@ -37,30 +35,34 @@ class ModelPanelMixin:
         """格式化模型列表项显示文本。"""
         if isinstance(model_config, str):
             model_id = model_config
-            capabilities = normalize_model_capabilities()
+            input_modalities, output_modalities = normalize_model_modalities()
         else:
             model_id = model_config.get("model_name", "")
-            capabilities = normalize_model_capabilities(
-                model_config.get("capabilities"),
-                legacy_is_embedding=bool(model_config.get("is_embedding")),
+            input_modalities, output_modalities = normalize_model_modalities(
+                model_config.get("input_modalities"),
+                model_config.get("output_modalities"),
             )
 
-        tag = ""
-        if CAP_EMBEDDING in capabilities:
-            tag = " [向量]"
-        elif CAP_IMAGE_GENERATION in capabilities or CAP_IMAGE_EDIT in capabilities or CAP_IMAGE_REFERENCE_INPUT in capabilities:
-            tag = " [生图]"
-        elif CAP_VISION_INPUT in capabilities:
-            tag = " [视觉]"
+        tags = []
+        if MODALITY_TEXT in output_modalities:
+            tags.append("T")
+        if MODALITY_IMAGE in output_modalities:
+            tags.append("I")
+        if MODALITY_IMAGE in input_modalities:
+            tags.append("V")
+        if MODALITY_EMBEDDING in output_modalities:
+            tags.append("E")
+        tag = f" [{' '.join(tags)}]" if tags else ""
         return f"{display_name}{tag} → {model_id}"
 
     def _extract_display_name(self, item_text: str) -> str:
         """从列表项文本中提取显示名称。"""
         display_part = item_text.split(" → ")[0]
-        for tag in (" [向量]", " [生图]", " [视觉]"):
-            if display_part.endswith(tag):
-                display_part = display_part[:-len(tag)]
-                break
+        tag_start = display_part.rfind(" [")
+        if tag_start >= 0 and display_part.endswith("]"):
+            tag_tokens = display_part[tag_start + 2:-1].split()
+            if tag_tokens and all(token in {"T", "I", "V", "E"} for token in tag_tokens):
+                display_part = display_part[:tag_start]
         return display_part
 
     def _parse_extra_body(self, text):

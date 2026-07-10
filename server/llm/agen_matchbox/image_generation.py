@@ -15,11 +15,12 @@ from .image_adapters import (
     IMAGE_ADAPTER_GEMINI_INTERACTIONS,
     IMAGE_ADAPTER_OPENAI_CHAT_IMAGE,
     IMAGE_ADAPTER_OPENAI_IMAGES,
+    IMAGE_ADAPTER_OPENAI_RESPONSES_IMAGE,
     IMAGE_ADAPTER_XAI_IMAGES,
     normalize_image_generation_adapter,
     strip_internal_image_generation_fields,
 )
-from .models import CAP_IMAGE_EDIT, CAP_IMAGE_REFERENCE_INPUT
+from .models import MODALITY_IMAGE, normalize_input_modalities
 from .utils import _build_endpoint
 
 
@@ -86,6 +87,12 @@ def _image_extra(config: dict[str, Any]) -> dict[str, Any]:
         inherited = {key: value for key, value in extra.items() if key != "image_generation"}
         return {**inherited, **image_extra}
     return extra
+
+
+def _ensure_reference_input_supported(config: dict[str, Any]) -> None:
+    """参考图只能传给明确接收图片输入的模型。"""
+    if MODALITY_IMAGE not in normalize_input_modalities(config.get("input_modalities")):
+        raise ImageGenerationError("该生图模型未声明接收图片输入，请在模型设置中勾选视觉能力")
 
 
 def _select_adapter(config: dict[str, Any]) -> str:
@@ -207,6 +214,40 @@ def _allowed_openai_chat_image_extra(extra: dict[str, Any]) -> dict[str, Any]:
         "messages",
         "prompt",
         "stream",
+    }
+    return {key: value for key, value in extra.items() if key not in blocked}
+
+
+_OPENAI_RESPONSES_IMAGE_TOOL_FIELDS = {
+    "action",
+    "background",
+    "input_fidelity",
+    "input_image_mask",
+    "moderation",
+    "output_compression",
+    "output_format",
+    "partial_images",
+    "quality",
+    "size",
+}
+
+
+def _allowed_openai_responses_extra(extra: dict[str, Any]) -> dict[str, Any]:
+    blocked = {
+        "adapter",
+        "provider",
+        "timeout",
+        "image_generation",
+        "endpoint",
+        "responses_endpoint",
+        "generation_endpoint",
+        "edit_endpoint",
+        "reference_mode",
+        "model",
+        "input",
+        "tools",
+        "stream",
+        *_OPENAI_RESPONSES_IMAGE_TOOL_FIELDS,
     }
     return {key: value for key, value in extra.items() if key not in blocked}
 
@@ -338,9 +379,7 @@ def _generate_openai_compatible_image(
     headers = {"Authorization": f"Bearer {config['api_key']}"}
 
     if request.references:
-        capabilities = set(config.get("capabilities") or [])
-        if CAP_IMAGE_REFERENCE_INPUT not in capabilities and CAP_IMAGE_EDIT not in capabilities:
-            raise ImageGenerationError("该生图模型未标记为支持参考图，请在模型设置中勾选参考图/编辑能力")
+        _ensure_reference_input_supported(config)
         endpoint = str(extra.get("edit_endpoint") or "").strip() or _build_endpoint(config["base_url"], "/images/edits")
         data: dict[str, Any] = {
             "model": model_name,
@@ -350,7 +389,7 @@ def _generate_openai_compatible_image(
         data.update(_allowed_openai_extra(extra))
         files = [
             (
-                "image",
+                "image[]",
                 (
                     reference.filename or f"reference-{idx + 1}.png",
                     reference.data,
@@ -393,6 +432,113 @@ def _generate_openai_compatible_image(
     )
 
 
+def _openai_responses_output_mime_type(tool: dict[str, Any]) -> str:
+    output_format = str(tool.get("output_format") or "png").strip().lower()
+    return {
+        "jpeg": "image/jpeg",
+        "jpg": "image/jpeg",
+        "webp": "image/webp",
+    }.get(output_format, "image/png")
+
+
+def _parse_openai_responses_image_response(
+    data: dict[str, Any],
+    *,
+    tool: dict[str, Any],
+) -> tuple[bytes, str, str]:
+    output = data.get("output") if isinstance(data, dict) else None
+    if not isinstance(output, list):
+        raise ImageGenerationError("Responses 生图接口没有返回 output")
+
+    for item in output:
+        if not isinstance(item, dict) or item.get("type") != "image_generation_call":
+            continue
+        result = item.get("result")
+        if not isinstance(result, str) or not result.strip():
+            continue
+        image, mime_type = _decode_b64_image(result, _openai_responses_output_mime_type(tool))
+        return image, mime_type, str(item.get("revised_prompt") or "")
+
+    raise ImageGenerationError("Responses 生图接口没有返回 image_generation_call 图片结果")
+
+
+def _generate_openai_responses_image(config: dict[str, Any], request: SparkImageRequest) -> SparkImageResult:
+    """通过 Responses API 的 image_generation 工具生成或编辑图片。"""
+    try:
+        import requests
+    except ImportError as exc:
+        raise ImageGenerationError("缺少 requests 库，无法调用 Responses 生图接口") from exc
+
+    timeout = _request_timeout(config)
+    extra = _image_extra(config)
+    model_name = str(config["model_name"])
+    endpoint = str(extra.get("responses_endpoint") or extra.get("endpoint") or "").strip() or _build_endpoint(
+        config["base_url"],
+        "/responses",
+    )
+
+    content: list[dict[str, Any]] = [{"type": "input_text", "text": request.prompt}]
+    if request.references:
+        _ensure_reference_input_supported(config)
+        content.extend(
+            {
+                "type": "input_image",
+                "image_url": _reference_to_data_uri(reference),
+            }
+            for reference in request.references
+        )
+
+    tool: dict[str, Any] = {
+        "type": "image_generation",
+        "action": "edit" if request.references else "generate",
+        "size": request.size,
+    }
+    tool.update({
+        key: extra[key]
+        for key in _OPENAI_RESPONSES_IMAGE_TOOL_FIELDS
+        if key in extra
+    })
+
+    payload: dict[str, Any] = {
+        "model": model_name,
+        "input": [{"role": "user", "content": content}],
+        "tools": [tool],
+        "stream": False,
+    }
+    payload.update(_allowed_openai_responses_extra(extra))
+
+    response = requests.post(
+        endpoint,
+        headers={
+            "Authorization": f"Bearer {config['api_key']}",
+            "Content-Type": "application/json",
+        },
+        json=payload,
+        timeout=timeout,
+    )
+    if not response.ok:
+        raise ImageGenerationError(
+            f"Responses 生图接口调用失败: HTTP {response.status_code}: {_compact_error_response(response)}"
+        )
+
+    try:
+        data = response.json()
+    except Exception as exc:
+        raise ImageGenerationError("Responses 生图接口返回的不是 JSON") from exc
+
+    image, mime_type, revised_prompt = _parse_openai_responses_image_response(data, tool=tool)
+    return SparkImageResult(
+        image=image,
+        mime_type=mime_type,
+        provider=IMAGE_ADAPTER_OPENAI_RESPONSES_IMAGE,
+        model_name=model_name,
+        model_id=config.get("model_id"),
+        platform_id=config.get("platform_id"),
+        revised_prompt=revised_prompt,
+        raw={"response_shape": IMAGE_ADAPTER_OPENAI_RESPONSES_IMAGE},
+    )
+
+
 def _generate_openai_chat_image(config: dict[str, Any], request: SparkImageRequest) -> SparkImageResult:
     try:
         import requests
@@ -409,9 +555,7 @@ def _generate_openai_chat_image(config: dict[str, Any], request: SparkImageReque
 
     content: str | list[dict[str, Any]]
     if request.references:
-        capabilities = set(config.get("capabilities") or [])
-        if CAP_IMAGE_REFERENCE_INPUT not in capabilities and CAP_IMAGE_EDIT not in capabilities:
-            raise ImageGenerationError("该生图模型未标记为支持参考图，请在模型设置中勾选参考图/编辑能力")
+        _ensure_reference_input_supported(config)
         content = [{"type": "text", "text": _chat_image_prompt(request)}]
         content.extend(
             {
@@ -482,9 +626,7 @@ def _generate_xai_image(config: dict[str, Any], request: SparkImageRequest) -> S
     payload.update(_allowed_xai_extra(extra))
 
     if request.references:
-        capabilities = set(config.get("capabilities") or [])
-        if CAP_IMAGE_REFERENCE_INPUT not in capabilities and CAP_IMAGE_EDIT not in capabilities:
-            raise ImageGenerationError("该生图模型未标记为支持参考图，请在模型设置中勾选参考图/编辑能力")
+        _ensure_reference_input_supported(config)
         if len(request.references) > 3:
             raise ImageGenerationError("xAI Grok 图片编辑最多支持 3 张参考图")
         endpoint = str(extra.get("edit_endpoint") or "").strip() or _build_endpoint(config["base_url"], "/images/edits")
@@ -609,6 +751,8 @@ def _generate_gemini_interactions_image(config: dict[str, Any], request: SparkIm
     extra = _image_extra(config)
     timeout = _request_timeout(config)
     model_name = str(config["model_name"])
+    if request.references:
+        _ensure_reference_input_supported(config)
     input_parts: list[dict[str, Any]] = [{"type": "text", "text": request.prompt}]
     for reference in request.references:
         input_parts.append({
@@ -682,6 +826,8 @@ def _generate_gemini_generate_content_image(config: dict[str, Any], request: Spa
     extra = _image_extra(config)
     timeout = _request_timeout(config)
     model_name = str(config["model_name"])
+    if request.references:
+        _ensure_reference_input_supported(config)
     parts: list[dict[str, Any]] = [{"text": request.prompt}]
     for reference in request.references:
         parts.append({
@@ -774,4 +920,6 @@ def generate_image_for_user(
         return _generate_xai_image(config, request)
     if adapter == IMAGE_ADAPTER_OPENAI_CHAT_IMAGE:
         return _generate_openai_chat_image(config, request)
+    if adapter == IMAGE_ADAPTER_OPENAI_RESPONSES_IMAGE:
+        return _generate_openai_responses_image(config, request)
     return _generate_openai_compatible_image(config, request, provider=IMAGE_ADAPTER_OPENAI_IMAGES)

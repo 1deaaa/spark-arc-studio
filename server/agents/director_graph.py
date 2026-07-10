@@ -43,6 +43,7 @@ class DirectorState(TypedDict):
     
     messages: Annotated[list, operator.add]
     active_context: str
+    current_user_message: str
     
     pending_delegate: Optional[Dict[str, Any]]
     sub_agent_result: Optional[str]
@@ -261,6 +262,46 @@ def _director_tracker_has_open_items(user_id: str, project_name: str) -> bool:
         return False
 
 
+def _build_director_prompt_context(
+    director: Any,
+    *,
+    user_id: str,
+    project_name: str,
+    active_context: str,
+) -> tuple[str, str]:
+    """统一构建导演稳定系统前缀与本轮动态项目上下文。"""
+    from agents.agent_utils import load_prompt
+
+    try:
+        prompts = load_prompt("director")
+        base_system_prompt = prompts.get("chat_system") or prompts.get(
+            "system",
+            "你是导演，负责协调团队中的专家。",
+        )
+    except Exception:
+        base_system_prompt = "你是导演，负责协调团队中的专家。"
+
+    from agents.context_provider import get_agent_context
+
+    try:
+        fresh_project_status = (
+            get_agent_context(user_id, project_name, "agent_director")
+            if project_name
+            else ""
+        )
+    except Exception:
+        fresh_project_status = ""
+
+    runtime_context = "\n\n".join(
+        part for part in [fresh_project_status, active_context] if part
+    )
+    system_instruction = director._build_tool_system_prompt(
+        base_system_prompt,
+        runtime_context,
+    )
+    return system_instruction, runtime_context
+
+
 # ==================== 导演节点 ====================
 
 def director_node(state: DirectorState) -> Dict[str, Any]:
@@ -272,7 +313,6 @@ def director_node(state: DirectorState) -> Dict[str, Any]:
     from llm.agen_matchbox import matchbox
     from llm.agen_matchbox.reasoning_compat import MessageEventStreamReasoningAdapter
     from langchain_core.messages import SystemMessage
-    from agents.agent_utils import load_prompt
 
     writer = get_stream_writer()
     
@@ -322,38 +362,29 @@ def director_node(state: DirectorState) -> Dict[str, Any]:
     if tools:
         stream_llm = stream_llm.bind_tools(tools)
     
-    # ---- 构建 System Prompt（和 SparkBaseAgent.chat_stream 逻辑一致）----
-    try:
-        prompt_name = "director"  # agent_director -> director
-        prompts = load_prompt(prompt_name)
-        base_system_prompt = prompts.get("chat_system") or prompts.get("system", f"你是导演，负责协调团队中的专家。")
-    except Exception:
-        base_system_prompt = f"你是导演，负责协调团队中的专家。"
-    
-    # 每次导演轮次，从磁盘刷新项目实时状态（子 Agent 执行完毕写入文件后，导演下一轮能感知新内容）
-    from agents.context_provider import get_agent_context as _refresh_project_ctx
-    user_initial_context = state.get("active_context", "")
-    try:
-        fresh_project_status = _refresh_project_ctx(user_id, project_name, "agent_director") if project_name else ""
-    except Exception:
-        fresh_project_status = ""
-    active_context = "\n\n".join(p for p in [fresh_project_status, user_initial_context] if p)
-    system_instruction = director._build_tool_system_prompt(base_system_prompt, active_context)
+    # 每轮从磁盘刷新项目状态；动态现场只进入最后一条 user，稳定前缀保持可缓存。
+    system_instruction, active_context = _build_director_prompt_context(
+        director,
+        user_id=user_id,
+        project_name=project_name,
+        active_context=state.get("active_context", ""),
+    )
     messages_with_system = [SystemMessage(content=system_instruction)] + list(messages)
     # -------------------------------------------------------------------
     
-    current_user_message = ""
-    for message in reversed(messages):
-        if isinstance(message, HumanMessage):
-            content = getattr(message, "content", "")
-            if isinstance(content, str):
-                current_user_message = content
-            else:
-                try:
-                    current_user_message = json.dumps(content, ensure_ascii=False)
-                except Exception:
-                    current_user_message = str(content)
-            break
+    current_user_message = str(state.get("current_user_message") or "")
+    if not current_user_message:
+        for message in reversed(messages):
+            if isinstance(message, HumanMessage):
+                content = getattr(message, "content", "")
+                if isinstance(content, str):
+                    current_user_message = content
+                else:
+                    try:
+                        current_user_message = json.dumps(content, ensure_ascii=False)
+                    except Exception:
+                        current_user_message = str(content)
+                break
 
     if active_context and messages_with_system and isinstance(messages_with_system[-1], HumanMessage):
         messages_with_system[-1] = HumanMessage(
@@ -364,26 +395,23 @@ def director_node(state: DirectorState) -> Dict[str, Any]:
         )
 
     stream_events = []
-    try:
-        from agents.context_budget import rebudget_existing_messages
+    from agents.context_budget import rebudget_existing_messages
 
-        budget_events: list[dict] = []
-        messages_with_system = rebudget_existing_messages(
-            user_id=user_id,
-            project_name=project_name,
-            agent_id="agent_director",
-            messages=messages_with_system,
-            llm_client=base_stream_llm,
-            emit_event=budget_events.append,
-            current_user_message=current_user_message,
-        ).messages
-        for evt in budget_events:
-            evt["source_agent"] = "agent_director"
-            if writer:
-                writer(evt)
-            stream_events.append(evt)
-    except Exception:
-        pass
+    budget_events: list[dict] = []
+    messages_with_system = rebudget_existing_messages(
+        user_id=user_id,
+        project_name=project_name,
+        agent_id="agent_director",
+        messages=messages_with_system,
+        llm_client=base_stream_llm,
+        emit_event=budget_events.append,
+        current_user_message=current_user_message,
+    ).messages
+    for evt in budget_events:
+        evt["source_agent"] = "agent_director"
+        if writer:
+            writer(evt)
+        stream_events.append(evt)
 
     tool_chunk_buffers: Dict[int, Dict] = {}
     started_tools = set()
@@ -999,35 +1027,62 @@ def run_director_stream(
     if is_stop_event_set(stop_event):
         return
 
-    lc_messages = []
-    for msg in (history or [])[-10:]:
-        role = msg.get("role")
-        content = msg.get("content") or ""
-        if not content: continue
-        if isinstance(content, dict):
-            content = json.dumps(content, ensure_ascii=False)
-        if role == "user":
-            lc_messages.append(HumanMessage(content=str(content)))
-        elif role == "assistant":
-            lc_messages.append(AIMessage(content=str(content)))
-    
-    lc_messages.append(HumanMessage(content=user_message))
-    
-    initial_state = {
-        "user_id": user_id,
-        "project_name": project_name,
-        "messages": lc_messages,
-        "active_context": active_context or "",
-        "pending_delegate": None,
-        "sub_agent_result": None,
-        "baton_holder": "agent_director",
-        "force_return_to_director": False,
-        "stream_events": [],
-        "stop_event": stop_event,
-    }
-    
-    
     try:
+        from agents.agent_director import DirectorAgent
+        from agents.context_budget import (
+            prepare_chat_messages_with_budget,
+            stream_context_budget_events,
+        )
+        from agents.prompt_layout import build_chat_prompt_layout
+        from llm.agen_matchbox import matchbox
+
+        director = DirectorAgent(user_id=user_id, project_name=project_name)
+        base_llm = matchbox().get_user_llm(user_id, agent_name="agent_director")
+        system_instruction, runtime_context = _build_director_prompt_context(
+            director,
+            user_id=user_id,
+            project_name=project_name,
+            active_context=active_context or "",
+        )
+        prompt_layout = build_chat_prompt_layout(
+            system_instruction=system_instruction,
+            user_message=user_message,
+            active_context=runtime_context,
+        )
+
+        budget_stream = stream_context_budget_events(
+            prepare_chat_messages_with_budget,
+            user_id=user_id,
+            project_name=project_name,
+            agent_id="agent_director",
+            system_instruction=prompt_layout.system_instruction,
+            history=history,
+            user_message=prompt_layout.user_message,
+            llm_client=base_llm,
+        )
+        while True:
+            try:
+                yield next(budget_stream)
+            except StopIteration as completed:
+                budget_result = completed.value
+                break
+
+        # system 前缀由 director_node 每轮实时重建，图状态只保存动态消息体。
+        lc_messages = list(budget_result.messages[1:])
+        initial_state = {
+            "user_id": user_id,
+            "project_name": project_name,
+            "messages": lc_messages,
+            "active_context": active_context or "",
+            "current_user_message": user_message,
+            "pending_delegate": None,
+            "sub_agent_result": None,
+            "baton_holder": "agent_director",
+            "force_return_to_director": False,
+            "stream_events": [],
+            "stop_event": stop_event,
+        }
+
         graph = create_director_graph()
         
         for chunk in graph.stream(
@@ -1045,6 +1100,11 @@ def run_director_stream(
             elif hasattr(chunk, "get") and chunk.get("type") == "custom":
                 yield chunk["data"]
     except Exception as e:
+        from agents.context_budget import NonRetryableChatError
+
+        if isinstance(e, NonRetryableChatError):
+            yield e.to_event()
+            return
         import traceback
         traceback.print_exc()
         from agents.routes.schemas import format_ai_error

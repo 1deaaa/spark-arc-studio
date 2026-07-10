@@ -723,7 +723,10 @@ def build_scene_context(
     圈 3（Compressed）：由调用方通过 narrative_memory 注入，此函数不重复处理。
     """
     from story.arc_parser import parse_arc, serialize_to_arc
-    from story.arc_safety import sanitize_arc_for_ai_context
+    from story.arc_safety import sanitize_arc_for_project_ai_context
+
+    def clean_arc(value: str) -> str:
+        return sanitize_arc_for_project_ai_context(value, user_id, project_name)
 
     arc_files = _get_chapter_arc_files(user_id, project_name)
     parts: List[str] = []
@@ -771,7 +774,7 @@ def build_scene_context(
                 # 只取最后一个场景作为章末锚点
                 last_scene_arc = serialize_to_arc([parsed[-1]], chr_map=chr_map)
                 tail_scenes.append(
-                    f"【第 {ci} 章 尾声 - {parsed[-1].get('scene', '')}】\n{sanitize_arc_for_ai_context(last_scene_arc)}"
+                    f"【第 {ci} 章 尾声 - {parsed[-1].get('scene', '')}】\n{clean_arc(last_scene_arc)}"
                 )
         except Exception:
             continue
@@ -785,7 +788,7 @@ def build_scene_context(
     if current_chapter_arc_text and current_chapter_arc_text.strip():
         # 调用方已传入当前章的完整 arc 文本（截至 target_scene 之前）
         parts.append("=== 当前章节前文 ===")
-        parts.append(sanitize_arc_for_ai_context(current_chapter_arc_text))
+        parts.append(clean_arc(current_chapter_arc_text))
     elif current_chapter_index < len(arc_files):
         # 全自动模式下：读取已保存的当前章 arc 文件
         raw = _read_arc_file_safe(arc_files[current_chapter_index])
@@ -797,12 +800,12 @@ def build_scene_context(
                     before_scenes = parsed[:current_scene_index]
                     if before_scenes:
                         parts.append("=== 当前章节前文（已完成场景）===")
-                        parts.append(sanitize_arc_for_ai_context(serialize_to_arc(before_scenes, chr_map=chr_map)))
+                        parts.append(clean_arc(serialize_to_arc(before_scenes, chr_map=chr_map)))
                 except Exception:
                     pass
             else:
                 parts.append("=== 当前章节前文 ===")
-                parts.append(sanitize_arc_for_ai_context(raw))
+                parts.append(clean_arc(raw))
 
     return "\n".join(parts)
 
@@ -902,7 +905,8 @@ def build_scriptwriter_context(
 
     # 拼接用户/Director 额外补充
     if extra_context and extra_context.strip():
-        extra_context = sanitize_arc_for_ai_context(extra_context)
+        from story.arc_safety import sanitize_arc_for_project_ai_context
+        extra_context = sanitize_arc_for_project_ai_context(extra_context, user_id, project_name)
         if context:
             context += f"\n\n# 用户补充上下文\n{extra_context.strip()}"
         else:

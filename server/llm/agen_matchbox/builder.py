@@ -32,7 +32,7 @@ from .models import (
     UserEmbeddingSelection,
     DEFAULT_MAX_CONTEXT_TOKENS,
     DEFAULT_MAX_OUTPUT_TOKENS,
-    get_model_capabilities,
+    get_model_modalities,
     is_chat_model,
     is_embedding_model,
     is_image_generation_model,
@@ -40,7 +40,6 @@ from .models import (
 from .config import SYSTEM_USER_ID, DEFAULT_USAGE_KEY
 from .image_adapters import (
     DEFAULT_IMAGE_GENERATION_ADAPTER,
-    extract_legacy_image_generation_adapter,
     normalize_image_generation_adapter,
     strip_internal_image_generation_fields,
 )
@@ -479,7 +478,7 @@ class LLMBuilderMixin:
                         "model_id": model.id,
                         "model_name": model.model_name,
                         "display_name": model.display_name or model.model_name,
-                        "capabilities": get_model_capabilities(model),
+                        **get_model_modalities(model),
                         "image_generation_adapter": (
                             normalize_image_generation_adapter(getattr(model, "image_generation_adapter", None))
                             or DEFAULT_IMAGE_GENERATION_ADAPTER
@@ -554,18 +553,15 @@ class LLMBuilderMixin:
             )
 
             extra_body: dict[str, Any] = {}
-            legacy_image_adapter = None
             if model.extra_body:
                 try:
                     parsed_extra = json.loads(model.extra_body)
                     if isinstance(parsed_extra, dict):
-                        legacy_image_adapter = extract_legacy_image_generation_adapter(parsed_extra)
                         extra_body = strip_internal_image_generation_fields(parsed_extra) or {}
                 except json.JSONDecodeError:
                     extra_body = {}
             image_generation_adapter = (
                 normalize_image_generation_adapter(getattr(model, "image_generation_adapter", None))
-                or legacy_image_adapter
                 or DEFAULT_IMAGE_GENERATION_ADAPTER
             )
 
@@ -579,7 +575,7 @@ class LLMBuilderMixin:
                 "display_name": model.display_name or model.model_name,
                 "api_key": api_key,
                 "quota_scope": quota_scope,
-                "capabilities": get_model_capabilities(model),
+                **get_model_modalities(model),
                 "image_generation_adapter": image_generation_adapter,
                 "extra_body": extra_body,
             }

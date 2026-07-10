@@ -271,6 +271,16 @@ class SparkBaseAgent:
         
         # 延迟加载 LLM，避免基类初始化时产生开销
         self._llm = None
+        self._pending_context_checkpoint: Optional[Dict[str, Any]] = None
+
+    def _set_context_checkpoint_candidate(self, checkpoint: Optional[Dict[str, Any]]) -> None:
+        self._pending_context_checkpoint = dict(checkpoint) if isinstance(checkpoint, dict) else None
+
+    def consume_context_checkpoint_candidate(self) -> Optional[Dict[str, Any]]:
+        """取出本次成功请求产生的 checkpoint 候选，并清空单次状态。"""
+        checkpoint = self._pending_context_checkpoint
+        self._pending_context_checkpoint = None
+        return checkpoint
 
     @property
     def llm(self):
@@ -1181,6 +1191,7 @@ class SparkBaseAgent:
         通用的直接对话入口。
         """
         from .agent_utils import load_prompt
+        self._set_context_checkpoint_candidate(None)
 
         if not active_context:
             active_context = self._extract_active_context_from_history(history)
@@ -1221,7 +1232,7 @@ class SparkBaseAgent:
                 agent_name=self.agent_id,
             )
             base_llm_client = invoke_llm
-            messages = prepare_chat_messages_with_budget(
+            budget_result = prepare_chat_messages_with_budget(
                 user_id=self.user_id,
                 project_name=self.project_name,
                 agent_id=self.agent_id,
@@ -1229,7 +1240,9 @@ class SparkBaseAgent:
                 history=history,
                 user_message=prompt_layout.user_message,
                 llm_client=base_llm_client,
-            ).messages
+            )
+            self._set_context_checkpoint_candidate(budget_result.checkpoint)
+            messages = budget_result.messages
             tools = get_tools_for_agent(self.agent_id, user_id=self.user_id)
             if tools:
                 invoke_llm = invoke_llm.bind_tools(tools)
@@ -1302,11 +1315,15 @@ class SparkBaseAgent:
         except Exception as e:
             import traceback
             traceback.print_exc()
+            from agents.context_budget import NonRetryableChatError
+            if isinstance(e, NonRetryableChatError):
+                raise
             return f"[Agent Error] 对话失败: {e}"
 
     def chat_stream(self, user_message: str, history: List[Dict[str, Any]] = None, active_context: str = None, skip_tool_confirmation: bool = False, stop_event: Any = None):
         """通用流式对话入口。逐段 yield 文本增量。"""
         from .agent_utils import load_prompt
+        self._set_context_checkpoint_candidate(None)
 
         if is_stop_event_set(stop_event):
             return
@@ -1335,14 +1352,18 @@ class SparkBaseAgent:
 
         from llm.agen_matchbox import matchbox
         from agents.tools.registry import get_tools_for_agent
-        from agents.context_budget import prepare_chat_messages_with_budget, rebudget_existing_messages
+        from agents.context_budget import (
+            prepare_chat_messages_with_budget,
+            rebudget_existing_messages,
+            stream_context_budget_events,
+        )
         stream_llm = matchbox().get_user_llm(
             self.user_id,
             agent_name=self.agent_id,
         )
         base_stream_llm = stream_llm
-        pending_budget_events: List[Dict[str, Any]] = []
-        messages = prepare_chat_messages_with_budget(
+        budget_result = yield from stream_context_budget_events(
+            prepare_chat_messages_with_budget,
             user_id=self.user_id,
             project_name=self.project_name,
             agent_id=self.agent_id,
@@ -1350,19 +1371,15 @@ class SparkBaseAgent:
             history=history,
             user_message=prompt_layout.user_message,
             llm_client=base_stream_llm,
-            emit_event=pending_budget_events.append,
-        ).messages
+        )
+        self._set_context_checkpoint_candidate(budget_result.checkpoint)
+        messages = budget_result.messages
         tools = get_tools_for_agent(self.agent_id, user_id=self.user_id)
         if tools:
             stream_llm = stream_llm.bind_tools(tools)
 
         try:
             from langchain_core.messages import ToolMessage as _ToolMessage
-
-            for budget_event in pending_budget_events:
-                if is_stop_event_set(stop_event):
-                    return
-                yield budget_event
 
             while True:
                 if is_stop_event_set(stop_event):
@@ -1570,25 +1587,25 @@ class SparkBaseAgent:
                     messages.append(_ToolMessage(content=t_result or "", tool_call_id=call_id, name=t_name))
                 # 附件分片滑动窗口：只保留本轮新 read_attachment_chunk 的完整正文，其余折叠
                 collapse_attachment_chunk_history(messages, fresh_call_ids=fresh_call_ids)
-                tool_budget_events: List[Dict[str, Any]] = []
-                messages = rebudget_existing_messages(
+                tool_budget_result = yield from stream_context_budget_events(
+                    rebudget_existing_messages,
                     user_id=self.user_id,
                     project_name=self.project_name,
                     agent_id=self.agent_id,
                     messages=messages,
                     llm_client=base_stream_llm,
-                    emit_event=tool_budget_events.append,
                     current_user_message=user_message,
-                ).messages
-                for budget_event in tool_budget_events:
-                    if is_stop_event_set(stop_event):
-                        return
-                    yield budget_event
+                )
+                messages = tool_budget_result.messages
 
         except Exception as e:
             import traceback
             traceback.print_exc()
+            from agents.context_budget import NonRetryableChatError
             from agents.routes.schemas import format_ai_error
+            if isinstance(e, NonRetryableChatError):
+                yield e.to_event()
+                return
             yield {"event": "error", "data": format_ai_error(e)}
 
 

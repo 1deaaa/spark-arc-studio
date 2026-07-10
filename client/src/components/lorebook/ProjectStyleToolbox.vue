@@ -1,5 +1,5 @@
 <template>
-  <div class="project-style-toolbox" :class="{ 'is-embedded': embedded }">
+  <div v-if="isScriptMode" class="project-style-toolbox" :class="{ 'is-embedded': embedded }">
     <n-card
       :title="t('components.lorebookEditor.projectStyleTitle')"
       :segmented="{ content: true }"
@@ -22,20 +22,42 @@
       </template>
 
       <div class="project-style-body">
+        <div class="visual-illustration-setting">
+          <div class="visual-illustration-setting__copy">
+            <n-text strong>{{ t('components.lorebookEditor.visualIllustrationTitle') }}</n-text>
+            <n-text depth="3" class="project-style-tip">
+              {{ t('components.lorebookEditor.visualIllustrationHint') }}
+            </n-text>
+            <n-text v-if="missingCharacterSprites.length" type="warning" class="project-style-tip">
+              {{ t('components.lorebookEditor.missingCharacterSprites', { count: missingCharacterSprites.length }) }}
+            </n-text>
+          </div>
+          <n-switch
+            v-model:value="visualIllustrationEnabled"
+            :loading="presentationSettingsSaving"
+            @update:value="saveVisualIllustrationEnabled"
+          />
+        </div>
+
         <n-text depth="3" class="project-style-tip">
           {{ t('components.lorebookEditor.projectStyleHint') }}
         </n-text>
 
         <div class="style-reference-list">
-          <n-tag
+          <button
             v-for="asset in projectStyleReferenceAssets"
             :key="asset.id"
-            size="small"
-            :bordered="false"
-            type="success"
+            type="button"
+            class="style-reference-candidate"
+            :class="{ 'is-selected': selectedProjectStyleReferenceId === asset.id }"
+            :aria-pressed="selectedProjectStyleReferenceId === asset.id"
+            :title="asset.title || asset.id"
+            @click="selectedProjectStyleReferenceId = asset.id"
           >
-            {{ asset.title || asset.id }}
-          </n-tag>
+            <img :src="presentationAssetUrl(asset)" :alt="asset.title || asset.id" />
+            <span>{{ asset.title || asset.id }}</span>
+            <n-icon v-if="selectedProjectStyleReferenceId === asset.id" :component="Check" />
+          </button>
           <n-text v-if="projectStyleReferenceAssets.length === 0" depth="3">
             {{ t('components.lorebookEditor.noStyleReferenceAssets') }}
           </n-text>
@@ -73,6 +95,17 @@
             </template>
             {{ t('nodeEditor.presentation.uploadStyleReference') }}
           </n-button>
+          <n-button
+            type="primary"
+            :loading="presentationSettingsSaving"
+            :disabled="!styleReferencePrompt.trim() && !selectedProjectStyleReferenceId"
+            @click="saveProjectVisualStyle"
+          >
+            <template #icon>
+              <n-icon :component="Save" />
+            </template>
+            {{ t('components.lorebookEditor.saveProjectStyle') }}
+          </n-button>
         </n-space>
 
         <input
@@ -90,29 +123,30 @@
 <script setup lang="ts">
 import { computed, onActivated, onBeforeUnmount, onMounted, ref, watch } from 'vue';
 import { useI18n } from 'vue-i18n';
-import { NButton, NCard, NIcon, NSelect, NSpace, NTag, NText } from 'naive-ui';
-import { Sparkles, Upload } from '@lucide/vue';
+import { NButton, NCard, NIcon, NSelect, NSpace, NSwitch, NText } from 'naive-ui';
+import { Check, Save, Sparkles, Upload } from '@lucide/vue';
 import StudioSeamlessTextarea from '@/components/editors/StudioSeamlessTextarea.vue';
 import bus from '@/eventBus';
-import { fetchCharacters, fetchWithAuth } from '@/services/api';
 import {
   fetchPresentationImageModels,
   fetchPresentationManifest,
   generatePresentationReference,
+  updatePresentationSettings,
   uploadPresentationReference,
   type PresentationAsset,
   type PresentationImageModel,
   type PresentationManifest,
 } from '@/services/presentationService';
+import { supportsImageInput } from '@/services/modelModalities';
 import { useProjectStore } from '@/components/stores/projectStore';
-import type { StoryCharacterDetail } from '@/services/aiContracts';
-import { buildCreativeCacheKey, loadCreativeCache, saveCreativeCache } from '@/utils/creativeLocalCache';
+import { useSceneStore } from '@/components/stores/sceneStore';
 
 defineProps({
   embedded: { type: Boolean, default: false },
 });
 
 const projectStore = useProjectStore();
+const sceneStore = useSceneStore();
 const { t } = useI18n();
 
 const styleReferenceFileInputRef = ref<HTMLInputElement | null>(null);
@@ -124,6 +158,10 @@ const imageModelsLoading = ref(false);
 const selectedImageModelKey = ref<string | null>(null);
 const presentationManifest = ref<PresentationManifest | null>(null);
 const selectedProjectStyleReferenceId = ref<string | null>(null);
+const visualIllustrationEnabled = ref(false);
+const presentationSettingsSaving = ref(false);
+const missingCharacterSprites = ref<Array<{ id: string; name: string }>>([]);
+const isScriptMode = computed(() => sceneStore.workspaceMode === 'script');
 
 const manifestAssets = computed<Record<string, PresentationAsset>>(() => {
   const assets = presentationManifest.value?.assets;
@@ -159,22 +197,23 @@ const selectedImageModel = computed(() => {
 });
 
 const canGenerateStyleReference = computed(() =>
-  !!projectStore.currentProject
+  isScriptMode.value
+  && !!projectStore.currentProject
   && !!styleReferencePrompt.value.trim()
   && !!selectedImageModel.value
 );
 
-function buildPromptCacheKey(projectName = projectStore.currentProject) {
-  return buildCreativeCacheKey('project-style-reference-prompt', projectName);
-}
-
-watch(styleReferencePrompt, (value) => {
-  if (!projectStore.currentProject) return;
-  saveCreativeCache(buildPromptCacheKey(), value);
-});
-
-watch(() => projectStore.currentProject, (projectName) => {
-  styleReferencePrompt.value = loadCreativeCache<string>(buildPromptCacheKey(projectName)) || '';
+watch([() => projectStore.currentProject, () => sceneStore.workspaceMode], () => {
+  styleReferencePrompt.value = '';
+  selectedProjectStyleReferenceId.value = null;
+  visualIllustrationEnabled.value = false;
+  missingCharacterSprites.value = [];
+  if (!isScriptMode.value) {
+    presentationManifest.value = null;
+    imageModels.value = [];
+    selectedImageModelKey.value = null;
+    return;
+  }
   void loadPresentationManifest();
   void loadPresentationImageModels();
 }, { immediate: true });
@@ -184,8 +223,7 @@ function imageModelKey(model: PresentationImageModel) {
 }
 
 function imageModelSupportsReference(model: PresentationImageModel | null) {
-  const capabilities = Array.isArray(model?.capabilities) ? model.capabilities : [];
-  return capabilities.includes('image_reference_input') || capabilities.includes('image_edit');
+  return supportsImageInput(model);
 }
 
 function presentationErrorMessage(error: unknown, fallback: string) {
@@ -194,12 +232,20 @@ function presentationErrorMessage(error: unknown, fallback: string) {
   return raw || fallback;
 }
 
-function compactPromptText(value: unknown, maxLength = 2400) {
-  const text = String(value || '').replace(/\s+/g, ' ').trim();
-  return text.length > maxLength ? `${text.slice(0, maxLength)}...` : text;
+function presentationAssetUrl(asset: PresentationAsset) {
+  if (asset.url) return asset.url;
+  const projectName = encodeURIComponent(projectStore.currentProject || '');
+  const path = String(asset.path || '')
+    .replace(/\\/g, '/')
+    .split('/')
+    .filter(Boolean)
+    .map(encodeURIComponent)
+    .join('/');
+  return projectName && path ? `/api/presentation/${projectName}/assets/${path}` : '';
 }
 
 async function loadPresentationImageModels() {
+  if (!isScriptMode.value) return;
   imageModelsLoading.value = true;
   try {
     const result = await fetchPresentationImageModels();
@@ -216,7 +262,7 @@ async function loadPresentationImageModels() {
 }
 
 async function loadPresentationManifest() {
-  if (!projectStore.currentProject) {
+  if (!projectStore.currentProject || !isScriptMode.value) {
     presentationManifest.value = null;
     selectedProjectStyleReferenceId.value = null;
     return;
@@ -224,6 +270,10 @@ async function loadPresentationManifest() {
   try {
     const result = await fetchPresentationManifest(projectStore.currentProject);
     presentationManifest.value = result.manifest || null;
+    styleReferencePrompt.value = result.settings?.visualStyle?.seed_prompt || '';
+    selectedProjectStyleReferenceId.value = result.settings?.visualStyle?.reference_asset_id || null;
+    visualIllustrationEnabled.value = !!result.settings?.visualIllustration?.enabled;
+    missingCharacterSprites.value = result.settings?.readiness?.missingCharacterSprites || [];
     if (selectedProjectStyleReferenceId.value && !manifestAssets.value[selectedProjectStyleReferenceId.value]) {
       selectedProjectStyleReferenceId.value = null;
     }
@@ -232,56 +282,46 @@ async function loadPresentationManifest() {
   }
 }
 
+async function saveVisualIllustrationEnabled(enabled: boolean) {
+  if (!projectStore.currentProject || !isScriptMode.value) return;
+  presentationSettingsSaving.value = true;
+  try {
+    const result = await updatePresentationSettings(projectStore.currentProject, {
+      visualIllustrationEnabled: enabled,
+    });
+    visualIllustrationEnabled.value = !!result.settings?.visualIllustration?.enabled;
+    bus.emit('presentation-settings-updated', { projectName: projectStore.currentProject });
+    bus.emit('toast', { type: 'success', message: t('components.lorebookEditor.visualIllustrationSaved') });
+  } catch (error: unknown) {
+    visualIllustrationEnabled.value = !enabled;
+    bus.emit('toast', { type: 'error', message: presentationErrorMessage(error, t('components.lorebookEditor.visualIllustrationSaveFailed')) });
+  } finally {
+    presentationSettingsSaving.value = false;
+  }
+}
+
+async function saveProjectVisualStyle() {
+  if (!projectStore.currentProject || !isScriptMode.value) return;
+  presentationSettingsSaving.value = true;
+  try {
+    await updatePresentationSettings(projectStore.currentProject, {
+      styleSeedPrompt: styleReferencePrompt.value.trim(),
+      styleReferenceAssetId: selectedProjectStyleReferenceId.value,
+    });
+    bus.emit('presentation-settings-updated', { projectName: projectStore.currentProject });
+    bus.emit('toast', { type: 'success', message: t('components.lorebookEditor.projectStyleSaved') });
+  } catch (error: unknown) {
+    bus.emit('toast', { type: 'error', message: presentationErrorMessage(error, t('components.lorebookEditor.projectStyleSaveFailed')) });
+  } finally {
+    presentationSettingsSaving.value = false;
+  }
+}
+
 function updatePresentationManifest(manifest: PresentationManifest | undefined | null) {
   if (manifest) {
     presentationManifest.value = manifest;
     bus.emit('presentation-manifest-updated', { projectName: projectStore.currentProject });
   }
-}
-
-async function buildActiveContext() {
-  const projectName = projectStore.currentProject;
-  if (!projectName) return { worldview: '', characters: [] as StoryCharacterDetail[] };
-
-  let worldview = '';
-  let characters: StoryCharacterDetail[] = [];
-
-  try {
-    const res = await fetchWithAuth(`/api/worldview/${encodeURIComponent(projectName)}`);
-    if (res.ok) {
-      const data = await res.json();
-      worldview = String(data?.content || '').trim();
-    }
-  } catch {}
-
-  try {
-    characters = await fetchCharacters(projectName, true) as StoryCharacterDetail[];
-  } catch {
-    characters = [];
-  }
-
-  return { worldview, characters };
-}
-
-async function buildProjectStyleReferencePrompt() {
-  const styleAsset = selectedProjectStyleReferenceId.value ? manifestAssets.value[selectedProjectStyleReferenceId.value] : null;
-  const { worldview, characters } = await buildActiveContext();
-  const characterSummary = (characters || [])
-    .filter(ch => ![-1, -2].includes(Number(ch.id)))
-    .slice(0, 8)
-    .map(ch => `- ${ch.name || t('components.lorebookEditor.characterN', { n: ch.id })}：${compactPromptText(ch.content, 220)}`)
-    .join('\n');
-  return [
-    '你正在为整个 Web 视觉小说项目生成项目级风格种子图。它不是正式背景，也不是角色立绘，而是后续背景、场景参考、角色立绘图生图时用于固定画风的一张锚点图。',
-    '用户提供的“风格种子文本”是最高优先级：请围绕它生成候选种子图，不要擅自切换到另一种画风。',
-    '请利用自然语言语义理解，把项目主题、世界观气质、角色群像倾向转化为稳定的视觉语言。',
-    '画面重点：色彩体系、光照、材质、时代感、镜头语言、整体情绪和绘制/摄影质感；可以出现一处代表性空间或氛围场景，但不要出现 UI、字幕、水印、标题字或大段文字。',
-    '画幅：1536x1024，横版；主体与关键视觉信息保持在中心安全区，方便后续 PC 与手机端演出复用。',
-    styleAsset ? `当前选中的风格种子图：${styleAsset.title || styleAsset.id}` : '',
-    worldview ? `世界观设定：${compactPromptText(worldview, 2600)}` : '',
-    characterSummary ? `主要角色摘要：\n${characterSummary}` : '',
-    `用户输入的风格种子文本：${styleReferencePrompt.value.trim()}`,
-  ].filter(Boolean).join('\n');
 }
 
 function projectStyleReferenceAssetIds() {
@@ -324,7 +364,7 @@ async function onStyleReferenceFileChange(event: Event) {
 }
 
 async function generateStyleReferenceByAI() {
-  if (!projectStore.currentProject) {
+  if (!projectStore.currentProject || !isScriptMode.value) {
     bus.emit('toast', { type: 'warning', message: t('nodeEditor.presentation.projectRequired') });
     return;
   }
@@ -340,7 +380,7 @@ async function generateStyleReferenceByAI() {
   styleReferenceGenerating.value = true;
   try {
     const result = await generatePresentationReference(projectStore.currentProject, {
-      prompt: await buildProjectStyleReferencePrompt(),
+      prompt: styleReferencePrompt.value.trim(),
       title: t('nodeEditor.presentation.generatedStyleReferenceTitle'),
       assetType: 'style_reference',
       size: '1536x1024',
@@ -411,21 +451,89 @@ onActivated(() => {
   gap: 10px;
 }
 
+.visual-illustration-setting {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 16px;
+  padding-bottom: 12px;
+  border-bottom: 1px solid var(--spark-border-soft);
+}
+
+.visual-illustration-setting__copy {
+  min-width: 0;
+  display: grid;
+  gap: 4px;
+}
+
 .project-style-tip {
   font-size: var(--spark-fs-xs);
   line-height: 1.55;
 }
 
 .style-reference-list {
-  min-height: 34px;
-  display: flex;
-  flex-wrap: wrap;
-  align-items: center;
+  min-height: 82px;
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(104px, 1fr));
   gap: 6px;
   padding: 8px;
   border: 1px solid color-mix(in srgb, var(--spark-border), transparent 8%);
   border-radius: 8px;
   background: color-mix(in srgb, var(--spark-bg) 42%, transparent);
+}
+
+.style-reference-candidate {
+  position: relative;
+  min-width: 0;
+  padding: 0;
+  overflow: hidden;
+  border: 1px solid var(--spark-border);
+  border-radius: 6px;
+  background: var(--spark-panel-bg);
+  color: var(--spark-text);
+  cursor: pointer;
+  text-align: left;
+}
+
+.style-reference-candidate img {
+  display: block;
+  width: 100%;
+  aspect-ratio: 3 / 2;
+  object-fit: cover;
+  background: var(--spark-bg);
+}
+
+.style-reference-candidate span {
+  display: block;
+  padding: 5px 7px;
+  overflow: hidden;
+  font-size: var(--spark-fs-2xs);
+  line-height: 1.35;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.style-reference-candidate > :deep(.n-icon) {
+  position: absolute;
+  top: 5px;
+  right: 5px;
+  width: 20px;
+  height: 20px;
+  display: grid;
+  place-items: center;
+  border-radius: 50%;
+  background: var(--spark-primary);
+  color: white;
+}
+
+.style-reference-candidate.is-selected {
+  border-color: var(--spark-primary);
+  box-shadow: 0 0 0 1px var(--spark-primary);
+}
+
+.style-reference-candidate:focus-visible {
+  outline: 2px solid var(--spark-primary);
+  outline-offset: 2px;
 }
 
 .style-hidden-input {

@@ -179,7 +179,9 @@ class ModelCreateRequest(BaseModel):
 
     max_output_tokens: Optional[int] = None
 
-    capabilities: Optional[List[str]] = None
+    input_modalities: Optional[List[str]] = None
+
+    output_modalities: Optional[List[str]] = None
 
 
 
@@ -199,7 +201,9 @@ class ModelUpdateRequest(BaseModel):
 
     max_output_tokens: Optional[int] = None
 
-    capabilities: Optional[List[str]] = None
+    input_modalities: Optional[List[str]] = None
+
+    output_modalities: Optional[List[str]] = None
 
 
 
@@ -1055,7 +1059,9 @@ async def create_model(
 
             max_output_tokens=data.max_output_tokens,
 
-            capabilities=data.capabilities,
+            input_modalities=data.input_modalities,
+
+            output_modalities=data.output_modalities,
 
         )
 
@@ -1191,7 +1197,7 @@ async def update_model(
 
     update_max_output = 'max_output_tokens' in fields_set
 
-    update_capabilities = 'capabilities' in fields_set
+    update_modalities = 'input_modalities' in fields_set or 'output_modalities' in fields_set
 
     update_image_generation_adapter = 'image_generation_adapter' in fields_set
 
@@ -1221,9 +1227,11 @@ async def update_model(
 
             update_max_output_tokens=update_max_output,
 
-            capabilities=data.capabilities if update_capabilities else None,
+            input_modalities=data.input_modalities if update_modalities else None,
 
-            update_capabilities=update_capabilities,
+            output_modalities=data.output_modalities if update_modalities else None,
+
+            update_modalities=update_modalities,
 
             image_generation_adapter=data.image_generation_adapter if update_image_generation_adapter else None,
 
@@ -1573,7 +1581,9 @@ class AdminSysModelRequest(BaseModel):
 
     max_output_tokens: Optional[int] = None
 
-    capabilities: Optional[List[str]] = None
+    input_modalities: Optional[List[str]] = None
+
+    output_modalities: Optional[List[str]] = None
 
 
 
@@ -1597,7 +1607,9 @@ class AdminSysModelUpdateRequest(BaseModel):
 
     max_output_tokens: Optional[int] = None
 
-    capabilities: Optional[List[str]] = None
+    input_modalities: Optional[List[str]] = None
+
+    output_modalities: Optional[List[str]] = None
 
 
 
@@ -1654,7 +1666,9 @@ async def admin_create_sys_model(
 
             max_output_tokens=data.max_output_tokens,
 
-            capabilities=data.capabilities,
+            input_modalities=data.input_modalities,
+
+            output_modalities=data.output_modalities,
 
         )
 
@@ -1727,7 +1741,7 @@ async def admin_update_sys_model(
 
     update_max_output = 'max_output_tokens' in fields_set
 
-    update_capabilities = 'capabilities' in fields_set
+    update_modalities = 'input_modalities' in fields_set or 'output_modalities' in fields_set
 
     update_image_generation_adapter = 'image_generation_adapter' in fields_set
 
@@ -1761,9 +1775,11 @@ async def admin_update_sys_model(
 
             update_max_output_tokens=update_max_output,
 
-            capabilities=data.capabilities if update_capabilities else None,
+            input_modalities=data.input_modalities if update_modalities else None,
 
-            update_capabilities=update_capabilities,
+            output_modalities=data.output_modalities if update_modalities else None,
+
+            update_modalities=update_modalities,
 
             image_generation_adapter=data.image_generation_adapter if update_image_generation_adapter else None,
 

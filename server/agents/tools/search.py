@@ -2,7 +2,6 @@ from __future__ import annotations
 
 import bisect
 import os
-import re
 from typing import Any, ClassVar
 
 from langchain.tools import tool
@@ -10,6 +9,14 @@ from pydantic import BaseModel, Field, field_validator
 
 from core.request_context import current_user_id, get_current_project_name
 from core.utils import get_project_path
+from agents.text_search import (
+    RegexPatternError,
+    RegexSearchTimeoutError,
+    compile_search_pattern,
+    escape_search_literal,
+    iter_search_matches,
+    search_first_match,
+)
 
 from .common import _apply_patch
 
@@ -100,18 +107,11 @@ def _build_match_context(text: str, start: int, end: int, radius: int = 40) -> s
     return context
 
 
-def _regex_flags(case_sensitive: bool = False) -> int:
-    flags = re.MULTILINE
-    if not case_sensitive:
-        flags |= re.IGNORECASE
-    return flags
-
-
 def _fallback_locate_match(
     text: str,
-    compiled: re.Pattern,
+    compiled: Any,
     hit: dict,
-) -> re.Match | None:
+) -> Any | None:
     """当 file_span_start/file_span_end 不可用时，通过 match_text 在全文中定位匹配。
 
     适用场景：chunk 文本经过策略转换（JSON 重序列化、conception 移除等），
@@ -122,7 +122,7 @@ def _fallback_locate_match(
         return None
 
     # 在全文中查找所有正则匹配
-    all_matches = list(compiled.finditer(text))
+    all_matches = list(iter_search_matches(compiled, text))
 
     # 筛选匹配文本完全相同的
     candidates = [m for m in all_matches if m.group(0) == match_text]
@@ -196,9 +196,8 @@ def search_project(pattern: str, case_sensitive: bool = False) -> str:
         return "错误：缺少用户或项目上下文。"
 
     try:
-        flags = _regex_flags(case_sensitive)
-        compiled = re.compile(pattern, flags)
-    except re.error as e:
+        compiled = compile_search_pattern(pattern, case_sensitive=case_sensitive)
+    except RegexPatternError as e:
         return f"正则表达式语法错误：{e}"
 
     from story.project_files import build_narrative_ref, collect_project_files, load_outline_data
@@ -220,31 +219,34 @@ def search_project(pattern: str, case_sensitive: bool = False) -> str:
 
         line_starts = _build_line_starts(file_text)
         narrative_ref = build_narrative_ref(rel_path, project_file.format_key, outline_data)
-        for match in compiled.finditer(file_text):
-            if match.start() == match.end():
-                continue
-            exact_start_line = _line_no_from_offset(line_starts, match.start())
-            exact_end_line = _line_no_from_offset(line_starts, max(match.end() - 1, match.start()))
-            context = _build_match_context(file_text, match.start(), match.end())
-            results.append(
-                {
-                    "index": len(results),
-                    "file_path": project_file.abs_path or (os.path.join(project_path, rel_path) if rel_path else ""),
-                    "rel_path": rel_path,
-                    "format_key": project_file.format_key,
-                    "start_line": exact_start_line,
-                    "end_line": exact_end_line,
-                    "narrative_ref": narrative_ref,
-                    "match_text": match.group(0),
-                    "context": context,
-                    "score": 1.0,
-                    "chunk_text": match.group(0),
-                    "pattern": pattern,
-                    "case_sensitive": case_sensitive,
-                    "file_span_start": match.start(),
-                    "file_span_end": match.end(),
-                }
-            )
+        try:
+            for match in iter_search_matches(compiled, file_text):
+                if match.start() == match.end():
+                    continue
+                exact_start_line = _line_no_from_offset(line_starts, match.start())
+                exact_end_line = _line_no_from_offset(line_starts, max(match.end() - 1, match.start()))
+                context = _build_match_context(file_text, match.start(), match.end())
+                results.append(
+                    {
+                        "index": len(results),
+                        "file_path": project_file.abs_path or (os.path.join(project_path, rel_path) if rel_path else ""),
+                        "rel_path": rel_path,
+                        "format_key": project_file.format_key,
+                        "start_line": exact_start_line,
+                        "end_line": exact_end_line,
+                        "narrative_ref": narrative_ref,
+                        "match_text": match.group(0),
+                        "context": context,
+                        "score": 1.0,
+                        "chunk_text": match.group(0),
+                        "pattern": pattern,
+                        "case_sensitive": case_sensitive,
+                        "file_span_start": match.start(),
+                        "file_span_end": match.end(),
+                    }
+                )
+        except RegexSearchTimeoutError as exc:
+            return f"正则搜索失败：{exc}"
 
     # 去重：相同文件、相同字节位置的重复命中（来自重叠分块）只保留第一条
     # 重叠分块（RecursiveCharacterTextSplitter chunk_overlap=100）会导致落在
@@ -328,7 +330,7 @@ def semantic_search(query: str, scope: list[str] | None = None, k: int = 8) -> s
     except IndexBuildNotReadyError as e:
         build_state = (e.status_payload or {}).get("build_state", {})
         progress = build_state.get("progress", {})
-        fallback = search_project(re.escape(query), case_sensitive=False)
+        fallback = search_project(escape_search_literal(query), case_sensitive=False)
         progress_text = ""
         total_chunks = int(progress.get("total_chunks", 0) or 0)
         embedded_chunks = int(progress.get("embedded_chunks", 0) or 0)
@@ -473,12 +475,19 @@ def replace_from_search(indices: list[int], replacement: str) -> str:
                 span_start = hit.get("file_span_start")
                 span_end = hit.get("file_span_end")
 
-                flags = _regex_flags(bool(hit.get("case_sensitive")))
-                compiled = re.compile(pattern, flags)
+                compiled = compile_search_pattern(
+                    pattern,
+                    case_sensitive=bool(hit.get("case_sensitive")),
+                )
 
                 if isinstance(span_start, int) and isinstance(span_end, int) and span_start >= 0 and span_end >= span_start:
                     # 精确位置可用，在指定范围内搜索
-                    match = compiled.search(working, pos=span_start, endpos=span_end)
+                    match = search_first_match(
+                        compiled,
+                        working,
+                        pos=span_start,
+                        endpos=span_end,
+                    )
                 else:
                     # 文件位置不可用（chunk 文本经过策略转换：JSON 重序列化、
                     # conception 移除等），降级为全文 match_text 定位

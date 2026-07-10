@@ -7,7 +7,7 @@
     <!-- 1. 背景层：氛围动画 -->
     <PlayerAmbient />
     <transition name="fade-slow">
-      <div v-if="activeBackgroundUrl" class="presentation-bg-layer" aria-hidden="true">
+      <div v-if="activeStageImageUrl" class="presentation-bg-layer" :class="{ 'is-illustration': !!activeIllustrationUrl }" aria-hidden="true">
         <div class="presentation-bg-blur" :style="presentationBackgroundImageStyle"></div>
         <div class="presentation-bg-image" :style="presentationBackgroundImageStyle"></div>
         <div class="presentation-bg-vignette"></div>
@@ -316,6 +316,7 @@ const registry = ref<Record<string, unknown>>({});
 const presentationManifest = ref<PresentationManifest | null>(null);
 const presentationAssetBaseUrl = ref('');
 const activeBackgroundUrl = ref('');
+const activeIllustrationUrl = ref('');
 const stageBackgroundColor = ref<string | null>(null);
 const activeSprite = ref<{ url: string; name: string; position: string } | null>(null);
 const contentFormat = ref('script');
@@ -393,7 +394,8 @@ const currentChoices = computed(() => {
   return currentDialogue.value.opt || [];
 });
 
-const currentCharacter = computed(() => activeSprite.value);
+const currentCharacter = computed(() => activeIllustrationUrl.value ? null : activeSprite.value);
+const activeStageImageUrl = computed(() => activeIllustrationUrl.value || activeBackgroundUrl.value);
 
 const playerPresentationStyle = computed<Record<string, string>>(() => {
   if (!stageBackgroundColor.value) return {} as Record<string, string>;
@@ -401,8 +403,8 @@ const playerPresentationStyle = computed<Record<string, string>>(() => {
 });
 
 const presentationBackgroundImageStyle = computed<Record<string, string>>(() => {
-  if (!activeBackgroundUrl.value) return {} as Record<string, string>;
-  return { backgroundImage: `url("${activeBackgroundUrl.value.replace(/"/g, '\\"')}")` };
+  if (!activeStageImageUrl.value) return {} as Record<string, string>;
+  return { backgroundImage: `url("${activeStageImageUrl.value.replace(/"/g, '\\"')}")` };
 });
 
 function encodeAssetPath(path: string): string {
@@ -440,6 +442,7 @@ function isCssColorValue(value: string): boolean {
 
 function resetPresentationBackground() {
   activeBackgroundUrl.value = '';
+  activeIllustrationUrl.value = '';
   stageBackgroundColor.value = null;
 }
 
@@ -452,15 +455,32 @@ function applyBackgroundValue(rawValue: unknown) {
   const text = typeof value === 'string' ? value.trim() : '';
   if (!text) return;
   if (isCssColorValue(text)) {
+    activeIllustrationUrl.value = '';
     stageBackgroundColor.value = text;
     activeBackgroundUrl.value = '';
     return;
   }
   const url = resolvePresentationAssetUrl(text);
   if (url) {
+    activeIllustrationUrl.value = '';
     activeBackgroundUrl.value = url;
     stageBackgroundColor.value = null;
   }
+}
+
+function applyIllustrationValue(rawValue: unknown) {
+  const value = Array.isArray(rawValue) ? rawValue[0] : rawValue;
+  if (value === false || value === null) {
+    activeIllustrationUrl.value = '';
+    return;
+  }
+  const text = typeof value === 'string' ? value.trim() : '';
+  if (!text || ['clear', 'none', 'hide', 'off'].includes(text.toLowerCase())) {
+    activeIllustrationUrl.value = '';
+    return;
+  }
+  const url = resolvePresentationAssetUrl(text);
+  if (url) activeIllustrationUrl.value = url;
 }
 
 function applySpriteValue(rawValue: unknown) {
@@ -491,10 +511,6 @@ function primeBackgroundForProgress(progress: ScriptProgressState) {
   const dialogues = scene?.dlg || [];
   const end = Math.min(progress.dialogueIndex, dialogues.length - 1);
   for (let i = 0; i <= end; i += 1) {
-    const bg = dialogues[i]?.act?.bg;
-    if (bg !== undefined) applyBackgroundValue(bg);
-    const sprite = dialogues[i]?.act?.sprite;
-    if (sprite !== undefined) applySpriteValue(sprite);
     applyPresentationCue(dialogues[i]?.presentation);
   }
 }
@@ -503,6 +519,7 @@ function applyPresentationCue(cue: Record<string, unknown> | null | undefined) {
   if (!cue || typeof cue !== 'object') return;
   if (cue.bg !== undefined) applyBackgroundValue(cue.bg);
   if (cue.sprite !== undefined) applySpriteValue(cue.sprite);
+  if (cue.illustration !== undefined) applyIllustrationValue(cue.illustration);
 }
 
 function clearTitleTimer() {
@@ -768,14 +785,6 @@ function executeAction(key: string, value: unknown) {
   console.log(`[Action] ${key}:`, value);
 
   switch (key.toLowerCase()) {
-    case 'bg': {
-      applyBackgroundValue(value);
-      break;
-    }
-    case 'sprite': {
-      applySpriteValue(value);
-      break;
-    }
     case 'shake': {
       const stage = document.querySelector('.game-stage');
       if (stage) {

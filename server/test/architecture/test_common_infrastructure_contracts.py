@@ -34,6 +34,21 @@ def test_apply_patch_exact_append_whitespace_and_json_validation(tmp_path: Path)
     assert "末尾追加" in append_result
     assert loose.read_text(encoding="utf-8").endswith("\n追加")
 
+    before_validation = loose.read_text(encoding="utf-8")
+
+    def reject_content(_original: str, _candidate: str) -> None:
+        raise ValueError("测试拒绝")
+
+    rejected = _apply_patch(
+        str(loose),
+        "追加",
+        "不应写入",
+        validate_content=reject_content,
+        file_label="loose.txt",
+    )
+    assert rejected.startswith("局部修改失败")
+    assert loose.read_text(encoding="utf-8") == before_validation
+
 
 def test_token_text_splitter_keeps_stable_chunk_metadata(monkeypatch) -> None:
     monkeypatch.setattr("core.file_ingest.chunking.estimate_tokens", lambda text, model=None: len(text))
@@ -197,6 +212,33 @@ def test_workspace_mode_route_is_folded_into_story_tags() -> None:
     paths = {getattr(route, "path", "") for route in tags_router.routes}
     assert "/api/project/workspace-mode" not in paths
     assert "/api/project/story-tags" in paths
+
+
+def test_visual_illustration_settings_are_project_scoped_and_script_only(monkeypatch, tmp_path: Path) -> None:
+    from core import project_settings
+
+    monkeypatch.setattr(project_settings, "get_project_path", lambda user_id, project_name: str(tmp_path))
+
+    assert project_settings.is_visual_illustration_enabled("u1", "p1") is False
+    visual = project_settings.set_visual_illustration_settings("u1", "p1", {
+        "enabled": True,
+        "max_per_scene": 99,
+        "sprite_chroma_key": "invalid",
+    })
+    assert visual["max_per_scene"] == 4
+    assert visual["sprite_chroma_key"] == "#00FF00"
+    assert project_settings.is_visual_illustration_enabled("u1", "p1") is True
+
+    project_settings.initialize_project_workspace_mode("u1", "p1", "novel")
+    assert project_settings.is_visual_illustration_enabled("u1", "p1") is False
+
+    style = project_settings.set_visual_style_settings("u1", "p1", {
+        "seed_prompt": "  清透赛璐璐  ",
+        "reference_asset_id": "style_demo",
+    })
+    assert style == {"seed_prompt": "清透赛璐璐", "reference_asset_id": "style_demo"}
+    saved = json.loads((tmp_path / ".sparkarc" / "settings.json").read_text(encoding="utf-8"))
+    assert saved["visual_style"]["reference_asset_id"] == "style_demo"
 
 
 def test_update_story_tags_tool_accepts_common_model_aliases() -> None:

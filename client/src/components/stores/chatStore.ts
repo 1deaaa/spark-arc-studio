@@ -261,6 +261,17 @@ function _delay(ms: number) {
   return new Promise(resolve => setTimeout(resolve, ms));
 }
 
+function _localizedStreamError(evt: AnyRecord) {
+  const code = String(evt?.code || '').trim();
+  if (code === 'context_window_incompatible') {
+    return i18n.global.t('components.chatPanel.contextWindowIncompatible');
+  }
+  if (code === 'context_compaction_failed') {
+    return i18n.global.t('components.chatPanel.contextCompactionRuntimeFailed');
+  }
+  return pickStreamEventText(evt, ['message', 'data', 'text']);
+}
+
 const CHAT_TRANSPORT_RECONNECT_BASE_DELAY_MS = 800;
 const CHAT_TRANSPORT_RECONNECT_MAX_DELAY_MS = 5000;
 
@@ -2098,7 +2109,7 @@ export const useChatStore = defineStore('chat', {
             syncAssistantSnapshot();
           }
           if (evt.status === 'error') {
-            session.lastError = String(evt.error || session.lastError || _defaultBackgroundTaskError());
+            session.lastError = String(session.lastError || evt.error || _defaultBackgroundTaskError());
           }
           return;
         }
@@ -2309,7 +2320,7 @@ export const useChatStore = defineStore('chat', {
           //     —— 后端中间错误已统一被 _run_chat_stream_with_retry 静默拦截，前端能拿到的
           //     error 事件已经是"全部重试均失败"的最终结论。
           streamState.receivedTaskDone = true;
-          const errMsg = pickStreamEventText(evt, ['message', 'data', 'text']);
+          const errMsg = _localizedStreamError(evt);
           session.lastError = errMsg;
           _clearRetryState(session);
           if (errMsg) {

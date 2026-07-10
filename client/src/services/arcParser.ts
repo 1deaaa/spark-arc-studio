@@ -434,7 +434,7 @@ function parseDialogueContent(
           continue;
         }
         
-        // 检查 @act (允许后面跟标签并忽略)
+        // 检查 @act。旧视觉键只做容错消费，不再迁移到演出字段。
         const actMatch = nextLine.match(/^@act\s+(\w+):([^<]+)/);
         if (actMatch) {
           const key = actMatch[1].trim();
@@ -442,24 +442,28 @@ function parseDialogueContent(
           if (value.includes(',')) {
             value = value.split(',').map(v => v.trim());
           }
-          if (key === 'bg' || key === 'sprite') {
-            presentationCommands[key] = value;
-          } else {
+          if (!['bg', 'sprite'].includes(key.toLowerCase())) {
             actCommands[key] = value;
           }
           i++;
           continue;
         }
 
-        // 检查 Web 演出指令。旧的 @act bg/sprite 会在读取时迁移到同一字段。
-        const presentationMatch = nextLine.match(/^@(?:web|presentation)\s+(\w+):([^<]+)/);
+        // Web 专用演出提示使用独立协议，不与 Unity 通用行为节点混用。
+        const presentationMatch = nextLine.match(/^@presentation\s+(\w+):([^<]+)/i);
         if (presentationMatch) {
-          const key = presentationMatch[1].trim();
+          const key = presentationMatch[1].trim().toLowerCase();
           let value: ActValue = presentationMatch[2].trim();
-          if (value.includes(',')) {
+          if (key !== 'illustration_prompt' && value.includes(',')) {
             value = value.split(',').map(v => v.trim());
           }
           presentationCommands[key] = value;
+          i++;
+          continue;
+        }
+
+        // 未识别或已废弃的指令静默忽略，禁止混入对白正文。
+        if (nextLine.startsWith('@')) {
           i++;
           continue;
         }
@@ -760,12 +764,12 @@ function serializeDialogues(dialogues: ArcDialogueNode[], chrMap: Record<string 
     }
     lines.push(`${indentStr}${d.txt}`);
 
-    // Web 演出指令与通用行为分离，避免 Unity 侧误把背景/立绘当 act。
+    // Web 专用演出提示与通用行为分离，Unity SDK 会统一忽略该节点字段。
     if (d.presentation && Object.keys(d.presentation).length > 0) {
       for (const [key, value] of Object.entries(d.presentation)) {
         if (value === undefined || value === null || value === '') continue;
         const valStr = Array.isArray(value) ? value.join(',') : value;
-        lines.push(`${indentStr}@web ${key}:${valStr}`);
+        lines.push(`${indentStr}@presentation ${key}:${valStr}`);
       }
     }
 
@@ -777,7 +781,7 @@ function serializeDialogues(dialogues: ArcDialogueNode[], chrMap: Record<string 
     // @act
     if (d.act && Object.keys(d.act).length > 0) {
       for (const [key, value] of Object.entries(d.act)) {
-        if (key === 'bg' || key === 'sprite') continue;
+        if (['bg', 'sprite'].includes(key.toLowerCase())) continue;
         const valStr = Array.isArray(value) ? value.join(',') : value;
         lines.push(`${indentStr}@act ${key}:${valStr}`);
       }

@@ -302,13 +302,18 @@ def _iter_named_story_characters(character_map: dict) -> list[tuple[str, str]]:
 def enrich_arc_content_for_model(
     raw_content: str,
     character_map: dict,
+    *,
+    allow_visual_illustration: bool = False,
 ) -> str:
     """给模型/检索使用的 ARC 文本补一段可用说话人清单并渲染可读说话人。
 
     新 ARC 正文以 ``[角色名]`` 保存；角色 ID 只属于 ``stories.db`` 等运行时结构。
     这里仍保留历史数字标记的只读容错，但不会把角色 ID 注入给 AI。
     """
-    text = sanitize_arc_for_ai_context(str(raw_content or ""))
+    text = sanitize_arc_for_ai_context(
+        str(raw_content or ""),
+        allow_visual_illustration=allow_visual_illustration,
+    )
     if not text.strip():
         return text
     if text.lstrip().startswith(("【可用说话人】", "【角色索引】")):
@@ -358,6 +363,8 @@ def collect_project_files(
 
     # 一次性加载角色 ID → 名字映射（chr.bind 可能不存在，结果为空字典）
     character_map = load_character_id_name_map(user_id, project_name)
+    from core.project_settings import is_visual_illustration_enabled
+    allow_visual_illustration = is_visual_illustration_enabled(user_id, project_name)
 
     # 按叙事顺序构建候选文件列表
     candidate_files: list[str] = []
@@ -418,7 +425,11 @@ def collect_project_files(
             character_name = character_map.get(character_id, "")
             text = enrich_character_content(text, character_id, character_name)
         elif format_key == "arc":
-            text = enrich_arc_content_for_model(text, character_map)
+            text = enrich_arc_content_for_model(
+                text,
+                character_map,
+                allow_visual_illustration=allow_visual_illustration,
+            )
 
         remaining = max_source_chars - total_chars
         if remaining <= 0:

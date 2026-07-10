@@ -3,8 +3,12 @@
 from __future__ import annotations
 
 import json
+import contextvars
+import queue
+import threading
+import time
 from dataclasses import dataclass
-from typing import Any, Callable, Dict, List, Sequence
+from typing import Any, Callable, Dict, Generator, List, Sequence
 
 from langchain_core.messages import AIMessage, BaseMessage, HumanMessage, SystemMessage
 
@@ -13,6 +17,85 @@ from llm.agen_matchbox.estimate_tokens import estimate_tokens
 
 CHAT_HISTORY_FETCH_LIMIT = 200
 DEFAULT_CONTEXT_WINDOW_FALLBACK_TOKENS = 256_000
+CONTEXT_CHECKPOINT_KIND = "context_checkpoint"
+LEGACY_CONTEXT_SUMMARY_KIND = "context_summary"
+CONTEXT_CHECKPOINT_READY_EVENT = "context_checkpoint_ready"
+
+
+class NonRetryableChatError(RuntimeError):
+    """不应通过重复调用上游模型来重试的聊天错误。"""
+
+    code = "non_retryable_chat_error"
+
+    def __init__(self, message: str, *, reason: str, details: Dict[str, Any] | None = None):
+        super().__init__(message)
+        self.reason = str(reason or "unknown")
+        self.details = dict(details or {})
+
+    def to_event(self) -> Dict[str, Any]:
+        return {
+            "event": "error",
+            "code": self.code,
+            "message": str(self),
+            "reason": self.reason,
+            "retryable": False,
+            **self.details,
+        }
+
+
+class ContextWindowIncompatibleError(NonRetryableChatError):
+    """当前模型窗口无法容纳不可丢弃的最小上下文。"""
+
+    code = "context_window_incompatible"
+
+
+class ContextCompactionFailedError(NonRetryableChatError):
+    """压缩失败；为避免静默丢失历史而终止本轮请求。"""
+
+    code = "context_compaction_failed"
+
+
+def stream_context_budget_events(
+    operation: Callable[..., "ContextBudgetResult"],
+    /,
+    **kwargs: Any,
+) -> Generator[Dict[str, Any], None, "ContextBudgetResult"]:
+    """在独立线程执行预算操作，让压缩事件能覆盖真实等待时间。"""
+    event_queue: queue.Queue[Any] = queue.Queue()
+    done_marker = object()
+    result_holder: Dict[str, Any] = {}
+    caller_context = contextvars.copy_context()
+
+    def run() -> None:
+        try:
+            result_holder["result"] = operation(**kwargs, emit_event=event_queue.put)
+        except BaseException as exc:
+            result_holder["error"] = exc
+        finally:
+            event_queue.put(done_marker)
+
+    worker = threading.Thread(
+        target=lambda: caller_context.run(run),
+        daemon=True,
+        name="chat_context_budget",
+    )
+    worker.start()
+
+    while True:
+        item = event_queue.get()
+        if item is done_marker:
+            break
+        if isinstance(item, dict):
+            yield item
+
+    worker.join()
+    error = result_holder.get("error")
+    if isinstance(error, BaseException):
+        raise error
+    result = result_holder.get("result")
+    if not isinstance(result, ContextBudgetResult):
+        raise RuntimeError("上下文预算操作未返回有效结果")
+    return result
 
 
 @dataclass(slots=True)
@@ -22,6 +105,7 @@ class ContextBudgetResult:
     original_tokens: int = 0
     compacted_tokens: int = 0
     retained_messages: int = 0
+    checkpoint: Dict[str, Any] | None = None
 
 
 @dataclass(frozen=True, slots=True)
@@ -56,6 +140,20 @@ def _coerce_content(content: Any) -> str:
         return str(content)
 
 
+def _history_source_metadata(item: Dict[str, Any]) -> Dict[str, Any]:
+    metadata = item.get("metadata") if isinstance(item.get("metadata"), dict) else {}
+    return {
+        "message_id": item.get("id"),
+        "role": str(item.get("role") or "").strip(),
+        "metadata": dict(metadata),
+    }
+
+
+def _history_message_kwargs(item: Dict[str, Any]) -> Dict[str, Any]:
+    # response_metadata 不会作为 OpenAI 消息字段发送给上游，只用于本地追踪压缩边界。
+    return {"response_metadata": {"spark_history": _history_source_metadata(item)}}
+
+
 def _history_to_messages(history: List[Dict[str, Any]] | None) -> List[BaseMessage]:
     messages: List[BaseMessage] = []
     for msg in history or []:
@@ -64,18 +162,21 @@ def _history_to_messages(history: List[Dict[str, Any]] | None) -> List[BaseMessa
         if not content:
             continue
         metadata = msg.get("metadata") if isinstance(msg.get("metadata"), dict) else {}
-        if role == "system" and metadata.get("kind") == "context_summary":
-            messages = [SystemMessage(content=(
-                "【已手动压缩的早期上下文】\n"
-                "以下内容是用户手动触发上下文压缩后生成的内部交接摘要，"
-                "请把它视为此前对话事实与工作进度，不要向用户解释压缩过程。\n"
-                f"{content}"
-            ))]
+        if role == "system" and metadata.get("kind") in {CONTEXT_CHECKPOINT_KIND, LEGACY_CONTEXT_SUMMARY_KIND}:
+            messages = [SystemMessage(
+                content=(
+                    "【已压缩的早期上下文】\n"
+                    "以下内容是系统生成的内部创作交接摘要，请把它视为此前对话事实、"
+                    "用户意图与工作进度，不要向用户解释压缩过程。\n"
+                    f"{content}"
+                ),
+                **_history_message_kwargs(msg),
+            )]
             continue
         if role == "user":
-            messages.append(HumanMessage(content=content))
+            messages.append(HumanMessage(content=content, **_history_message_kwargs(msg)))
         elif role == "assistant":
-            messages.append(AIMessage(content=content))
+            messages.append(AIMessage(content=content, **_history_message_kwargs(msg)))
     return messages
 
 
@@ -134,13 +235,185 @@ def _messages_tokens(messages: List[BaseMessage], model_name: str | None) -> int
     return estimate_tokens("\n\n".join(_message_text(m) for m in messages), model=model_name)
 
 
-def _messages_to_history_items(messages: List[BaseMessage]) -> List[Dict[str, str]]:
-    items: List[Dict[str, str]] = []
+def _messages_to_history_items(messages: List[BaseMessage]) -> List[Dict[str, Any]]:
+    items: List[Dict[str, Any]] = []
     for message in messages:
         msg_type = getattr(message, "type", "") or ""
-        role = "assistant" if msg_type in {"ai", "assistant"} else "user"
-        items.append({"role": role, "content": _coerce_content(getattr(message, "content", ""))})
+        if msg_type in {"ai", "assistant"}:
+            role = "assistant"
+        elif msg_type == "system":
+            role = "system"
+        elif msg_type == "tool":
+            role = "tool"
+        else:
+            role = "user"
+        item: Dict[str, Any] = {
+            "role": role,
+            "content": _coerce_content(getattr(message, "content", "")),
+        }
+        source = _message_history_metadata(message)
+        message_id = _coerce_positive_int(source.get("message_id"))
+        if message_id is not None:
+            item["message_id"] = message_id
+        metadata = source.get("metadata") if isinstance(source.get("metadata"), dict) else {}
+        if str(metadata.get("kind") or "") in {
+            CONTEXT_CHECKPOINT_KIND,
+            LEGACY_CONTEXT_SUMMARY_KIND,
+        }:
+            item["source_message_id_start"] = metadata.get("source_message_id_start")
+            item["source_message_id_end"] = (
+                metadata.get("source_message_id_end")
+                or metadata.get("compacted_through_message_id")
+            )
+        items.append(item)
     return items
+
+
+def _message_history_metadata(message: BaseMessage) -> Dict[str, Any]:
+    response_metadata = getattr(message, "response_metadata", None)
+    if not isinstance(response_metadata, dict):
+        return {}
+    value = response_metadata.get("spark_history")
+    return dict(value) if isinstance(value, dict) else {}
+
+
+def _coerce_positive_int(value: Any) -> int | None:
+    try:
+        parsed = int(value)
+    except (TypeError, ValueError):
+        return None
+    return parsed if parsed > 0 else None
+
+
+def _checkpoint_source_stats(messages: Sequence[BaseMessage]) -> Dict[str, Any]:
+    """把既有 checkpoint 与新原文合并成一个连续、可审计的来源范围。"""
+    first_ids: List[int] = []
+    last_ids: List[int] = []
+    original_messages = 0
+
+    for message in messages:
+        source = _message_history_metadata(message)
+        metadata = source.get("metadata") if isinstance(source.get("metadata"), dict) else {}
+        kind = str(metadata.get("kind") or "")
+        if kind in {CONTEXT_CHECKPOINT_KIND, LEGACY_CONTEXT_SUMMARY_KIND}:
+            first_id = _coerce_positive_int(
+                metadata.get("source_message_id_start") or metadata.get("first_source_message_id")
+            )
+            last_id = _coerce_positive_int(
+                metadata.get("compacted_through_message_id")
+                or metadata.get("source_message_id_end")
+                or metadata.get("last_source_message_id")
+            )
+            count = _coerce_positive_int(
+                metadata.get("original_messages") or metadata.get("source_message_count")
+            ) or 0
+        else:
+            message_id = _coerce_positive_int(source.get("message_id"))
+            first_id = message_id
+            last_id = message_id
+            count = 1 if message_id is not None else 0
+
+        if first_id is not None:
+            first_ids.append(first_id)
+        if last_id is not None:
+            last_ids.append(last_id)
+        original_messages += count
+
+    return {
+        "source_message_id_start": min(first_ids) if first_ids else None,
+        "source_message_id_end": max(last_ids) if last_ids else None,
+        "compacted_through_message_id": max(last_ids) if last_ids else None,
+        "original_messages": original_messages,
+    }
+
+
+def build_context_checkpoint_payload(
+    *,
+    summary: Dict[str, Any],
+    source_messages: Sequence[BaseMessage],
+    source: str,
+    agent_id: str,
+    model_name: str,
+    target_tokens: int,
+    original_tokens: int,
+    compacted_tokens: int,
+    retained_messages: int,
+) -> Dict[str, Any] | None:
+    """构造可由持久化层幂等保存的 checkpoint 候选，不执行任何数据库操作。"""
+    source_stats = _checkpoint_source_stats(source_messages)
+    if source_stats.get("compacted_through_message_id") is None:
+        return None
+    return {
+        "summary": dict(summary or {}),
+        "metadata": {
+            "kind": CONTEXT_CHECKPOINT_KIND,
+            "schema_version": 1,
+            "source": str(source or "automatic_compaction"),
+            "agent_id": str(agent_id or ""),
+            "model": str(model_name or ""),
+            "target_tokens": max(int(target_tokens or 0), 0),
+            "original_tokens": max(int(original_tokens or 0), 0),
+            "compacted_tokens": max(int(compacted_tokens or 0), 0),
+            "retained_messages": max(int(retained_messages or 0), 0),
+            "created_at": int(time.time()),
+            **source_stats,
+        },
+    }
+
+
+def build_context_checkpoint_payload_from_history(
+    *,
+    summary: Dict[str, Any],
+    history: Sequence[Dict[str, Any]],
+    source: str,
+    agent_id: str,
+    model_name: str,
+    target_tokens: int,
+    original_tokens: int,
+    compacted_tokens: int,
+    retained_messages: int = 0,
+) -> Dict[str, Any] | None:
+    """供手动压缩复用的历史字典入口。"""
+    return build_context_checkpoint_payload(
+        summary=summary,
+        source_messages=_history_to_messages(list(history)),
+        source=source,
+        agent_id=agent_id,
+        model_name=model_name,
+        target_tokens=target_tokens,
+        original_tokens=original_tokens,
+        compacted_tokens=compacted_tokens,
+        retained_messages=retained_messages,
+    )
+
+
+def partition_history_for_manual_compaction(
+    history: Sequence[Dict[str, Any]],
+    *,
+    keep_recent_turns: int = 2,
+) -> tuple[List[Dict[str, Any]], List[Dict[str, Any]]]:
+    """把运行时历史切成待摘要旧历史与保留原文的最近完整轮次。"""
+    filtered = [
+        dict(item)
+        for item in history
+        if str(item.get("role") or "") in {"system", "user", "assistant"}
+        and str(item.get("content") or "").strip()
+    ]
+    if not filtered:
+        return [], []
+
+    user_indices = [
+        index
+        for index, item in enumerate(filtered)
+        if str(item.get("role") or "") == "user"
+    ]
+    if not user_indices:
+        split_at = max(0, len(filtered) - 1)
+    else:
+        turns = max(1, int(keep_recent_turns or 1))
+        split_at = user_indices[max(0, len(user_indices) - turns)]
+
+    return filtered[:split_at], filtered[split_at:]
 
 
 def _get_model_name(llm_client: Any) -> str:
@@ -151,13 +424,13 @@ def _get_model_name(llm_client: Any) -> str:
 def _get_limits(llm_client: Any) -> tuple[int, int]:
     max_context = int(getattr(llm_client, "max_context_tokens", 0) or DEFAULT_CONTEXT_WINDOW_FALLBACK_TOKENS)
     max_output = int(getattr(llm_client, "max_output_tokens", 0) or 4096)
-    return max(max_context, 8192), max(max_output, 1024)
+    return max(max_context, 1024), max(max_output, 256)
 
 
 def _context_budget_policy(max_context: int, max_output: int) -> ContextBudgetPolicy:
     """按模型真实窗口推导预算，避免大窗口模型过早压缩动态写作上下文。"""
-    context = max(int(max_context or 0), 8192)
-    output_limit = max(int(max_output or 0), 1024)
+    context = max(int(max_context or 0), 1024)
+    output_limit = max(int(max_output or 0), 256)
     if context >= 1_000_000:
         trigger_ratio = 0.92
         output_ratio_cap = 0.14
@@ -168,10 +441,10 @@ def _context_budget_policy(max_context: int, max_output: int) -> ContextBudgetPo
         trigger_ratio = 0.85
         output_ratio_cap = 0.22
 
-    safety_margin = max(4096, min(32_000, int(context * 0.03)))
-    reserved_output = min(output_limit, max(4096, int(context * output_ratio_cap)))
-    hard_budget = max(4096, context - reserved_output - safety_margin)
-    trigger_budget = max(4096, min(hard_budget, int(context * trigger_ratio)))
+    safety_margin = max(256, min(32_000, int(context * 0.03)))
+    reserved_output = min(output_limit, max(512, int(context * output_ratio_cap)))
+    hard_budget = max(256, context - reserved_output - safety_margin)
+    trigger_budget = max(256, min(hard_budget, int(context * trigger_ratio)))
     return ContextBudgetPolicy(
         hard_budget=hard_budget,
         trigger_budget=trigger_budget,
@@ -544,7 +817,7 @@ def _compress_history_items(
     target_tokens: int,
     current_user_message: str,
     overflow_messages: List[BaseMessage],
-) -> SystemMessage:
+) -> tuple[SystemMessage, Dict[str, Any]]:
     from agents.utility_agent import UtilityAgent
 
     utility = UtilityAgent(user_id=user_id, project_name=project_name)
@@ -555,12 +828,37 @@ def _compress_history_items(
         target_tokens=target_tokens,
         current_user_message=current_user_message,
     )
-    return SystemMessage(content=(
-        "【已压缩的早期上下文】\n"
-        "以下内容是系统为避免上下文窗口溢出而生成的内部交接摘要，"
-        "请把它视为此前对话事实与工作进度，不要向用户解释压缩过程。\n"
-        f"{json.dumps(summary, ensure_ascii=False, indent=2)}"
-    ))
+    return (
+        SystemMessage(content=(
+            "【已压缩的早期上下文】\n"
+            "以下内容是系统为避免上下文窗口溢出而生成的内部创作交接摘要，"
+            "请把它视为此前对话事实、用户意图与工作进度，不要向用户解释压缩过程。\n"
+            f"{json.dumps(summary, ensure_ascii=False, indent=2)}"
+        )),
+        summary,
+    )
+
+
+def _context_window_error(
+    *,
+    reason: str,
+    model_name: str,
+    input_tokens: int,
+    max_context: int,
+    max_output: int,
+    hard_budget: int,
+) -> ContextWindowIncompatibleError:
+    return ContextWindowIncompatibleError(
+        "当前模型的上下文窗口无法容纳必要的系统指令和本轮内容。请改用上下文更大的模型，或减少当前附件与编辑区内容。",
+        reason=reason,
+        details={
+            "model": model_name,
+            "input_tokens": max(int(input_tokens or 0), 0),
+            "max_context_tokens": max(int(max_context or 0), 0),
+            "max_output_tokens": max(int(max_output or 0), 0),
+            "hard_budget": max(int(hard_budget or 0), 0),
+        },
+    )
 
 
 def prepare_chat_messages_with_budget(
@@ -602,14 +900,39 @@ def prepare_chat_messages_with_budget(
         return ContextBudgetResult(full_messages, False, original_tokens, original_tokens, len(history_messages))
 
     base_tokens = _messages_tokens([system_msg, current_msg], model_name)
-    summary_reserved = min(12000, max(2048, int(hard_budget * 0.2)))
-    recent_budget = max(1024, hard_budget - base_tokens - summary_reserved)
+    if base_tokens > hard_budget:
+        _emit_context_window_stats(
+            emit_event,
+            agent_id=agent_id,
+            original_tokens=original_tokens,
+            input_tokens=base_tokens,
+            retained_messages=0,
+            model_name=model_name,
+            max_context_tokens=max_context,
+            max_output_tokens=max_output,
+            hard_budget=hard_budget,
+            trigger_budget=trigger_budget,
+            compacted=False,
+            reason="required_context_exceeds_model_window",
+        )
+        raise _context_window_error(
+            reason="required_context_exceeds_model_window",
+            model_name=model_name,
+            input_tokens=base_tokens,
+            max_context=max_context,
+            max_output=max_output,
+            hard_budget=hard_budget,
+        )
+
+    available_history_budget = max(0, hard_budget - base_tokens)
+    summary_reserved = min(12000, max(256, int(hard_budget * 0.2)), available_history_budget)
+    recent_budget = max(0, available_history_budget - summary_reserved)
 
     retained_reversed: List[BaseMessage] = []
     retained_tokens = 0
     for message in reversed(history_messages):
         cost = _messages_tokens([message], model_name)
-        if retained_reversed and retained_tokens + cost > recent_budget:
+        if retained_tokens + cost > recent_budget:
             break
         retained_reversed.append(message)
         retained_tokens += cost
@@ -620,10 +943,16 @@ def prepare_chat_messages_with_budget(
 
     if not overflow_messages:
         compacted_messages = [system_msg, *retained_messages, current_msg]
-        while len(retained_messages) > 1 and _messages_tokens(compacted_messages, model_name) > hard_budget:
-            _drop_oldest_message_unit(retained_messages)
-            compacted_messages = [system_msg, *retained_messages, current_msg]
         compacted_tokens = _messages_tokens(compacted_messages, model_name)
+        if compacted_tokens > hard_budget:
+            raise _context_window_error(
+                reason="minimum_history_unit_exceeds_model_window",
+                model_name=model_name,
+                input_tokens=compacted_tokens,
+                max_context=max_context,
+                max_output=max_output,
+                hard_budget=hard_budget,
+            )
         _emit_context_window_stats(
             emit_event,
             agent_id=agent_id,
@@ -636,7 +965,7 @@ def prepare_chat_messages_with_budget(
             hard_budget=hard_budget,
             trigger_budget=trigger_budget,
             compacted=False,
-            reason="recent_context_trimmed",
+            reason="within_hard_budget_high_usage",
         )
         return ContextBudgetResult(compacted_messages, False, original_tokens, compacted_tokens, len(retained_messages))
 
@@ -649,7 +978,7 @@ def prepare_chat_messages_with_budget(
     )
 
     try:
-        summary_msg = _compress_history_items(
+        summary_msg, summary = _compress_history_items(
             user_id=user_id,
             project_name=project_name,
             agent_id=agent_id,
@@ -659,10 +988,27 @@ def prepare_chat_messages_with_budget(
             overflow_messages=overflow_messages,
         )
         compacted_messages = [system_msg, summary_msg, *retained_messages, current_msg]
-        while len(retained_messages) > 1 and _messages_tokens(compacted_messages, model_name) > hard_budget:
-            _drop_oldest_message_unit(retained_messages)
-            compacted_messages = [system_msg, summary_msg, *retained_messages, current_msg]
         compacted_tokens = _messages_tokens(compacted_messages, model_name)
+        if compacted_tokens > hard_budget:
+            raise _context_window_error(
+                reason="compacted_context_exceeds_model_window",
+                model_name=model_name,
+                input_tokens=compacted_tokens,
+                max_context=max_context,
+                max_output=max_output,
+                hard_budget=hard_budget,
+            )
+        checkpoint = build_context_checkpoint_payload(
+            summary=summary,
+            source_messages=overflow_messages,
+            source="automatic_compaction",
+            agent_id=agent_id,
+            model_name=model_name,
+            target_tokens=summary_reserved,
+            original_tokens=original_tokens,
+            compacted_tokens=compacted_tokens,
+            retained_messages=len(retained_messages),
+        )
         _emit_finished(
             emit_event,
             original_tokens=original_tokens,
@@ -670,6 +1016,11 @@ def prepare_chat_messages_with_budget(
             retained_messages=len(retained_messages),
             model_name=model_name,
         )
+        if checkpoint is not None:
+            _append_event(emit_event, {
+                "event": CONTEXT_CHECKPOINT_READY_EVENT,
+                "checkpoint": checkpoint,
+            })
         _emit_context_window_stats(
             emit_event,
             agent_id=agent_id,
@@ -684,13 +1035,18 @@ def prepare_chat_messages_with_budget(
             compacted=True,
             reason="context_compacted",
         )
-        return ContextBudgetResult(compacted_messages, True, original_tokens, compacted_tokens, len(retained_messages))
+        return ContextBudgetResult(
+            compacted_messages,
+            True,
+            original_tokens,
+            compacted_tokens,
+            len(retained_messages),
+            checkpoint,
+        )
+    except NonRetryableChatError:
+        raise
     except Exception as exc:
-        compacted_messages = [system_msg, *retained_messages, current_msg]
-        while len(retained_messages) > 1 and _messages_tokens(compacted_messages, model_name) > hard_budget:
-            _drop_oldest_message_unit(retained_messages)
-            compacted_messages = [system_msg, *retained_messages, current_msg]
-        compacted_tokens = _messages_tokens(compacted_messages, model_name)
+        compacted_tokens = _messages_tokens([system_msg, *retained_messages, current_msg], model_name)
         _emit_failed(
             emit_event,
             original_tokens=original_tokens,
@@ -713,7 +1069,16 @@ def prepare_chat_messages_with_budget(
             compacted=False,
             reason="context_compaction_failed",
         )
-        return ContextBudgetResult(compacted_messages, False, original_tokens, compacted_tokens, len(retained_messages))
+        raise ContextCompactionFailedError(
+            "上下文压缩失败。为避免丢失早期对话，本次请求已停止，请稍后重试或检查 Utility Agent 的模型配置。",
+            reason="context_compaction_failed",
+            details={
+                "model": model_name,
+                "original_tokens": original_tokens,
+                "input_tokens": compacted_tokens,
+                "max_context_tokens": max_context,
+            },
+        ) from exc
 
 
 def rebudget_existing_messages(
@@ -732,6 +1097,15 @@ def rebudget_existing_messages(
         max_context, max_output = _get_limits(llm_client)
         hard_budget, trigger_budget = _budget_limits(max_context, max_output)
         tokens = _messages_tokens(messages, model_name)
+        if tokens > hard_budget:
+            raise _context_window_error(
+                reason="required_tool_loop_context_exceeds_model_window",
+                model_name=model_name,
+                input_tokens=tokens,
+                max_context=max_context,
+                max_output=max_output,
+                hard_budget=hard_budget,
+            )
         _emit_context_window_stats(
             emit_event,
             agent_id=agent_id,
@@ -771,55 +1145,90 @@ def rebudget_existing_messages(
 
     system_msg = messages[0]
     body_messages = messages[1:]
-    base_tokens = _messages_tokens([system_msg], model_name)
-    summary_reserved = min(12000, max(2048, int(hard_budget * 0.2)))
-    recent_budget = max(1024, hard_budget - base_tokens - summary_reserved)
+
+    # 当前用户消息及其后续工具循环不可压缩。否则模型可能在同一轮任务中忘掉
+    # 用户原话，或把刚执行完的工具结果与其触发请求拆开。
+    current_user_index = -1
+    for index in range(len(body_messages) - 1, -1, -1):
+        if _message_type(body_messages[index]) in {"human", "user"}:
+            current_user_index = index
+            break
+    if current_user_index >= 0:
+        compressible_body = body_messages[:current_user_index]
+        required_tail = body_messages[current_user_index:]
+    else:
+        compressible_body = body_messages
+        required_tail = []
+
+    base_tokens = _messages_tokens([system_msg, *required_tail], model_name)
+    if base_tokens > hard_budget:
+        raise _context_window_error(
+            reason="required_tool_loop_context_exceeds_model_window",
+            model_name=model_name,
+            input_tokens=base_tokens,
+            max_context=max_context,
+            max_output=max_output,
+            hard_budget=hard_budget,
+        )
+    available_body_budget = max(0, hard_budget - base_tokens)
+    summary_reserved = min(12000, max(256, int(hard_budget * 0.2)), available_body_budget)
+    recent_budget = max(0, available_body_budget - summary_reserved)
 
     retained_reversed: List[BaseMessage] = []
     retained_tokens = 0
-    for message in reversed(body_messages):
+    for message in reversed(compressible_body):
         cost = _messages_tokens([message], model_name)
-        if retained_reversed and retained_tokens + cost > recent_budget:
+        if retained_tokens + cost > recent_budget:
             break
         retained_reversed.append(message)
         retained_tokens += cost
 
-    retained_messages = _repair_tool_boundary(body_messages, list(reversed(retained_reversed)))
+    retained_messages = _repair_tool_boundary(
+        compressible_body,
+        list(reversed(retained_reversed)),
+    )
 
-    overflow_count = max(0, len(body_messages) - len(retained_messages))
-    overflow_messages = body_messages[:overflow_count]
+    overflow_count = max(0, len(compressible_body) - len(retained_messages))
+    overflow_messages = compressible_body[:overflow_count]
+    retained_count = len(retained_messages) + len(required_tail)
     if not overflow_messages:
-        compacted = [system_msg, *retained_messages]
-        while len(retained_messages) > 2 and _messages_tokens(compacted, model_name) > hard_budget:
-            _drop_oldest_message_unit(retained_messages)
-            compacted = [system_msg, *retained_messages]
+        compacted = [system_msg, *retained_messages, *required_tail]
         compacted_tokens = _messages_tokens(compacted, model_name)
+        if compacted_tokens > hard_budget:
+            raise _context_window_error(
+                reason="tool_loop_minimum_unit_exceeds_model_window",
+                model_name=model_name,
+                input_tokens=compacted_tokens,
+                max_context=max_context,
+                max_output=max_output,
+                hard_budget=hard_budget,
+            )
         _emit_context_window_stats(
             emit_event,
             agent_id=agent_id,
             original_tokens=original_tokens,
             input_tokens=compacted_tokens,
-            retained_messages=len(retained_messages),
+            retained_messages=retained_count,
             model_name=model_name,
             max_context_tokens=max_context,
             max_output_tokens=max_output,
             hard_budget=hard_budget,
             trigger_budget=trigger_budget,
             compacted=False,
-            reason="recent_context_trimmed",
+            reason="within_hard_budget_high_usage",
         )
-        return ContextBudgetResult(compacted, False, original_tokens, compacted_tokens, len(retained_messages))
+        return ContextBudgetResult(compacted, False, original_tokens, compacted_tokens, retained_count)
 
     _emit_started(
         emit_event,
         original_tokens=original_tokens,
         model_name=model_name,
-        retained_messages=len(retained_messages),
+        retained_messages=retained_count,
         reason="tool_loop_context_budget_exceeded",
     )
 
     try:
-        summary_msg = _compress_history_items(
+        summary_msg, _summary = _compress_history_items(
             user_id=user_id,
             project_name=project_name,
             agent_id=agent_id,
@@ -828,16 +1237,22 @@ def rebudget_existing_messages(
             current_user_message=current_user_message,
             overflow_messages=overflow_messages,
         )
-        compacted = [system_msg, summary_msg, *retained_messages]
-        while len(retained_messages) > 2 and _messages_tokens(compacted, model_name) > hard_budget:
-            _drop_oldest_message_unit(retained_messages)
-            compacted = [system_msg, summary_msg, *retained_messages]
+        compacted = [system_msg, summary_msg, *retained_messages, *required_tail]
         compacted_tokens = _messages_tokens(compacted, model_name)
+        if compacted_tokens > hard_budget:
+            raise _context_window_error(
+                reason="tool_loop_compacted_context_exceeds_model_window",
+                model_name=model_name,
+                input_tokens=compacted_tokens,
+                max_context=max_context,
+                max_output=max_output,
+                hard_budget=hard_budget,
+            )
         _emit_finished(
             emit_event,
             original_tokens=original_tokens,
             compacted_tokens=compacted_tokens,
-            retained_messages=len(retained_messages),
+            retained_messages=retained_count,
             model_name=model_name,
         )
         _emit_context_window_stats(
@@ -845,7 +1260,7 @@ def rebudget_existing_messages(
             agent_id=agent_id,
             original_tokens=original_tokens,
             input_tokens=compacted_tokens,
-            retained_messages=len(retained_messages),
+            retained_messages=retained_count,
             model_name=model_name,
             max_context_tokens=max_context,
             max_output_tokens=max_output,
@@ -854,18 +1269,19 @@ def rebudget_existing_messages(
             compacted=True,
             reason="tool_loop_context_compacted",
         )
-        return ContextBudgetResult(compacted, True, original_tokens, compacted_tokens, len(retained_messages))
+        return ContextBudgetResult(compacted, True, original_tokens, compacted_tokens, retained_count)
+    except NonRetryableChatError:
+        raise
     except Exception as exc:
-        compacted = [system_msg, *retained_messages]
-        while len(retained_messages) > 2 and _messages_tokens(compacted, model_name) > hard_budget:
-            _drop_oldest_message_unit(retained_messages)
-            compacted = [system_msg, *retained_messages]
-        compacted_tokens = _messages_tokens(compacted, model_name)
+        compacted_tokens = _messages_tokens(
+            [system_msg, *retained_messages, *required_tail],
+            model_name,
+        )
         _emit_failed(
             emit_event,
             original_tokens=original_tokens,
             compacted_tokens=compacted_tokens,
-            retained_messages=len(retained_messages),
+            retained_messages=retained_count,
             model_name=model_name,
             error=exc,
         )
@@ -874,7 +1290,7 @@ def rebudget_existing_messages(
             agent_id=agent_id,
             original_tokens=original_tokens,
             input_tokens=compacted_tokens,
-            retained_messages=len(retained_messages),
+            retained_messages=retained_count,
             model_name=model_name,
             max_context_tokens=max_context,
             max_output_tokens=max_output,
@@ -883,4 +1299,13 @@ def rebudget_existing_messages(
             compacted=False,
             reason="tool_loop_context_compaction_failed",
         )
-        return ContextBudgetResult(compacted, False, original_tokens, compacted_tokens, len(retained_messages))
+        raise ContextCompactionFailedError(
+            "工具调用期间的上下文压缩失败。为避免丢失任务状态，本次请求已停止，请稍后重试。",
+            reason="tool_loop_context_compaction_failed",
+            details={
+                "model": model_name,
+                "original_tokens": original_tokens,
+                "input_tokens": compacted_tokens,
+                "max_context_tokens": max_context,
+            },
+        ) from exc

@@ -43,6 +43,7 @@ cryptography~=48.0
 networkx~=3.6
 numpy~=2.4
 pydantic~=2.13
+regex~=2026.5
 python-dotenv~=1.2
 Pillow~=11.3
 pystray~=0.19

@@ -199,6 +199,93 @@ describe('chatStore NDJSON 消费契约', () => {
     vi.runOnlyPendingTimers();
   });
 
+  it('消费上下文压缩事件并将同一动画段更新为完成态', async () => {
+    const store = useChatStore();
+    const session = store.primarySession;
+    session.sending = true;
+    session.backgroundTaskStatus = 'running';
+    session.streamEpoch = 1;
+    const assistantMsg: any = {
+      clientId: 'assistant-compaction',
+      role: 'assistant',
+      content: '',
+      reasoning: '',
+      tool_traces: [],
+      segments: [],
+      timestamp: 1,
+    };
+    const reader = readerFromEvents([
+      {
+        event: 'context_compaction_started',
+        seq: 1,
+        original_tokens: 9000,
+        retained_messages: 4,
+        model: 'offline-model',
+      },
+      {
+        event: 'context_compaction_finished',
+        seq: 2,
+        original_tokens: 9000,
+        compacted_tokens: 2200,
+        retained_messages: 4,
+        model: 'offline-model',
+      },
+      { event: 'task_done', seq: 3, status: 'completed' },
+    ]);
+
+    await store._consumeStream(session, assistantMsg, false, reader, 0, {
+      agentId: 'agent_director',
+      contextKey: 'global',
+      streamEpoch: 1,
+    });
+
+    expect(assistantMsg.segments).toHaveLength(1);
+    expect(assistantMsg.segments[0]).toMatchObject({
+      type: 'context_compaction',
+      status: 'finished',
+      original_tokens: 9000,
+      compacted_tokens: 2200,
+    });
+  });
+
+  it('对短上下文模型错误显示本地化提示且不进入模型重试态', async () => {
+    const store = useChatStore();
+    const session = store.primarySession;
+    session.sending = true;
+    session.backgroundTaskStatus = 'running';
+    session.streamEpoch = 1;
+    const assistantMsg: any = {
+      clientId: 'assistant-context-error',
+      role: 'assistant',
+      content: '',
+      reasoning: '',
+      tool_traces: [],
+      segments: [],
+      timestamp: 1,
+    };
+    const reader = readerFromEvents([
+      {
+        event: 'error',
+        seq: 1,
+        code: 'context_window_incompatible',
+        message: 'backend fallback',
+        retryable: false,
+      },
+      { event: 'task_done', seq: 2, status: 'error', error: 'backend fallback' },
+    ]);
+
+    await store._consumeStream(session, assistantMsg, false, reader, 0, {
+      agentId: 'agent_director',
+      contextKey: 'global',
+      streamEpoch: 1,
+    });
+
+    expect(session.lastError).not.toBe('backend fallback');
+    expect(String(session.lastError || '').length).toBeGreaterThan(20);
+    expect(session.retryAttempt).toBeNull();
+    expect(session.retryMode).toBeNull();
+  });
+
   it('观察流断开但后台任务仍运行时保留运行态', async () => {
     vi.mocked(getChatTaskStatus).mockResolvedValueOnce({
       hasTask: true,

@@ -391,28 +391,35 @@ def _parse_dialogue_content(
                     i += 1
                     continue
                 
-                # 检查 @act (允许后面跟标签并忽略)
+                # 检查 @act。旧视觉键只做容错消费，不再迁移到演出字段。
                 act_match = re.match(r'^@act\s+(\w+):([^<]+)', next_line)
                 if act_match:
                     key = act_match.group(1).strip()
                     value = act_match.group(2).strip()
                     if ',' in value:
                         value = [v.strip() for v in value.split(',')]
-                    if key in {"bg", "sprite"}:
-                        presentation_commands[key] = value
-                    else:
+                    if key.lower() not in {"bg", "sprite"}:
                         act_commands[key] = value
                     i += 1
                     continue
 
-                # Web 演出指令。旧的 @act bg/sprite 会在读取时迁移到同一字段。
-                presentation_match = re.match(r'^@(?:web|presentation)\s+(\w+):([^<]+)', next_line)
+                # Web 专用演出提示使用独立协议，不与 Unity 通用行为节点混用。
+                presentation_match = re.match(
+                    r'^@presentation\s+(\w+):([^<]+)',
+                    next_line,
+                    re.IGNORECASE,
+                )
                 if presentation_match:
-                    key = presentation_match.group(1).strip()
+                    key = presentation_match.group(1).strip().lower()
                     value = presentation_match.group(2).strip()
-                    if ',' in value:
+                    if key != 'illustration_prompt' and ',' in value:
                         value = [v.strip() for v in value.split(',')]
                     presentation_commands[key] = value
+                    i += 1
+                    continue
+
+                # 未识别或已废弃的指令静默忽略，禁止混入对白正文。
+                if next_line.startswith('@'):
                     i += 1
                     continue
                 
@@ -685,13 +692,13 @@ def _serialize_dialogues(dialogues: List[Dict[str, Any]], chr_map: Dict[int, str
         # 文本内容
         lines.append(f"{indent_str}{d.get('txt', '')}")
         
-        # Web 演出指令与通用行为分离，避免 Unity 侧误把背景/立绘当 act。
+        # Web 专用演出提示与通用行为分离，Unity SDK 会统一忽略该节点字段。
         if d.get('presentation'):
             for key, value in d['presentation'].items():
                 if value in (None, ''):
                     continue
                 val_str = ','.join(value) if isinstance(value, list) else value
-                lines.append(f"{indent_str}@web {key}:{val_str}")
+                lines.append(f"{indent_str}@presentation {key}:{val_str}")
 
         # @next
         if d.get('next'):
@@ -700,7 +707,7 @@ def _serialize_dialogues(dialogues: List[Dict[str, Any]], chr_map: Dict[int, str
         # @act
         if d.get('act'):
             for key, value in d['act'].items():
-                if key in {"bg", "sprite"}:
+                if str(key).lower() in {"bg", "sprite"}:
                     continue
                 val_str = ','.join(value) if isinstance(value, list) else value
                 lines.append(f"{indent_str}@act {key}:{val_str}")

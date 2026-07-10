@@ -22,9 +22,9 @@ from ..utils import (
     test_platform_chat,
 )
 from ..models import (
-    CAP_EMBEDDING,
-    CAP_TEXT_GENERATION,
-    normalize_model_capabilities,
+    MODALITY_EMBEDDING,
+    MODALITY_TEXT,
+    normalize_model_modalities,
 )
 
 
@@ -32,12 +32,12 @@ class ProbeMixin:
     """模型探测与测试功能 Mixin，需与 LLMConfigGUI 混入使用。"""
 
     @staticmethod
-    def _model_capabilities_from_config(model_config):
+    def _model_modalities_from_config(model_config):
         if isinstance(model_config, str):
-            return normalize_model_capabilities()
-        return normalize_model_capabilities(
-            model_config.get("capabilities"),
-            legacy_is_embedding=bool(model_config.get("is_embedding")),
+            return normalize_model_modalities()
+        return normalize_model_modalities(
+            model_config.get("input_modalities"),
+            model_config.get("output_modalities"),
         )
 
     def test_model(self):
@@ -67,9 +67,9 @@ class ProbeMixin:
         else:
             model_id = model_config.get("model_name", "")
             extra_body = model_config.get("extra_body")
-        capabilities = self._model_capabilities_from_config(model_config)
+        _, output_modalities = self._model_modalities_from_config(model_config)
 
-        if CAP_TEXT_GENERATION not in capabilities:
+        if MODALITY_TEXT not in output_modalities:
             messagebox.showwarning("提示", "当前模型不支持文本对话测试")
             return
 
@@ -126,9 +126,9 @@ class ProbeMixin:
             model_id = model_config
         else:
             model_id = model_config.get("model_name", "")
-        capabilities = self._model_capabilities_from_config(model_config)
+        _, output_modalities = self._model_modalities_from_config(model_config)
 
-        if CAP_EMBEDDING not in capabilities:
+        if MODALITY_EMBEDDING not in output_modalities:
             messagebox.showwarning("提示", "当前模型不是 Embedding")
             return
 
@@ -197,9 +197,9 @@ class ProbeMixin:
         else:
             model_id = model_config.get("model_name", "")
             extra_body = model_config.get("extra_body")
-        capabilities = self._model_capabilities_from_config(model_config)
+        _, output_modalities = self._model_modalities_from_config(model_config)
 
-        if CAP_TEXT_GENERATION not in capabilities:
+        if MODALITY_TEXT not in output_modalities:
             messagebox.showwarning("提示", "当前模型不支持文本测速")
             return
 

@@ -70,13 +70,18 @@ class UtilityAgent:
             pass
         return {
             "summary": text[:4000],
-            "user_goal": [],
+            "user_intent_anchors": [],
+            "creative_state": {},
+            "author_preferences": {},
             "current_progress": [],
             "important_facts": [],
             "decisions": [],
+            "rejected_options": [],
+            "conflicts_and_uncertainties": [],
             "open_tasks": [],
             "recent_turns": [],
             "tool_results": [],
+            "retrieval_anchors": [],
             "handoff_notes": ["压缩模型未返回严格 JSON，已保留原始摘要文本。"],
         }
 
@@ -106,6 +111,48 @@ class UtilityAgent:
         content = getattr(response, "content", response)
         return self._parse_json_object(content)
 
+    @staticmethod
+    def _summary_token_count(
+        summary: Dict[str, Any],
+        *,
+        model_name: str,
+    ) -> int:
+        return int(estimate_tokens(
+            json.dumps(summary, ensure_ascii=False),
+            model=model_name or None,
+        ))
+
+    def _enforce_summary_budget(
+        self,
+        *,
+        summary: Dict[str, Any],
+        agent_id: str,
+        model_name: str,
+        target_tokens: int,
+        current_user_message: str,
+    ) -> Dict[str, Any]:
+        """超出目标时再做一次结构化收敛，仍超限则显式失败。"""
+        safe_target = max(int(target_tokens or 0), 256)
+        if self._summary_token_count(summary, model_name=model_name) <= safe_target:
+            return summary
+
+        compacted_again = self._compress_once(
+            history_text=self._json_dumps(summary),
+            agent_id=agent_id,
+            model_name=model_name,
+            target_tokens=safe_target,
+            current_user_message=current_user_message,
+        )
+        actual_tokens = self._summary_token_count(
+            compacted_again,
+            model_name=model_name,
+        )
+        if actual_tokens > safe_target:
+            raise ValueError(
+                f"上下文摘要超过目标预算：{actual_tokens} > {safe_target} tokens"
+            )
+        return compacted_again
+
     def compress_chat_history(
         self,
         *,
@@ -123,10 +170,17 @@ class UtilityAgent:
         max_input_tokens = max(4000, int(max_context * 0.55))
 
         if estimate_tokens(material, model=utility_model_name or model_name) <= max_input_tokens:
-            return self._compress_once(
+            summary = self._compress_once(
                 history_text=material,
                 agent_id=agent_id,
                 model_name=model_name,
+                target_tokens=target_tokens,
+                current_user_message=current_user_message,
+            )
+            return self._enforce_summary_budget(
+                summary=summary,
+                agent_id=agent_id,
+                model_name=utility_model_name or model_name,
                 target_tokens=target_tokens,
                 current_user_message=current_user_message,
             )
@@ -147,10 +201,17 @@ class UtilityAgent:
                 current_user_message=current_user_message,
             ))
 
-        return self._compress_once(
+        summary = self._compress_once(
             history_text=self._json_dumps(partials),
             agent_id=agent_id,
             model_name=model_name,
+            target_tokens=target_tokens,
+            current_user_message=current_user_message,
+        )
+        return self._enforce_summary_budget(
+            summary=summary,
+            agent_id=agent_id,
+            model_name=utility_model_name or model_name,
             target_tokens=target_tokens,
             current_user_message=current_user_message,
         )

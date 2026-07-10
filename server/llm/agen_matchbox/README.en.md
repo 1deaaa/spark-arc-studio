@@ -33,6 +33,7 @@ Although specialized external gateways (such as NewAPI, LiteLLM, etc.) are power
   - **Multi-User Custom-Platform Mode**: Provides maximum flexibility, allowing each user to freely add and manage their own LLM platforms and models.
 - **Unified Interface**: Regardless of how the backend configuration changes, developers can retrieve the LLM instance for a specific user/purpose via `matchbox().get_user_llm(user_id, usage_key="fast")`.
 - **Intelligent Reasoning Stream Adaptation (No Blank Waiting)**: The gateway is **OpenAI-compatible** and supports dynamic detection and auto-conversion of common reasoning fields (e.g., `reasoning_content` and `<think>` tags) to **unify them into a continuous reasoning stream**. This ensures that the frontend maintains a superior pure-streaming experience when running deep thinking models.
+- **Strict Tool Schema Compatibility**: Function tools are normalized to valid JSON Schema at the request boundary. Object schemas with no required parameters explicitly receive `required: []` for strict implementations such as Grok. This is a general OpenAI-compatible protocol rule: it does not branch on domains or model names, and it does not consume or rewrite `extra_body`.
 - **Multi-Purpose Model Binding Slots**: Maintains multiple purpose slots per user (e.g., `main`, `fast`, `reason`) and allows users to define custom slots and bind them to different models as needed.
 - **System and User Isolation**: Clearly distinguishes between "System Platforms" and "User Private Platforms". System platforms are managed by the configuration file (`matchbox_cfg.yaml`), while user platform data is stored in the database.
 - **Flexible Key Management**:
@@ -287,6 +288,50 @@ python matchbox_cfg_gui.py
 3. Click "Probe Models" to fetch all models supported by the platform.
 4. Select target models from the probed list, and click "Add Selected" to add them to the platform.
 5. For platforms you do not need, click "Disable Platform" to soft-disable and hide them from default listings without deleting database records.
+
+#### 2.1. Model Modalities and Image Protocols
+
+Model types are not persisted through `is_embedding` or an expanding set of category flags. The database, YAML, and API use two factual fields only:
+
+- `input_modalities`: currently `text` and `image`.
+- `output_modalities`: currently `text`, `image`, and `embedding`; `embedding` is exclusive with other outputs.
+
+Common combinations:
+
+| Use case | `input_modalities` | `output_modalities` |
+|---|---|---|
+| Text model | `[text]` | `[text]` |
+| Vision text model | `[text, image]` | `[text]` |
+| Text-to-image | `[text]` | `[image]` |
+| Image-to-image / editing | `[text, image]` | `[image]` |
+| Unified text and image output | `[text, image]` | `[text, image]` |
+| Embedding model | `[text]` | `[embedding]` |
+
+The Web manager and CustomTkinter GUI expose only three checkboxes: Vision, Image Generation, and Embedding. Text input is implicit. Selecting Embedding clears the other choices. Compact model tags use `T` for text output, `I` for image output, `V` for image input, and `E` for embedding output; the Web UI explains each tag through tooltips.
+
+```yaml
+models:
+  Editable Image Model:
+    model_name: provider-image-model
+    input_modalities: [text, image]
+    output_modalities: [image]
+    image_generation_adapter: openai_images
+    extra_body:
+      quality: high
+```
+
+`image_generation_adapter` is the sole source of truth for SparkArc's internal image protocol selection. The user selects it explicitly; it is never inferred from the `base_url` domain, model name, or `extra_body`, and is never written into or forwarded to the upstream service. `extra_body` remains reserved for provider-specific parameters. The adapter strips only SparkArc's internal control keys and forwards other parameters on a best-effort basis. Image models without an explicit selection use the `openai_images` default; no legacy nested adapter is read.
+
+| Value | Upstream protocol | Configured `model_name` | Reference-image transport |
+|---|---|---|---|
+| `openai_images` | `/images/generations` and `/images/edits` | GPT Image or a compatible image model | multipart `image[]` |
+| `openai_responses_image` | `/responses` with the `image_generation` tool | A mainline text model that supports the tool | `input_image` data URLs in the one request; no persistent Files API upload |
+| `openai_chat_image` | A compatible `/chat/completions` gateway | The image-model name exposed by that gateway | data URLs in multimodal message content; parses Markdown/data-URI image results |
+| `gemini_generate_content` | Gemini `models/*:generateContent` | A Gemini / Nano Banana model | `inline_data` |
+| `gemini_interactions` | Gemini Interactions | A Gemini / Nano Banana model | image parts in `input` |
+| `xai_images` | xAI `/images/generations` and `/images/edits` | A Grok Image model | JSON data URLs, with at most three references for editing |
+
+`openai_images` remains the default because it is the closest thing to a common minimum image API. `openai_responses_image` is not a direct GPT Image model protocol: the configured mainline model calls the image-generation tool, so mainline-model token usage also applies. SparkArc never uploads project references to a provider Files API automatically. Project images remain persisted locally and are attached only to the selected generation request.
 
 #### 2.2. Manually Editing YAML (Bootstrap/Distribution Only)
 

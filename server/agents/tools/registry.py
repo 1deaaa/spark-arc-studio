@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 from agents.tools.attachment import read_attachment_chunk
+from agents.tools.chat_history import search_chat_history
 from agents.tools.automation import (
     check_scriptwriter_status,
     trigger_auto_write,
@@ -40,12 +41,13 @@ from agents.tools.showrunner import (
 )
 from agents.tools.story_memory import story_memory_tool
 from agents.tools.web_search import web_search
-from core.request_context import current_user_id
+from core.request_context import current_user_id, get_current_chat_session
 
 MCP_ONLY_TOOLS = [capture_inspiration]
 EXTERNAL_SEARCH_TOOLS = [web_search]
 OPTIONAL_RESEARCH_TOOLS = [story_memory_tool, graph_rag_tool]
 SHARED_SKILL_TOOLS = [search_skills, read_skill, read_skill_reference]
+SHARED_CHAT_HISTORY_TOOLS = [search_chat_history]
 SKILL_CAPABLE_AGENT_IDS = {
     "agent_director",
     "agent_muse",
@@ -133,6 +135,14 @@ def _with_skill_tools(agent_id: str, base_tools: list, user_id: str | int | None
     return tools
 
 
+def _with_contextual_tools(agent_id: str, base_tools: list, user_id: str | int | None = None) -> list:
+    tools = _with_skill_tools(agent_id, base_tools, user_id)
+    room_agent_id, context_key = get_current_chat_session()
+    if room_agent_id and context_key:
+        tools.extend(SHARED_CHAT_HISTORY_TOOLS)
+    return tools
+
+
 MUSE_TOOLS = MUSE_BASE_TOOLS + SHARED_SKILL_TOOLS
 LOREBOOK_TOOLS = LOREBOOK_BASE_TOOLS + SHARED_SKILL_TOOLS
 SHOWRUNNER_TOOLS = SHOWRUNNER_BASE_TOOLS + SHARED_SKILL_TOOLS
@@ -156,6 +166,7 @@ ALL_TOOLS = (
         read_attachment_chunk,
     ]
     + SHARED_SKILL_TOOLS
+    + SHARED_CHAT_HISTORY_TOOLS
     + EXTERNAL_SEARCH_TOOLS
     + OPTIONAL_RESEARCH_TOOLS
 )
@@ -174,7 +185,7 @@ def get_tools_for_agent(agent_id: str, user_id: str | int | None = None) -> list
         "agent_critic": CRITIC_BASE_TOOLS,
         "agent_style": [],
     }
-    return _with_skill_tools(agent_id, tool_map.get(agent_id, []), user_id)
+    return _with_contextual_tools(agent_id, tool_map.get(agent_id, []), user_id)
 
 
 # MCP 远程操控暴露的纯查询工具白名单（P0 第二层）

@@ -19,7 +19,7 @@
 然而这个世界似乎还想再折磨折磨我。
 唯独留下了那副十五岁时，现在看起来柔弱得楚楚可怜的躯壳。
 
-@act bg:school_road_sunset
+@presentation bg:school_road_sunset
 @act sound:summer_wind,school_bell
 
 [江砚]

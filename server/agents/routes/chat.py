@@ -67,10 +67,16 @@ from core.request_context import (
     set_current_locale,
     set_current_export_format,
     current_llm_usage_context,
+    reset_current_chat_session,
+    set_current_chat_session,
 )
 
 from agents.agent_factory import create_agent_instance
-from agents.context_budget import CHAT_HISTORY_FETCH_LIMIT
+from agents.context_budget import (
+    CHAT_HISTORY_FETCH_LIMIT,
+    CONTEXT_CHECKPOINT_READY_EVENT,
+    NonRetryableChatError,
+)
 from agents.chat_manager import ChatManager
 
 from .schemas import (
@@ -128,6 +134,8 @@ def _run_chat_background_context(
     is_admin: bool,
     locale: str,
     llm_usage_context: str,
+    chat_agent_id: str,
+    chat_context_key: str,
     callback: Any,
 ) -> Any:
     """在聊天后台线程中恢复请求级上下文。"""
@@ -140,9 +148,11 @@ def _run_chat_background_context(
     current_project_name.set(project_name)
     locale_token = set_current_locale(locale)
     usage_token = current_llm_usage_context.set(llm_usage_context)
+    chat_tokens = set_current_chat_session(chat_agent_id, chat_context_key)
     try:
         return callback()
     finally:
+        reset_current_chat_session(chat_tokens)
         current_llm_usage_context.reset(usage_token)
         reset_current_locale(locale_token)
 
@@ -195,6 +205,33 @@ def _mark_chat_task_error(
     return error_message
 
 
+def _persist_context_checkpoint_safely(
+    cm: ChatManager,
+    *,
+    agent_id: str,
+    context_key: str,
+    checkpoint: Dict[str, Any] | None,
+) -> Dict[str, Any] | None:
+    """checkpoint 是优化层；落盘故障不能重放已经成功的模型或工具调用。"""
+    if not checkpoint:
+        return None
+    try:
+        return cm.persist_context_checkpoint(
+            agent_id=agent_id,
+            context_key=context_key,
+            checkpoint=checkpoint,
+        )
+    except Exception:
+        import logging
+
+        logging.getLogger(__name__).exception(
+            "持久化聊天上下文 checkpoint 失败: agent=%s context=%s",
+            agent_id,
+            context_key,
+        )
+        return None
+
+
 # ── 自动重试统一收口 ─────────────────────────────────────────────
 #
 # 设计原则：
@@ -238,6 +275,7 @@ def _run_chat_stream_with_retry(
     terminated_early = False
     final_error_message = ''
     retry_count = 0
+    checkpoint_candidate: Dict[str, Any] | None = None
 
     for attempt in range(1, max_retries + 1):
         # 重试前清空上一轮残留：accumulator 重置 + 推 snapshot 让前端 UI 复位
@@ -262,12 +300,28 @@ def _run_chat_stream_with_retry(
                 if not delta:
                     continue
 
+                if isinstance(delta, dict) and delta.get('event') == CONTEXT_CHECKPOINT_READY_EVENT:
+                    candidate = delta.get('checkpoint')
+                    if isinstance(candidate, dict):
+                        checkpoint_candidate = dict(candidate)
+                    continue
+
                 # ⚠️ 拦截 yield 出来的 error 事件：暂不落盘，由重试逻辑统一裁决
                 #   这是状态唯一性的关键 —— 中间错误若被 append 进 event_log，
                 #   observer 重连回放时会让前端误以为任务已终结。
                 if isinstance(delta, dict) and delta.get('event') == 'error':
                     last_error_summary = _coerce_stream_error_text(delta) or '聊天生成失败'
                     encountered_error = True
+                    if delta.get('retryable') is False:
+                        entry.append_event(delta)
+                        final_error_message = _mark_chat_task_error(
+                            cm,
+                            entry,
+                            task_key,
+                            delta,
+                            retry_count=retry_count,
+                        )
+                        return terminated_early, final_error_message, retry_count
                     break
 
                 event = entry.append_event(delta)
@@ -290,12 +344,34 @@ def _run_chat_stream_with_retry(
 
             if not encountered_error:
                 # chat_stream 正常结束，跳出重试循环
+                if checkpoint_candidate is None:
+                    consume_candidate = getattr(agent_inst, 'consume_context_checkpoint_candidate', None)
+                    if callable(consume_candidate):
+                        checkpoint_candidate = consume_candidate()
+                if checkpoint_candidate and hasattr(cm, 'persist_context_checkpoint'):
+                    _persist_context_checkpoint_safely(
+                        cm,
+                        agent_id=entry.agent_id,
+                        context_key=entry.context_key,
+                        checkpoint=checkpoint_candidate,
+                    )
                 return terminated_early, final_error_message, retry_count
 
         except Exception as e:
             if stop_event.is_set():
                 terminated_early = True
                 break
+            if isinstance(e, NonRetryableChatError):
+                error_event = e.to_event()
+                entry.append_event(error_event)
+                final_error_message = _mark_chat_task_error(
+                    cm,
+                    entry,
+                    task_key,
+                    error_event,
+                    retry_count=retry_count,
+                )
+                return terminated_early, final_error_message, retry_count
             last_error_summary = format_ai_error(e)
             encountered_error = True
 
@@ -511,9 +587,14 @@ def _context_summary_plain_text(summary: Dict[str, Any]) -> str:
     title_map = {
         "summary": "摘要",
         "user_goal": "用户目标",
+        "user_intent_anchors": "用户意图与原话锚点",
+        "creative_state": "创作状态",
+        "author_preferences": "作者偏好与禁区",
         "current_progress": "当前进度",
         "important_facts": "重要事实",
         "decisions": "已定决策",
+        "rejected_options": "明确否决项",
+        "conflicts_and_uncertainties": "冲突与未确认项",
         "open_tasks": "待办事项",
         "recent_turns": "近期上下文",
         "tool_results": "工具结果",
@@ -526,6 +607,8 @@ def _context_summary_plain_text(summary: Dict[str, Any]) -> str:
         lines.append(f"{title}：")
         if isinstance(value, list):
             lines.extend(f"- {str(item).strip()}" for item in value if str(item).strip())
+        elif isinstance(value, dict):
+            lines.append(json.dumps(value, ensure_ascii=False, indent=2))
         else:
             lines.append(str(value).strip())
         lines.append("")
@@ -627,20 +710,43 @@ async def compact_chat_context(data: ChatContextCompactRequest, user: dict = Dep
         return JSONResponse(status_code=400, content={'error': '缺少项目名称'})
 
     cm = ChatManager(user_id=user_id, project_name=project_name)
-    history = cm.get_history(agent_id=data.agentId, context_key=data.contextKey, limit=CHAT_HISTORY_FETCH_LIMIT)
+    history = cm.get_context_history(agent_id=data.agentId, context_key=data.contextKey)
+    raw_history = [
+        item
+        for item in history
+        if item.get("role") in {"user", "assistant"} and str(item.get("content") or "").strip()
+    ]
+    if not raw_history:
+        return {'success': True, 'compacted': False, 'message': '当前会话没有新增的可压缩上下文'}
+    from agents.context_budget import partition_history_for_manual_compaction
+
+    compactible_source, retained_history = partition_history_for_manual_compaction(
+        history,
+        keep_recent_turns=2,
+    )
     compactible_history = [
         {
             "role": item.get("role"),
             "content": item.get("content"),
         }
-        for item in history
-        if item.get("role") in {"user", "assistant"} and str(item.get("content") or "").strip()
+        for item in compactible_source
+        if item.get("role") in {"system", "user", "assistant"} and str(item.get("content") or "").strip()
     ]
-    if not compactible_history:
-        return {'success': True, 'compacted': False, 'message': '当前会话没有可压缩的上下文'}
+    new_source_messages = [
+        item
+        for item in compactible_source
+        if item.get("role") in {"user", "assistant"}
+    ]
+    if not compactible_history or not new_source_messages:
+        return {
+            'success': True,
+            'compacted': False,
+            'message': '当前会话尚未积累超过最近两轮的可压缩上下文',
+        }
 
     try:
         from agents.utility_agent import UtilityAgent
+        from agents.context_budget import build_context_checkpoint_payload_from_history
         from llm.agen_matchbox import matchbox
 
         llm = matchbox().get_user_llm(user_id, agent_name=data.agentId)
@@ -661,24 +767,59 @@ async def compact_chat_context(data: ChatContextCompactRequest, user: dict = Dep
         try:
             from llm.agen_matchbox.estimate_tokens import estimate_tokens
             summary_tokens = int(estimate_tokens(summary_json, model=model_name))
-            original_tokens = int(estimate_tokens(json.dumps(compactible_history, ensure_ascii=False), model=model_name))
+            retained_tokens = int(estimate_tokens(
+                json.dumps(
+                    [
+                        {"role": item.get("role"), "content": item.get("content")}
+                        for item in retained_history
+                    ],
+                    ensure_ascii=False,
+                ),
+                model=model_name,
+            ))
+            original_tokens = int(estimate_tokens(
+                json.dumps(
+                    [
+                        {"role": item.get("role"), "content": item.get("content")}
+                        for item in history
+                    ],
+                    ensure_ascii=False,
+                ),
+                model=model_name,
+            ))
+            compacted_runtime_tokens = summary_tokens + retained_tokens
         except Exception:
             summary_tokens = 0
             original_tokens = 0
-        msg = cm.append_message(
+            compacted_runtime_tokens = 0
+        checkpoint_payload = build_context_checkpoint_payload_from_history(
+            summary=summary,
+            history=compactible_source,
+            source="manual_compaction",
+            agent_id=data.agentId,
+            model_name=model_name,
+            target_tokens=target_tokens,
+            original_tokens=original_tokens,
+            compacted_tokens=summary_tokens,
+            retained_messages=len(retained_history),
+        )
+        if checkpoint_payload is None:
+            return JSONResponse(status_code=409, content={
+                'error': '无法确定上下文压缩边界，请刷新会话后重试',
+                'code': 'context_checkpoint_boundary_missing',
+            })
+        msg = cm.persist_context_checkpoint(
             agent_id=data.agentId,
             context_key=data.contextKey,
-            role='system',
-            content=summary_json,
-            metadata={
-                "kind": "context_summary",
-                "source": "manual_compaction",
-                "original_messages": len(compactible_history),
-                "target_tokens": target_tokens,
-                "model": model_name,
-                "created_at": int(time.time()),
-            },
+            checkpoint=checkpoint_payload,
         )
+        if msg is None:
+            return JSONResponse(status_code=409, content={
+                'error': '上下文在压缩期间发生变化，请重试',
+                'code': 'context_checkpoint_conflict',
+            })
+        checkpoint_metadata = dict(msg.get("metadata") or {})
+        original_message_count = int(checkpoint_metadata.get("original_messages") or len(raw_history))
         notice = cm.append_message(
             agent_id=data.agentId,
             context_key=data.contextKey,
@@ -689,10 +830,10 @@ async def compact_chat_context(data: ChatContextCompactRequest, user: dict = Dep
                 "channel": "manual_compaction",
                 "context_window_stats": {
                     "agent_id": data.agentId,
-                    "input_tokens": summary_tokens,
+                    "input_tokens": compacted_runtime_tokens,
                     "output_tokens": 0,
                     "original_tokens": original_tokens,
-                    "retained_messages": 1,
+                    "retained_messages": len(retained_history),
                     "model": model_name,
                     "compacted": True,
                     "reason": "manual_context_compacted",
@@ -702,8 +843,8 @@ async def compact_chat_context(data: ChatContextCompactRequest, user: dict = Dep
                         "type": "context_compaction_summary",
                         "status": "finished",
                         "summary_text": summary_text,
-                        "summary_message_id": msg.id,
-                        "original_messages": len(compactible_history),
+                        "summary_message_id": msg["id"],
+                        "original_messages": original_message_count,
                         "compacted_tokens": summary_tokens,
                         "model": model_name,
                     }
@@ -713,16 +854,16 @@ async def compact_chat_context(data: ChatContextCompactRequest, user: dict = Dep
         return {
             'success': True,
             'compacted': True,
-            'summaryMessageId': msg.id,
+            'summaryMessageId': msg["id"],
             'noticeMessageId': notice.id,
-            'originalMessages': len(compactible_history),
+            'originalMessages': original_message_count,
             'targetTokens': target_tokens,
             'summaryText': summary_text,
             'contextWindowStats': {
                 'agent_id': data.agentId,
-                'input_tokens': summary_tokens,
+                'input_tokens': compacted_runtime_tokens,
                 'original_tokens': original_tokens,
-                'retained_messages': 1,
+                'retained_messages': len(retained_history),
                 'model': model_name,
                 'compacted': True,
                 'reason': 'manual_context_compacted',
@@ -946,7 +1087,7 @@ async def edit_chat_message(data: ChatMessageEditRequest, user: dict = Depends(g
 
         # 统一实例化 Agent（包括导演）并获取回复
         # get_history 返回的历史已含编辑后的用户消息，需移除以避免与 data.content 双喂
-        history = cm.get_history(agent_id=data.agentId, context_key=data.contextKey, limit=CHAT_HISTORY_FETCH_LIMIT)
+        history = cm.get_context_history(agent_id=data.agentId, context_key=data.contextKey)
         if history and history[-1].get('role') == 'user':
             history = history[:-1]
 
@@ -954,7 +1095,16 @@ async def edit_chat_message(data: ChatMessageEditRequest, user: dict = Depends(g
             print(f"[EditChat] Triggering reply for expert agent: {data.agentId}")
             agent_inst = create_agent_instance(data.agentId, user_id, project_name)
 
-            reply = await run_in_threadpool(agent_inst.chat, data.content, history=history, active_context=effective_active_context)
+            chat_tokens = set_current_chat_session(data.agentId, data.contextKey)
+            try:
+                reply = await run_in_threadpool(
+                    agent_inst.chat,
+                    data.content,
+                    history=history,
+                    active_context=effective_active_context,
+                )
+            finally:
+                reset_current_chat_session(chat_tokens)
             print(f"[EditChat] Agent reply length: {len(reply) if reply else 0}")
             
             cm.append_message(
@@ -964,6 +1114,14 @@ async def edit_chat_message(data: ChatMessageEditRequest, user: dict = Depends(g
                 content=reply,
                 metadata={'channel': 'edit_reply'},
             )
+            checkpoint = agent_inst.consume_context_checkpoint_candidate()
+            if checkpoint:
+                _persist_context_checkpoint_safely(
+                    cm,
+                    agent_id=data.agentId,
+                    context_key=data.contextKey,
+                    checkpoint=checkpoint,
+                )
             return {'success': True, 'reply': reply}
         except Exception as e:
             import traceback
@@ -1054,7 +1212,7 @@ async def edit_chat_message_stream(request: Request, data: ChatMessageEditReques
     _checkpoint_chat_task(cm, entry, force=True, stream_status='running')
 
     # get_history 返回的历史已含编辑后的用户消息，需移除以避免与 data.content 双喂
-    history = cm.get_history(agent_id=data.agentId, context_key=data.contextKey, limit=CHAT_HISTORY_FETCH_LIMIT)
+    history = cm.get_context_history(agent_id=data.agentId, context_key=data.contextKey)
     if history and history[-1].get('role') == 'user':
         history = history[:-1]
     agent_inst = create_agent_instance(data.agentId, user_id, project_name)
@@ -1125,6 +1283,8 @@ async def edit_chat_message_stream(request: Request, data: ChatMessageEditReques
             is_admin=bool(user.get('is_admin')),
             locale=request_locale,
             llm_usage_context=_make_llm_usage_context(entry.task_id),
+            chat_agent_id=data.agentId,
+            chat_context_key=data.contextKey,
             callback=_in_context,
         )
 
@@ -1168,7 +1328,7 @@ async def send_chat_message(data: ChatSendRequest, user: dict = Depends(get_curr
     cm = ChatManager(user_id=user_id, project_name=project_name)
 
     # 1. 先取历史（不含当前消息），避免双喂
-    history = cm.get_history(agent_id=agent_id, context_key=context_key, limit=CHAT_HISTORY_FETCH_LIMIT)
+    history = cm.get_context_history(agent_id=agent_id, context_key=context_key)
 
     # 2. 保存用户消息到 DB
     cm.append_message(
@@ -1182,7 +1342,16 @@ async def send_chat_message(data: ChatSendRequest, user: dict = Depends(get_curr
     try:
         agent_inst = create_agent_instance(agent_id, user_id, project_name)
 
-        reply = await run_in_threadpool(agent_inst.chat, message, history=history, active_context=effective_active_context)
+        chat_tokens = set_current_chat_session(agent_id, context_key)
+        try:
+            reply = await run_in_threadpool(
+                agent_inst.chat,
+                message,
+                history=history,
+                active_context=effective_active_context,
+            )
+        finally:
+            reset_current_chat_session(chat_tokens)
 
         # 3. Record AI reply
         cm.append_message(
@@ -1192,6 +1361,14 @@ async def send_chat_message(data: ChatSendRequest, user: dict = Depends(get_curr
             content=reply,
             metadata={'channel': 'direct_reply'},
         )
+        checkpoint = agent_inst.consume_context_checkpoint_candidate()
+        if checkpoint:
+            _persist_context_checkpoint_safely(
+                cm,
+                agent_id=agent_id,
+                context_key=context_key,
+                checkpoint=checkpoint,
+            )
         
         return {'success': True, 'mode': 'direct', 'reply': reply}
     except Exception as e:
@@ -1253,7 +1430,7 @@ async def send_chat_message_stream(request: Request, data: ChatSendRequest, user
     cm = ChatManager(user_id=user_id, project_name=project_name)
 
     # 先取历史（不含当前消息），避免双喂
-    history = cm.get_history(agent_id=agent_id, context_key=context_key, limit=CHAT_HISTORY_FETCH_LIMIT)
+    history = cm.get_context_history(agent_id=agent_id, context_key=context_key)
 
     # 保存用户消息到 DB（在取历史之后，确保 history 不含当前消息）
     cm.append_message(
@@ -1349,6 +1526,8 @@ async def send_chat_message_stream(request: Request, data: ChatSendRequest, user
             is_admin=bool(user.get('is_admin')),
             locale=request_locale,
             llm_usage_context=_make_llm_usage_context(entry.task_id),
+            chat_agent_id=agent_id,
+            chat_context_key=context_key,
             callback=_in_context,
         )
 

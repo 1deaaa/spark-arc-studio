@@ -340,7 +340,7 @@
                                         </template>
                                         {{ t('components.aiManager.badges.extraBodyTooltip') }}
                                     </n-tooltip>
-                                    <n-tooltip v-if="plat.is_sys && isTextModel(model.capabilities)" trigger="hover">
+                                    <n-tooltip v-if="plat.is_sys && isTextModel(model)" trigger="hover">
                                         <template #trigger>
                                             <SparkTag
                                                 class="model-credit-tag"
@@ -358,7 +358,7 @@
                                         </template>
                                         {{ t('components.aiManager.badges.extraBodyTooltip') }}
                                     </n-tooltip>
-                                    <n-tooltip v-if="plat.is_sys && isTextModel(model.capabilities)" trigger="hover">
+                                    <n-tooltip v-if="plat.is_sys && isTextModel(model)" trigger="hover">
                                         <template #trigger>
                                             <SparkTag
                                                 class="model-credit-tag-mobile"
@@ -406,7 +406,7 @@
                                     </n-tooltip>
 
                                     <!-- 测速按钮 -->
-                                    <n-tooltip v-if="isTextModel(model.capabilities)" trigger="hover">
+                                    <n-tooltip v-if="isTextModel(model)" trigger="hover">
                                         <template #trigger>
                                             <n-button
                                                 size="tiny"
@@ -423,7 +423,7 @@
                                     </n-tooltip>
 
                                     <!-- 测试按钮 -->
-                                    <n-tooltip v-if="isTextModel(model.capabilities)" trigger="hover">
+                                    <n-tooltip v-if="isTextModel(model)" trigger="hover">
                                         <template #trigger>
                                             <n-button
                                                 size="tiny"
@@ -438,7 +438,7 @@
                                         </template>
                                         {{ t('components.aiManager.actions.testConnection') }}
                                     </n-tooltip>
-                                    <n-tooltip v-if="isEmbeddingModel(model.capabilities)" trigger="hover">
+                                    <n-tooltip v-if="isEmbeddingModel(model)" trigger="hover">
                                         <template #trigger>
                                             <n-button
                                                 size="tiny"
@@ -453,7 +453,7 @@
                                         </template>
                                         {{ t('components.aiManager.embedding.setDefault') }}
                                     </n-tooltip>
-                                    <n-tooltip v-if="isEmbeddingModel(model.capabilities)" trigger="hover">
+                                    <n-tooltip v-if="isEmbeddingModel(model)" trigger="hover">
                                         <template #trigger>
                                             <n-button size="tiny" quaternary class="action-btn icon-btn btn-green" @click="testEmbeddingModel(plat, model)">
                                                 <template #icon><n-icon><CircleCheck /></n-icon></template>
@@ -652,16 +652,16 @@
                     <n-form-item :label="t('components.aiManager.form.modelCapabilities')">
                         <div class="capability-check-row">
                             <n-checkbox
-                                v-for="option in capabilityOptions"
+                                v-for="option in modelAbilityOptions"
                                 :key="option.value"
-                                :checked="isCapabilityChecked(newModel, option.value)"
-                                @update:checked="checked => toggleModelCapability(newModel, option.value, checked)"
+                                :checked="isModelAbilityChecked(newModel, option.value)"
+                                @update:checked="checked => toggleModelAbility(newModel, option.value, checked)"
                             >
                                 {{ option.label }}
                             </n-checkbox>
                         </div>
                     </n-form-item>
-                    <n-form-item v-if="isImageModel(newModel.capabilities)" :label="t('components.aiManager.form.imageAdapter')">
+                    <n-form-item v-if="isImageModel(newModel)" :label="t('components.aiManager.form.imageAdapter')">
                         <n-select
                             v-model:value="newModel.imageAdapter"
                             :options="imageAdapterOptions"
@@ -813,16 +813,16 @@
                     <n-form-item :label="t('components.aiManager.form.modelCapabilities')">
                         <div class="capability-check-row">
                             <n-checkbox
-                                v-for="option in capabilityOptions"
+                                v-for="option in modelAbilityOptions"
                                 :key="option.value"
-                                :checked="isCapabilityChecked(editingModel, option.value)"
-                                @update:checked="checked => toggleModelCapability(editingModel, option.value, checked)"
+                                :checked="isModelAbilityChecked(editingModel, option.value)"
+                                @update:checked="checked => toggleModelAbility(editingModel, option.value, checked)"
                             >
                                 {{ option.label }}
                             </n-checkbox>
                         </div>
                     </n-form-item>
-                    <n-form-item v-if="isImageModel(editingModel.capabilities)" :label="t('components.aiManager.form.imageAdapter')">
+                    <n-form-item v-if="isImageModel(editingModel)" :label="t('components.aiManager.form.imageAdapter')">
                         <n-select
                             v-model:value="editingModel.imageAdapter"
                             :options="imageAdapterOptions"
@@ -943,14 +943,17 @@ import { useAiStore } from '@/components/stores/aiStore';
 import type { AiPlatform, AiModelItem, ApiId } from '@/services/aiContracts';
 import { fetchWithAuth } from '@/services/api';
 import {
-    MODEL_CAPABILITIES,
-    capabilitiesToModelType,
+    MODEL_MODALITIES,
+    getModelModalities,
     isEmbeddingModel,
     isImageModel,
     isTextModel,
-    normalizeModelCapabilities,
-    type ModelCapability,
-} from '@/services/modelCapabilities';
+    modalitiesToModelType,
+    normalizeModelModalities,
+    supportsImageInput,
+    type ModelModality,
+    type ModelModalitiesLike,
+} from '@/services/modelModalities';
 
 const aiStore = useAiStore();
 const { t } = useI18n();
@@ -988,22 +991,25 @@ type CapabilityBadgeMeta = {
     type: TagKind;
 };
 
-const capabilityOptions = computed<{ label: string; value: ModelCapability }[]>(() => [
-    { label: t('components.aiManager.capabilities.visionInput'), value: MODEL_CAPABILITIES.visionInput },
-    { label: t('components.aiManager.capabilities.imageGeneration'), value: MODEL_CAPABILITIES.imageGeneration },
-    { label: t('components.aiManager.capabilities.embedding'), value: MODEL_CAPABILITIES.embedding },
+type ModelAbilityKey = 'vision' | 'image' | 'embedding';
+
+const modelAbilityOptions = computed<{ label: string; value: ModelAbilityKey }[]>(() => [
+    { label: t('components.aiManager.capabilities.visionInput'), value: 'vision' },
+    { label: t('components.aiManager.capabilities.imageGeneration'), value: 'image' },
+    { label: t('components.aiManager.capabilities.embedding'), value: 'embedding' },
 ]);
 
 const imageAdapterOptions = computed(() => [
     { label: t('components.aiManager.imageAdapters.openaiImages'), value: 'openai_images' },
+    { label: t('components.aiManager.imageAdapters.openaiResponsesImage'), value: 'openai_responses_image' },
     { label: t('components.aiManager.imageAdapters.openaiChatImage'), value: 'openai_chat_image' },
+    { label: t('components.aiManager.imageAdapters.geminiGenerateContent'), value: 'gemini_generate_content' },
     { label: t('components.aiManager.imageAdapters.geminiImage'), value: 'gemini_interactions' },
     { label: t('components.aiManager.imageAdapters.grokImage'), value: 'xai_images' },
 ]);
 
 function modelCapabilityBadges(model: AiModelItem): CapabilityBadgeMeta[] {
-    const capabilities = normalizeModelCapabilities(model.capabilities);
-    if (capabilities.includes(MODEL_CAPABILITIES.embedding)) {
+    if (isEmbeddingModel(model)) {
         return [{
             key: 'embedding',
             text: 'E',
@@ -1013,7 +1019,7 @@ function modelCapabilityBadges(model: AiModelItem): CapabilityBadgeMeta[] {
     }
 
     const badges: CapabilityBadgeMeta[] = [];
-    if (capabilities.includes(MODEL_CAPABILITIES.textGeneration)) {
+    if (isTextModel(model)) {
         badges.push({
             key: 'text',
             text: 'T',
@@ -1021,7 +1027,7 @@ function modelCapabilityBadges(model: AiModelItem): CapabilityBadgeMeta[] {
             type: 'default',
         });
     }
-    if (capabilities.includes(MODEL_CAPABILITIES.imageGeneration)) {
+    if (isImageModel(model)) {
         badges.push({
             key: 'image',
             text: 'I',
@@ -1029,7 +1035,7 @@ function modelCapabilityBadges(model: AiModelItem): CapabilityBadgeMeta[] {
             type: 'success',
         });
     }
-    if (capabilities.includes(MODEL_CAPABILITIES.visionInput)) {
+    if (supportsImageInput(model)) {
         badges.push({
             key: 'vision',
             text: 'V',
@@ -1045,55 +1051,55 @@ function modelCapabilityBadges(model: AiModelItem): CapabilityBadgeMeta[] {
     }];
 }
 
-function extraBodyPlaceholderForCapabilities(rawCapabilities: unknown): string {
-    const type = capabilitiesToModelType(rawCapabilities);
+function extraBodyPlaceholderForModel(model: ModelModalitiesLike): string {
+    const type = modalitiesToModelType(model);
     if (type === 'embedding') {
         return t('components.aiManager.form.extraBodyEmbeddingPlaceholder');
     }
-    if (type === 'image_generation' || type === 'image_reference') {
+    if (type === 'image_generation') {
         return t('components.aiManager.form.extraBodyImagePlaceholder');
     }
     return t('components.aiManager.form.extraBodyModelPlaceholder');
 }
 
-type CapabilityFormTarget = {
-    capabilities: ModelCapability[];
+type ModalityFormTarget = ModelModalitiesLike & {
+    inputModalities: ModelModality[];
+    outputModalities: ModelModality[];
 };
 
-const IMAGE_CAPABILITIES: ModelCapability[] = [
-    MODEL_CAPABILITIES.imageGeneration,
-    MODEL_CAPABILITIES.imageReferenceInput,
-    MODEL_CAPABILITIES.imageEdit,
-];
-
-function isCapabilityChecked(target: CapabilityFormTarget, capability: ModelCapability): boolean {
-    return normalizeModelCapabilities(target.capabilities).includes(capability);
+function isModelAbilityChecked(target: ModalityFormTarget, ability: ModelAbilityKey): boolean {
+    if (ability === 'vision') return supportsImageInput(target);
+    if (ability === 'image') return isImageModel(target);
+    return isEmbeddingModel(target);
 }
 
-function toggleModelCapability(target: CapabilityFormTarget, capability: ModelCapability, checked: boolean) {
-    const set = new Set(normalizeModelCapabilities(target.capabilities));
-
-    if (capability === MODEL_CAPABILITIES.embedding) {
-        target.capabilities = checked
-            ? [MODEL_CAPABILITIES.embedding]
-            : [MODEL_CAPABILITIES.textGeneration];
+function toggleModelAbility(target: ModalityFormTarget, ability: ModelAbilityKey, checked: boolean) {
+    if (ability === 'embedding') {
+        const modalities = checked
+            ? normalizeModelModalities([MODEL_MODALITIES.text], [MODEL_MODALITIES.embedding])
+            : normalizeModelModalities();
+        target.inputModalities = modalities.inputModalities;
+        target.outputModalities = modalities.outputModalities;
         return;
     }
 
-    set.delete(MODEL_CAPABILITIES.embedding);
-    if (capability === MODEL_CAPABILITIES.imageGeneration) {
-        IMAGE_CAPABILITIES.forEach(item => checked ? set.add(item) : set.delete(item));
-        target.capabilities = normalizeModelCapabilities([...set]);
-        return;
-    }
+    const current = getModelModalities(target);
+    const inputModalities = new Set(current.inputModalities);
+    const outputModalities = new Set(current.outputModalities);
+    outputModalities.delete(MODEL_MODALITIES.embedding);
+    outputModalities.add(MODEL_MODALITIES.text);
 
-    if (checked) {
-        set.add(capability);
+    if (ability === 'vision') {
+        if (checked) inputModalities.add(MODEL_MODALITIES.image);
+        else inputModalities.delete(MODEL_MODALITIES.image);
     } else {
-        set.delete(capability);
+        if (checked) outputModalities.add(MODEL_MODALITIES.image);
+        else outputModalities.delete(MODEL_MODALITIES.image);
     }
 
-    target.capabilities = normalizeModelCapabilities([...set]);
+    const modalities = normalizeModelModalities([...inputModalities], [...outputModalities]);
+    target.inputModalities = modalities.inputModalities;
+    target.outputModalities = modalities.outputModalities;
 }
 
 // === Token 输入 K/M 单位支持 ===
@@ -1577,10 +1583,10 @@ const {
     confirmEditDisplayName,
 } = useAIModelManager(platforms, syncAiStoreSilently, systemConfig);
 
-const isNewModelText = computed(() => isTextModel(newModel.value.capabilities));
-const isEditModelText = computed(() => isTextModel(editingModel.value.capabilities));
-const addModelExtraBodyPlaceholder = computed(() => extraBodyPlaceholderForCapabilities(newModel.value.capabilities));
-const editModelExtraBodyPlaceholder = computed(() => extraBodyPlaceholderForCapabilities(editingModel.value.capabilities));
+const isNewModelText = computed(() => isTextModel(newModel.value));
+const isEditModelText = computed(() => isTextModel(editingModel.value));
+const addModelExtraBodyPlaceholder = computed(() => extraBodyPlaceholderForModel(newModel.value));
+const editModelExtraBodyPlaceholder = computed(() => extraBodyPlaceholderForModel(editingModel.value));
 
 watch(() => showAddModelModal.value, (open) => { if (open) nextTick(syncAddTokenTexts); });
 watch(() => showEditModelModal.value, (open) => { if (open) nextTick(syncEditTexts); });

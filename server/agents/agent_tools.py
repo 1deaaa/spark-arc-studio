@@ -15,6 +15,7 @@ from agents.tools.attachment import (
     ReadAttachmentChunkInput,
     read_attachment_chunk,
 )
+from agents.tools.chat_history import SearchChatHistoryInput, search_chat_history
 from agents.tools.automation import (
     CheckScriptwriterStatusInput,
     TriggerAutoWriteInput,
@@ -63,6 +64,7 @@ from agents.tools.registry import (
     MUSE_TOOLS,
     OPTIONAL_RESEARCH_TOOLS,
     SCRIPTWRITER_TOOLS,
+    SHARED_CHAT_HISTORY_TOOLS,
     SHARED_READ_TOOLS,
     SHARED_SKILL_TOOLS,
     SHOWRUNNER_TOOLS,
@@ -165,9 +167,11 @@ __all__ = [
     "RewriteSynopsisInput",
     "RewriteWorldviewInput",
     "SCRIPTWRITER_TOOLS",
+    "SHARED_CHAT_HISTORY_TOOLS",
     "SHARED_READ_TOOLS",
     "SHARED_SKILL_TOOLS",
     "SHOWRUNNER_TOOLS",
+    "SearchChatHistoryInput",
     "SearchSkillsInput",
     "SearchProjectInput",
     "SemanticSearchInput",
@@ -216,6 +220,7 @@ __all__ = [
     "rewrite_outline",
     "rewrite_synopsis",
     "rewrite_worldview",
+    "search_chat_history",
     "search_project",
     "search_skills",
     "semantic_search",

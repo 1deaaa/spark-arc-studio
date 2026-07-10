@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import json
 import os
+from typing import Callable
 
 from core.request_context import current_user_id, get_current_agent_id, get_current_project_name
 
@@ -47,19 +48,40 @@ def _apply_patch(
     replace_text: str,
     *,
     validate_json: bool = False,
+    validate_content: Callable[[str, str], None] | None = None,
     file_label: str | None = None,
 ) -> str:
     import re
 
     label = file_label or os.path.basename(file_path)
 
+    original = ""
+
+    def write_candidate(candidate: str, success_message: str) -> str:
+        if validate_content is not None:
+            try:
+                validate_content(original, candidate)
+            except Exception as exc:
+                return f"局部修改失败：写入前内容校验未通过（{exc}）。"
+        if validate_json:
+            try:
+                json.loads(candidate)
+            except Exception as exc:
+                return (
+                    f"局部修改失败：替换后破坏了原有的 JSON 格式（{exc}）。"
+                    "请检查 replace_text 的引号、括号和逗号是否完整闭合。"
+                )
+        parent = os.path.dirname(file_path)
+        if parent:
+            os.makedirs(parent, exist_ok=True)
+        with open(file_path, "w", encoding="utf-8") as handle:
+            handle.write(candidate)
+        return success_message
+
     if not os.path.exists(file_path):
         # 末尾追加模式下文件不存在时，直接创建新文件
         if not search_text:
-            os.makedirs(os.path.dirname(file_path), exist_ok=True)
-            with open(file_path, "w", encoding="utf-8") as f:
-                f.write(replace_text)
-            return f"已成功创建并写入 '{label}'。"
+            return write_candidate(replace_text, f"已成功创建并写入 '{label}'。")
         return f"局部修改失败：文件 '{label}' 不存在。"
 
     with open(file_path, "r", encoding="utf-8") as f:
@@ -69,9 +91,7 @@ def _apply_patch(
     if not search_text:
         separator = "\n" if original and not original.endswith("\n") else ""
         new_content = original + separator + replace_text
-        with open(file_path, "w", encoding="utf-8") as f:
-            f.write(new_content)
-        return f"已成功在 '{label}' 末尾追加内容。"
+        return write_candidate(new_content, f"已成功在 '{label}' 末尾追加内容。")
 
     if search_text in original:
         new_content = original.replace(search_text, replace_text, 1)
@@ -112,16 +132,4 @@ def _apply_patch(
 
         new_content = orig_clean[:orig_char_start] + replace_text + orig_clean[orig_char_end:]
 
-    if validate_json:
-        try:
-            json.loads(new_content)
-        except Exception as e:
-            return (
-                f"局部修改失败：替换后破坏了原有的 JSON 格式（{e}）。"
-                "请检查 replace_text 的引号、括号和逗号是否完整闭合。"
-            )
-
-    with open(file_path, "w", encoding="utf-8") as f:
-        f.write(new_content)
-
-    return f"已成功局部更新 '{label}'。"
+    return write_candidate(new_content, f"已成功局部更新 '{label}'。")

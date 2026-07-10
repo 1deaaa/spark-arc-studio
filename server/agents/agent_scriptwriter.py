@@ -25,7 +25,7 @@ from agents.agent_utils import load_prompt, SparkAgentExecutor
 from agents.agent_style.utils import format_style_profile_for_prompt
 from agents.context_budget import prepare_specialized_prompt_messages_with_budget
 from agents.prompt_layout import build_prompt_messages
-from story.arc_safety import sanitize_arc_for_ai_context
+from story.arc_safety import sanitize_arc_ai_output, sanitize_arc_for_ai_context
 from .communication import SparkBaseAgent
 
 
@@ -149,10 +149,54 @@ class ScriptwriterAgent(SparkBaseAgent, SparkAgentExecutor):
     # tool_rules 已迁入 scriptwriter.yaml 的 tool_rules 字段，
     # 基类 _build_tool_system_prompt 会自动加载并追加，无需再重写此方法。
 
-    @staticmethod
-    def _clean_model_visible_arc_text(text: Any) -> str:
+    def _visual_illustration_settings(self) -> dict[str, Any]:
+        """读取当前项目视觉插图策略；缺少请求上下文时保持默认关闭。"""
+        from core.project_settings import (
+            get_visual_illustration_settings,
+            is_visual_illustration_enabled,
+            normalize_visual_illustration_settings,
+        )
+        from core.request_context import get_current_project_name
+
+        project_name = get_current_project_name()
+        if not project_name:
+            return normalize_visual_illustration_settings(None)
+        try:
+            settings = get_visual_illustration_settings(str(self.user_id), project_name)
+            settings["enabled"] = is_visual_illustration_enabled(str(self.user_id), project_name)
+            return settings
+        except Exception:
+            return normalize_visual_illustration_settings(None)
+
+    def _visual_illustration_protocol(self) -> str:
+        """仅在项目开关有效时返回 Scriptwriter 可见的视觉描述协议。"""
+        settings = self._visual_illustration_settings()
+        if not settings["enabled"]:
+            return ""
+        max_per_scene = settings["max_per_scene"]
+        return f"""
+### 实验性视觉插图描述协议
+- 你可以在确有视觉叙事价值的对话或旁白节点正文后增加一行：`@presentation illustration_prompt:自然语言画面描述`。
+- `presentation` 仅供 SparkArc Web 播放器演出，Unity SDK 会统一忽略整个节点字段；不要把它当作 Unity 行为指令。
+- 该字段只描述一张完整场景插图的最终画面，不得填写资产 ID，不得生成 `illustration`、`bg`、`sprite`、`@act` 或 `@next`。
+- 每个场景允许 0 张，通常只用 1 张，硬上限为 {max_per_scene} 张；两个插图描述节点之间至少隔一个普通节点。
+- 只在场景首次建立、重大视觉转折、剧情高潮或关键情绪定格时使用。普通对白、连续动作、同一空间的重复信息不得换图。
+- 插图必须带来仅靠常规背景加立绘难以低成本表达的新信息。描述应包含地点与时代、出场角色及外观动作、情绪、构图景别、镜头、光照和关键环境细节。
+- 不要描述文字、字幕、对话框、界面、水印或标志；画面主体应位于横版中央安全区，以兼容桌面和竖屏模糊扩展演出。
+""".strip()
+
+    def _prepare_script_system_prompt(self, system_prompt: str) -> str:
+        """把项目条件协议追加到结构化写作系统提示。"""
+        protocol = self._visual_illustration_protocol()
+        return f"{system_prompt.rstrip()}\n\n{protocol}" if protocol else system_prompt
+
+    def _clean_model_visible_arc_text(self, text: Any) -> str:
         """构造编剧模型可见的 ARC 干净视图，不改写用户原始文件。"""
-        return sanitize_arc_for_ai_context(str(text or ""))
+        settings = self._visual_illustration_settings()
+        return sanitize_arc_for_ai_context(
+            str(text or ""),
+            allow_visual_illustration=bool(settings["enabled"]),
+        )
 
     def _clean_history_for_model(self, history):
         """清理历史消息副本，避免旧工具结果把历史控制节点重新带入模型。"""
@@ -218,6 +262,12 @@ class ScriptwriterAgent(SparkBaseAgent, SparkAgentExecutor):
             },
         }
 
+    def _build_tool_prompt_reference_block(self) -> str:
+        """让聊天与导演委派的落盘工具复用同一条件视觉协议。"""
+        block = super()._build_tool_prompt_reference_block()
+        protocol = self._visual_illustration_protocol()
+        return f"{block}\n\n{protocol}".strip() if protocol else block
+
     def _build_chr_reference(self, chr_map: dict | None = None) -> str:
         """构建模型可见的说话人标记列表，不向正文暴露隐藏角色 ID。"""
         lines = [
@@ -245,7 +295,7 @@ class ScriptwriterAgent(SparkBaseAgent, SparkAgentExecutor):
         """构造正式写作消息，保持固定 system 头，只在超预算时裁动态 user 材料。"""
         result = prepare_specialized_prompt_messages_with_budget(
             agent_id=getattr(self, "agent_id", "agent_scriptwriter"),
-            system_prompt=system_prompt,
+            system_prompt=self._prepare_script_system_prompt(system_prompt),
             user_prompt=user_prompt,
             llm_client=self.llm,
         )
@@ -689,7 +739,7 @@ class ScriptwriterAgent(SparkBaseAgent, SparkAgentExecutor):
         return None
 
     def _extract_arc_script(self, text: str) -> str:
-        """Extracts .arc script from response, removing thought block and markdown fences."""
+        """提取模型正文并通过统一 ARC 输出门禁。"""
         text = text.strip()
 
         # Remove <conception> block(s)
@@ -705,7 +755,13 @@ class ScriptwriterAgent(SparkBaseAgent, SparkAgentExecutor):
             if text.endswith("```"):
                 text = text[:-3]
 
-        return text.strip()
+        settings = self._visual_illustration_settings()
+        return sanitize_arc_ai_output(
+            text.strip(),
+            allow_visual_illustration=bool(settings["enabled"]),
+            max_per_scene=settings["max_per_scene"],
+            min_node_gap=settings["min_node_gap"],
+        )
 
     def bridge_scenes(
         self,
@@ -758,7 +814,10 @@ class ScriptwriterAgent(SparkBaseAgent, SparkAgentExecutor):
             story_tags=story_tags or "",
         )
 
-        messages = build_prompt_messages(system_prompt=prompts["system"], user_prompt=prompts["user"])
+        messages = build_prompt_messages(
+            system_prompt=self._prepare_script_system_prompt(prompts["system"]),
+            user_prompt=prompts["user"],
+        )
 
         response = self._get_invoke_llm().invoke(messages)
         full_content = extract_visible_text_from_plain_text(
@@ -824,7 +883,10 @@ class ScriptwriterAgent(SparkBaseAgent, SparkAgentExecutor):
             story_tags=story_tags or "",
         )
 
-        messages = build_prompt_messages(system_prompt=prompts["system"], user_prompt=prompts["user"])
+        messages = build_prompt_messages(
+            system_prompt=self._prepare_script_system_prompt(prompts["system"]),
+            user_prompt=prompts["user"],
+        )
 
         full_content = ""
         parser = PrefixReasoningStreamParser()

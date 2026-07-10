@@ -68,7 +68,6 @@ def _create_snapshot_for_format(user_id: str, project_name: str, content_format:
         try:
             with open(snapshot_path, 'w', encoding='utf-8') as f:
                 f.write(aggregate_novel(user_id, project_name, export_format='md'))
-            copy_presentation_snapshot(user_id, project_name, snapshot_path)
         except Exception:
             if os.path.exists(snapshot_path):
                 try:

@@ -15,7 +15,7 @@ from .models import (
     UserEmbeddingSelection,
     DEFAULT_MAX_CONTEXT_TOKENS,
     DEFAULT_MAX_OUTPUT_TOKENS,
-    get_model_capabilities,
+    get_model_modalities,
     is_embedding_model,
 )
 from .config import DEFAULT_USAGE_KEY, BUILTIN_USAGE_SLOTS
@@ -292,7 +292,7 @@ class UserServicesMixin:
             "model_id": model.id,
             "model_name": model.model_name,
             "display_name": model.display_name,
-            "capabilities": get_model_capabilities(model),
+            **get_model_modalities(model),
             "max_context_tokens": int(getattr(model, "max_context_tokens", 0) or DEFAULT_MAX_CONTEXT_TOKENS),
             "max_output_tokens": int(getattr(model, "max_output_tokens", 0) or DEFAULT_MAX_OUTPUT_TOKENS),
             "api_key_set": bool(api_key),

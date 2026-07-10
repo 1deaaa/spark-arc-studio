@@ -1,10 +1,15 @@
-"""Web 演出资源 manifest 与资产文件管理。"""
+"""Web 播放器专用演出资源 manifest 与资产文件管理。
+
+``presentation`` 节点及其资产不属于 Unity SDK 协议。Unity 导出统一依据
+manifest 的 ``ignore.unity.nodeKeys`` 忽略整个节点字段。
+"""
 
 from __future__ import annotations
 
 import json
 import os
 import shutil
+import threading
 import uuid
 from datetime import datetime, timezone
 from typing import Any, Optional
@@ -16,6 +21,7 @@ MANIFEST_FILENAME = "presentation_manifest.json"
 ASSET_ROOT = "assets/presentation"
 BACKGROUND_DIR = f"{ASSET_ROOT}/backgrounds"
 SPRITE_DIR = f"{ASSET_ROOT}/sprites"
+ILLUSTRATION_DIR = f"{ASSET_ROOT}/illustrations"
 
 ASSET_KIND_CONFIG = {
     "background": {
@@ -25,6 +31,10 @@ ASSET_KIND_CONFIG = {
     "character_sprite": {
         "prefix": "sprite",
         "dir": SPRITE_DIR,
+    },
+    "scene_illustration": {
+        "prefix": "ill",
+        "dir": ILLUSTRATION_DIR,
     },
     "style_reference": {
         "prefix": "style",
@@ -42,20 +52,22 @@ SUPPORTED_IMAGE_TYPES = {
     "image/webp": ".webp",
 }
 
+_MANIFEST_LOCK = threading.RLock()
+
 
 class PresentationAssetError(ValueError):
     """演出资源写入或读取失败。"""
 
 
 def empty_manifest() -> dict[str, Any]:
-    """返回 manifest 默认结构。"""
+    """返回 Web 专用 manifest 默认结构，并声明 Unity 的统一忽略边界。"""
     return {
-        "schema": "sparkarc.presentation.v1",
-        "version": 1,
+        "schema": "sparkarc.presentation.v2",
+        "version": 2,
         "targets": ["web"],
         "ignore": {
             "unity": {
-                "actKeys": ["bg", "sprite"],
+                "actKeys": [],
                 "nodeKeys": ["presentation"],
                 "assetTargets": ["web"],
             }
@@ -63,7 +75,7 @@ def empty_manifest() -> dict[str, Any]:
         "assets": {},
         "runtime": {
             "web": {
-                "actBindings": {
+                "cueBindings": {
                     "bg": {
                         "type": "background",
                         "fallback": "ambient",
@@ -71,6 +83,10 @@ def empty_manifest() -> dict[str, Any]:
                     "sprite": {
                         "type": "character_sprite",
                         "fallback": "hidden",
+                    },
+                    "illustration": {
+                        "type": "scene_illustration",
+                        "fallback": "background_and_sprite",
                     }
                 }
             }
@@ -133,35 +149,56 @@ def _detect_image_type(data: bytes, content_type: Optional[str]) -> tuple[str, s
 
 def load_manifest_from_root(root: str) -> dict[str, Any]:
     """从项目或快照根目录读取 manifest。"""
-    path = _manifest_path(root)
-    if not os.path.isfile(path):
-        return empty_manifest()
-    try:
-        with open(path, "r", encoding="utf-8") as f:
-            data = json.load(f) or {}
-    except Exception:
-        return empty_manifest()
-    if not isinstance(data, dict):
-        return empty_manifest()
-    manifest = empty_manifest()
-    manifest.update(data)
-    if not isinstance(manifest.get("assets"), dict):
-        manifest["assets"] = {}
-    if not isinstance(manifest.get("targets"), list):
-        manifest["targets"] = ["web"]
-    if not isinstance(manifest.get("ignore"), dict):
-        manifest["ignore"] = empty_manifest()["ignore"]
-    if not isinstance(manifest.get("runtime"), dict):
-        manifest["runtime"] = empty_manifest()["runtime"]
-    return manifest
+    with _MANIFEST_LOCK:
+        path = _manifest_path(root)
+        if not os.path.isfile(path):
+            return empty_manifest()
+        try:
+            with open(path, "r", encoding="utf-8") as f:
+                data = json.load(f) or {}
+        except Exception:
+            return empty_manifest()
+        if not isinstance(data, dict):
+            return empty_manifest()
+        manifest = empty_manifest()
+        manifest.update(data)
+        manifest["schema"] = "sparkarc.presentation.v2"
+        manifest["version"] = 2
+        if not isinstance(manifest.get("assets"), dict):
+            manifest["assets"] = {}
+        if not isinstance(manifest.get("targets"), list):
+            manifest["targets"] = ["web"]
+        if not isinstance(manifest.get("ignore"), dict):
+            manifest["ignore"] = empty_manifest()["ignore"]
+        if not isinstance(manifest.get("runtime"), dict):
+            manifest["runtime"] = empty_manifest()["runtime"]
+        else:
+            web_runtime = manifest["runtime"].setdefault("web", {})
+            if isinstance(web_runtime, dict):
+                web_runtime.pop("actBindings", None)
+            bindings = web_runtime.setdefault("cueBindings", {}) if isinstance(web_runtime, dict) else {}
+            if isinstance(bindings, dict):
+                for key, value in empty_manifest()["runtime"]["web"]["cueBindings"].items():
+                    bindings.setdefault(key, value)
+        return manifest
 
 
 def save_manifest_to_root(root: str, manifest: dict[str, Any]) -> None:
-    """保存 manifest 到项目或快照根目录。"""
-    os.makedirs(root, exist_ok=True)
-    payload = manifest if isinstance(manifest, dict) else empty_manifest()
-    with open(_manifest_path(root), "w", encoding="utf-8") as f:
-        json.dump(payload, f, ensure_ascii=False, indent=2)
+    """以原子替换方式保存 manifest，避免并发读取半写入 JSON。"""
+    with _MANIFEST_LOCK:
+        os.makedirs(root, exist_ok=True)
+        payload = manifest if isinstance(manifest, dict) else empty_manifest()
+        path = _manifest_path(root)
+        temporary_path = f"{path}.{uuid.uuid4().hex}.tmp"
+        try:
+            with open(temporary_path, "w", encoding="utf-8") as f:
+                json.dump(payload, f, ensure_ascii=False, indent=2)
+                f.flush()
+                os.fsync(f.fileno())
+            os.replace(temporary_path, path)
+        finally:
+            if os.path.exists(temporary_path):
+                os.remove(temporary_path)
 
 
 def get_ignored_act_keys(manifest: dict[str, Any], target: str) -> set[str]:
@@ -218,7 +255,7 @@ def upload_presentation_asset(
     prompt: str = "",
     metadata: Optional[dict[str, Any]] = None,
 ) -> dict[str, Any]:
-    """写入 Web 演出图片资产，并注册到 manifest。"""
+    """写入 Web 播放器专用演出图片资产，并注册到 manifest。"""
     if not data:
         raise PresentationAssetError("图片内容为空")
     if len(data) > 25 * 1024 * 1024:
@@ -230,33 +267,73 @@ def upload_presentation_asset(
 
     mime_type, ext = _detect_image_type(data, content_type)
     root = _project_root(user_id, project_name)
-    manifest = load_manifest_from_root(root)
-    asset_id = f"{config['prefix']}_{uuid.uuid4().hex[:12]}"
-    rel_path = f"{config['dir']}/{asset_id}{ext}"
-    abs_path = _safe_join(root, rel_path)
-    os.makedirs(os.path.dirname(abs_path), exist_ok=True)
-    with open(abs_path, "wb") as f:
-        f.write(data)
+    with _MANIFEST_LOCK:
+        manifest = load_manifest_from_root(root)
+        asset_id = f"{config['prefix']}_{uuid.uuid4().hex[:12]}"
+        rel_path = f"{config['dir']}/{asset_id}{ext}"
+        abs_path = _safe_join(root, rel_path)
+        os.makedirs(os.path.dirname(abs_path), exist_ok=True)
+        temporary_path = f"{abs_path}.{uuid.uuid4().hex}.tmp"
+        try:
+            with open(temporary_path, "wb") as f:
+                f.write(data)
+                f.flush()
+                os.fsync(f.fileno())
+            os.replace(temporary_path, abs_path)
+        finally:
+            if os.path.exists(temporary_path):
+                os.remove(temporary_path)
 
-    clean_title = str(title or "").strip() or os.path.splitext(os.path.basename(filename or ""))[0] or asset_id
-    asset = {
-        "id": asset_id,
-        "type": kind,
-        "targets": ["web"],
-        "source": source,
-        "title": clean_title,
-        "path": rel_path,
-        "mimeType": mime_type,
-        "prompt": str(prompt or "").strip(),
-        "createdAt": _now_iso(),
-    }
-    if metadata:
-        for key, value in metadata.items():
+        clean_title = str(title or "").strip() or os.path.splitext(os.path.basename(filename or ""))[0] or asset_id
+        asset = {
+            "id": asset_id,
+            "type": kind,
+            "targets": ["web"],
+            "source": source,
+            "title": clean_title,
+            "path": rel_path,
+            "mimeType": mime_type,
+            "prompt": str(prompt or "").strip(),
+            "createdAt": _now_iso(),
+        }
+        if metadata:
+            for key, value in metadata.items():
+                if value is not None:
+                    asset[key] = value
+        manifest.setdefault("assets", {})[asset_id] = asset
+        try:
+            save_manifest_to_root(root, manifest)
+        except Exception:
+            if os.path.isfile(abs_path):
+                os.remove(abs_path)
+            raise
+        return dict(asset)
+
+
+def update_presentation_asset_metadata(
+    user_id: str,
+    project_name: str,
+    asset_id: str,
+    metadata: dict[str, Any],
+) -> tuple[dict[str, Any], dict[str, Any]]:
+    """在 manifest 临界区内更新单个资产元数据，并返回资产与完整 manifest。"""
+    clean_asset_id = str(asset_id or "").strip()
+    if not clean_asset_id:
+        raise PresentationAssetError("缺少演出资源 ID")
+    root = _project_root(user_id, project_name)
+    with _MANIFEST_LOCK:
+        manifest = load_manifest_from_root(root)
+        assets = manifest.setdefault("assets", {})
+        current = assets.get(clean_asset_id) if isinstance(assets, dict) else None
+        if not isinstance(current, dict):
+            raise PresentationAssetError(f"演出资源不存在: {clean_asset_id}")
+        updated = dict(current)
+        for key, value in (metadata or {}).items():
             if value is not None:
-                asset[key] = value
-    manifest.setdefault("assets", {})[asset_id] = asset
-    save_manifest_to_root(root, manifest)
-    return asset
+                updated[key] = value
+        assets[clean_asset_id] = updated
+        save_manifest_to_root(root, manifest)
+        return dict(updated), manifest
 
 
 def upload_background_asset(
@@ -317,6 +394,37 @@ def upload_character_sprite_asset(
     )
 
 
+def upload_scene_illustration_asset(
+    *,
+    user_id: str,
+    project_name: str,
+    data: bytes,
+    filename: str = "",
+    content_type: Optional[str] = None,
+    title: str = "",
+    source: str = "upload",
+    prompt: str = "",
+    scene_name: str = "",
+    node_id: str = "",
+) -> dict[str, Any]:
+    """写入完整场景插图，并记录其创作定位。"""
+    return upload_presentation_asset(
+        user_id=user_id,
+        project_name=project_name,
+        asset_type="scene_illustration",
+        data=data,
+        filename=filename,
+        content_type=content_type,
+        title=title,
+        source=source,
+        prompt=prompt,
+        metadata={
+            "sceneName": str(scene_name or "").strip(),
+            "nodeId": str(node_id or "").strip(),
+        },
+    )
+
+
 def get_project_asset_path(user_id: str, project_name: str, rel_path: str) -> str:
     """返回项目演出资产绝对路径，并做目录边界检查。"""
     return _safe_presentation_asset_path(_project_root(user_id, project_name), rel_path)
@@ -329,29 +437,30 @@ def get_snapshot_asset_path(snapshot_path: str, rel_path: str) -> str:
 
 def copy_presentation_snapshot(user_id: str, project_name: str, snapshot_path: str) -> Optional[str]:
     """把项目演出 manifest 与资产目录复制到快照 sidecar。"""
-    project_root = _project_root(user_id, project_name)
-    source_manifest = _manifest_path(project_root)
-    source_assets = os.path.join(project_root, ASSET_ROOT.replace("/", os.sep))
+    with _MANIFEST_LOCK:
+        project_root = _project_root(user_id, project_name)
+        source_manifest = _manifest_path(project_root)
+        source_assets = os.path.join(project_root, ASSET_ROOT.replace("/", os.sep))
 
-    if not os.path.isfile(source_manifest) and not os.path.isdir(source_assets):
-        return None
+        if not os.path.isfile(source_manifest) and not os.path.isdir(source_assets):
+            return None
 
-    sidecar = _snapshot_sidecar_dir(snapshot_path)
-    if os.path.isdir(sidecar):
-        shutil.rmtree(sidecar)
-    os.makedirs(sidecar, exist_ok=True)
+        sidecar = _snapshot_sidecar_dir(snapshot_path)
+        if os.path.isdir(sidecar):
+            shutil.rmtree(sidecar)
+        os.makedirs(sidecar, exist_ok=True)
 
-    if os.path.isfile(source_manifest):
-        shutil.copy2(source_manifest, _manifest_path(sidecar))
-    else:
-        save_manifest_to_root(sidecar, empty_manifest())
+        if os.path.isfile(source_manifest):
+            shutil.copy2(source_manifest, _manifest_path(sidecar))
+        else:
+            save_manifest_to_root(sidecar, empty_manifest())
 
-    if os.path.isdir(source_assets):
-        target_assets = os.path.join(sidecar, ASSET_ROOT.replace("/", os.sep))
-        os.makedirs(os.path.dirname(target_assets), exist_ok=True)
-        shutil.copytree(source_assets, target_assets, dirs_exist_ok=True)
+        if os.path.isdir(source_assets):
+            target_assets = os.path.join(sidecar, ASSET_ROOT.replace("/", os.sep))
+            os.makedirs(os.path.dirname(target_assets), exist_ok=True)
+            shutil.copytree(source_assets, target_assets, dirs_exist_ok=True)
 
-    return sidecar
+        return sidecar
 
 
 def load_snapshot_manifest(snapshot_path: str) -> dict[str, Any]:

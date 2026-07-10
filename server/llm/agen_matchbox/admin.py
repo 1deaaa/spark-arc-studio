@@ -9,24 +9,24 @@ from typing import Optional, Dict, Any, List
 from sqlalchemy.orm import selectinload
 
 from .models import (
-    CAP_EMBEDDING,
-    CAP_TEXT_GENERATION,
+    MODALITY_EMBEDDING,
+    MODALITY_IMAGE,
+    MODALITY_TEXT,
     LLMPlatform,
     LLModels,
     LLMSysPlatformKey,
     DEFAULT_MAX_CONTEXT_TOKENS,
     DEFAULT_MAX_OUTPUT_TOKENS,
-    get_model_capabilities,
+    get_model_modalities,
     is_chat_model,
     is_embedding_model,
     is_image_generation_model,
-    normalize_model_capabilities,
-    set_model_capabilities,
+    normalize_model_modalities,
+    set_model_modalities,
 )
 from .config import DEFAULT_PLATFORM_CONFIGS, SYSTEM_USER_ID
 from .image_adapters import (
     DEFAULT_IMAGE_GENERATION_ADAPTER,
-    extract_legacy_image_generation_adapter,
     normalize_image_generation_adapter,
     strip_internal_image_generation_fields,
 )
@@ -35,7 +35,7 @@ from .utils import normalize_base_url, normalize_recharge_url
 
 
 def _parse_extra_body_raw(extra_body_str: Optional[str]) -> Optional[Dict[str, Any]]:
-    """解析数据库中的 extra_body 原始对象，仅供内部迁移兜底读取。"""
+    """解析数据库中的 extra_body 原始对象。"""
     if not extra_body_str:
         return None
     try:
@@ -59,18 +59,17 @@ def _parse_extra_body_for_response(extra_body_str: Optional[str]) -> Optional[Di
 
 def _normalize_model_image_generation_adapter(
     *,
-    capabilities: Optional[List[str]],
+    output_modalities: Optional[List[str]],
     image_generation_adapter: Optional[str],
-    extra_body: Optional[Dict[str, Any]] = None,
     existing_value: Optional[str] = None,
 ) -> Optional[str]:
-    """按模型能力决定是否保存生图协议字段。"""
-    if "image_generation" not in normalize_model_capabilities(capabilities):
+    """按模型输出模态决定是否保存生图协议字段。"""
+    _, normalized_output = normalize_model_modalities(None, output_modalities)
+    if MODALITY_IMAGE not in normalized_output:
         return None
     return (
         normalize_image_generation_adapter(image_generation_adapter)
         or normalize_image_generation_adapter(existing_value)
-        or extract_legacy_image_generation_adapter(extra_body)
         or DEFAULT_IMAGE_GENERATION_ADAPTER
     )
 
@@ -109,12 +108,11 @@ def _model_payload_for_response(model: LLModels) -> Dict[str, Any]:
         "model_id": model.id,
         "model_name": model.model_name,
         "display_name": model.display_name,
-        "capabilities": get_model_capabilities(model),
+        **get_model_modalities(model),
         "extra_body": response_extra_body,
         "image_generation_adapter": _normalize_model_image_generation_adapter(
-            capabilities=get_model_capabilities(model),
+            output_modalities=get_model_modalities(model)["output_modalities"],
             image_generation_adapter=getattr(model, "image_generation_adapter", None),
-            extra_body=raw_extra_body,
         ),
         "temperature": model.temperature,
         "max_context_tokens": int(model.max_context_tokens or DEFAULT_MAX_CONTEXT_TOKENS),
@@ -621,7 +619,7 @@ class AdminMixin:
                     "model_id": model.id,
                     "model_name": model.model_name,
                     "display_name": model.display_name,
-                    "capabilities": get_model_capabilities(model),
+                    **get_model_modalities(model),
                     "extra_body": _parse_extra_body_for_response(model.extra_body),
                     "temperature": model.temperature,
                     "max_context_tokens": int(model.max_context_tokens or DEFAULT_MAX_CONTEXT_TOKENS),
@@ -688,7 +686,8 @@ class AdminMixin:
         admin_mode: bool = False,
         max_context_tokens: Optional[int] = DEFAULT_MAX_CONTEXT_TOKENS,
         max_output_tokens: Optional[int] = DEFAULT_MAX_OUTPUT_TOKENS,
-        capabilities: Optional[List[str]] = None,
+        input_modalities: Optional[List[str]] = None,
+        output_modalities: Optional[List[str]] = None,
         image_generation_adapter: Optional[str] = None,
     ):
         """
@@ -710,14 +709,16 @@ class AdminMixin:
             field_label="最大单次输出",
             default_value=DEFAULT_MAX_OUTPUT_TOKENS,
         )
-        normalized_capabilities = normalize_model_capabilities(capabilities)
+        normalized_input_modalities, normalized_output_modalities = normalize_model_modalities(
+            input_modalities,
+            output_modalities,
+        )
         cleaned_extra_body = strip_internal_image_generation_fields(extra_body)
         normalized_image_adapter = _normalize_model_image_generation_adapter(
-            capabilities=normalized_capabilities,
+            output_modalities=normalized_output_modalities,
             image_generation_adapter=image_generation_adapter,
-            extra_body=extra_body,
         )
-        is_text_capable = CAP_TEXT_GENERATION in normalized_capabilities
+        is_text_capable = MODALITY_TEXT in normalized_output_modalities
         if not is_text_capable:
             temperature = None
             sys_credit_input_price_per_million = None
@@ -757,7 +758,11 @@ class AdminMixin:
                     existing_display.platform_id = plat.id
                     existing_display.model_name = model_name
                     existing_display.display_name = display_name
-                    set_model_capabilities(existing_display, normalized_capabilities)
+                    set_model_modalities(
+                        existing_display,
+                        normalized_input_modalities,
+                        normalized_output_modalities,
+                    )
                     existing_display.extra_body = json.dumps(cleaned_extra_body) if cleaned_extra_body else None
                     existing_display.image_generation_adapter = normalized_image_adapter
                     existing_display.temperature = temperature
@@ -803,7 +808,7 @@ class AdminMixin:
                     None if sys_credit_output_price_per_million is None else max(float(sys_credit_output_price_per_million), 0)
                 ),
             )
-            set_model_capabilities(m, normalized_capabilities)
+            set_model_modalities(m, normalized_input_modalities, normalized_output_modalities)
             session.add(m)
             session.commit()
             
@@ -841,7 +846,8 @@ class AdminMixin:
             admin_mode=admin_mode,
             max_context_tokens=max_context_tokens,
             max_output_tokens=max_output_tokens,
-            capabilities=[CAP_EMBEDDING],
+            input_modalities=[MODALITY_TEXT],
+            output_modalities=[MODALITY_EMBEDDING],
         )
 
     def update_model(
@@ -861,8 +867,9 @@ class AdminMixin:
         max_output_tokens: Optional[int] = None,
         update_max_context_tokens: bool = False,
         update_max_output_tokens: bool = False,
-        capabilities: Optional[List[str]] = None,
-        update_capabilities: bool = False,
+        input_modalities: Optional[List[str]] = None,
+        output_modalities: Optional[List[str]] = None,
+        update_modalities: bool = False,
         image_generation_adapter: Optional[str] = None,
         update_image_generation_adapter: bool = False,
     ):
@@ -900,25 +907,27 @@ class AdminMixin:
                     raise ValueError(f"显示名称 '{new_display_name}' 已被使用")
                 model.display_name = new_display_name
 
-            legacy_image_adapter = None
             if new_extra_body is not None:
-                legacy_image_adapter = extract_legacy_image_generation_adapter(new_extra_body)
                 cleaned_extra_body = strip_internal_image_generation_fields(new_extra_body)
                 model.extra_body = json.dumps(cleaned_extra_body) if cleaned_extra_body else None
 
             if update_temperature:
                 model.temperature = new_temperature
 
-            if update_capabilities:
-                set_model_capabilities(model, capabilities)
+            if update_modalities:
+                current_modalities = get_model_modalities(model)
+                set_model_modalities(
+                    model,
+                    input_modalities if input_modalities is not None else current_modalities["input_modalities"],
+                    output_modalities if output_modalities is not None else current_modalities["output_modalities"],
+                )
 
             if is_image_generation_model(model):
-                if update_image_generation_adapter or legacy_image_adapter or not getattr(model, "image_generation_adapter", None):
+                if update_image_generation_adapter or not getattr(model, "image_generation_adapter", None):
                     model.image_generation_adapter = _normalize_model_image_generation_adapter(
-                        capabilities=get_model_capabilities(model),
+                        output_modalities=get_model_modalities(model)["output_modalities"],
                         image_generation_adapter=image_generation_adapter,
-                        extra_body=new_extra_body,
-                        existing_value=legacy_image_adapter or getattr(model, "image_generation_adapter", None),
+                        existing_value=getattr(model, "image_generation_adapter", None),
                     )
             else:
                 model.image_generation_adapter = None
@@ -1174,13 +1183,11 @@ class AdminMixin:
                             "_db_id": m.id,
                             "display_name": m.display_name,
                             "model_name": m.model_name,
-                            "capabilities": get_model_capabilities(m),
+                            **get_model_modalities(m),
                             "image_generation_adapter": _normalize_model_image_generation_adapter(
-                                capabilities=get_model_capabilities(m),
+                                output_modalities=get_model_modalities(m)["output_modalities"],
                                 image_generation_adapter=getattr(m, "image_generation_adapter", None),
-                                extra_body=raw_extra_body,
                             ),
-                            "is_embedding": is_embedding_model(m),
                             "disabled": bool(m.disable),
                             "temperature": m.temperature,
                             "max_context_tokens": int(m.max_context_tokens or DEFAULT_MAX_CONTEXT_TOKENS),
@@ -1455,14 +1462,15 @@ class AdminMixin:
                 "sys_credit_input_price_per_million": 100000 or None,
                 "sys_credit_cached_input_price_per_million": 25000 or None,
                 "sys_credit_output_price_per_million": 400000 or None,
-                "capabilities": ["text_generation"],
+                "input_modalities": ["text"],
+                "output_modalities": ["text"],
                 "sort_order": 0,
             },
             ...
         ]
 
         同步策略：
-        - 按 model_name + capabilities 匹配已有模型
+        - 按 model_name + 输入/输出模态匹配已有模型
         - 匹配到 → 更新属性（保留 model.id，外键不断裂）
         - 未匹配到 → 新增
         - 旧列表中有但新列表中没有 → 设 disable=1
@@ -1474,10 +1482,15 @@ class AdminMixin:
 
             existing_models = session.query(LLModels).filter_by(platform_id=platform_id).all()
 
-            # 索引：(model_name, capabilities) → LLModels
+            # 索引：(model_name, input_modalities, output_modalities) → LLModels
             existing_map = {}
             for m in existing_models:
-                key = (m.model_name, tuple(get_model_capabilities(m)))
+                modalities = get_model_modalities(m)
+                key = (
+                    m.model_name,
+                    tuple(modalities["input_modalities"]),
+                    tuple(modalities["output_modalities"]),
+                )
                 existing_map[key] = m
 
             seen_keys = set()
@@ -1487,9 +1500,9 @@ class AdminMixin:
                 display_name = cfg.get("display_name", model_name)
                 extra_body = cfg.get("extra_body")
                 temperature = cfg.get("temperature")
-                capabilities = normalize_model_capabilities(
-                    cfg.get("capabilities"),
-                    legacy_is_embedding=bool(cfg.get("is_embedding", False)),
+                input_modalities, output_modalities = normalize_model_modalities(
+                    cfg.get("input_modalities"),
+                    cfg.get("output_modalities"),
                 )
                 sort_order = cfg.get("sort_order", idx)
                 # 兼容旧字段名 sys_credit_price_per_million_tokens（自动拆分为输入/输出同值）
@@ -1510,21 +1523,20 @@ class AdminMixin:
                 model_max_output = cfg.get("max_output_tokens") if has_max_output_field else None
 
                 cleaned_extra_body = strip_internal_image_generation_fields(extra_body)
+                key = (model_name, tuple(input_modalities), tuple(output_modalities))
                 image_generation_adapter = _normalize_model_image_generation_adapter(
-                    capabilities=capabilities,
+                    output_modalities=output_modalities,
                     image_generation_adapter=cfg.get("image_generation_adapter"),
-                    extra_body=extra_body,
-                    existing_value=getattr(existing_map.get((model_name, tuple(capabilities))), "image_generation_adapter", None),
+                    existing_value=getattr(existing_map.get(key), "image_generation_adapter", None),
                 )
                 extra_body_json = json.dumps(cleaned_extra_body) if cleaned_extra_body else None
-                key = (model_name, tuple(capabilities))
                 seen_keys.add(key)
 
                 existing = existing_map.get(key)
                 if existing:
                     # 更新已有模型（保留 ID）
                     existing.display_name = display_name
-                    set_model_capabilities(existing, capabilities)
+                    set_model_modalities(existing, input_modalities, output_modalities)
                     existing.extra_body = extra_body_json
                     existing.image_generation_adapter = image_generation_adapter
                     existing.temperature = temperature
@@ -1582,7 +1594,7 @@ class AdminMixin:
                         ),
                         sort_order=sort_order,
                     )
-                    set_model_capabilities(new_model, capabilities)
+                    set_model_modalities(new_model, input_modalities, output_modalities)
                     session.add(new_model)
 
             # 旧列表中有但新列表中没有 → 禁用
@@ -1609,9 +1621,9 @@ class AdminMixin:
         sys_credit_cached_input_price_per_million: Optional[float] = None,
         sys_credit_output_price_per_million: Optional[float] = None,
         update_credit_price: bool = False,
-        is_embedding: bool = False,
-        capabilities: Optional[List[str]] = None,
-        update_capabilities: bool = False,
+        input_modalities: Optional[List[str]] = None,
+        output_modalities: Optional[List[str]] = None,
+        update_modalities: bool = False,
         image_generation_adapter: Optional[str] = None,
         update_image_generation_adapter: bool = False,
         max_context_tokens: Optional[int] = None,
@@ -1627,13 +1639,10 @@ class AdminMixin:
             display_name: 新的显示名称（可选）
             extra_body: 新的 extra_body 字典（可选，None 表示清除）
             temperature: 新的 temperature（可选，None 表示清除）
-            capabilities: 模型能力集合；显式传入时作为模型类型真相源。
+            input_modalities: 模型输入模态。
+            output_modalities: 模型输出模态。
         """
         update_temperature = temperature is not None
-
-        if not update_capabilities and capabilities is None and is_embedding:
-            capabilities = [CAP_EMBEDDING]
-            update_capabilities = True
 
         return self.update_model(
             model_id=model_id,
@@ -1649,8 +1658,9 @@ class AdminMixin:
             update_temperature=update_temperature,
             update_max_context_tokens=update_max_context_tokens,
             update_max_output_tokens=update_max_output_tokens,
-            capabilities=capabilities,
-            update_capabilities=update_capabilities,
+            input_modalities=input_modalities,
+            output_modalities=output_modalities,
+            update_modalities=update_modalities,
             image_generation_adapter=image_generation_adapter,
             update_image_generation_adapter=update_image_generation_adapter,
             admin_mode=True,

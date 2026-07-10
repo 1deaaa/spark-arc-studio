@@ -289,7 +289,7 @@
           <n-form-item v-if="hasPresentationCue">
             <template #label>
               <div class="content-runtime-label">
-                <span>{{ t('nodeEditor.presentation.webCue') }}</span>
+                <span>{{ t('nodeEditor.presentation.presentationCue') }}</span>
                 <n-text depth="3" class="content-runtime-label__hint">{{ t('nodeEditor.presentation.movedToAiPanel') }}</n-text>
               </div>
             </template>
@@ -299,6 +299,12 @@
               </SparkTag>
               <SparkTag v-if="currentSpriteId" type="info" size="small">
                 {{ t('nodeEditor.presentation.spriteShort', { value: currentSpriteId }) }}
+              </SparkTag>
+              <SparkTag v-if="currentIllustrationId" type="success" size="small">
+                {{ t('nodeEditor.presentation.illustrationShort', { value: currentIllustrationId }) }}
+              </SparkTag>
+              <SparkTag v-else-if="currentIllustrationPrompt" type="warning" size="small">
+                {{ t('nodeEditor.presentation.illustrationPlanned') }}
               </SparkTag>
             </div>
           </n-form-item>
@@ -775,7 +781,22 @@ const currentSpriteId = computed(() => {
   return typeof sprite === 'string' ? sprite.trim() : '';
 });
 
-const hasPresentationCue = computed(() => !!currentBackgroundId.value || !!currentSpriteId.value);
+const currentIllustrationId = computed(() => {
+  const value = currentDialoguePresentation.value?.illustration;
+  if (Array.isArray(value)) return String(value[0] || '').trim();
+  return typeof value === 'string' ? value.trim() : '';
+});
+
+const currentIllustrationPrompt = computed(() => {
+  const value = currentDialoguePresentation.value?.illustration_prompt;
+  if (Array.isArray(value)) return String(value[0] || '').trim();
+  return typeof value === 'string' ? value.trim() : '';
+});
+
+const hasPresentationCue = computed(() => !!currentBackgroundId.value
+  || !!currentSpriteId.value
+  || !!currentIllustrationId.value
+  || !!currentIllustrationPrompt.value);
 
 function onActChange(val: Record<string, string | string[]> | null) {
   if (!isDialogueNode(sceneStore.currentNode) || sceneStore.selectionType !== 'dialogue') return;

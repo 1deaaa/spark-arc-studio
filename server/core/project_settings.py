@@ -16,7 +16,9 @@ from __future__ import annotations
 
 import json
 import os
+import re
 import threading
+from copy import deepcopy
 from typing import Any, Dict, List, Optional
 
 from core.utils import get_project_path, get_user_projects_root
@@ -46,12 +48,29 @@ _DEFAULT_SETTINGS: Dict[str, Any] = {
     },
     # 当前生效的灵感 ID（可选，用于追溯项目参数的来源灵感）
     "active_inspiration_id": None,
+    # 项目级视觉风格种子。独立于完整场景插图开关，背景和立绘也会复用。
+    "visual_style": {
+        "seed_prompt": "",
+        "reference_asset_id": None,
+    },
+    # 实验性视觉插图。UI 只暴露 enabled，其余字段作为统一策略由系统维护。
+    "visual_illustration": {
+        "enabled": False,
+        "max_per_scene": 2,
+        "min_node_gap": 1,
+        "require_character_sprite": True,
+        "sprite_chroma_key": "#00FF00",
+        "sprite_matting": "chroma_key",
+    },
 }
 
 # 与 routes_import.py 的 chunk_tokens 校验保持一致，避免极端值。
 ATTACHMENT_CHUNK_TOKENS_MIN = 1000
 ATTACHMENT_CHUNK_TOKENS_MAX = 120000
 ATTACHMENT_CHUNK_TOKENS_DEFAULT = 64000
+VISUAL_ILLUSTRATION_MAX_PER_SCENE_LIMIT = 4
+VISUAL_ILLUSTRATION_MAX_PER_SCENE_DEFAULT = 2
+VISUAL_ILLUSTRATION_MIN_NODE_GAP_DEFAULT = 1
 
 
 def _coerce_attachment_chunk_tokens(value: Any) -> int:
@@ -66,14 +85,65 @@ def _coerce_attachment_chunk_tokens(value: Any) -> int:
         return ATTACHMENT_CHUNK_TOKENS_MAX
     return ivalue
 
+
+def _coerce_bounded_int(value: Any, *, default: int, minimum: int, maximum: int) -> int:
+    """把配置整数收敛到给定区间。"""
+    try:
+        normalized = int(value)
+    except (TypeError, ValueError):
+        return default
+    return max(minimum, min(maximum, normalized))
+
+
+def normalize_visual_illustration_settings(value: Any) -> Dict[str, Any]:
+    """规范化实验性视觉插图配置，供路由、Agent 与播放器共享。"""
+    defaults = _DEFAULT_SETTINGS["visual_illustration"]
+    raw = value if isinstance(value, dict) else {}
+    chroma_key = str(raw.get("sprite_chroma_key") or defaults["sprite_chroma_key"]).strip().upper()
+    if not re.fullmatch(r"#[0-9A-F]{6}", chroma_key):
+        chroma_key = defaults["sprite_chroma_key"]
+    matting = str(raw.get("sprite_matting") or defaults["sprite_matting"]).strip().lower()
+    if matting not in {"chroma_key", "none"}:
+        matting = defaults["sprite_matting"]
+    return {
+        "enabled": bool(raw.get("enabled", defaults["enabled"])),
+        "max_per_scene": _coerce_bounded_int(
+            raw.get("max_per_scene"),
+            default=VISUAL_ILLUSTRATION_MAX_PER_SCENE_DEFAULT,
+            minimum=1,
+            maximum=VISUAL_ILLUSTRATION_MAX_PER_SCENE_LIMIT,
+        ),
+        "min_node_gap": _coerce_bounded_int(
+            raw.get("min_node_gap"),
+            default=VISUAL_ILLUSTRATION_MIN_NODE_GAP_DEFAULT,
+            minimum=0,
+            maximum=4,
+        ),
+        "require_character_sprite": bool(
+            raw.get("require_character_sprite", defaults["require_character_sprite"])
+        ),
+        "sprite_chroma_key": chroma_key,
+        "sprite_matting": matting,
+    }
+
+
+def normalize_visual_style_settings(value: Any) -> Dict[str, Any]:
+    """规范化项目级风格种子配置。"""
+    raw = value if isinstance(value, dict) else {}
+    seed_prompt = str(raw.get("seed_prompt") or "").strip()[:4000]
+    raw_asset_id = raw.get("reference_asset_id")
+    reference_asset_id = str(raw_asset_id).strip() if raw_asset_id is not None else ""
+    return {
+        "seed_prompt": seed_prompt,
+        "reference_asset_id": reference_asset_id or None,
+    }
+
 _lock = threading.Lock()
 
 
 def _default_settings_copy() -> Dict[str, Any]:
-    """返回项目默认配置副本，避免嵌套 story_tags 被运行时修改污染。"""
-    data = dict(_DEFAULT_SETTINGS)
-    data["story_tags"] = dict(_DEFAULT_SETTINGS["story_tags"])
-    return data
+    """返回项目默认配置深拷贝，避免嵌套配置被运行时修改污染。"""
+    return deepcopy(_DEFAULT_SETTINGS)
 
 
 def _settings_path(project_path: str) -> str:
@@ -89,6 +159,10 @@ def _normalize(raw: Dict[str, Any] | None) -> Dict[str, Any]:
         data["attachment_chunk_tokens"] = _coerce_attachment_chunk_tokens(
             raw.get("attachment_chunk_tokens", _DEFAULT_SETTINGS["attachment_chunk_tokens"])
         )
+        data["visual_illustration"] = normalize_visual_illustration_settings(
+            raw.get("visual_illustration")
+        )
+        data["visual_style"] = normalize_visual_style_settings(raw.get("visual_style"))
         raw_mode_from_tags = None
         # 规范化 story_tags：保留已有值，补齐缺失字段
         raw_tags = raw.get("story_tags")
@@ -201,6 +275,43 @@ def get_workspace_mode(user_id: str, project_name: str) -> str:
     tags = get_project_story_tags(user_id, project_name)
     mode = tags.get("workspace_mode")
     return "novel" if mode == "novel" else "script"
+
+
+def get_visual_illustration_settings(user_id: str, project_name: str) -> Dict[str, Any]:
+    """读取实验性视觉插图配置，并返回独立副本。"""
+    raw = get_project_setting(user_id, project_name, "visual_illustration", {})
+    return normalize_visual_illustration_settings(raw)
+
+
+def set_visual_illustration_settings(
+    user_id: str,
+    project_name: str,
+    value: Any,
+) -> Dict[str, Any]:
+    """更新实验性视觉插图配置并返回最终生效值。"""
+    normalized = normalize_visual_illustration_settings(value)
+    set_project_setting(user_id, project_name, "visual_illustration", normalized)
+    return normalized
+
+
+def is_visual_illustration_enabled(user_id: str, project_name: str) -> bool:
+    """仅剧本项目可启用视觉插图，小说模式始终返回 False。"""
+    if get_workspace_mode(user_id, project_name) != "script":
+        return False
+    return bool(get_visual_illustration_settings(user_id, project_name)["enabled"])
+
+
+def get_visual_style_settings(user_id: str, project_name: str) -> Dict[str, Any]:
+    """读取项目级风格种子文本与当前选中参考图。"""
+    raw = get_project_setting(user_id, project_name, "visual_style", {})
+    return normalize_visual_style_settings(raw)
+
+
+def set_visual_style_settings(user_id: str, project_name: str, value: Any) -> Dict[str, Any]:
+    """更新项目级风格种子配置并返回最终生效值。"""
+    normalized = normalize_visual_style_settings(value)
+    set_project_setting(user_id, project_name, "visual_style", normalized)
+    return normalized
 
 
 def list_projects_semantic_status(user_id: str) -> List[Dict[str, Any]]:

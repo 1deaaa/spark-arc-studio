@@ -39,6 +39,8 @@ current_user_is_admin: ContextVar[bool] = ContextVar('current_user_is_admin', de
 current_project_name: ContextVar[Optional[str]] = ContextVar('current_project_name', default=None)
 current_inspiration_id: ContextVar[Optional[str]] = ContextVar('current_inspiration_id', default=None)
 current_agent_id: ContextVar[Optional[str]] = ContextVar('current_agent_id', default=None)
+current_chat_agent_id: ContextVar[Optional[str]] = ContextVar('current_chat_agent_id', default=None)
+current_chat_context_key: ContextVar[Optional[str]] = ContextVar('current_chat_context_key', default=None)
 # 当前聊天任务对应的 LLM usage 归属标记。
 # UsageTrackingCallback 会在单次 LLM 调用结束时读取它，便于聊天流按 task 聚合真实 token 用量。
 current_llm_usage_context: ContextVar[Optional[str]] = ContextVar('current_llm_usage_context', default=None)
@@ -86,6 +88,26 @@ def get_current_agent_id() -> Optional[str]:
         return None
     value = str(agent_id).strip()
     return value or None
+
+
+def get_current_chat_session() -> tuple[Optional[str], Optional[str]]:
+    """读取当前聊天房间归属；与执行工具的子 Agent 身份相互独立。"""
+    agent_id = str(current_chat_agent_id.get() or "").strip() or None
+    context_key = str(current_chat_context_key.get() or "").strip() or None
+    return agent_id, context_key
+
+
+def set_current_chat_session(agent_id: Optional[str], context_key: Optional[str]) -> tuple[Token, Token]:
+    """设置当前聊天房间，并返回可用于恢复上层上下文的 token。"""
+    agent_token = current_chat_agent_id.set(str(agent_id or "").strip() or None)
+    context_token = current_chat_context_key.set(str(context_key or "").strip() or "global")
+    return agent_token, context_token
+
+
+def reset_current_chat_session(tokens: tuple[Token, Token]) -> None:
+    agent_token, context_token = tokens
+    current_chat_agent_id.reset(agent_token)
+    current_chat_context_key.reset(context_token)
 
 
 def set_agent_context(user_id: str, project_name: str) -> None:

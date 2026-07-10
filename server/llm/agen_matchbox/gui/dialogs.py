@@ -19,15 +19,21 @@ if __package__ in (None, "", "gui"):
 from ..models import (
     DEFAULT_MAX_CONTEXT_TOKENS,
     DEFAULT_MAX_OUTPUT_TOKENS,
-    CAP_EMBEDDING,
-    CAP_IMAGE_EDIT,
-    CAP_IMAGE_GENERATION,
-    CAP_IMAGE_REFERENCE_INPUT,
-    CAP_TEXT_GENERATION,
-    CAP_VISION_INPUT,
-    normalize_model_capabilities,
+    MODALITY_EMBEDDING,
+    MODALITY_IMAGE,
+    MODALITY_TEXT,
+    normalize_model_modalities,
 )
-from ..image_adapters import strip_internal_image_generation_fields
+from ..image_adapters import (
+    IMAGE_ADAPTER_GEMINI_GENERATE_CONTENT,
+    IMAGE_ADAPTER_GEMINI_INTERACTIONS,
+    IMAGE_ADAPTER_OPENAI_CHAT_IMAGE,
+    IMAGE_ADAPTER_OPENAI_IMAGES,
+    IMAGE_ADAPTER_OPENAI_RESPONSES_IMAGE,
+    IMAGE_ADAPTER_XAI_IMAGES,
+    normalize_image_generation_adapter,
+    strip_internal_image_generation_fields,
+)
 from .dpi import prepare_toplevel_window
 from .theme import style_listbox
 
@@ -36,24 +42,17 @@ class DialogsMixin:
     """对话框功能 Mixin，需与 LLMConfigGUI 混入使用。"""
 
     IMAGE_ADAPTER_OPTIONS = {
-        "OpenAI Images / 兼容协议": "openai_images",
-        "OpenAI Chat 图片 / 兼容网关": "openai_chat_image",
-        "Gemini Image / Nano Banana": "gemini_interactions",
-        "Grok Image": "xai_images",
+        "OpenAI Images / 兼容协议": IMAGE_ADAPTER_OPENAI_IMAGES,
+        "OpenAI Responses 图片工具": IMAGE_ADAPTER_OPENAI_RESPONSES_IMAGE,
+        "OpenAI Chat 图片 / 兼容网关": IMAGE_ADAPTER_OPENAI_CHAT_IMAGE,
+        "Gemini generateContent / Nano Banana": IMAGE_ADAPTER_GEMINI_GENERATE_CONTENT,
+        "Gemini Interactions": IMAGE_ADAPTER_GEMINI_INTERACTIONS,
+        "Grok Image": IMAGE_ADAPTER_XAI_IMAGES,
     }
-    DEFAULT_IMAGE_ADAPTER = "openai_images"
+    DEFAULT_IMAGE_ADAPTER = IMAGE_ADAPTER_OPENAI_IMAGES
 
     def _normalize_image_adapter(self, value) -> str:
-        text = str(value or "").strip().lower()
-        if text in {"gemini", "google", "google_gemini", "gemini_interactions", "google_interactions"}:
-            return "gemini_interactions"
-        if text in {"xai", "xai_images", "grok", "grok_image", "grok_images", "grok_imagine"}:
-            return "xai_images"
-        if text in {"openai_chat", "openai_chat_image", "openai_chat_completions", "chat_completions", "chat_image", "compatible_chat_image"}:
-            return "openai_chat_image"
-        if text in {"openai", "openai_images", "openai_compatible", "gpt_image", "gpt-image"}:
-            return "openai_images"
-        return self.DEFAULT_IMAGE_ADAPTER
+        return normalize_image_generation_adapter(value) or self.DEFAULT_IMAGE_ADAPTER
 
     def _image_adapter_label(self, value) -> str:
         normalized = self._normalize_image_adapter(value)
@@ -68,42 +67,33 @@ class DialogsMixin:
             self._normalize_image_adapter(label_or_value),
         )
 
-    def _extract_image_adapter(self, adapter_value=None, extra_body=None) -> str:
-        if adapter_value:
-            return self._normalize_image_adapter(adapter_value)
-        if not isinstance(extra_body, dict):
-            return self.DEFAULT_IMAGE_ADAPTER
-        image_config = extra_body.get("image_generation")
-        if isinstance(image_config, dict):
-            return self._normalize_image_adapter(image_config.get("adapter"))
-        return self.DEFAULT_IMAGE_ADAPTER
+    def _extract_image_adapter(self, adapter_value=None) -> str:
+        """只读取显式协议字段；Extra Body 永不承担内部协议选择。"""
+        return self._normalize_image_adapter(adapter_value)
 
-    def _image_adapter_for_capabilities(self, capabilities, adapter):
-        normalized_capabilities = normalize_model_capabilities(capabilities)
-        if CAP_IMAGE_GENERATION not in normalized_capabilities:
+    def _image_adapter_for_modalities(self, output_modalities, adapter):
+        _, normalized_output = normalize_model_modalities(None, output_modalities)
+        if MODALITY_IMAGE not in normalized_output:
             return None
         return self._image_adapter_value(adapter)
 
-    def _capabilities_to_model_type_label(self, raw_capabilities=None, *, legacy_is_embedding=False) -> str:
-        capabilities = normalize_model_capabilities(
-            raw_capabilities,
-            legacy_is_embedding=legacy_is_embedding,
-        )
-        if CAP_EMBEDDING in capabilities:
-            return "向量模型"
-        if CAP_IMAGE_GENERATION in capabilities:
-            return "生图模型"
-        if CAP_VISION_INPUT in capabilities:
-            return "视觉文本模型"
-        return "文本模型"
-
-    def _make_model_capability_checkboxes(self, parent, *, row: int, initial_capabilities=None):
+    def _make_model_modality_checkboxes(
+        self,
+        parent,
+        *,
+        row: int,
+        initial_input_modalities=None,
+        initial_output_modalities=None,
+    ):
         """创建用户可见的模型能力复选框。文本能力默认隐含，不单独展示。"""
-        capabilities = normalize_model_capabilities(initial_capabilities)
+        input_modalities, output_modalities = normalize_model_modalities(
+            initial_input_modalities,
+            initial_output_modalities,
+        )
         vars_map = {
-            "vision": tk.BooleanVar(value=CAP_VISION_INPUT in capabilities),
-            "image": tk.BooleanVar(value=CAP_IMAGE_GENERATION in capabilities),
-            "embedding": tk.BooleanVar(value=CAP_EMBEDDING in capabilities),
+            "vision": tk.BooleanVar(value=MODALITY_IMAGE in input_modalities),
+            "image": tk.BooleanVar(value=MODALITY_IMAGE in output_modalities),
+            "embedding": tk.BooleanVar(value=MODALITY_EMBEDDING in output_modalities),
         }
 
         frame = ctk.CTkFrame(parent, fg_color="transparent")
@@ -141,18 +131,17 @@ class DialogsMixin:
         ).pack(side=tk.LEFT)
         return vars_map
 
-    def _capability_vars_to_capabilities(self, vars_map, *, initial_capabilities=None):
+    def _modality_vars_to_modalities(self, vars_map):
         if vars_map["embedding"].get():
-            return [CAP_EMBEDDING]
+            return normalize_model_modalities([MODALITY_TEXT], [MODALITY_EMBEDDING])
 
-        capabilities = [CAP_TEXT_GENERATION]
+        input_modalities = [MODALITY_TEXT]
+        output_modalities = [MODALITY_TEXT]
         if vars_map["vision"].get():
-            capabilities.append(CAP_VISION_INPUT)
+            input_modalities.append(MODALITY_IMAGE)
         if vars_map["image"].get():
-            capabilities.append(CAP_IMAGE_GENERATION)
-            capabilities.append(CAP_IMAGE_REFERENCE_INPUT)
-            capabilities.append(CAP_IMAGE_EDIT)
-        return normalize_model_capabilities(capabilities)
+            output_modalities.append(MODALITY_IMAGE)
+        return normalize_model_modalities(input_modalities, output_modalities)
 
     @staticmethod
     def _parse_optional_non_negative_int(raw_value: str, *, field_label: str):
@@ -247,7 +236,7 @@ class DialogsMixin:
             model_id_entry.insert(0, selected_model_id)
 
         ctk.CTkLabel(dialog, text="模型能力:", font=("Microsoft YaHei UI", 11)).grid(row=2, column=0, sticky=tk.W, padx=20, pady=5)
-        capability_vars = self._make_model_capability_checkboxes(dialog, row=2)
+        modality_vars = self._make_model_modality_checkboxes(dialog, row=2)
 
         ctk.CTkLabel(dialog, text="生图协议:", font=("Microsoft YaHei UI", 11)).grid(row=3, column=0, sticky=tk.W, padx=20, pady=5)
         image_adapter_var = tk.StringVar(value=self._image_adapter_label(self.DEFAULT_IMAGE_ADAPTER))
@@ -262,10 +251,10 @@ class DialogsMixin:
         image_adapter_combo.grid(row=3, column=1, sticky=tk.W, padx=20, pady=5)
 
         def refresh_image_adapter_state(*_):
-            image_adapter_combo.configure(state="readonly" if capability_vars["image"].get() else "disabled")
+            image_adapter_combo.configure(state="readonly" if modality_vars["image"].get() else "disabled")
 
-        capability_vars["image"].trace_add("write", refresh_image_adapter_state)
-        capability_vars["embedding"].trace_add("write", refresh_image_adapter_state)
+        modality_vars["image"].trace_add("write", refresh_image_adapter_state)
+        modality_vars["embedding"].trace_add("write", refresh_image_adapter_state)
         refresh_image_adapter_state()
 
         temperature_enabled_var = tk.BooleanVar(value=False)
@@ -376,9 +365,9 @@ class DialogsMixin:
                     return
                 temperature_value = temp_value
 
-            capabilities = self._capability_vars_to_capabilities(capability_vars)
-            image_generation_adapter = self._image_adapter_for_capabilities(
-                capabilities,
+            input_modalities, output_modalities = self._modality_vars_to_modalities(modality_vars)
+            image_generation_adapter = self._image_adapter_for_modalities(
+                output_modalities,
                 image_adapter_var.get(),
             )
             try:
@@ -417,7 +406,8 @@ class DialogsMixin:
                 model_cfg_payload = {
                     "display_name": display_name,
                     "model_name": model_id,
-                    "capabilities": capabilities,
+                    "input_modalities": input_modalities,
+                    "output_modalities": output_modalities,
                     "extra_body": extra_body,
                     "image_generation_adapter": image_generation_adapter,
                     "temperature": temperature_value,
@@ -467,7 +457,7 @@ class DialogsMixin:
             model_id = model_config
             extra_body_dict = None
             model_image_adapter = None
-            model_capabilities = normalize_model_capabilities()
+            model_input_modalities, model_output_modalities = normalize_model_modalities()
             model_temperature = None
             model_disabled = False
             model_input_price = None
@@ -479,9 +469,9 @@ class DialogsMixin:
             model_id = model_config.get("model_name", "")
             extra_body_dict = model_config.get("extra_body")
             model_image_adapter = model_config.get("image_generation_adapter")
-            model_capabilities = normalize_model_capabilities(
-                model_config.get("capabilities"),
-                legacy_is_embedding=bool(model_config.get("is_embedding")),
+            model_input_modalities, model_output_modalities = normalize_model_modalities(
+                model_config.get("input_modalities"),
+                model_config.get("output_modalities"),
             )
             model_temperature = model_config.get("temperature")
             model_disabled = bool(model_config.get("disabled"))
@@ -519,14 +509,15 @@ class DialogsMixin:
         model_id_entry.configure(state='readonly')
 
         ctk.CTkLabel(dialog, text="模型能力:", font=("Microsoft YaHei UI", 11)).grid(row=2, column=0, sticky=tk.W, padx=20, pady=5)
-        capability_vars = self._make_model_capability_checkboxes(
+        modality_vars = self._make_model_modality_checkboxes(
             dialog,
             row=2,
-            initial_capabilities=model_capabilities,
+            initial_input_modalities=model_input_modalities,
+            initial_output_modalities=model_output_modalities,
         )
 
         ctk.CTkLabel(dialog, text="生图协议:", font=("Microsoft YaHei UI", 11)).grid(row=3, column=0, sticky=tk.W, padx=20, pady=5)
-        image_adapter_var = tk.StringVar(value=self._image_adapter_label(self._extract_image_adapter(model_image_adapter, extra_body_dict)))
+        image_adapter_var = tk.StringVar(value=self._image_adapter_label(self._extract_image_adapter(model_image_adapter)))
         image_adapter_combo = ctk.CTkComboBox(
             dialog,
             variable=image_adapter_var,
@@ -538,10 +529,10 @@ class DialogsMixin:
         image_adapter_combo.grid(row=3, column=1, sticky=tk.W, padx=20, pady=5)
 
         def refresh_image_adapter_state(*_):
-            image_adapter_combo.configure(state="readonly" if capability_vars["image"].get() else "disabled")
+            image_adapter_combo.configure(state="readonly" if modality_vars["image"].get() else "disabled")
 
-        capability_vars["image"].trace_add("write", refresh_image_adapter_state)
-        capability_vars["embedding"].trace_add("write", refresh_image_adapter_state)
+        modality_vars["image"].trace_add("write", refresh_image_adapter_state)
+        modality_vars["embedding"].trace_add("write", refresh_image_adapter_state)
         refresh_image_adapter_state()
 
         temperature_enabled_var = tk.BooleanVar(value=model_temperature is not None)
@@ -695,12 +686,9 @@ class DialogsMixin:
 
             max_context_tokens = DEFAULT_MAX_CONTEXT_TOKENS if max_context_tokens is None else max_context_tokens
             max_output_tokens = DEFAULT_MAX_OUTPUT_TOKENS if max_output_tokens is None else max_output_tokens
-            updated_capabilities = self._capability_vars_to_capabilities(
-                capability_vars,
-                initial_capabilities=model_capabilities,
-            )
-            image_generation_adapter = self._image_adapter_for_capabilities(
-                updated_capabilities,
+            updated_input_modalities, updated_output_modalities = self._modality_vars_to_modalities(modality_vars)
+            image_generation_adapter = self._image_adapter_for_modalities(
+                updated_output_modalities,
                 image_adapter_var.get(),
             )
 
@@ -720,8 +708,9 @@ class DialogsMixin:
                     image_generation_adapter=image_generation_adapter,
                     update_image_generation_adapter=True,
                     temperature=temperature_value,
-                    capabilities=updated_capabilities,
-                    update_capabilities=True,
+                    input_modalities=updated_input_modalities,
+                    output_modalities=updated_output_modalities,
+                    update_modalities=True,
                     max_context_tokens=max_context_tokens,
                     max_output_tokens=max_output_tokens,
                     sys_credit_input_price_per_million=model_input_price_value,

@@ -103,7 +103,10 @@ def build_scriptwriter_context_pack(
     - arc 文件解析和前文序列化逻辑保留（生产端需要精确的 target_scene 和 local_script）。
     """
     from story.arc_parser import parse_arc, serialize_to_arc
-    from story.arc_safety import sanitize_arc_for_ai_context
+    from story.arc_safety import sanitize_arc_for_project_ai_context
+
+    def clean_arc(value: str) -> str:
+        return sanitize_arc_for_project_ai_context(value, user_id, project_name)
 
     # ── 全量加载：世界观 / 所有角色 / 完整大纲 / 叙事记忆 ──────────────
     from .context_builder import load_worldview, load_all_roles, load_full_outline, load_narrative_memory
@@ -147,7 +150,7 @@ def build_scriptwriter_context_pack(
     # ── 解析 .arc 文件，提取前文和目标场景 ─────────────────────────────
     story_data = []
     target_scene = None
-    canonical_context = sanitize_arc_for_ai_context(context or "")
+    canonical_context = clean_arc(context or "")
     local_script = ""
     stories_path = get_project_stories_path(user_id, project_name)
     normalized_file_path = file_path or ""
@@ -168,8 +171,8 @@ def build_scriptwriter_context_pack(
                     break
             if target_scene:
                 context_scenes = story_data[: target_index + 1]
-                canonical_context = sanitize_arc_for_ai_context(serialize_to_arc(context_scenes, chr_map=chr_map))
-                local_script = sanitize_arc_for_ai_context(serialize_to_arc([target_scene], chr_map=chr_map))
+                canonical_context = clean_arc(serialize_to_arc(context_scenes, chr_map=chr_map))
+                local_script = clean_arc(serialize_to_arc([target_scene], chr_map=chr_map))
                 if (
                     context
                     and str(context).strip()
@@ -178,7 +181,7 @@ def build_scriptwriter_context_pack(
                     canonical_context = (
                         canonical_context
                         + "\n\n# 用户补充上下文\n"
-                        + sanitize_arc_for_ai_context(str(context))
+                        + clean_arc(str(context))
                     )
 
     scene_characters: List[str] = []
@@ -350,12 +353,18 @@ def _record_story_memory_from_story_file(
     )
 
 
-def _clean_generated_nodes(final_nodes: List[Dict[str, Any]]) -> List[Dict[str, Any]]:
+def _clean_generated_nodes(
+    final_nodes: List[Dict[str, Any]],
+    *,
+    allow_visual_illustration: bool = False,
+) -> List[Dict[str, Any]]:
     """
-    清洗 AI 生成的节点列表，剥除所有非协议字段（仅保留 id/chr/speaker/txt/opt/optn/dia/act/next），
+    清洗 AI 生成的节点列表，只保留叙事字段与受门禁控制的插图描述，
     防止 AI 幻觉添加的额外字段污染落盘后的 .arc 文件。
     """
-    allowed_fields = {"id", "chr", "speaker", "txt", "opt", "optn", "dia", "act", "next"}
+    from story.arc_safety import normalize_illustration_prompt
+
+    allowed_fields = {"id", "chr", "speaker", "txt", "opt", "optn", "dia", "presentation"}
 
     def clean_node(node):
         if isinstance(node, dict):
@@ -363,6 +372,14 @@ def _clean_generated_nodes(final_nodes: List[Dict[str, Any]]) -> List[Dict[str, 
             for key in list(node.keys()):
                 if key not in allowed_fields:
                     del node[key]
+            presentation = node.get("presentation")
+            prompt = ""
+            if allow_visual_illustration and isinstance(presentation, dict):
+                prompt = normalize_illustration_prompt(presentation.get("illustration_prompt"))
+            if prompt:
+                node["presentation"] = {"illustration_prompt": prompt}
+            else:
+                node.pop("presentation", None)
             if "dia" in node:
                 clean_nodes_list(node["dia"])
             if "opt" in node:
@@ -421,7 +438,18 @@ def _persist_generated_nodes(
     if not target_scene:
         raise FileNotFoundError(f"场景 '{scene_name}' 未找到")
 
-    final_nodes = _clean_generated_nodes(final_nodes)
+    from core.project_settings import (
+        get_visual_illustration_settings,
+        is_visual_illustration_enabled,
+    )
+    from story.arc_safety import validate_arc_visual_prompt_candidate
+
+    visual_settings = get_visual_illustration_settings(user_id, project_name)
+    visual_enabled = is_visual_illustration_enabled(user_id, project_name)
+    final_nodes = _clean_generated_nodes(
+        final_nodes,
+        allow_visual_illustration=visual_enabled,
+    )
 
     def find_and_insert(nodes):
         if after_node_id == 0:
@@ -450,6 +478,12 @@ def _persist_generated_nodes(
         target_scene["thought"] = thought
 
     new_arc_content = serialize_to_arc(story_data, chr_map=chr_map)
+    validate_arc_visual_prompt_candidate(
+        arc_content,
+        new_arc_content,
+        max_per_scene=visual_settings["max_per_scene"],
+        min_node_gap=visual_settings["min_node_gap"],
+    )
     with open(file_path, "w", encoding="utf-8") as f:
         f.write(new_arc_content)
 

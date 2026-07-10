@@ -27,137 +27,125 @@ Base = declarative_base()
 DEFAULT_MAX_CONTEXT_TOKENS = 256_000
 DEFAULT_MAX_OUTPUT_TOKENS = 64_000
 
-CAP_TEXT_GENERATION = "text_generation"
-CAP_VISION_INPUT = "vision_input"
-CAP_EMBEDDING = "embedding"
-CAP_IMAGE_GENERATION = "image_generation"
-CAP_IMAGE_REFERENCE_INPUT = "image_reference_input"
-CAP_IMAGE_EDIT = "image_edit"
+MODALITY_TEXT = "text"
+MODALITY_IMAGE = "image"
+MODALITY_EMBEDDING = "embedding"
 
-MODEL_CAPABILITY_ORDER = (
-    CAP_TEXT_GENERATION,
-    CAP_VISION_INPUT,
-    CAP_EMBEDDING,
-    CAP_IMAGE_GENERATION,
-    CAP_IMAGE_REFERENCE_INPUT,
-    CAP_IMAGE_EDIT,
-)
-MODEL_CAPABILITIES = set(MODEL_CAPABILITY_ORDER)
-DEFAULT_MODEL_CAPABILITIES = (CAP_TEXT_GENERATION,)
-EMBEDDING_MODEL_CAPABILITIES = (CAP_EMBEDDING,)
-
-_CAPABILITY_ALIASES = {
-    "text": CAP_TEXT_GENERATION,
-    "chat": CAP_TEXT_GENERATION,
-    "llm": CAP_TEXT_GENERATION,
-    "vision": CAP_VISION_INPUT,
-    "vision_text": CAP_VISION_INPUT,
-    "multimodal": CAP_VISION_INPUT,
-    "embedding": CAP_EMBEDDING,
-    "embeddings": CAP_EMBEDDING,
-    "image": CAP_IMAGE_GENERATION,
-    "image_generation": CAP_IMAGE_GENERATION,
-    "text_to_image": CAP_IMAGE_GENERATION,
-    "image_reference": CAP_IMAGE_REFERENCE_INPUT,
-    "image_reference_input": CAP_IMAGE_REFERENCE_INPUT,
-    "image_edit": CAP_IMAGE_EDIT,
-    "image_editing": CAP_IMAGE_EDIT,
-}
+MODEL_INPUT_MODALITY_ORDER = (MODALITY_TEXT, MODALITY_IMAGE)
+MODEL_OUTPUT_MODALITY_ORDER = (MODALITY_TEXT, MODALITY_IMAGE, MODALITY_EMBEDDING)
+DEFAULT_MODEL_INPUT_MODALITIES = (MODALITY_TEXT,)
+DEFAULT_MODEL_OUTPUT_MODALITIES = (MODALITY_TEXT,)
+EMBEDDING_MODEL_INPUT_MODALITIES = (MODALITY_TEXT,)
+EMBEDDING_MODEL_OUTPUT_MODALITIES = (MODALITY_EMBEDDING,)
 
 
-def _capability_tokens(raw_capabilities):
-    """把数据库、YAML、API 入参中的能力值拆成候选 token。"""
-    if raw_capabilities is None:
+def _modality_tokens(raw_modalities, *, field_name: str):
+    """把数据库、YAML、API 入参中的模态值拆成候选 token。"""
+    if raw_modalities is None:
         return []
-    if isinstance(raw_capabilities, (list, tuple, set)):
-        return list(raw_capabilities)
-    if isinstance(raw_capabilities, dict):
-        raw_capabilities = raw_capabilities.get("capabilities", [])
-        return _capability_tokens(raw_capabilities)
-    if isinstance(raw_capabilities, str):
-        value = raw_capabilities.strip()
+    if isinstance(raw_modalities, (list, tuple, set)):
+        return list(raw_modalities)
+    if isinstance(raw_modalities, dict):
+        return _modality_tokens(raw_modalities.get(field_name, []), field_name=field_name)
+    if isinstance(raw_modalities, str):
+        value = raw_modalities.strip()
         if not value:
             return []
         if value[0] in "[{":
             try:
-                return _capability_tokens(json.loads(value))
-            except Exception:
+                return _modality_tokens(json.loads(value), field_name=field_name)
+            except (json.JSONDecodeError, TypeError):
                 pass
         return [part for part in value.replace(";", ",").replace("|", ",").split(",") if part.strip()]
-    return [raw_capabilities]
+    return [raw_modalities]
 
 
-def normalize_model_capabilities(raw_capabilities=None, *, legacy_is_embedding=None):
-    """规范化模型能力集合，作为模型类型的唯一业务真相源。"""
-    capabilities = set()
-    for token in _capability_tokens(raw_capabilities):
+def _normalize_modalities(raw_modalities, *, field_name: str, order: tuple[str, ...]) -> list[str]:
+    """按稳定顺序过滤未知模态。"""
+    allowed = set(order)
+    modalities = set()
+    for token in _modality_tokens(raw_modalities, field_name=field_name):
         key = str(token).strip().lower()
-        if not key:
-            continue
-        capability = _CAPABILITY_ALIASES.get(key, key)
-        if capability in MODEL_CAPABILITIES:
-            capabilities.add(capability)
-
-    if not capabilities:
-        if legacy_is_embedding:
-            capabilities.add(CAP_EMBEDDING)
-        else:
-            capabilities.update(DEFAULT_MODEL_CAPABILITIES)
-
-    if CAP_EMBEDDING in capabilities:
-        capabilities = {CAP_EMBEDDING}
-
-    if CAP_VISION_INPUT in capabilities:
-        capabilities.add(CAP_TEXT_GENERATION)
-
-    if CAP_IMAGE_REFERENCE_INPUT in capabilities or CAP_IMAGE_EDIT in capabilities:
-        capabilities.add(CAP_IMAGE_GENERATION)
-
-    if CAP_IMAGE_EDIT in capabilities:
-        capabilities.add(CAP_IMAGE_REFERENCE_INPUT)
-
-    return [cap for cap in MODEL_CAPABILITY_ORDER if cap in capabilities]
+        if key in allowed:
+            modalities.add(key)
+    return [modality for modality in order if modality in modalities]
 
 
-def serialize_model_capabilities(raw_capabilities=None, *, legacy_is_embedding=None):
-    """序列化能力集合，供数据库与 YAML 写入使用。"""
-    return json.dumps(
-        normalize_model_capabilities(raw_capabilities, legacy_is_embedding=legacy_is_embedding),
-        ensure_ascii=False,
+def normalize_input_modalities(raw_modalities=None) -> list[str]:
+    """规范化输入模态；所有已支持模型都必须接收文本输入。"""
+    modalities = _normalize_modalities(
+        raw_modalities,
+        field_name="input_modalities",
+        order=MODEL_INPUT_MODALITY_ORDER,
     )
+    if MODALITY_TEXT not in modalities:
+        modalities.insert(0, MODALITY_TEXT)
+    return modalities
 
 
-def get_model_capabilities(model):
-    """读取模型能力集合；历史 is_embedding 只作为旧数据回退。"""
-    return normalize_model_capabilities(
-        getattr(model, "capabilities", None),
-        legacy_is_embedding=bool(getattr(model, "is_embedding", 0)),
+def normalize_output_modalities(raw_modalities=None) -> list[str]:
+    """规范化输出模态；向量输出与文本、图片输出互斥。"""
+    modalities = _normalize_modalities(
+        raw_modalities,
+        field_name="output_modalities",
+        order=MODEL_OUTPUT_MODALITY_ORDER,
     )
+    if not modalities:
+        return list(DEFAULT_MODEL_OUTPUT_MODALITIES)
+    if MODALITY_EMBEDDING in modalities:
+        return list(EMBEDDING_MODEL_OUTPUT_MODALITIES)
+    return modalities
 
 
-def set_model_capabilities(model, raw_capabilities=None, *, legacy_is_embedding=None):
-    """写入模型能力集合，并同步旧列以便本地旧库平滑迁移。"""
-    capabilities = normalize_model_capabilities(raw_capabilities, legacy_is_embedding=legacy_is_embedding)
-    model.capabilities = json.dumps(capabilities, ensure_ascii=False)
-    if hasattr(model, "is_embedding"):
-        model.is_embedding = 1 if CAP_EMBEDDING in capabilities else 0
-    return capabilities
+def normalize_model_modalities(input_modalities=None, output_modalities=None) -> tuple[list[str], list[str]]:
+    """原子规范化模型输入与输出模态。"""
+    normalized_output = normalize_output_modalities(output_modalities)
+    if normalized_output == list(EMBEDDING_MODEL_OUTPUT_MODALITIES):
+        return list(EMBEDDING_MODEL_INPUT_MODALITIES), normalized_output
+    return normalize_input_modalities(input_modalities), normalized_output
 
 
-def model_has_capability(model, capability: str) -> bool:
-    return capability in get_model_capabilities(model)
+def get_model_modalities(model) -> dict[str, list[str]]:
+    """读取模型输入与输出模态。"""
+    input_modalities, output_modalities = normalize_model_modalities(
+        getattr(model, "input_modalities", None),
+        getattr(model, "output_modalities", None),
+    )
+    return {
+        "input_modalities": input_modalities,
+        "output_modalities": output_modalities,
+    }
+
+
+def set_model_modalities(model, input_modalities=None, output_modalities=None) -> dict[str, list[str]]:
+    """原子写入模型输入与输出模态。"""
+    normalized_input, normalized_output = normalize_model_modalities(input_modalities, output_modalities)
+    model.input_modalities = json.dumps(normalized_input, ensure_ascii=False)
+    model.output_modalities = json.dumps(normalized_output, ensure_ascii=False)
+    return {
+        "input_modalities": normalized_input,
+        "output_modalities": normalized_output,
+    }
+
+
+def model_accepts(model, modality: str) -> bool:
+    return str(modality).strip().lower() in get_model_modalities(model)["input_modalities"]
+
+
+def model_outputs(model, modality: str) -> bool:
+    return str(modality).strip().lower() in get_model_modalities(model)["output_modalities"]
 
 
 def is_chat_model(model) -> bool:
-    return model_has_capability(model, CAP_TEXT_GENERATION)
+    return model_outputs(model, MODALITY_TEXT)
 
 
 def is_embedding_model(model) -> bool:
-    return model_has_capability(model, CAP_EMBEDDING)
+    return model_outputs(model, MODALITY_EMBEDDING)
 
 
 def is_image_generation_model(model) -> bool:
-    return model_has_capability(model, CAP_IMAGE_GENERATION)
+    return model_outputs(model, MODALITY_IMAGE)
 
 
 class LLMPlatform(Base):
@@ -232,9 +220,18 @@ class LLModels(Base):
     sys_credit_cached_input_price_per_million = Column(Float, nullable=True)
     sys_credit_output_price_per_million = Column(Float, nullable=True)
     disable = Column(Integer, default=0, index=True)
-    capabilities = Column(String(512), nullable=True)
-    # 旧数据迁移辅助列。业务判断必须使用 capabilities 及上方 helper。
-    is_embedding = Column(Integer, default=0, index=True)
+    input_modalities = Column(
+        String(256),
+        nullable=False,
+        default='["text"]',
+        server_default=text("'[\"text\"]'"),
+    )
+    output_modalities = Column(
+        String(256),
+        nullable=False,
+        default='["text"]',
+        server_default=text("'[\"text\"]'"),
+    )
     sort_order = Column(Integer, default=0)
 
 

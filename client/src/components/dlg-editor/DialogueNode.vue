@@ -111,6 +111,7 @@
 
 <script setup lang="ts">
 import { computed } from 'vue';
+import { useI18n } from 'vue-i18n';
 import { NCard, NText, NTag, NSpace, NEllipsis, NButton, NIcon, NTooltip } from 'naive-ui';
 import { GitBranch } from '@lucide/vue';
 import Draggable from 'vuedraggable';
@@ -142,6 +143,7 @@ const props = defineProps<{
 }>();
 
 defineEmits(['select', 'select-option', 'drag-end', 'add-act']);
+const { t } = useI18n();
 
 const characterName = computed(() => {
   if (props.node.speaker) return props.node.speaker;
@@ -158,8 +160,12 @@ const presentationBadges = computed(() => {
   const badges: Array<{ key: string; label: string; value: string }> = [];
   const bg = normalizePresentationValue(cue.bg);
   const sprite = normalizePresentationValue(cue.sprite);
+  const illustrationPrompt = normalizePresentationValue(cue.illustration_prompt);
+  const illustration = normalizePresentationValue(cue.illustration);
   if (bg) badges.push({ key: 'bg', label: 'BG', value: bg });
-  if (sprite) badges.push({ key: 'sprite', label: '立绘', value: sprite });
+  if (sprite) badges.push({ key: 'sprite', label: t('nodeEditor.presentation.spriteBadge'), value: sprite });
+  if (illustration) badges.push({ key: 'illustration', label: t('nodeEditor.presentation.illustrationBadge'), value: illustration });
+  else if (illustrationPrompt) badges.push({ key: 'illustration_prompt', label: t('nodeEditor.presentation.illustrationPlannedBadge'), value: illustrationPrompt });
   return badges;
 });
 const hasAnyBadge = computed(() => (props.node?.opt?.length) || (props.node?.act && Object.keys(props.node.act).length) || presentationBadges.value.length || props.node?.next);

@@ -469,7 +469,7 @@ export async function renameUserUsageSlot(usageKey: string, newUsageKey: string 
  * @param {string} displayName - 显示名称
  * @param {string|null} extraBody - extra_body JSON 字符串 (可选)
  */
-export async function createModel(platformId: ApiId, modelName: string, displayName: string, extraBody: string | null = null, temperature: number | undefined = undefined, maxContextTokens?: number | null, maxOutputTokens?: number | null, capabilities?: string[], imageGenerationAdapter?: string | null) {
+export async function createModel(platformId: ApiId, modelName: string, displayName: string, extraBody: string | null = null, temperature: number | undefined = undefined, maxContextTokens?: number | null, maxOutputTokens?: number | null, inputModalities?: string[], outputModalities?: string[], imageGenerationAdapter?: string | null) {
   const payload: MutablePayload = {
     platform_id: platformId,
     model_name: modelName,
@@ -485,8 +485,9 @@ export async function createModel(platformId: ApiId, modelName: string, displayN
   if (maxOutputTokens != null) {
     payload.max_output_tokens = maxOutputTokens;
   }
-  if (capabilities && capabilities.length > 0) {
-    payload.capabilities = capabilities;
+  if (inputModalities && outputModalities) {
+    payload.input_modalities = inputModalities;
+    payload.output_modalities = outputModalities;
   }
   if (imageGenerationAdapter) {
     payload.image_generation_adapter = imageGenerationAdapter;
@@ -508,7 +509,7 @@ export async function createModel(platformId: ApiId, modelName: string, displayN
  * @param {string|null} displayName - 新的显示名称 (可选)
  * @param {string|null} extraBody - extra_body JSON 字符串 (可选)
  */
-export async function updateModel(modelId: ApiId, displayName: string | null = null, extraBody: string | null = null, options: { includeTemperature?: boolean; temperature?: number | null; includeMaxTokens?: boolean; maxContextTokens?: number | null; maxOutputTokens?: number | null; includeCapabilities?: boolean; capabilities?: string[]; includeImageGenerationAdapter?: boolean; imageGenerationAdapter?: string | null } = {}) {
+export async function updateModel(modelId: ApiId, displayName: string | null = null, extraBody: string | null = null, options: { includeTemperature?: boolean; temperature?: number | null; includeMaxTokens?: boolean; maxContextTokens?: number | null; maxOutputTokens?: number | null; includeModalities?: boolean; inputModalities?: string[]; outputModalities?: string[]; includeImageGenerationAdapter?: boolean; imageGenerationAdapter?: string | null } = {}) {
   const payload: MutablePayload = {
     id: modelId,
     display_name: displayName,
@@ -521,8 +522,9 @@ export async function updateModel(modelId: ApiId, displayName: string | null = n
     payload.max_context_tokens = options.maxContextTokens ?? null;
     payload.max_output_tokens = options.maxOutputTokens ?? null;
   }
-  if (options?.includeCapabilities) {
-    payload.capabilities = options.capabilities ?? [];
+  if (options?.includeModalities) {
+    payload.input_modalities = options.inputModalities ?? ['text'];
+    payload.output_modalities = options.outputModalities ?? ['text'];
   }
   if (options?.includeImageGenerationAdapter) {
     payload.image_generation_adapter = options.imageGenerationAdapter ?? null;
@@ -958,7 +960,8 @@ export async function adminCreateSysModel(
   outputPricePerMillion: number | undefined = undefined,
   maxContextTokens?: number | null,
   maxOutputTokens?: number | null,
-  capabilities?: string[],
+  inputModalities?: string[],
+  outputModalities?: string[],
   imageGenerationAdapter?: string | null,
 ) {
   const payload: MutablePayload = {
@@ -985,8 +988,9 @@ export async function adminCreateSysModel(
   if (maxOutputTokens != null) {
     payload.max_output_tokens = maxOutputTokens;
   }
-  if (capabilities && capabilities.length > 0) {
-    payload.capabilities = capabilities;
+  if (inputModalities && outputModalities) {
+    payload.input_modalities = inputModalities;
+    payload.output_modalities = outputModalities;
   }
   if (imageGenerationAdapter) {
     payload.image_generation_adapter = imageGenerationAdapter;
@@ -1015,8 +1019,9 @@ export async function adminUpdateSysModel(modelId: ApiId, displayName: string | 
   includeMaxTokens?: boolean;
   maxContextTokens?: number | null;
   maxOutputTokens?: number | null;
-  includeCapabilities?: boolean;
-  capabilities?: string[];
+  includeModalities?: boolean;
+  inputModalities?: string[];
+  outputModalities?: string[];
   includeImageGenerationAdapter?: boolean;
   imageGenerationAdapter?: string | null;
 } = {}) {
@@ -1037,8 +1042,9 @@ export async function adminUpdateSysModel(modelId: ApiId, displayName: string | 
     payload.max_context_tokens = options.maxContextTokens ?? null;
     payload.max_output_tokens = options.maxOutputTokens ?? null;
   }
-  if (options?.includeCapabilities) {
-    payload.capabilities = options.capabilities ?? [];
+  if (options?.includeModalities) {
+    payload.input_modalities = options.inputModalities ?? ['text'];
+    payload.output_modalities = options.outputModalities ?? ['text'];
   }
   if (options?.includeImageGenerationAdapter) {
     payload.image_generation_adapter = options.imageGenerationAdapter ?? null;
