@@ -3,6 +3,7 @@
     <div class="mobile-content">
         <div class="settings-column-mobile">
             <AIManager />
+            <AdminConfigPanel v-if="isAdmin" policy-only />
             <ModelUsageManager />
             <SemanticSearchCard />
             <SystemNoticeBoard />
@@ -25,6 +26,7 @@
 
 <script setup lang="ts">
 import AIManager from '../../components/settings/AIManager.vue';
+import AdminConfigPanel from '../../components/settings/AdminConfigPanel.vue';
 import ModelUsageManager from '../../components/settings/ModelUsageManager.vue';
 import SemanticSearchCard from '../../components/settings/SemanticSearchCard.vue';
 import SystemNoticeBoard from '../../components/settings/SystemNoticeBoard.vue';
@@ -36,7 +38,8 @@ import { useOnboarding } from '../../onboarding';
 import { useMobile } from '../../composables/useMobile';
 import { useRouter } from 'vue-router';
 import { useProjectStore } from '../../components/stores/projectStore';
-import { logout as apiLogout } from '../../services/api';
+import { fetchWithAuth, logout as apiLogout } from '../../services/api';
+import { onMounted, ref } from 'vue';
 
 const { aiStore } = useSettingsLogic();
 const { t } = useI18n();
@@ -44,6 +47,20 @@ const { resetAll, trigger } = useOnboarding();
 const { isMobile } = useMobile();
 const router = useRouter();
 const projectStore = useProjectStore();
+const isAdmin = ref(false);
+
+async function checkAdmin() {
+    try {
+        const response = await fetchWithAuth('/api/user/info');
+        if (!response.ok) return;
+        const data = await response.json();
+        isAdmin.value = Boolean(data?.success && data?.user?.is_admin);
+    } catch {
+        isAdmin.value = false;
+    }
+}
+
+onMounted(checkAdmin);
 
 function replayOnboarding() {
     resetAll();

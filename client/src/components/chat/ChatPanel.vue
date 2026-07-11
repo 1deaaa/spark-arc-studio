@@ -15,6 +15,7 @@
           @update:value="onAgentSelected"
           @rerun="$emit('rerun')"
         />
+        <ChatProgressBoardPopover :history="history" :agent-id="agentId" />
         <div v-if="contextTokenLabel" class="chat-token-meter">
           <n-tooltip v-if="contextTokenLabel" trigger="hover">
             <template #trigger>
@@ -84,8 +85,8 @@
       <!-- 消息列表 -->
       <ChatMessageList
         ref="chatListRef"
-        :history="history"
-        :loading="loading"
+        :history="visibleHistory"
+        :loading="loading || agentContentPending"
         :last-error="lastError"
         :sending="sending"
         :thinking-seconds="thinkingSeconds"
@@ -165,11 +166,12 @@
  * 2. 状态驱动：通过 props 接收对话数据，通过 events 发出交互指令，本身不持有业务 Store。
  * 3. 高复用性：同时服务于 GlobalChatFloat（单例主入口）和 ExtraChatWindow（多实例窗口）。
  */
-import { ref, computed, useSlots, type PropType } from 'vue';
+import { ref, computed, useSlots, watch, type PropType } from 'vue';
 import { useI18n } from 'vue-i18n';
 import { NButton, NInput, NPopconfirm, NTooltip } from 'naive-ui';
 import ChatMessageList from '@/components/chat/ChatMessageList.vue';
 import AgentRadialPicker from '@/components/chat/AgentRadialPicker.vue';
+import ChatProgressBoardPopover from '@/components/chat/ChatProgressBoardPopover.vue';
 import GlobalLoading from '@/components/share/GlobalLoading.vue';
 import type { ChatMessage } from '@/services/chatService';
 
@@ -282,6 +284,20 @@ const emit = defineEmits([
 
 const { t } = useI18n();
 const slots = useSlots();
+const agentContentPending = ref(false);
+let agentSwitchEpoch = 0;
+
+watch(() => props.agentId, () => {
+  const epoch = ++agentSwitchEpoch;
+  agentContentPending.value = true;
+  requestAnimationFrame(() => {
+    requestAnimationFrame(() => {
+      if (epoch === agentSwitchEpoch) agentContentPending.value = false;
+    });
+  });
+});
+
+const visibleHistory = computed(() => agentContentPending.value ? [] : props.history);
 
 const editingContentLocal = computed({
   get: () => props.editingContent,

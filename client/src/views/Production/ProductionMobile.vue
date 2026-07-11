@@ -56,7 +56,7 @@
 
     <!-- 场景列表视图 -->
     <template v-else>
-      <n-spin :show="loading">
+      <n-spin :show="loading" class="production-list-state">
         <section class="mobile-workbench-panel">
           <div class="workbench-heading">
             <div class="workbench-copy">
@@ -643,7 +643,25 @@ onUnmounted(() => {
   position: relative;
   display: flex;
   flex-direction: column;
-  min-height: 100%;
+  height: 100%;
+  min-height: 0;
+  overflow: hidden;
+}
+
+.production-list-state {
+  flex: 1;
+  min-height: 0;
+}
+
+.production-list-state :deep(.n-spin-container),
+.production-list-state :deep(.n-spin-content) {
+  height: 100%;
+  min-height: 0;
+}
+
+.production-list-state :deep(.n-spin-content) {
+  display: flex;
+  flex-direction: column;
 }
 
 .mobile-workbench-panel {
@@ -760,9 +778,14 @@ onUnmounted(() => {
 
 /* 场景卡片列表 */
 .scene-list {
+  flex: 1;
+  min-height: 0;
   display: flex;
   flex-direction: column;
   gap: 10px;
+  overflow-y: auto;
+  overscroll-behavior: contain;
+  padding-bottom: 12px;
 }
 
 .scene-card {
@@ -850,9 +873,12 @@ onUnmounted(() => {
 
 /* 空状态 */
 .empty-state {
+  flex: 1;
+  min-height: 180px;
   display: flex;
   flex-direction: column;
   align-items: center;
+  justify-content: center;
   gap: 12px;
   padding: 40px 20px;
 }

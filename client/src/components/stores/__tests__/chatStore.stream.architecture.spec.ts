@@ -2,7 +2,7 @@ import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { createPinia, setActivePinia } from 'pinia';
 import { useChatStore } from '../chatStore';
 import { useDirectorAutoWriteStore } from '../directorAutoWriteStore';
-import { getChatTaskStatus } from '@/services/chatService';
+import { compactChatContext, getChatTaskStatus } from '@/services/chatService';
 import bus from '@/eventBus';
 
 vi.mock('@/components/stores/projectStore', () => ({
@@ -12,6 +12,7 @@ vi.mock('@/services/chatService', async () => {
   const actual = await vi.importActual<typeof import('@/services/chatService')>('@/services/chatService');
   return {
     ...actual,
+    compactChatContext: vi.fn(),
     getChatTaskStatus: vi.fn(),
   };
 });
@@ -364,6 +365,50 @@ describe('chatStore NDJSON 消费契约', () => {
     expect(stillRunning).toBe(true);
     expect(session.sending).toBe(true);
     expect(session.backgroundTaskStatus).toBe('running');
+  });
+
+  it('任务状态查询失败时返回未知态而不是误判为结束', async () => {
+    vi.mocked(getChatTaskStatus).mockRejectedValueOnce(new TypeError('Failed to fetch'));
+
+    const store = useChatStore();
+
+    await expect(
+      store._getChatTaskAuthorityState('agent_director', 'global'),
+    ).resolves.toBe('unknown');
+  });
+
+  it('只有权威终态才能解除发送锁定', () => {
+    const store = useChatStore();
+    const session = store.primarySession;
+
+    expect(store._applyChatTaskAuthorityState(session, 'unknown')).toBe(true);
+    expect(session.sending).toBe(true);
+    expect(session.backgroundTaskStatus).toBe('running');
+
+    expect(store._applyChatTaskAuthorityState(session, 'terminal')).toBe(false);
+    expect(session.sending).toBe(false);
+    expect(session.backgroundTaskStatus).toBeNull();
+  });
+
+  it('没有较早上下文可压缩时保留窗口统计且不刷新历史', async () => {
+    vi.mocked(compactChatContext).mockResolvedValueOnce({
+      success: true,
+      compacted: false,
+    });
+    const store = useChatStore();
+    const session = store.primarySession;
+    session.contextWindowStats = { inputTokens: 1200, outputTokens: 80 } as any;
+    const refreshSpy = vi.spyOn(store, 'refreshSessionHistory');
+    const toasts: any[] = [];
+    const onToast = (payload: any) => toasts.push(payload);
+    bus.on('toast', onToast);
+
+    await store.compactSessionContext(session.id);
+
+    bus.off('toast', onToast);
+    expect(session.contextWindowStats).toEqual({ inputTokens: 1200, outputTokens: 80 });
+    expect(refreshSpy).not.toHaveBeenCalled();
+    expect(toasts.at(-1)?.type).toBe('info');
   });
 
   it('状态查询短暂断网时保持运行态并继续按游标恢复观察流', async () => {

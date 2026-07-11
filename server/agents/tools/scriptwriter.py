@@ -262,10 +262,11 @@ def patch_script(search_text: str, replace_text: str) -> str:
     if not os.path.exists(stories_path):
         return "局部修改剧本失败：stories 目录不存在。"
 
-    arc_files = sorted(f for f in os.listdir(stories_path) if f.endswith(".arc"))
+    from story.file_naming import list_story_files
 
-    for filename in arc_files:
-        file_path = os.path.join(stories_path, filename)
+    arc_files = list_story_files(stories_path, file_format="arc")
+
+    for rel_path, file_path, _ in arc_files:
         with open(file_path, "r", encoding="utf-8") as f:
             arc_content = f.read()
         if search_text in arc_content:
@@ -274,17 +275,16 @@ def patch_script(search_text: str, replace_text: str) -> str:
                 search_text,
                 replace_text,
                 validate_content=validate_candidate,
-                file_label=filename,
+                file_label=rel_path,
             )
 
-    for filename in arc_files:
-        file_path = os.path.join(stories_path, filename)
+    for rel_path, file_path, _ in arc_files:
         result = _apply_patch(
             file_path,
             search_text,
             replace_text,
             validate_content=validate_candidate,
-            file_label=filename,
+            file_label=rel_path,
         )
         if not result.startswith("局部修改失败"):
             return result

@@ -45,13 +45,19 @@ class SemanticChunker:
         user_id: str,
         project_name: str,
         use_cache: bool = True,
+        max_source_chars: int = 600_000,
     ) -> list[SemanticChunk]:
         """
         对整个项目执行语义分块。
 
         启用缓存时，仅对新增/变更文件重新分块，未变更文件直接复用缓存。
         """
-        state = self.chunk_project_state(user_id, project_name, use_cache=use_cache)
+        state = self.chunk_project_state(
+            user_id,
+            project_name,
+            use_cache=use_cache,
+            max_source_chars=max_source_chars,
+        )
         return list(state.get("chunks") or [])
 
     def chunk_project_state(
@@ -59,11 +65,16 @@ class SemanticChunker:
         user_id: str,
         project_name: str,
         use_cache: bool = True,
+        max_source_chars: int = 600_000,
     ) -> dict[str, Any]:
         """返回项目分块结果及增量缓存状态。"""
         project_path = get_project_path(user_id, project_name)
         cache_path = os.path.join(project_path, ".chunks_cache.json")
-        files = collect_project_files(user_id, project_name)
+        files = collect_project_files(
+            user_id,
+            project_name,
+            max_source_chars=max_source_chars,
+        )
         outline_data = load_outline_data(user_id, project_name)
         outline_hash = self._compute_outline_hash(outline_data)
         file_hashes = {

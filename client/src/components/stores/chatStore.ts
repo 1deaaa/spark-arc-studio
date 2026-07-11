@@ -75,6 +75,7 @@ type AnyRecord = Record<string, any>;
 
 type ChatSessionKind = 'primary' | 'extra';
 type RetryMode = 'model' | 'transport';
+type ChatTaskAuthorityState = 'running' | 'terminal' | 'missing' | 'unknown';
 
 type ChatSession = {
   id: number;
@@ -986,17 +987,22 @@ export const useChatStore = defineStore('chat', {
             session.toolProgressText = '';
           }
           const canKeepRunning = !session.abortRequested && !abortController.signal.aborted;
-          const stillRunning = canKeepRunning
-            ? await this._isChatTaskStillRunning(agentIdAtStart, contextKeyAtStart)
-            : false;
-          session.sending = false;
-          if (stillRunning) {
-            session.backgroundTaskStatus = 'running';
-            session.sending = true;
-          } else if (!session.abortRequested && session.streamEpoch === streamEpoch) {
-            session.backgroundTaskStatus = null;
-          }
+          const taskState: ChatTaskAuthorityState = streamState?.receivedTaskDone
+            ? 'terminal'
+            : canKeepRunning
+              ? await this._getChatTaskAuthorityState(agentIdAtStart, contextKeyAtStart)
+              : 'terminal';
+          this._applyChatTaskAuthorityState(session, taskState);
           this._finalizeSessionAbort(sessionId, abortController);
+          if (taskState === 'unknown' && session.streamEpoch === streamEpoch) {
+            void this._resumeChatTaskAfterTransportLoss(
+              session,
+              agentIdAtStart,
+              contextKeyAtStart,
+              _getRecoverySeq(null, streamState),
+              streamEpoch,
+            ).catch(error => console.warn('恢复聊天任务状态失败', error));
+          }
         }
       }
     },
@@ -1141,16 +1147,32 @@ export const useChatStore = defineStore('chat', {
       }
     },
 
-    async _isChatTaskStillRunning(agentId: string, contextKey: string): Promise<boolean> {
+    async _getChatTaskAuthorityState(agentId: string, contextKey: string): Promise<ChatTaskAuthorityState> {
       const projectStore = useProjectStore();
       const projectName = projectStore.currentProject;
-      if (!projectName) return false;
+      if (!projectName) return 'missing';
       try {
         const status = await getChatTaskStatus(projectName, agentId, contextKey) as AnyRecord;
-        return !!status?.hasTask && status.status === 'running';
+        if (!status?.hasTask) return 'missing';
+        if (status.status === 'running') return 'running';
+        if (status.status === 'completed' || status.status === 'cancelled' || status.status === 'error') {
+          return 'terminal';
+        }
+        return 'unknown';
       } catch {
-        return false;
+        return 'unknown';
       }
+    },
+
+    _applyChatTaskAuthorityState(session: ChatSession, state: ChatTaskAuthorityState): boolean {
+      const keepLocked = state === 'running' || state === 'unknown';
+      session.sending = keepLocked;
+      session.backgroundTaskStatus = keepLocked ? 'running' : null;
+      return keepLocked;
+    },
+
+    async _isChatTaskStillRunning(agentId: string, contextKey: string): Promise<boolean> {
+      return (await this._getChatTaskAuthorityState(agentId, contextKey)) === 'running';
     },
 
     async checkBackgroundTasks(): Promise<boolean> {
@@ -1373,16 +1395,17 @@ export const useChatStore = defineStore('chat', {
       } finally {
         if (session.streamEpoch === streamEpoch) {
           const canKeepRunning = !session.abortRequested && !abortController.signal.aborted;
-          const stillRunning = canKeepRunning
-            ? await this._isChatTaskStillRunning(agentId, contextKey)
-            : false;
-          session.sending = stillRunning;
-          session.backgroundTaskStatus = stillRunning ? 'running' : null;
+          const taskState: ChatTaskAuthorityState = streamState?.receivedTaskDone
+            ? 'terminal'
+            : canKeepRunning
+              ? await this._getChatTaskAuthorityState(agentId, contextKey)
+              : 'terminal';
+          const keepLocked = this._applyChatTaskAuthorityState(session, taskState);
           this._finalizeSessionAbort(sessionId, abortController);
 
           // 重连流只包含断开后的 delta，本地 assistant 内容不完整。
           // 流结束时后端已将完整消息落盘，移除本地部分消息后刷新历史。
-          if (!stillRunning && !abortController.signal.aborted && assistantMsg) {
+          if (!keepLocked && !abortController.signal.aborted && assistantMsg) {
             const partialClientId = assistantMsg.clientId;
             if (partialClientId) {
               session.history = (session.history || []).filter(
@@ -1390,6 +1413,15 @@ export const useChatStore = defineStore('chat', {
               );
             }
             await this.refreshSessionHistory(sessionId, 80, { silent: true, authoritative: true });
+          }
+          if (taskState === 'unknown' && session.streamEpoch === streamEpoch) {
+            void this._resumeChatTaskAfterTransportLoss(
+              session,
+              agentId,
+              contextKey,
+              _getRecoverySeq(assistantMsg, streamState, afterSeq),
+              streamEpoch,
+            ).catch(error => console.warn('恢复后台聊天任务状态失败', error));
           }
         }
       }
@@ -1461,6 +1493,10 @@ export const useChatStore = defineStore('chat', {
       });
       try {
         const result = await compactChatContext(projectName, session.agentId, session.contextKey, targetTokens) as AnyRecord;
+        if (result.compacted === false) {
+          bus.emit('toast', { type: 'info', message: i18n.global.t('components.chatPanel.compactContextSkipped') });
+          return result;
+        }
         const nextStats = result.contextWindowStats || result.context_window_stats;
         if (nextStats && typeof nextStats === 'object') {
           session.contextWindowStats = extractContextWindowStats({
@@ -1473,6 +1509,7 @@ export const useChatStore = defineStore('chat', {
         }
         await this.refreshSessionHistory(sessionId, 80, { silent: true, authoritative: true });
         bus.emit('toast', { type: 'success', message: i18n.global.t('components.chatPanel.compactContextSuccess') });
+        return result;
       } catch (e: unknown) {
         const message = _getErrorMessage(e, i18n.global.t('components.chatPanel.compactContextFailed'));
         bus.emit('toast', { type: 'error', message });
@@ -1666,17 +1703,22 @@ export const useChatStore = defineStore('chat', {
             session.toolProgressText = '';
           }
           const canKeepRunning = !session.abortRequested && !abortController.signal.aborted;
-          const stillRunning = canKeepRunning
-            ? await this._isChatTaskStillRunning(agentIdAtStart, contextKeyAtStart)
-            : false;
-          session.sending = false;
-          if (stillRunning) {
-            session.backgroundTaskStatus = 'running';
-            session.sending = true;
-          } else if (!session.abortRequested && session.streamEpoch === streamEpoch) {
-            session.backgroundTaskStatus = null;
-          }
+          const taskState: ChatTaskAuthorityState = streamState?.receivedTaskDone
+            ? 'terminal'
+            : canKeepRunning
+              ? await this._getChatTaskAuthorityState(agentIdAtStart, contextKeyAtStart)
+              : 'terminal';
+          this._applyChatTaskAuthorityState(session, taskState);
           this._finalizeSessionAbort(sessionId, abortController);
+          if (taskState === 'unknown' && session.streamEpoch === streamEpoch) {
+            void this._resumeChatTaskAfterTransportLoss(
+              session,
+              agentIdAtStart,
+              contextKeyAtStart,
+              _getRecoverySeq(null, streamState),
+              streamEpoch,
+            ).catch(error => console.warn('恢复编辑任务状态失败', error));
+          }
         }
       }
     },

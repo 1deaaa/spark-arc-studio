@@ -10,6 +10,7 @@ from itertools import combinations
 from typing import Any, Dict, List, Optional
 
 from core.utils import get_project_path
+from core.json_state import load_json_file, save_json_file_atomic, synchronized_json_state
 
 
 STATE_DIR_NAME = ".story_memory"
@@ -191,13 +192,7 @@ class StoryMemoryFacade:
         }
 
     def load_state(self) -> Dict[str, Any]:
-        if not os.path.exists(self.state_path):
-            return self._default_state()
-        try:
-            with open(self.state_path, "r", encoding="utf-8") as f:
-                data = json.load(f) or {}
-        except Exception:
-            return self._default_state()
+        data = load_json_file(self.state_path, self._default_state) or {}
 
         state = self._default_state()
         state.update(data)
@@ -216,11 +211,10 @@ class StoryMemoryFacade:
         normalized.update(state or {})
         normalized["project"] = self.project_name
         normalized["updated_at"] = _utc_now_iso()
-        os.makedirs(self.memory_dir, exist_ok=True)
-        with open(self.state_path, "w", encoding="utf-8") as f:
-            json.dump(normalized, f, ensure_ascii=False, indent=2)
+        save_json_file_atomic(self.state_path, normalized)
         return normalized
 
+    @synchronized_json_state
     def record_scene_write(
         self,
         *,
@@ -924,6 +918,7 @@ class StoryMemoryFacade:
                 merged[str(item.get(id_key))] = item
         return list(merged.values())[-limit:]
 
+    @synchronized_json_state
     def record_quality_review(
         self,
         *,
@@ -1017,6 +1012,7 @@ class StoryMemoryFacade:
         rewrite_required = bool(review.get("rewrite_required", decision != "PASS"))
         return decision == "PASS" and not rewrite_required and not raw_tickets
 
+    @synchronized_json_state
     def _close_quality_tickets_for_review(
         self,
         *,

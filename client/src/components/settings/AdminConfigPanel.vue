@@ -24,9 +24,9 @@
                             <n-switch v-model:value="config.llm_auto_key" @update:value="(val) => updateConfig('llm_auto_key', val)" />
                         </div>
 
-                        <n-divider />
+                        <n-divider v-if="!policyOnly" />
 
-                        <div class="config-item">
+                        <div v-if="!policyOnly" class="config-item">
                             <div class="item-label-group">
                                 <span>{{ t('components.adminConfigPanel.useSysConfig.label') }}</span>
                                 <n-tooltip trigger="hover">
@@ -37,9 +37,9 @@
                             <n-switch v-model:value="config.use_sys_llm_config" @update:value="(val) => updateConfig('use_sys_llm_config', val)" />
                         </div>
 
-                        <n-divider />
+                        <n-divider v-if="!policyOnly" />
 
-                        <div class="config-item">
+                        <div v-if="!policyOnly" class="config-item">
                             <div class="item-label-group">
                                 <span>{{ t('components.adminConfigPanel.disablePublicShare.label') }}</span>
                                 <n-tooltip trigger="hover">
@@ -67,7 +67,7 @@
             </n-card>
 
             <!-- 安全密钥卡片 -->
-            <n-card :title="t('components.adminConfigPanel.securityKeyTitle')" size="small">
+            <n-card v-if="!policyOnly" :title="t('components.adminConfigPanel.securityKeyTitle')" size="small">
                 <div class="key-status">
                     <div v-if="config.llm_key_set" class="status-tip success">
                         <n-icon><CircleCheckBig /></n-icon>
@@ -500,6 +500,10 @@ type LLMKeyPayload = {
     allow_clear_unrecoverable?: boolean;
 };
 
+const { policyOnly = false } = defineProps<{
+    policyOnly?: boolean;
+}>();
+
 async function submitLLMKey(payload: LLMKeyPayload): Promise<void> {
     const res = await fetchWithAuth('/api/admin/config/llm-key', {
         method: 'POST',
@@ -740,7 +744,7 @@ async function saveVerificationDialog() {
 
 onMounted(() => {
     void loadConfig();
-    void loadVerification();
+    if (!policyOnly) void loadVerification();
     bus.on('system-config-updated', handleRemoteUpdate);
 });
 

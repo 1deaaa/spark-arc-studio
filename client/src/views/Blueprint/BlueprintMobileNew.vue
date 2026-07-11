@@ -78,6 +78,25 @@
           {{ t('views.blueprint.mobileNew.noJump') }}
         </div>
 
+        <div v-if="selectedSceneName === scene.scene" class="relation-focus">
+          <div class="relation-focus-metric">
+            <n-icon :component="CornerUpLeft" size="15" />
+            <span>{{ t('views.blueprint.mobileNew.incoming') }}</span>
+            <strong>{{ getIncomingSources(scene).length }}</strong>
+          </div>
+          <div class="relation-focus-metric">
+            <n-icon :component="CornerDownRight" size="15" />
+            <span>{{ t('views.blueprint.mobileNew.outgoing') }}</span>
+            <strong>{{ getSceneJumps(scene).length }}</strong>
+          </div>
+          <div v-if="getIncomingSources(scene).length" class="incoming-sources">
+            <span>{{ t('views.blueprint.mobileNew.incomingFrom') }}</span>
+            <n-tag v-for="source in getIncomingSources(scene)" :key="source" size="tiny" :bordered="false">
+              {{ source }}
+            </n-tag>
+          </div>
+        </div>
+
         <!-- 连接线 -->
         <div v-if="idx < scenes.length - 1" class="connector-line"></div>
       </div>
@@ -102,7 +121,7 @@
 <script setup lang="ts">
 import { ref, computed, inject, watch, onMounted, nextTick, type Ref } from 'vue';
 import { NButton, NIcon, NEmpty, NSelect, NTag } from 'naive-ui';
-import { ArrowRight, GitBranch } from '@lucide/vue';
+import { ArrowRight, CornerDownRight, CornerUpLeft, GitBranch } from '@lucide/vue';
 import { useI18n } from 'vue-i18n';
 import { useSceneStore, type SceneWithClientId } from '../../components/stores/sceneStore';
 import { useFileStore } from '../../components/stores/fileStore';
@@ -152,6 +171,15 @@ function getSceneJumps(scene: SceneWithClientId): JumpInfo[] {
     seen.add(key);
     return true;
   });
+}
+
+function getIncomingSources(targetScene: SceneWithClientId): string[] {
+  const targetName = String(targetScene.scene || '').trim();
+  if (!targetName) return [];
+  return scenes.value
+    .filter(scene => getSceneJumps(scene).some(jump => jump.target === targetName))
+    .map(scene => String(scene.scene || '').trim())
+    .filter(Boolean);
 }
 
 const relationStats = computed(() => {
@@ -225,6 +253,11 @@ watch(projectId, async (newId) => {
 watch(() => fileStore.selectedFile?.path, (p) => {
   if (p) selectedFilePath.value = p;
 });
+
+watch(scenes, (nextScenes) => {
+  const selectedStillExists = nextScenes.some(scene => scene.scene === selectedSceneName.value);
+  if (!selectedStillExists) selectedSceneName.value = nextScenes[0]?.scene || null;
+}, { immediate: true });
 </script>
 
 <style scoped>
@@ -319,9 +352,11 @@ watch(() => fileStore.selectedFile?.path, (p) => {
 
 .scene-relation-list {
   flex: 1;
+  min-height: 0;
   overflow-y: auto;
+  overscroll-behavior: contain;
   padding: 8px 12px;
-  padding-bottom: calc(var(--mobile-bottom-nav-height, 60px) + var(--sab, 0px));
+  padding-bottom: 12px;
 }
 
 .scene-relation-card {
@@ -424,6 +459,50 @@ watch(() => fileStore.selectedFile?.path, (p) => {
   background: color-mix(in srgb, var(--spark-warning) 10%, transparent);
   color: var(--spark-text-muted);
   font-size: var(--spark-fs-xs);
+}
+
+.relation-focus {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 6px;
+  margin-top: 8px;
+  padding-top: 8px;
+  border-top: 1px solid var(--spark-border);
+}
+
+.relation-focus-metric {
+  display: grid;
+  grid-template-columns: auto 1fr auto;
+  align-items: center;
+  gap: 5px;
+  min-width: 0;
+  padding: 7px 8px;
+  border-radius: 6px;
+  background: color-mix(in srgb, var(--spark-primary) 8%, transparent);
+  color: var(--spark-text-muted);
+  font-size: var(--spark-fs-xs);
+}
+
+.relation-focus-metric span {
+  min-width: 0;
+  overflow: hidden;
+  white-space: nowrap;
+  text-overflow: ellipsis;
+}
+
+.relation-focus-metric strong {
+  color: var(--spark-primary);
+}
+
+.incoming-sources {
+  grid-column: 1 / -1;
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 5px;
+  min-width: 0;
+  color: var(--spark-text-muted);
+  font-size: var(--spark-fs-3xs);
 }
 
 .connector-line {

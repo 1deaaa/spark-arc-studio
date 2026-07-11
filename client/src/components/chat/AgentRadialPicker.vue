@@ -935,9 +935,21 @@ onBeforeUnmount(() => {
 }
 
 @media (max-width: 599.9px) {
+  .agent-radial-overlay,
+  .agent-radial-overlay.is-stable {
+    backdrop-filter: none;
+    -webkit-backdrop-filter: none;
+    will-change: auto;
+  }
+
   .agent-radial-wheel {
     --slot-size: 46px;
     --label-offset: 38px;
+  }
+
+  .agent-radial-fade-enter-active .agent-radial-wheel {
+    animation-duration: 0.18s;
+    animation-timing-function: ease-out;
   }
 }
 

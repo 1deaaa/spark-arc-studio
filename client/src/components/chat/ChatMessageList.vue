@@ -40,7 +40,6 @@
               :text="getReasoningSegmentText(seg)"
               :source-agent="String(seg.source_agent || '')"
               :agent-name="getAgentName(seg.source_agent)"
-              :tracker-result="getAgentWorkTracker(seg.source_agent)"
               :streaming="isReasoningSegmentThinking(m, idx, segIdx)"
               :active="isAgentSegmentActive(m, idx, segIdx)"
             />
@@ -59,12 +58,10 @@
               @toggle="toggleToolTrace(getToolTraceKey(m, idx, segIdx))"
             />
             <div v-else-if="seg.type === 'text' && seg.text && seg.text.trim()" class="chat-bubble" :class="{ 'has-agent-avatar': !!seg.source_agent }">
-              <AgentProgressAvatar
+              <AgentAvatar
                 v-if="seg.source_agent"
                 class="agent-avatar-anchor"
                 :agent-id="seg.source_agent"
-                :agent-name="getAgentName(seg.source_agent)"
-                :tracker-result="getAgentWorkTracker(seg.source_agent)"
                 :size="28"
                 :active="isAgentSegmentActive(m, idx, segIdx)"
               />
@@ -299,7 +296,7 @@ import { useI18n } from 'vue-i18n';
 import { NButton, NInput, NPopover, NTooltip, useMessage } from 'naive-ui';
 import MarkdownRenderer from '@/components/share/MarkdownRenderer.vue';
 import SparkAlert from '@/components/share/SparkAlert.vue';
-import AgentProgressAvatar from '@/components/chat/message/AgentProgressAvatar.vue';
+import AgentAvatar from '@/components/share/AgentAvatar.vue';
 import SparkLoaderAnimation from '@/components/share/SparkLoaderAnimation.vue';
 import ContextCompactionSegment from '@/components/chat/message/ContextCompactionSegment.vue';
 import ReasoningSegmentBubble from '@/components/chat/message/ReasoningSegmentBubble.vue';
@@ -308,7 +305,6 @@ import { useAgentRegistry } from '@/composables/useAgentRegistry';
 import { getToolNameLabelKey } from '@/components/stores/chat/toolUi';
 import {
   formatTokenCount,
-  collectLatestWorkTrackers,
   getDisplayContent,
   getMessageSegments,
   getReasoningSegmentText,
@@ -373,12 +369,6 @@ const editingContentLocal = computed({
 });
 
 const listRef = ref(null);
-const latestWorkTrackers = computed(() => collectLatestWorkTrackers(props.history));
-
-function getAgentWorkTracker(agentId?: string) {
-  return latestWorkTrackers.value[String(agentId || '').trim()] ?? null;
-}
-
 // 判断最后一条消息是否是 AI 回复
 const lastMessageIsAssistant = computed(() => {
   const history = props.history || [];

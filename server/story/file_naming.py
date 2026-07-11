@@ -251,6 +251,34 @@ def story_sort_key(rel_path: str) -> tuple:
     )
 
 
+def list_story_files(
+    stories_path: str,
+    *,
+    file_format: str | None = None,
+) -> list[tuple[str, str, Optional[Dict[str, Any]]]]:
+    """递归列出作品正文文件，返回相对路径、绝对路径和文件名元数据。"""
+    if not os.path.isdir(stories_path):
+        return []
+
+    target_ext = story_extension(file_format) if file_format else None
+    entries: list[tuple[tuple, str, str, Optional[Dict[str, Any]]]] = []
+    for root, dirs, files in os.walk(stories_path):
+        dirs.sort()
+        for filename in files:
+            ext = os.path.splitext(filename)[1].lower()
+            if ext not in {".arc", ".md"}:
+                continue
+            if target_ext and ext != target_ext:
+                continue
+            abs_path = os.path.join(root, filename)
+            rel_path = os.path.relpath(abs_path, stories_path).replace(os.sep, "/")
+            parsed = parse_story_filename(filename)
+            entries.append((story_sort_key(rel_path), rel_path, abs_path, parsed))
+
+    entries.sort(key=lambda item: (item[0], item[1].lower()))
+    return [(rel_path, abs_path, parsed) for _, rel_path, abs_path, parsed in entries]
+
+
 def next_story_order(stories_path: str, relative_dir: str = "") -> int:
     directory = os.path.join(stories_path, relative_dir) if relative_dir else stories_path
     max_order = 0

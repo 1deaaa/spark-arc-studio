@@ -115,17 +115,67 @@ def read_chapter_scene(chapter_index: int, scene_index: int | None = None) -> st
     stories_path = get_project_stories_path(user_id, project_name)
     script_info = ""
     if os.path.exists(stories_path):
-        arc_files = sorted([f for f in os.listdir(stories_path) if f.endswith(".arc")])
-        if 0 <= chapter_index < len(arc_files):
-            arc_path = os.path.join(stories_path, arc_files[chapter_index])
-            try:
-                with open(arc_path, "r", encoding="utf-8") as f:
-                    content = f.read()
-                script_info = f"\n\n## 剧本文件: {arc_files[chapter_index]}\n```arc\n{content}\n```"
-            except Exception as e:
-                script_info = f"\n\n读取剧本文件失败: {e}"
+        from story.file_naming import list_story_files
+
+        all_story_files = list_story_files(stories_path)
+        target_chapter_num = chapter_index + 1
+        chapter_files = [
+            entry for entry in all_story_files
+            if entry[2] and entry[2].get("chapter_num") == target_chapter_num
+        ]
+
+        if not chapter_files and chapter_node:
+            chapter_title = str(chapter_node.get("title") or chapter_node.get("name") or "").strip()
+            chapter_files = [
+                entry for entry in all_story_files
+                if chapter_title and entry[0].split("/", 1)[0] == chapter_title
+            ]
+
+        if not chapter_files:
+            chapter_groups: list[list[tuple]] = []
+            group_map: dict[str, list[tuple]] = {}
+            for entry in all_story_files:
+                group_key = entry[0].split("/", 1)[0] if "/" in entry[0] else ""
+                if group_key not in group_map:
+                    group_map[group_key] = []
+                    chapter_groups.append(group_map[group_key])
+                group_map[group_key].append(entry)
+            if 0 <= chapter_index < len(chapter_groups):
+                chapter_files = chapter_groups[chapter_index]
+
+        selected_files = chapter_files
+        if scene_index is not None and chapter_files:
+            target_scene_num = scene_index + 1
+            identity_match = next(
+                (
+                    entry for entry in chapter_files
+                    if entry[2] and entry[2].get("scene_num") == target_scene_num
+                ),
+                None,
+            )
+            selected_files = [identity_match] if identity_match else (
+                [chapter_files[scene_index]] if 0 <= scene_index < len(chapter_files) else []
+            )
+
+        if selected_files:
+            persisted_parts = []
+            for rel_path, story_path, parsed in selected_files:
+                file_format = str((parsed or {}).get("format") or ("novel" if story_path.endswith(".md") else "arc"))
+                fence = "markdown" if file_format == "novel" else "arc"
+                format_label = "小说" if file_format == "novel" else "剧本"
+                try:
+                    with open(story_path, "r", encoding="utf-8") as f:
+                        content = f.read()
+                    persisted_parts.append(
+                        f"## 已落盘{format_label}: {rel_path}\n```{fence}\n{content}\n```"
+                    )
+                except Exception as e:
+                    persisted_parts.append(f"读取正文文件 {rel_path} 失败: {e}")
+            script_info = "\n\n" + "\n\n".join(persisted_parts)
+        elif all_story_files:
+            script_info = "\n\n（未找到与该章节/场景身份匹配的已落盘正文文件）"
         else:
-            script_info = "\n\n（该章节尚无对应的 .arc 剧本文件）"
+            script_info = "\n\n（当前项目尚无已落盘正文文件）"
 
     result = outline_info + script_info
     return result if result.strip() else f"章节 {chapter_index} 没有找到任何内容。"

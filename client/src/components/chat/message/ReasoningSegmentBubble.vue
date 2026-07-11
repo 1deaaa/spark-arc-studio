@@ -3,12 +3,10 @@
     class="chat-bubble reasoning-bubble"
     :class="{ 'has-agent-avatar': !!sourceAgent }"
   >
-    <AgentProgressAvatar
+    <AgentAvatar
       v-if="sourceAgent"
       class="agent-avatar-anchor"
       :agent-id="sourceAgent"
-      :agent-name="agentName"
-      :tracker-result="trackerResult"
       :size="28"
       :active="active"
       :aria-label="avatarAriaLabel"
@@ -58,7 +56,7 @@
 <script setup lang="ts">
 import { computed, nextTick, onBeforeUnmount, ref, watch } from 'vue';
 import { useI18n } from 'vue-i18n';
-import AgentProgressAvatar from './AgentProgressAvatar.vue';
+import AgentAvatar from '@/components/share/AgentAvatar.vue';
 import MarkdownRenderer from '@/components/share/MarkdownRenderer.vue';
 
 type RevealPhase = '' | 'opening' | 'closing';
@@ -77,7 +75,6 @@ const props = withDefaults(defineProps<{
   agentName?: string;
   streaming?: boolean;
   active?: boolean;
-  trackerResult?: unknown;
 }>(), {
   sourceAgent: '',
   agentName: '',

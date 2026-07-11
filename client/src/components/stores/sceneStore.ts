@@ -51,6 +51,8 @@ type StoryCacheSnapshot = {
 };
 
 const lastPersistedStoryPayload = new Map<string, string>();
+const storySaveChains = new Map<string, Promise<void>>();
+let storyLoadRequestSeq = 0;
 
 function getErrorMessage(error: unknown): string {
   if (error instanceof Error) return error.message;
@@ -223,6 +225,7 @@ export const useSceneStore = defineStore('scene', {
       }
     },
     async loadStory(filePath: string | null | undefined) {
+      const requestId = ++storyLoadRequestSeq;
         if (!filePath) {
           this.scriptData = [];
           this.currentFilePath = null;
@@ -236,13 +239,17 @@ export const useSceneStore = defineStore('scene', {
       }
       try {
         const projectStore = useProjectStore();
-        const cacheKey = buildStoryCacheKey(projectStore.currentProject, filePath);
+        const requestedProject = String(projectStore.currentProject || '');
+        const cacheKey = buildStoryCacheKey(requestedProject, filePath);
         const cached = loadCreativeCache<StoryCacheSnapshot>(cacheKey);
         if (cached && cached.currentFilePath === filePath) {
           this._applyStorySnapshot(cached);
         }
 
-        const data = await fetchStoryFile(String(projectStore.currentProject || ''), filePath);
+        const data = await fetchStoryFile(requestedProject, filePath);
+        if (requestId !== storyLoadRequestSeq || String(projectStore.currentProject || '') !== requestedProject) {
+          return;
+        }
         const remoteSnapshot = normalizeStoryResponse(filePath, data);
         const localSnapshot = buildStorySnapshot(filePath, this);
         if (!isCreativeCacheEqual(localSnapshot, remoteSnapshot)) {
@@ -260,21 +267,36 @@ export const useSceneStore = defineStore('scene', {
         // Silently fail if no project or file is selected
         return;
       }
+      const projectName = String(projectStore.currentProject);
+      const filePath = this.currentFilePath;
+      const dataToSave = serializeStoryDataForSave(filePath, this.scriptData);
+      const cacheKey = buildStoryCacheKey(projectName, filePath);
+      const persistKey = `${projectName}:${filePath}`;
+      saveCreativeCache(cacheKey, buildStorySnapshot(filePath, this));
+
+      const previousSave = storySaveChains.get(persistKey) || Promise.resolve();
+      const currentSave = previousSave
+        .catch(() => undefined)
+        .then(async () => {
+          if (lastPersistedStoryPayload.get(persistKey) === dataToSave) {
+            return;
+          }
+          await saveStory(projectName, filePath, dataToSave);
+          lastPersistedStoryPayload.set(persistKey, dataToSave);
+        });
+      storySaveChains.set(persistKey, currentSave);
+
       try {
-        const dataToSave = serializeStoryDataForSave(this.currentFilePath, this.scriptData);
-        const cacheKey = buildStoryCacheKey(projectStore.currentProject, this.currentFilePath);
-        saveCreativeCache(cacheKey, buildStorySnapshot(this.currentFilePath, this));
-        const persistKey = `${projectStore.currentProject}:${this.currentFilePath}`;
-        if (lastPersistedStoryPayload.get(persistKey) === dataToSave) {
-          return;
-        }
-        await saveStory(projectStore.currentProject, this.currentFilePath, dataToSave);
-        lastPersistedStoryPayload.set(persistKey, dataToSave);
+        await currentSave;
         bus.emit('toast', { type: 'success', message: '已保存' });
         bus.emit('saved');
       } catch (error: unknown) {
         bus.emit('toast', { type: 'error', message: `保存失败: ${getErrorMessage(error)}` });
         console.error('保存剧本失败:', error);
+      } finally {
+        if (storySaveChains.get(persistKey) === currentSave) {
+          storySaveChains.delete(persistKey);
+        }
       }
     },
     selectScene(scene: SceneWithClientId) {

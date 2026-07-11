@@ -89,3 +89,26 @@ def test_vector_service_does_not_use_cloud_when_local_runtime_is_selected(
         service._get_embeddings()
 
     assert cloud_calls["count"] == 0
+
+
+def test_vector_index_hashes_include_arc_after_large_root_file(monkeypatch, tmp_path) -> None:
+    monkeypatch.setattr("core.utils.USERDATA_ROOT", str(tmp_path))
+    monkeypatch.setattr(
+        "core.project_settings.is_visual_illustration_enabled",
+        lambda user_id, project_name: False,
+    )
+    monkeypatch.setattr(
+        "core.project_settings.is_attachment_index_enabled",
+        lambda user_id, project_name: False,
+    )
+    project_path = tmp_path / "uid_u-large" / "projects" / "长文本项目"
+    stories_path = project_path / "stories" / "一 · 开端"
+    stories_path.mkdir(parents=True)
+    (project_path / "世界观.txt").write_text("世" * 610_000, encoding="utf-8")
+    arc_path = stories_path / "1-1 初遇.__spark__chap=001.scene=001.order=001001.arc"
+    arc_path.write_text("# 1-1 初遇\n[旁白]\n必须进入语义索引的正文。", encoding="utf-8")
+
+    service = vector_service.VectorIndexService("u-large", "长文本项目")
+    hashes = service._compute_file_hashes()
+
+    assert "stories/一 · 开端/1-1 初遇.__spark__chap=001.scene=001.order=001001.arc" in hashes

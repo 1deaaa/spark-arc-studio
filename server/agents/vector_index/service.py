@@ -32,6 +32,9 @@ from .embedding_contract import (
 
 _build_state_registry: dict[str, dict] = {}
 _build_state_lock = threading.Lock()
+_VECTOR_INDEX_MAX_SOURCE_CHARS = int(
+    os.getenv("SPARKARC_VECTOR_INDEX_MAX_SOURCE_CHARS", "1000000000")
+)
 
 
 # ==================== 辅助函数 ====================
@@ -485,7 +488,12 @@ class VectorIndexService:
             self._check_cancelled()
             metadata = self._load_meta() if self._table_exists() else {}
             chunker = SemanticChunker()
-            chunk_state = chunker.chunk_project_state(self.user_id, self.project_name, use_cache=True)
+            chunk_state = chunker.chunk_project_state(
+                self.user_id,
+                self.project_name,
+                use_cache=True,
+                max_source_chars=_VECTOR_INDEX_MAX_SOURCE_CHARS,
+            )
             self._check_cancelled()
             chunks_by_file = {
                 str(rel_path): list(file_chunks)
@@ -1081,7 +1089,11 @@ class VectorIndexService:
         会导致 ``semantic_search(scope=["attachment"])`` 命中旧索引甚至查不到附件。
         """
         hashes: dict[str, str] = {}
-        files = collect_project_files(self.user_id, self.project_name)
+        files = collect_project_files(
+            self.user_id,
+            self.project_name,
+            max_source_chars=_VECTOR_INDEX_MAX_SOURCE_CHARS,
+        )
         for pf in files:
             try:
                 hashes[pf.rel_path] = hashlib.md5(pf.content.encode("utf-8")).hexdigest()

@@ -298,21 +298,6 @@ def semantic_search(query: str, scope: list[str] | None = None, k: int = 8) -> s
             "并确保已在「设置 → AI管理」中配置了可用的 Embedding 模型。"
         )
 
-    try:
-        from llm.agen_matchbox import matchbox
-
-        matchbox().get_user_embedding(user_id)
-    except ValueError as e:
-        error_msg = str(e)
-        if "未找到可用的 Embedding" in error_msg:
-            return (
-                "语义搜索失败：嵌入模型不可用。"
-                "请引导用户前往「设置 → AI管理」中配置并选择一个可用的 Embedding 模型。"
-            )
-        return f"语义搜索失败：嵌入模型配置异常（{error_msg}）。请引导用户检查 Embedding 模型配置。"
-    except Exception as e:
-        return f"语义搜索失败：嵌入模型初始化异常（{e}）。请引导用户检查 Embedding 模型配置。"
-
     from agents.vector_index import VectorIndexService
     from agents.vector_index.service import IndexBuildNotReadyError
 

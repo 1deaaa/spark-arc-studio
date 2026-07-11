@@ -112,7 +112,7 @@
 <script setup lang="ts">
 import { ref, onMounted, watch, nextTick, h, computed } from 'vue';
 import { NForm, NFormItem, NColorPicker, NSelect, NText, NTooltip, NIcon, NPopover } from 'naive-ui';
-import { Info } from '@lucide/vue';
+import { Apple, Info, Monitor, Smartphone, Terminal } from '@lucide/vue';
 import { useThemeStore } from '../stores/themeStore';
 import { useI18n } from 'vue-i18n';
 
@@ -168,18 +168,14 @@ const PLATFORM = {
     linux: 'linux',
 };
 
-const platformEmoji = (p) => {
-    if (p === PLATFORM.windows) return '💻';
-    if (p === PLATFORM.android) return '📱';
-    if (p === PLATFORM.ios) return '🍎';
-    if (p === PLATFORM.linux) return '🐧';
-    return '';
-};
-
 const PlatformIcon = (p) => {
-    const emoji = platformEmoji(p);
-    if (emoji) return h('span', { class: 'platform-emoji', title: emoji }, emoji);
-    return null;
+    const icon = {
+        [PLATFORM.windows]: Monitor,
+        [PLATFORM.android]: Smartphone,
+        [PLATFORM.ios]: Apple,
+        [PLATFORM.linux]: Terminal,
+    }[p];
+    return icon ? h(NIcon, { class: 'platform-icon', component: icon, size: 14, title: p, 'aria-label': p }) : null;
 };
 
 const makeFontOption = (label, value, platforms) => ({
@@ -444,7 +440,7 @@ const renderFontOptionLabel = (option) => {
     color: color-mix(in srgb, var(--spark-text-muted), var(--spark-primary) 18%);
 }
 
-.platform-emoji {
+.platform-icon {
     display: inline-flex;
     align-items: center;
     justify-content: center;
@@ -453,8 +449,7 @@ const renderFontOptionLabel = (option) => {
     border-radius: 6px;
     border: 1px solid color-mix(in srgb, var(--spark-border), transparent 10%);
     background: color-mix(in srgb, var(--spark-panel-bg), transparent 18%);
-    font-size: var(--spark-fs-sm);
-    line-height: 1;
+    color: currentColor;
 }
 
 .appearance-preview {
