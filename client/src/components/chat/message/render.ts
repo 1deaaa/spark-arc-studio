@@ -265,7 +265,6 @@ export function collectLatestWorkTrackers(history: ChatMessageItem[] | null | un
       if (String(segment.tool_name || '').trim() !== 'work_tracker') continue;
       const agentId = String(segment.source_agent || '').trim();
       if (!agentId) continue;
-      if (String(segment.tool_action || '').trim() === 'clear') continue;
       if (segment.tool_result !== null && segment.tool_result !== undefined && String(segment.tool_result).trim()) {
         latest[agentId] = segment.tool_result;
       }

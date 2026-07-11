@@ -4,7 +4,6 @@
     <HeaderToolbar
       :username="username"
       @open-settings="openSettings"
-      @auto-save-changed="onAutoSaveChanged"
       @logout="onLogout"
       @open-version-manager="openVersionManager"
     />
@@ -175,10 +174,6 @@ onMounted(() => {
 onUnmounted(() => {
   bus.off('post-login-ready', onPostLoginReady);
 });
-
-function onAutoSaveChanged(_v: boolean) {
-  // autoSaveEnabled 已改为 computed 读 localStorage，无需手动赋值
-}
 
 function openVersionManager() {
   versionManagerVisible.value = true;

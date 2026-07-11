@@ -30,7 +30,7 @@ def test_pending_delegate_history_keeps_only_matching_tool_call() -> None:
             {
                 "id": "call_tracker",
                 "name": "work_tracker",
-                "args": {"action": "update"},
+                "args": {"operations": [{"operation": "set_status"}]},
                 "type": "tool_call",
             },
             {
@@ -45,7 +45,7 @@ def test_pending_delegate_history_keeps_only_matching_tool_call() -> None:
                 {
                     "id": "call_tracker",
                     "type": "function",
-                    "function": {"name": "work_tracker", "arguments": "{\"action\":\"update\"}"},
+                    "function": {"name": "work_tracker", "arguments": "{\"operations\":[]}"},
                 },
                 {
                     "id": "call_delegate",
@@ -119,7 +119,6 @@ def test_tracker_progress_update_requires_explicit_overwrite_or_operations() -> 
     assert _is_tracker_progress_update(
         "work_tracker",
         {
-            "action": "update",
             "overwrite": True,
             "items": [
                 {"task": "生成梗概", "status": "completed"},
@@ -131,7 +130,6 @@ def test_tracker_progress_update_requires_explicit_overwrite_or_operations() -> 
     assert _is_tracker_progress_update(
         "work_tracker",
         {
-            "action": "update",
             "operations": [
                 {"operation": "set_status", "item_id": "task_1", "status": "completed"},
             ],
@@ -141,19 +139,18 @@ def test_tracker_progress_update_requires_explicit_overwrite_or_operations() -> 
     assert _is_tracker_progress_update(
         "work_tracker",
         {
-            "action": "update",
             "items": [{"task": "不允许隐式覆盖", "status": "completed"}],
         },
         "共 1 个任务",
     ) is False
     assert _is_tracker_progress_update(
         "work_tracker",
-        {"action": "read"},
+        {},
         "共 2 个任务",
     ) is False
     assert _is_tracker_progress_update(
         "work_tracker",
-        {"action": "update"},
+        {},
         "共 2 个任务",
     ) is False
 

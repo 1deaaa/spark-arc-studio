@@ -1,7 +1,7 @@
 <template>
   <div id="ai-screenwriter" class="right-panel-section" v-show="visible">
     <n-card 
-      title="AI 编剧" 
+      :title="t('nodeEditor.presentation.toolboxTitle')"
       :segmented="{ content: true }" 
       :bordered="false"
       size="small"
@@ -10,157 +10,124 @@
         <n-icon :component="SquarePen" size="20" />
       </template>
 
-      <n-form label-placement="top" size="medium">
-        <!-- 模式选择 -->
-        <n-form-item label="模式" v-if="!hideModeSelector && modeOptions.length > 1">
-          <n-select 
-            v-model:value="mode" 
-            id="ai-mode-select" 
-            placeholder="选择生成模式"
-            :options="modeOptions"
-          />
-        </n-form-item>
+      <n-form class="toolbox-form" label-placement="top" size="medium">
+        <section v-if="canEditPresentation" class="toolbox-module image-generation-module">
+          <div class="toolbox-module-heading">
+            <n-icon :component="Images" />
+            <span>{{ t('nodeEditor.presentation.imageGenerationModule') }}</span>
+          </div>
 
-        <div v-if="canEditPresentation" class="presentation-tools">
-          <div class="presentation-section-heading">
-            <n-icon :component="ImagePlus" />
-            <span>{{ t('nodeEditor.presentation.presentationCue') }}</span>
+          <div class="presentation-model-control">
+            <div class="toolbox-field-label">{{ t('nodeEditor.presentation.imageModelLabel') }}</div>
+            <n-select
+              v-model:value="selectedImageModelKey"
+              class="presentation-wide-select"
+              size="small"
+              clearable
+              :loading="imageModelsLoading"
+              :options="imageModelSelectOptions"
+              :placeholder="t('nodeEditor.presentation.imageModelPlaceholder')"
+            />
+            <n-text v-if="!imageModelsLoading && availableImageModels.length === 0" depth="3" class="presentation-tool-tip">
+              {{ t('nodeEditor.presentation.imageModelMissing') }}
+            </n-text>
           </div>
 
           <div class="presentation-tool-stack">
-            <div class="presentation-style-card presentation-reference-card">
-              <div class="presentation-tool-heading">
-                <n-icon :component="Palette" />
-                <span>{{ t('nodeEditor.presentation.styleReference') }}</span>
+            <div class="presentation-tool-heading">
+              <n-icon :component="ImagePlus" />
+              <span>{{ t('nodeEditor.presentation.background') }}</span>
+            </div>
+            <n-select
+              :value="currentBackgroundId || null"
+              size="small"
+              clearable
+              filterable
+              :options="backgroundAssetOptions"
+              :placeholder="t('nodeEditor.presentation.backgroundLibrarySelect')"
+              @update:value="setDialoguePresentationValue('bg', $event || null)"
+            />
+            <div class="background-preview" :class="{ 'is-empty': !currentBackgroundPreviewUrl || backgroundPreviewFailed }">
+              <img
+                v-if="currentBackgroundPreviewUrl && !backgroundPreviewFailed"
+                :src="currentBackgroundPreviewUrl"
+                :alt="t('nodeEditor.presentation.background')"
+                @error="backgroundPreviewFailed = true"
+              />
+              <div v-else class="background-preview-empty">
+                <n-icon :component="ImagePlus" />
+                <span>
+                  {{ currentBackgroundId
+                    ? t('nodeEditor.presentation.backgroundPreviewUnavailable')
+                    : t('nodeEditor.presentation.noBackground') }}
+                </span>
               </div>
+            </div>
+            <div class="toolbox-field-label">{{ t('nodeEditor.presentation.conceptionLabel') }}</div>
+            <n-input
+              v-model:value="illustrationPrompt"
+              type="textarea"
+              size="small"
+              :autosize="{ minRows: 2, maxRows: 4 }"
+              :placeholder="t('nodeEditor.presentation.conceptionPlaceholder')"
+              @blur="saveIllustrationPrompt"
+            />
+            <div v-if="visualIllustrationEnabled" class="presentation-participants">
+              <div class="toolbox-field-label">{{ t('nodeEditor.presentation.participatingCharacters') }}</div>
               <n-select
-                v-model:value="selectedStyleReferenceId"
-                class="presentation-wide-select"
-                size="small"
+                v-model:value="presentationCharacterIds"
+                multiple
                 clearable
-                :options="styleReferenceOptions"
-                :placeholder="t('nodeEditor.presentation.styleReferenceSelect')"
+                filterable
+                size="small"
+                :options="characterOptions"
+                :placeholder="t('nodeEditor.presentation.participatingCharactersPlaceholder')"
+                @update:value="savePresentationCharacters"
               />
               <n-text depth="3" class="presentation-tool-tip">
-                {{ selectedStyleReferenceLabel || t('nodeEditor.presentation.nodeStyleReferenceHint') }}
+                {{ t('nodeEditor.presentation.participatingCharactersHint') }}
               </n-text>
             </div>
-
-            <div class="presentation-control-grid">
-              <div class="presentation-control-card">
-                <div class="presentation-tool-heading">
-                  <n-icon :component="ImagePlus" />
-                  <span>{{ t('nodeEditor.presentation.background') }}</span>
-                </div>
-                <div class="presentation-current-line" :class="{ 'is-empty': !currentBackgroundId }">
-                  {{ currentBackgroundId || t('nodeEditor.presentation.noBackground') }}
-                </div>
-                <n-input
-                  v-model:value="backgroundPrompt"
-                  type="textarea"
-                  size="small"
-                  :autosize="{ minRows: 2, maxRows: 4 }"
-                  :placeholder="t('nodeEditor.presentation.generatePromptPlaceholder')"
-                />
-                <n-space :size="8" wrap align="center">
-                  <n-button size="small" secondary :loading="backgroundUploading" @click="triggerBackgroundUpload">
-                    <template #icon>
-                      <n-icon :component="Upload" />
-                    </template>
-                    {{ t('nodeEditor.presentation.uploadBackground') }}
-                  </n-button>
-                  <n-button
-                    v-if="currentBackgroundId"
-                    size="small"
-                    secondary
-                    type="warning"
-                    @click="clearDialogueBackground"
-                  >
-                    <template #icon>
-                      <n-icon :component="Eraser" />
-                    </template>
-                    {{ t('nodeEditor.presentation.clearBackground') }}
-                  </n-button>
-                  <n-button
-                    size="small"
-                    type="primary"
-                    secondary
-                    :disabled="!canGenerateBackground"
-                    :loading="backgroundGenerating"
-                    @click="generateBackgroundByAI"
-                  >
-                    <template #icon>
-                      <n-icon :component="Sparkles" />
-                    </template>
-                    {{ t('nodeEditor.presentation.generateBackground') }}
-                  </n-button>
-                </n-space>
-                <input
-                  ref="backgroundFileInputRef"
-                  class="presentation-hidden-input"
-                  type="file"
-                  accept="image/png,image/jpeg,image/webp"
-                  @change="onBackgroundFileChange"
-                />
-              </div>
-
-              <div class="presentation-control-card">
-                <div class="presentation-tool-heading">
-                  <n-icon :component="UserRound" />
-                  <span>{{ t('nodeEditor.presentation.sprite') }}</span>
-                </div>
-                <div class="presentation-current-line" :class="{ 'is-empty': !currentSpriteId }">
-                  {{ currentSpriteId || t('nodeEditor.presentation.noSprite') }}
-                </div>
-                <n-input
-                  v-model:value="spritePrompt"
-                  type="textarea"
-                  size="small"
-                  :autosize="{ minRows: 2, maxRows: 4 }"
-                  :placeholder="t('nodeEditor.presentation.generateSpritePromptPlaceholder')"
-                />
-                <n-space :size="8" wrap align="center">
-                  <n-button size="small" secondary :loading="spriteUploading" @click="triggerSpriteUpload">
-                    <template #icon>
-                      <n-icon :component="Upload" />
-                    </template>
-                    {{ t('nodeEditor.presentation.uploadSprite') }}
-                  </n-button>
-                  <n-button
-                    v-if="currentSpriteId"
-                    size="small"
-                    secondary
-                    type="warning"
-                    @click="clearDialogueSprite"
-                  >
-                    <template #icon>
-                      <n-icon :component="Eraser" />
-                    </template>
-                    {{ t('nodeEditor.presentation.clearSprite') }}
-                  </n-button>
-                  <n-button
-                    size="small"
-                    type="primary"
-                    secondary
-                    :disabled="!canGenerateSprite"
-                    :loading="spriteGenerating"
-                    @click="generateSpriteByAI"
-                  >
-                    <template #icon>
-                      <n-icon :component="Sparkles" />
-                    </template>
-                    {{ t('nodeEditor.presentation.generateSprite') }}
-                  </n-button>
-                </n-space>
-                <input
-                  ref="spriteFileInputRef"
-                  class="presentation-hidden-input"
-                  type="file"
-                  accept="image/png,image/jpeg,image/webp"
-                  @change="onSpriteFileChange"
-                />
-              </div>
-            </div>
+            <n-space :size="8" wrap align="center">
+              <n-button size="small" secondary :loading="backgroundUploading" @click="triggerBackgroundUpload">
+                <template #icon>
+                  <n-icon :component="Upload" />
+                </template>
+                {{ t('nodeEditor.presentation.uploadBackground') }}
+              </n-button>
+              <n-button
+                v-if="currentBackgroundId"
+                size="small"
+                secondary
+                type="warning"
+                @click="clearDialogueBackground"
+              >
+                <template #icon>
+                  <n-icon :component="Eraser" />
+                </template>
+                {{ t('nodeEditor.presentation.clearBackground') }}
+              </n-button>
+              <n-button
+                size="small"
+                type="primary"
+                secondary
+                :disabled="!canGenerateBackground"
+                :loading="backgroundGenerating"
+                @click="generateBackgroundByAI"
+              >
+                <template #icon>
+                  <n-icon :component="Sparkles" />
+                </template>
+                {{ t('nodeEditor.presentation.generateBackground') }}
+              </n-button>
+            </n-space>
+            <input
+              ref="backgroundFileInputRef"
+              class="presentation-hidden-input"
+              type="file"
+              accept="image/png,image/jpeg,image/webp"
+              @change="onBackgroundFileChange"
+            />
 
             <div v-if="visualIllustrationEnabled" class="presentation-style-card presentation-illustration-card">
               <div class="presentation-tool-heading">
@@ -170,14 +137,6 @@
               <div class="presentation-current-line" :class="{ 'is-empty': !currentIllustrationId }">
                 {{ currentIllustrationId || t('nodeEditor.presentation.noIllustration') }}
               </div>
-              <n-input
-                v-model:value="illustrationPrompt"
-                type="textarea"
-                size="small"
-                :autosize="{ minRows: 3, maxRows: 7 }"
-                :placeholder="t('nodeEditor.presentation.illustrationPromptPlaceholder')"
-                @blur="saveIllustrationPrompt"
-              />
               <n-radio-group v-model:value="illustrationBatchScope" size="small">
                 <n-radio-button value="scene">{{ t('nodeEditor.presentation.batchScopeScene') }}</n-radio-button>
                 <n-radio-button value="file">{{ t('nodeEditor.presentation.batchScopeFile') }}</n-radio-button>
@@ -228,20 +187,24 @@
               />
             </div>
 
-            <n-select
-              v-model:value="selectedImageModelKey"
-              class="presentation-wide-select"
-              size="small"
-              clearable
-              :loading="imageModelsLoading"
-              :options="imageModelSelectOptions"
-              :placeholder="t('nodeEditor.presentation.imageModelPlaceholder')"
-            />
-            <n-text v-if="!imageModelsLoading && availableImageModels.length === 0" depth="3" class="presentation-tool-tip">
-              {{ t('nodeEditor.presentation.imageModelMissing') }}
-            </n-text>
           </div>
-        </div>
+        </section>
+
+        <section class="toolbox-module continuation-module">
+          <div class="toolbox-module-heading">
+            <n-icon :component="Zap" />
+            <span>{{ t('nodeEditor.presentation.continuationModule') }}</span>
+          </div>
+
+          <!-- 模式选择 -->
+          <n-form-item class="continuation-mode-selector" :label="t('nodeEditor.presentation.modeLabel')" v-if="!hideModeSelector && modeOptions.length > 1">
+            <n-select
+              v-model:value="mode"
+              id="ai-mode-select"
+              :placeholder="t('nodeEditor.presentation.modePlaceholder')"
+              :options="modeOptions"
+            />
+          </n-form-item>
 
         <!-- 单段续写控件 -->
         <div v-show="mode === 'single-node'" class="mode-content">
@@ -544,6 +507,7 @@
             </n-space>
           </div>
         </div>
+        </section>
       </n-form>
     </n-card>
   </div>
@@ -554,7 +518,7 @@ import { computed, onBeforeUnmount, onMounted, ref, watch } from 'vue';
 import { useI18n } from 'vue-i18n';
 import { NCard, NForm, NFormItem, NSelect, NInputNumber, NButton, NInput, NIcon, NSpace, NTag, NDivider, NText, NRadioButton, NRadioGroup, useDialog } from 'naive-ui';
 import SparkAlert from '@/components/share/SparkAlert.vue';
-import { ChartColumn, CircleCheck, Eraser, FileText, Files, GitBranch, ImagePlus, Images, Palette, RefreshCw, Sparkles, SquarePen, Upload, UserRound, Zap } from '@lucide/vue';
+import { ChartColumn, CircleCheck, Eraser, FileText, Files, GitBranch, ImagePlus, Images, RefreshCw, Sparkles, SquarePen, Upload, Zap } from '@lucide/vue';
 import bus from '@/eventBus';
 import MarkdownRenderer from '@/components/share/MarkdownRenderer.vue';
 import { useSceneStore } from '@/components/stores/sceneStore';
@@ -567,10 +531,8 @@ import {
   fetchPresentationManifest,
   generatePresentationBackground,
   generatePresentationIllustration,
-  generatePresentationSprite,
   uploadPresentationBackground,
   uploadPresentationIllustration,
-  uploadPresentationSprite,
   type PresentationAsset,
   type PresentationImageModel,
   type PresentationManifest,
@@ -578,7 +540,6 @@ import {
 } from '@/services/presentationService';
 import { supportsImageInput } from '@/services/modelModalities';
 import { createStreamingTask, consumeSSEReader, isAbortLikeError, parseSSEEventPayload } from '@/utils/streamingRuntime';
-import { matteSprite } from '@/utils/spriteMatting';
 import type { CancelLoadingPayload } from '@/eventBus';
 import type { StoryCharacterDetail } from '@/services/aiContracts';
 import { formatSpeakerMarker, type ArcDialogueNode, type ArcScene, type PresentationCue } from '@/services/arcParser';
@@ -744,21 +705,18 @@ const multiPrompt = ref('');
 const multiSegments = ref(0);
 const characters = ref<StoryCharacterDetail[]>([]);
 const selectedCharacterIds = ref<string[]>([]);
+const presentationCharacterIds = ref<string[]>([]);
 let abortController: AbortController | null = null;
 
 const backgroundFileInputRef = ref<HTMLInputElement | null>(null);
-const spriteFileInputRef = ref<HTMLInputElement | null>(null);
 const illustrationFileInputRef = ref<HTMLInputElement | null>(null);
 const backgroundUploading = ref(false);
 const backgroundGenerating = ref(false);
-const spriteUploading = ref(false);
-const spriteGenerating = ref(false);
 const illustrationUploading = ref(false);
 const illustrationGenerating = ref(false);
 const illustrationBatchGenerating = ref(false);
 const illustrationBatchScope = ref<'scene' | 'file'>('scene');
-const backgroundPrompt = ref('');
-const spritePrompt = ref('');
+const backgroundPreviewFailed = ref(false);
 const illustrationPrompt = ref('');
 const imageModels = ref<PresentationImageModel[]>([]);
 const imageModelsLoading = ref(false);
@@ -766,8 +724,6 @@ const selectedImageModelKey = ref<string | null>(null);
 const presentationManifest = ref<PresentationManifest | null>(null);
 const selectedStyleReferenceId = ref<string | null>(null);
 const visualIllustrationEnabled = ref(false);
-const spriteChromaKey = ref('#00FF00');
-const spriteMattingMode = ref('chroma_key');
 
 // 重写场景
 const rewriteThought = ref('');
@@ -847,33 +803,25 @@ const currentPresentation = computed<Record<string, unknown>>(() => {
 });
 
 const currentBackgroundId = computed(() => normalizePresentationValue(currentPresentation.value.bg));
-const currentSpriteId = computed(() => normalizePresentationValue(currentPresentation.value.sprite));
 const currentIllustrationId = computed(() => normalizePresentationValue(currentPresentation.value.illustration));
-
-const currentSpriteCharacterId = computed(() => {
-  const node = currentDialogueNode.value;
-  return node ? characterIdForNode(node) : '';
-});
 
 const manifestAssets = computed<Record<string, PresentationAsset>>(() => {
   const assets = presentationManifest.value?.assets;
   return assets && typeof assets === 'object' ? assets : {};
 });
 
-const styleReferenceOptions = computed(() => Object.values(manifestAssets.value)
-  .filter(asset => asset.type === 'style_reference')
+const currentBackgroundAsset = computed(() => manifestAssets.value[currentBackgroundId.value] || null);
+const currentBackgroundPreviewUrl = computed(() => (
+  currentBackgroundAsset.value ? presentationAssetUrl(currentBackgroundAsset.value) : ''
+));
+
+const backgroundAssetOptions = computed(() => Object.values(manifestAssets.value)
+  .filter(asset => asset.type === 'background')
   .sort((a, b) => String(b.createdAt || '').localeCompare(String(a.createdAt || '')))
   .map(asset => ({
-    label: `${t('nodeEditor.presentation.styleReference')} · ${asset.title || asset.id}`,
+    label: asset.title || asset.id,
     value: asset.id,
   })));
-
-const selectedStyleReferenceLabel = computed(() => {
-  const id = selectedStyleReferenceId.value;
-  if (!id) return '';
-  const asset = manifestAssets.value[id];
-  return asset ? t('nodeEditor.presentation.activeStyleReference', { value: asset.title || asset.id }) : '';
-});
 
 const availableImageModels = computed(() => imageModels.value.filter(model => model.api_key_set !== false));
 
@@ -893,15 +841,8 @@ const selectedImageModel = computed(() => {
 
 const canGenerateBackground = computed(() =>
   !!projectStore.currentProject
-  && !!backgroundPrompt.value.trim()
+  && !!illustrationPrompt.value.trim()
   && !!selectedImageModel.value
-);
-
-const canGenerateSprite = computed(() =>
-  !!projectStore.currentProject
-  && !!spritePrompt.value.trim()
-  && !!selectedImageModel.value
-  && !!currentSpriteCharacterId.value
 );
 
 const canGenerateIllustration = computed(() =>
@@ -933,11 +874,21 @@ const canBatchGenerateIllustrations = computed(() =>
 
 watch(() => currentDialogueNode.value?.id, () => {
   illustrationPrompt.value = normalizePresentationValue(currentPresentation.value.illustration_prompt);
+  presentationCharacterIds.value = normalizePresentationList(currentPresentation.value.characters);
 }, { immediate: true });
+
+watch(currentBackgroundPreviewUrl, () => {
+  backgroundPreviewFailed.value = false;
+});
 
 function normalizePresentationValue(value: unknown): string {
   const raw = Array.isArray(value) ? value[0] : value;
   return typeof raw === 'string' ? raw.trim() : '';
+}
+
+function normalizePresentationList(value: unknown): string[] {
+  const values = Array.isArray(value) ? value : (value ? [value] : []);
+  return Array.from(new Set(values.map(item => String(item || '').trim()).filter(Boolean)));
 }
 
 function imageModelKey(model: PresentationImageModel) {
@@ -952,6 +903,18 @@ function presentationErrorMessage(error: unknown, fallback: string) {
   if (error instanceof Error && error.message.trim()) return error.message;
   const raw = String(error || '').trim();
   return raw || fallback;
+}
+
+function presentationAssetUrl(asset: PresentationAsset) {
+  if (asset.url) return asset.url;
+  const projectName = encodeURIComponent(projectStore.currentProject || '');
+  const path = String(asset.path || '')
+    .replace(/\\/g, '/')
+    .split('/')
+    .filter(Boolean)
+    .map(encodeURIComponent)
+    .join('/');
+  return projectName && path ? `/api/presentation/${projectName}/assets/${path}` : '';
 }
 
 function updateManifest(manifest: PresentationManifest | undefined | null) {
@@ -994,8 +957,6 @@ async function loadPresentationManifest() {
     presentationManifest.value = result.manifest || null;
     selectedStyleReferenceId.value = result.settings?.visualStyle?.reference_asset_id || null;
     visualIllustrationEnabled.value = !!result.settings?.visualIllustration?.effectiveEnabled;
-    spriteChromaKey.value = result.settings?.visualIllustration?.sprite_chroma_key || '#00FF00';
-    spriteMattingMode.value = result.settings?.visualIllustration?.sprite_matting || 'chroma_key';
     if (selectedStyleReferenceId.value && !manifestAssets.value[selectedStyleReferenceId.value]) {
       selectedStyleReferenceId.value = null;
     }
@@ -1014,8 +975,8 @@ async function savePresentationBinding() {
 
 function setNodePresentationValue(
   node: ArcDialogueNode | null,
-  key: 'bg' | 'sprite' | 'illustration_prompt' | 'illustration',
-  value: string | null,
+  key: 'bg' | 'illustration_prompt' | 'illustration' | 'characters',
+  value: string | string[] | null,
 ) {
   if (!node) return;
   const nextPresentation: PresentationCue = { ...(node.presentation || {}) };
@@ -1026,7 +987,7 @@ function setNodePresentationValue(
   else node.presentation = presentation;
 }
 
-function setDialoguePresentationValue(key: 'bg' | 'sprite' | 'illustration_prompt' | 'illustration', value: string | null) {
+function setDialoguePresentationValue(key: 'bg' | 'illustration_prompt' | 'illustration' | 'characters', value: string | string[] | null) {
   setNodePresentationValue(currentDialogueNode.value, key, value);
   void savePresentationBinding();
 }
@@ -1070,15 +1031,6 @@ function nearestIllustrationAssetId(
   return '';
 }
 
-function currentCharacterDetail() {
-  const id = currentSpriteCharacterId.value;
-  if (!id) return null;
-  const byId = characters.value.find(ch => String(ch.id) === id);
-  if (byId) return byId;
-  const name = chrName(id);
-  return characters.value.find(ch => ch.name === name) || null;
-}
-
 function characterIdForNode(node: ArcDialogueNode): string {
   const raw = String(node.speaker ?? node.chr ?? '').trim();
   if (!raw || raw === '-1' || raw === '旁白') return '';
@@ -1091,10 +1043,16 @@ function characterIdForNode(node: ArcDialogueNode): string {
 function buildPresentationGenerationContext(
   node = currentDialogueNode.value,
   scene: ArcScene | null = sceneStore.currentScene as ArcScene | null,
+  includeCharacters = true,
 ) {
   const contextNodes = getCurrentDialogueWindow(node, scene);
-  const characterIds = Array.from(new Set(contextNodes.map(characterIdForNode).filter(Boolean)));
-  if (node) {
+  const plannedCharacterIds = normalizePresentationList(node?.presentation?.characters);
+  const characterIds = includeCharacters
+    ? (plannedCharacterIds.length > 0
+      ? plannedCharacterIds
+      : Array.from(new Set(contextNodes.map(characterIdForNode).filter(Boolean))))
+    : [];
+  if (includeCharacters && plannedCharacterIds.length === 0 && node) {
     const currentId = characterIdForNode(node);
     if (currentId && !characterIds.includes(currentId)) characterIds.unshift(currentId);
   }
@@ -1111,7 +1069,7 @@ function buildPresentationGenerationContext(
 }
 
 function referenceAssetsFor(
-  kind: 'background' | 'sprite' | 'illustration',
+  kind: 'background' | 'illustration',
   node = currentDialogueNode.value,
   scene: ArcScene | null = sceneStore.currentScene as ArcScene | null,
 ) {
@@ -1127,8 +1085,7 @@ function referenceAssetsFor(
 
   add(selectedStyleReferenceId.value || '', 'style');
   const cue = node?.presentation || {};
-  if (kind !== 'sprite') add(normalizePresentationValue(cue.bg), 'scene');
-  if (kind === 'sprite') add(normalizePresentationValue(cue.sprite), 'character');
+  add(normalizePresentationValue(cue.bg), 'scene');
 
   if (kind === 'illustration') {
     const characterIds = new Set(buildPresentationGenerationContext(node, scene).characterIds);
@@ -1178,7 +1135,7 @@ async function generateBackgroundByAI() {
     bus.emit('toast', { type: 'warning', message: t('nodeEditor.presentation.projectRequired') });
     return;
   }
-  const prompt = backgroundPrompt.value.trim();
+  const prompt = illustrationPrompt.value.trim();
   const model = selectedImageModel.value;
   if (!prompt) {
     bus.emit('toast', { type: 'warning', message: t('nodeEditor.presentation.promptRequired') });
@@ -1190,6 +1147,7 @@ async function generateBackgroundByAI() {
   }
   backgroundGenerating.value = true;
   try {
+    saveIllustrationPrompt();
     const result = await generatePresentationBackground(projectStore.currentProject, {
       prompt,
       title: currentDialogueNode.value?.txt?.trim().slice(0, 18) || t('nodeEditor.presentation.generatedBackgroundTitle'),
@@ -1197,12 +1155,11 @@ async function generateBackgroundByAI() {
       platformId: Number(model.platform_id),
       modelId: Number(model.model_id),
       referenceAssets: referenceAssetsFor('background'),
-      context: buildPresentationGenerationContext(),
+      context: buildPresentationGenerationContext(currentDialogueNode.value, sceneStore.currentScene as ArcScene | null, false),
     });
     if (!result.asset?.id) throw new Error(t('nodeEditor.presentation.uploadInvalidResult'));
     updateManifest(result.manifest);
     setDialoguePresentationValue('bg', result.asset.id);
-    backgroundPrompt.value = '';
     bus.emit('toast', { type: 'success', message: t('nodeEditor.presentation.generateSuccess') });
   } catch (error: unknown) {
     bus.emit('toast', { type: 'error', message: presentationErrorMessage(error, t('nodeEditor.presentation.generateFailed')) });
@@ -1211,116 +1168,12 @@ async function generateBackgroundByAI() {
   }
 }
 
-function triggerSpriteUpload() {
-  if (!projectStore.currentProject) {
-    bus.emit('toast', { type: 'warning', message: t('nodeEditor.presentation.projectRequired') });
-    return;
-  }
-  if (!currentSpriteCharacterId.value) {
-    bus.emit('toast', { type: 'warning', message: t('nodeEditor.presentation.characterRequired') });
-    return;
-  }
-  spriteFileInputRef.value?.click();
-}
-
-async function onSpriteFileChange(event: Event) {
-  const input = event.target as HTMLInputElement | null;
-  const file = input?.files?.[0];
-  if (input) input.value = '';
-  if (!file || !projectStore.currentProject) return;
-  spriteUploading.value = true;
-  try {
-    const result = await uploadPresentationSprite(projectStore.currentProject, file, {
-      title: `${currentSpriteCharacterId.value}-${file.name}`,
-      characterId: currentSpriteCharacterId.value,
-      expression: 'default',
-    });
-    if (!result.asset?.id) throw new Error(t('nodeEditor.presentation.uploadInvalidResult'));
-    updateManifest(result.manifest);
-    setDialoguePresentationValue('sprite', result.asset.id);
-    bus.emit('toast', { type: 'success', message: t('nodeEditor.presentation.spriteUploadSuccess') });
-  } catch (error: unknown) {
-    bus.emit('toast', { type: 'error', message: presentationErrorMessage(error, t('nodeEditor.presentation.spriteUploadFailed')) });
-  } finally {
-    spriteUploading.value = false;
-  }
-}
-
-function clearDialogueSprite() {
-  setDialoguePresentationValue('sprite', null);
-  bus.emit('toast', { type: 'success', message: t('nodeEditor.presentation.spriteClearSuccess') });
-}
-
-async function generateSpriteByAI() {
-  if (!projectStore.currentProject) {
-    bus.emit('toast', { type: 'warning', message: t('nodeEditor.presentation.projectRequired') });
-    return;
-  }
-  if (!currentSpriteCharacterId.value) {
-    bus.emit('toast', { type: 'warning', message: t('nodeEditor.presentation.characterRequired') });
-    return;
-  }
-  const prompt = spritePrompt.value.trim();
-  const model = selectedImageModel.value;
-  if (!prompt) {
-    bus.emit('toast', { type: 'warning', message: t('nodeEditor.presentation.promptRequired') });
-    return;
-  }
-  if (!model) {
-    bus.emit('toast', { type: 'warning', message: t('nodeEditor.presentation.imageModelMissing') });
-    return;
-  }
-  spriteGenerating.value = true;
-  try {
-    const result = await generatePresentationSprite(projectStore.currentProject, {
-      prompt,
-      title: currentCharacterDetail()?.name || currentSpriteCharacterId.value || t('nodeEditor.presentation.generatedSpriteTitle'),
-      characterId: currentSpriteCharacterId.value,
-      expression: 'default',
-      size: '1024x1536',
-      platformId: Number(model.platform_id),
-      modelId: Number(model.model_id),
-      referenceAssets: referenceAssetsFor('sprite'),
-      context: buildPresentationGenerationContext(),
-    });
-    if (!result.asset?.id) throw new Error(t('nodeEditor.presentation.uploadInvalidResult'));
-    updateManifest(result.manifest);
-    let spriteAssetId = result.asset.id;
-    if (result.asset.url) {
-      try {
-        const response = await fetchWithAuth(result.asset.url);
-        if (!response.ok) throw new Error(t('components.lorebookEditor.matteSourceMissing'));
-        const transparent = await matteSprite(await response.blob(), {
-          mode: spriteMattingMode.value,
-          chromaKey: spriteChromaKey.value,
-        });
-        const transparentResult = await uploadPresentationSprite(
-          projectStore.currentProject,
-          new File([transparent], `${result.asset.id}-transparent.png`, { type: 'image/png' }),
-          {
-            title: `${currentCharacterDetail()?.name || currentSpriteCharacterId.value}-${t('components.lorebookEditor.transparentSpriteTitle')}`,
-            characterId: currentSpriteCharacterId.value,
-            expression: 'default',
-          },
-        );
-        if (transparentResult.asset?.id) spriteAssetId = transparentResult.asset.id;
-        updateManifest(transparentResult.manifest);
-      } catch (error: unknown) {
-        bus.emit('toast', { type: 'warning', message: presentationErrorMessage(error, t('components.lorebookEditor.autoMatteFailed')) });
-      }
-    }
-    setDialoguePresentationValue('sprite', spriteAssetId);
-    spritePrompt.value = '';
-    bus.emit('toast', { type: 'success', message: t('nodeEditor.presentation.spriteGenerateSuccess') });
-  } catch (error: unknown) {
-    bus.emit('toast', { type: 'error', message: presentationErrorMessage(error, t('nodeEditor.presentation.spriteGenerateFailed')) });
-  } finally {
-    spriteGenerating.value = false;
-  }
-}
-
 function saveIllustrationPrompt() {
   setDialoguePresentationValue('illustration_prompt', illustrationPrompt.value.trim() || null);
+}
+
+function savePresentationCharacters() {
+  setDialoguePresentationValue('characters', presentationCharacterIds.value.length > 0 ? presentationCharacterIds.value : null);
 }
 
 function triggerIllustrationUpload() {
@@ -2223,11 +2076,26 @@ function insertBridgeResult() {
 <style scoped>
 .right-panel-section {
   padding: 0;
+  flex: 1;
+  min-height: 0;
+  max-height: 100%;
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
 }
 
-/* 让 AI 面板占更少空间，给节点编辑器更多空间 */
-#ai-screenwriter.right-panel-section {
-  flex: 0.6;  /* AI 面板占更少空间 */
+/* 与节点编辑器一致：卡片占满面板，标题固定，内容区域独立滚动。 */
+#ai-screenwriter :deep(.n-card) {
+  flex: 1;
+  min-height: 0;
+  max-height: 100%;
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+}
+
+#ai-screenwriter :deep(.n-card-content) {
+  flex: 1;
   min-height: 0;
   overflow-y: auto;
 }
@@ -2236,24 +2104,47 @@ function insertBridgeResult() {
   display: flex;
   flex-direction: column;
   gap: 16px;
+  order: 1;
 }
 
-.presentation-tools {
-  margin-bottom: 12px;
-  padding: 10px;
-  border: 1px solid color-mix(in srgb, var(--spark-border), transparent 8%);
-  border-radius: 8px;
-  background: color-mix(in srgb, var(--spark-bg) 38%, transparent);
+.toolbox-form {
+  display: flex;
+  flex-direction: column;
+  gap: 18px;
 }
 
-.presentation-section-heading {
+.toolbox-module {
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
+}
+
+.continuation-module {
+  order: 0;
+}
+
+.image-generation-module {
+  order: 1;
+  padding-top: 18px;
+  border-top: 1px solid color-mix(in srgb, var(--spark-border), transparent 12%);
+}
+
+.toolbox-module-heading {
   display: inline-flex;
   align-items: center;
   gap: 7px;
-  margin-bottom: 10px;
-  font-size: var(--spark-fs-xs);
+  padding-bottom: 10px;
+  border-bottom: 1px solid color-mix(in srgb, var(--spark-primary), transparent 72%);
+  font-size: var(--spark-fs-base);
   font-weight: 700;
-  color: var(--spark-text);
+  color: var(--spark-primary);
+}
+
+.toolbox-field-label {
+  font-size: var(--spark-fs-xs);
+  font-weight: 600;
+  color: var(--spark-text-secondary);
 }
 
 .presentation-tool-stack {
@@ -2261,10 +2152,24 @@ function insertBridgeResult() {
   flex-direction: column;
   gap: 10px;
   min-width: 0;
+  margin-bottom: 12px;
 }
 
-.presentation-style-card,
-.presentation-control-card {
+.presentation-model-control {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  min-width: 0;
+}
+
+.presentation-participants {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  min-width: 0;
+}
+
+.presentation-style-card {
   min-width: 0;
   display: flex;
   flex-direction: column;
@@ -2282,12 +2187,6 @@ function insertBridgeResult() {
   font-size: var(--spark-fs-xs);
   font-weight: 650;
   color: var(--spark-text);
-}
-
-.presentation-control-grid {
-  display: grid;
-  grid-template-columns: repeat(2, minmax(0, 1fr));
-  gap: 10px;
 }
 
 .presentation-current-line {
@@ -2309,6 +2208,45 @@ function insertBridgeResult() {
   color: var(--spark-text-muted);
 }
 
+.background-preview {
+  width: 100%;
+  height: clamp(132px, 24vh, 280px);
+  min-width: 0;
+  overflow: hidden;
+  border: 1px solid color-mix(in srgb, var(--spark-border), transparent 4%);
+  border-radius: 8px;
+  background: color-mix(in srgb, var(--spark-bg), black 8%);
+}
+
+.background-preview img {
+  display: block;
+  width: 100%;
+  height: 100%;
+  object-fit: contain;
+}
+
+.background-preview.is-empty {
+  background: color-mix(in srgb, var(--spark-bg) 72%, transparent);
+}
+
+.background-preview-empty {
+  width: 100%;
+  height: 100%;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  padding: 16px;
+  color: var(--spark-text-muted);
+  font-size: var(--spark-fs-xs);
+  text-align: center;
+}
+
+.background-preview-empty .n-icon {
+  font-size: 24px;
+}
+
 .presentation-model-select {
   width: min(100%, 230px);
   flex: 1 1 180px;
@@ -2325,12 +2263,6 @@ function insertBridgeResult() {
 
 .presentation-hidden-input {
   display: none;
-}
-
-@media (max-width: 1280px) {
-  .presentation-control-grid {
-    grid-template-columns: 1fr;
-  }
 }
 
 /* Bridge 结果样式 */

@@ -9,7 +9,6 @@ import { useFileStore } from '../components/stores/fileStore';
 import { useChatStore } from '../components/stores/chatStore';
 import { getUserInfo } from '../services/api';
 import { serializeToArc } from '../services/arcParser';
-import { autoSaveEnabled } from '../utils/autoSaveState';
 
 export function useScriptWriterLogic() {
     const route = useRoute();
@@ -139,10 +138,21 @@ export function useScriptWriterLogic() {
 
     function openSettings() { settingsVisible.value = true; }
 
-    function onKeydown(e) {
-        if ((e.ctrlKey || e.metaKey) && e.key.toLowerCase() === 's') {
-            e.preventDefault();
-            bus.emit('save-request');
+    function onKeydown(e: KeyboardEvent) {
+        if (!e.ctrlKey && !e.metaKey) return;
+        const target = e.target instanceof Element ? e.target : null;
+        if (!target?.closest('.reader-editor, #node-editor, .dialogue-tree, .mobile-node-editor')) return;
+
+        const key = e.key.toLowerCase();
+        const wantsUndo = key === 'z' && !e.shiftKey;
+        const wantsRedo = key === 'y' || (key === 'z' && e.shiftKey);
+        if (!wantsUndo && !wantsRedo) return;
+
+        e.preventDefault();
+        if (wantsUndo) {
+            void sceneStore.undoStoryEdit();
+        } else {
+            void sceneStore.redoStoryEdit();
         }
     }
 
@@ -258,7 +268,6 @@ export function useScriptWriterLogic() {
         projectStore,
         username,
         isAdmin,
-        autoSaveEnabled,
         settingsVisible,
         versionManagerVisible,
         aiSidebarVisible,

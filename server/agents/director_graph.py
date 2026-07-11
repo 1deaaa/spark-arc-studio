@@ -33,6 +33,7 @@ from llm.agen_matchbox.reasoning_compat import extract_visible_text_from_plain_t
 
 from agents.agent_factory import create_agent_instance
 from agents.prompt_layout import build_current_user_message
+from agents.work_tracker import build_work_tracker_prompt_context
 
 # ==================== State 定义 ====================
 
@@ -258,8 +259,6 @@ def _is_tracker_progress_update(tool_name: str, tool_args: Any, tool_result: Any
     """判断本次工具调用是否完成了可展示的任务板进度更新。"""
     if normalize_tool_name(tool_name) != "work_tracker" or not isinstance(tool_args, dict):
         return False
-    if str(tool_args.get("action") or "").strip().lower() != "update":
-        return False
 
     items = (
         tool_args.get("items")
@@ -280,7 +279,7 @@ def _tracker_update_required_message() -> str:
     """返回不会把失败回交误判为完成的任务板协议提示。"""
     return (
         "进度板协议错误：刚收到专家回交结果，且导演任务板仍有未完成条目。"
-        "请先调用 work_tracker(action=\"update\", operations=[增量操作])，并按实际结果更新："
+        "请调用 work_tracker(operations=[增量操作])，并按实际结果更新："
         "成功才标为 completed；执行失败或质量不达标时保持 in_progress，"
         "在 notes 记录失败原因和重做要求；只有确实无法继续时才标为 blocked。"
         "更新后可以立即重新委派原专家重做，也可以更换专家，不会终止当前流程。"
@@ -415,13 +414,22 @@ def director_node(state: DirectorState) -> Dict[str, Any]:
                         current_user_message = str(content)
                 break
 
-    if active_context and messages_with_system and isinstance(messages_with_system[-1], HumanMessage):
-        messages_with_system[-1] = HumanMessage(
-            content=build_current_user_message(
-                user_message=current_user_message,
-                active_context=active_context,
-            )
-        )
+    runtime_tail = build_work_tracker_prompt_context(
+        user_id,
+        project_name,
+        "agent_director",
+    )
+    if active_context or runtime_tail:
+        for index in range(len(messages_with_system) - 1, -1, -1):
+            if isinstance(messages_with_system[index], HumanMessage):
+                messages_with_system[index] = HumanMessage(
+                    content=build_current_user_message(
+                        user_message=current_user_message,
+                        active_context=active_context,
+                        runtime_tail=runtime_tail,
+                    )
+                )
+                break
 
     stream_events = []
     from agents.context_budget import rebudget_existing_messages
@@ -590,10 +598,6 @@ def director_node(state: DirectorState) -> Dict[str, Any]:
                     _ta = str(_spec_args.get("target_agent") or "").strip()
                     if _ta:
                         _extra_start["target_agent"] = _ta
-                elif tool_name == "work_tracker":
-                    _act = str(_spec_args.get("action") or "").strip()
-                    if _act:
-                        _extra_start["tool_action"] = _act
                 evt_start = build_tool_stream_event(
                     "tool_exec_started",
                     tool_name,
@@ -1102,6 +1106,11 @@ def run_director_stream(
             system_instruction=system_instruction,
             user_message=user_message,
             active_context=runtime_context,
+            runtime_tail=build_work_tracker_prompt_context(
+                user_id,
+                project_name,
+                "agent_director",
+            ),
         )
 
         budget_stream = stream_context_budget_events(

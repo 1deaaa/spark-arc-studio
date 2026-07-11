@@ -108,6 +108,56 @@
           </n-button>
         </n-space>
 
+        <section class="background-library-section">
+          <div class="background-library-heading">
+            <n-text strong>{{ t('nodeEditor.presentation.backgroundLibraryTitle') }}</n-text>
+            <n-text depth="3" class="project-style-tip">
+              {{ t('nodeEditor.presentation.backgroundLibraryHint') }}
+            </n-text>
+          </div>
+
+          <div class="background-library-list">
+            <button
+              v-for="asset in projectBackgroundAssets"
+              :key="asset.id"
+              type="button"
+              class="style-reference-candidate"
+              :class="{ 'is-selected': selectedBackgroundReferenceId === asset.id }"
+              :aria-pressed="selectedBackgroundReferenceId === asset.id"
+              :title="asset.title || asset.id"
+              @click="selectedBackgroundReferenceId = selectedBackgroundReferenceId === asset.id ? null : asset.id"
+            >
+              <img :src="presentationAssetUrl(asset)" :alt="asset.title || asset.id" />
+              <span>{{ asset.title || asset.id }}</span>
+              <n-icon v-if="selectedBackgroundReferenceId === asset.id" :component="Check" />
+            </button>
+            <n-text v-if="projectBackgroundAssets.length === 0" depth="3">
+              {{ t('nodeEditor.presentation.backgroundLibraryEmpty') }}
+            </n-text>
+          </div>
+
+          <StudioSeamlessTextarea
+            v-model:value="backgroundLibraryPrompt"
+            :autosize="{ minRows: 3, maxRows: 6 }"
+            :placeholder="t('nodeEditor.presentation.backgroundLibraryPromptPlaceholder')"
+            :show-count="true"
+            :maxlength="900"
+          />
+
+          <n-space justify="end" :size="8" wrap>
+            <n-button
+              type="primary"
+              secondary
+              :loading="backgroundLibraryGenerating"
+              :disabled="!canGenerateProjectBackground"
+              @click="generateProjectBackground"
+            >
+              <template #icon><n-icon :component="Sparkles" /></template>
+              {{ t('nodeEditor.presentation.generateLibraryBackground') }}
+            </n-button>
+          </n-space>
+        </section>
+
         <input
           ref="styleReferenceFileInputRef"
           class="style-hidden-input"
@@ -130,12 +180,14 @@ import bus from '@/eventBus';
 import {
   fetchPresentationImageModels,
   fetchPresentationManifest,
+  generatePresentationBackground,
   generatePresentationReference,
   updatePresentationSettings,
   uploadPresentationReference,
   type PresentationAsset,
   type PresentationImageModel,
   type PresentationManifest,
+  type PresentationReferenceDescriptor,
 } from '@/services/presentationService';
 import { supportsImageInput } from '@/services/modelModalities';
 import { useProjectStore } from '@/components/stores/projectStore';
@@ -153,6 +205,9 @@ const styleReferenceFileInputRef = ref<HTMLInputElement | null>(null);
 const styleReferenceUploading = ref(false);
 const styleReferenceGenerating = ref(false);
 const styleReferencePrompt = ref('');
+const backgroundLibraryPrompt = ref('');
+const backgroundLibraryGenerating = ref(false);
+const selectedBackgroundReferenceId = ref<string | null>(null);
 const imageModels = ref<PresentationImageModel[]>([]);
 const imageModelsLoading = ref(false);
 const selectedImageModelKey = ref<string | null>(null);
@@ -170,6 +225,10 @@ const manifestAssets = computed<Record<string, PresentationAsset>>(() => {
 
 const projectStyleReferenceAssets = computed(() => Object.values(manifestAssets.value)
   .filter(asset => asset.type === 'style_reference')
+  .sort((a, b) => String(b.createdAt || '').localeCompare(String(a.createdAt || ''))));
+
+const projectBackgroundAssets = computed(() => Object.values(manifestAssets.value)
+  .filter(asset => asset.type === 'background')
   .sort((a, b) => String(b.createdAt || '').localeCompare(String(a.createdAt || ''))));
 
 const styleReferenceOptions = computed(() => Object.values(manifestAssets.value)
@@ -200,6 +259,13 @@ const canGenerateStyleReference = computed(() =>
   isScriptMode.value
   && !!projectStore.currentProject
   && !!styleReferencePrompt.value.trim()
+  && !!selectedImageModel.value
+);
+
+const canGenerateProjectBackground = computed(() =>
+  isScriptMode.value
+  && !!projectStore.currentProject
+  && !!backgroundLibraryPrompt.value.trim()
   && !!selectedImageModel.value
 );
 
@@ -334,6 +400,12 @@ function projectStyleReferenceAssetIds() {
   return Array.from(ids).slice(0, 4);
 }
 
+function projectBackgroundReferences(): PresentationReferenceDescriptor[] {
+  const model = selectedImageModel.value;
+  if (!model || !imageModelSupportsReference(model) || !selectedBackgroundReferenceId.value) return [];
+  return [{ assetId: selectedBackgroundReferenceId.value, role: 'scene' }];
+}
+
 function triggerStyleReferenceUpload() {
   if (!projectStore.currentProject) {
     bus.emit('toast', { type: 'warning', message: t('nodeEditor.presentation.projectRequired') });
@@ -395,6 +467,33 @@ async function generateStyleReferenceByAI() {
     bus.emit('toast', { type: 'error', message: presentationErrorMessage(error, t('nodeEditor.presentation.styleReferenceGenerateFailed')) });
   } finally {
     styleReferenceGenerating.value = false;
+  }
+}
+
+async function generateProjectBackground() {
+  const projectName = projectStore.currentProject;
+  const model = selectedImageModel.value;
+  const prompt = backgroundLibraryPrompt.value.trim();
+  if (!projectName || !model || !prompt) return;
+  backgroundLibraryGenerating.value = true;
+  try {
+    const result = await generatePresentationBackground(projectName, {
+      prompt,
+      title: prompt.slice(0, 24),
+      size: '1536x1024',
+      platformId: Number(model.platform_id),
+      modelId: Number(model.model_id),
+      referenceAssets: projectBackgroundReferences(),
+      context: { characterIds: [] },
+    });
+    updatePresentationManifest(result.manifest);
+    selectedBackgroundReferenceId.value = result.asset?.id || null;
+    backgroundLibraryPrompt.value = '';
+    bus.emit('toast', { type: 'success', message: t('nodeEditor.presentation.backgroundLibraryGenerateSuccess') });
+  } catch (error: unknown) {
+    bus.emit('toast', { type: 'error', message: presentationErrorMessage(error, t('nodeEditor.presentation.backgroundLibraryGenerateFailed')) });
+  } finally {
+    backgroundLibraryGenerating.value = false;
   }
 }
 
@@ -538,5 +637,29 @@ onActivated(() => {
 
 .style-hidden-input {
   display: none;
+}
+
+.background-library-section {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  padding-top: 14px;
+  border-top: 1px solid var(--spark-border-soft);
+}
+
+.background-library-heading {
+  display: grid;
+  gap: 4px;
+}
+
+.background-library-list {
+  min-height: 82px;
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(104px, 1fr));
+  gap: 6px;
+  padding: 8px;
+  border: 1px solid color-mix(in srgb, var(--spark-border), transparent 8%);
+  border-radius: 8px;
+  background: color-mix(in srgb, var(--spark-bg) 42%, transparent);
 }
 </style>

@@ -5,10 +5,6 @@
       <div class="header-row">
         <div class="title-display">{{ localOutline.title || '未命名故事' }}</div>
         <div class="header-actions">
-          <n-button @click="saveOutline" type="primary" :loading="saving">
-            <template #icon><n-icon :component="Save" /></template>
-            保存
-          </n-button>
           <n-button @click="saveToHistory" secondary>
             <template #icon><n-icon :component="Clock" /></template>
             存档
@@ -74,7 +70,7 @@
 import { ref, watch, computed } from 'vue';
 import { NButton, NIcon, useMessage, useDialog } from 'naive-ui';
 import SparkTag from '../share/SparkTag.vue';
-import { Clock, FileText, Plus, Save, Sparkles, Workflow } from '@lucide/vue';
+import { Clock, FileText, Plus, Sparkles, Workflow } from '@lucide/vue';
 import OutlineNode from './OutlineNode.vue';
 // Auto Write 统一由 DirectorAutoWriteOverlay 承载
 import { exportOutlineToFiles } from '@/services/api';
@@ -92,12 +88,11 @@ const props = defineProps({
   }
 });
 
-const emit = defineEmits(['update:outline', 'save', 'save-history']);
+const emit = defineEmits(['update:outline', 'save-history']);
 
 const projectStore = useProjectStore();
 const message = useMessage();
 const dialog = useDialog();
-const saving = ref(false);
 const exporting = ref(false);
 
 // 本地副本用于编辑
@@ -118,16 +113,6 @@ function generateId(type = 'node') {
 // 触发更新
 function emitChange() {
   emit('update:outline', JSON.parse(JSON.stringify(localOutline.value)));
-}
-
-// 保存大纲
-async function saveOutline() {
-  saving.value = true;
-  try {
-    emit('save', localOutline.value);
-  } finally {
-    saving.value = false;
-  }
 }
 
 // 存档到历史

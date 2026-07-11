@@ -22,7 +22,7 @@ Director Agent 基于 **LangGraph SupervisorGraph** 实现多轮工具调用自�
 | `delegate_task` | 委派任务给专家 Agent | 核心调度动作，返回 Sentinel 交由 LangGraph 拦截 |
 | `trigger_auto_write` | 触发无人值守自动撰写 | 启动 Auto-Write 管道 |
 | `check_scriptwriter_status` | 查询自动撰写进度 | 检查 Auto-Write 状态 |
-| `work_tracker` | 工作进度追踪 | 记录任务完成情况 |
+| `work_tracker` | 工作进度追踪 | 仅负责创建或增量更新任务板；当前板面由系统自动注入消息尾部 |
 | `search_project` | 正则搜索全项目文本 | 快速定位关键词/模式 |
 | `semantic_search` | 语义搜索项目文本与附件 | 按语义相关性检索内容 |
 | `replace_from_search` | 基于搜索结果替换文本 | 批量修改命中片段 |
@@ -85,6 +85,7 @@ flowchart TD
 
     K["active_context<br/>当前编辑区 / 附件清单 / 单附件正文<br/>动态：每轮任务现场"] --> L["build_current_user_message"]
     M["user_message<br/>本轮用户请求<br/>动态：每轮变化"] --> L
+    Q["work tracker 快照<br/>当前用户 + 项目 + Agent<br/>动态：每轮自动读取"] --> L
     L --> N["最后一条 HumanMessage<br/>动态尾部"]
 
     G --> O["最终 messages"]
@@ -100,9 +101,12 @@ flowchart TD
 - `web_search` 的日期锚点会随日期变化，是少量必要动态内容；它只影响绑定了 `web_search` 的 Agent。
 - Director 的团队成员能力概览由 registry 运行时构建，随 Agent 注册表变化而变化。
 - 单附件全文、当前编辑器上下文、多附件清单都属于动态尾部，不应提前塞入 system。
+- Director 与 Scriptwriter 的持久任务板由系统在每次模型请求前自动读取，并追加到最后一条 user message 的末尾。`work_tracker` 是更新专用工具，不提供 `read`；Agent 不应为了了解板面额外调用工具。
 - 多轮工具循环会调用 `rebudget_existing_messages`，并用附件分片滑窗折叠旧 `read_attachment_chunk` 结果，避免历史膨胀。
 - 更换模型 / 平台、修改专家 prompt / `pipeline_system` / `tool_rules`、改变工具绑定、语言策略或部分全局参数，都会改变稳定前缀并导致上游缓存重新建立。
 - 前端在消息下方展示 `context_window_stats`。完成后，后端只从 `llm_usage.by_agent[当前窗口 agent_id]` 合并当前 Agent 的缓存命中 token；为 0 时不显示。`llm_usage` 顶层是整个 chat task 的全链路汇总，可能包含导演委派的子 Agent，只用于后台成本诊断，不作为当前窗口缓存命中率。
+
+任务板存储按 `user_id + project_name + agent_id` 隔离。任务条目的 `id` 仅用于 `edit`、`delete`、`set_status` 等增量操作稳定定位某一项，避免任务重排或同一任务板内的并行更新误伤其他条目；它不是项目隔离键，也不是 Auto-Write 后台任务的恢复 ID。前端任务板 API、Director 的流程护栏和后台恢复直接调用 `agents/work_tracker.py`，不通过 LLM 的工具读取链路。
 
 ### 2.1 一张图看懂：三条入口，一条管线
 

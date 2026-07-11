@@ -16,40 +16,40 @@ function clamp(value: number, min: number, max: number) {
 function getPanelBounds(viewportWidth: number): PanelBounds {
   if (viewportWidth <= 1280) {
     return {
-      sidebarMin: 180,
-      sidebarMax: 260,
-      inspectorMin: 240,
+      sidebarMin: 170,
+      sidebarMax: 240,
+      inspectorMin: Math.max(260, Math.round(viewportWidth * 0.21)),
       inspectorMax: 320,
-      aiMin: 240,
-      aiMax: 340,
+      aiMin: Math.max(280, Math.round(viewportWidth * 0.23)),
+      aiMax: 360,
     };
   }
 
   if (viewportWidth <= 1520) {
     return {
-      sidebarMin: 180,
-      sidebarMax: 320,
-      inspectorMin: 250,
+      sidebarMin: 170,
+      sidebarMax: 280,
+      inspectorMin: Math.round(viewportWidth * 0.2),
       inspectorMax: 420,
-      aiMin: 240,
-      aiMax: 420,
+      aiMin: Math.round(viewportWidth * 0.22),
+      aiMax: 460,
     };
   }
 
   return {
-    sidebarMin: 180,
-    sidebarMax: 400,
-    inspectorMin: 260,
+    sidebarMin: 170,
+    sidebarMax: 340,
+    inspectorMin: Math.min(600, Math.round(viewportWidth * 0.18)),
     inspectorMax: 600,
-    aiMin: 250,
+    aiMin: Math.min(800, Math.round(viewportWidth * 0.2)),
     aiMax: 800,
   };
 }
 
 export function useResizer() {
-  const sidebarWidth = ref(250);
-  const inspectorWidth = ref(300);
-  const aiSidebarWidth = ref(350);
+  const sidebarWidth = ref(220);
+  const inspectorWidth = ref(320);
+  const aiSidebarWidth = ref(380);
 
   const isResizing = ref(false);
   let currentResizer: HTMLElement | null = null;
@@ -79,14 +79,15 @@ export function useResizer() {
       return current - reduced;
     };
 
-    aiSidebarWidth.value = shrinkFrom(aiSidebarWidth.value, bounds.aiMin);
-    inspectorWidth.value = shrinkFrom(inspectorWidth.value, bounds.inspectorMin);
+    // 空间不足时优先让节点树让位，保证两个编辑面板仍有可用宽度。
     sidebarWidth.value = shrinkFrom(sidebarWidth.value, bounds.sidebarMin);
+    inspectorWidth.value = shrinkFrom(inspectorWidth.value, bounds.inspectorMin);
+    aiSidebarWidth.value = shrinkFrom(aiSidebarWidth.value, bounds.aiMin);
   }
 
   const savePanelSizes = () => {
     localStorage.setItem(
-      'panelSizes_v3',
+      'panelSizes_v4',
       JSON.stringify({
         sidebar: sidebarWidth.value,
         inspector: inspectorWidth.value,
@@ -96,7 +97,7 @@ export function useResizer() {
   };
 
   const loadPanelSizes = () => {
-    const saved = localStorage.getItem('panelSizes_v3');
+    const saved = localStorage.getItem('panelSizes_v4');
     if (!saved) {
       clampPanelSizes();
       return;

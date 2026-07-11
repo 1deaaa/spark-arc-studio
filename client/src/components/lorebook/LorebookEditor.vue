@@ -238,7 +238,6 @@ import {
 import { supportsImageInput } from '@/services/modelModalities';
 import { matteSprite } from '@/utils/spriteMatting';
 import { AUTO_SAVE_DEBOUNCE_TIME } from '../../config';
-import { autoSaveEnabled } from '@/utils/autoSaveState';
 import { buildCreativeCacheKey, isCreativeCacheEqual, loadCreativeCache, saveCreativeCache } from '@/utils/creativeLocalCache';
 
 const projectStore = useProjectStore();
@@ -411,7 +410,7 @@ function onWorldviewInput() {
     clearTimeout(worldviewTimer);
   }
   worldviewTimer = setTimeout(() => {
-    if (autoSaveEnabled.value) saveWorldview();
+    saveWorldview();
   }, AUTO_SAVE_DEBOUNCE_TIME);
 }
 
@@ -707,7 +706,7 @@ function onCharacterInput(ch) {
   saveLorebookSnapshot();
   clearTimeout(timers.get(key));
   const timer = setTimeout(() => {
-    if (autoSaveEnabled.value) saveCharacter(ch);
+    saveCharacter(ch);
   }, AUTO_SAVE_DEBOUNCE_TIME);
   timers.set(key, timer);
 }

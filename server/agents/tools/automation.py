@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import json
 import os
+from typing import Literal
 
 from langchain.tools import tool
 from pydantic import AliasChoices, BaseModel, ConfigDict, Field, field_validator, model_validator
@@ -23,33 +24,73 @@ class TriggerAutoWriteInput(BaseModel):
 class WorkTrackerItemInput(BaseModel):
     model_config = ConfigDict(extra="forbid")
 
-    id: str | None = Field(default=None, description="稳定任务 ID。覆盖时可省略，由系统生成；编辑时不要在 item 内修改 ID。")
-    task: str = Field(description="任务描述。")
-    status: str = Field(default="pending", description="任务状态：pending / in_progress / completed / blocked。")
-    priority: str = Field(default="medium", description="优先级：high / medium / low。")
+    task: str = Field(description="任务描述。稳定任务 ID 由系统自动生成，不要自行提供 ID。")
+    status: Literal["pending", "in_progress", "completed", "blocked"] = Field(default="pending", description="任务状态。")
+    priority: Literal["high", "medium", "low"] = Field(default="medium", description="任务优先级。")
     notes: str = Field(default="", description="结果、失败原因、重做要求或其他备注。")
+
+
+class WorkTrackerOperationItemInput(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    task: str | None = Field(default=None, description="任务描述。add/insert 必填；edit 时仅在修改描述时传入。")
+    status: Literal["pending", "in_progress", "completed", "blocked"] | None = Field(default=None, description="任务状态。通常使用 set_status 操作修改状态。")
+    priority: Literal["high", "medium", "low"] | None = Field(default=None, description="任务优先级。")
+    notes: str | None = Field(default=None, description="结果、失败原因、重做要求或其他备注。")
 
 
 class WorkTrackerOperationInput(BaseModel):
     model_config = ConfigDict(extra="forbid")
 
-    operation: str = Field(description="条目操作：add=末尾新增；insert=指定位置插入；edit=修改；delete=彻底删除；set_status=标记状态。")
+    operation: Literal["add", "insert", "edit", "delete", "set_status"] = Field(description="条目操作：add=末尾新增；insert=指定位置插入；edit=修改；delete=彻底删除；set_status=标记状态。")
     item_id: str | None = Field(default=None, description="单个目标任务 ID，适用于 edit/delete/set_status。")
     item_ids: list[str] | None = Field(default=None, description="批量目标任务 ID，适用于 delete/set_status。")
-    item: dict | None = Field(default=None, description="add/insert 时传完整条目；edit 时只传需要修改的字段。")
+    item: WorkTrackerOperationItemInput | None = Field(default=None, description="add/insert 时传任务内容；edit 时只传需要修改的字段，禁止传 ID。")
     position: int | None = Field(default=None, ge=1, description="insert 的 1 基位置。")
-    status: str | None = Field(default=None, description="set_status 的目标状态。标记完成请传 completed；删除任务必须使用 delete。")
+    status: Literal["pending", "in_progress", "completed", "blocked"] | None = Field(default=None, description="set_status 的目标状态。标记完成请传 completed；删除任务必须使用 delete。")
+
+    @model_validator(mode="after")
+    def _validate_operation_shape(self):
+        target_ids = [str(value).strip() for value in (self.item_ids or []) if str(value).strip()]
+        if self.item_id and self.item_id.strip():
+            target_ids.append(self.item_id.strip())
+
+        if self.operation in {"add", "insert"}:
+            if self.item is None or not str(self.item.task or "").strip():
+                raise ValueError(f"{self.operation} 操作必须提供包含 task 的 item。")
+            if self.operation == "insert" and self.position is None:
+                raise ValueError("insert 操作必须提供从 1 开始的 position。")
+        elif self.operation == "edit":
+            if len(set(target_ids)) != 1 or self.item is None:
+                raise ValueError("edit 操作必须提供唯一 item_id 和待修改的 item 字段。")
+        elif self.operation == "delete" and not target_ids:
+            raise ValueError("delete 操作必须提供 item_id 或 item_ids。")
+        elif self.operation == "set_status" and (not target_ids or self.status is None):
+            raise ValueError("set_status 操作必须提供目标 ID 和 status。")
+        return self
 
 
 class WorkTrackerInput(BaseModel):
     model_config = ConfigDict(extra="forbid", populate_by_name=True)
 
-    action: str = Field(description="操作类型：read=读取持久任务板；update=更新任务板。任务板不再支持 clear，全部完成后应保留最终状态。")
-    overwrite: bool = Field(default=False, description="是否显式覆盖整个任务板。仅创建全新计划或用户明确要求重建任务板时设为 true；默认 false，执行增量操作。")
+    overwrite: bool = Field(default=False, description="仅在创建全新计划或用户明确要求重建任务板时设为 true；已有任务板的日常推进必须保持 false。")
     items: list[WorkTrackerItemInput] | None = Field(default=None, validation_alias=AliasChoices("items", "tasks", "todo_items"), description="仅 overwrite=true 时有效，用于提供新的完整任务列表。")
     operations: list[WorkTrackerOperationInput] | None = Field(default=None, description="增量操作列表，可在一次调用中批量新增、插入、编辑、删除或标记状态。")
     summary: str | None = Field(default=None, validation_alias=AliasChoices("summary", "goal", "objective"), description="任务板总目标；不传则保持原值。")
     contract: dict | None = Field(default=None, description="结构化创作契约；不传则保持原值。")
+
+    @model_validator(mode="after")
+    def _validate_update_mode(self):
+        if self.overwrite:
+            if self.items is None:
+                raise ValueError("overwrite=true 时必须提供完整 items。")
+            if self.operations:
+                raise ValueError("整板覆盖与增量 operations 不能在同一次调用中混用。")
+        elif self.items is not None:
+            raise ValueError("增量更新不能直接传 items；创建全新计划时请显式设置 overwrite=true。")
+        elif not self.operations and self.summary is None and self.contract is None:
+            raise ValueError("增量更新必须提供 operations、summary 或 contract。")
+        return self
 
 
 class CheckScriptwriterStatusInput(BaseModel):
@@ -283,55 +324,49 @@ def check_scriptwriter_status() -> str:
 
 @tool(args_schema=WorkTrackerInput)
 def work_tracker(
-    action: str,
     overwrite: bool = False,
     items: list[dict] | None = None,
     operations: list[dict] | None = None,
     summary: str | None = None,
     contract: dict | None = None,
 ) -> str:
-    """读取或更新当前 Agent 的持久任务板。"""
-    from agents.work_tracker import load_work_tracker, update_work_tracker
+    """更新当前 Agent 的持久任务板；当前板面已由系统自动注入消息尾部。"""
+    from agents.work_tracker import update_work_tracker
 
     user_id, project_name = ToolExecutionContext.get_context()
     agent_id = ToolExecutionContext.get_agent_id() or "unknown"
 
-    if action == "read":
-        return json.dumps(load_work_tracker(user_id, project_name, agent_id), ensure_ascii=False)
-    if action == "update":
-        effective_contract = contract
-        if effective_contract is None and overwrite:
-            try:
-                story_tags = get_project_story_tags(user_id, project_name)
-                if story_tags:
-                    effective_contract = {
-                        "workspace_mode": story_tags.get("workspace_mode", "script"),
-                        "style": story_tags.get("style"),
-                        "genres": story_tags.get("genres", []),
-                        "tones": story_tags.get("tones", []),
-                        "worldviews": story_tags.get("worldviews", []),
-                        "pov": story_tags.get("pov"),
-                        "length_hint": story_tags.get("length_hint"),
-                        "scene_length_hint": story_tags.get("scene_length_hint", "standard"),
-                    }
-            except Exception:
-                effective_contract = None
+    effective_contract = contract
+    if effective_contract is None and overwrite:
         try:
-            data = update_work_tracker(
-                user_id,
-                project_name,
-                agent_id,
-                overwrite=overwrite,
-                items=items,
-                operations=operations,
-                summary=summary,
-                contract=effective_contract,
-            )
-        except ValueError as exc:
-            return f"任务板更新失败：{exc}"
-        return json.dumps(data, ensure_ascii=False)
-
-    return f"未知操作类型：{action}。支持的操作：read / update。"
+            story_tags = get_project_story_tags(user_id, project_name)
+            if story_tags:
+                effective_contract = {
+                    "workspace_mode": story_tags.get("workspace_mode", "script"),
+                    "style": story_tags.get("style"),
+                    "genres": story_tags.get("genres", []),
+                    "tones": story_tags.get("tones", []),
+                    "worldviews": story_tags.get("worldviews", []),
+                    "pov": story_tags.get("pov"),
+                    "length_hint": story_tags.get("length_hint"),
+                    "scene_length_hint": story_tags.get("scene_length_hint", "standard"),
+                }
+        except Exception:
+            effective_contract = None
+    try:
+        data = update_work_tracker(
+            user_id,
+            project_name,
+            agent_id,
+            overwrite=overwrite,
+            items=items,
+            operations=operations,
+            summary=summary,
+            contract=effective_contract,
+        )
+    except ValueError as exc:
+        return f"任务板更新失败：{exc}"
+    return json.dumps(data, ensure_ascii=False)
 
 
 @tool

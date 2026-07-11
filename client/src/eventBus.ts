@@ -1,7 +1,7 @@
 import mitt from 'mitt';
 
 // 统一应用内事件：
-// 'save-request' | 'saved' | 'scene-selected' | 'ai-append-text'
+// 'scene-selected' | 'ai-append-text'
 export type CancelLoadingPayload = {
 	scope?: string;
 	target?: string;

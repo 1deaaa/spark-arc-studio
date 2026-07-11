@@ -174,16 +174,39 @@ class ScriptwriterAgent(SparkBaseAgent, SparkAgentExecutor):
         if not settings["enabled"]:
             return ""
         max_per_scene = settings["max_per_scene"]
+        background_catalog = self._presentation_background_catalog()
+        background_lines = "\n".join(
+            f"  - `{item['id']}`：{item['title']}" for item in background_catalog
+        ) or "  - （当前项目尚无可复用背景）"
         return f"""
-### 实验性视觉插图描述协议
-- 你可以在确有视觉叙事价值的对话或旁白节点正文后增加一行：`@presentation illustration_prompt:自然语言画面描述`。
+### Web 演出构思协议
+- 你可以在需要视觉演出的对话或旁白节点正文后增加一行：`@presentation illustration_prompt:自然语言演出构思`。它是背景生成与完整场景插图共用的默认提示词。
 - `presentation` 仅供 SparkArc Web 播放器演出，Unity SDK 会统一忽略整个节点字段；不要把它当作 Unity 行为指令。
-- 该字段只描述一张完整场景插图的最终画面，不得填写资产 ID，不得生成 `illustration`、`bg`、`sprite`、`@act` 或 `@next`。
+- 如当前节点发生在项目已有固定场景，可额外写 `@presentation bg:背景资产ID`。只能从下方白名单逐字选择，禁止编造 ID；它既是播放器背景，也是后续天气、时间或完整插图生成的场景参考。
+- 可用背景资产：
+{background_lines}
+- 不得生成 `illustration`、`sprite`、`@act` 或 `@next`；运行时生成结果仍由系统绑定。
 - 每个场景允许 0 张，通常只用 1 张，硬上限为 {max_per_scene} 张；两个插图描述节点之间至少隔一个普通节点。
 - 只在场景首次建立、重大视觉转折、剧情高潮或关键情绪定格时使用。普通对白、连续动作、同一空间的重复信息不得换图。
 - 插图必须带来仅靠常规背景加立绘难以低成本表达的新信息。描述应包含地点与时代、出场角色及外观动作、情绪、构图景别、镜头、光照和关键环境细节。
 - 不要描述文字、字幕、对话框、界面、水印或标志；画面主体应位于横版中央安全区，以兼容桌面和竖屏模糊扩展演出。
 """.strip()
+
+    def _presentation_background_catalog(self) -> list[dict[str, str]]:
+        """读取当前项目可供模型选择的背景资产目录。"""
+        from core.request_context import get_current_project_name
+        from story.presentation_manifest import get_project_background_catalog
+
+        project_name = get_current_project_name()
+        if not project_name:
+            return []
+        try:
+            return get_project_background_catalog(str(self.user_id), project_name)
+        except Exception:
+            return []
+
+    def _allowed_presentation_background_ids(self) -> set[str]:
+        return {item["id"] for item in self._presentation_background_catalog()}
 
     def _prepare_script_system_prompt(self, system_prompt: str) -> str:
         """把项目条件协议追加到结构化写作系统提示。"""
@@ -196,6 +219,7 @@ class ScriptwriterAgent(SparkBaseAgent, SparkAgentExecutor):
         return sanitize_arc_for_ai_context(
             str(text or ""),
             allow_visual_illustration=bool(settings["enabled"]),
+            allowed_background_ids=self._allowed_presentation_background_ids(),
         )
 
     def _clean_history_for_model(self, history):
@@ -665,6 +689,7 @@ class ScriptwriterAgent(SparkBaseAgent, SparkAgentExecutor):
             allow_visual_illustration=bool(settings["enabled"]),
             max_per_scene=settings["max_per_scene"],
             min_node_gap=settings["min_node_gap"],
+            allowed_background_ids=self._allowed_presentation_background_ids(),
         )
 
     def bridge_scenes(

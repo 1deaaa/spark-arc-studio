@@ -1,5 +1,5 @@
 <template>
-  <NovelBackdrop class="novel-reader" mode="panel" framed :data-save-state="saveState">
+  <NovelBackdrop class="novel-reader" mode="panel" framed>
     <div class="reader-stage">
       <div class="reader-sheet">
         <div class="sheet-edge" aria-hidden="true"></div>
@@ -43,7 +43,6 @@ const props = defineProps({
 
 const sceneStore = useSceneStore();
 const editorRef = ref<HTMLDivElement | null>(null);
-const saveState = ref<'idle' | 'editing' | 'saving' | 'saved'>('idle');
 
 function normalizeContent(value: unknown): string {
   if (typeof value === 'string') return value;
@@ -53,7 +52,6 @@ function normalizeContent(value: unknown): string {
 }
 
 const localContent = ref(normalizeContent(props.content));
-let saveTimer: ReturnType<typeof setTimeout> | null = null;
 
 function getEditorText(): string {
   return (editorRef.value?.innerText || '').replace(/\r\n/g, '\n').replace(/\u00A0/g, ' ');
@@ -67,14 +65,6 @@ function syncEditorContent(value: string) {
   }
 }
 
-async function persistContent() {
-  sceneStore.scriptData = normalizeContent(localContent.value);
-  sceneStore.selectionType = 'novel';
-  saveState.value = 'saving';
-  await sceneStore._saveStory();
-  saveState.value = 'saved';
-}
-
 watch(() => props.content, (value) => {
   const next = normalizeContent(value);
   if (next !== localContent.value) {
@@ -83,21 +73,12 @@ watch(() => props.content, (value) => {
   nextTick(() => syncEditorContent(next));
 });
 
-function scheduleSave() {
-  if (saveTimer) clearTimeout(saveTimer);
-  saveState.value = 'editing';
-  saveTimer = setTimeout(async () => {
-    saveTimer = null;
-    await persistContent();
-  }, 700);
-}
-
 function handleInput() {
   const nextValue = getEditorText();
   localContent.value = nextValue;
   sceneStore.scriptData = nextValue;
   sceneStore.selectionType = 'novel';
-  scheduleSave();
+  sceneStore.scheduleStorySave();
 }
 
 function handlePaste(event: ClipboardEvent) {
@@ -119,11 +100,10 @@ function handlePaste(event: ClipboardEvent) {
 
 onMounted(() => {
   syncEditorContent(localContent.value);
-  saveState.value = localContent.value ? 'saved' : 'idle';
 });
 
 onBeforeUnmount(() => {
-  if (saveTimer) clearTimeout(saveTimer);
+  void sceneStore.flushStorySave();
 });
 </script>
 
@@ -212,18 +192,6 @@ onBeforeUnmount(() => {
   font-size: var(--spark-fs-h3);
   line-height: 1.9;
   font-family: var(--spark-font);
-}
-
-.novel-reader[data-save-state='editing'] .reader-sheet {
-  box-shadow: inset 0 0 0 1px color-mix(in srgb, var(--spark-primary), transparent 70%);
-}
-
-.novel-reader[data-save-state='saving'] .reader-sheet {
-  box-shadow: inset 0 0 0 1px color-mix(in srgb, var(--spark-warning), transparent 68%);
-}
-
-.novel-reader[data-save-state='saved'] .reader-sheet {
-  box-shadow: inset 0 0 0 1px color-mix(in srgb, var(--spark-success), transparent 78%);
 }
 
 :global(html.viewport-tablet-down .novel-reader .editor-frame) {

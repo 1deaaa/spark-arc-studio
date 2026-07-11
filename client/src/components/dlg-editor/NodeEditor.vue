@@ -286,6 +286,16 @@
             />
           </n-form-item>
 
+          <n-form-item :label="t('nodeEditor.presentation.conceptionLabel')">
+            <n-input
+              :value="currentIllustrationPrompt"
+              type="textarea"
+              :autosize="{ minRows: 2, maxRows: 6 }"
+              :placeholder="t('nodeEditor.presentation.conceptionPlaceholder')"
+              @update:value="updatePresentationConception"
+            />
+          </n-form-item>
+
           <n-form-item v-if="hasPresentationCue">
             <template #label>
               <div class="content-runtime-label">
@@ -430,7 +440,6 @@ import { useCharacterStore } from '@/components/stores/characterStore';
 import { useActionBindingStore } from '@/components/stores/actionBindingStore';
 import MarkdownRenderer from '@/components/share/MarkdownRenderer.vue';
 import type { ArcDialogueNode, ArcOptionNode, ArcScene } from '@/services/arcParser';
-import { autoSaveEnabled } from '@/utils/autoSaveState';
 import { getSceneRuntimeSummary, type SceneContentKind } from '@/utils/sceneContentRuntime';
 
 const { t } = useI18n();
@@ -465,27 +474,10 @@ const sceneSelectOptions = computed(() =>
     .filter(Boolean)
     .map(name => ({ label: name, value: name }))
 );
-async function maybeAutoSave() {
-  if (!autoSaveEnabled.value) return;
+function debouncedAutoSave() {
   if (!fileStore.selectedFile?.path || !projectStore.currentProject) return;
-  try {
-    await sceneStore._saveStory();
-  } catch (e) {
-    console.error('Auto save failed:', e);
-  }
+  sceneStore.scheduleStorySave({ boundary: true });
 }
-
-// 简易防抖封装
-function useDebounce(fn, delay = 600) {
-  let t;
-  return (...args) => {
-    clearTimeout(t);
-    t = setTimeout(() => fn(...args), delay);
-  };
-}
-import { AUTO_SAVE_DEBOUNCE_TIME } from '@/config';
-
-const debouncedAutoSave = useDebounce(maybeAutoSave, AUTO_SAVE_DEBOUNCE_TIME);
 
 const type = computed(() => sceneStore.selectionType);
 const editorType = computed<'' | 'scene' | 'dialogue' | 'option'>(() => {
@@ -797,6 +789,18 @@ const hasPresentationCue = computed(() => !!currentBackgroundId.value
   || !!currentSpriteId.value
   || !!currentIllustrationId.value
   || !!currentIllustrationPrompt.value);
+
+function updatePresentationConception(value: string) {
+  if (!isDialogueNode(sceneStore.currentNode) || sceneStore.selectionType !== 'dialogue') return;
+  const presentation = { ...(sceneStore.currentNode.presentation || {}) };
+  const normalized = String(value || '').replace(/\s+/g, ' ').trim();
+  if (normalized) presentation.illustration_prompt = normalized;
+  else delete presentation.illustration_prompt;
+  sceneStore.updateCurrentDialogue({
+    presentation: Object.keys(presentation).length > 0 ? presentation : undefined,
+  });
+  debouncedAutoSave();
+}
 
 function onActChange(val: Record<string, string | string[]> | null) {
   if (!isDialogueNode(sceneStore.currentNode) || sceneStore.selectionType !== 'dialogue') return;

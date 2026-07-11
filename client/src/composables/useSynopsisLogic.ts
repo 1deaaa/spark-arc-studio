@@ -280,7 +280,6 @@ export function useSynopsisLogic() {
                 saveBeatSheet(projectStore.currentProject, bMarkup)
             ]);
             saveCreativeCache(buildSynopsisCacheKey(), getSynopsisSnapshot());
-            message.success('梗概与节奏表已保存');
         } catch (e: unknown) {
             message.error('保存失败: ' + getErrorMessage(e));
         } finally {
@@ -605,7 +604,6 @@ export function useSynopsisLogic() {
         getTensionHeight,
         getBeatColor,
         loadFromProject,
-        handleSave,
         handleGenerateSynopsis,
         handleGenerateBeats,
         addBeat,

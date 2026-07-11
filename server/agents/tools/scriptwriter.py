@@ -199,13 +199,18 @@ def create_or_rewrite_script(
             is_visual_illustration_enabled,
         )
         from story.arc_safety import sanitize_arc_ai_output
+        from story.presentation_manifest import get_project_background_catalog
 
         visual_settings = get_visual_illustration_settings(user_id, project_name)
+        allowed_background_ids = {
+            item["id"] for item in get_project_background_catalog(user_id, project_name)
+        }
         content = sanitize_arc_ai_output(
             content,
             allow_visual_illustration=is_visual_illustration_enabled(user_id, project_name),
             max_per_scene=visual_settings["max_per_scene"],
             min_node_gap=visual_settings["min_node_gap"],
+            allowed_background_ids=allowed_background_ids,
         )
     if not content:
         return "创建/重写剧本失败：overwrite_content 为空。"
@@ -301,12 +306,17 @@ def patch_script(search_text: str, replace_text: str) -> str:
         sanitize_arc_ai_fragment,
         validate_arc_visual_prompt_candidate,
     )
+    from story.presentation_manifest import get_project_background_catalog
 
     visual_settings = get_visual_illustration_settings(user_id, project_name)
+    allowed_background_ids = {
+        item["id"] for item in get_project_background_catalog(user_id, project_name)
+    }
     raw_replace_text = replace_text
     replace_text = sanitize_arc_ai_fragment(
         replace_text,
         allow_visual_illustration=is_visual_illustration_enabled(user_id, project_name),
+        allowed_background_ids=allowed_background_ids,
     )
     if str(raw_replace_text or "").strip() and not replace_text:
         return "局部修改剧本失败：replace_text 只包含 AI 无权写入的运行时控制字段。"

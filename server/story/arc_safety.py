@@ -11,6 +11,10 @@ _VISUAL_ILLUSTRATION_PROMPT_RE = re.compile(
     r"^(?P<indent>\s*)@presentation\s+illustration_prompt\s*:(?P<value>.*)$",
     re.IGNORECASE,
 )
+_PRESENTATION_BACKGROUND_RE = re.compile(
+    r"^(?P<indent>\s*)@presentation\s+bg\s*:(?P<value>[^\s<>,]+)\s*$",
+    re.IGNORECASE,
+)
 _SCENE_HEADER_RE = re.compile(r"^\s*#(?!#)\s+\S")
 _SPEAKER_MARKER_RE = re.compile(r"^\s*\[[^\]]+\]\s*$")
 _MAX_ILLUSTRATION_PROMPT_CHARS = 1200
@@ -23,7 +27,12 @@ def normalize_illustration_prompt(value: str) -> str:
     return normalized[:_MAX_ILLUSTRATION_PROMPT_CHARS].strip()
 
 
-def sanitize_arc_ai_fragment(text: str, *, allow_visual_illustration: bool = False) -> str:
+def sanitize_arc_ai_fragment(
+    text: str,
+    *,
+    allow_visual_illustration: bool = False,
+    allowed_background_ids: set[str] | None = None,
+) -> str:
     """清洗一段来源于 AI 的 ARC 文本，但暂不依赖其所在场景位置。
 
     该阶段只执行字段白名单：删除 ``@next``、``@act`` 和所有资产绑定，
@@ -34,6 +43,7 @@ def sanitize_arc_ai_fragment(text: str, *, allow_visual_illustration: bool = Fal
         return ""
 
     kept_lines: list[str] = []
+    allowed_backgrounds = {str(value).strip() for value in (allowed_background_ids or set()) if str(value).strip()}
     for line in str(text).splitlines():
         prompt_match = _VISUAL_ILLUSTRATION_PROMPT_RE.match(line)
         if prompt_match:
@@ -44,13 +54,26 @@ def sanitize_arc_ai_fragment(text: str, *, allow_visual_illustration: bool = Fal
                         f"{prompt_match.group('indent')}@presentation illustration_prompt:{prompt}"
                     )
             continue
+        background_match = _PRESENTATION_BACKGROUND_RE.match(line)
+        if background_match:
+            asset_id = background_match.group("value").strip()
+            if asset_id in allowed_backgrounds:
+                kept_lines.append(
+                    f"{background_match.group('indent')}@presentation bg:{asset_id}"
+                )
+            continue
         if _AI_CONTROL_DIRECTIVE_RE.match(line):
             continue
         kept_lines.append(line)
     return "\n".join(kept_lines).strip()
 
 
-def sanitize_arc_for_ai_context(text: str, *, allow_visual_illustration: bool = False) -> str:
+def sanitize_arc_for_ai_context(
+    text: str,
+    *,
+    allow_visual_illustration: bool = False,
+    allowed_background_ids: set[str] | None = None,
+) -> str:
     """清理传给 AI 的历史 ARC 片段，避免模型模仿运行时控制节点。
 
     这里仅构造 Scriptwriter 可见的干净上下文视图，不改写用户原文件。
@@ -59,6 +82,7 @@ def sanitize_arc_for_ai_context(text: str, *, allow_visual_illustration: bool = 
     return sanitize_arc_ai_fragment(
         text,
         allow_visual_illustration=allow_visual_illustration,
+        allowed_background_ids=allowed_background_ids,
     )
 
 
@@ -70,7 +94,19 @@ def sanitize_arc_for_project_ai_context(text: str, user_id: str, project_name: s
         enabled = is_visual_illustration_enabled(str(user_id), str(project_name))
     except Exception:
         enabled = False
-    return sanitize_arc_for_ai_context(text, allow_visual_illustration=enabled)
+    try:
+        from story.presentation_manifest import get_project_background_catalog
+
+        allowed_background_ids = {
+            item["id"] for item in get_project_background_catalog(str(user_id), str(project_name))
+        }
+    except Exception:
+        allowed_background_ids = set()
+    return sanitize_arc_for_ai_context(
+        text,
+        allow_visual_illustration=enabled,
+        allowed_background_ids=allowed_background_ids,
+    )
 
 
 def sanitize_arc_ai_output(
@@ -79,6 +115,7 @@ def sanitize_arc_ai_output(
     allow_visual_illustration: bool = False,
     max_per_scene: int = 2,
     min_node_gap: int = 1,
+    allowed_background_ids: set[str] | None = None,
 ) -> str:
     """清洗 Scriptwriter 即将落盘的 ARC，执行字段白名单与节奏硬约束。
 
@@ -88,6 +125,7 @@ def sanitize_arc_ai_output(
     safe_fragment = sanitize_arc_ai_fragment(
         text,
         allow_visual_illustration=allow_visual_illustration,
+        allowed_background_ids=allowed_background_ids,
     )
     if not safe_fragment:
         return ""

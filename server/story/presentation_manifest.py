@@ -183,6 +183,26 @@ def load_manifest_from_root(root: str) -> dict[str, Any]:
         return manifest
 
 
+def get_project_background_catalog(user_id: str, project_name: str) -> list[dict[str, str]]:
+    """返回可供编辑器与 Scriptwriter 绑定的项目背景白名单。"""
+    manifest = load_project_manifest(user_id, project_name)
+    assets = manifest.get("assets") if isinstance(manifest, dict) else {}
+    if not isinstance(assets, dict):
+        return []
+    result: list[dict[str, str]] = []
+    for asset_id, asset in assets.items():
+        if not isinstance(asset, dict) or asset.get("type") != "background":
+            continue
+        normalized_id = str(asset.get("id") or asset_id or "").strip()
+        if not normalized_id:
+            continue
+        result.append({
+            "id": normalized_id,
+            "title": str(asset.get("title") or normalized_id).strip(),
+        })
+    return sorted(result, key=lambda item: (item["title"], item["id"]))
+
+
 def save_manifest_to_root(root: str, manifest: dict[str, Any]) -> None:
     """以原子替换方式保存 manifest，避免并发读取半写入 JSON。"""
     with _MANIFEST_LOCK:

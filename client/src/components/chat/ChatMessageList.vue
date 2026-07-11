@@ -523,13 +523,6 @@ function getAgentName(agentId?: string): string {
 // Agent 头像视觉渲染已统一收口到 AgentAvatar 组件（基于 registry.icon / registry.color）。
 // 旧本地 agentIconMap / agentColorMap / isSparkAgent 等硬编码已迁移；如需扩展请改 server/agents/registry.py。
 
-/** 工具 action 中文标签（work_tracker 专用） */
-const workTrackerActionLabelMap: Record<string, string> = {
-  read: 'components.chatMessageList.workTrackerActions.read',
-  update: 'components.chatMessageList.workTrackerActions.update',
-  clear: 'components.chatMessageList.workTrackerActions.clear',
-};
-
 /**
  * 计算 tool_trace segment 的有效显示状态：
  * 1. 若同条消息中后续已有已完成的 tool_trace，说明此 segment 是孤立的 intent 记录，应显示为 finished
@@ -560,10 +553,7 @@ function formatToolTraceLabel(trace: any, resolvedStatus?: string) {
     : (isFailed ? (trace?.message || t('components.chatMessageList.toolStatus.failed')) : t('components.chatMessageList.toolStatus.finished'));
 
   let label: string;
-  if (toolName === 'work_tracker' && trace?.tool_action) {
-    const actionLabelKey = workTrackerActionLabelMap[trace.tool_action];
-    label = actionLabelKey ? t(actionLabelKey) : t('components.chatMessageList.workTrackerActions.fallback', { action: trace.tool_action });
-  } else if (toolName === 'delegate_task' && trace?.target_agent) {
+  if (toolName === 'delegate_task' && trace?.target_agent) {
     const targetName = getAgentName(trace.target_agent);
     label = t('components.chatMessageList.delegateTarget', { target: targetName });
   } else {

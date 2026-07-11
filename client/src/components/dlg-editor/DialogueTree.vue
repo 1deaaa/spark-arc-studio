@@ -59,7 +59,6 @@ import { useSceneStore } from '@/components/stores/sceneStore';
 import Draggable from 'vuedraggable';
 import { useProjectStore } from '@/components/stores/projectStore';
 import { useFileStore } from '@/components/stores/fileStore';
-import { autoSaveEnabled } from '@/utils/autoSaveState';
 import { useCharacterStore } from '@/components/stores/characterStore';
 import DialogueNode from './DialogueNode.vue';
 import bus from '@/eventBus';
@@ -105,14 +104,10 @@ function onMove(evt) {
   } catch { return true; }
 }
 
-async function saveAfterDrag(evt) {
-  if (!autoSaveEnabled.value) return;
+function saveAfterDrag(evt) {
   if (!fileStore.selectedFile?.path || !projectStore.currentProject) return;
   if (evt && evt.oldIndex === evt.newIndex) return;
-  try {
-    await sceneStore._saveStory();
-    window.dispatchEvent(new CustomEvent('saved'));
-  } catch {}
+  sceneStore.scheduleStorySave({ boundary: true });
 }
 
 function onDragEndRoot(evt) {

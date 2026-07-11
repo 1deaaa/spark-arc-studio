@@ -67,7 +67,6 @@
           ref="outlineEditorRef"
           :outline="currentOutline"
           @update:outline="handleOutlineUpdate"
-          @save="handleSaveOutline"
           @save-history="handleSaveToHistory"
         />
       </div>
@@ -188,7 +187,6 @@ const {
   lengthOptions,
   handleGenerateOutline,
   handleOutlineUpdate,
-  handleSaveOutline,
   handleSaveToHistory,
   handleOutlineHistorySelect,
   handleOutlineRestore,

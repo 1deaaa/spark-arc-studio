@@ -4,6 +4,7 @@ import { useProjectStore } from './projectStore';
 import bus from '@/eventBus';
 import { parseArc, serializeToArc, type ActValue, type ArcDialogueNode, type ArcOptionNode, type ArcScene } from '@/services/arcParser';
 import { buildCreativeCacheKey, isCreativeCacheEqual, loadCreativeCache, saveCreativeCache } from '@/utils/creativeLocalCache';
+import { createAutoSaveScheduler, type AutoSaveScheduler } from '@/utils/autoSaveScheduler';
 
 export type SceneSelectionType = '' | 'scene' | 'dialogue' | 'option' | 'novel';
 
@@ -42,6 +43,8 @@ type SceneStoreState = {
   fileFormat: 'arc' | 'novel';
   workspaceMode: 'script' | 'novel';
   lastScriptwriterThought: string;
+  canUndo: boolean;
+  canRedo: boolean;
 };
 
 type StoryCacheSnapshot = {
@@ -50,8 +53,25 @@ type StoryCacheSnapshot = {
   scriptData: SceneWithClientId[] | string;
 };
 
+type StorySavePayload = {
+  projectName: string;
+  filePath: string;
+  content: string;
+};
+
+type StoryHistoryState = {
+  past: string[];
+  future: string[];
+  observed: string;
+  groupOpen: boolean;
+  groupTimer: ReturnType<typeof setTimeout> | null;
+};
+
+const STORY_HISTORY_LIMIT = 100;
+const STORY_HISTORY_GROUP_TIME = 800;
 const lastPersistedStoryPayload = new Map<string, string>();
-const storySaveChains = new Map<string, Promise<void>>();
+const storySaveSchedulers = new Map<string, AutoSaveScheduler<StorySavePayload>>();
+const storyHistories = new Map<string, StoryHistoryState>();
 let storyLoadRequestSeq = 0;
 
 function getErrorMessage(error: unknown): string {
@@ -99,6 +119,35 @@ function normalizeStoryResponse(filePath: string, data: unknown): StoryCacheSnap
   };
 }
 
+function storyPersistKey(projectName: string, filePath: string): string {
+  return `${projectName}:${filePath}`;
+}
+
+function getStorySaveScheduler(key: string): AutoSaveScheduler<StorySavePayload> {
+  let scheduler = storySaveSchedulers.get(key);
+  if (scheduler) return scheduler;
+  scheduler = createAutoSaveScheduler(async payload => {
+    if (lastPersistedStoryPayload.get(key) === payload.content) return;
+    await saveStory(payload.projectName, payload.filePath, payload.content);
+    lastPersistedStoryPayload.set(key, payload.content);
+  }, {
+    delay: 800,
+    maxWait: 5000,
+    onError: error => {
+      bus.emit('toast', { type: 'error', message: `自动保存失败: ${getErrorMessage(error)}` });
+      console.error('自动保存剧本失败:', error);
+    },
+  });
+  storySaveSchedulers.set(key, scheduler);
+  return scheduler;
+}
+
+function closeHistoryGroup(history: StoryHistoryState) {
+  if (history.groupTimer) clearTimeout(history.groupTimer);
+  history.groupTimer = null;
+  history.groupOpen = false;
+}
+
 function serializeStoryDataForSave(filePath: string, scriptData: SceneWithClientId[] | string): string {
   if (filePath.endsWith('.md')) {
     return String(scriptData ?? '');
@@ -131,6 +180,21 @@ function renameSpeakerInDialogues(nodes: ArcDialogueNode[] | undefined, oldName:
   return changed;
 }
 
+function findDialogueSelection(
+  nodes: ArcDialogueNode[] | undefined,
+  id: number | undefined,
+): { dialogue: ArcDialogueNode; parent: ArcOptionNode | null } | null {
+  if (!Array.isArray(nodes) || id === undefined) return null;
+  for (const dialogue of nodes) {
+    if (dialogue.id === id) return { dialogue, parent: null };
+    for (const option of dialogue.opt || []) {
+      const nested = findDialogueSelection(option.dia, id);
+      if (nested) return { dialogue: nested.dialogue, parent: nested.parent || option };
+    }
+  }
+  return null;
+}
+
 function buildStorySnapshot(filePath: string, store: SceneStoreState): StoryCacheSnapshot {
   return {
     currentFilePath: filePath,
@@ -152,10 +216,22 @@ export const useSceneStore = defineStore('scene', {
     fileFormat: 'arc', // 支持 arc / novel
     workspaceMode: 'script', // script | novel
     lastScriptwriterThought: '', // scriptwriter 的 thought（最近一次多段续写返回）
+    canUndo: false,
+    canRedo: false,
   }),
   actions: {
     _applyStorySnapshot(snapshot: StoryCacheSnapshot) {
       const previousSceneName = this.currentScene?.scene;
+      const previousSelectionType = this.selectionType;
+      const previousDialogueId = this.currentNode && 'id' in this.currentNode
+        ? Number(this.currentNode.id)
+        : undefined;
+      const previousOptionText = this.selectionType === 'option'
+        ? String(this.currentNode?.optn || '')
+        : '';
+      const previousParentDialogueId = this.selectionType === 'option' && this.nodeParent && 'id' in this.nodeParent
+        ? Number(this.nodeParent.id)
+        : undefined;
       this.currentFilePath = snapshot.currentFilePath;
       this.fileFormat = snapshot.fileFormat;
 
@@ -182,12 +258,131 @@ export const useSceneStore = defineStore('scene', {
       }
       this.currentNode = null;
       this.nodeParent = null;
+      if (previousSelectionType === 'dialogue' && this.currentScene) {
+        const selected = findDialogueSelection(this.currentScene.dia, previousDialogueId);
+        if (selected) {
+          this.currentNode = selected.dialogue;
+          this.nodeParent = selected.parent;
+          this.selectionType = 'dialogue';
+        }
+      } else if (previousSelectionType === 'option' && this.currentScene) {
+        const selectedParent = findDialogueSelection(this.currentScene.dia, previousParentDialogueId);
+        const option = selectedParent?.dialogue.opt?.find(item => String(item.optn || '') === previousOptionText);
+        if (selectedParent && option) {
+          this.currentNode = option;
+          this.nodeParent = selectedParent.dialogue;
+          this.selectionType = 'option';
+        }
+      }
     },
     _syncCurrentStoryCache() {
       const projectStore = useProjectStore();
       if (!projectStore.currentProject || !this.currentFilePath) return;
       const cacheKey = buildStoryCacheKey(projectStore.currentProject, this.currentFilePath);
       saveCreativeCache(cacheKey, buildStorySnapshot(this.currentFilePath, this));
+    },
+    _currentStoryIdentity() {
+      const projectStore = useProjectStore();
+      const projectName = String(projectStore.currentProject || '');
+      const filePath = String(this.currentFilePath || '');
+      if (!projectName || !filePath) return null;
+      return { projectName, filePath, key: storyPersistKey(projectName, filePath) };
+    },
+    _resetStoryHistory() {
+      const identity = this._currentStoryIdentity();
+      this.canUndo = false;
+      this.canRedo = false;
+      if (!identity) return;
+      const previous = storyHistories.get(identity.key);
+      if (previous) closeHistoryGroup(previous);
+      storyHistories.set(identity.key, {
+        past: [],
+        future: [],
+        observed: serializeStoryDataForSave(identity.filePath, this.scriptData),
+        groupOpen: false,
+        groupTimer: null,
+      });
+    },
+    _trackStoryChange(boundary = false) {
+      const identity = this._currentStoryIdentity();
+      if (!identity) return;
+      const current = serializeStoryDataForSave(identity.filePath, this.scriptData);
+      let history = storyHistories.get(identity.key);
+      if (!history) {
+        history = { past: [], future: [], observed: current, groupOpen: false, groupTimer: null };
+        storyHistories.set(identity.key, history);
+        return;
+      }
+      if (history.observed === current) return;
+
+      if (boundary || !history.groupOpen) {
+        if (history.past.at(-1) !== history.observed) history.past.push(history.observed);
+        if (history.past.length > STORY_HISTORY_LIMIT) history.past.shift();
+      }
+      history.observed = current;
+      history.future = [];
+      closeHistoryGroup(history);
+      if (!boundary) {
+        history.groupOpen = true;
+        history.groupTimer = setTimeout(() => closeHistoryGroup(history!), STORY_HISTORY_GROUP_TIME);
+      }
+      this.canUndo = history.past.length > 0;
+      this.canRedo = false;
+    },
+    _scheduleCurrentStoryPayload() {
+      const identity = this._currentStoryIdentity();
+      if (!identity) return null;
+      const content = serializeStoryDataForSave(identity.filePath, this.scriptData);
+      saveCreativeCache(
+        buildStoryCacheKey(identity.projectName, identity.filePath),
+        buildStorySnapshot(identity.filePath, this),
+      );
+      const scheduler = getStorySaveScheduler(identity.key);
+      scheduler.schedule({ projectName: identity.projectName, filePath: identity.filePath, content });
+      return scheduler;
+    },
+    scheduleStorySave(options: { boundary?: boolean } = {}) {
+      this._trackStoryChange(!!options.boundary);
+      this._scheduleCurrentStoryPayload();
+    },
+    async flushStorySave(): Promise<boolean> {
+      this._trackStoryChange(true);
+      const scheduler = this._scheduleCurrentStoryPayload();
+      return scheduler ? scheduler.flush() : true;
+    },
+    async undoStoryEdit(): Promise<boolean> {
+      const identity = this._currentStoryIdentity();
+      if (!identity) return false;
+      const history = storyHistories.get(identity.key);
+      if (!history?.past.length) return false;
+      closeHistoryGroup(history);
+      const current = serializeStoryDataForSave(identity.filePath, this.scriptData);
+      const target = history.past.pop()!;
+      history.future.push(current);
+      history.observed = target;
+      this._applyStorySnapshot(normalizeStoryResponse(identity.filePath, target));
+      this.canUndo = history.past.length > 0;
+      this.canRedo = true;
+      this._syncCurrentStoryCache();
+      this._scheduleCurrentStoryPayload();
+      return true;
+    },
+    async redoStoryEdit(): Promise<boolean> {
+      const identity = this._currentStoryIdentity();
+      if (!identity) return false;
+      const history = storyHistories.get(identity.key);
+      if (!history?.future.length) return false;
+      closeHistoryGroup(history);
+      const current = serializeStoryDataForSave(identity.filePath, this.scriptData);
+      const target = history.future.pop()!;
+      history.past.push(current);
+      history.observed = target;
+      this._applyStorySnapshot(normalizeStoryResponse(identity.filePath, target));
+      this.canUndo = true;
+      this.canRedo = history.future.length > 0;
+      this._syncCurrentStoryCache();
+      this._scheduleCurrentStoryPayload();
+      return true;
     },
     setWorkspaceMode(mode: string) {
       this.workspaceMode = mode === 'novel' ? 'novel' : 'script';
@@ -214,6 +409,8 @@ export const useSceneStore = defineStore('scene', {
       this.currentNode = null;
       this.nodeParent = null;
       this.lastScriptwriterThought = '';
+      this.canUndo = false;
+      this.canRedo = false;
       if (normalized === 'novel') {
         this.scriptData = '';
         this.fileFormat = 'novel';
@@ -225,6 +422,9 @@ export const useSceneStore = defineStore('scene', {
       }
     },
     async loadStory(filePath: string | null | undefined) {
+      if (this.currentFilePath && this.currentFilePath !== filePath) {
+        await this.flushStorySave();
+      }
       const requestId = ++storyLoadRequestSeq;
         if (!filePath) {
           this.scriptData = [];
@@ -235,6 +435,8 @@ export const useSceneStore = defineStore('scene', {
         this.selectionType = '';
         this.fileFormat = 'arc';
         this.lastScriptwriterThought = '';
+        this.canUndo = false;
+        this.canRedo = false;
         return;
       }
       try {
@@ -256,48 +458,14 @@ export const useSceneStore = defineStore('scene', {
           this._applyStorySnapshot(remoteSnapshot);
         }
         saveCreativeCache(cacheKey, remoteSnapshot);
+        this._resetStoryHistory();
       } catch (error: unknown) {
         console.error('加载剧本失败:', error);
         bus.emit('toast', { type: 'error', message: `加载剧本失败: ${getErrorMessage(error)}` });
       }
     },
-    async _saveStory() {
-      const projectStore = useProjectStore();
-      if (!projectStore.currentProject || !this.currentFilePath) {
-        // Silently fail if no project or file is selected
-        return;
-      }
-      const projectName = String(projectStore.currentProject);
-      const filePath = this.currentFilePath;
-      const dataToSave = serializeStoryDataForSave(filePath, this.scriptData);
-      const cacheKey = buildStoryCacheKey(projectName, filePath);
-      const persistKey = `${projectName}:${filePath}`;
-      saveCreativeCache(cacheKey, buildStorySnapshot(filePath, this));
-
-      const previousSave = storySaveChains.get(persistKey) || Promise.resolve();
-      const currentSave = previousSave
-        .catch(() => undefined)
-        .then(async () => {
-          if (lastPersistedStoryPayload.get(persistKey) === dataToSave) {
-            return;
-          }
-          await saveStory(projectName, filePath, dataToSave);
-          lastPersistedStoryPayload.set(persistKey, dataToSave);
-        });
-      storySaveChains.set(persistKey, currentSave);
-
-      try {
-        await currentSave;
-        bus.emit('toast', { type: 'success', message: '已保存' });
-        bus.emit('saved');
-      } catch (error: unknown) {
-        bus.emit('toast', { type: 'error', message: `保存失败: ${getErrorMessage(error)}` });
-        console.error('保存剧本失败:', error);
-      } finally {
-        if (storySaveChains.get(persistKey) === currentSave) {
-          storySaveChains.delete(persistKey);
-        }
-      }
+    async _saveStory(): Promise<boolean> {
+      return this.flushStorySave();
     },
     selectScene(scene: SceneWithClientId) {
       this.currentScene = scene;
@@ -318,17 +486,17 @@ export const useSceneStore = defineStore('scene', {
     updateCurrentScene(fields: Partial<SceneWithClientId>) {
       if (!this.currentScene) return;
       Object.assign(this.currentScene, fields);
-      this._syncCurrentStoryCache();
+      this.scheduleStorySave();
     },
     updateCurrentDialogue(fields: Partial<ArcDialogueNode>) {
       if (!this.currentNode || this.selectionType !== 'dialogue') return;
       Object.assign(this.currentNode, fields);
-      this._syncCurrentStoryCache();
+      this.scheduleStorySave();
     },
     updateCurrentOption(fields: Partial<ArcOptionNode>) {
       if (!this.currentNode || this.selectionType !== 'option') return;
       Object.assign(this.currentNode, fields);
-      this._syncCurrentStoryCache();
+      this.scheduleStorySave();
     },
     renameSpeaker(oldName: string, newName: string): number {
       const from = String(oldName || '').trim();
@@ -340,7 +508,7 @@ export const useSceneStore = defineStore('scene', {
         changed += renameSpeakerInDialogues(scene.dia, from, to);
       }
       if (changed > 0) {
-        this._syncCurrentStoryCache();
+        this.scheduleStorySave({ boundary: true });
       }
       return changed;
     },
@@ -375,8 +543,7 @@ export const useSceneStore = defineStore('scene', {
         }
         this.scriptData.push(newScene);
         this.selectScene(newScene);
-        this._syncCurrentStoryCache();
-        await this._saveStory();
+        this.scheduleStorySave({ boundary: true });
         return newScene; // Return the newly created scene object
       }
       return null;
@@ -391,8 +558,7 @@ export const useSceneStore = defineStore('scene', {
         this.currentNode = null;
         this.nodeParent = null;
         this.selectionType = this.currentScene ? 'scene' : '';
-        this._syncCurrentStoryCache();
-        await this._saveStory();
+        this.scheduleStorySave({ boundary: true });
         bus.emit('toast', { type: 'success', message: '场景已删除' });
       }
     },
@@ -407,8 +573,7 @@ export const useSceneStore = defineStore('scene', {
       this.currentNode = null;
       this.nodeParent = null;
       this.selectionType = 'novel';
-      this._syncCurrentStoryCache();
-      await this._saveStory();
+      this.scheduleStorySave();
     }
   },
 });

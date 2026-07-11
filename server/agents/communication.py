@@ -500,6 +500,25 @@ class SparkBaseAgent:
 
         return system_instruction
 
+    def _build_runtime_tail(self) -> str:
+        """构建仅属于本轮请求的运行态尾部，避免污染可缓存的系统前缀。"""
+        if not self.project_name:
+            return ""
+        try:
+            from agents.tools.registry import get_tools_for_agent
+            from agents.work_tracker import build_work_tracker_prompt_context
+
+            tools = get_tools_for_agent(self.agent_id, user_id=self.user_id)
+            if not any(getattr(tool, "name", "") == "work_tracker" for tool in tools):
+                return ""
+            return build_work_tracker_prompt_context(
+                self.user_id,
+                self.project_name,
+                self.agent_id,
+            )
+        except Exception:
+            return ""
+
     def _build_skill_catalog_prompt_block(self) -> str:
         """注入已安装 Skill 的最小索引，帮助模型选择要读取的 Skill。"""
         try:
@@ -620,10 +639,6 @@ class SparkBaseAgent:
             # 向 sink 推送工具开始事件（供外层 chat_stream 转发给前端）
             if sink is not None:
                 _extra_exec: dict = {}
-                if tool_name == "work_tracker" and isinstance(tool_args, dict):
-                    _act = str(tool_args.get("action") or "").strip()
-                    if _act:
-                        _extra_exec["tool_action"] = _act
                 sink.put(build_tool_stream_event(
                     "tool_exec_started",
                     tool_name,
@@ -1219,6 +1234,7 @@ class SparkBaseAgent:
             system_instruction=system_instruction,
             user_message=user_message,
             active_context=active_context,
+            runtime_tail=self._build_runtime_tail(),
         )
 
         # 2. 调用 LLM（支持多轮工具调用）
@@ -1349,6 +1365,7 @@ class SparkBaseAgent:
             system_instruction=system_instruction,
             user_message=user_message,
             active_context=active_context,
+            runtime_tail=self._build_runtime_tail(),
         )
 
         from llm.agen_matchbox import matchbox

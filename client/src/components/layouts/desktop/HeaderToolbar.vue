@@ -72,40 +72,26 @@
 
         <n-tooltip trigger="hover">
           <template #trigger>
-            <n-button class="header-action-btn" @click="saveCurrentFile" type="primary" strong>
-              <template #icon>
-                <n-icon :component="saveSucceeded ? CircleCheck : Save" />
-              </template>
-              {{ saveButtonText }}
+            <n-button class="header-action-btn" quaternary :disabled="!sceneStore.canUndo" @click="sceneStore.undoStoryEdit()">
+              <template #icon><n-icon :component="Undo2" /></template>
             </n-button>
           </template>
-          {{ t('components.headerToolbar.saveShortcut') }}
+          {{ t('components.headerToolbar.undo') }}
+        </n-tooltip>
+
+        <n-tooltip trigger="hover">
+          <template #trigger>
+            <n-button class="header-action-btn" quaternary :disabled="!sceneStore.canRedo" @click="sceneStore.redoStoryEdit()">
+              <template #icon><n-icon :component="Redo2" /></template>
+            </n-button>
+          </template>
+          {{ t('components.headerToolbar.redo') }}
         </n-tooltip>
       </div>
       <input type="file" ref="importFileInput" @change="onFileChange" accept=".arc" style="display:none;">
       <input type="file" ref="importSparkInput" @change="onSparkFileChange" accept=".spark" style="display:none;">
     </div>
     <div class="header-right">
-      <n-tooltip trigger="hover">
-        <template #trigger>
-          <n-button
-            text
-            style="font-size: var(--spark-fs-h1); margin-right: 8px;"
-            @click="toggleAutoSave(!autoSaveEnabled)"
-          >
-            <template #icon>
-              <n-icon
-                :component="autoSaveEnabled ? SaveAll : SaveOff"
-                :color="autoSaveEnabled ? 'var(--n-primary-color)' : '#e88080'"
-                :style="{
-                  transition: 'all 0.3s ease'
-                }"
-              />
-            </template>
-          </n-button>
-        </template>
-        {{ autoSaveEnabled ? t('components.headerToolbar.autoSaveDisable') : t('components.headerToolbar.autoSaveEnable') }}
-      </n-tooltip>
       <n-tooltip trigger="hover">
         <template #trigger>
           <n-button text style="font-size: var(--spark-fs-h2); margin-left: 8px;" @click="handleToggleFullscreen">
@@ -162,7 +148,7 @@
 import { onBeforeUnmount, onMounted, ref, computed, h } from 'vue';
 import { useI18n } from 'vue-i18n';
 import { NButton, NIcon, NText, NDropdown, NTooltip } from 'naive-ui';
-import { Archive, BrainCircuit, CircleCheck, CloudDownload, CloudUpload, FolderOpen, Laptop, LogOut, Maximize2, Minimize2, Moon, PaintBucket, Play, Save, SaveAll, SaveOff, Share2, Sun, Languages } from '@lucide/vue';
+import { Archive, BrainCircuit, CloudDownload, CloudUpload, FolderOpen, Laptop, LogOut, Maximize2, Minimize2, Moon, PaintBucket, Play, Redo2, Share2, Sun, Languages, Undo2 } from '@lucide/vue';
 import { useLocaleStore } from '@/components/stores/localeStore';
 import type { AppLocale } from '@/i18n/types';
 import bus from '@/eventBus';
@@ -171,14 +157,13 @@ import { useSceneStore } from '@/components/stores/sceneStore';
 import { useProjectStore } from '@/components/stores/projectStore';
 import { useFileStore } from '@/components/stores/fileStore';
 import { useThemeStore } from '@/components/stores/themeStore';
-import { absorbStoryMemory, saveStory, uploadStory, logout as apiLogout, fetchWithAuth } from '@/services/api';
+import { absorbStoryMemory, uploadStory, logout as apiLogout, fetchWithAuth } from '@/services/api';
 import { exportProjectToSQLite, exportProjectAsSpark, importProjectFromSpark } from '@/services/projectService';
 import { useFullscreen } from '@/composables/useFullscreen';
 import { useWindowControls } from '@/composables/useWindowControls';
 import { useDockMagnify } from '@/composables/useDockMagnify';
 import AppBrand from '@/components/share/AppBrand.vue';
 import { SPARKARC_GITHUB_URL } from '@/config';
-import { autoSaveEnabled, setAutoSaveEnabled } from '@/utils/autoSaveState';
 import WindowControls from './WindowControls.vue';
 
 const { startDragging, isTauriDesktop: showWinControls } = useWindowControls();
@@ -211,10 +196,7 @@ const props = defineProps({
 
 const { t } = useI18n();
 
-const emit = defineEmits(['open-settings', 'auto-save-changed', 'logout', 'open-version-manager']);
-
-const saveSucceeded = ref(false);
-const saveButtonText = computed(() => saveSucceeded.value ? t('components.headerToolbar.saveSuccess') : t('views.common.save'));
+const emit = defineEmits(['open-settings', 'logout', 'open-version-manager']);
 const previewing = ref(false);
 
 const importFileInput = ref(null);
@@ -350,10 +332,6 @@ const currentThemeIcon = computed(() => {
 
 const currentFilePath = computed(() => fileStore.selectedFile?.type === 'story' ? fileStore.selectedFile.path : null);
 
-function showSavedHint() {
-  bus.emit('saved');
-}
-
 function createNewScene() { sceneStore.createNewScene(); }
 
 async function handleFileSelected(file) {
@@ -370,7 +348,6 @@ async function handleFileSelected(file) {
         await sceneStore.loadStory(match.path);
       }
     }
-  showSavedHint();
   bus.emit('toast', { type: 'success', message: t('components.headerToolbar.uploadSuccess') });
   } catch (e: unknown) {
     const errorMessage = e instanceof Error ? e.message : String(e || 'Unknown error');
@@ -419,30 +396,6 @@ function handleToggleFullscreen() {
   toggleFullscreen();
 }
 
-async function saveCurrentFile() {
-  if (!currentFilePath.value) {
-    bus.emit('toast', { type: 'info', message: autoSaveEnabled.value ? t('components.headerToolbar.autoSaveOn') : t('components.headerToolbar.autoSaveOff') });
-    return;
-  }
-  try {
-    await saveStory(projectStore.currentProject, currentFilePath.value, sceneStore.scriptData);
-    if (autoSaveEnabled.value) localStorage.setItem('lastSavedState', JSON.stringify(sceneStore.scriptData));
-    showSavedHint();
-    
-    // 成功反馈
-    saveSucceeded.value = true;
-    setTimeout(() => {
-      saveSucceeded.value = false;
-    }, 2000);
-
-    bus.emit('toast', { type: 'success', message: t('views.common.saveSuccess') });
-  } catch (e: unknown) {
-    const errorMessage = e instanceof Error ? e.message : String(e || 'Unknown error');
-    bus.emit('toast', { type: 'error', message: `${t('views.common.saveFailed')}: ${errorMessage}` });
-    throw e;
-  }
-}
-
 async function absorbCurrentStoryMemory() {
   if (!projectStore.currentProject || !currentFilePath.value) {
     bus.emit('toast', { type: 'info', message: t('components.headerToolbar.selectStoryFileFirst') });
@@ -465,11 +418,8 @@ async function quickPreview() {
     return;
   }
 
-  try {
-    await saveCurrentFile();
-  } catch {
-    return;
-  }
+  const saved = await sceneStore.flushStorySave();
+  if (!saved) return;
 
   previewing.value = true;
   try {
@@ -505,16 +455,6 @@ async function quickPreview() {
   }
 }
 
-function toggleAutoSave(newVal) {
-  setAutoSaveEnabled(newVal);
-  // 仅关闭时提示（开启是默认行为，无需提示）
-  if (!newVal) {
-    bus.emit('toast', { type: 'warning', message: t('components.headerToolbar.autoSaveOff') });
-  }
-  emit('auto-save-changed', newVal);
-  if (newVal) saveCurrentFile();
-}
-
 async function handleLogout() {
   // 先重置 Pinia 状态，防止旧项目名残留导致新用户登录后被 watch immediate 捕获
   projectStore.resetForLogout();
@@ -522,10 +462,6 @@ async function handleLogout() {
   // 切换到应用内登录视图（SPA），由父组件处理
   emit('logout');
 }
-
-function onSaveRequest() { saveCurrentFile(); }
-onMounted(() => { bus.on('save-request', onSaveRequest); });
-onBeforeUnmount(() => { bus.off('save-request', onSaveRequest); });
 
 onMounted(() => {
   if (preferred.value && !document.fullscreenElement) {

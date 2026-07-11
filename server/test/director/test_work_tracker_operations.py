@@ -3,9 +3,18 @@ from __future__ import annotations
 import asyncio
 import json
 
+from langchain_core.utils.function_calling import convert_to_openai_tool
+
 from agents.routes.runtime import get_work_trackers_api
 from agents.tools.automation import work_tracker
-from agents.work_tracker import list_work_trackers, load_work_tracker, update_work_tracker
+from agents.prompt_layout import build_current_user_message
+from agents.agent_director import DirectorAgent
+from agents.work_tracker import (
+    build_work_tracker_prompt_context,
+    list_work_trackers,
+    load_work_tracker,
+    update_work_tracker,
+)
 from core.request_context import current_agent_id, set_current_context
 
 
@@ -104,14 +113,12 @@ def test_langchain_tool_accepts_structured_items_and_operations(monkeypatch, tmp
     token = current_agent_id.set("agent_director")
     try:
         created = json.loads(work_tracker.invoke({
-            "action": "update",
             "overwrite": True,
             "summary": "真实工具调用",
             "items": [{"task": "第一步", "status": "in_progress", "priority": "high"}],
         }))
         item_id = created["items"][0]["id"]
         completed = json.loads(work_tracker.invoke({
-            "action": "update",
             "operations": [{
                 "operation": "set_status",
                 "item_ids": [item_id],
@@ -122,6 +129,81 @@ def test_langchain_tool_accepts_structured_items_and_operations(monkeypatch, tmp
         current_agent_id.reset(token)
 
     assert completed["items"][0]["status"] == "completed"
+
+
+def test_work_tracker_schema_is_update_only_and_describes_nested_item() -> None:
+    schema = work_tracker.args_schema.model_json_schema()
+
+    assert "action" not in schema["properties"]
+    assert set(schema["properties"]["overwrite"]) >= {"default", "description"}
+    operation_ref = schema["$defs"]["WorkTrackerOperationInput"]
+    assert set(operation_ref["properties"]["operation"]["enum"]) == {
+        "add",
+        "insert",
+        "edit",
+        "delete",
+        "set_status",
+    }
+    assert "WorkTrackerOperationItemInput" in schema["$defs"]
+
+
+def test_openai_tool_schema_preserves_work_tracker_field_guidance() -> None:
+    parameters = convert_to_openai_tool(work_tracker)["function"]["parameters"]
+
+    assert "action" not in parameters["properties"]
+    operations = parameters["properties"]["operations"]["anyOf"][0]["items"]
+    assert set(operations["properties"]["operation"]["enum"]) == {
+        "add",
+        "insert",
+        "edit",
+        "delete",
+        "set_status",
+    }
+    item = operations["properties"]["item"]["anyOf"][0]
+    assert item["properties"]["task"]["description"]
+    assert item["properties"]["notes"]["description"]
+
+
+def test_work_tracker_snapshot_is_appended_to_user_message_tail(monkeypatch, tmp_path) -> None:
+    monkeypatch.setattr("core.utils.USERDATA_ROOT", str(tmp_path))
+    tracker = update_work_tracker(
+        "u6",
+        "demo",
+        "agent_director",
+        overwrite=True,
+        summary="完成全流程",
+        items=[{"task": "生成大纲", "status": "in_progress"}],
+    )
+
+    runtime_tail = build_work_tracker_prompt_context("u6", "demo", "agent_director")
+    message = build_current_user_message(
+        user_message="继续推进",
+        active_context="当前已有世界观",
+        runtime_tail=runtime_tail,
+    )
+
+    assert tracker["items"][0]["id"] in runtime_tail
+    assert "无需调用工具读取" in runtime_tail
+    assert message.endswith(runtime_tail)
+    assert message.index("### 本轮用户请求") < message.index("### 当前进度板（系统自动注入）")
+
+
+def test_agent_runtime_tail_keeps_tracker_out_of_system_prefix(monkeypatch, tmp_path) -> None:
+    monkeypatch.setattr("core.utils.USERDATA_ROOT", str(tmp_path))
+    update_work_tracker(
+        "u7",
+        "demo",
+        "agent_director",
+        overwrite=True,
+        items=[{"task": "生成角色", "status": "pending"}],
+    )
+    agent = DirectorAgent(user_id="u7", project_name="demo")
+
+    system_prompt = agent._build_tool_system_prompt("固定系统规则")
+    runtime_tail = agent._build_runtime_tail()
+
+    assert "当前进度板（系统自动注入）" not in system_prompt
+    assert "当前进度板（系统自动注入）" in runtime_tail
 
 
 def test_runtime_api_returns_persisted_agent_boards(monkeypatch, tmp_path) -> None:

@@ -358,12 +358,17 @@ def _clean_generated_nodes(
     final_nodes: List[Dict[str, Any]],
     *,
     allow_visual_illustration: bool = False,
+    allowed_background_ids: set[str] | None = None,
 ) -> List[Dict[str, Any]]:
     """
     清洗 AI 生成的节点列表，只保留叙事字段与受门禁控制的插图描述，
     防止 AI 幻觉添加的额外字段污染落盘后的 .arc 文件。
     """
     from story.arc_safety import normalize_illustration_prompt
+
+    allowed_backgrounds = {
+        str(value).strip() for value in (allowed_background_ids or set()) if str(value).strip()
+    }
 
     allowed_fields = {"id", "chr", "speaker", "txt", "opt", "optn", "dia", "presentation"}
 
@@ -375,10 +380,22 @@ def _clean_generated_nodes(
                     del node[key]
             presentation = node.get("presentation")
             prompt = ""
+            background_id = ""
             if allow_visual_illustration and isinstance(presentation, dict):
                 prompt = normalize_illustration_prompt(presentation.get("illustration_prompt"))
+                raw_background = presentation.get("bg")
+                if isinstance(raw_background, list):
+                    raw_background = raw_background[0] if raw_background else ""
+                candidate_background = str(raw_background or "").strip()
+                if candidate_background in allowed_backgrounds:
+                    background_id = candidate_background
+            safe_presentation = {}
             if prompt:
-                node["presentation"] = {"illustration_prompt": prompt}
+                safe_presentation["illustration_prompt"] = prompt
+            if background_id:
+                safe_presentation["bg"] = background_id
+            if safe_presentation:
+                node["presentation"] = safe_presentation
             else:
                 node.pop("presentation", None)
             if "dia" in node:
@@ -444,12 +461,17 @@ def _persist_generated_nodes(
         is_visual_illustration_enabled,
     )
     from story.arc_safety import validate_arc_visual_prompt_candidate
+    from story.presentation_manifest import get_project_background_catalog
 
     visual_settings = get_visual_illustration_settings(user_id, project_name)
     visual_enabled = is_visual_illustration_enabled(user_id, project_name)
+    allowed_background_ids = {
+        item["id"] for item in get_project_background_catalog(user_id, project_name)
+    }
     final_nodes = _clean_generated_nodes(
         final_nodes,
         allow_visual_illustration=visual_enabled,
+        allowed_background_ids=allowed_background_ids,
     )
 
     def find_and_insert(nodes):

@@ -17,6 +17,7 @@ import { i18n } from '@/i18n';
 import { createStreamingTask, isAbortLikeError } from '@/utils/streamingRuntime';
 import type { OutlineData } from '../services/aiContracts';
 import { buildCreativeCacheKey, isCreativeCacheEqual, loadCreativeCache, saveCreativeCache } from '@/utils/creativeLocalCache';
+import { createAutoSaveScheduler } from '@/utils/autoSaveScheduler';
 
 type StructureAdoptionPayload = {
     projectName?: string;
@@ -249,23 +250,25 @@ export function useStructureLogic() {
         }
     }
 
+    const outlineSaveScheduler = createAutoSaveScheduler<{
+        projectName: string;
+        outline: OutlineData;
+    }>(async payload => {
+        await saveOutline(payload.projectName, payload.outline, false);
+    }, {
+        delay: 800,
+        maxWait: 5000,
+        onError: error => message.error('自动保存失败: ' + getErrorMessage(error)),
+    });
+
     function handleOutlineUpdate(newOutline: OutlineData | null) {
         currentOutline.value = newOutline;
         saveStructureSnapshot();
-    }
-
-    async function handleSaveOutline(outline?: unknown) {
-        try {
-            const payload = (outline || currentOutline.value) as OutlineData | null;
-            if (!payload) {
-                message.warning('暂无可保存的大纲');
-                return;
-            }
-            await saveOutline(projectStore.currentProject, payload, false);
-            saveStructureSnapshot();
-            message.success('大纲已保存');
-        } catch (e: unknown) {
-            message.error('保存失败: ' + getErrorMessage(e));
+        if (newOutline && projectStore.currentProject) {
+            outlineSaveScheduler.schedule({
+                projectName: projectStore.currentProject,
+                outline: JSON.parse(JSON.stringify(newOutline)),
+            });
         }
     }
 
@@ -380,6 +383,7 @@ export function useStructureLogic() {
     onBeforeUnmount(() => {
         bus.off('adopt-synopsis', handleAdoptSynopsis);
         bus.off('outline-refresh', handleOutlineRefresh);
+        void outlineSaveScheduler.flush();
     });
 
     watch(() => projectStore.pendingStructureAdoption, () => {
@@ -406,7 +410,6 @@ export function useStructureLogic() {
         lengthOptions,
         handleGenerateOutline,
         handleOutlineUpdate,
-        handleSaveOutline,
         handleSaveToHistory,
         handleOutlineHistorySelect,
         handleOutlineRestore,

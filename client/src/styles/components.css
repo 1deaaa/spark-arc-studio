@@ -250,33 +250,6 @@ button.delete-btn:hover {
     color: var(--spark-text);
 }
 
-/* 自动保存按钮 */
-#auto-save-btn {
-    background-color: transparent;
-    border: 1px solid var(--spark-border);
-    color: var(--spark-text-muted);
-    padding: 8px 16px;
-    border-radius: 20px;
-    cursor: pointer;
-    font-size: var(--spark-fs-xs);
-    font-weight: 500;
-    transition: all 0.2s ease;
-    position: relative;
-}
-
-#auto-save-btn:hover {
-    background-color: var(--spark-border);
-    border-color: var(--spark-text-muted);
-    color: var(--spark-text);
-}
-
-#auto-save-btn::before,
-#auto-save-btn::after {
-    display: none !important;
-    content: none !important;
-}
-
-
 /* --- Right Panel --- */
 .right-panel-section {
     margin-bottom: 12px;

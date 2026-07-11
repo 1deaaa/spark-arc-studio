@@ -1,10 +1,32 @@
 <template>
-  <n-drawer v-model:show="visible" placement="bottom" :height="drawerHeight" :auto-size="true" :max-height="85">
+  <n-drawer v-model:show="visible" class="mobile-node-editor" placement="bottom" :height="drawerHeight" :auto-size="true" :max-height="85">
     <n-drawer-content closable>
       <template #header>
         <div class="drawer-header-inner">
           <n-icon :component="headerIcon" size="20" />
-          <span>{{ headerTitle }}</span>
+          <span class="drawer-header-title">{{ headerTitle }}</span>
+          <div class="drawer-history-actions">
+            <n-button
+              quaternary
+              circle
+              size="small"
+              :disabled="!sceneStore.canUndo"
+              :aria-label="t('components.headerToolbar.undo')"
+              @click.stop="sceneStore.undoStoryEdit()"
+            >
+              <template #icon><n-icon :component="Undo2" /></template>
+            </n-button>
+            <n-button
+              quaternary
+              circle
+              size="small"
+              :disabled="!sceneStore.canRedo"
+              :aria-label="t('components.headerToolbar.redo')"
+              @click.stop="sceneStore.redoStoryEdit()"
+            >
+              <template #icon><n-icon :component="Redo2" /></template>
+            </n-button>
+          </div>
         </div>
       </template>
 
@@ -216,7 +238,7 @@
 <script setup lang="ts">
 import { computed, reactive, ref, watch } from 'vue';
 import { NDrawer, NDrawerContent, NInput, NInputNumber, NSelect, NButton, NIcon, NSwitch, NCollapse, NCollapseItem, NPopconfirm, NEmpty, NSpace, NText } from 'naive-ui';
-import { ArrowDown, CircleDot, CirclePlus, Film, Gamepad2, MessageCircle, Plus, Settings, Trash } from '@lucide/vue';
+import { ArrowDown, CircleDot, CirclePlus, Film, Gamepad2, MessageCircle, Plus, Redo2, Settings, Trash, Undo2 } from '@lucide/vue';
 import { useI18n } from 'vue-i18n';
 import { useSceneStore, type SceneWithClientId } from '../stores/sceneStore';
 import { useProjectStore } from '../stores/projectStore';
@@ -291,29 +313,10 @@ const sceneSelectOptions = computed(() =>
 );
 
 // ── 自动保存 ──
-import { autoSaveEnabled } from '@/utils/autoSaveState';
-
-function useDebounce(fn: Function, delay = 600) {
-  let timer: ReturnType<typeof setTimeout> | null = null;
-  return (...args: unknown[]) => {
-    if (timer) clearTimeout(timer);
-    timer = setTimeout(() => fn(...args), delay);
-  };
-}
-
-import { AUTO_SAVE_DEBOUNCE_TIME } from '../../config';
-
-async function maybeAutoSave() {
-  if (!autoSaveEnabled.value) return;
+function debouncedAutoSave() {
   if (!fileStore.selectedFile?.path || !projectStore.currentProject) return;
-  try {
-    await sceneStore._saveStory();
-  } catch (e) {
-    console.error('Auto save failed:', e);
-  }
+  sceneStore.scheduleStorySave({ boundary: true });
 }
-
-const debouncedAutoSave = useDebounce(maybeAutoSave, AUTO_SAVE_DEBOUNCE_TIME);
 
 // ── 场景草稿 ──
 const sceneDraft = reactive<{
@@ -548,6 +551,17 @@ watch(() => projectStore.currentProject, (proj) => {
   gap: 8px;
   font-weight: 600;
   font-size: var(--spark-fs-md);
+}
+
+.drawer-header-title {
+  min-width: 0;
+  flex: 1;
+}
+
+.drawer-history-actions {
+  display: flex;
+  flex: 0 0 auto;
+  gap: 2px;
 }
 
 .editor-form {

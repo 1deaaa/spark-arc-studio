@@ -14,7 +14,6 @@
           <template #icon><n-icon><RefreshCw /></n-icon></template>
           {{ t('views.common.reload') }}
         </n-button>
-        <n-button type="primary" @click="handleSave">{{ t('views.common.saveAll') }}</n-button>
       </div>
       <div class="spark-desktop-header__right">
         <n-button :disabled="!synopsisData.synopsis_text" size="small" secondary type="primary" @click="goToStructure({ autoGenerateOutline: true })">
@@ -167,7 +166,6 @@ const {
   getTensionHeight,
   getBeatColor,
   loadFromProject,
-  handleSave,
   handleGenerateSynopsis,
   handleGenerateBeats,
   addBeat,
