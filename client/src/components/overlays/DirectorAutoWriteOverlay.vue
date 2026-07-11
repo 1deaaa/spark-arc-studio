@@ -163,6 +163,13 @@
             </div>
           </Transition>
 
+          <Transition name="daw-row-fade" mode="out-in">
+            <div v-if="snapshot?.phase === 'prewrite'" class="daw-phase-row">
+              <n-icon :component="Search" :size="13" class="daw-row-icon" />
+              <span class="daw-phase-text">{{ t('components.directorAutoWrite.prewriteStatus') }}</span>
+            </div>
+          </Transition>
+
           <!-- 实时流式预览（手动触发时显示） -->
           <Transition name="daw-row-fade" mode="out-in">
             <div
@@ -252,7 +259,7 @@
 <script setup lang="ts">
 import { computed, ref, reactive, watch, onMounted, onUnmounted } from 'vue';
 import { NIcon } from 'naive-ui';
-import { CircleAlert, CircleCheck, CircleX, FileText, FolderOpen, Info, Play, RotateCw, Square, SquarePen, TriangleAlert, X } from '@lucide/vue';
+import { CircleAlert, CircleCheck, CircleX, FileText, FolderOpen, Info, Play, RotateCw, Search, Square, SquarePen, TriangleAlert, X } from '@lucide/vue';
 import { useI18n } from 'vue-i18n';
 import { useDirectorAutoWriteStore } from '@/components/stores/directorAutoWriteStore';
 import { useProjectStore } from '@/components/stores/projectStore';
@@ -429,7 +436,7 @@ const showStreamingPreview = computed(() => {
   const task = store.currentTask;
   if (!task) return false;
   // 手动触发且正在运行时显示流式区域
-  return !task.fromDirector && (task.snapshot.status === 'running');
+  return !task.fromDirector && task.snapshot.status === 'running' && task.snapshot.phase !== 'prewrite';
 });
 
 const snapshot = computed(() => store.currentTask?.snapshot ?? null);
@@ -841,6 +848,7 @@ onUnmounted(() => {
 
 /* ── 数据行通用 ── */
 .daw-scene-row,
+.daw-phase-row,
 .daw-saved-row,
 .daw-error-row {
   display: flex;
@@ -1127,6 +1135,15 @@ onUnmounted(() => {
 }
 .daw-select:focus {
   border-color: var(--spark-primary);
+}
+
+.daw-phase-row {
+  background: var(--spark-surface-variant);
+  border-left: 3px solid var(--spark-info);
+}
+
+.daw-phase-text {
+  color: var(--spark-text-secondary);
 }
 
 .daw-check-row {

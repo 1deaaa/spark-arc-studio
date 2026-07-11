@@ -1067,6 +1067,7 @@ const enUS = {
         rewriteOutline: 'Rewrite outline',
         patchOutline: 'Patch outline',
         createChapter: 'Create chapter',
+        prepareScriptCreation: 'PreWrite research and planning',
         createOrRewriteScript: 'Rewrite script',
         organizeScenesToChapter: 'Organize scenes into chapter',
         patchScript: 'Patch script',
@@ -1113,6 +1114,7 @@ const enUS = {
       closePanel: 'Close panel',
       paused: 'Paused',
       preparing: 'Preparing...',
+      prewriteStatus: 'The scriptwriter is researching and planning.',
       chapterProgress: 'Chapter {current} / {total}{title}',
       // Setup phase
       genMode: 'Generation mode',
@@ -1763,6 +1765,7 @@ const enUS = {
       workTracker: 'Tracking progress...',
       updateProjectStoryTags: 'Updating project story tags...',
       createChapter: 'Creating chapter...',
+      prepareScriptCreation: 'The scriptwriter is researching and planning.',
       createOrRewriteScript: 'Rewriting script...',
       organizeScenesToChapter: 'Organizing scenes into chapter...',
       patchScript: 'Patching script...',

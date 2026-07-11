@@ -36,6 +36,7 @@ def test_core_agent_tool_boundaries() -> None:
     assert {"rewrite_worldview", "rewrite_all_characters", "update_character"} <= tool_names("agent_lorebook")
     assert {"rewrite_synopsis", "rewrite_beat_sheet", "rewrite_outline"} <= tool_names("agent_showrunner")
     assert {
+        "prepare_script_creation",
         "create_chapter",
         "create_or_rewrite_script",
         "patch_script",

@@ -49,6 +49,13 @@ current_llm_usage_context: ContextVar[Optional[str]] = ContextVar('current_llm_u
 # 目前仅 ScriptwriterAgent 使用；若将来其他 Agent 也有双格式工具，可直接复用。
 current_export_format: ContextVar[Optional[str]] = ContextVar('current_export_format', default=None)
 current_response_locale: ContextVar[Optional[str]] = ContextVar('current_response_locale', default='zh-CN')
+# Scriptwriter 完整场景落盘前的请求级 PreWrite 状态容器。
+# LangChain 工具调用会复制 ContextVar 上下文，因此容器必须在请求入口初始化，
+# 工具内部只原地修改容器，才能让同一任务的后续工具读取到凭证。
+current_scriptwriter_prewrite_receipt: ContextVar[Optional[Dict[str, Any]]] = ContextVar(
+    'current_scriptwriter_prewrite_receipt',
+    default=None,
+)
 
 
 def normalize_response_locale(locale: Optional[str]) -> str:
@@ -90,6 +97,29 @@ def get_current_agent_id() -> Optional[str]:
     return value or None
 
 
+def set_scriptwriter_prewrite_receipt(receipt: Optional[Dict[str, Any]]) -> None:
+    state = current_scriptwriter_prewrite_receipt.get()
+    if state is None:
+        state = {}
+        current_scriptwriter_prewrite_receipt.set(state)
+    if isinstance(receipt, dict):
+        state["receipt"] = dict(receipt)
+    else:
+        state.pop("receipt", None)
+
+
+def get_scriptwriter_prewrite_receipt() -> Optional[Dict[str, Any]]:
+    state = current_scriptwriter_prewrite_receipt.get()
+    receipt = state.get("receipt") if isinstance(state, dict) else None
+    return dict(receipt) if isinstance(receipt, dict) else None
+
+
+def clear_scriptwriter_prewrite_receipt() -> None:
+    state = current_scriptwriter_prewrite_receipt.get()
+    if isinstance(state, dict):
+        state.pop("receipt", None)
+
+
 def get_current_chat_session() -> tuple[Optional[str], Optional[str]]:
     """读取当前聊天房间归属；与执行工具的子 Agent 身份相互独立。"""
     agent_id = str(current_chat_agent_id.get() or "").strip() or None
@@ -114,6 +144,7 @@ def set_agent_context(user_id: str, project_name: str) -> None:
     """Set context for tools when running outside of a request (e.g., Agent pipelines)."""
     current_user_id.set(user_id)
     current_project_name.set(normalize_project_name(project_name))
+    current_scriptwriter_prewrite_receipt.set({})
 
 
 async def extract_project_name(
@@ -175,6 +206,7 @@ def set_current_context(user_id: Optional[str], project_name: Optional[str], is_
         current_user_id.set(user_id)
     else:
         current_user_id.set(None)
+    current_scriptwriter_prewrite_receipt.set({})
     # 管理员身份必须随请求显式注入，不能让 Matchbox 反查用户库。
     # 原因：Matchbox 是可独立运行的 LLM 配置层，也支持系统虚拟用户 -1；
     # 将 Web 用户表硬塞进去会把“站长真人账号”和“内部系统用户”重新搅在一起。

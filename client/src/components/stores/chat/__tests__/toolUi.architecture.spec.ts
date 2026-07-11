@@ -75,6 +75,12 @@ describe('聊天工具 UI 绑定契约', () => {
     expect(getToolProgressText('story_memory_tool', 'Executing story_memory_tool')).toBe(
       i18n.global.t('chatStore.toolProgress.storyMemoryTool'),
     );
+    expect(getToolNameLabelKey('prepare_script_creation')).toBe(
+      'components.chatMessageList.tools.prepareScriptCreation',
+    );
+    expect(getToolProgressText('prepare_script_creation')).toBe(
+      i18n.global.t('chatStore.toolProgress.prepareScriptCreation'),
+    );
   });
 
   it('所有已映射工具都有四语名称和执行中文案', () => {

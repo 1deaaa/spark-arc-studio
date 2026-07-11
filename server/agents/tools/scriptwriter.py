@@ -17,6 +17,14 @@ class CreateOrRewriteScriptInput(BaseModel):
     work_name: str | None = Field(default=None, description="场景文件的显示名称（不含扩展名），格式为「章节号-场景号 场景名」（如「1-1 初遇」「2-3 决战」）。若不提供，系统将自动根据内容或上下文命名。")
 
 
+class PrepareScriptCreationInput(BaseModel):
+    task_description: str = Field(description="本次完整场景创作任务，包含目标、冲突、衔接要求与用户意图。")
+    chapter_name: str = Field(description="目标章节名称，必须与随后 create_chapter 和 create_or_rewrite_script 使用的 chapter_name 完全一致。")
+    scene_name: str = Field(description="目标场景名称，必须与随后 create_or_rewrite_script 使用的 work_name 完全一致。")
+    scene_guidance: str = Field(default="", description="大纲中对当前场景的具体指导、关键事件或落点。")
+    scene_characters: list[str] = Field(default_factory=list, description="预计在本场出现或必须核对的角色名。")
+
+
 class CreateChapterInput(BaseModel):
     chapter_name: str = Field(description="章节名称，将作为 stories 目录下的子文件夹名称。格式为「中文数字 · 标题」（如「一 · 开端」「二 · 相遇」「十 · 终章」）。")
 
@@ -114,6 +122,45 @@ def read_beat_sheet() -> str:
         return f.read()
 
 
+@tool(args_schema=PrepareScriptCreationInput)
+def prepare_script_creation(
+    task_description: str,
+    chapter_name: str,
+    scene_name: str,
+    scene_guidance: str = "",
+    scene_characters: list[str] | None = None,
+) -> str:
+    """执行完整场景创作前的 PreWrite，核对任务包并签发本次落盘凭证。"""
+    import json
+
+    from agents.scriptwriter_prewrite import (
+        ScriptwriterPreWriteRequest,
+        prepare_interactive_scriptwriter_prewrite,
+    )
+
+    user_id, project_name = ToolExecutionContext.get_context()
+    chapter = str(chapter_name or "").strip()
+    scene = str(scene_name or "").strip()
+    if not chapter or not scene:
+        return "PreWrite 失败：chapter_name 与 scene_name 均不能为空。"
+
+    result = prepare_interactive_scriptwriter_prewrite(ScriptwriterPreWriteRequest(
+        user_id=user_id,
+        project_name=project_name,
+        task_description=str(task_description or "").strip(),
+        chapter_name=chapter,
+        scene_name=scene,
+        scene_guidance=str(scene_guidance or "").strip(),
+        scene_characters=[str(item).strip() for item in (scene_characters or []) if str(item).strip()],
+    ))
+    return json.dumps({
+        "status": "ready",
+        "message": "PreWrite 已完成，可以继续补查只读资料，随后创建章节并落盘正文。",
+        "task_pack": result.brief,
+        "planning_note": result.planning_note,
+    }, ensure_ascii=False)
+
+
 @tool(args_schema=CreateOrRewriteScriptInput)
 def create_or_rewrite_script(
     overwrite_content: str,
@@ -130,10 +177,21 @@ def create_or_rewrite_script(
         sanitize_story_display_name,
     )
 
-    from core.request_context import get_current_export_format
+    from core.request_context import clear_scriptwriter_prewrite_receipt, get_current_export_format
+    from agents.scriptwriter_prewrite import has_matching_prewrite_receipt
 
     effective_format = get_current_export_format()
     user_id, project_name = ToolExecutionContext.get_context()
+    if ToolExecutionContext.get_agent_id() == "agent_scriptwriter" and not has_matching_prewrite_receipt(
+        user_id=user_id,
+        project_name=project_name,
+        chapter_name=chapter_name,
+        scene_name=work_name,
+    ):
+        return (
+            "创建/重写剧本失败：当前完整场景尚未完成匹配的 PreWrite。"
+            "请先调用 prepare_script_creation，并使用完全一致的 chapter_name 与 scene_name。"
+        )
     content = (overwrite_content or "").strip()
     if effective_format != "novel":
         from core.project_settings import (
@@ -206,6 +264,8 @@ def create_or_rewrite_script(
         export_format=effective_format,
         scene_characters=[],
     )
+    if ToolExecutionContext.get_agent_id() == "agent_scriptwriter":
+        clear_scriptwriter_prewrite_receipt()
 
     format_label = "小说" if effective_format == "novel" else "剧本"
     action_label = "已覆盖" if existed else "已保存"

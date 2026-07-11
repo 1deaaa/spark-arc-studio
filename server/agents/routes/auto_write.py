@@ -36,6 +36,11 @@ from core.auth import get_current_user
 from core.utils import get_project_path, get_project_stories_path
 from core.project_settings import get_project_story_tags, get_workspace_mode
 from agents.agent_scriptwriter import ScriptwriterAgent
+from agents.scriptwriter_prewrite import (
+    PREWRITE_STATUS_MESSAGE,
+    ScriptwriterPreWriteRequest,
+    run_autonomous_scriptwriter_prewrite,
+)
 from agents.agent_critic import CriticAgent
 from .stream_semantics import (
     semantic_sse_data,
@@ -397,21 +402,6 @@ async def generate_script_stream(
                     [f"- {d}" for d in key_dialogues]
                 )
 
-            # Update User
-            yield semantic_sse_data(
-                "writing_scene",
-                chapter_index=i,
-                chapter_title=chapter_title,
-                scene_index=scene_idx,
-                scene_title=scene_title,
-                **on_progress(
-                    f"正在撰写：{chapter_title} - {scene_title}",
-                    stage="scene_start",
-                    chapterIndex=i,
-                    sceneIndex=scene_idx,
-                ),
-            )
-
             # Construct Prompt Context
             # We provide:
             # 1. Overall Story Context (from Outline Summary + Accumulation)
@@ -461,25 +451,64 @@ async def generate_script_stream(
 请撰写本场景的完整剧本内容。
 """
 
-            # ── Pre-flight 侦查阶段：按需懒加载远端伏笔场景 ───────────────────
-            # 全量世界观/角色/梗概/节拍表已通过 Prompt 注入，无需读取工具；
-            # 但如果大纲中提到了远端章节的具体伏笔细节，模型可通过
-            # list_chapters / read_chapter_scene 按需取回历史场景原文，
-            # 取回的内容追加进 context_str，再交给纯净的 write_script_stream。
-            try:
-                reference_text = writer.research_references(
-                    scene_goal=scene_goal,
-                    full_outline=full_outline,
+            update_state(
+                "running",
+                phase="prewrite",
+                phaseMessage=PREWRITE_STATUS_MESSAGE,
+                nextChapterIndex=i,
+                availableResumeChapterIndex=i,
+                availableResumeSceneIndex=scene_idx,
+            )
+            yield semantic_sse_data(
+                "prewrite",
+                chapter_index=i,
+                chapter_title=chapter_title,
+                scene_index=scene_idx,
+                scene_title=scene_title,
+                **on_progress(
+                    PREWRITE_STATUS_MESSAGE,
+                    stage="prewrite",
+                    chapterIndex=i,
+                    sceneIndex=scene_idx,
+                ),
+            )
+            prewrite_result = await asyncio.to_thread(
+                run_autonomous_scriptwriter_prewrite,
+                ScriptwriterPreWriteRequest(
                     user_id=user_id,
                     project_name=project_name,
-                )
-                if reference_text:
-                    context_str = context_str + (
-                        "\n\n### 【Pre-flight 主动查阅的远端场景参考】\n" + reference_text
-                    )
-            except Exception as preflight_err:
-                # pre-flight 失败不影响正式写作，仅记录日志
-                print(f"[AutoWrite] Pre-flight research_references exception (ignored): {preflight_err}")
+                    task_description=scene_goal,
+                    chapter_name=chapter_title,
+                    scene_name=scene_title,
+                    scene_guidance=scene_desc,
+                    scene_characters=[str(name) for name in scene_characters],
+                    full_outline=full_outline,
+                    available_context=context_str,
+                ),
+                llm=writer.llm,
+                clean_text=writer._clean_model_visible_arc_text,
+            )
+            if prewrite_result.context_addition:
+                context_str = context_str + "\n\n" + prewrite_result.context_addition
+
+            update_state(
+                "running",
+                phase="writing",
+                phaseMessage=f"正在撰写：{chapter_title} - {scene_title}",
+            )
+            yield semantic_sse_data(
+                "writing_scene",
+                chapter_index=i,
+                chapter_title=chapter_title,
+                scene_index=scene_idx,
+                scene_title=scene_title,
+                **on_progress(
+                    f"正在撰写：{chapter_title} - {scene_title}",
+                    stage="scene_start",
+                    chapterIndex=i,
+                    sceneIndex=scene_idx,
+                ),
+            )
 
             try:
 

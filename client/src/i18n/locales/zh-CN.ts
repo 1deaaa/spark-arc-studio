@@ -1065,6 +1065,7 @@ const zhCN = {
         rewriteOutline: '重写大纲',
         patchOutline: '局部更新大纲',
         createChapter: '创建章节',
+        prepareScriptCreation: 'PreWrite 调研规划',
         createOrRewriteScript: '重写正文',
         organizeScenesToChapter: '整理场景到章节',
         patchScript: '局部更新正文',
@@ -1111,6 +1112,7 @@ const zhCN = {
       closePanel: '关闭面板',
       paused: '已暂停',
       preparing: '准备中...',
+      prewriteStatus: '编剧正在调研规划。',
       chapterProgress: '第 {current} / {total} 章{title}',
       // Setup 阶段
       genMode: '生成模式',
@@ -1761,6 +1763,7 @@ const zhCN = {
       workTracker: '正在跟踪进度...',
       updateProjectStoryTags: '正在更新项目主题参数...',
       createChapter: '正在创建章节...',
+      prepareScriptCreation: '编剧正在调研规划。',
       createOrRewriteScript: '正在重写正文...',
       organizeScenesToChapter: '正在整理场景到章节...',
       patchScript: '正在局部更新正文...',

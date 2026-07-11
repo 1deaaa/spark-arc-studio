@@ -1067,6 +1067,7 @@ const jaJP = {
         rewriteOutline: 'アウトラインを書き換え',
         patchOutline: 'アウトラインを部分更新',
         createChapter: '章を作成',
+        prepareScriptCreation: 'PreWrite の調査と構成',
         createOrRewriteScript: '本文を書き換え',
         organizeScenesToChapter: 'シーンを章に整理',
         patchScript: '本文を部分更新',
@@ -1113,6 +1114,7 @@ const jaJP = {
       closePanel: 'パネルを閉じる',
       paused: '一時停止',
       preparing: '準備中...',
+      prewriteStatus: '脚本家が調査と構成を進めています。',
       chapterProgress: '第 {current} / {total} 章{title}',
       // Setup phase
       genMode: '生成モード',
@@ -1763,6 +1765,7 @@ const jaJP = {
       workTracker: '進捗を確認中...',
       updateProjectStoryTags: 'プロジェクトストーリータグを更新中...',
       createChapter: '章を作成中...',
+      prepareScriptCreation: '脚本家が調査と構成を進めています。',
       createOrRewriteScript: '本文を書き換え中...',
       organizeScenesToChapter: 'シーンを章に整理中...',
       patchScript: '本文を部分更新中...',

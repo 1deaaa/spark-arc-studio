@@ -38,6 +38,8 @@ export interface AutoWriteSnapshot {
   currentChapterTitle: string;
   currentSceneIndex: number | null;
   currentSceneTitle: string;
+  phase?: 'prewrite' | 'writing' | '';
+  phaseMessage?: string;
   totalChapters?: number;    // 前端注册时从旁路事件得到
   totalScenes?: number;
   completedScenes?: number;
@@ -220,6 +222,8 @@ export const useDirectorAutoWriteStore = defineStore('directorAutoWrite', () => 
         currentChapterTitle: '',
         currentSceneIndex: null,
         currentSceneTitle: '',
+        phase: '',
+        phaseMessage: '',
         totalChapters: total_chapters,
         totalScenes: total_scenes,
         availableResumeChapterIndex: payload.start_chapter_index,
@@ -281,6 +285,8 @@ export const useDirectorAutoWriteStore = defineStore('directorAutoWrite', () => 
             currentChapterTitle: '',
             currentSceneIndex: null,
             currentSceneTitle: '',
+            phase: '',
+            phaseMessage: '',
             totalScenes: data.totalScenes ?? 0,
             completedScenes: data.completedScenes ?? 0,
             lastSavedFilename: '',
@@ -472,6 +478,8 @@ export const useDirectorAutoWriteStore = defineStore('directorAutoWrite', () => 
         currentChapterTitle: '',
         currentSceneIndex: null,
         currentSceneTitle: '',
+        phase: '',
+        phaseMessage: '',
         lastSavedFilename: '',
         lastError: '',
         updatedAt: new Date().toISOString(),
@@ -583,9 +591,20 @@ export const useDirectorAutoWriteStore = defineStore('directorAutoWrite', () => 
     } else if (data.status === 'chapter_start') {
       snap.currentChapterIndex = (data.chapter_index as number) ?? snap.currentChapterIndex;
       snap.currentChapterTitle = (data.chapter_title as string) ?? snap.currentChapterTitle;
+    } else if (data.status === 'prewrite') {
+      snap.currentSceneIndex = (data.scene_index as number) ?? snap.currentSceneIndex;
+      snap.currentSceneTitle = (data.scene_title as string) ?? snap.currentSceneTitle;
+      snap.phase = 'prewrite';
+      snap.phaseMessage = (data.message as string) ?? snap.phaseMessage;
+      snap.streamingPreview = '';
+      snap.streamingSpeed = 0;
+      snap.streamingChars = 0;
+      snap.streamingElapsed = 0;
     } else if (data.status === 'writing_scene') {
       snap.currentSceneIndex = (data.scene_index as number) ?? snap.currentSceneIndex;
       snap.currentSceneTitle = (data.scene_title as string) ?? snap.currentSceneTitle;
+      snap.phase = 'writing';
+      snap.phaseMessage = (data.message as string) ?? snap.phaseMessage;
       snap.streamingPreview = '';
     } else if (data.status === 'streaming') {
       // 实时文字流！这是手动触发独有的体验
@@ -595,6 +614,8 @@ export const useDirectorAutoWriteStore = defineStore('directorAutoWrite', () => 
       snap.streamingElapsed = (data.elapsed as number) ?? snap.streamingElapsed;
     } else if (data.status === 'scene_completed') {
       snap.streamingPreview = '';
+      snap.phase = '';
+      snap.phaseMessage = '';
     } else if (data.status === 'scene_saved') {
       snap.lastSavedFilename = (data.filename as string) ?? snap.lastSavedFilename;
       // 后端 SSE 事件携带精确的 completedScenes / totalScenes，实时更新进度条

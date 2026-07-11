@@ -23,6 +23,7 @@ from agents.tools.scriptwriter import (
     create_or_rewrite_script,
     organize_scenes_to_chapter,
     patch_script,
+    prepare_script_creation,
     read_beat_sheet,
     read_character,
     read_synopsis,
@@ -80,6 +81,7 @@ SHOWRUNNER_BASE_TOOLS = [
     read_chapter_outline_raw,
 ]
 SCRIPTWRITER_BASE_TOOLS = [
+    prepare_script_creation,
     create_chapter,
     create_or_rewrite_script,
     organize_scenes_to_chapter,

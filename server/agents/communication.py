@@ -1161,6 +1161,7 @@ class SparkBaseAgent:
             "rewrite_outline": "正在重写剧情大纲...",
             "patch_outline": "正在局部更新剧情大纲...",
             "create_chapter": "正在创建章节...",
+            "prepare_script_creation": "编剧正在调研规划。",
             "create_or_rewrite_script": "正在新建/重写剧本文本...",
             "patch_script": "正在局部更新剧本文本...",
             "list_chapters": "正在查阅章节结构...",

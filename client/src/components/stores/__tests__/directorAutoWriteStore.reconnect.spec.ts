@@ -77,4 +77,32 @@ describe('directorAutoWriteStore SSE 恢复契约', () => {
     await vi.advanceTimersByTimeAsync(20000);
     expect(streamFetch).toHaveBeenCalledTimes(2);
   });
+
+  it('收到 PreWrite 事件后立即记录调研规划阶段', async () => {
+    vi.mocked(fetchWithAuth).mockResolvedValue(new Response(JSON.stringify({
+      success: true,
+      export_format: 'arc',
+    }), { status: 200 }));
+
+    vi.stubGlobal('fetch', vi.fn().mockResolvedValue(sseResponse([
+      {
+        status: 'prewrite',
+        streamSeq: 1,
+        scene_index: 2,
+        scene_title: '1-3 决断',
+        message: '编剧正在调研规划。',
+      },
+    ])));
+
+    const store = useDirectorAutoWriteStore();
+    const result = await store.startManualWrite('PreWrite 测试项目');
+    expect(result.success).toBe(true);
+    await flushAsyncWork();
+
+    const snapshot = store.tasks['PreWrite 测试项目'].snapshot;
+    expect(snapshot.phase).toBe('prewrite');
+    expect(snapshot.phaseMessage).toBe('编剧正在调研规划。');
+    expect(snapshot.currentSceneTitle).toBe('1-3 决断');
+    expect(snapshot.streamingChars).toBe(0);
+  });
 });

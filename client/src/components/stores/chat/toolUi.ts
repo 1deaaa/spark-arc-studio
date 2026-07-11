@@ -22,6 +22,7 @@ export const TOOL_PRESENTATION_KEY_MAP: Record<string, string> = {
   rewrite_outline: 'rewriteOutline',
   patch_outline: 'patchOutline',
   create_chapter: 'createChapter',
+  prepare_script_creation: 'prepareScriptCreation',
   create_or_rewrite_script: 'createOrRewriteScript',
   organize_scenes_to_chapter: 'organizeScenesToChapter',
   patch_script: 'patchScript',

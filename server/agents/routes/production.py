@@ -29,6 +29,7 @@ from sse_starlette.sse import EventSourceResponse
 from starlette.concurrency import run_in_threadpool
 from typing import List, Dict, Any
 import threading
+import asyncio
 import os
 import json
 import time
@@ -557,6 +558,11 @@ async def scriptwriter_compose_stream(
 ):
     """ScriptWriter 统一执行流接口。"""
     from story.arc_parser import parse_arc_to_dialogues
+    from agents.scriptwriter_prewrite import (
+        PREWRITE_STATUS_MESSAGE,
+        ScriptwriterPreWriteRequest,
+        run_autonomous_scriptwriter_prewrite,
+    )
 
     user_id = str(user["user_id"])
     project_name = resolve_project_name(get_current_project_name(), data.projectName)
@@ -795,9 +801,57 @@ async def scriptwriter_compose_stream(
                 )
                 return
 
+            project_meta = context_pack.get("project_meta") or {}
+            outline_contract = context_pack.get("outline_scene_contract") or {}
+            chapter_name = str(outline_contract.get("chapter_title") or "").strip()
+            if not chapter_name:
+                normalized_path = str(project_meta.get("file_path") or "").replace("\\", "/")
+                chapter_name = normalized_path.rsplit("/", 1)[0].split("/")[-1] if "/" in normalized_path else ""
+            scene_name = str(data.sceneName or project_meta.get("scene_name") or "").strip()
+            yield semantic_event_data(
+                "progress",
+                message=PREWRITE_STATUS_MESSAGE,
+                stage="prewrite",
+                operation=operation,
+                mode=mode,
+                **on_progress(PREWRITE_STATUS_MESSAGE, stage="prewrite"),
+            )
+            prewrite_result = await asyncio.to_thread(
+                run_autonomous_scriptwriter_prewrite,
+                ScriptwriterPreWriteRequest(
+                    user_id=user_id,
+                    project_name=project_name,
+                    task_description=str(context_pack.get("guidance") or data.guidance or operation),
+                    chapter_name=chapter_name,
+                    scene_name=scene_name,
+                    scene_guidance=str(context_pack.get("guidance") or ""),
+                    scene_characters=[
+                        str(item.get("name") or "").strip()
+                        for item in (context_pack.get("characters") or [])
+                        if isinstance(item, dict) and str(item.get("name") or "").strip()
+                    ],
+                    full_outline=str(context_pack.get("full_outline") or ""),
+                    available_context=str(context_pack.get("context") or data.context or ""),
+                ),
+                llm=agent.llm,
+                clean_text=agent._clean_model_visible_arc_text,
+            )
+            combined_context = str(context_pack.get("context") or data.context or "")
+            if prewrite_result.context_addition:
+                combined_context = combined_context + "\n\n" + prewrite_result.context_addition
+            yield semantic_event_data(
+                "progress",
+                message="PreWrite 已完成，开始撰写正文",
+                stage="writing",
+                operation=operation,
+                mode=mode,
+                **on_progress("PreWrite 已完成，开始撰写正文", stage="writing"),
+            )
+            started_at = time.monotonic()
+
             exec_context = agent.build_context(
                 operation=operation,
-                context=context_pack.get("context") or data.context or "",
+                context=combined_context,
                 worldview=context_pack.get("worldview") or "",
                 roles=context_pack.get("roles") or "",
                 full_outline=context_pack.get("full_outline") or "",
