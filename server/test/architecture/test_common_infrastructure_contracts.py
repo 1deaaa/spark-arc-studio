@@ -262,11 +262,28 @@ def test_visual_illustration_settings_are_project_scoped_and_script_only(monkeyp
 
     style = project_settings.set_visual_style_settings("u1", "p1", {
         "seed_prompt": "  清透赛璐璐  ",
-        "reference_asset_id": "style_demo",
+        "reference_asset_ids": [
+            "style_1",
+            "style_2",
+            "style_1",
+            "style_3",
+            "style_4",
+            "style_5",
+            "style_6",
+        ],
     })
-    assert style == {"seed_prompt": "清透赛璐璐", "reference_asset_id": "style_demo"}
+    assert style == {
+        "seed_prompt": "清透赛璐璐",
+        "reference_asset_ids": ["style_1", "style_2", "style_3", "style_4", "style_5"],
+    }
     saved = json.loads((tmp_path / ".sparkarc" / "settings.json").read_text(encoding="utf-8"))
-    assert saved["visual_style"]["reference_asset_id"] == "style_demo"
+    assert saved["visual_style"]["reference_asset_ids"] == [
+        "style_1",
+        "style_2",
+        "style_3",
+        "style_4",
+        "style_5",
+    ]
 
 
 def test_update_story_tags_tool_accepts_common_model_aliases() -> None:

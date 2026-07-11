@@ -10,7 +10,7 @@ def test_visual_generation_prompt_combines_project_context_and_reference_roles(m
         "get_visual_style_settings",
         lambda user_id, project_name: {
             "seed_prompt": "清透赛璐璐，冷暖霓虹对比",
-            "reference_asset_id": "style_demo",
+            "reference_asset_ids": ["style_demo"],
         },
     )
     monkeypatch.setattr(
@@ -74,7 +74,7 @@ def test_sprite_prompt_requires_uniform_chroma_key(monkeypatch) -> None:
     monkeypatch.setattr(
         generation,
         "get_visual_style_settings",
-        lambda user_id, project_name: {"seed_prompt": "手绘动画", "reference_asset_id": None},
+        lambda user_id, project_name: {"seed_prompt": "手绘动画", "reference_asset_ids": []},
     )
     monkeypatch.setattr(
         generation,
@@ -101,7 +101,7 @@ def test_style_seed_prompt_does_not_implicitly_inject_project_characters(monkeyp
     monkeypatch.setattr(
         generation,
         "get_visual_style_settings",
-        lambda user_id, project_name: {"seed_prompt": "", "reference_asset_id": None},
+        lambda user_id, project_name: {"seed_prompt": "", "reference_asset_ids": []},
     )
     monkeypatch.setattr(
         generation,
@@ -135,23 +135,30 @@ def test_style_seed_prompt_does_not_implicitly_inject_project_characters(monkeyp
     assert "本画面涉及的角色档案" not in prompt
 
 
-def test_saved_style_reference_is_always_injected_before_explicit_references(monkeypatch) -> None:
+def test_five_saved_style_references_are_injected_before_other_reference_roles(monkeypatch) -> None:
     from story import routes_presentation as routes
+
+    style_ids = [f"style_{index}" for index in range(1, 7)]
 
     monkeypatch.setattr(
         routes,
         "load_project_manifest",
         lambda user_id, project_name: {
             "assets": {
-                "style_saved": {"id": "style_saved", "type": "style_reference", "title": "已定风格"},
+                **{
+                    asset_id: {"id": asset_id, "type": "style_reference", "title": f"风格 {asset_id}"}
+                    for asset_id in style_ids
+                },
                 "scene_manual": {"id": "scene_manual", "type": "background", "title": "场景参考"},
+                "character_manual": {"id": "character_manual", "type": "character_sprite", "title": "角色参考"},
+                "continuity_manual": {"id": "continuity_manual", "type": "scene_illustration", "title": "连续性参考"},
             }
         },
     )
     monkeypatch.setattr(
         routes,
         "get_visual_style_settings",
-        lambda user_id, project_name: {"reference_asset_id": "style_saved"},
+        lambda user_id, project_name: {"reference_asset_ids": style_ids},
     )
     monkeypatch.setattr(routes, "load_character_id_name_map", lambda *args, **kwargs: {})
 
@@ -159,10 +166,16 @@ def test_saved_style_reference_is_always_injected_before_explicit_references(mon
         "u1",
         "demo",
         asset_ids=[],
-        references=[routes.VisualReferenceRequest(assetId="scene_manual", role="scene")],
+        references=[
+            routes.VisualReferenceRequest(assetId="scene_manual", role="scene"),
+            routes.VisualReferenceRequest(assetId="character_manual", role="character"),
+            routes.VisualReferenceRequest(assetId="continuity_manual", role="continuity"),
+        ],
     )
 
     assert [(item["assetId"], item["role"]) for item in resolved] == [
-        ("style_saved", "style"),
+        *((asset_id, "style") for asset_id in style_ids[:5]),
         ("scene_manual", "scene"),
+        ("character_manual", "character"),
+        ("continuity_manual", "continuity"),
     ]

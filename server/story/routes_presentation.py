@@ -71,7 +71,7 @@ class GenerateImageRequest(BaseModel):
 
 
 class GenerateBackgroundRequest(GenerateImageRequest):
-    pass
+    library: bool = False
 
 
 class GenerateSpriteRequest(GenerateImageRequest):
@@ -92,7 +92,7 @@ class GenerateIllustrationRequest(GenerateImageRequest):
 class UpdatePresentationSettingsRequest(BaseModel):
     visualIllustrationEnabled: bool | None = None
     styleSeedPrompt: str | None = None
-    styleReferenceAssetId: str | None = None
+    styleReferenceAssetIds: list[str] | None = None
 
 
 REFERENCE_ASSET_TYPES = {"style_reference", "scene_reference"}
@@ -222,8 +222,9 @@ def _resolve_reference_descriptors(
         assets = {}
 
     requested: list[dict[str, str]] = []
-    style_asset_id = get_visual_style_settings(user_id, project_name).get("reference_asset_id")
-    if style_asset_id:
+    style_settings = get_visual_style_settings(user_id, project_name)
+    style_asset_ids = style_settings.get("reference_asset_ids") or []
+    for style_asset_id in style_asset_ids[:5]:
         requested.append({"assetId": str(style_asset_id), "role": "style"})
     for item in references or []:
         requested.append({"assetId": item.assetId, "role": item.role})
@@ -270,7 +271,7 @@ def _load_reference_assets(
         assets = {}
 
     references: list[ImageReference] = []
-    for descriptor in descriptors[:4]:
+    for descriptor in descriptors[:10]:
         asset_id = descriptor["assetId"]
         asset = assets.get(asset_id)
         if not isinstance(asset, dict):
@@ -347,7 +348,11 @@ async def _generate_visual_asset(
         "prompt": generated.revised_prompt or final_prompt,
     }
     if asset_type == "background":
-        asset = upload_background_asset(**common, title=data.title or "AI 背景图")
+        asset = upload_background_asset(
+            **common,
+            title=data.title or "AI 背景图",
+            library=bool(getattr(data, "library", False)),
+        )
     elif asset_type == "character_sprite":
         asset = upload_character_sprite_asset(
             **common,
@@ -441,17 +446,24 @@ async def update_presentation_settings(
             visual["enabled"] = bool(data.visualIllustrationEnabled)
             set_visual_illustration_settings(user_id, normalized_project, visual)
 
-        if {"styleSeedPrompt", "styleReferenceAssetId"} & fields:
+        if {"styleSeedPrompt", "styleReferenceAssetIds"} & fields:
             style = get_visual_style_settings(user_id, normalized_project)
             if "styleSeedPrompt" in fields:
                 style["seed_prompt"] = data.styleSeedPrompt or ""
-            if "styleReferenceAssetId" in fields:
-                asset_id = str(data.styleReferenceAssetId or "").strip()
-                if asset_id:
-                    asset = load_project_manifest(user_id, normalized_project).get("assets", {}).get(asset_id)
+            if "styleReferenceAssetIds" in fields:
+                requested_ids: list[str] = []
+                for raw_id in data.styleReferenceAssetIds or []:
+                    asset_id = str(raw_id or "").strip()
+                    if asset_id and asset_id not in requested_ids:
+                        requested_ids.append(asset_id)
+                    if len(requested_ids) >= 5:
+                        break
+                assets = load_project_manifest(user_id, normalized_project).get("assets", {})
+                for asset_id in requested_ids:
+                    asset = assets.get(asset_id) if isinstance(assets, dict) else None
                     if not isinstance(asset, dict) or asset.get("type") != "style_reference":
-                        raise PresentationAssetError("选中的风格种子图不存在或类型不正确")
-                style["reference_asset_id"] = asset_id or None
+                        raise PresentationAssetError(f"选中的风格种子图不存在或类型不正确: {asset_id}")
+                style["reference_asset_ids"] = requested_ids
             set_visual_style_settings(user_id, normalized_project, style)
 
         return {
@@ -469,6 +481,7 @@ async def upload_presentation_background(
     project_name: str,
     file: UploadFile = File(...),
     title: str = Form(""),
+    library: bool = Form(False),
     user: dict = Depends(get_current_user),
 ):
     """上传背景图并注册为 Web 播放器专用演出资产。"""
@@ -489,6 +502,7 @@ async def upload_presentation_background(
             content_type=file.content_type,
             title=title,
             source="upload",
+            library=library,
         )
         return {
             "success": True,

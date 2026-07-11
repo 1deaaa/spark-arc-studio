@@ -52,7 +52,7 @@ _DEFAULT_SETTINGS: Dict[str, Any] = {
     # 项目级视觉风格种子。独立于完整场景插图开关，背景和立绘也会复用。
     "visual_style": {
         "seed_prompt": "",
-        "reference_asset_id": None,
+        "reference_asset_ids": [],
     },
     # 实验性视觉插图。UI 只暴露 enabled，其余字段作为统一策略由系统维护。
     "visual_illustration": {
@@ -163,11 +163,18 @@ def normalize_visual_style_settings(value: Any) -> Dict[str, Any]:
     """规范化项目级风格种子配置。"""
     raw = value if isinstance(value, dict) else {}
     seed_prompt = str(raw.get("seed_prompt") or "").strip()[:4000]
-    raw_asset_id = raw.get("reference_asset_id")
-    reference_asset_id = str(raw_asset_id).strip() if raw_asset_id is not None else ""
+    raw_asset_ids = raw.get("reference_asset_ids")
+    candidates = raw_asset_ids if isinstance(raw_asset_ids, list) else []
+    reference_asset_ids: list[str] = []
+    for candidate in candidates:
+        asset_id = str(candidate or "").strip()
+        if asset_id and asset_id not in reference_asset_ids:
+            reference_asset_ids.append(asset_id)
+        if len(reference_asset_ids) >= 5:
+            break
     return {
         "seed_prompt": seed_prompt,
-        "reference_asset_id": reference_asset_id or None,
+        "reference_asset_ids": reference_asset_ids,
     }
 
 _lock = threading.Lock()

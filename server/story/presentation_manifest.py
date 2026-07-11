@@ -191,7 +191,11 @@ def get_project_background_catalog(user_id: str, project_name: str) -> list[dict
         return []
     result: list[dict[str, str]] = []
     for asset_id, asset in assets.items():
-        if not isinstance(asset, dict) or asset.get("type") != "background":
+        if (
+            not isinstance(asset, dict)
+            or asset.get("type") != "background"
+            or asset.get("library") is not True
+        ):
             continue
         normalized_id = str(asset.get("id") or asset_id or "").strip()
         if not normalized_id:
@@ -366,6 +370,7 @@ def upload_background_asset(
     title: str = "",
     source: str = "upload",
     prompt: str = "",
+    library: bool = False,
 ) -> dict[str, Any]:
     """写入背景图资产，并注册到 manifest。"""
     return upload_presentation_asset(
@@ -378,6 +383,7 @@ def upload_background_asset(
         title=title,
         source=source,
         prompt=prompt,
+        metadata={"library": True} if library else None,
     )
 
 

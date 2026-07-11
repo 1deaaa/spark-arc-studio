@@ -722,7 +722,6 @@ const imageModels = ref<PresentationImageModel[]>([]);
 const imageModelsLoading = ref(false);
 const selectedImageModelKey = ref<string | null>(null);
 const presentationManifest = ref<PresentationManifest | null>(null);
-const selectedStyleReferenceId = ref<string | null>(null);
 const visualIllustrationEnabled = ref(false);
 
 // 重写场景
@@ -816,7 +815,7 @@ const currentBackgroundPreviewUrl = computed(() => (
 ));
 
 const backgroundAssetOptions = computed(() => Object.values(manifestAssets.value)
-  .filter(asset => asset.type === 'background')
+  .filter(asset => asset.type === 'background' && asset.library === true)
   .sort((a, b) => String(b.createdAt || '').localeCompare(String(a.createdAt || '')))
   .map(asset => ({
     label: asset.title || asset.id,
@@ -948,18 +947,13 @@ async function loadPresentationImageModels() {
 async function loadPresentationManifest() {
   if (!projectStore.currentProject || isNovelMode.value) {
     presentationManifest.value = null;
-    selectedStyleReferenceId.value = null;
     visualIllustrationEnabled.value = false;
     return;
   }
   try {
     const result = await fetchPresentationManifest(projectStore.currentProject);
     presentationManifest.value = result.manifest || null;
-    selectedStyleReferenceId.value = result.settings?.visualStyle?.reference_asset_id || null;
     visualIllustrationEnabled.value = !!result.settings?.visualIllustration?.effectiveEnabled;
-    if (selectedStyleReferenceId.value && !manifestAssets.value[selectedStyleReferenceId.value]) {
-      selectedStyleReferenceId.value = null;
-    }
   } catch (_error: unknown) {
     presentationManifest.value = null;
   }
@@ -1083,7 +1077,6 @@ function referenceAssetsFor(
     result.push({ assetId, role });
   };
 
-  add(selectedStyleReferenceId.value || '', 'style');
   const cue = node?.presentation || {};
   add(normalizePresentationValue(cue.bg), 'scene');
 

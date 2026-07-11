@@ -129,6 +129,34 @@ def test_manifest_concurrent_asset_updates_are_atomic(monkeypatch, tmp_path: Pat
     assert persisted["assets"][assets[0]["id"]]["generation"]["provider"] == "offline-test"
 
 
+def test_background_catalog_only_contains_explicit_library_assets(monkeypatch, tmp_path: Path) -> None:
+    project_root = tmp_path / "project"
+    monkeypatch.setattr(pm, "get_project_path", lambda user_id, project_name: str(project_root))
+
+    ordinary = pm.upload_background_asset(
+        user_id="u1",
+        project_name="p1",
+        data=PNG_BYTES,
+        filename="node-background.png",
+        title="节点临时背景",
+    )
+    library = pm.upload_background_asset(
+        user_id="u1",
+        project_name="p1",
+        data=PNG_BYTES + b"-library",
+        filename="library-background.png",
+        title="项目常用教室",
+        library=True,
+    )
+
+    manifest = pm.load_project_manifest("u1", "p1")
+    assert manifest["assets"][ordinary["id"]].get("library") is not True
+    assert manifest["assets"][library["id"]]["library"] is True
+    assert pm.get_project_background_catalog("u1", "p1") == [
+        {"id": library["id"], "title": "项目常用教室"},
+    ]
+
+
 def test_presentation_project_guard_requires_existing_script_project(monkeypatch, tmp_path: Path) -> None:
     from story import routes_presentation as routes
 

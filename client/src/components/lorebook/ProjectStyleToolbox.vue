@@ -49,14 +49,14 @@
             :key="asset.id"
             type="button"
             class="style-reference-candidate"
-            :class="{ 'is-selected': selectedProjectStyleReferenceId === asset.id }"
-            :aria-pressed="selectedProjectStyleReferenceId === asset.id"
+            :class="{ 'is-selected': selectedProjectStyleReferenceIds.includes(asset.id) }"
+            :aria-pressed="selectedProjectStyleReferenceIds.includes(asset.id)"
             :title="asset.title || asset.id"
-            @click="selectedProjectStyleReferenceId = asset.id"
+            @click="toggleProjectStyleReference(asset.id)"
           >
             <img :src="presentationAssetUrl(asset)" :alt="asset.title || asset.id" />
             <span>{{ asset.title || asset.id }}</span>
-            <n-icon v-if="selectedProjectStyleReferenceId === asset.id" :component="Check" />
+            <n-icon v-if="selectedProjectStyleReferenceIds.includes(asset.id)" :component="Check" />
           </button>
           <n-text v-if="projectStyleReferenceAssets.length === 0" depth="3">
             {{ t('components.lorebookEditor.noStyleReferenceAssets') }}
@@ -64,9 +64,11 @@
         </div>
 
         <n-select
-          v-model:value="selectedProjectStyleReferenceId"
+          v-model:value="selectedProjectStyleReferenceIds"
           size="small"
           clearable
+          multiple
+          :max-tag-count="5"
           :options="styleReferenceOptions"
           :placeholder="t('components.lorebookEditor.styleReferencePlaceholder')"
         />
@@ -98,7 +100,7 @@
           <n-button
             type="primary"
             :loading="presentationSettingsSaving"
-            :disabled="!styleReferencePrompt.trim() && !selectedProjectStyleReferenceId"
+            :disabled="!styleReferencePrompt.trim() && selectedProjectStyleReferenceIds.length === 0"
             @click="saveProjectVisualStyle"
           >
             <template #icon>
@@ -145,6 +147,10 @@
           />
 
           <n-space justify="end" :size="8" wrap>
+            <n-button secondary :loading="backgroundLibraryUploading" @click="triggerBackgroundLibraryUpload">
+              <template #icon><n-icon :component="Upload" /></template>
+              {{ t('nodeEditor.presentation.uploadLibraryBackground') }}
+            </n-button>
             <n-button
               type="primary"
               secondary
@@ -156,6 +162,13 @@
               {{ t('nodeEditor.presentation.generateLibraryBackground') }}
             </n-button>
           </n-space>
+          <input
+            ref="backgroundLibraryFileInputRef"
+            class="style-hidden-input"
+            type="file"
+            accept="image/png,image/jpeg,image/webp"
+            @change="onBackgroundLibraryFileChange"
+          />
         </section>
 
         <input
@@ -184,6 +197,7 @@ import {
   generatePresentationReference,
   updatePresentationSettings,
   uploadPresentationReference,
+  uploadPresentationBackground,
   type PresentationAsset,
   type PresentationImageModel,
   type PresentationManifest,
@@ -207,12 +221,14 @@ const styleReferenceGenerating = ref(false);
 const styleReferencePrompt = ref('');
 const backgroundLibraryPrompt = ref('');
 const backgroundLibraryGenerating = ref(false);
+const backgroundLibraryUploading = ref(false);
+const backgroundLibraryFileInputRef = ref<HTMLInputElement | null>(null);
 const selectedBackgroundReferenceId = ref<string | null>(null);
 const imageModels = ref<PresentationImageModel[]>([]);
 const imageModelsLoading = ref(false);
 const selectedImageModelKey = ref<string | null>(null);
 const presentationManifest = ref<PresentationManifest | null>(null);
-const selectedProjectStyleReferenceId = ref<string | null>(null);
+const selectedProjectStyleReferenceIds = ref<string[]>([]);
 const visualIllustrationEnabled = ref(false);
 const presentationSettingsSaving = ref(false);
 const missingCharacterSprites = ref<Array<{ id: string; name: string }>>([]);
@@ -228,7 +244,7 @@ const projectStyleReferenceAssets = computed(() => Object.values(manifestAssets.
   .sort((a, b) => String(b.createdAt || '').localeCompare(String(a.createdAt || ''))));
 
 const projectBackgroundAssets = computed(() => Object.values(manifestAssets.value)
-  .filter(asset => asset.type === 'background')
+  .filter(asset => asset.type === 'background' && asset.library === true)
   .sort((a, b) => String(b.createdAt || '').localeCompare(String(a.createdAt || ''))));
 
 const styleReferenceOptions = computed(() => Object.values(manifestAssets.value)
@@ -237,6 +253,8 @@ const styleReferenceOptions = computed(() => Object.values(manifestAssets.value)
   .map(asset => ({
     label: `${t('nodeEditor.presentation.styleReference')} · ${asset.title || asset.id}`,
     value: asset.id,
+    disabled: selectedProjectStyleReferenceIds.value.length >= 5
+      && !selectedProjectStyleReferenceIds.value.includes(asset.id),
   })));
 
 const availableImageModels = computed(() => imageModels.value.filter(model => model.api_key_set !== false));
@@ -271,7 +289,7 @@ const canGenerateProjectBackground = computed(() =>
 
 watch([() => projectStore.currentProject, () => sceneStore.workspaceMode], () => {
   styleReferencePrompt.value = '';
-  selectedProjectStyleReferenceId.value = null;
+  selectedProjectStyleReferenceIds.value = [];
   visualIllustrationEnabled.value = false;
   missingCharacterSprites.value = [];
   if (!isScriptMode.value) {
@@ -330,19 +348,18 @@ async function loadPresentationImageModels() {
 async function loadPresentationManifest() {
   if (!projectStore.currentProject || !isScriptMode.value) {
     presentationManifest.value = null;
-    selectedProjectStyleReferenceId.value = null;
+    selectedProjectStyleReferenceIds.value = [];
     return;
   }
   try {
     const result = await fetchPresentationManifest(projectStore.currentProject);
     presentationManifest.value = result.manifest || null;
     styleReferencePrompt.value = result.settings?.visualStyle?.seed_prompt || '';
-    selectedProjectStyleReferenceId.value = result.settings?.visualStyle?.reference_asset_id || null;
+    selectedProjectStyleReferenceIds.value = (result.settings?.visualStyle?.reference_asset_ids || [])
+      .filter(assetId => manifestAssets.value[assetId]?.type === 'style_reference')
+      .slice(0, 5);
     visualIllustrationEnabled.value = !!result.settings?.visualIllustration?.enabled;
     missingCharacterSprites.value = result.settings?.readiness?.missingCharacterSprites || [];
-    if (selectedProjectStyleReferenceId.value && !manifestAssets.value[selectedProjectStyleReferenceId.value]) {
-      selectedProjectStyleReferenceId.value = null;
-    }
   } catch {
     presentationManifest.value = null;
   }
@@ -372,7 +389,7 @@ async function saveProjectVisualStyle() {
   try {
     await updatePresentationSettings(projectStore.currentProject, {
       styleSeedPrompt: styleReferencePrompt.value.trim(),
-      styleReferenceAssetId: selectedProjectStyleReferenceId.value,
+      styleReferenceAssetIds: selectedProjectStyleReferenceIds.value.slice(0, 5),
     });
     bus.emit('presentation-settings-updated', { projectName: projectStore.currentProject });
     bus.emit('toast', { type: 'success', message: t('components.lorebookEditor.projectStyleSaved') });
@@ -393,11 +410,24 @@ function updatePresentationManifest(manifest: PresentationManifest | undefined |
 function projectStyleReferenceAssetIds() {
   const model = selectedImageModel.value;
   if (!imageModelSupportsReference(model)) return [];
-  const ids = new Set<string>();
-  if (selectedProjectStyleReferenceId.value) ids.add(selectedProjectStyleReferenceId.value);
-  const latestStyle = projectStyleReferenceAssets.value[0];
-  if (latestStyle?.id) ids.add(latestStyle.id);
-  return Array.from(ids).slice(0, 4);
+  return selectedProjectStyleReferenceIds.value.slice(0, 5);
+}
+
+function toggleProjectStyleReference(assetId: string) {
+  if (selectedProjectStyleReferenceIds.value.includes(assetId)) {
+    selectedProjectStyleReferenceIds.value = selectedProjectStyleReferenceIds.value.filter(id => id !== assetId);
+    return;
+  }
+  if (selectedProjectStyleReferenceIds.value.length < 5) {
+    selectedProjectStyleReferenceIds.value = [...selectedProjectStyleReferenceIds.value, assetId];
+  }
+}
+
+function includeNewProjectStyleReference(assetId: string) {
+  if (!assetId || selectedProjectStyleReferenceIds.value.includes(assetId)) return;
+  if (selectedProjectStyleReferenceIds.value.length < 5) {
+    selectedProjectStyleReferenceIds.value = [...selectedProjectStyleReferenceIds.value, assetId];
+  }
 }
 
 function projectBackgroundReferences(): PresentationReferenceDescriptor[] {
@@ -426,7 +456,7 @@ async function onStyleReferenceFileChange(event: Event) {
       assetType: 'style_reference',
     });
     updatePresentationManifest(result.manifest);
-    selectedProjectStyleReferenceId.value = result.asset.id;
+    includeNewProjectStyleReference(result.asset.id);
     bus.emit('toast', { type: 'success', message: t('nodeEditor.presentation.styleReferenceUploadSuccess') });
   } catch (error: unknown) {
     bus.emit('toast', { type: 'error', message: presentationErrorMessage(error, t('nodeEditor.presentation.styleReferenceUploadFailed')) });
@@ -461,7 +491,7 @@ async function generateStyleReferenceByAI() {
       referenceAssetIds: projectStyleReferenceAssetIds(),
     });
     updatePresentationManifest(result.manifest);
-    selectedProjectStyleReferenceId.value = result.asset.id;
+    includeNewProjectStyleReference(result.asset.id);
     bus.emit('toast', { type: 'success', message: t('nodeEditor.presentation.styleReferenceGenerateSuccess') });
   } catch (error: unknown) {
     bus.emit('toast', { type: 'error', message: presentationErrorMessage(error, t('nodeEditor.presentation.styleReferenceGenerateFailed')) });
@@ -485,6 +515,7 @@ async function generateProjectBackground() {
       modelId: Number(model.model_id),
       referenceAssets: projectBackgroundReferences(),
       context: { characterIds: [] },
+      library: true,
     });
     updatePresentationManifest(result.manifest);
     selectedBackgroundReferenceId.value = result.asset?.id || null;
@@ -494,6 +525,29 @@ async function generateProjectBackground() {
     bus.emit('toast', { type: 'error', message: presentationErrorMessage(error, t('nodeEditor.presentation.backgroundLibraryGenerateFailed')) });
   } finally {
     backgroundLibraryGenerating.value = false;
+  }
+}
+
+function triggerBackgroundLibraryUpload() {
+  if (!projectStore.currentProject) return;
+  backgroundLibraryFileInputRef.value?.click();
+}
+
+async function onBackgroundLibraryFileChange(event: Event) {
+  const input = event.target as HTMLInputElement | null;
+  const file = input?.files?.[0];
+  if (input) input.value = '';
+  if (!file || !projectStore.currentProject) return;
+  backgroundLibraryUploading.value = true;
+  try {
+    const result = await uploadPresentationBackground(projectStore.currentProject, file, file.name, true);
+    updatePresentationManifest(result.manifest);
+    selectedBackgroundReferenceId.value = result.asset?.id || null;
+    bus.emit('toast', { type: 'success', message: t('nodeEditor.presentation.backgroundLibraryUploadSuccess') });
+  } catch (error: unknown) {
+    bus.emit('toast', { type: 'error', message: presentationErrorMessage(error, t('nodeEditor.presentation.backgroundLibraryUploadFailed')) });
+  } finally {
+    backgroundLibraryUploading.value = false;
   }
 }
 

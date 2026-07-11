@@ -15,6 +15,7 @@ export type PresentationAsset = {
   sceneName?: string;
   nodeId?: string;
   createdAt?: string;
+  library?: boolean;
 };
 
 export type PresentationManifest = {
@@ -42,7 +43,7 @@ export type VisualIllustrationSettings = {
 
 export type VisualStyleSettings = {
   seed_prompt: string;
-  reference_asset_id?: string | null;
+  reference_asset_ids: string[];
 };
 
 export type PresentationSettings = {
@@ -105,7 +106,9 @@ export type PresentationGenerateImagePayload = {
   context?: PresentationGenerationContext;
 };
 
-export type PresentationGenerateBackgroundPayload = PresentationGenerateImagePayload;
+export type PresentationGenerateBackgroundPayload = PresentationGenerateImagePayload & {
+  library?: boolean;
+};
 
 export type PresentationGenerateSpritePayload = PresentationGenerateImagePayload & {
   characterId?: string | number | null;
@@ -126,7 +129,7 @@ export type PresentationGenerateIllustrationPayload = PresentationGenerateImageP
 export type UpdatePresentationSettingsPayload = {
   visualIllustrationEnabled?: boolean;
   styleSeedPrompt?: string | null;
-  styleReferenceAssetId?: string | null;
+  styleReferenceAssetIds?: string[];
 };
 
 async function readPresentationError(response: Response): Promise<string> {
@@ -141,10 +144,11 @@ async function readPresentationError(response: Response): Promise<string> {
   return '';
 }
 
-export async function uploadPresentationBackground(projectName: string, file: File, title = ''): Promise<PresentationUploadResult> {
+export async function uploadPresentationBackground(projectName: string, file: File, title = '', library = false): Promise<PresentationUploadResult> {
   const form = new FormData();
   form.append('file', file);
   if (title) form.append('title', title);
+  if (library) form.append('library', 'true');
 
   const response = await fetchWithAuth(`/api/presentation/${encodeURIComponent(projectName)}/backgrounds/upload`, {
     method: 'POST',

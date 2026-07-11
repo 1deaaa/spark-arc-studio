@@ -155,14 +155,6 @@
         </div>
 
         <n-select
-          v-model:value="selectedSpriteStyleReferenceId"
-          size="small"
-          clearable
-          :options="styleReferenceOptions"
-          :placeholder="t('components.lorebookEditor.styleReferencePlaceholder')"
-        />
-
-        <n-select
           v-model:value="selectedImageModelKey"
           size="small"
           clearable
@@ -272,7 +264,6 @@ const imageModels = ref<PresentationImageModel[]>([]);
 const imageModelsLoading = ref(false);
 const selectedImageModelKey = ref<string | null>(null);
 const presentationManifest = ref<PresentationManifest | null>(null);
-const selectedSpriteStyleReferenceId = ref<string | null>(null);
 const spriteChromaKey = ref('#00FF00');
 const spriteMattingMode = ref('chroma_key');
 const mattingAssetId = ref('');
@@ -297,14 +288,6 @@ const activeCharacterSpriteAssets = computed(() => {
     .filter(asset => asset.type === 'character_sprite' && characterKeys.has(String(asset.characterId || '').trim()))
     .sort((a, b) => String(b.createdAt || '').localeCompare(String(a.createdAt || '')));
 });
-
-const styleReferenceOptions = computed(() => Object.values(manifestAssets.value)
-  .filter(asset => asset.type === 'style_reference')
-  .sort((a, b) => String(b.createdAt || '').localeCompare(String(a.createdAt || '')))
-  .map(asset => ({
-    label: `${t('nodeEditor.presentation.styleReference')} · ${asset.title || asset.id}`,
-    value: asset.id,
-  })));
 
 const availableImageModels = computed(() => imageModels.value.filter(model => model.api_key_set !== false));
 
@@ -466,18 +449,13 @@ async function loadPresentationImageModels() {
 async function loadPresentationManifest() {
   if (!projectStore.currentProject || !isScriptMode.value) {
     presentationManifest.value = null;
-    selectedSpriteStyleReferenceId.value = null;
     return;
   }
   try {
     const result = await fetchPresentationManifest(projectStore.currentProject);
     presentationManifest.value = result.manifest || null;
-    selectedSpriteStyleReferenceId.value = result.settings?.visualStyle?.reference_asset_id || null;
     spriteChromaKey.value = result.settings?.visualIllustration?.sprite_chroma_key || '#00FF00';
     spriteMattingMode.value = result.settings?.visualIllustration?.sprite_matting || 'chroma_key';
-    if (selectedSpriteStyleReferenceId.value && !manifestAssets.value[selectedSpriteStyleReferenceId.value]) {
-      selectedSpriteStyleReferenceId.value = null;
-    }
   } catch {
     presentationManifest.value = null;
   }
@@ -507,14 +485,11 @@ function characterSpriteReferences() {
   const model = selectedImageModel.value;
   if (!imageModelSupportsReference(model)) return [];
   const result: PresentationReferenceDescriptor[] = [];
-  if (selectedSpriteStyleReferenceId.value) {
-    result.push({ assetId: selectedSpriteStyleReferenceId.value, role: 'style' });
-  }
   const latestSprite = activeCharacterSpriteAssets.value[0];
-  if (latestSprite?.id && latestSprite.id !== selectedSpriteStyleReferenceId.value) {
+  if (latestSprite?.id) {
     result.push({ assetId: latestSprite.id, role: 'character' });
   }
-  return result.slice(0, 4);
+  return result;
 }
 
 function presentationAssetUrl(asset: PresentationAsset) {

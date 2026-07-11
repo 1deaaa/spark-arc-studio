@@ -793,8 +793,8 @@ const hasPresentationCue = computed(() => !!currentBackgroundId.value
 function updatePresentationConception(value: string) {
   if (!isDialogueNode(sceneStore.currentNode) || sceneStore.selectionType !== 'dialogue') return;
   const presentation = { ...(sceneStore.currentNode.presentation || {}) };
-  const normalized = String(value || '').replace(/\s+/g, ' ').trim();
-  if (normalized) presentation.illustration_prompt = normalized;
+  const normalized = String(value || '').replace(/[\r\n]+/g, ' ');
+  if (normalized.trim()) presentation.illustration_prompt = normalized;
   else delete presentation.illustration_prompt;
   sceneStore.updateCurrentDialogue({
     presentation: Object.keys(presentation).length > 0 ? presentation : undefined,

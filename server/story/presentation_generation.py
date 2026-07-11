@@ -97,7 +97,7 @@ def infer_reference_role(asset: dict[str, Any]) -> str:
 def normalize_reference_descriptors(
     references: Iterable[dict[str, Any]],
 ) -> list[dict[str, str]]:
-    """规范化参考图 ID、职责和标题，最多保留四张。"""
+    """规范化参考图 ID、职责和标题，最多保留十张。"""
     result: list[dict[str, str]] = []
     seen: set[str] = set()
     for raw in references:
@@ -117,7 +117,7 @@ def normalize_reference_descriptors(
             "characterId": str(raw.get("characterId") or "").strip(),
             "characterName": _compact(raw.get("characterName"), 120),
         })
-        if len(result) >= 4:
+        if len(result) >= 10:
             break
     return result
 
@@ -227,7 +227,7 @@ def build_visual_generation_prompt(
         "schema": "sparkarc.visual-context.v1",
         "assetType": kind,
         "styleSeedPrompt": style["seed_prompt"],
-        "styleReferenceAssetId": style["reference_asset_id"],
+        "styleReferenceAssetIds": style["reference_asset_ids"],
         "sceneName": scene_name,
         "sceneIntro": scene_intro,
         "sceneConception": scene_conception,

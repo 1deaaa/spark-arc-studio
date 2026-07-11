@@ -68,7 +68,9 @@ def test_scriptwriter_visual_protocol_is_absent_when_disabled_and_shared_by_tool
     for prompt in (specialized, tool_reference):
         assert "@presentation illustration_prompt:" in prompt
         assert "@web" not in prompt
-        assert "不得生成 `illustration`、`bg`、`sprite`、`@act` 或 `@next`" in prompt
+        assert "@presentation bg:背景资产ID" in prompt
+        assert "只能从下方白名单逐字选择" in prompt
+        assert "不得生成 `illustration`、`sprite`、`@act` 或 `@next`" in prompt
 
 
 def test_visual_illustration_output_enforces_whitelist_scene_limit_and_gap() -> None:
@@ -256,6 +258,46 @@ def test_illustration_prompt_with_commas_remains_scalar_in_arc_parser() -> None:
 
     assert parsed[0]["dia"][0]["presentation"]["illustration_prompt"] == "雨夜书店，低机位，中景"
     assert "@presentation illustration_prompt:雨夜书店，低机位，中景" in serialize_to_arc(parsed)
+
+
+def test_ai_background_binding_requires_project_asset_whitelist() -> None:
+    raw = "\n".join([
+        "# 校园",
+        "[旁白]",
+        "雨停了。",
+        "@presentation illustration_prompt:雨后的教学楼走廊，傍晚",
+        "@presentation bg:bg_school_corridor",
+        "[旁白]",
+        "镜头转向不存在的地点。",
+        "@presentation bg:bg_hallucinated",
+    ])
+
+    cleaned = sanitize_arc_ai_output(
+        raw,
+        allow_visual_illustration=True,
+        allowed_background_ids={"bg_school_corridor"},
+    )
+
+    assert "@presentation bg:bg_school_corridor" in cleaned
+    assert "bg_hallucinated" not in cleaned
+
+
+def test_model_context_exposes_only_whitelisted_background_binding() -> None:
+    raw = "\n".join([
+        "[旁白]",
+        "走廊空无一人。",
+        "@presentation bg:bg_school_corridor",
+        "@presentation bg:bg_private",
+    ])
+
+    cleaned = sanitize_arc_for_ai_context(
+        raw,
+        allow_visual_illustration=True,
+        allowed_background_ids={"bg_school_corridor"},
+    )
+
+    assert "@presentation bg:bg_school_corridor" in cleaned
+    assert "bg_private" not in cleaned
 
 
 def test_arc_safety_removes_runtime_control_directives_from_ai_context() -> None:
