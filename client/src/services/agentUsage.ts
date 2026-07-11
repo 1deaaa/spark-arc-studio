@@ -37,6 +37,15 @@ type SaveAgentPayload = {
   model_id?: string | null;
 };
 
+const DEFAULT_USAGE_KEY = 'main';
+const AGENT_DEFAULT_USAGE_KEYS: Readonly<Record<string, string>> = {
+  agent_director: 'reason',
+};
+
+export function getDefaultAgentUsageKey(agentName?: string | null): string {
+  return AGENT_DEFAULT_USAGE_KEYS[agentName || ''] || DEFAULT_USAGE_KEY;
+}
+
 // 获取当前用户的 agent-用途绑定（从数据库读取）
 export async function fetchAgentUsageBindings(): Promise<AgentBindingsMap> {
   const response = await fetchWithAuth('/api/ai/agent-bindings');
@@ -55,7 +64,7 @@ export async function fetchAgentUsageBindings(): Promise<AgentBindingsMap> {
         }
       };
     } else {
-      bindings[item.agent_name] = item.usage_key || 'main';
+      bindings[item.agent_name] = item.usage_key || getDefaultAgentUsageKey(item.agent_name);
     }
   });
   return bindings;
@@ -73,7 +82,7 @@ export async function saveAgentBinding(agentName: string, bindingData: SaveBindi
   const payload: SaveAgentPayload = {
     agent_name: agentName,
     target_type: 'usage',
-    usage_key: 'main'
+    usage_key: getDefaultAgentUsageKey(agentName)
   };
 
   if (typeof bindingData === 'string') {

@@ -152,6 +152,7 @@ class ProjectStoryTagsRequest(BaseModel):
     worldviews: Optional[List[str]] = None
     pov: Optional[str] = None
     lengthHint: Optional[str] = None
+    sceneLengthHint: Optional[str] = None
     activeInspirationId: Optional[str] = None
 
 
@@ -200,6 +201,7 @@ async def set_project_story_tags_api(
             worldviews=data.worldviews,
             pov=data.pov,
             length_hint=data.lengthHint,
+            scene_length_hint=data.sceneLengthHint,
             active_inspiration_id=data.activeInspirationId
         )
         return {

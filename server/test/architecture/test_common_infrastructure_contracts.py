@@ -176,6 +176,26 @@ def test_story_tags_hint_includes_global_workspace_mode() -> None:
     assert ".arc" in script_hint
     assert "【创作格式】小说模式" in novel_hint
     assert "Markdown 小说正文" in novel_hint
+    assert "20-35 个有效叙事单元" in script_hint
+    assert "1000-1800 个中文字符" in novel_hint
+    assert "±30%" in script_hint
+
+
+def test_scene_length_hint_uses_mode_specific_soft_targets() -> None:
+    concise_script = build_story_tags_hint({
+        "workspace_mode": "script",
+        "scene_length_hint": "concise",
+    })
+    expanded_novel = build_story_tags_hint({
+        "workspace_mode": "novel",
+        "scene_length_hint": "expanded",
+    })
+
+    assert "精简档" in concise_script
+    assert "12-20 个有效叙事单元" in concise_script
+    assert "充实档" in expanded_novel
+    assert "1800-3000 个中文字符" in expanded_novel
+    assert "不得为凑数量注水" in expanded_novel
 
 
 def test_project_story_tags_are_workspace_mode_truth_source(monkeypatch, tmp_path: Path) -> None:
@@ -194,12 +214,20 @@ def test_project_story_tags_are_workspace_mode_truth_source(monkeypatch, tmp_pat
     tags = project_settings.get_project_story_tags("u1", "p1")
     assert tags["workspace_mode"] == "novel"
     assert tags["genres"] == ["悬疑"]
+    assert tags["scene_length_hint"] == "standard"
 
-    project_settings.set_project_story_tags("u1", "p1", workspace_mode="script", genres=["冒险"])
+    project_settings.set_project_story_tags(
+        "u1",
+        "p1",
+        workspace_mode="script",
+        genres=["冒险"],
+        scene_length_hint="充实",
+    )
     saved = json.loads((settings_dir / "settings.json").read_text(encoding="utf-8"))
     assert "workspace_mode" not in saved
     assert saved["story_tags"]["workspace_mode"] == "novel"
     assert saved["story_tags"]["genres"] == ["冒险"]
+    assert saved["story_tags"]["scene_length_hint"] == "expanded"
 
     initialized = project_settings.initialize_project_workspace_mode("u1", "p1", "script")
     assert initialized["workspace_mode"] == "script"
@@ -250,6 +278,7 @@ def test_update_story_tags_tool_accepts_common_model_aliases() -> None:
             "genres": "悬疑,冒险",
             "tones": ["冷峻"],
             "length": "中篇",
+            "sceneLengthHint": "concise",
             "pointOfView": "第三人称有限视角",
         },
     })
@@ -257,6 +286,7 @@ def test_update_story_tags_tool_accepts_common_model_aliases() -> None:
     assert parsed.workspace_mode == "novel"
     assert parsed.genres == ["悬疑", "冒险"]
     assert parsed.length_hint == "中篇"
+    assert parsed.scene_length_hint == "concise"
     assert parsed.pov == "第三人称有限视角"
 
 

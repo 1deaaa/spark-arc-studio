@@ -159,7 +159,7 @@ import { useNaiveTheme } from './styles/themeConfig';
 import { captureLauncherThemeSnapshot, persistLauncherThemeSnapshot } from './utils/launcherThemeSync';
 import { ensureFullAppFontCss, markAppFontWarmCacheHint } from './utils/fontAssets';
 import { warmupCommonChineseCharacters } from './utils/fontWarmup';
-import { preloadPostLoginCoreResources, preloadPostLoginFollowupResources } from './utils/postLoginPreload';
+import { preloadPostLoginFollowupResources } from './utils/postLoginPreload';
 import { isLocalTauriShell, isTauriDesktop } from './composables/usePlatform';
 import { useSeoMeta } from './composables/useSeoMeta';
 import { useI18n } from 'vue-i18n';
@@ -178,12 +178,11 @@ let onboardingModulePromise: Promise<typeof import('./onboarding')> | null = nul
 
 async function loadDirectorOverlayModule() {
   if (!directorOverlayModulePromise) {
-    directorOverlayModulePromise = preloadPostLoginCoreResources()
-      .then(() => import('./components/overlays/DirectorAutoWriteOverlay.vue'))
+    directorOverlayModulePromise = import('./components/overlays/DirectorAutoWriteOverlay.vue')
       .then((mod) => {
-      DirectorAutoWriteOverlayComponent.value = mod.default;
-      return mod;
-    });
+        DirectorAutoWriteOverlayComponent.value = mod.default;
+        return mod;
+      });
   }
   return directorOverlayModulePromise;
 }

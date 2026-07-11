@@ -28,6 +28,7 @@ import { i18n } from '@/i18n';
 
 import { getChatHistory, sendChatMessageStream, clearChatHistory, compactChatContext, deleteChatMessage, removeChatMessageAttachment, editChatMessageStream, getChatTaskStatus, getChatRecentTasks, cancelChatTask, reconnectChatTaskStream } from '@/services/chatService';
 import { useProjectStore } from './projectStore';
+import { useDirectorAutoWriteStore } from './directorAutoWriteStore';
 import bus from '@/eventBus';
 import { createStreamingTask } from '@/utils/streamingRuntime';
 import {
@@ -2328,24 +2329,22 @@ export const useChatStore = defineStore('chat', {
           }
         }
         if (eventType === 'director_auto_write_started') {
-          bus.emit('director-auto-write-started', evt);
-          // 懒引入：避免循环依赖（directorAutoWriteStore 也引用了 projectStore）
-          import('@/components/stores/directorAutoWriteStore').then(({ useDirectorAutoWriteStore }) => {
-            const dirStore = useDirectorAutoWriteStore();
-            const currentProjectStore = useProjectStore();
-            const projectName = String(evt.project_name || currentProjectStore.currentProject || '').trim();
-            if (!projectName) return;
-            dirStore.onDirectorStarted({
-              project_name:        projectName,
-              start_chapter_index: Number(evt.start_chapter_index ?? 0),
-              start_scene_index:   Number(evt.start_scene_index ?? 0),
-              mode:                String(evt.mode || 'chapter_by_chapter'),
-              export_format:       String(evt.export_format || 'arc'),
-              auto_review:         evt.auto_review === true,
-              total_chapters:      Number(evt.total_chapters ?? 0),
-              total_scenes:        Number(evt.total_scenes ?? 0),
-            });
-          }).catch(() => {/* 静默 */});
+          const currentProjectStore = useProjectStore();
+          const projectName = String(evt.project_name || currentProjectStore.currentProject || '').trim();
+          if (!projectName) return;
+
+          useDirectorAutoWriteStore().onDirectorStarted({
+            project_name:        projectName,
+            start_chapter_index: Number(evt.start_chapter_index ?? 0),
+            start_scene_index:   Number(evt.start_scene_index ?? 0),
+            mode:                String(evt.mode || 'chapter_by_chapter'),
+            export_format:       String(evt.export_format || 'arc'),
+            auto_review:         evt.auto_review === true,
+            total_chapters:      Number(evt.total_chapters ?? 0),
+            total_scenes:        Number(evt.total_scenes ?? 0),
+          });
+          // Store 已同步进入 running 后再通知 App 装载覆盖层，避免后台标签页中的异步竞态。
+          bus.emit('director-auto-write-started', { ...evt, project_name: projectName });
         }
       };
 

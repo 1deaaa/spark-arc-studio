@@ -89,6 +89,7 @@ SCRIPTWRITER_BASE_TOOLS = [
     read_synopsis,
     read_beat_sheet,
     work_tracker,
+    update_project_story_tags,
     *OPTIONAL_RESEARCH_TOOLS,
 ]
 SHARED_READ_TOOLS = [list_chapters, read_chapter_scene, read_chapter_outline_raw]

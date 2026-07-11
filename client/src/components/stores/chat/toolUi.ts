@@ -9,45 +9,63 @@ export type ToolUiBinding = {
 
 type AnyRecord = Record<string, any>;
 
+export const TOOL_PRESENTATION_KEY_MAP: Record<string, string> = {
+  rewrite_inspiration: 'rewriteInspiration',
+  rewrite_worldview: 'rewriteWorldview',
+  rewrite_all_characters: 'rewriteAllCharacters',
+  update_character: 'updateCharacter',
+  patch_worldview: 'patchWorldview',
+  rewrite_synopsis: 'rewriteSynopsis',
+  patch_synopsis: 'patchSynopsis',
+  rewrite_beat_sheet: 'rewriteBeatSheet',
+  patch_beat_sheet: 'patchBeatSheet',
+  rewrite_outline: 'rewriteOutline',
+  patch_outline: 'patchOutline',
+  create_chapter: 'createChapter',
+  create_or_rewrite_script: 'createOrRewriteScript',
+  organize_scenes_to_chapter: 'organizeScenesToChapter',
+  patch_script: 'patchScript',
+  list_chapters: 'listChapters',
+  read_chapter_scene: 'readChapterScene',
+  read_chapter_outline_raw: 'readChapterOutlineRaw',
+  read_attachment_chunk: 'readAttachmentChunk',
+  read_worldview: 'readWorldview',
+  read_character: 'readCharacter',
+  read_synopsis: 'readSynopsis',
+  read_beat_sheet: 'readBeatSheet',
+  work_tracker: 'workTracker',
+  update_project_story_tags: 'updateProjectStoryTags',
+  read_project_story_tags: 'readProjectStoryTags',
+  story_memory_tool: 'storyMemoryTool',
+  graph_rag_tool: 'graphRagTool',
+  delegate_task: 'delegateTask',
+  capture_inspiration: 'captureInspiration',
+  list_inspirations: 'listInspirations',
+  read_inspiration: 'readInspiration',
+  bind_inspiration_to_current_project: 'bindInspirationToProject',
+  trigger_auto_write: 'triggerAutoWrite',
+  check_scriptwriter_status: 'checkScriptwriterStatus',
+  search_project: 'searchProject',
+  semantic_search: 'semanticSearch',
+  replace_from_search: 'replaceFromSearch',
+  web_search: 'webSearch',
+  search_skills: 'searchSkills',
+  read_skill: 'readSkill',
+  read_skill_reference: 'readSkillReference',
+  search_chat_history: 'searchChatHistory',
+};
+
+export function getToolNameLabelKey(toolName: unknown) {
+  const suffix = TOOL_PRESENTATION_KEY_MAP[normalizeToolName(toolName)];
+  return suffix ? `components.chatMessageList.tools.${suffix}` : '';
+}
+
 export function getToolProgressText(toolName: unknown, fallbackText = '') {
   const normalizedToolName = normalizeToolName(toolName);
+  const suffix = TOOL_PRESENTATION_KEY_MAP[normalizedToolName];
+  if (suffix) return i18n.global.t(`chatStore.toolProgress.${suffix}`);
   if (fallbackText && fallbackText.trim()) return fallbackText.trim();
-  const mapping: Record<string, string> = {
-    rewrite_inspiration: i18n.global.t('chatStore.toolProgress.rewriteInspiration'),
-    rewrite_worldview: i18n.global.t('chatStore.toolProgress.rewriteWorldview'),
-    rewrite_all_characters: i18n.global.t('chatStore.toolProgress.rewriteAllCharacters'),
-    update_character: i18n.global.t('chatStore.toolProgress.updateCharacter'),
-    rewrite_synopsis: i18n.global.t('chatStore.toolProgress.rewriteSynopsis'),
-    rewrite_beat_sheet: i18n.global.t('chatStore.toolProgress.rewriteBeatSheet'),
-    rewrite_outline: i18n.global.t('chatStore.toolProgress.rewriteOutline'),
-    patch_outline: i18n.global.t('chatStore.toolProgress.patchOutline'),
-    patch_synopsis: i18n.global.t('chatStore.toolProgress.patchSynopsis'),
-    patch_beat_sheet: i18n.global.t('chatStore.toolProgress.patchBeatSheet'),
-    patch_worldview: i18n.global.t('chatStore.toolProgress.patchWorldview'),
-    list_chapters: i18n.global.t('chatStore.toolProgress.listChapters'),
-    read_chapter_scene: i18n.global.t('chatStore.toolProgress.readChapterScene'),
-    read_chapter_outline_raw: i18n.global.t('chatStore.toolProgress.readChapterOutlineRaw'),
-    read_attachment_chunk: i18n.global.t('chatStore.toolProgress.readAttachmentChunk'),
-    read_worldview: i18n.global.t('chatStore.toolProgress.readWorldview'),
-    read_character: i18n.global.t('chatStore.toolProgress.readCharacter'),
-    read_synopsis: i18n.global.t('chatStore.toolProgress.readSynopsis'),
-    read_beat_sheet: i18n.global.t('chatStore.toolProgress.readBeatSheet'),
-    work_tracker: i18n.global.t('chatStore.toolProgress.workTracker'),
-    update_project_story_tags: i18n.global.t('chatStore.toolProgress.updateProjectStoryTags'),
-    create_chapter: i18n.global.t('chatStore.toolProgress.createChapter'),
-    create_or_rewrite_script: i18n.global.t('chatStore.toolProgress.createOrRewriteScript'),
-    patch_script: i18n.global.t('chatStore.toolProgress.patchScript'),
-    trigger_auto_write: i18n.global.t('chatStore.toolProgress.triggerAutoWrite'),
-    check_scriptwriter_status: i18n.global.t('chatStore.toolProgress.checkScriptwriterStatus'),
-    search_project: i18n.global.t('chatStore.toolProgress.searchProject'),
-    semantic_search: i18n.global.t('chatStore.toolProgress.semanticSearch'),
-    replace_from_search: i18n.global.t('chatStore.toolProgress.replaceFromSearch'),
-    web_search: i18n.global.t('chatStore.toolProgress.webSearch'),
-    graph_rag_tool: i18n.global.t('chatStore.toolProgress.graphRagTool'),
-    delegate_task: i18n.global.t('chatStore.toolProgress.delegateTask'),
-    capture_inspiration: i18n.global.t('chatStore.toolProgress.captureInspiration'),
-  };
-  return mapping[normalizedToolName] || i18n.global.t('chatStore.toolProgress.executingTool', { tool: normalizedToolName || 'unknown' });
+  return i18n.global.t('chatStore.toolProgress.executingTool', { tool: normalizedToolName || 'unknown' });
 }
 
 function isLorebookRewriteTool(toolName: unknown) {

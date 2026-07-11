@@ -4,7 +4,13 @@ import threading
 
 from langchain_core.messages import AIMessage, ToolMessage
 
-from agents.director_graph import _retain_only_pending_delegate_tool_call, run_director_stream
+from agents.director_graph import (
+    _is_tracker_progress_update,
+    _retain_only_pending_delegate_tool_call,
+    _tracker_update_required_message,
+    route_after_director,
+    run_director_stream,
+)
 
 
 def _tool_call_ids(message: AIMessage) -> set[str]:
@@ -107,6 +113,56 @@ def test_pending_delegate_history_injects_fallback_tool_call_id() -> None:
 
     assert pruned.tool_calls[0]["id"] == response.tool_call_id
     assert pruned.additional_kwargs["tool_calls"][0]["id"] == response.tool_call_id
+
+
+def test_tracker_progress_update_requires_full_visible_items() -> None:
+    assert _is_tracker_progress_update(
+        "work_tracker",
+        {
+            "action": "update",
+            "items": [
+                {"task": "生成梗概", "status": "completed"},
+                {"task": "生成节拍", "status": "in_progress"},
+            ],
+        },
+        "共 2 个任务",
+    ) is True
+    assert _is_tracker_progress_update(
+        "work_tracker",
+        {"action": "read"},
+        "共 2 个任务",
+    ) is False
+    assert _is_tracker_progress_update(
+        "work_tracker",
+        {"action": "update"},
+        "共 2 个任务",
+    ) is False
+
+
+def test_progress_protocol_error_returns_to_director() -> None:
+    state = {
+        "pending_delegate": None,
+        "force_return_to_director": True,
+        "messages": [
+            ToolMessage(
+                content="请先更新任务板再委派",
+                tool_call_id="call_delegate",
+                name="delegate_task",
+            )
+        ],
+    }
+
+    assert route_after_director(state) == "director"
+
+
+def test_tracker_protocol_keeps_failed_or_unsatisfactory_task_retryable() -> None:
+    message = _tracker_update_required_message()
+
+    assert "成功才标为 completed" in message
+    assert "质量不达标时保持 in_progress" in message
+    assert "notes 记录失败原因和重做要求" in message
+    assert "重新委派原专家重做" in message
+    assert "不会终止当前流程" in message
 
 
 def test_director_uses_full_history_budget_pipeline_and_emits_checkpoint(monkeypatch) -> None:

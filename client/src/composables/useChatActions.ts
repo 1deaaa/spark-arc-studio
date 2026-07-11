@@ -70,13 +70,15 @@ export function useChatActions(adapter: ChatActionsAdapter, options: UseChatActi
     const thinkingSeconds = ref(0);
     let thinkingTimer: ReturnType<typeof setInterval> | null = null;
 
-    // 智能自动下滑：用户上滚可打断，AI 新回复时恢复
+    // 智能自动下滑：用户上滚会锁住当前回复，下一轮 AI 回复才恢复。
     const autoScrollEnabled = ref(true);
     const SCROLL_BOTTOM_THRESHOLD = 60; // 距底部多少像素内视为"在底部"
     let programmaticScrollUntil = 0;
     let userScrollIntentUntil = 0;
+    let currentResponseInterrupted = false;
     let scrollListeners: Array<{ el: HTMLElement; handler: () => void }> = [];
-    let intentListeners: Array<{ el: HTMLElement; type: 'wheel' | 'touchstart' | 'pointerdown'; handler: () => void }> = [];
+    let intentListeners: Array<{ el: HTMLElement; type: 'wheel' | 'touchstart' | 'pointerdown'; handler: (event: Event) => void }> = [];
+    const lastKnownScrollTop = new WeakMap<HTMLElement, number>();
 
     /** 判断元素是否滚动到接近底部 */
     function isNearBottom(el: { scrollTop?: number; scrollHeight?: number; clientHeight?: number }) {
@@ -102,6 +104,12 @@ export function useChatActions(adapter: ChatActionsAdapter, options: UseChatActi
         return typeof performance !== 'undefined' && performance.now() < userScrollIntentUntil;
     }
 
+    function interruptCurrentResponse() {
+        if (!adapter.getSending()) return;
+        currentResponseInterrupted = true;
+        autoScrollEnabled.value = false;
+    }
+
     /** 为滚动容器绑定 scroll 事件，检测用户上滚 */
     function bindScrollListeners() {
         // 先清理旧监听
@@ -110,8 +118,25 @@ export function useChatActions(adapter: ChatActionsAdapter, options: UseChatActi
         for (const sourceRef of refs) {
             const el = resolveEl(sourceRef) as HTMLElement | undefined;
             if (!el) continue;
+            lastKnownScrollTop.set(el, el.scrollTop);
             const handler = () => {
-                if (isProgrammaticScrollActive() && !isUserScrollIntentActive()) return;
+                const previousScrollTop = lastKnownScrollTop.get(el) ?? el.scrollTop;
+                const currentScrollTop = el.scrollTop;
+                const movedUp = currentScrollTop < previousScrollTop - 1;
+                const userIntentActive = isUserScrollIntentActive();
+                const programmaticScrollActive = isProgrammaticScrollActive();
+                lastKnownScrollTop.set(el, currentScrollTop);
+
+                if (
+                    adapter.getSending()
+                    && (userIntentActive || !programmaticScrollActive)
+                    && (movedUp || !isNearBottom(el))
+                ) {
+                    interruptCurrentResponse();
+                    return;
+                }
+                if (programmaticScrollActive && !userIntentActive) return;
+                if (adapter.getSending() && currentResponseInterrupted) return;
                 if (isNearBottom(el)) {
                     autoScrollEnabled.value = true;
                     return;
@@ -122,7 +147,12 @@ export function useChatActions(adapter: ChatActionsAdapter, options: UseChatActi
             el.addEventListener('scroll', handler, { passive: true });
             scrollListeners.push({ el, handler });
 
-            const intentHandler = () => markUserScrollIntent();
+            const intentHandler = (event: Event) => {
+                markUserScrollIntent();
+                if ('deltaY' in event && Number(event.deltaY) < 0) {
+                    interruptCurrentResponse();
+                }
+            };
             el.addEventListener('wheel', intentHandler, { passive: true });
             el.addEventListener('touchstart', intentHandler, { passive: true });
             el.addEventListener('pointerdown', intentHandler, { passive: true });
@@ -166,15 +196,18 @@ export function useChatActions(adapter: ChatActionsAdapter, options: UseChatActi
 
     function scrollToBottom(force = false) {
         nextTick(() => {
+            if (adapter.getSending() && currentResponseInterrupted) return;
             if (!force && !autoScrollEnabled.value) return;
             markProgrammaticScroll();
             const desktopEl = resolveEl(listRef);
             if (desktopEl && desktopEl.scrollHeight !== undefined && desktopEl.scrollTop !== undefined) {
                 desktopEl.scrollTop = desktopEl.scrollHeight;
+                if (desktopEl instanceof HTMLElement) lastKnownScrollTop.set(desktopEl, desktopEl.scrollTop);
             }
             const mobileEl = resolveEl(mobileListRef);
             if (mobileEl && mobileEl.scrollHeight !== undefined && mobileEl.scrollTop !== undefined) {
                 mobileEl.scrollTop = mobileEl.scrollHeight;
+                if (mobileEl instanceof HTMLElement) lastKnownScrollTop.set(mobileEl, mobileEl.scrollTop);
             }
         });
     }
@@ -199,6 +232,7 @@ export function useChatActions(adapter: ChatActionsAdapter, options: UseChatActi
                 thinkingSeconds.value++;
             }, 1000);
             // AI 开始新回复时恢复自动下滑
+            currentResponseInterrupted = false;
             autoScrollEnabled.value = true;
             scrollToBottom(true);
             // 延迟重新绑定 scroll 监听（DOM 可能刚挂载）

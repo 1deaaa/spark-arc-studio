@@ -28,33 +28,16 @@
       </span>
     </div>
     <SparkCollapseTransition v-if="expandable" :show="expanded" no-opacity duration="0.2s">
-      <div class="tool-trace-detail">
-        <div v-if="parsed.summary" class="wt-summary">{{ parsed.summary }}</div>
-        <div v-if="parsed.items.length" class="wt-items">
-          <div v-for="(item, iIdx) in parsed.items" :key="iIdx" class="wt-item" :class="`is-${item.status}`">
-            <span class="wt-item-dot" :class="`is-${item.status}`"></span>
-            <span v-if="item.priority" class="wt-item-priority" :class="`is-${item.priority}`">{{ item.priority }}</span>
-            <span class="wt-item-task">{{ item.task }}</span>
-            <span v-if="item.notes" class="wt-item-notes">{{ item.notes }}</span>
-          </div>
-        </div>
-        <div v-if="!parsed.summary && !parsed.items.length" class="wt-empty">{{ parsed.raw }}</div>
-        <div v-if="parsed.updatedAt" class="wt-updated">
-          {{ t('components.chatMessageList.workTrackerUpdatedAt', { time: formatRelativeTime(parsed.updatedAt, t) }) }}
-        </div>
-      </div>
+      <WorkTrackerBoard class="tool-trace-detail" :result="segment.tool_result" />
     </SparkCollapseTransition>
   </div>
 </template>
 
 <script setup lang="ts">
 import { computed, type PropType } from 'vue';
-import { useI18n } from 'vue-i18n';
 import SparkCollapseTransition from '@/components/share/SparkCollapseTransition.vue';
-import { formatRelativeTime, parseWorkTrackerResult } from './workTracker';
+import WorkTrackerBoard from './WorkTrackerBoard.vue';
 import type { MessageSegment } from './render';
-
-const { t } = useI18n();
 
 const props = defineProps({
   segment: { type: Object as PropType<MessageSegment>, required: true },
@@ -66,7 +49,6 @@ const props = defineProps({
 defineEmits(['toggle']);
 
 const expandable = computed(() => String(props.segment.tool_name || '').trim() === 'work_tracker' && !!props.segment.tool_result);
-const parsed = computed(() => parseWorkTrackerResult(props.segment.tool_result));
 </script>
 
 <style scoped>
@@ -153,132 +135,6 @@ const parsed = computed(() => parseWorkTrackerResult(props.segment.tool_result))
 
 .tool-trace-detail {
   overflow: hidden;
-}
-
-.wt-summary {
-  padding: 8px 10px 6px;
-  font-size: var(--spark-fs-xs);
-  font-weight: 600;
-  color: var(--spark-primary);
-  border-bottom: 1px solid var(--spark-primary-muted);
-  margin-bottom: 4px;
-}
-
-.wt-items {
-  padding: 4px 10px 8px;
-}
-
-.wt-item {
-  display: flex;
-  flex-wrap: wrap;
-  align-items: baseline;
-  gap: 4px 6px;
-  padding: 3px 0;
-  font-size: var(--spark-fs-xs);
-  line-height: 1.4;
-  color: var(--spark-text);
-}
-
-.wt-item.is-completed {
-  opacity: 0.55;
-}
-
-.wt-item.is-completed .wt-item-task {
-  text-decoration: line-through;
-}
-
-.wt-item.is-blocked .wt-item-task {
-  color: var(--spark-danger, #d03050);
-}
-
-.wt-item.is-in_progress .wt-item-task {
-  font-weight: 600;
-  color: var(--spark-primary);
-}
-
-.wt-item-dot {
-  flex-shrink: 0;
-  width: 6px;
-  height: 6px;
-  border-radius: 50%;
-  background: var(--spark-text-muted);
-  margin-top: 5px;
-}
-
-.wt-item-dot.is-completed {
-  background: var(--spark-success, #52c41a);
-}
-
-.wt-item-dot.is-in_progress {
-  background: var(--spark-primary);
-  animation: wt-pulse 1.5s ease-in-out infinite;
-}
-
-.wt-item-dot.is-blocked {
-  background: var(--spark-danger, #f5222d);
-}
-
-.wt-item-priority {
-  flex-shrink: 0;
-  font-size: var(--spark-fs-3xs);
-  padding: 0 4px;
-  border-radius: 4px;
-  font-weight: 600;
-  text-transform: uppercase;
-  letter-spacing: 0.5px;
-}
-
-.wt-item-priority.is-high {
-  color: var(--spark-danger, #d03050);
-  background: rgba(208, 48, 80, 0.1);
-}
-
-.wt-item-priority.is-medium {
-  color: var(--spark-warning, #e6a700);
-  background: rgba(230, 167, 0, 0.1);
-}
-
-.wt-item-priority.is-low {
-  color: var(--spark-text-secondary);
-  background: rgba(128, 128, 128, 0.1);
-}
-
-.wt-item-task {
-  flex: 1;
-  min-width: 0;
-  overflow-wrap: break-word;
-  word-break: break-word;
-}
-
-.wt-item-notes {
-  flex-shrink: 1;
-  min-width: 0;
-  font-size: var(--spark-fs-2xs);
-  color: var(--spark-text-secondary);
-  opacity: 0.8;
-  overflow-wrap: break-word;
-}
-
-.wt-empty {
-  padding: 8px 10px;
-  font-size: var(--spark-fs-xs);
-  color: var(--spark-text-secondary);
-  opacity: 0.7;
-  white-space: pre-wrap;
-}
-
-.wt-updated {
-  padding: 4px 10px 6px;
-  font-size: var(--spark-fs-2xs);
-  color: var(--spark-text-secondary);
-  opacity: 0.6;
-  border-top: 1px solid var(--spark-primary-muted);
-  margin-top: 4px;
-}
-
-@keyframes wt-pulse {
-  0%, 100% { opacity: 1; }
-  50% { opacity: 0.4; }
 }
 
 @keyframes spin {

@@ -244,6 +244,8 @@ export function getMessageSegments(message: ChatMessageItem | null | undefined):
       status: trace.status || 'finished',
       duration: trace.duration || 0,
       source_agent: String(trace.source_agent || ''),
+      tool_result: trace.tool_result,
+      tool_action: trace.tool_action,
     });
   }
   const content = getDisplayContent(message);
@@ -253,6 +255,26 @@ export function getMessageSegments(message: ChatMessageItem | null | undefined):
     segments.push({ type: 'json', content: message.content });
   }
   return segments;
+}
+
+/** 汇总聊天历史中每个 Agent 最新的工作追踪结果，clear 操作会移除对应入口。 */
+export function collectLatestWorkTrackers(history: ChatMessageItem[] | null | undefined): Record<string, unknown> {
+  const latest: Record<string, unknown> = {};
+  for (const message of history || []) {
+    for (const segment of getMessageSegments(message)) {
+      if (String(segment.tool_name || '').trim() !== 'work_tracker') continue;
+      const agentId = String(segment.source_agent || '').trim();
+      if (!agentId) continue;
+      if (String(segment.tool_action || '').trim() === 'clear') {
+        delete latest[agentId];
+        continue;
+      }
+      if (segment.tool_result !== null && segment.tool_result !== undefined && String(segment.tool_result).trim()) {
+        latest[agentId] = segment.tool_result;
+      }
+    }
+  }
+  return latest;
 }
 
 export function hasRenderableAssistantActivity(message: ChatMessageItem | null | undefined) {

@@ -43,6 +43,7 @@ class UpdateProjectStoryTagsInput(BaseModel):
     worldviews: list[str] | None = Field(default=None, description="世界观，多选字符串数组，如 ['修真']；即使只有一个也必须传数组。")
     pov: str | None = Field(default=None, validation_alias=AliasChoices("pov", "point_of_view", "pointOfView"), description="人称视角，单选字符串，如 '第一人称'、'第三人称全知'。")
     length_hint: str | None = Field(default=None, validation_alias=AliasChoices("length_hint", "lengthHint", "length"), description="篇幅，单选字符串，如 '短篇'、'中篇'、'长篇'。")
+    scene_length_hint: str | None = Field(default=None, validation_alias=AliasChoices("scene_length_hint", "sceneLengthHint", "scene_length"), description="单场篇幅软目标：concise=精简、standard=标准、expanded=充实。用户要求今后的场景整体变短或变长时使用。")
     active_inspiration_id: str | None = Field(default=None, validation_alias=AliasChoices("active_inspiration_id", "activeInspirationId"), description="当前生效的灵感 ID，可选字符串，用于追溯来源。")
 
     @model_validator(mode="before")
@@ -343,6 +344,7 @@ def work_tracker(
                         "worldviews": story_tags.get("worldviews", []),
                         "pov": story_tags.get("pov"),
                         "length_hint": story_tags.get("length_hint"),
+                        "scene_length_hint": story_tags.get("scene_length_hint", "standard"),
                     }
                     # 仅当至少有一个字段非空时才写入
                     if any(v for v in auto_contract.values() if v not in (None, [], "")):
@@ -360,7 +362,7 @@ def work_tracker(
 
 @tool
 def read_project_story_tags() -> str:
-    """读取当前项目的故事主题参数（风格/题材/基调/世界观/人称/篇幅）。
+    """读取当前项目的故事主题参数（风格/题材/基调/世界观/人称/篇幅/单场篇幅）。
     
     这些参数是"项目宪法"，贯穿整个创作周期，所有 Agent 通过 context_provider 统一读取。
     返回格式化的文本，若某项未设置则标注"未设置"。
@@ -400,6 +402,10 @@ def read_project_story_tags() -> str:
     
     length_hint = tags.get("length_hint")
     lines.append(f"篇幅：{length_hint or '未设置'}")
+
+    scene_length_labels = {"concise": "精简", "standard": "标准", "expanded": "充实"}
+    scene_length_hint = tags.get("scene_length_hint", "standard")
+    lines.append(f"单场篇幅：{scene_length_labels.get(scene_length_hint, '标准')}（软目标）")
     
     return "\n".join(lines)
 
@@ -413,6 +419,7 @@ def update_project_story_tags(
     worldviews: list[str] | None = None,
     pov: str | None = None,
     length_hint: str | None = None,
+    scene_length_hint: str | None = None,
     active_inspiration_id: str | None = None,
 ) -> str:
     """更新当前项目的故事主题参数（部分更新，仅覆盖传入的字段）。
@@ -432,6 +439,7 @@ def update_project_story_tags(
             worldviews=worldviews,
             pov=pov,
             length_hint=length_hint,
+            scene_length_hint=scene_length_hint,
             active_inspiration_id=active_inspiration_id,
         )
     except Exception as e:
@@ -455,6 +463,10 @@ def update_project_story_tags(
         updated_fields.append(f"人称视角={pov}")
     if length_hint is not None:
         updated_fields.append(f"篇幅={length_hint}")
+    if scene_length_hint is not None:
+        scene_length_labels = {"concise": "精简", "standard": "标准", "expanded": "充实"}
+        normalized_scene_length = tags.get("scene_length_hint", "standard")
+        updated_fields.append(f"单场篇幅={scene_length_labels.get(normalized_scene_length, '标准')}")
     if active_inspiration_id is not None:
         updated_fields.append(f"灵感ID={active_inspiration_id}")
     

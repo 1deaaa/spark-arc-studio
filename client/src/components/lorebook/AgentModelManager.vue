@@ -106,7 +106,7 @@ import { ref, computed, onMounted, watch } from 'vue';
 import { NButton, NIcon, NSpin, NTabs, NTabPane, NFormItem, NSelect, NTag, NGrid, NGi } from 'naive-ui';
 import SparkAlert from '@/components/share/SparkAlert.vue';
 import { Link, RefreshCw } from '@lucide/vue';
-import { fetchAgentUsageBindings, saveAgentBinding } from '../../services/agentUsage';
+import { fetchAgentUsageBindings, getDefaultAgentUsageKey, saveAgentBinding } from '../../services/agentUsage';
 import { useAgentRegistry } from '@/composables/useAgentRegistry';
 import { useUsageDisplay } from '@/composables/useUsageDisplay';
 import { useAiStore } from '../stores/aiStore';
@@ -165,17 +165,15 @@ const checkAndFixBindings = async () => {
 
     const isMissing = boundUsage === undefined || boundUsage === null || boundUsage === '';
     if (isMissing) {
-      newBindings[aKey] = 'main';
-      changed = true;
       continue;
     }
 
     // If binding is a string
     if (typeof boundUsage === 'string') {
       // If it equals the agentKey (old fallback to self) we should keep it as direct pending selection
-      // Only if it's not a valid usage slot and not agentKey, set to 'main'
+      // 如果不是有效用途且不是 Agent 自身的直接绑定，则回退到该 Agent 的默认用途
       if (boundUsage !== aKey && !existingUsageKeys.has(boundUsage)) {
-        newBindings[aKey] = 'main';
+        newBindings[aKey] = getDefaultAgentUsageKey(aKey);
         changed = true;
       }
       continue;
@@ -192,8 +190,8 @@ const checkAndFixBindings = async () => {
       const bindingIsOwnAgent = binding === aKey;
 
       if (!hasDirectModel && !bindingIsValidUsage && !bindingIsOwnAgent) {
-        // Neither a valid direct model nor a valid usage binding -> default to main
-        newBindings[aKey] = 'main';
+        // 无有效的直接模型或用途绑定时，回退到该 Agent 的默认用途
+        newBindings[aKey] = getDefaultAgentUsageKey(aKey);
         changed = true;
       }
       continue;
@@ -250,7 +248,7 @@ const getBindingMode = (agentKey) => {
   if (boundUsage && boundUsage !== agentKey) {
     return 'usage';
   }
-  return 'direct';
+  return boundUsage ? 'direct' : 'usage';
 };
 
 const setBindingMode = async (agentKey, mode) => {
@@ -259,16 +257,17 @@ const setBindingMode = async (agentKey, mode) => {
     // The direct info will be populated when user selects a model.
     await updateAgentUsageBinding(agentKey, { binding: agentKey });
   } else {
-    // Switch to usage mode, default to 'main' if not set
+    // 切换到用途模式时，缺少记录则使用该 Agent 的默认用途
     const current = agentBindings.value[agentKey];
-    let target = 'main';
+    const defaultUsage = getDefaultAgentUsageKey(agentKey);
+    let target = defaultUsage;
     if (typeof current === 'object' && current !== null) {
-        target = current.binding || 'main';
+        target = current.binding || defaultUsage;
     } else if (current && current !== agentKey) {
         target = current;
     }
     
-    if (target === agentKey) target = 'main'; // Avoid binding to self in usage mode
+    if (target === agentKey) target = defaultUsage;
     
     await updateAgentUsageBinding(agentKey, target);
   }
@@ -277,11 +276,12 @@ const setBindingMode = async (agentKey, mode) => {
 // --- Logic for Usage Mode ---
 
 const getBoundUsage = (agentKey) => {
+  const defaultUsage = getDefaultAgentUsageKey(agentKey);
   const val = agentBindings.value[agentKey];
   if (typeof val === 'object' && val !== null) {
-    return val.binding || 'main';
+    return val.binding || defaultUsage;
   }
-  return val || 'main';
+  return val || defaultUsage;
 };
 
 const getUsageModelName = (usageKey) => {

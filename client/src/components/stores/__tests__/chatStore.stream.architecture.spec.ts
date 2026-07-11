@@ -1,7 +1,9 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { createPinia, setActivePinia } from 'pinia';
 import { useChatStore } from '../chatStore';
+import { useDirectorAutoWriteStore } from '../directorAutoWriteStore';
 import { getChatTaskStatus } from '@/services/chatService';
+import bus from '@/eventBus';
 
 vi.mock('@/components/stores/projectStore', () => ({
   useProjectStore: () => ({ currentProject: '测试项目' }),
@@ -246,6 +248,60 @@ describe('chatStore NDJSON 消费契约', () => {
       original_tokens: 9000,
       compacted_tokens: 2200,
     });
+  });
+
+  it('导演启动自动写作时先同步注册 running 状态再通知覆盖层', async () => {
+    const store = useChatStore();
+    const session = store.primarySession;
+    session.sending = true;
+    session.backgroundTaskStatus = 'running';
+    session.streamEpoch = 1;
+    const assistantMsg: any = {
+      clientId: 'assistant-auto-write',
+      role: 'assistant',
+      content: '',
+      reasoning: '',
+      tool_traces: [],
+      segments: [],
+      timestamp: 1,
+    };
+    let statusWhenNotified = '';
+    const onStarted = () => {
+      statusWhenNotified = useDirectorAutoWriteStore().tasks['测试项目']?.snapshot.status || '';
+    };
+    bus.on('director-auto-write-started', onStarted);
+    const emitSpy = vi.spyOn(bus, 'emit');
+
+    const reader = readerFromEvents([
+      {
+        event: 'director_auto_write_started',
+        seq: 1,
+        project_name: '测试项目',
+        start_chapter_index: 0,
+        start_scene_index: 0,
+        mode: 'continuous_write',
+        export_format: 'arc',
+        total_chapters: 3,
+        total_scenes: 12,
+      },
+      { event: 'task_done', seq: 2, status: 'completed' },
+    ]);
+
+    await store._consumeStream(session, assistantMsg, false, reader, 0, {
+      agentId: 'agent_director',
+      contextKey: 'global',
+      streamEpoch: 1,
+    });
+
+    const task = useDirectorAutoWriteStore().tasks['测试项目'];
+    expect(task?.snapshot.status).toBe('running');
+    expect(task?.fromDirector).toBe(true);
+    expect(statusWhenNotified).toBe('running');
+    expect(emitSpy).toHaveBeenCalledWith('director-auto-write-started', expect.objectContaining({
+      project_name: '测试项目',
+    }));
+    bus.off('director-auto-write-started', onStarted);
+    vi.clearAllTimers();
   });
 
   it('对短上下文模型错误显示本地化提示且不进入模型重试态', async () => {

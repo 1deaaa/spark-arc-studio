@@ -31,6 +31,10 @@
           :show-style="false"
           :show-length="true"
         />
+        <SceneLengthControl
+          v-model="selectedSceneLength"
+          :workspace-mode="workspaceMode"
+        />
       </div>
     </div>
   </n-popover>
@@ -67,6 +71,10 @@
                 :show-style="false"
                 :show-length="true"
               />
+              <SceneLengthControl
+                v-model="selectedSceneLength"
+                :workspace-mode="workspaceMode"
+              />
             </div>
           </div>
         </div>
@@ -81,6 +89,7 @@ import { useI18n } from 'vue-i18n';
 import { NPopover, NButton, NIcon, NTooltip } from 'naive-ui';
 import { Tags } from '@lucide/vue';
 import InspireTagSelector from '../lorebook/InspireTagSelector.vue';
+import SceneLengthControl from './SceneLengthControl.vue';
 import { useProjectStore } from '../stores/projectStore';
 import { useSceneStore } from '../stores/sceneStore';
 import { fetchWithAuth } from '../../services/api';
@@ -103,6 +112,8 @@ const selectedTones = ref<string[]>([]);
 const selectedWorldviews = ref<string[]>([]);
 const selectedPov = ref<string | undefined>(undefined);
 const selectedLength = ref<string | undefined>(undefined);
+const selectedSceneLength = ref<'concise' | 'standard' | 'expanded'>('standard');
+const workspaceMode = ref<'script' | 'novel'>('script');
 
 // 移动端弹出菜单的显示状态（脱离按钮锚点的居中弹出）
 const show = ref(false);
@@ -121,12 +132,16 @@ async function loadFromBackend() {
       const data = await response.json();
       if (data.success && data.tags) {
         const mode = data.tags.workspace_mode === 'novel' ? 'novel' : 'script';
+        workspaceMode.value = mode;
         sceneStore.setWorkspaceMode(mode);
         selectedGenres.value = data.tags.genres || [];
         selectedTones.value = data.tags.tones || [];
         selectedWorldviews.value = data.tags.worldviews || [];
         selectedPov.value = data.tags.pov || undefined;
         selectedLength.value = data.tags.length_hint || undefined;
+        selectedSceneLength.value = ['concise', 'expanded'].includes(data.tags.scene_length_hint)
+          ? data.tags.scene_length_hint
+          : 'standard';
       }
     }
   } catch (e) {
@@ -147,6 +162,7 @@ async function saveStoryTagsToBackend() {
         worldviews: selectedWorldviews.value,
         pov: selectedPov.value || null,
         lengthHint: selectedLength.value || null,
+        sceneLengthHint: selectedSceneLength.value,
       }),
     });
   } catch (e) {
@@ -165,7 +181,7 @@ function scheduleBackendSave() {
 
 // ── 监听值变化，自动异步保存到后端 ──
 watch(
-  [selectedGenres, selectedTones, selectedWorldviews, selectedPov, selectedLength],
+  [selectedGenres, selectedTones, selectedWorldviews, selectedPov, selectedLength, selectedSceneLength],
   () => { scheduleBackendSave(); },
   { deep: true },
 );

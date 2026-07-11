@@ -131,7 +131,7 @@ import SparkAlert from '@/components/share/SparkAlert.vue';
 import { Info, Zap } from '@lucide/vue';
 import { useAiStore } from '@/components/stores/aiStore';
 import { useUsageDisplay } from '@/composables/useUsageDisplay';
-import { fetchAgentUsageBindings, saveAgentBinding } from '@/services/agentUsage';
+import { fetchAgentUsageBindings, getDefaultAgentUsageKey, saveAgentBinding } from '@/services/agentUsage';
 import bus from '@/eventBus';
 
 const props = defineProps({ 
@@ -149,7 +149,7 @@ function toStoreId(value: unknown): string | null {
 }
 
 // 数据
-const selectedUsageKey = ref('main'); // Current selected usage
+const selectedUsageKey = ref(getDefaultAgentUsageKey(props.agentName));
 const selectedPlatformId = ref<string | null>(null);
 const selectedModelId = ref<string | null>(null);
 
@@ -189,7 +189,7 @@ const compactMode = ref('usage'); // 'usage' or 'direct'
 function getResolvedUsageKey(usageKey = selectedUsageKey.value) {
   const hasUsage = aiStore.usageSelections.some(u => u.usage_key === usageKey);
   if (hasUsage) return usageKey;
-  return aiStore.usageSelections[0]?.usage_key ?? 'main';
+  return aiStore.usageSelections[0]?.usage_key ?? getDefaultAgentUsageKey(props.agentName);
 }
 
 async function applyUsageSelection(usageKey = selectedUsageKey.value) {
@@ -296,12 +296,14 @@ async function loadAgentBinding() {
     // 默认使用用途绑定
     isDirectBinding.value = false;
     compactMode.value = 'usage';
-    selectedUsageKey.value = getResolvedUsageKey(typeof binding === 'string' && binding ? binding : 'main');
+    selectedUsageKey.value = getResolvedUsageKey(
+      typeof binding === 'string' && binding ? binding : getDefaultAgentUsageKey(props.agentName),
+    );
     await syncSelectionFromStore();
   } catch (err: unknown) {
-    // 绑定加载失败时回退到 main
+    // 绑定加载失败时回退到该 Agent 的默认用途
     isDirectBinding.value = false;
-    selectedUsageKey.value = getResolvedUsageKey('main');
+    selectedUsageKey.value = getResolvedUsageKey(getDefaultAgentUsageKey(props.agentName));
     await syncSelectionFromStore();
   }
 }

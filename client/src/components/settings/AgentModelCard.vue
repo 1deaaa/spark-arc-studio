@@ -132,7 +132,7 @@ import { ref, computed, onMounted, watch } from 'vue';
 import { useI18n } from 'vue-i18n';
 import { NCard, NButton, NIcon, NSelect, NFormItem, NTabs, NTabPane, NSpin, NSpace, NTooltip } from 'naive-ui';
 import { FilePenLine, Link, RefreshCw, Rocket } from '@lucide/vue';
-import { fetchAgentUsageBindings, saveAgentBinding } from '../../services/agentUsage';
+import { fetchAgentUsageBindings, getDefaultAgentUsageKey, saveAgentBinding } from '../../services/agentUsage';
 import {
   fetchAgentPromptPreferences,
   type PromptPreferenceState,
@@ -238,17 +238,18 @@ const bindingMode = computed(() => {
     if (boundUsage.binding === selectedAgentKey.value) return 'direct';
     return 'usage';
   }
-  if (boundUsage && boundUsage !== selectedAgentKey.value) return 'usage';
-  return 'direct';
+  if (!boundUsage) return 'usage';
+  return boundUsage === selectedAgentKey.value ? 'direct' : 'usage';
 });
 
 // 当前绑定的用途
 const boundUsage = computed(() => {
+  const defaultUsage = getDefaultAgentUsageKey(selectedAgentKey.value);
   const val = agentBindings.value[selectedAgentKey.value];
   if (typeof val === 'object' && val !== null) {
-    return val.binding || 'main';
+    return val.binding || defaultUsage;
   }
-  return val || 'main';
+  return val || defaultUsage;
 });
 
 // 直接模式的平台和模型
@@ -299,13 +300,14 @@ const handleModeChange = async (mode) => {
       agentBindings.value[key] = { binding: key };
     } else {
       const current = agentBindings.value[key];
-      let target = 'main';
+      const defaultUsage = getDefaultAgentUsageKey(key);
+      let target = defaultUsage;
       if (typeof current === 'object' && current !== null) {
-        target = current.binding || 'main';
+        target = current.binding || defaultUsage;
       } else if (current && current !== key) {
         target = current;
       }
-      if (target === key) target = 'main';
+      if (target === key) target = defaultUsage;
       await saveAgentBinding(key, target);
       agentBindings.value[key] = target;
     }

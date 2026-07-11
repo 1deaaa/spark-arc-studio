@@ -489,6 +489,29 @@
     grid-template-columns: repeat(3, minmax(0, 1fr));
 }
 
+.token-unit-badge {
+    min-width: 20px;
+    color: var(--spark-primary);
+    font-size: var(--spark-fs-xs);
+    font-weight: 700;
+    text-align: center;
+}
+
+.token-range-hint {
+    display: inline-flex;
+    align-items: flex-start;
+    gap: 5px;
+    color: var(--spark-text-muted);
+    font-size: var(--spark-fs-xs);
+    line-height: 1.45;
+}
+
+.token-range-hint .n-icon {
+    flex: 0 0 auto;
+    margin-top: 2px;
+    color: var(--spark-primary);
+}
+
 .add-model-extra-body {
     margin-bottom: 8px;
 }

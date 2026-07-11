@@ -138,4 +138,45 @@ describe('useChatActions 聊天自动滚动开关', () => {
 
     expect(el.scrollTop).toBe(260);
   });
+
+  it('流式回复被上滚打断后本轮不再恢复，下一轮回复才重新启用', async () => {
+    vi.spyOn(performance, 'now').mockReturnValue(1000);
+
+    const wrapper = mountHarness();
+    await nextTick();
+    await nextTick();
+
+    const exposed = wrapper.vm as any;
+    const el = exposed.listEl as HTMLElement;
+    setScrollMetrics(el, { scrollTop: 650, scrollHeight: 1000, clientHeight: 320 });
+
+    exposed.sending = true;
+    await nextTick();
+    await nextTick();
+
+    // 即使仍处于距底部 60px 的阈值内，明确的向上滚轮意图也必须立即打断。
+    setScrollMetrics(el, { scrollTop: 640, scrollHeight: 1000, clientHeight: 320 });
+    el.dispatchEvent(new WheelEvent('wheel', { deltaY: -30 }));
+    el.dispatchEvent(new Event('scroll'));
+
+    setScrollMetrics(el, { scrollTop: 640, scrollHeight: 1200, clientHeight: 320 });
+    exposed.actions.scrollToBottom(true);
+    await nextTick();
+    expect(el.scrollTop).toBe(640);
+
+    // 本轮即使用户手动回到底部，也不再重新跟随新增长的正文。
+    setScrollMetrics(el, { scrollTop: 880, scrollHeight: 1200, clientHeight: 320 });
+    el.dispatchEvent(new Event('scroll'));
+    setScrollMetrics(el, { scrollTop: 880, scrollHeight: 1400, clientHeight: 320 });
+    exposed.actions.scrollToBottom();
+    await nextTick();
+    expect(el.scrollTop).toBe(880);
+
+    exposed.sending = false;
+    await nextTick();
+    exposed.sending = true;
+    await nextTick();
+    await nextTick();
+    expect(el.scrollTop).toBe(1400);
+  });
 });

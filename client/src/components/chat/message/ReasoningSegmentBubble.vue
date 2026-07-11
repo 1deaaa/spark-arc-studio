@@ -3,18 +3,16 @@
     class="chat-bubble reasoning-bubble"
     :class="{ 'has-agent-avatar': !!sourceAgent }"
   >
-    <n-tooltip v-if="sourceAgent" trigger="hover">
-      <template #trigger>
-        <AgentAvatar
-          class="agent-avatar-anchor"
-          :agent-id="sourceAgent"
-          :size="28"
-          :active="active"
-          :aria-label="avatarAriaLabel"
-        />
-      </template>
-      {{ avatarAriaLabel }}
-    </n-tooltip>
+    <AgentProgressAvatar
+      v-if="sourceAgent"
+      class="agent-avatar-anchor"
+      :agent-id="sourceAgent"
+      :agent-name="agentName"
+      :tracker-result="trackerResult"
+      :size="28"
+      :active="active"
+      :aria-label="avatarAriaLabel"
+    />
 
     <div
       class="reasoning-block"
@@ -60,8 +58,7 @@
 <script setup lang="ts">
 import { computed, nextTick, onBeforeUnmount, ref, watch } from 'vue';
 import { useI18n } from 'vue-i18n';
-import { NTooltip } from 'naive-ui';
-import AgentAvatar from '@/components/share/AgentAvatar.vue';
+import AgentProgressAvatar from './AgentProgressAvatar.vue';
 import MarkdownRenderer from '@/components/share/MarkdownRenderer.vue';
 
 type RevealPhase = '' | 'opening' | 'closing';
@@ -80,6 +77,7 @@ const props = withDefaults(defineProps<{
   agentName?: string;
   streaming?: boolean;
   active?: boolean;
+  trackerResult?: unknown;
 }>(), {
   sourceAgent: '',
   agentName: '',

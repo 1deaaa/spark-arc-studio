@@ -40,6 +40,7 @@ from core.utils import (
     get_project_path,
     get_project_stories_path,
 )
+from core.project_settings import normalize_scene_length_hint
 from story.project_files import _coerce_character_name
 
 
@@ -68,6 +69,27 @@ def build_story_tags_hint(story_tags: dict) -> str:
         parts.append("【创作格式】小说模式（纯文学小说，输出 Markdown 小说正文，避免使用 ARC 剧本语法）。")
     else:
         parts.append("【创作格式】剧本模式（ARC 互动剧本，输出 .arc 剧本正文，遵守 ARC 语法规范）。")
+
+    scene_length_hint = normalize_scene_length_hint(story_tags.get("scene_length_hint"))
+    if workspace_mode == "novel":
+        scene_targets = {
+            "concise": ("精简", "约 600-1000 个中文字符"),
+            "standard": ("标准", "约 1000-1800 个中文字符"),
+            "expanded": ("充实", "约 1800-3000 个中文字符"),
+        }
+    else:
+        scene_targets = {
+            "concise": ("精简", "约 12-20 个有效叙事单元"),
+            "standard": ("标准", "约 20-35 个有效叙事单元"),
+            "expanded": ("充实", "约 35-55 个有效叙事单元"),
+        }
+    scene_label, scene_target = scene_targets[scene_length_hint]
+    parts.append(
+        f"【单场篇幅软目标】{scene_label}档，{scene_target}。"
+        "剧本中的有效叙事单元包括对白、动作、旁白和明确转折，不只计算对白句。"
+        "可按过场、高潮、纯动作等实际节奏在目标附近约 ±30% 浮动；"
+        "不得为凑数量注水，也不得在必要的动作或情绪转折中途硬截断。"
+    )
 
     pov = story_tags.get("pov")
     if pov:

@@ -766,7 +766,7 @@
                                 @blur="onTokenBlur('addContext', newModel as any, 'maxContextTokens')"
                                 @clear="onTokenClear('addContext', newModel as any, 'maxContextTokens')"
                             >
-                                <template #suffix><span style="opacity:0.45;font-size:11px">100K~2M</span></template>
+                                <template #suffix><span class="token-unit-badge">K</span></template>
                             </n-input>
                             <n-input
                                 v-model:value="tokenTexts.addOutput"
@@ -775,9 +775,15 @@
                                 @blur="onTokenBlur('addOutput', newModel as any, 'maxOutputTokens')"
                                 @clear="onTokenClear('addOutput', newModel as any, 'maxOutputTokens')"
                             >
-                                <template #suffix><span style="opacity:0.45;font-size:11px">8K~256K</span></template>
+                                <template #suffix><span class="token-unit-badge">K</span></template>
                             </n-input>
                         </div>
+                        <template #feedback>
+                            <span class="token-range-hint">
+                                <n-icon><CircleAlert /></n-icon>
+                                {{ t('components.aiManager.form.maxTokensAutoHint') }}
+                            </span>
+                        </template>
                     </n-form-item>
                     <n-form-item class="add-model-extra-body" :show-feedback="false" :label="t('components.aiManager.form.extraBodyOptional')">
                         <n-input 
@@ -879,7 +885,7 @@
                                 @blur="onTokenBlur('editContext', editingModel as any, 'maxContextTokens')"
                                 @clear="onTokenClear('editContext', editingModel as any, 'maxContextTokens')"
                             >
-                                <template #suffix><span style="opacity:0.45;font-size:11px">100K~2M</span></template>
+                                <template #suffix><span class="token-unit-badge">K</span></template>
                             </n-input>
                             <n-input
                                 v-model:value="tokenTexts.editOutput"
@@ -888,9 +894,15 @@
                                 @blur="onTokenBlur('editOutput', editingModel as any, 'maxOutputTokens')"
                                 @clear="onTokenClear('editOutput', editingModel as any, 'maxOutputTokens')"
                             >
-                                <template #suffix><span style="opacity:0.45;font-size:11px">8K~256K</span></template>
+                                <template #suffix><span class="token-unit-badge">K</span></template>
                             </n-input>
                         </div>
+                        <template #feedback>
+                            <span class="token-range-hint">
+                                <n-icon><CircleAlert /></n-icon>
+                                {{ t('components.aiManager.form.maxTokensAutoHint') }}
+                            </span>
+                        </template>
                     </n-form-item>
                     <n-form-item :show-feedback="false" :label="t('components.aiManager.form.extraBody')">
                         <n-input 
@@ -954,6 +966,7 @@ import {
     type ModelModality,
     type ModelModalitiesLike,
 } from '@/services/modelModalities';
+import { formatTokenKValue, parseTokenKValue } from '@/utils/modelTokenUnits';
 
 const aiStore = useAiStore();
 const { t } = useI18n();
@@ -1102,38 +1115,6 @@ function toggleModelAbility(target: ModalityFormTarget, ability: ModelAbilityKey
     target.outputModalities = modalities.outputModalities;
 }
 
-// === Token 输入 K/M 单位支持 ===
-function formatTokenDisplay(value: number | null | undefined): string {
-    if (value == null) return '';
-    const num = Number(value);
-    if (!Number.isFinite(num) || num <= 0) return '';
-    if (num >= 1e6) {
-        const v = num / 1e6;
-        if (v >= 100) return `${Math.round(v)}M`;
-        if (v >= 10) return `${v.toFixed(1)}M`;
-        return `${v.toFixed(2)}M`;
-    }
-    if (num >= 1e3) {
-        const v = num / 1e3;
-        if (v >= 100) return `${Math.round(v)}K`;
-        if (v >= 10) return `${v.toFixed(1)}K`;
-        return `${v.toFixed(2)}K`;
-    }
-    return String(num);
-}
-
-function parseTokenInput(text: string): number | null {
-    if (!text || !text.trim()) return null;
-    const cleaned = text.trim().replace(/[,，\s]/g, '');
-    const match = cleaned.match(/^([0-9]*\.?[0-9]+)\s*([kKmMgG])?$/i);
-    if (!match) return null;
-    const num = parseFloat(match[1]);
-    if (!Number.isFinite(num) || num < 0) return null;
-    const suffix = (match[2] || '').toUpperCase();
-    const multiplier = suffix === 'K' ? 1e3 : suffix === 'M' ? 1e6 : suffix === 'G' ? 1e9 : 1;
-    return Math.round(num * multiplier);
-}
-
 const tokenTexts = reactive({
     addContext: '',
     addOutput: '',
@@ -1142,40 +1123,52 @@ const tokenTexts = reactive({
 });
 
 function syncAddTokenTexts() {
-    tokenTexts.addContext = formatTokenDisplay(newModel.value.maxContextTokens);
-    tokenTexts.addOutput = formatTokenDisplay(newModel.value.maxOutputTokens);
+    tokenTexts.addContext = formatTokenKValue(newModel.value.maxContextTokens);
+    tokenTexts.addOutput = formatTokenKValue(newModel.value.maxOutputTokens);
 }
 function syncEditTexts() {
-    tokenTexts.editContext = formatTokenDisplay(editingModel.value.maxContextTokens);
-    tokenTexts.editOutput = formatTokenDisplay(editingModel.value.maxOutputTokens);
+    tokenTexts.editContext = formatTokenKValue(editingModel.value.maxContextTokens);
+    tokenTexts.editOutput = formatTokenKValue(editingModel.value.maxOutputTokens);
 }
 
-const TOKEN_RANGE: Record<string, { min: number; max: number; label: string }> = {
-    maxContextTokens: { min: 1e5, max: 2e6, label: '100K ~ 2M' },
-    maxOutputTokens: { min: 8e3, max: 256e3, label: '8K ~ 256K' },
+const TOKEN_RANGE: Record<string, { min: number; max: number; minLabel: string; maxLabel: string }> = {
+    maxContextTokens: { min: 1e5, max: 2e6, minLabel: '100 K', maxLabel: '2000 K' },
+    maxOutputTokens: { min: 8e3, max: 256e3, minLabel: '8 K', maxLabel: '256 K' },
 };
 
 function onTokenBlur(key: keyof typeof tokenTexts, target: Record<string, unknown>, field: string) {
-    const parsed = parseTokenInput(tokenTexts[key]);
+    const input = tokenTexts[key].trim();
+    if (!input) {
+        onTokenClear(key, target, field);
+        return;
+    }
+
+    const parsed = parseTokenKValue(input);
+    if (parsed == null) {
+        tokenTexts[key] = formatTokenKValue(target[field] as number | null | undefined);
+        message.warning(t('components.aiManager.form.tokenInvalid'));
+        return;
+    }
+
     if (parsed != null) {
         const range = TOKEN_RANGE[field];
         if (range) {
             if (parsed < range.min) {
                 target[field] = range.min;
-                tokenTexts[key] = formatTokenDisplay(range.min);
-                message.warning(t('components.aiManager.form.tokenClampedMin', { min: range.label }));
+                tokenTexts[key] = formatTokenKValue(range.min);
+                message.warning(t('components.aiManager.form.tokenClampedMin', { min: range.minLabel }));
                 return;
             }
             if (parsed > range.max) {
                 target[field] = range.max;
-                tokenTexts[key] = formatTokenDisplay(range.max);
-                message.warning(t('components.aiManager.form.tokenClampedMax', { max: range.label }));
+                tokenTexts[key] = formatTokenKValue(range.max);
+                message.warning(t('components.aiManager.form.tokenClampedMax', { max: range.maxLabel }));
                 return;
             }
         }
     }
     target[field] = parsed;
-    tokenTexts[key] = formatTokenDisplay(parsed);
+    tokenTexts[key] = formatTokenKValue(parsed);
 }
 function onTokenClear(key: keyof typeof tokenTexts, target: Record<string, unknown>, field: string) {
     target[field] = null;

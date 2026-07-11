@@ -161,7 +161,7 @@ import { ref, computed, onMounted, onBeforeUnmount, nextTick, watch } from 'vue'
 import { useI18n } from 'vue-i18n';
 import { NButton, NIcon, NTabs, NTabPane, NFormItem, NSelect, NTooltip } from 'naive-ui';
 import { FilePenLine, Link } from '@lucide/vue';
-import { fetchAgentUsageBindings, saveAgentBinding } from '@/services/agentUsage';
+import { fetchAgentUsageBindings, getDefaultAgentUsageKey, saveAgentBinding } from '@/services/agentUsage';
 import { useAgentRegistry } from '@/composables/useAgentRegistry';
 import { useAiStore } from '@/components/stores/aiStore';
 import { useUsageDisplay } from '@/composables/useUsageDisplay';
@@ -432,8 +432,8 @@ const getBindingMode = (agentKey: string) => {
     if (bound.binding === agentKey) return 'direct';
     return 'usage';
   }
-  if (bound && bound !== agentKey) return 'usage';
-  return 'direct';
+  if (!bound) return 'usage';
+  return bound === agentKey ? 'direct' : 'usage';
 };
 
 const updateAgentUsageBinding = async (agentKey: string, usageKey: AgentBinding) => {
@@ -454,21 +454,23 @@ const setBindingMode = async (agentKey: string, mode: string) => {
     await updateAgentUsageBinding(agentKey, { binding: agentKey });
   } else {
     const current = agentBindings.value[agentKey];
-    let target = 'main';
+    const defaultUsage = getDefaultAgentUsageKey(agentKey);
+    let target = defaultUsage;
     if (typeof current === 'object' && current !== null) {
-      target = current.binding || 'main';
+      target = current.binding || defaultUsage;
     } else if (current && current !== agentKey) {
       target = current;
     }
-    if (target === agentKey) target = 'main';
+    if (target === agentKey) target = defaultUsage;
     await updateAgentUsageBinding(agentKey, target);
   }
 };
 
 const getBoundUsage = (agentKey: string) => {
+  const defaultUsage = getDefaultAgentUsageKey(agentKey);
   const val = agentBindings.value[agentKey];
-  if (typeof val === 'object' && val !== null) return val.binding || 'main';
-  return val || 'main';
+  if (typeof val === 'object' && val !== null) return val.binding || defaultUsage;
+  return val || defaultUsage;
 };
 
 const getUsageModelName = (usageKey: string) => aiStore.getUsageModelName(usageKey);
@@ -556,14 +558,12 @@ const checkAndFixBindings = async (agentRegistry: ReadonlyArray<{ key: string }>
 
     const isMissing = boundUsage === undefined || boundUsage === null || boundUsage === '';
     if (isMissing) {
-      newBindings[aKey] = 'main';
-      changed = true;
       continue;
     }
 
     if (typeof boundUsage === 'string') {
       if (boundUsage !== aKey && !existingUsageKeys.has(boundUsage)) {
-        newBindings[aKey] = 'main';
+        newBindings[aKey] = getDefaultAgentUsageKey(aKey);
         changed = true;
       }
       continue;
@@ -578,7 +578,7 @@ const checkAndFixBindings = async (agentRegistry: ReadonlyArray<{ key: string }>
       const bindingIsOwnAgent = binding === aKey;
 
       if (!hasDirectModel && !bindingIsValidUsage && !bindingIsOwnAgent) {
-        newBindings[aKey] = 'main';
+        newBindings[aKey] = getDefaultAgentUsageKey(aKey);
         changed = true;
       }
     }

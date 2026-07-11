@@ -490,9 +490,7 @@
   will-change: height;
 }
 
-/* 抽屉满高时顶部安全区域 */
 .chat-mobile-drawer :deep(.n-drawer-content) {
-  padding-top: var(--sat, 0px);
   overflow: hidden;
 }
 

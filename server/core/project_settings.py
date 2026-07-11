@@ -8,7 +8,7 @@
   graphrag_enabled: false
   attachment_index_enabled: true
   attachment_chunk_tokens: 64000  (附件分片 token 上限，等价于"按需读取"滑动窗口的窗口大小)
-  story_tags: {}  (项目级故事主题参数：创作模式/风格/题材/基调/世界观/人称/篇幅)
+  story_tags: {}  (项目级故事主题参数：创作模式/风格/题材/基调/世界观/人称/全书篇幅/单场篇幅)
   active_inspiration_id: null  (当前生效的灵感 ID，用于追溯来源)
 """
 
@@ -45,6 +45,7 @@ _DEFAULT_SETTINGS: Dict[str, Any] = {
         "worldviews": [],        # 世界观（多选，如["修真"]）
         "pov": None,             # 人称视角（单选，如"第一人称"）
         "length_hint": None,     # 篇幅（单选，如"中篇"）
+        "scene_length_hint": "standard",  # 单场篇幅软目标（concise / standard / expanded）
     },
     # 当前生效的灵感 ID（可选，用于追溯项目参数的来源灵感）
     "active_inspiration_id": None,
@@ -63,6 +64,37 @@ _DEFAULT_SETTINGS: Dict[str, Any] = {
         "sprite_matting": "chroma_key",
     },
 }
+
+_SCENE_LENGTH_HINT_ALIASES = {
+    "concise": "concise",
+    "compact": "concise",
+    "brief": "concise",
+    "short": "concise",
+    "精简": "concise",
+    "紧凑": "concise",
+    "短": "concise",
+    "standard": "standard",
+    "balanced": "standard",
+    "normal": "standard",
+    "medium": "standard",
+    "标准": "standard",
+    "适中": "standard",
+    "正常": "standard",
+    "expanded": "expanded",
+    "rich": "expanded",
+    "detailed": "expanded",
+    "long": "expanded",
+    "充实": "expanded",
+    "丰富": "expanded",
+    "详细": "expanded",
+    "长": "expanded",
+}
+
+
+def normalize_scene_length_hint(value: Any) -> str:
+    """把界面或模型传入的单场篇幅表达规范为稳定枚举。"""
+    key = str(value or "standard").strip().lower()
+    return _SCENE_LENGTH_HINT_ALIASES.get(key, "standard")
 
 # 与 routes_import.py 的 chunk_tokens 校验保持一致，避免极端值。
 ATTACHMENT_CHUNK_TOKENS_MIN = 1000
@@ -179,6 +211,9 @@ def _normalize(raw: Dict[str, Any] | None) -> Dict[str, Any]:
                 "worldviews": raw_tags.get("worldviews", default_tags["worldviews"]) or [],
                 "pov": raw_tags.get("pov", default_tags["pov"]),
                 "length_hint": raw_tags.get("length_hint", default_tags["length_hint"]),
+                "scene_length_hint": normalize_scene_length_hint(
+                    raw_tags.get("scene_length_hint", default_tags["scene_length_hint"])
+                ),
             }
         # 规范化 active_inspiration_id
         data["active_inspiration_id"] = raw.get("active_inspiration_id", _DEFAULT_SETTINGS["active_inspiration_id"])
@@ -452,6 +487,7 @@ def get_project_story_tags(user_id: str, project_name: str) -> Dict[str, Any]:
         "worldviews": list[str],
         "pov": str | None,
         "length_hint": str | None,
+        "scene_length_hint": "concise" | "standard" | "expanded",
     }
     """
     settings = get_project_settings(user_id, project_name)
@@ -483,6 +519,7 @@ def set_project_story_tags(
     worldviews: Optional[List[str]] = None,
     pov: Optional[str] = None,
     length_hint: Optional[str] = None,
+    scene_length_hint: Optional[str] = None,
     workspace_mode: Optional[str] = None,
     active_inspiration_id: Optional[str] = None,
 ) -> Dict[str, Any]:
@@ -497,6 +534,7 @@ def set_project_story_tags(
         worldviews: 世界观（多选，如["修真"]）
         pov: 人称视角（单选，如"第一人称"）
         length_hint: 篇幅（单选，如"中篇"）
+        scene_length_hint: 单场篇幅软目标（concise / standard / expanded）
         workspace_mode: 创作模式只读兼容参数；创建项目后会被忽略
         active_inspiration_id: 当前生效的灵感 ID（可选）
     
@@ -521,6 +559,8 @@ def set_project_story_tags(
             current_tags["pov"] = pov
         if length_hint is not None:
             current_tags["length_hint"] = length_hint
+        if scene_length_hint is not None:
+            current_tags["scene_length_hint"] = normalize_scene_length_hint(scene_length_hint)
         settings["story_tags"] = current_tags
         
         # 更新 active_inspiration_id（如果传入）

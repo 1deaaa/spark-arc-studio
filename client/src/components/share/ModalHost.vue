@@ -1,6 +1,6 @@
 <template>
   <Transition name="modal-fade">
-  <div v-if="state.visible" class="modal-mask" @click.self="cancel">
+  <div v-if="state.visible" class="modal-mask spark-safe-area-popup" @click.self="cancel">
     <div class="modal-box">
       <div class="modal-title">{{ state.title }}</div>
       <div class="modal-message" v-if="state.message">{{ state.message }}</div>

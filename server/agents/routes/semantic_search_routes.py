@@ -120,17 +120,18 @@ async def _resolve_project_semantic_status(
 
 
 async def _resolve_embedding_runtime_status(user_id: str) -> tuple[bool, str]:
-    """读取当前语义检索使用的嵌入运行时，优先展示已启用的本地服务。"""
-    try:
-        if get_local_embedding_enabled():
+    """读取当前语义检索使用的嵌入运行时；本地开关开启时不回退云端。"""
+    if get_local_embedding_enabled():
+        try:
             from agents.vector_index.local_embedding import (
                 is_local_embedding_alive,
                 local_embedding_model_name,
             )
             if await run_in_threadpool(lambda: is_local_embedding_alive(timeout=1.0, ttl=0)):
                 return True, local_embedding_model_name()
-    except Exception:
-        pass
+            return False, local_embedding_model_name()
+        except Exception:
+            return False, "local"
 
     try:
         from llm.agen_matchbox import matchbox
@@ -138,6 +139,108 @@ async def _resolve_embedding_runtime_status(user_id: str) -> tuple[bool, str]:
         return True, emb.model
     except Exception:
         return False, ""
+
+
+def _validate_embedding_dimensions(dims: int, *, runtime_label: str) -> int:
+    """校验当前索引契约要求的固定向量维度。"""
+    dims = int(dims or 0)
+    if dims != QWEN3_EMBEDDING_DIMENSIONS:
+        raise ValueError(
+            f"{runtime_label}嵌入模型维度为 {dims}，"
+            f"但当前索引契约要求 {QWEN3_EMBEDDING_DIMENSIONS} 维。"
+        )
+    return dims
+
+
+async def _test_active_embedding_runtime(user_id: str) -> dict:
+    """测试当前生效的嵌入运行时；本地与云端选择只在这里判定。"""
+    if get_local_embedding_enabled():
+        from agents.vector_index.local_embedding import (
+            is_local_embedding_alive,
+            local_embedding_model_name,
+            LOCAL_EMBEDDING_API_KEY,
+            LOCAL_EMBEDDING_BASE_URL,
+        )
+
+        alive = await run_in_threadpool(
+            lambda: is_local_embedding_alive(timeout=2.0, ttl=0)
+        )
+        if not alive:
+            raise ValueError("本地嵌入服务尚未就绪，请等待服务启动完成后重试。")
+
+        from langchain_openai import OpenAIEmbeddings
+
+        emb = OpenAIEmbeddings(
+            model=embedding_contract_metadata()["model"],
+            api_key=LOCAL_EMBEDDING_API_KEY,
+            base_url=LOCAL_EMBEDDING_BASE_URL,
+            check_embedding_ctx_length=False,
+            extra_body=embedding_extra_body(),
+        )
+        test_vector = await run_in_threadpool(emb.embed_query, "测试")
+        dims = _validate_embedding_dimensions(
+            len(test_vector) if test_vector else 0,
+            runtime_label="本地",
+        )
+        return {
+            "success": True,
+            "dims": dims,
+            "model_name": local_embedding_model_name(),
+            "platform_name": "local",
+            "embedding_contract": embedding_contract_metadata(),
+        }
+
+    from llm.agen_matchbox import matchbox
+
+    mb = matchbox()
+    emb = mb.get_user_embedding(user_id, extra_body=embedding_extra_body())
+    model_name = emb.model
+    platform_name = ""
+
+    with mb.Session() as session:
+        from llm.agen_matchbox.models import UserEmbeddingSelection, LLMPlatform
+
+        selection = session.query(UserEmbeddingSelection).filter_by(user_id=user_id).first()
+        if selection and selection.platform_id:
+            plat = session.query(LLMPlatform).filter_by(id=selection.platform_id).first()
+            if not plat:
+                raise ValueError("嵌入模型所在平台不存在")
+            platform_name = plat.name
+            api_key = mb._get_effective_api_key(session, user_id, plat)
+            if not api_key:
+                raise ValueError("嵌入模型所在平台未配置 API Key")
+
+            from llm.agen_matchbox.utils import test_platform_embedding
+
+            result = await run_in_threadpool(
+                lambda: test_platform_embedding(
+                    plat.base_url,
+                    api_key,
+                    model_name,
+                    extra_body=embedding_extra_body(),
+                )
+            )
+            dims = _validate_embedding_dimensions(result.get("dims", 0), runtime_label="")
+            return {
+                "success": True,
+                "dims": dims,
+                "model_name": model_name,
+                "platform_name": platform_name,
+                "embedding_contract": embedding_contract_metadata(),
+            }
+
+    test_vector = await run_in_threadpool(emb.embed_query, "测试")
+    dims = _validate_embedding_dimensions(
+        len(test_vector) if test_vector else 0,
+        runtime_label="",
+    )
+    return {
+        "success": True,
+        "dims": dims,
+        "model_name": model_name,
+        "platform_name": platform_name,
+        "embedding_contract": embedding_contract_metadata(),
+    }
 
 
 def _trigger_project_semantic_refresh_sync(user_id: str, project_name: str) -> dict:
@@ -285,47 +388,8 @@ async def enable_semantic_search(data: ProjectNameRequest, user: dict = Depends(
     if not project_name:
         raise HTTPException(status_code=400, detail="缺少项目名称")
 
-    # 测试嵌入模型
     try:
-        from llm.agen_matchbox import matchbox
-        from llm.agen_matchbox.utils import test_platform_embedding
-        mb = matchbox()
-
-        # 获取用户选择的嵌入模型
-        emb = mb.get_user_embedding(user_id, extra_body=embedding_extra_body())
-        model_name = emb.model
-
-        # 获取平台信息
-        with mb.Session() as session:
-            from llm.agen_matchbox.models import UserEmbeddingSelection, LLMPlatform
-            selection = session.query(UserEmbeddingSelection).filter_by(user_id=user_id).first()
-            if selection and selection.platform_id:
-                plat = session.query(LLMPlatform).filter_by(id=selection.platform_id).first()
-                if plat:
-                    api_key = mb._get_effective_api_key(session, user_id, plat)
-                    if api_key:
-                        result = test_platform_embedding(
-                            plat.base_url,
-                            api_key,
-                            model_name,
-                            extra_body=embedding_extra_body(),
-                        )
-                        dims = result.get("dims", 0)
-                        if dims != QWEN3_EMBEDDING_DIMENSIONS:
-                            raise ValueError(
-                                f"嵌入模型维度为 {dims}，但当前索引契约要求 {QWEN3_EMBEDDING_DIMENSIONS} 维。"
-                            )
-                    else:
-                        raise ValueError("嵌入模型所在平台未配置 API Key")
-                else:
-                    raise ValueError("嵌入模型所在平台不存在")
-            else:
-                # 无用户选择，使用 get_user_embedding 的回退逻辑已经能拿到实例
-                # 直接用 embed_query 做一次真实调用
-                test_vector = emb.embed_query("测试")
-                if not test_vector or len(test_vector) == 0:
-                    raise ValueError("嵌入模型返回了空向量，请检查模型配置")
-
+        embedding_runtime = await _test_active_embedding_runtime(user_id)
     except ValueError as e:
         raise HTTPException(status_code=400, detail=str(e))
     except Exception as e:
@@ -349,6 +413,8 @@ async def enable_semantic_search(data: ProjectNameRequest, user: dict = Depends(
         "index_exists": index_status["index_exists"],
         "needs_rebuild": index_status["needs_rebuild"],
         "build_state": index_status["build_state"],
+        "embedding_model_name": embedding_runtime["model_name"],
+        "embedding_platform_name": embedding_runtime["platform_name"],
     }
 
 
@@ -400,93 +466,11 @@ async def disable_semantic_search(data: ProjectNameRequest, user: dict = Depends
 
 @semantic_search_router.post('/test-embedding')
 async def test_semantic_embedding(user: dict = Depends(get_current_user)):
-    """测试当前用户配置的嵌入模型是否可用。"""
+    """测试当前生效的本地或云端嵌入模型是否可用。"""
     user_id = str(user['user_id'])
 
     try:
-        if get_local_embedding_enabled():
-            from agents.vector_index.local_embedding import (
-                is_local_embedding_alive,
-                local_embedding_model_name,
-                LOCAL_EMBEDDING_API_KEY,
-                LOCAL_EMBEDDING_BASE_URL,
-            )
-            if await run_in_threadpool(lambda: is_local_embedding_alive(timeout=2.0, ttl=0)):
-                from langchain_openai import OpenAIEmbeddings
-
-                emb = OpenAIEmbeddings(
-                    model=embedding_contract_metadata()["model"],
-                    api_key=LOCAL_EMBEDDING_API_KEY,
-                    base_url=LOCAL_EMBEDDING_BASE_URL,
-                    check_embedding_ctx_length=False,
-                    extra_body=embedding_extra_body(),
-                )
-                test_vector = await run_in_threadpool(emb.embed_query, "测试")
-                dims = len(test_vector) if test_vector else 0
-                if dims != QWEN3_EMBEDDING_DIMENSIONS:
-                    raise ValueError(
-                        f"本地嵌入模型维度为 {dims}，但当前索引契约要求 {QWEN3_EMBEDDING_DIMENSIONS} 维。"
-                    )
-                return {
-                    "success": True,
-                    "dims": dims,
-                    "model_name": local_embedding_model_name(),
-                    "platform_name": "local",
-                    "embedding_contract": embedding_contract_metadata(),
-                }
-
-        from llm.agen_matchbox import matchbox
-        mb = matchbox()
-
-        # 获取用户嵌入模型
-        emb = mb.get_user_embedding(user_id, extra_body=embedding_extra_body())
-        model_name = emb.model
-
-        # 获取平台信息做精确测试
-        with mb.Session() as session:
-            from llm.agen_matchbox.models import UserEmbeddingSelection, LLMPlatform
-            selection = session.query(UserEmbeddingSelection).filter_by(user_id=user_id).first()
-            platform_name = ""
-            if selection and selection.platform_id:
-                plat = session.query(LLMPlatform).filter_by(id=selection.platform_id).first()
-                if plat:
-                    platform_name = plat.name
-                    api_key = mb._get_effective_api_key(session, user_id, plat)
-                    if api_key:
-                        from llm.agen_matchbox.utils import test_platform_embedding
-                        result = test_platform_embedding(
-                            plat.base_url,
-                            api_key,
-                            model_name,
-                            extra_body=embedding_extra_body(),
-                        )
-                        dims = result.get("dims", 0)
-                        if dims != QWEN3_EMBEDDING_DIMENSIONS:
-                            raise ValueError(
-                                f"嵌入模型维度为 {dims}，但当前索引契约要求 {QWEN3_EMBEDDING_DIMENSIONS} 维。"
-                            )
-                        return {
-                            "success": True,
-                            "dims": dims,
-                            "model_name": model_name,
-                            "platform_name": platform_name,
-                            "embedding_contract": embedding_contract_metadata(),
-                        }
-
-        # 回退：直接 embed_query
-        test_vector = emb.embed_query("测试")
-        dims = len(test_vector) if test_vector else 0
-        if dims != QWEN3_EMBEDDING_DIMENSIONS:
-            raise ValueError(
-                f"嵌入模型维度为 {dims}，但当前索引契约要求 {QWEN3_EMBEDDING_DIMENSIONS} 维。"
-            )
-        return {
-            "success": True,
-            "dims": dims,
-            "model_name": model_name,
-            "platform_name": platform_name,
-            "embedding_contract": embedding_contract_metadata(),
-        }
+        return await _test_active_embedding_runtime(user_id)
 
     except ValueError as e:
         error_msg = str(e)

@@ -104,16 +104,19 @@ class VectorIndexService:
     # ==================== Embedding ====================
 
     def _get_embeddings(self) -> OpenAIEmbeddings:
-        """通过 matchbox 获取用户配置的 embedding 模型。"""
-        try:
-            from core.system_settings import get_local_embedding_enabled
-            from agents.vector_index.local_embedding import (
-                LOCAL_EMBEDDING_API_KEY,
-                LOCAL_EMBEDDING_BASE_URL,
-                is_local_embedding_alive,
-            )
+        """获取当前生效的嵌入运行时；本地开关开启时不静默回退云端。"""
+        from core.system_settings import get_local_embedding_enabled
 
-            if get_local_embedding_enabled() and is_local_embedding_alive(timeout=1.0):
+        if get_local_embedding_enabled():
+            try:
+                from agents.vector_index.local_embedding import (
+                    LOCAL_EMBEDDING_API_KEY,
+                    LOCAL_EMBEDDING_BASE_URL,
+                    is_local_embedding_alive,
+                )
+
+                if not is_local_embedding_alive(timeout=1.0):
+                    raise RuntimeError("本地嵌入服务尚未就绪，请等待服务启动完成后重试。")
                 return OpenAIEmbeddings(
                     model=embedding_contract_metadata()["model"],
                     api_key=LOCAL_EMBEDDING_API_KEY,
@@ -121,8 +124,10 @@ class VectorIndexService:
                     check_embedding_ctx_length=False,
                     extra_body=embedding_extra_body(),
                 )
-        except Exception:
-            pass
+            except RuntimeError:
+                raise
+            except Exception as exc:
+                raise RuntimeError(f"本地嵌入服务不可用：{exc}") from exc
 
         return matchbox().get_user_embedding(
             self.user_id,

@@ -262,6 +262,36 @@ def _director_tracker_has_open_items(user_id: str, project_name: str) -> bool:
         return False
 
 
+def _is_tracker_progress_update(tool_name: str, tool_args: Any, tool_result: Any) -> bool:
+    """判断本次工具调用是否完成了可展示的任务板进度更新。"""
+    if normalize_tool_name(tool_name) != "work_tracker" or not isinstance(tool_args, dict):
+        return False
+    if str(tool_args.get("action") or "").strip().lower() != "update":
+        return False
+
+    items = (
+        tool_args.get("items")
+        if "items" in tool_args
+        else tool_args.get("tasks", tool_args.get("todo_items"))
+    )
+    if not isinstance(items, list) or not items:
+        return False
+
+    result_text = str(tool_result or "")
+    return "执行失败" not in result_text and "未知操作类型" not in result_text
+
+
+def _tracker_update_required_message() -> str:
+    """返回不会把失败回交误判为完成的任务板协议提示。"""
+    return (
+        "进度板协议错误：刚收到专家回交结果，且导演任务板仍有未完成条目。"
+        "请先调用 work_tracker(action=\"update\", items=[完整任务列表])，并按实际结果更新："
+        "成功才标为 completed；执行失败或质量不达标时保持 in_progress，"
+        "在 notes 记录失败原因和重做要求；只有确实无法继续时才标为 blocked。"
+        "更新后可以立即重新委派原专家重做，也可以更换专家，不会终止当前流程。"
+    )
+
+
 def _build_director_prompt_context(
     director: Any,
     *,
@@ -320,6 +350,10 @@ def director_node(state: DirectorState) -> Dict[str, Any]:
     project_name = state["project_name"]
     messages = state.get("messages", [])
     sub_agent_result = state.get("sub_agent_result")
+    tracker_update_required = bool(sub_agent_result) and _director_tracker_has_open_items(
+        user_id,
+        project_name,
+    )
     baton_holder = state.get("baton_holder") or "agent_director"
     stop_event = state.get("stop_event")
 
@@ -518,6 +552,7 @@ def director_node(state: DirectorState) -> Dict[str, Any]:
         "stream_events": stream_events,
         "sub_agent_result": None,
         "baton_holder": baton_holder,
+        "force_return_to_director": False,
     }
     
     pending_delegate = None
@@ -577,6 +612,20 @@ def director_node(state: DirectorState) -> Dict[str, Any]:
                 if is_stop_event_set(stop_event):
                     pending_delegate = None
                     break
+
+                if tool_name == "delegate_task" and tracker_update_required:
+                    protocol_error = _tracker_update_required_message()
+                    tool_results.append((call_id, tool_name, protocol_error))
+                    updates["force_return_to_director"] = True
+                    if writer:
+                        writer(build_tool_stream_event(
+                            "tool_exec_failed",
+                            tool_name,
+                            source_agent="agent_director",
+                            message=protocol_error,
+                            tool_call_key=tool_call_key,
+                        ))
+                    continue
                 
                 tool_result = director._execute_tool_calls([spec])
 
@@ -652,6 +701,13 @@ def director_node(state: DirectorState) -> Dict[str, Any]:
                         **_extra_done_director,
                     )
                 if writer: writer(evt_done)
+
+                if tracker_update_required and _is_tracker_progress_update(
+                    tool_name,
+                    _spec_args,
+                    tool_result,
+                ):
+                    tracker_update_required = False
 
                 # 旁路检测：导演执行 trigger_auto_write → 推送 director_auto_write_started 给前端
                 _SIDEBAND_MARKER = "__director_auto_write_started__:"
@@ -959,6 +1015,9 @@ def route_after_director(state: DirectorState) -> str:
 
     if state.get("pending_delegate"):
         return "sub_agent"
+
+    if state.get("force_return_to_director"):
+        return "director"
     
     # 补充：如果有最新消息并且它是函数调用的应答，可能需要返回 director 继续推敲
     # 结合当前需求，非 delegate 工具我们在节点内消化完了，直接 END

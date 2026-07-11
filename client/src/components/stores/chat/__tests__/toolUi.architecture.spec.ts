@@ -1,6 +1,17 @@
 import { describe, expect, it } from 'vitest';
+import { i18n } from '@/i18n';
+import zhCN from '@/i18n/locales/zh-CN';
+import enUS from '@/i18n/locales/en-US';
+import jaJP from '@/i18n/locales/ja-JP';
+import koKR from '@/i18n/locales/ko-KR';
 import { normalizeToolName } from '../../chatDomain';
-import { getToolUiTaskKey, resolveToolUiBinding } from '../toolUi';
+import {
+  getToolNameLabelKey,
+  getToolProgressText,
+  getToolUiTaskKey,
+  resolveToolUiBinding,
+  TOOL_PRESENTATION_KEY_MAP,
+} from '../toolUi';
 
 describe('聊天工具 UI 绑定契约', () => {
   it('工具名归一化兼容历史别名', () => {
@@ -52,5 +63,29 @@ describe('聊天工具 UI 绑定契约', () => {
       refreshEvents: ['custom-refresh'],
     });
     expect(getToolUiTaskKey(binding)).toBe('custom::panel');
+  });
+
+  it('进度板和故事记忆工具共用本地化展示映射', () => {
+    expect(getToolNameLabelKey('work_tracker')).toBe(
+      'components.chatMessageList.tools.workTracker',
+    );
+    expect(getToolNameLabelKey('story_memory_tool')).toBe(
+      'components.chatMessageList.tools.storyMemoryTool',
+    );
+    expect(getToolProgressText('story_memory_tool', 'Executing story_memory_tool')).toBe(
+      i18n.global.t('chatStore.toolProgress.storyMemoryTool'),
+    );
+  });
+
+  it('所有已映射工具都有四语名称和执行中文案', () => {
+    const locales = [zhCN, enUS, jaJP, koKR] as Array<Record<string, any>>;
+    const suffixes = new Set(Object.values(TOOL_PRESENTATION_KEY_MAP));
+
+    for (const locale of locales) {
+      for (const suffix of suffixes) {
+        expect(locale.components.chatMessageList.tools[suffix]).toEqual(expect.any(String));
+        expect(locale.chatStore.toolProgress[suffix]).toEqual(expect.any(String));
+      }
+    }
   });
 });

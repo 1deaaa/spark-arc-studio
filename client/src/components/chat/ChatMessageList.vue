@@ -40,6 +40,7 @@
               :text="getReasoningSegmentText(seg)"
               :source-agent="String(seg.source_agent || '')"
               :agent-name="getAgentName(seg.source_agent)"
+              :tracker-result="getAgentWorkTracker(seg.source_agent)"
               :streaming="isReasoningSegmentThinking(m, idx, segIdx)"
               :active="isAgentSegmentActive(m, idx, segIdx)"
             />
@@ -58,18 +59,15 @@
               @toggle="toggleToolTrace(getToolTraceKey(m, idx, segIdx))"
             />
             <div v-else-if="seg.type === 'text' && seg.text && seg.text.trim()" class="chat-bubble" :class="{ 'has-agent-avatar': !!seg.source_agent }">
-              <n-tooltip v-if="seg.source_agent" trigger="hover">
-                <template #trigger>
-                  <AgentAvatar
-                    class="agent-avatar-anchor"
-                    :agent-id="seg.source_agent"
-                    :size="28"
-                    :active="isAgentSegmentActive(m, idx, segIdx)"
-                    :aria-label="getAgentName(seg.source_agent)"
-                  />
-                </template>
-                {{ getAgentName(seg.source_agent) }}
-              </n-tooltip>
+              <AgentProgressAvatar
+                v-if="seg.source_agent"
+                class="agent-avatar-anchor"
+                :agent-id="seg.source_agent"
+                :agent-name="getAgentName(seg.source_agent)"
+                :tracker-result="getAgentWorkTracker(seg.source_agent)"
+                :size="28"
+                :active="isAgentSegmentActive(m, idx, segIdx)"
+              />
               <MarkdownRenderer :content="seg.text" />
             </div>
             <div v-else-if="seg.type === 'json'" class="chat-bubble">
@@ -301,14 +299,16 @@ import { useI18n } from 'vue-i18n';
 import { NButton, NInput, NPopover, NTooltip, useMessage } from 'naive-ui';
 import MarkdownRenderer from '@/components/share/MarkdownRenderer.vue';
 import SparkAlert from '@/components/share/SparkAlert.vue';
-import AgentAvatar from '@/components/share/AgentAvatar.vue';
+import AgentProgressAvatar from '@/components/chat/message/AgentProgressAvatar.vue';
 import SparkLoaderAnimation from '@/components/share/SparkLoaderAnimation.vue';
 import ContextCompactionSegment from '@/components/chat/message/ContextCompactionSegment.vue';
 import ReasoningSegmentBubble from '@/components/chat/message/ReasoningSegmentBubble.vue';
 import ToolTraceSegment from '@/components/chat/message/ToolTraceSegment.vue';
 import { useAgentRegistry } from '@/composables/useAgentRegistry';
+import { getToolNameLabelKey } from '@/components/stores/chat/toolUi';
 import {
   formatTokenCount,
+  collectLatestWorkTrackers,
   getDisplayContent,
   getMessageSegments,
   getReasoningSegmentText,
@@ -373,6 +373,11 @@ const editingContentLocal = computed({
 });
 
 const listRef = ref(null);
+const latestWorkTrackers = computed(() => collectLatestWorkTrackers(props.history));
+
+function getAgentWorkTracker(agentId?: string) {
+  return latestWorkTrackers.value[String(agentId || '').trim()] ?? null;
+}
 
 // 判断最后一条消息是否是 AI 回复
 const lastMessageIsAssistant = computed(() => {
@@ -399,44 +404,9 @@ const thinkingDisplayText = computed(() => {
 const thinkingNoticeText = computed(() => t('components.chatMessageList.thinkingNotice'));
 const thinkingNoticeVisible = ref(false);
 
-const toolNameLabelKeyMap: Record<string, string> = {
-  rewrite_inspiration: 'components.chatMessageList.tools.rewriteInspiration',
-  rewrite_worldview: 'components.chatMessageList.tools.rewriteWorldview',
-  rewrite_all_characters: 'components.chatMessageList.tools.rewriteAllCharacters',
-  update_character: 'components.chatMessageList.tools.updateCharacter',
-  patch_worldview: 'components.chatMessageList.tools.patchWorldview',
-  rewrite_synopsis: 'components.chatMessageList.tools.rewriteSynopsis',
-  patch_synopsis: 'components.chatMessageList.tools.patchSynopsis',
-  rewrite_beat_sheet: 'components.chatMessageList.tools.rewriteBeatSheet',
-  patch_beat_sheet: 'components.chatMessageList.tools.patchBeatSheet',
-  rewrite_outline: 'components.chatMessageList.tools.rewriteOutline',
-  patch_outline: 'components.chatMessageList.tools.patchOutline',
-  create_chapter: 'components.chatMessageList.tools.createChapter',
-  create_or_rewrite_script: 'components.chatMessageList.tools.createOrRewriteScript',
-  patch_script: 'components.chatMessageList.tools.patchScript',
-  list_chapters: 'components.chatMessageList.tools.listChapters',
-  read_chapter_scene: 'components.chatMessageList.tools.readChapterScene',
-  read_chapter_outline_raw: 'components.chatMessageList.tools.readChapterOutlineRaw',
-  read_attachment_chunk: 'components.chatMessageList.tools.readAttachmentChunk',
-  read_worldview: 'components.chatMessageList.tools.readWorldview',
-  read_character: 'components.chatMessageList.tools.readCharacter',
-  read_synopsis: 'components.chatMessageList.tools.readSynopsis',
-  read_beat_sheet: 'components.chatMessageList.tools.readBeatSheet',
-  update_project_story_tags: 'components.chatMessageList.tools.updateProjectStoryTags',
-  graph_rag_tool: 'components.chatMessageList.tools.graphRagTool',
-  delegate_task: 'components.chatMessageList.tools.delegateTask',
-  capture_inspiration: 'components.chatMessageList.tools.captureInspiration',
-  trigger_auto_write: 'components.chatMessageList.tools.triggerAutoWrite',
-  check_scriptwriter_status: 'components.chatMessageList.tools.checkScriptwriterStatus',
-  search_project: 'components.chatMessageList.tools.searchProject',
-  semantic_search: 'components.chatMessageList.tools.semanticSearch',
-  replace_from_search: 'components.chatMessageList.tools.replaceFromSearch',
-  web_search: 'components.chatMessageList.tools.webSearch',
-};
-
 function getToolNameLabel(toolName: string) {
-  const key = toolNameLabelKeyMap[toolName];
-  return key ? t(key) : toolName || t('components.chatMessageList.toolFallback');
+  const key = getToolNameLabelKey(toolName);
+  return key ? t(key) : t('components.chatMessageList.toolFallback');
 }
 
 function formatObject(v) {
