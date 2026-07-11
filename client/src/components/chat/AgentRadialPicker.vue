@@ -24,6 +24,7 @@
         name="agent-radial-fade"
         @after-enter="onOverlayAfterEnter"
         @before-leave="onOverlayBeforeLeave"
+        @after-leave="onOverlayAfterLeave"
       >
         <div
           v-if="isOpen"
@@ -202,6 +203,7 @@ const props = defineProps({
 const emit = defineEmits<{
   (e: 'update:value', val: string): void;
   (e: 'rerun'): void;
+  (e: 'closed'): void;
 }>();
 
 type AgentAvatarExpose = {
@@ -601,6 +603,11 @@ function onOverlayAfterEnter(): void {
  */
 function onOverlayBeforeLeave(): void {
   overlayStable.value = false;
+}
+
+function onOverlayAfterLeave(): void {
+  renderSnapshot.value = null;
+  emit('closed');
 }
 
 function commitSelectionAndClose(value: string, idx: number): void {

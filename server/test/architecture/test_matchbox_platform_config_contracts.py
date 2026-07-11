@@ -57,7 +57,8 @@ cfg = {
 )
 
 manager = AIManager()
-manager.ensure_database_schema()
+from llm.agen_matchbox.models import Base
+Base.metadata.create_all(manager.engine)
 manager.admin_reload_from_yaml()
 
 with manager.Session() as session:
@@ -80,7 +81,8 @@ from llm.agen_matchbox.manager import AIManager
 from llm.agen_matchbox.models import LLMPlatform
 
 manager = AIManager()
-manager.ensure_database_schema()
+from llm.agen_matchbox.models import Base
+Base.metadata.create_all(manager.engine)
 platform = manager.add_platform(
     "用户充值平台",
     "https://api.custom-billing.test/v1",
@@ -125,7 +127,8 @@ from llm.agen_matchbox.manager import AIManager
 from llm.agen_matchbox.models import LLMPlatform
 
 manager = AIManager()
-manager.ensure_database_schema()
+from llm.agen_matchbox.models import Base
+Base.metadata.create_all(manager.engine)
 manager.llm_auto_key = False
 
 platform = manager.admin_add_sys_platform(
@@ -195,7 +198,8 @@ def test_matchbox_model_modalities_drive_model_views(tmp_path: Path) -> None:
 from llm.agen_matchbox.manager import AIManager
 
 manager = AIManager()
-manager.ensure_database_schema()
+from llm.agen_matchbox.models import Base
+Base.metadata.create_all(manager.engine)
 platform = manager.add_platform(
     "能力集合测试平台",
     "https://api.capability-view.test/v1",
@@ -258,7 +262,8 @@ from llm.agen_matchbox.manager import AIManager
 from llm.agen_matchbox.image_generation import _select_adapter
 
 manager = AIManager()
-manager.ensure_database_schema()
+from llm.agen_matchbox.models import Base
+Base.metadata.create_all(manager.engine)
 platform = manager.add_platform(
     "显式生图协议平台",
     "https://api.x.ai/v1",
@@ -305,7 +310,8 @@ def test_matchbox_non_text_output_clears_token_pricing(tmp_path: Path) -> None:
 from llm.agen_matchbox.manager import AIManager
 
 manager = AIManager()
-manager.ensure_database_schema()
+from llm.agen_matchbox.models import Base
+Base.metadata.create_all(manager.engine)
 manager.billing_enabled = True
 platform = manager.admin_add_sys_platform(
     "非文本计费清理平台",

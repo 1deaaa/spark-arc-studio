@@ -38,14 +38,33 @@ def cancel_project_graphrag_build(
     return warnings
 
 
+def cancel_project_auto_write(
+    user_id: str,
+    project_name: str,
+    *,
+    wait_timeout: float = 4.0,
+) -> list[str]:
+    """请求取消项目自动写作后台任务。"""
+    warnings: list[str] = []
+    try:
+        from agents.auto_write_service import cancel_auto_write_background
+
+        if not cancel_auto_write_background(user_id, project_name, wait_timeout=wait_timeout):
+            warnings.append("自动写作任务未在等待时间内停止")
+    except Exception as exc:
+        warnings.append(f"取消自动写作任务失败: {exc}")
+    return warnings
+
+
 def cancel_project_background_builds(
     user_id: str,
     project_name: str,
     *,
     vector_wait_timeout: float = 4.0,
     graph_wait_timeout: float = 2.0,
+    auto_write_wait_timeout: float = 4.0,
 ) -> list[str]:
-    """统一取消项目级后台索引/图谱构建，供关闭开关和删除项目复用。"""
+    """统一取消项目级后台任务，供关闭开关和项目生命周期复用。"""
     warnings: list[str] = []
     warnings.extend(
         cancel_project_vector_index_build(
@@ -59,6 +78,13 @@ def cancel_project_background_builds(
             user_id,
             project_name,
             wait_timeout=graph_wait_timeout,
+        )
+    )
+    warnings.extend(
+        cancel_project_auto_write(
+            user_id,
+            project_name,
+            wait_timeout=auto_write_wait_timeout,
         )
     )
     gc.collect()

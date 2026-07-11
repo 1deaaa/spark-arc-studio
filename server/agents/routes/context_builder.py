@@ -41,6 +41,7 @@ from core.utils import (
     get_project_stories_path,
 )
 from core.project_settings import normalize_scene_length_hint
+from story.file_naming import list_story_files
 from story.project_files import _coerce_character_name
 
 
@@ -702,22 +703,20 @@ def load_narrative_memory(user_id: str, project_name: str) -> Tuple[str, str]:
     return narrative_memory, beats_summary
 
 
-def _get_chapter_arc_files(user_id: str, project_name: str) -> List[str]:
-    """返回按名称排序的章节 .arc 文件路径列表。"""
+def _get_chapter_story_files(user_id: str, project_name: str) -> Dict[int, List[str]]:
+    """按隐藏章节/场景身份分组返回当前正文文件。"""
     stories_path = get_project_stories_path(user_id, project_name)
-    if not os.path.exists(stories_path):
-        return []
-    return sorted(
-        [
-            os.path.join(stories_path, f)
-            for f in os.listdir(stories_path)
-            if f.endswith(".arc")
-        ]
-    )
+    chapters: Dict[int, List[str]] = {}
+    for _, abs_path, parsed in list_story_files(stories_path):
+        if not parsed or parsed.get("chapter_num") is None or parsed.get("scene_num") is None:
+            continue
+        chapter_index = int(parsed["chapter_num"]) - 1
+        chapters.setdefault(chapter_index, []).append(abs_path)
+    return chapters
 
 
-def _read_arc_file_safe(filepath: str) -> str:
-    """安全读取 .arc 文件，失败返回空字符串。"""
+def _read_story_file_safe(filepath: str) -> str:
+    """安全读取正文文件，失败返回空字符串。"""
     try:
         with open(filepath, "r", encoding="utf-8") as f:
             return f.read()
@@ -750,7 +749,7 @@ def build_scene_context(
     def clean_arc(value: str) -> str:
         return sanitize_arc_for_project_ai_context(value, user_id, project_name)
 
-    arc_files = _get_chapter_arc_files(user_id, project_name)
+    chapter_files = _get_chapter_story_files(user_id, project_name)
     parts: List[str] = []
 
     # ── StoryMemory：当前场景事实包（仅供核对）──────────────────────
@@ -785,10 +784,15 @@ def build_scene_context(
     # ── 圈 2：前序章节末尾场景 ──────────────────────────────────────────
     tail_scenes: List[str] = []
     for ci in range(current_chapter_index):
-        if ci >= len(arc_files):
-            break
-        raw = _read_arc_file_safe(arc_files[ci])
+        files = chapter_files.get(ci) or []
+        if not files:
+            continue
+        last_file = files[-1]
+        raw = _read_story_file_safe(last_file)
         if not raw:
+            continue
+        if last_file.lower().endswith(".md"):
+            tail_scenes.append(f"【第 {ci + 1} 章 尾声】\n{raw}")
             continue
         try:
             parsed = parse_arc(raw, chr_map=chr_map)
@@ -796,7 +800,7 @@ def build_scene_context(
                 # 只取最后一个场景作为章末锚点
                 last_scene_arc = serialize_to_arc([parsed[-1]], chr_map=chr_map)
                 tail_scenes.append(
-                    f"【第 {ci} 章 尾声 - {parsed[-1].get('scene', '')}】\n{clean_arc(last_scene_arc)}"
+                    f"【第 {ci + 1} 章 尾声 - {parsed[-1].get('scene', '')}】\n{clean_arc(last_scene_arc)}"
                 )
         except Exception:
             continue
@@ -811,23 +815,19 @@ def build_scene_context(
         # 调用方已传入当前章的完整 arc 文本（截至 target_scene 之前）
         parts.append("=== 当前章节前文 ===")
         parts.append(clean_arc(current_chapter_arc_text))
-    elif current_chapter_index < len(arc_files):
-        # 全自动模式下：读取已保存的当前章 arc 文件
-        raw = _read_arc_file_safe(arc_files[current_chapter_index])
-        if raw:
-            if current_scene_index is not None:
-                # 截取到 current_scene_index 之前的所有场景
-                try:
-                    parsed = parse_arc(raw, chr_map=chr_map)
-                    before_scenes = parsed[:current_scene_index]
-                    if before_scenes:
-                        parts.append("=== 当前章节前文（已完成场景）===")
-                        parts.append(clean_arc(serialize_to_arc(before_scenes, chr_map=chr_map)))
-                except Exception:
-                    pass
-            else:
-                parts.append("=== 当前章节前文 ===")
-                parts.append(clean_arc(raw))
+    else:
+        completed_files = chapter_files.get(current_chapter_index) or []
+        if current_scene_index is not None:
+            completed_files = completed_files[: max(0, current_scene_index)]
+        completed_parts: List[str] = []
+        for story_file in completed_files:
+            raw = _read_story_file_safe(story_file)
+            if not raw:
+                continue
+            completed_parts.append(raw if story_file.lower().endswith(".md") else clean_arc(raw))
+        if completed_parts:
+            parts.append("=== 当前章节前文（已完成场景）===")
+            parts.append("\n\n".join(completed_parts))
 
     return "\n".join(parts)
 

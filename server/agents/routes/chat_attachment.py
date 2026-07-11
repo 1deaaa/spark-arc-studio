@@ -32,20 +32,18 @@ from typing import Any, Dict, List
 
 # ==================== 元信息抽取 / 标签 ====================
 
-def _normalize_single_imported_file(imported_file: Any) -> Dict[str, Any] | None:
-    """把单条 ``importedFile`` dict 归一化为内部规范结构。
+def _normalize_attachment_meta(attachment_meta: Any) -> Dict[str, Any] | None:
+    """把单条附件元信息归一化为内部规范结构。
 
     必须同时携带 ``attachmentId`` 与 ``filename``，缺一返回 None。
     """
-    if not isinstance(imported_file, dict):
+    if not isinstance(attachment_meta, dict):
         return None
-    filename = str(imported_file.get('filename') or '').strip()
-    attachment_id = str(
-        imported_file.get('attachmentId') or imported_file.get('attachment_id') or ''
-    ).strip()
+    filename = str(attachment_meta.get('filename') or '').strip()
+    attachment_id = str(attachment_meta.get('attachmentId') or '').strip()
     if not filename or not attachment_id:
         return None
-    warnings = imported_file.get('warnings')
+    warnings = attachment_meta.get('warnings')
     normalized_warnings = []
     if isinstance(warnings, list):
         for item in warnings:
@@ -58,16 +56,16 @@ def _normalize_single_imported_file(imported_file: Any) -> Dict[str, Any] | None
     payload: Dict[str, Any] = {
         'attachmentId': attachment_id,
         'filename': filename,
-        'sourceFormat': str(imported_file.get('sourceFormat') or '').strip(),
-        'totalTokens': int(imported_file.get('totalTokens') or 0),
-        'chunkTokens': int(imported_file.get('chunkTokens') or 0),
-        'isPartial': bool(imported_file.get('isPartial')),
+        'sourceFormat': str(attachment_meta.get('sourceFormat') or '').strip(),
+        'totalTokens': int(attachment_meta.get('totalTokens') or 0),
+        'chunkTokens': int(attachment_meta.get('chunkTokens') or 0),
+        'isPartial': bool(attachment_meta.get('isPartial')),
         'warnings': normalized_warnings,
-        'uploadedAt': int(imported_file.get('uploadedAt') or 0),
+        'uploadedAt': int(attachment_meta.get('uploadedAt') or 0),
     }
-    if imported_file.get('deleted'):
+    if attachment_meta.get('deleted'):
         payload['deleted'] = True
-        deleted_at = imported_file.get('deletedAt')
+        deleted_at = attachment_meta.get('deletedAt')
         if deleted_at is not None:
             try:
                 payload['deletedAt'] = int(deleted_at)
@@ -79,12 +77,7 @@ def _normalize_single_imported_file(imported_file: Any) -> Dict[str, Any] | None
 def extract_imported_files_meta(active_meta: Dict[str, Any] | None) -> List[Dict[str, Any]]:
     """从 ``activeMeta`` 取出所有附件元信息，统一归一化为列表。
 
-    支持三种入参形态，按优先级处理：
-    1. ``activeMeta.importedFiles`` 存在且为列表 → 按列表展开。
-    2. ``activeMeta.importedFile`` 存在（单数旧字段）→ 视为单元素列表。
-    3. 其他情况 → 返回空列表。
-
-    返回的列表保持入参顺序；未通过 ``_normalize_single_imported_file``
+    返回的列表保持入参顺序；未通过 ``_normalize_attachment_meta``
     校验的元素被静默丢弃，调用方拿到的永远是合法 dict。
     """
     if not isinstance(active_meta, dict):
@@ -95,7 +88,7 @@ def extract_imported_files_meta(active_meta: Dict[str, Any] | None) -> List[Dict
         result: List[Dict[str, Any]] = []
         seen_ids: set[str] = set()
         for item in imported_files:
-            normalized = _normalize_single_imported_file(item)
+            normalized = _normalize_attachment_meta(item)
             if not normalized:
                 continue
             attachment_id = normalized['attachmentId']
@@ -105,17 +98,7 @@ def extract_imported_files_meta(active_meta: Dict[str, Any] | None) -> List[Dict
             result.append(normalized)
         return result
 
-    legacy = _normalize_single_imported_file(active_meta.get('importedFile'))
-    return [legacy] if legacy else []
-
-
-def extract_imported_file_meta(active_meta: Dict[str, Any] | None) -> Dict[str, Any] | None:
-    """向后兼容包装：仅返回首个附件 meta，老调用方仍可继续工作。
-
-    新代码请改用 ``extract_imported_files_meta`` 拿全量列表。
-    """
-    metas = extract_imported_files_meta(active_meta)
-    return metas[0] if metas else None
+    return []
 
 
 def build_imported_file_context_label(imported_file: Dict[str, Any] | None) -> str:
@@ -134,14 +117,11 @@ def build_imported_file_context_label(imported_file: Dict[str, Any] | None) -> s
 def build_user_message_metadata(
     channel: str,
     active_context: Any,
-    imported_file_meta: Dict[str, Any] | List[Dict[str, Any]] | None,
+    imported_file_meta: List[Dict[str, Any]] | None,
 ) -> Dict[str, Any]:
     """构造 user 消息的 metadata。仅存 attachmentId 引用 + 元信息。
 
-    上游可传 dict（单附件，向后兼容）或 list（多附件）。最终写盘的
-    metadata 会同时携带：
-      - ``importedFiles`` 列表：新版多附件唯一真相源；
-      - ``importedFile`` 单 dict：老前端 / 老读取路径仍可读出首个附件。
+    ``importedFiles`` 列表是附件引用的唯一真相源。
     只写代表“附件存在”的字段；空列表 / None 不写任何附件字段。
     """
     metadata: Dict[str, Any] = {'channel': channel}
@@ -150,17 +130,10 @@ def build_user_message_metadata(
         if stored_context:
             metadata['active_context'] = stored_context
 
-    files: List[Dict[str, Any]]
-    if isinstance(imported_file_meta, list):
-        files = [dict(item) for item in imported_file_meta if isinstance(item, dict)]
-    elif isinstance(imported_file_meta, dict):
-        files = [dict(imported_file_meta)]
-    else:
-        files = []
+    files = [dict(item) for item in (imported_file_meta or []) if isinstance(item, dict)]
 
     if files:
         metadata['importedFiles'] = files
-        metadata['importedFile'] = dict(files[0])  # 向后兼容老 reader
     return metadata
 
 
@@ -366,33 +339,9 @@ def expand_active_context_with_attachments(
     return '\n\n'.join(seg for seg in [base, block] if seg)
 
 
-def expand_active_context_with_attachment(
-    user_id: str,
-    project_name: str,
-    active_context: str,
-    imported_file_meta: Dict[str, Any] | List[Dict[str, Any]] | None,
-) -> str:
-    """向后兼容包装。
-
-    上游传 dict 时当单附件处理，传 list 时走多附件分支。新代码请直接调
-    ``expand_active_context_with_attachments``；本函数仅为老调用点过渡。
-    """
-    if isinstance(imported_file_meta, list):
-        return expand_active_context_with_attachments(
-            user_id, project_name, active_context, imported_file_meta
-        )
-    if isinstance(imported_file_meta, dict):
-        return expand_active_context_with_attachments(
-            user_id, project_name, active_context, [imported_file_meta]
-        )
-    return str(active_context or '').strip()
-
-
 __all__ = [
-    'extract_imported_file_meta',
     'extract_imported_files_meta',
     'build_imported_file_context_label',
     'build_user_message_metadata',
-    'expand_active_context_with_attachment',
     'expand_active_context_with_attachments',
 ]

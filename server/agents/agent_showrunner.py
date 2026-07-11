@@ -405,28 +405,6 @@ class ShowrunnerAgent(SparkBaseAgent, SparkAgentExecutor):
             return cleaned[start:end + 1]
         return cleaned
 
-    def _get_tool_bound_llm(self):
-        """获取绑定了工具的 LLM 实例（非流式）。"""
-        from llm.agen_matchbox import matchbox
-        from agents.tools.registry import SHOWRUNNER_TOOLS
-        
-        llm = matchbox().get_user_llm(
-            self.user_id, 
-            agent_name="agent_showrunner", 
-        )
-        return llm.bind_tools(SHOWRUNNER_TOOLS)
-
-    def _get_tool_bound_llm_stream(self):
-        """获取绑定了工具的 LLM 实例（流式）。"""
-        from llm.agen_matchbox import matchbox
-        from agents.tools.registry import SHOWRUNNER_TOOLS
-        
-        llm = matchbox().get_user_llm(
-            self.user_id, 
-            agent_name="agent_showrunner", 
-        )
-        return llm.bind_tools(SHOWRUNNER_TOOLS)
-
     # tool_rules 已迁入 showrunner.yaml 的 tool_rules 字段，
     # 基类 _build_tool_system_prompt 会自动加载并追加，无需再重写此方法。
 

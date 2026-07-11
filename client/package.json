@@ -27,7 +27,6 @@
   "dependencies": {
     "@fingerprintjs/fingerprintjs": "^5.2.0",
     "@lucide/vue": "^1.17.0",
-    "@microsoft/fetch-event-source": "^2.0.1",
     "@tauri-apps/api": "^2.11.0",
     "@tauri-apps/plugin-fs": "^2.5.1",
     "@tauri-apps/plugin-opener": "^2.5.4",

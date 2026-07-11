@@ -1,12 +1,12 @@
 from __future__ import annotations
 
-import json
 import os
 import uuid
 from datetime import datetime, timezone
 from typing import Any, Dict, List
 
 from core.utils import get_project_path, get_project_stories_path
+from core.json_state import json_state_lock, load_json_file, save_json_file_atomic
 from story.file_naming import (
     build_scene_story_filename,
     find_scene_file_by_identity,
@@ -120,17 +120,10 @@ def default_auto_write_state() -> Dict[str, Any]:
 
 def load_auto_write_state(user_id: str, project_name: str) -> Dict[str, Any]:
     state_path = get_auto_write_state_path(user_id, project_name)
-    if not os.path.exists(state_path):
-        return default_auto_write_state()
-
-    try:
-        with open(state_path, "r", encoding="utf-8") as f:
-            data = json.load(f) or {}
-        state = default_auto_write_state()
-        state.update(data)
-        return state
-    except Exception:
-        return default_auto_write_state()
+    data = load_json_file(state_path, default_auto_write_state) or {}
+    state = default_auto_write_state()
+    state.update(data)
+    return state
 
 
 def save_auto_write_state(user_id: str, project_name: str, state: Dict[str, Any]) -> Dict[str, Any]:
@@ -141,16 +134,17 @@ def save_auto_write_state(user_id: str, project_name: str, state: Dict[str, Any]
     normalized_state.update(state or {})
     normalized_state["updatedAt"] = _utc_now_iso()
 
-    with open(state_path, "w", encoding="utf-8") as f:
-        json.dump(normalized_state, f, ensure_ascii=False, indent=2)
+    save_json_file_atomic(state_path, normalized_state)
 
     return normalized_state
 
 
 def patch_auto_write_state(user_id: str, project_name: str, **fields: Any) -> Dict[str, Any]:
-    state = load_auto_write_state(user_id, project_name)
-    state.update(fields)
-    return save_auto_write_state(user_id, project_name, state)
+    state_path = get_auto_write_state_path(user_id, project_name)
+    with json_state_lock(state_path):
+        state = load_auto_write_state(user_id, project_name)
+        state.update(fields)
+        return save_auto_write_state(user_id, project_name, state)
 
 
 def begin_auto_write_run(
@@ -210,7 +204,7 @@ def build_auto_write_chapter_plan(
     outline: Dict[str, Any],
     export_format: str = "arc",
 ) -> List[Dict[str, Any]]:
-    """章节级 plan（保留向下兼容，供 ScriptGenerationModal 使用）。"""
+    """构建章节级状态计划，供恢复操作与覆盖预览使用。"""
     stories_path = get_project_stories_path(user_id, project_name)
     chapter_nodes = [node for node in (outline.get("nodes") or []) if node.get("type") == "chapter"]
     plan: List[Dict[str, Any]] = []

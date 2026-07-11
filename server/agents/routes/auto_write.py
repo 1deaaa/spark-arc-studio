@@ -128,15 +128,6 @@ def record_auto_write_scene_review(
         return None
 
 
-# 全局存储运行中项目的 stop_event
-_auto_write_stop_events: Dict[str, threading.Event] = {}
-
-# 全局进度队列：后台线程写入，SSE 观察者读取
-# key = project_name, value = queue.Queue[str | None]
-# 每个元素是 SSE 格式字符串（data: {...}\n\n），None 为结束哨兵
-_auto_write_progress_queues: Dict[str, queue.Queue] = {}
-
-
 def _resolve_export_format(user_id: str, project_name: str) -> str:
     """根据项目 story tags 解析自动写作输出格式。"""
     return "novel" if get_workspace_mode(user_id, project_name) == "novel" else "arc"
@@ -154,13 +145,13 @@ async def generate_script_stream(
     export_format: str = "arc",
     auto_review: bool = False,
     from_director: bool = False,
+    stop_event: threading.Event | None = None,
 ):
     """
     Generator function for SSE streaming of script generation progress.
     """
 
-    stop_event = threading.Event()
-    _auto_write_stop_events[project_name] = stop_event
+    stop_event = stop_event or threading.Event()
 
     # 1. Initialize
     nodes = outline.get("nodes", [])
@@ -625,6 +616,15 @@ async def generate_script_stream(
 
                 gen_thread.join()  # 确保线程结束
                 if stop_event.is_set():
+                    update_state(
+                        "interrupted",
+                        nextChapterIndex=i,
+                        availableResumeChapterIndex=i,
+                        availableResumeSceneIndex=scene_idx,
+                        availableRestartChapterIndex=i,
+                        lastSavedFilename=filename if os.path.exists(filepath) else "",
+                        lastError="",
+                    )
                     yield semantic_sse_data(
                         "cancelled",
                         message="自动撰写任务已取消",
@@ -879,37 +879,6 @@ async def generate_script_stream(
     )
 
 
-async def _observe_progress_stream(project_name: str):
-    """SSE 观察者生成器：从进度队列读取事件并流式推送给前端。
-    前端断连不影响后台任务执行，重连后可重新订阅。"""
-    progress_queue = _auto_write_progress_queues.get(project_name)
-    if not progress_queue:
-        # 没有活跃的进度队列，发送 idle 事件后结束
-        yield semantic_sse_data("idle", message="没有正在运行的自动撰写任务")
-        return
-
-    heartbeat_interval = 3.0
-    last_heartbeat = time.time()
-
-    while True:
-        try:
-            event = progress_queue.get_nowait()
-        except queue.Empty:
-            current_time = time.time()
-            if current_time - last_heartbeat >= heartbeat_interval:
-                yield ": heartbeat\n\n"
-                last_heartbeat = current_time
-            await asyncio.sleep(0.05)
-            continue
-
-        if event is None:
-            # 结束哨兵
-            break
-
-        yield event
-        last_heartbeat = time.time()
-
-
 @auto_write_router.post("/api/outline/{project_name}/auto-write-start")
 async def auto_write_start(
     project_name: str, request: Request, user: dict = Depends(get_current_user),
@@ -924,10 +893,6 @@ async def auto_write_start(
     export_format = _resolve_export_format(user_id, project_name)
     auto_review = bool(data.get("auto_review", False))
 
-    # 检查是否已有运行中的任务
-    if project_name in _auto_write_stop_events and not _auto_write_stop_events[project_name].is_set():
-        return {"success": False, "error": "该项目已有自动撰写任务正在运行"}
-
     # 加载大纲
     from story.outline_parser import parse_outline_markup
     outline_path = os.path.join(get_project_path(user_id, project_name), "大纲.txt")
@@ -937,63 +902,38 @@ async def auto_write_start(
     with open(outline_path, "r", encoding="utf-8") as f:
         outline = parse_outline_markup(f.read())
 
-    # 创建进度队列
-    progress_queue = queue.Queue()
-    _auto_write_progress_queues[project_name] = progress_queue
+    from agents.auto_write_service import start_auto_write_background
 
-    def _run_background():
-        import asyncio as _asyncio
-        from core.request_context import current_user_id, current_project_name, set_current_export_format
-
-        current_user_id.set(str(user_id))
-        current_project_name.set(project_name)
-        set_current_export_format(export_format)
-
-        async def _drain_to_queue():
-            try:
-                async for event_str in generate_script_stream(
-                    user_id=str(user_id),
-                    project_name=project_name,
-                    outline=outline,
-                    request=None,  # 后台执行，不受前端断连影响
-                    mode=mode,
-                    start_chapter_index=start_chapter_index,
-                    start_scene_index=start_scene_index,
-                    context_strategy="accumulate",
-                    export_format=export_format,
-                    auto_review=auto_review,
-                    from_director=False,
-                ):
-                    progress_queue.put(event_str)
-            except Exception as e:
-                from .schemas import format_ai_error
-                friendly = format_ai_error(e)
-                error_event = semantic_sse_data("error", message=friendly, **on_error(friendly))
-                progress_queue.put(error_event)
-            finally:
-                # 结束哨兵
-                progress_queue.put(None)
-                # 延迟清理队列引用（给观察者一点时间读取剩余事件）
-                def _cleanup():
-                    _auto_write_progress_queues.pop(project_name, None)
-                threading.Timer(5.0, _cleanup).start()
-
-        _asyncio.run(_drain_to_queue())
-
-    thread = threading.Thread(target=_run_background, daemon=True, name=f"auto_write_bg_{project_name}")
-    thread.start()
+    result = start_auto_write_background(
+        user_id=user_id,
+        project_name=project_name,
+        outline=outline,
+        mode=mode,
+        start_chapter_index=start_chapter_index,
+        start_scene_index=start_scene_index,
+        export_format=export_format,
+        context_strategy="accumulate",
+        auto_review=auto_review,
+        from_director=False,
+    )
+    if not result.started:
+        return {"success": False, "error": result.error}
 
     return {"success": True, "export_format": export_format}
 
 
 @auto_write_router.get("/api/outline/{project_name}/auto-write-progress-stream")
 async def auto_write_progress_stream(
-    project_name: str, user: dict = Depends(get_current_user),
+    project_name: str,
+    afterSeq: int = 0,
+    user: dict = Depends(get_current_user),
 ):
     """SSE 观察者端点：只读取进度队列，不控制任务生命周期。
     前端断连后任务继续运行，可重新连接此端点恢复实时流。"""
+    from agents.auto_write_service import observe_auto_write_progress
+
     return StreamingResponse(
-        _observe_progress_stream(project_name),
+        observe_auto_write_progress(str(user["user_id"]), project_name, after_seq=afterSeq),
         media_type="text/event-stream",
     )
 
@@ -1027,49 +967,6 @@ async def get_auto_write_state(
     }
 
 
-@auto_write_router.post("/api/outline/{project_name}/auto-write-stream")
-async def auto_write_stream(
-    project_name: str, request: Request, user: dict = Depends(get_current_user)
-):
-    """旧端点（deprecated）：手动触发的 SSE 直连模式，前端断连会打断任务。
-    保留向后兼容，新代码应使用 /auto-write-start + /auto-write-progress-stream。"""
-    user_id = str(user["user_id"])
-    if await request.is_disconnected():
-        return StreamingResponse(iter(()), media_type="text/event-stream")
-    data = await request.json() or {}
-    mode = data.get("mode", "chapter_by_chapter")
-    start_chapter_index = data.get("start_chapter_index", 0)
-    start_scene_index = data.get("start_scene_index", 0)
-    export_format = _resolve_export_format(user_id, project_name)
-    auto_review = bool(data.get("auto_review", False))
-
-    # Load Outline
-    from story.outline_parser import parse_outline_markup
-    outline_path = os.path.join(get_project_path(user_id, project_name), "大纲.txt")
-    if not os.path.exists(outline_path):
-        return {"error": "Outline not found"}
-
-    with open(outline_path, "r", encoding="utf-8") as f:
-        outline = parse_outline_markup(f.read())
-
-    return StreamingResponse(
-        generate_script_stream(
-            user_id,
-            project_name,
-            outline,
-            request,
-            mode,
-            start_chapter_index,
-            start_scene_index,
-            context_strategy="accumulate",
-            export_format=export_format,
-            auto_review=auto_review,
-            from_director=False,
-        ),
-        media_type="text/event-stream",
-    )
-
-
 @auto_write_router.post("/api/outline/{project_name}/auto-write-pause")
 async def auto_write_pause(
     project_name: str, user: dict = Depends(get_current_user)
@@ -1079,9 +976,9 @@ async def auto_write_pause(
     """
     user_id = str(user["user_id"])
     
-    # 向当前在内存中跑的任务发送停止信号
-    if project_name in _auto_write_stop_events:
-        _auto_write_stop_events[project_name].set()
+    from agents.auto_write_service import stop_auto_write
+
+    stop_auto_write(user_id, project_name)
     
     # 兜底：修改状态为中断（防止孤儿线程无法更新或早已消失）
     patch_auto_write_state(

@@ -13,6 +13,7 @@
           :options="agentOptions"
           :disabled="sending && !allowAgentSwitchWhileSending"
           @update:value="onAgentSelected"
+          @closed="onAgentPickerClosed"
           @rerun="$emit('rerun')"
         />
         <ChatProgressBoardPopover :history="history" :agent-id="agentId" />
@@ -173,6 +174,7 @@ import ChatMessageList from '@/components/chat/ChatMessageList.vue';
 import AgentRadialPicker from '@/components/chat/AgentRadialPicker.vue';
 import ChatProgressBoardPopover from '@/components/chat/ChatProgressBoardPopover.vue';
 import GlobalLoading from '@/components/share/GlobalLoading.vue';
+import { useProgressiveIdleList } from '@/composables/useProgressiveIdleList';
 import type { ChatMessage } from '@/services/chatService';
 
 type AgentOption = {
@@ -284,20 +286,49 @@ const emit = defineEmits([
 
 const { t } = useI18n();
 const slots = useSlots();
-const agentContentPending = ref(false);
-let agentSwitchEpoch = 0;
+type ChatListExpose = { listRef?: HTMLElement | null };
+type ScrollSnapshot = { scrollTop: number; scrollHeight: number };
+const chatListRef = ref<ChatListExpose | null>(null);
 
-watch(() => props.agentId, () => {
-  const epoch = ++agentSwitchEpoch;
-  agentContentPending.value = true;
-  requestAnimationFrame(() => {
-    requestAnimationFrame(() => {
-      if (epoch === agentSwitchEpoch) agentContentPending.value = false;
-    });
-  });
+function getChatListElement(): HTMLElement | null {
+  return chatListRef.value?.listRef || null;
+}
+
+const {
+  visibleItems: visibleHistory,
+  pending: agentContentPending,
+  block: blockAgentContent,
+  release: releaseAgentContent,
+  showAll: showAllAgentContent,
+} = useProgressiveIdleList(() => props.history, {
+  initialBatchSize: 6,
+  batchSize: 6,
+  idleTimeout: 400,
+  beforeBatch: () => {
+    const list = getChatListElement();
+    return list ? { scrollTop: list.scrollTop, scrollHeight: list.scrollHeight } : null;
+  },
+  afterBatch: (rawSnapshot, firstBatch) => {
+    const list = getChatListElement();
+    if (!list) return;
+    if (firstBatch) {
+      list.scrollTop = list.scrollHeight;
+      return;
+    }
+    const snapshot = rawSnapshot as ScrollSnapshot | null;
+    if (snapshot) {
+      list.scrollTop = snapshot.scrollTop + Math.max(0, list.scrollHeight - snapshot.scrollHeight);
+    }
+  },
 });
+let pendingPickerAgentId = '';
 
-const visibleHistory = computed(() => agentContentPending.value ? [] : props.history);
+watch(() => props.agentId, (nextAgentId, previousAgentId) => {
+  if (nextAgentId === previousAgentId || nextAgentId === pendingPickerAgentId) return;
+  pendingPickerAgentId = '';
+  blockAgentContent();
+  releaseAgentContent();
+}, { flush: 'sync' });
 
 const editingContentLocal = computed({
   get: () => props.editingContent,
@@ -381,10 +412,25 @@ const contextTokenHint = computed(() => {
 
 /** AgentRadialPicker 选中 Agent 时透传给上层（轮盘自身会自动关闭） */
 function onAgentSelected(val: string): void {
+  if (!val || val === props.agentId) return;
+  pendingPickerAgentId = val;
+  blockAgentContent();
   emit('update:agentId', val);
 }
 
-const chatListRef = ref(null);
+/** 轮盘真实离场后才释放历史，并用空闲任务分批挂载，避免与收起动画争抢主线程。 */
+function onAgentPickerClosed(): void {
+  if (!pendingPickerAgentId) return;
+  if (props.agentId === pendingPickerAgentId) {
+    pendingPickerAgentId = '';
+    releaseAgentContent();
+    return;
+  }
+
+  // 上层因 Agent 占用等原因拒绝切换时，恢复当前会话，不能留下永久加载态。
+  pendingPickerAgentId = '';
+  showAllAgentContent();
+}
 
 // 暴露 ChatMessageList 内部的 DOM listRef，保持与 useChatActions scrollToBottom 兼容
 // useChatActions 做 listRef.value?.listRef -> 应得到 DOM element

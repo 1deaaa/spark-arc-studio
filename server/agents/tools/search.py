@@ -67,6 +67,7 @@ class ReplaceFromSearchInput(BaseModel):
 
 
 _search_results_cache: dict[str, list[dict]] = {}
+SEARCH_MAX_SOURCE_CHARS = 1_000_000_000
 
 
 def _get_search_cache_key() -> str:
@@ -147,7 +148,11 @@ def _fallback_locate_match(
 def _locate_chunk_positions(user_id: str, project_name: str, chunks: list[Any]) -> list[dict | None]:
     from story.project_files import collect_project_files
 
-    project_files = collect_project_files(user_id, project_name)
+    project_files = collect_project_files(
+        user_id,
+        project_name,
+        max_source_chars=SEARCH_MAX_SOURCE_CHARS,
+    )
     file_contents = {pf.rel_path: pf.content for pf in project_files}
     line_starts_map = {rel_path: _build_line_starts(content) for rel_path, content in file_contents.items()}
     locate_cursors: dict[str, int] = {}
@@ -202,7 +207,11 @@ def search_project(pattern: str, case_sensitive: bool = False) -> str:
 
     from story.project_files import build_narrative_ref, collect_project_files, load_outline_data
 
-    project_files = collect_project_files(user_id, project_name, max_source_chars=1_000_000_000)
+    project_files = collect_project_files(
+        user_id,
+        project_name,
+        max_source_chars=SEARCH_MAX_SOURCE_CHARS,
+    )
     outline_data = load_outline_data(user_id, project_name)
     project_path = get_project_path(user_id, project_name)
 

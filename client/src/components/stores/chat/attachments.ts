@@ -54,7 +54,6 @@ export function resolveActiveContext(
   }
 
   // 引用制：activeContext 不带全文，仅在 activeMeta.importedFiles 列表上传 attachmentId 引用。
-  // 后端在调 LLM 前按 id 从磁盘加载正文动态注入；同时双写 importedFile=[0] 兼容老 reader。
   const validAttachments = (attachments || []).filter(
     (item) => item && String(item.attachmentId || '').trim() && String(item.filename || '').trim(),
   );
@@ -63,39 +62,33 @@ export function resolveActiveContext(
     activeMeta = {
       ...(activeMeta || {}),
       importedFiles,
-      importedFile: { ...importedFiles[0] },
     };
   }
 
   return { activeContext, activeMeta };
 }
 
-export function extractImportedFileMeta(activeMeta: AnyRecord | null = null) {
-  const list = extractImportedFilesMeta(activeMeta);
-  return list[0] || null;
-}
-
 export function normalizeRawImportedFile(raw: unknown): AnyRecord | null {
   if (!raw || typeof raw !== 'object' || Array.isArray(raw)) return null;
-  const importedFile = raw as AnyRecord;
-  if (importedFile.deleted) return null;
-  const attachmentId = String(importedFile.attachmentId || importedFile.attachment_id || '').trim();
-  const filename = String(importedFile.filename || '').trim();
+  const attachment = raw as AnyRecord;
+  if (attachment.deleted) return null;
+  const attachmentId = String(attachment.attachmentId || '').trim();
+  const filename = String(attachment.filename || '').trim();
   if (!attachmentId || !filename) return null;
   return {
     attachmentId,
     filename,
-    sourceFormat: String(importedFile.sourceFormat || '').trim(),
-    totalTokens: Number(importedFile.totalTokens || 0) || 0,
-    chunkTokens: Number(importedFile.chunkTokens || 0) || 0,
-    isPartial: Boolean(importedFile.isPartial),
-    warnings: Array.isArray(importedFile.warnings)
-      ? importedFile.warnings.map((item: AnyRecord = {}) => ({
+    sourceFormat: String(attachment.sourceFormat || '').trim(),
+    totalTokens: Number(attachment.totalTokens || 0) || 0,
+    chunkTokens: Number(attachment.chunkTokens || 0) || 0,
+    isPartial: Boolean(attachment.isPartial),
+    warnings: Array.isArray(attachment.warnings)
+      ? attachment.warnings.map((item: AnyRecord = {}) => ({
           code: String(item.code || '').trim(),
           message: String(item.message || '').trim(),
         })).filter((item: AnyRecord) => item.code || item.message)
       : [],
-    uploadedAt: Number(importedFile.uploadedAt || 0) || 0,
+    uploadedAt: Number(attachment.uploadedAt || 0) || 0,
   };
 }
 
@@ -114,8 +107,7 @@ export function extractImportedFilesMeta(activeMeta: AnyRecord | null = null): A
     }
     return result;
   }
-  const single = normalizeRawImportedFile((activeMeta as AnyRecord).importedFile);
-  return single ? [single] : [];
+  return [];
 }
 
 export function isDeletedAttachmentContext(value: unknown) {
@@ -131,13 +123,6 @@ export function sameImportedFile(a: AnyRecord | null | undefined, b: AnyRecord |
   const bUploadedAt = Number(b.uploadedAt || 0) || 0;
   if (aUploadedAt && bUploadedAt) return aUploadedAt === bUploadedAt;
   return true;
-}
-
-export function getMessageImportedFile(message: AnyRecord | null | undefined) {
-  const importedFile = message?.metadata?.importedFile;
-  if (!importedFile || typeof importedFile !== 'object' || Array.isArray(importedFile)) return null;
-  const filename = String(importedFile.filename || '').trim();
-  return filename ? importedFile as AnyRecord : null;
 }
 
 export function markMessageImportedFileDeleted(message: AnyRecord | null | undefined, reference: AnyRecord | null | undefined, deletedAt = Math.floor(Date.now() / 1000)) {
@@ -160,22 +145,7 @@ export function markMessageImportedFileDeleted(message: AnyRecord | null | undef
     });
     if (touched) {
       metadata.importedFiles = nextList;
-      const stillActive = nextList.find((entry) => entry && typeof entry === 'object' && !(entry as AnyRecord).deleted) as AnyRecord | undefined;
-      if (stillActive) {
-        metadata.importedFile = { ...stillActive };
-      } else if (nextList[0] && typeof nextList[0] === 'object') {
-        metadata.importedFile = { ...(nextList[0] as AnyRecord) };
-      }
     }
-  }
-
-  if (!touched) {
-    const importedFile = getMessageImportedFile(message);
-    if (!importedFile) return false;
-    if (reference && !sameImportedFile(importedFile, reference)) return false;
-    metadata.importedFile = { ...importedFile, deleted: true, deletedAt };
-    matchedFilename = String(importedFile.filename || '').trim() || matchedFilename;
-    touched = true;
   }
 
   if (!touched) return false;
@@ -237,7 +207,6 @@ export function buildUserMessageMetadata(activeContext: unknown, activeMeta: Any
   }
   if (importedFiles.length > 0) {
     metadata.importedFiles = importedFiles.map((item) => ({ ...item }));
-    metadata.importedFile = { ...importedFiles[0] };
   }
   return Object.keys(metadata).length ? metadata : null;
 }
@@ -253,7 +222,7 @@ export function resolveMessageContextForEdit(
   const importedFiles = extractImportedFilesMeta(messageMetadata);
   const activeContext = storedContext || providerContext;
   const activeMeta = importedFiles.length > 0
-    ? { ...(providerMeta || {}), importedFiles, importedFile: { ...importedFiles[0] } }
+    ? { ...(providerMeta || {}), importedFiles }
     : (providerMeta || null);
 
   return {

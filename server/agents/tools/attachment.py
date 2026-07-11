@@ -25,7 +25,7 @@ from .common import ToolExecutionContext
 
 class ReadAttachmentChunkInput(BaseModel):
     attachment_id: str = Field(
-        description="附件 ID（即上传成功后写入 importedFile.attachmentId 的字符串）"
+        description="附件 ID（即上传成功后写入 importedFiles[].attachmentId 的字符串）"
     )
     chunk_index: int = Field(
         description="要读取的分片下标，从 0 开始。0 表示首个分片，1 表示第二个分片，依此类推。",

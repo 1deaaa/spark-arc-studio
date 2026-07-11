@@ -60,9 +60,14 @@ for name in (
 def test_initialize_matchbox_defaults_keeps_llm_runtime_lazy(tmp_path: Path) -> None:
     code = """
 import sys
+import os
+from pathlib import Path
 
+from core.auto_migrate import BASE_DIR, run_db_upgrade
 from llm.agen_matchbox import initialize_matchbox
 
+Path(os.environ["AGENT_MATCHBOX_HOME"]).mkdir(parents=True, exist_ok=True)
+run_db_upgrade("llm", BASE_DIR)
 initialize_matchbox(ensure_defaults=True)
 
 for name in (

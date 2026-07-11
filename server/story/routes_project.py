@@ -40,13 +40,15 @@ def _cancel_project_background_builds(
     *,
     vector_wait_timeout: float = 4.0,
     graph_wait_timeout: float = 2.0,
+    auto_write_wait_timeout: float = 4.0,
 ) -> list[str]:
-    """删除项目优先级最高：先请求停止项目级后台索引/图谱构建。"""
+    """项目目录变更前，统一停止所有可能读写该项目的后台任务。"""
     return cancel_project_background_builds(
         user_id,
         project_name,
         vector_wait_timeout=vector_wait_timeout,
         graph_wait_timeout=graph_wait_timeout,
+        auto_write_wait_timeout=auto_write_wait_timeout,
     )
 
 
@@ -66,6 +68,7 @@ def _remove_project_directory_with_retries(user_id: str, project_name: str, proj
                 project_name,
                 vector_wait_timeout=0.5,
                 graph_wait_timeout=0.0,
+                auto_write_wait_timeout=0.0,
             )
             if attempt < 7:
                 time.sleep(0.25 * (attempt + 1))
@@ -162,8 +165,11 @@ async def delete_project(project_name: str, user: dict = Depends(get_current_use
 
         # 1. 删除项目文件目录前，优先中断可能持有文件句柄的后台构建。
         cancel_warnings = _cancel_project_background_builds(user_id, project_name)
-        for warning in cancel_warnings:
-            print(warning)
+        if cancel_warnings:
+            return JSONResponse(
+                status_code=409,
+                content={"success": False, "message": "项目仍有后台任务未停止", "details": cancel_warnings},
+            )
         _remove_project_directory_with_retries(user_id, project_name, project_path)
 
         # 2. 清除该项目所有聊天记录
@@ -212,6 +218,13 @@ async def rename_project(project_name: str, data: ProjectRename, user: dict = De
         new_path = get_project_path(user_id, new_name)
         if os.path.exists(new_path):
             return JSONResponse(status_code=409, content={"success": False, "message": "目标项目名已存在"})
+
+        cancel_warnings = _cancel_project_background_builds(user_id, project_name)
+        if cancel_warnings:
+            return JSONResponse(
+                status_code=409,
+                content={"success": False, "message": "项目仍有后台任务未停止", "details": cancel_warnings},
+            )
 
         os.rename(old_path, new_path)
 

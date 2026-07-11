@@ -517,6 +517,7 @@ class GraphRAGService:
             self.user_id,
             self.project_name,
             use_cache=True,
+            max_source_chars=self._max_source_chars,
         )
         semantic_chunks = semantic_state.get("chunks") or []
 

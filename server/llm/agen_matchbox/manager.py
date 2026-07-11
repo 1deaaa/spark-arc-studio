@@ -24,11 +24,10 @@ import time
 from collections import Counter
 from typing import Dict, Any, Optional, List
 
-from sqlalchemy import text
 from sqlalchemy.orm import sessionmaker, selectinload
 
 from .models import (
-    Base, LLMPlatform, LLModels, LLMSysPlatformKey,
+    LLMPlatform, LLModels, LLMSysPlatformKey,
     UserModelUsage, AgentModelBinding, ModelUsageStats, UserEmbeddingSelection,
     DEFAULT_MAX_CONTEXT_TOKENS, DEFAULT_MAX_OUTPUT_TOKENS,
     DEFAULT_MODEL_INPUT_MODALITIES, DEFAULT_MODEL_OUTPUT_MODALITIES,
@@ -102,11 +101,6 @@ class AIManagerBase:
             default_sqlite_path=db_path,
         )
         self.engine = create_configured_engine(db_url, future=True)
-        # 注意：表创建现由 Alembic 迁移管理
-        # 首次部署时运行: cd server && alembic upgrade head -x db=llm
-        # 保留 create_all 以确保向后兼容（无 Alembic 环境时自动创建表）
-        # [FIX] 在 Alembic 运行时调用的 import 链中会导致死锁/占用，故注释掉。
-        # Base.metadata.create_all(self.engine)
         self.Session = sessionmaker(bind=self.engine, expire_on_commit=False)
         self._sys_platforms_cache = None 
         self._cache_lock = threading.Lock()
@@ -119,147 +113,11 @@ class AIManagerBase:
         self._default_model_id = None
         self._builtin_usage_map = {slot["key"]: slot for slot in BUILTIN_USAGE_SLOTS}
         self._default_usage_key = DEFAULT_USAGE_KEY
-        self._sys_platform_keys_constraint_checked = False
         
         state_file_path = get_state_file_path()
         state_file_path.parent.mkdir(parents=True, exist_ok=True)
         self.state_file = str(state_file_path)
         self._load_state()
-
-    def _has_sys_platform_keys_composite_unique(self, conn) -> bool:
-        """检测 llm_sys_platform_keys 是否具备 (user_id, platform_id) 复合唯一约束。"""
-        index_rows = conn.execute(text("PRAGMA index_list('llm_sys_platform_keys')")).fetchall()
-        for row in index_rows:
-            if len(row) < 3:
-                continue
-            index_name = row[1]
-            unique_flag = int(row[2])
-            if unique_flag != 1 or not index_name:
-                continue
-
-            safe_index_name = str(index_name).replace("'", "''")
-            col_rows = conn.execute(text(f"PRAGMA index_info('{safe_index_name}')")).fetchall()
-            cols = [str(c[2]) for c in col_rows if len(c) >= 3]
-            if len(cols) == 2 and set(cols) == {"user_id", "platform_id"}:
-                return True
-
-        return False
-
-    def _repair_sys_platform_keys_unique_constraint(self, conn) -> None:
-        """修复历史数据库中 llm_sys_platform_keys 缺失复合唯一约束的问题。"""
-        print("[startup-fix] Detected missing (user_id, platform_id) unique constraint on llm_sys_platform_keys, starting auto-fix")
-
-        rows = conn.execute(
-            text(
-                """
-                SELECT id, user_id, platform_id, api_key, disable
-                FROM llm_sys_platform_keys
-                ORDER BY id ASC
-                """
-            )
-        ).mappings().all()
-
-        deduped: Dict[tuple, Dict[str, Any]] = {}
-        for row in rows:
-            user_id = str(row["user_id"] or "")
-            platform_id = int(row["platform_id"])
-            candidate = {
-                "id": int(row["id"]),
-                "user_id": user_id,
-                "platform_id": platform_id,
-                "api_key": row["api_key"],
-                "disable": int(row["disable"] or 0),
-            }
-
-            key = (user_id, platform_id)
-            existing = deduped.get(key)
-            if existing is None:
-                deduped[key] = candidate
-                continue
-
-            # 同一 user+platform 出现重复历史脏数据时：优先保留有 key 的记录，其次保留最新 id。
-            existing_has_key = bool(existing.get("api_key"))
-            candidate_has_key = bool(candidate.get("api_key"))
-            if (not existing_has_key and candidate_has_key) or (
-                existing_has_key == candidate_has_key and candidate["id"] > existing["id"]
-            ):
-                deduped[key] = candidate
-
-        conn.execute(text("DROP TABLE IF EXISTS llm_sys_platform_keys__rebuild"))
-        conn.execute(
-            text(
-                """
-                CREATE TABLE llm_sys_platform_keys__rebuild (
-                    id INTEGER PRIMARY KEY,
-                    user_id VARCHAR(255) NOT NULL,
-                    platform_id INTEGER NOT NULL,
-                    api_key VARCHAR(512),
-                    disable INTEGER DEFAULT 0,
-                    FOREIGN KEY(platform_id) REFERENCES llm_platforms(id) ON DELETE CASCADE,
-                    CONSTRAINT uq_sys_platform_key_user_platform UNIQUE (user_id, platform_id)
-                )
-                """
-            )
-        )
-
-        if deduped:
-            conn.execute(
-                text(
-                    """
-                    INSERT INTO llm_sys_platform_keys__rebuild (id, user_id, platform_id, api_key, disable)
-                    VALUES (:id, :user_id, :platform_id, :api_key, :disable)
-                    """
-                ),
-                list(deduped.values()),
-            )
-
-        conn.execute(text("DROP TABLE llm_sys_platform_keys"))
-        conn.execute(text("ALTER TABLE llm_sys_platform_keys__rebuild RENAME TO llm_sys_platform_keys"))
-        conn.execute(
-            text(
-                "CREATE INDEX IF NOT EXISTS ix_llm_sys_platform_keys_user_id "
-                "ON llm_sys_platform_keys (user_id)"
-            )
-        )
-        conn.execute(
-            text(
-                "CREATE INDEX IF NOT EXISTS ix_llm_sys_platform_keys_platform_id "
-                "ON llm_sys_platform_keys (platform_id)"
-            )
-        )
-        print("[startup-fix] llm_sys_platform_keys constraint fix complete")
-
-    def _ensure_sys_platform_keys_unique_constraint(self, force: bool = False) -> None:
-        """确保系统平台用户密钥表具备 (user_id, platform_id) 复合唯一约束。"""
-        if self._sys_platform_keys_constraint_checked and not force:
-            return
-
-        if self.engine.dialect.name != "sqlite":
-            self._sys_platform_keys_constraint_checked = True
-            return
-
-        with self.engine.begin() as conn:
-            table_exists = conn.execute(
-                text(
-                    """
-                    SELECT 1 FROM sqlite_master
-                    WHERE type='table' AND name='llm_sys_platform_keys'
-                    LIMIT 1
-                    """
-                )
-            ).first()
-
-            if not table_exists:
-                self._sys_platform_keys_constraint_checked = True
-                return
-
-            if self._has_sys_platform_keys_composite_unique(conn):
-                self._sys_platform_keys_constraint_checked = True
-                return
-
-            self._repair_sys_platform_keys_unique_constraint(conn)
-
-        self._sys_platform_keys_constraint_checked = True
 
     def _load_state(self):
         """加载运行时状态"""
@@ -290,15 +148,6 @@ class AIManagerBase:
         except Exception as e:
             print(f"Failed to save state: {e}")
 
-    def ensure_database_schema(self):
-        """显式创建缺失的数据表。"""
-        Base.metadata.create_all(self.engine)
-
-    def ensure_database_ready(self):
-        """确保数据库与系统默认配置均已初始化。"""
-        self.ensure_database_schema()
-        self.initialize_defaults(ensure_schema=False)
-
     def _resolve_default_ids_from_db(self, session) -> None:
         """从数据库 sort_order 确定默认平台 ID 和默认模型 ID。
 
@@ -306,8 +155,6 @@ class AIManagerBase:
         1. 数据库中 sort_order 最小的未禁用系统平台
         2. 该平台内 sort_order 最小的未禁用文本生成模型
         """
-        from sqlalchemy.orm import selectinload
-
         default_plat = (
             session.query(LLMPlatform)
             .options(selectinload(LLMPlatform.models))
@@ -330,13 +177,8 @@ class AIManagerBase:
 
         self._default_model_id = default_model.id
 
-    def initialize_defaults(self, ensure_schema: bool = True):
+    def initialize_defaults(self):
         """同步默认平台并初始化默认ID"""
-        if ensure_schema:
-            self.ensure_database_schema()
-
-        self._ensure_sys_platform_keys_unique_constraint()
-
         self._sync_default_platforms()
 
         with self.Session() as session:
@@ -855,8 +697,6 @@ class AIManagerBase:
             current_key = str(get_env_var("LLM_KEY") or "").strip()
             if current_key and current_key != new_key:
                 old_key = current_key
-
-        self.ensure_database_schema()
 
         # 平台结构来自 matchbox_cfg.yaml，密钥独立存放在 matchbox_key.yaml。
         key_yaml_data = load_key_yaml_raw()

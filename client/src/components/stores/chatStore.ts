@@ -62,7 +62,6 @@ import {
   buildUserMessageMetadata,
   extractImportedFilesMeta,
   findLatestImportedContexts,
-  getMessageImportedFile,
   markSessionImportedFileDeleted,
   resolveActiveContext,
   resolveMessageContextForEdit,
@@ -537,8 +536,7 @@ export const useChatStore = defineStore('chat', {
         if (list.length > 0) {
           return list.some((entry) => entry.attachmentId === targetId);
         }
-        const legacy = getMessageImportedFile(message);
-        return legacy && !legacy.deleted && sameImportedFile(legacy, reference);
+        return false;
       });
 
       if (persistedMessage?.id != null) {
@@ -1535,13 +1533,13 @@ export const useChatStore = defineStore('chat', {
       if (!targetMessage) return;
 
       const trimmedAttachmentId = String(attachmentId || '').trim();
-      // 解析 reference：传 attachmentId 时按 id 在 importedFiles 列表中找；否则取首个 importedFile（老语义）。
+      // 解析 reference：传 attachmentId 时按 id 查找，否则取列表首项。
       let reference: AnyRecord | null = null;
+      const importedFiles = extractImportedFilesMeta(targetMessage?.metadata || null);
       if (trimmedAttachmentId) {
-        const list = extractImportedFilesMeta(targetMessage?.metadata || null);
-        reference = list.find((entry) => entry.attachmentId === trimmedAttachmentId) || null;
+        reference = importedFiles.find((entry) => entry.attachmentId === trimmedAttachmentId) || null;
       } else {
-        reference = getMessageImportedFile(targetMessage);
+        reference = importedFiles[0] || null;
       }
 
       // 本地：从 session.attachments 中移除对应项（按 id 优先），并同步 importedContext。

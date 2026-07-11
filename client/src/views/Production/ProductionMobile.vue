@@ -310,12 +310,6 @@
       </n-drawer-content>
     </n-drawer>
 
-    <ScriptGenerationModal
-      v-model:show="showAutoWrite"
-      :outline="outlineData || undefined"
-      @refresh-files="handleRefreshFiles"
-    />
-
     <!-- 移动端节点编辑器 -->
     <MobileNodeEditor v-model:show="showNodeEditor" />
   </div>
@@ -332,7 +326,6 @@ import { getOutline } from '../../services/api';
 import type { OutlineData } from '../../services/aiContracts';
 import GlobalLoading from '../../components/share/GlobalLoading.vue';
 import AiPanel from '../../components/dlg-editor/AiPanel.vue';
-import ScriptGenerationModal from '../../components/dlg-editor/ScriptGenerationModal.vue';
 import DialogueTree from '../../components/dlg-editor/DialogueTree.vue';
 import NovelReader from '../../components/dlg-editor/NovelReader.vue';
 import MobileNodeEditor from '../../components/dlg-editor/MobileNodeEditor.vue';
@@ -365,7 +358,6 @@ const projectId = inject<Ref<string | null>>('projectId', ref<string | null>(nul
 
 const loading = ref(false);
 const outlineData = ref<OutlineData | null>(null);
-const showAutoWrite = ref(false);
 const showSceneMetaDrawer = ref(false);
 const showRuntimeTestDrawer = ref(false);
 const showAiDrawer = ref(false);
@@ -588,11 +580,7 @@ async function saveSceneMeta() {
 }
 
 function openAutoWrite() {
-  showAutoWrite.value = true;
-}
-
-async function handleRefreshFiles() {
-  await loadFiles();
+  bus.emit('open-auto-write-setup');
 }
 
 onMounted(async () => {

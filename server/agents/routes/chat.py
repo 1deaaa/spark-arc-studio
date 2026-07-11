@@ -49,7 +49,7 @@ Chat / Session History API - 通用会话机制
 from fastapi import APIRouter, Depends, Request, HTTPException, Query
 from fastapi.responses import StreamingResponse, JSONResponse
 from starlette.concurrency import run_in_threadpool
-from typing import Any, Dict
+from typing import Any, Callable, Dict
 import asyncio
 import threading
 import time
@@ -576,6 +576,142 @@ def _merge_context_window_stats_with_usage(
     return merged
 
 
+def _start_chat_stream_task(
+    *,
+    user: dict,
+    user_id: str,
+    project_name: str,
+    agent_id: str,
+    context_key: str,
+    channel: str,
+    message: str,
+    active_context: Any,
+    cm: ChatManager,
+    prepare_history: Callable[[], list],
+) -> ChatTaskEntry:
+    """注册并启动统一聊天后台任务，入口差异仅由历史准备回调承载。"""
+    task_key = _make_task_key(user_id, project_name, agent_id, context_key)
+    stop_event = threading.Event()
+    entry = ChatTaskEntry(
+        task_key=task_key,
+        user_id=user_id,
+        project_name=project_name,
+        agent_id=agent_id,
+        context_key=context_key,
+        stop_event=stop_event,
+        status='running',
+        started_at=time.time(),
+        channel=channel,
+    )
+    try:
+        register_task(entry)
+    except ValueError as exc:
+        raise HTTPException(status_code=409, detail='该会话已有任务在执行') from exc
+
+    try:
+        history = prepare_history()
+        assistant_msg = cm.append_message(
+            agent_id=agent_id,
+            context_key=context_key,
+            role='assistant',
+            content='',
+            metadata={
+                'channel': channel,
+                'stream_status': 'running',
+                'stream_seq': 0,
+                'task_id': entry.task_id,
+            },
+        )
+        entry.assistant_message_id = assistant_msg.id
+        entry.result_message_id = assistant_msg.id
+        _checkpoint_chat_task(cm, entry, force=True, stream_status='running')
+        agent_inst = create_agent_instance(agent_id, user_id, project_name)
+    except Exception:
+        update_task_status(task_key, 'error')
+        cleanup_task(task_key, delay=0)
+        raise
+    request_locale = get_current_locale()
+
+    def _run_chat_background() -> None:
+        import contextvars
+
+        ctx = contextvars.copy_context()
+
+        def _in_context() -> None:
+            terminated_early = False
+            final_error_message = ''
+            retry_count = 0
+            try:
+                terminated_early, final_error_message, retry_count = _run_chat_stream_with_retry(
+                    agent_inst=agent_inst,
+                    message=message,
+                    history=history,
+                    active_context=active_context,
+                    cm=cm,
+                    entry=entry,
+                    task_key=task_key,
+                    stop_event=stop_event,
+                )
+            finally:
+                final_status = (
+                    'cancelled'
+                    if terminated_early
+                    else 'error'
+                    if final_error_message
+                    else 'completed'
+                )
+                entry.llm_usage = _collect_chat_task_llm_usage(entry)
+                if entry.accumulator is not None:
+                    entry.accumulator.context_window_stats = _merge_context_window_stats_with_usage(
+                        entry.accumulator.context_window_stats,
+                        entry.llm_usage,
+                    )
+                reply = entry.accumulator.content if entry.accumulator is not None else ''
+                metadata = entry.build_metadata(stream_status=final_status)
+                _checkpoint_chat_task(cm, entry, force=True, stream_status=final_status)
+                entry.append_control_event({
+                    'event': 'task_done',
+                    'status': final_status,
+                    'assistant_message_id': entry.assistant_message_id,
+                    'result_message_id': entry.assistant_message_id,
+                    **({'llm_usage': entry.llm_usage} if entry.llm_usage else {}),
+                    **({
+                        'context_window_stats': entry.accumulator.context_window_stats,
+                    } if entry.accumulator is not None and entry.accumulator.context_window_stats else {}),
+                    **({'error': final_error_message} if final_error_message else {}),
+                })
+                update_task_status(
+                    task_key,
+                    final_status,
+                    result_message_id=entry.assistant_message_id,
+                    result_content=reply,
+                    result_metadata=metadata,
+                    error_message=final_error_message,
+                    retry_count=retry_count,
+                )
+                cleanup_task(task_key)
+
+        ctx.run(
+            _run_chat_background_context,
+            user_id=str(user_id),
+            project_name=project_name,
+            is_admin=bool(user.get('is_admin')),
+            locale=request_locale,
+            llm_usage_context=_make_llm_usage_context(entry.task_id),
+            chat_agent_id=agent_id,
+            chat_context_key=context_key,
+            callback=_in_context,
+        )
+
+    thread = threading.Thread(
+        target=_run_chat_background,
+        daemon=True,
+        name=f"chat_{channel}_{task_key}",
+    )
+    thread.start()
+    return entry
+
+
 def _visible_chat_history(history: list[dict]) -> list[dict]:
     return [item for item in history if item.get("role") != "system"]
 
@@ -698,6 +834,10 @@ async def clear_chat_history(
 
     cm = ChatManager(user_id=user_id, project_name=project_name)
     ok = cm.clear_session(agent_id=agentId, context_key=contextKey)
+    if ok:
+        from agents.attachment import collect_orphan_attachments
+
+        collect_orphan_attachments(user_id, project_name)
     return {'success': True, 'cleared': ok}
 
 
@@ -901,6 +1041,10 @@ async def delete_chat_message(
 
     cm = ChatManager(user_id=user_id, project_name=project_name)
     ok = cm.delete_message(messageId)
+    if ok:
+        from agents.attachment import collect_orphan_attachments
+
+        collect_orphan_attachments(user_id, project_name)
     return {'success': True, 'deleted': bool(ok)}
 
 
@@ -912,10 +1056,8 @@ async def remove_chat_message_attachment(data: ChatMessageAttachmentRemoveReques
     - 以 ``messageId`` 对应的附件作为锚点；同一 agent / contextKey 下所有引用
       同一附件的用户消息都会被同步标记为 deleted。
     - 多附件场景：``data.attachmentId`` 用于精确指定要移除的那一个附件；
-      不传时回落到按首个附件匹配（兼容老前端）。
-    - importedFiles 列表里的对应项被打上 deleted 标记；如果列表中只剩这一个
-      附件，importedFile 单数字段同步标记 deleted；否则把单数字段更新为剩下的
-      第一个附件，避免老 reader 拿到已删除附件作为入口。
+      不传时移除列表中的首个附件。
+    - ``importedFiles`` 是附件引用的唯一真相源，匹配项会被标记为 deleted。
     - 不删除消息，不删除后续回复。
     """
     user_id = str(user['user_id'])
@@ -926,13 +1068,10 @@ async def remove_chat_message_attachment(data: ChatMessageAttachmentRemoveReques
     requested_attachment_id = (data.attachmentId or '').strip()
 
     def _collect_files(meta: dict) -> list[dict]:
-        """从 metadata 抽取 importedFiles 列表，兼容老 importedFile 单数。"""
+        """从 metadata 的唯一附件真相源抽取引用列表。"""
         files = meta.get('importedFiles')
         if isinstance(files, list):
             return [dict(item) for item in files if isinstance(item, dict)]
-        legacy = meta.get('importedFile')
-        if isinstance(legacy, dict):
-            return [dict(legacy)]
         return []
 
     with UserInfoSession() as session:
@@ -953,7 +1092,7 @@ async def remove_chat_message_attachment(data: ChatMessageAttachmentRemoveReques
         target_entry: dict | None = None
         if requested_attachment_id:
             for entry in target_files:
-                if str(entry.get('attachmentId') or entry.get('attachment_id') or '').strip() == requested_attachment_id:
+                if str(entry.get('attachmentId') or '').strip() == requested_attachment_id:
                     target_entry = entry
                     break
             if target_entry is None:
@@ -962,14 +1101,14 @@ async def remove_chat_message_attachment(data: ChatMessageAttachmentRemoveReques
             target_entry = target_files[0]
 
         target_filename = str(target_entry.get('filename') or '').strip()
-        target_attachment_id = str(target_entry.get('attachmentId') or target_entry.get('attachment_id') or '').strip()
+        target_attachment_id = str(target_entry.get('attachmentId') or '').strip()
         target_uploaded_at = target_entry.get('uploadedAt') or 0
 
     def _same_attachment(entry: Any) -> bool:
         """优先用 attachmentId 精确匹配；缺失时回落到 filename + uploadedAt。"""
         if not isinstance(entry, dict):
             return False
-        entry_id = str(entry.get('attachmentId') or entry.get('attachment_id') or '').strip()
+        entry_id = str(entry.get('attachmentId') or '').strip()
         if target_attachment_id and entry_id:
             return entry_id == target_attachment_id
         filename = str(entry.get('filename') or '').strip()
@@ -1013,16 +1152,6 @@ async def remove_chat_message_attachment(data: ChatMessageAttachmentRemoveReques
                     updated_entries.append(dict(entry))
             meta['importedFiles'] = updated_entries
 
-            # 老 reader 入口：单数字段——如果还有未删除的附件，指向第一个未删除项；
-            # 否则保留指向被删除附件，连同 deleted 标记一起暴露给老 reader。
-            still_active = next((e for e in updated_entries if not e.get('deleted')), None)
-            if still_active is not None:
-                meta['importedFile'] = dict(still_active)
-            else:
-                # 全部 deleted：单数字段同步 deleted，让老 reader 也能识别
-                deleted_first = updated_entries[0]
-                meta['importedFile'] = dict(deleted_first)
-
             active_ctx = meta.get('active_context')
             if isinstance(active_ctx, str) and active_ctx.strip():
                 fallback_label = target_filename or target_attachment_id or '未知附件'
@@ -1032,6 +1161,10 @@ async def remove_chat_message_attachment(data: ChatMessageAttachmentRemoveReques
             updated_count += 1
 
         session.commit()
+
+    from agents.attachment import collect_orphan_attachments
+
+    collect_orphan_attachments(user_id, project_name)
 
     return {'success': True, 'updated': updated_count}
 
@@ -1160,10 +1293,9 @@ async def edit_chat_message_stream(request: Request, data: ChatMessageEditReques
         role = msg.role
         msg_id = msg.id
 
-    cm.update_message(data.messageId, data.content)
-    cm.delete_after(agent_id=data.agentId, context_key=data.contextKey, message_id=msg_id)
-
     if role != 'user':
+        cm.update_message(data.messageId, data.content)
+        cm.delete_after(agent_id=data.agentId, context_key=data.contextKey, message_id=msg_id)
         return StreamingResponse(iter(['']), media_type='text/plain')
 
     effective_active_context = _resolve_effective_active_context(user_id, project_name, data.agentId, data.activeContext)
@@ -1173,124 +1305,26 @@ async def edit_chat_message_stream(request: Request, data: ChatMessageEditReques
         user_id, project_name, effective_active_context, imported_files_meta,
     )
 
-    task_key = _make_task_key(user_id, project_name, data.agentId, data.contextKey)
+    def prepare_history() -> list:
+        cm.update_message(data.messageId, data.content)
+        cm.delete_after(agent_id=data.agentId, context_key=data.contextKey, message_id=msg_id)
+        history = cm.get_context_history(agent_id=data.agentId, context_key=data.contextKey)
+        if history and history[-1].get('role') == 'user':
+            history = history[:-1]
+        return history
 
-    # 检查是否已有同 key 的活跃任务
-    existing = get_task_by_parts(user_id, project_name, data.agentId, data.contextKey)
-    if existing and existing.status == 'running':
-        raise HTTPException(status_code=409, detail='该会话已有任务在执行')
-
-    # 创建任务入口
-    stop_event = threading.Event()
-    entry = ChatTaskEntry(
-        task_key=task_key,
+    entry = _start_chat_stream_task(
+        user=user,
         user_id=user_id,
         project_name=project_name,
         agent_id=data.agentId,
         context_key=data.contextKey,
-        stop_event=stop_event,
-        status='running',
-        started_at=time.time(),
         channel='edit_reply_stream',
+        message=data.content,
+        active_context=effective_active_context,
+        cm=cm,
+        prepare_history=prepare_history,
     )
-    register_task(entry)
-
-    assistant_msg = cm.append_message(
-        agent_id=data.agentId,
-        context_key=data.contextKey,
-        role='assistant',
-        content='',
-        metadata={
-            'channel': 'edit_reply_stream',
-            'stream_status': 'running',
-            'stream_seq': 0,
-            'task_id': entry.task_id,
-        },
-    )
-    entry.assistant_message_id = assistant_msg.id
-    entry.result_message_id = assistant_msg.id
-    _checkpoint_chat_task(cm, entry, force=True, stream_status='running')
-
-    # get_history 返回的历史已含编辑后的用户消息，需移除以避免与 data.content 双喂
-    history = cm.get_context_history(agent_id=data.agentId, context_key=data.contextKey)
-    if history and history[-1].get('role') == 'user':
-        history = history[:-1]
-    agent_inst = create_agent_instance(data.agentId, user_id, project_name)
-    request_locale = get_current_locale()
-
-    # ── 后台线程：执行 chat_stream 并写入进度队列 + 数据库 ──
-    def _run_chat_background():
-        import contextvars
-
-        ctx = contextvars.copy_context()
-
-        def _in_context():
-            terminated_early = False
-            final_error_message = ''
-            retry_count = 0
-
-            try:
-                terminated_early, final_error_message, retry_count = _run_chat_stream_with_retry(
-                    agent_inst=agent_inst,
-                    message=data.content,
-                    history=history,
-                    active_context=effective_active_context,
-                    cm=cm,
-                    entry=entry,
-                    task_key=task_key,
-                    stop_event=stop_event,
-                )
-            finally:
-                if terminated_early:
-                    final_status = 'cancelled'
-                elif final_error_message:
-                    final_status = 'error'
-                else:
-                    final_status = 'completed'
-
-                entry.llm_usage = _collect_chat_task_llm_usage(entry)
-                if entry.accumulator is not None:
-                    entry.accumulator.context_window_stats = _merge_context_window_stats_with_usage(
-                        entry.accumulator.context_window_stats,
-                        entry.llm_usage,
-                    )
-                reply = entry.accumulator.content if entry.accumulator is not None else ''
-                metadata = entry.build_metadata(stream_status=final_status)
-                _checkpoint_chat_task(cm, entry, force=True, stream_status=final_status)
-                entry.append_control_event({
-                    "event": "task_done",
-                    "status": final_status,
-                    "assistant_message_id": entry.assistant_message_id,
-                    "result_message_id": entry.assistant_message_id,
-                    **({"llm_usage": entry.llm_usage} if entry.llm_usage else {}),
-                    **({"context_window_stats": entry.accumulator.context_window_stats} if entry.accumulator is not None and entry.accumulator.context_window_stats else {}),
-                    **({"error": final_error_message} if final_error_message else {}),
-                })
-                update_task_status(
-                    task_key, final_status,
-                    result_message_id=entry.assistant_message_id,
-                    result_content=reply,
-                    result_metadata=metadata,
-                    error_message=final_error_message,
-                    retry_count=retry_count,
-                )
-                cleanup_task(task_key)
-
-        ctx.run(
-            _run_chat_background_context,
-            user_id=str(user_id),
-            project_name=project_name,
-            is_admin=bool(user.get('is_admin')),
-            locale=request_locale,
-            llm_usage_context=_make_llm_usage_context(entry.task_id),
-            chat_agent_id=data.agentId,
-            chat_context_key=data.contextKey,
-            callback=_in_context,
-        )
-
-
-    thread = threading.Thread(target=_run_chat_background, daemon=True, name=f"chat_edit_bg_{task_key}")
-    thread.start()
 
     return StreamingResponse(_observe_chat_task_events(request, entry, include_snapshot=True), media_type=_NDJSON_MEDIA_TYPE)
 
@@ -1405,135 +1439,31 @@ async def send_chat_message_stream(request: Request, data: ChatSendRequest, user
         user_id, project_name, effective_active_context, imported_files_meta,
     )
 
-    task_key = _make_task_key(user_id, project_name, agent_id, context_key)
+    cm = ChatManager(user_id=user_id, project_name=project_name)
 
-    # 检查是否已有同 key 的活跃任务
-    existing = get_task_by_parts(user_id, project_name, agent_id, context_key)
-    if existing and existing.status == 'running':
-        raise HTTPException(status_code=409, detail='该会话已有任务在执行')
+    def prepare_history() -> list:
+        history = cm.get_context_history(agent_id=agent_id, context_key=context_key)
+        cm.append_message(
+            agent_id=agent_id,
+            context_key=context_key,
+            role='user',
+            content=message,
+            metadata=_build_user_message_metadata('direct', data.activeContext, imported_files_meta),
+        )
+        return history
 
-    # 创建任务入口
-    stop_event = threading.Event()
-    entry = ChatTaskEntry(
-        task_key=task_key,
+    entry = _start_chat_stream_task(
+        user=user,
         user_id=user_id,
         project_name=project_name,
         agent_id=agent_id,
         context_key=context_key,
-        stop_event=stop_event,
-        status='running',
-        started_at=time.time(),
         channel='direct_reply_stream',
+        message=message,
+        active_context=effective_active_context,
+        cm=cm,
+        prepare_history=prepare_history,
     )
-    register_task(entry)
-
-    cm = ChatManager(user_id=user_id, project_name=project_name)
-
-    # 先取历史（不含当前消息），避免双喂
-    history = cm.get_context_history(agent_id=agent_id, context_key=context_key)
-
-    # 保存用户消息到 DB（在取历史之后，确保 history 不含当前消息）
-    cm.append_message(
-        agent_id=agent_id,
-        context_key=context_key,
-        role='user',
-        content=message,
-        metadata=_build_user_message_metadata('direct', data.activeContext, imported_files_meta),
-    )
-
-    assistant_msg = cm.append_message(
-        agent_id=agent_id,
-        context_key=context_key,
-        role='assistant',
-        content='',
-        metadata={
-            'channel': 'direct_reply_stream',
-            'stream_status': 'running',
-            'stream_seq': 0,
-            'task_id': entry.task_id,
-        },
-    )
-    entry.assistant_message_id = assistant_msg.id
-    entry.result_message_id = assistant_msg.id
-    _checkpoint_chat_task(cm, entry, force=True, stream_status='running')
-
-    agent_inst = create_agent_instance(agent_id, user_id, project_name)
-    request_locale = get_current_locale()
-
-    # ── 后台线程：执行 chat_stream 并写入进度队列 + 数据库 ──
-    def _run_chat_background():
-        import contextvars
-
-        # 复制请求级 ContextVar 到后台线程
-        ctx = contextvars.copy_context()
-
-        def _in_context():
-            terminated_early = False
-            final_error_message = ''
-            retry_count = 0
-
-            try:
-                terminated_early, final_error_message, retry_count = _run_chat_stream_with_retry(
-                    agent_inst=agent_inst,
-                    message=message,
-                    history=history,
-                    active_context=effective_active_context,
-                    cm=cm,
-                    entry=entry,
-                    task_key=task_key,
-                    stop_event=stop_event,
-                )
-            finally:
-                if terminated_early:
-                    final_status = 'cancelled'
-                elif final_error_message:
-                    final_status = 'error'
-                else:
-                    final_status = 'completed'
-
-                entry.llm_usage = _collect_chat_task_llm_usage(entry)
-                if entry.accumulator is not None:
-                    entry.accumulator.context_window_stats = _merge_context_window_stats_with_usage(
-                        entry.accumulator.context_window_stats,
-                        entry.llm_usage,
-                    )
-                reply = entry.accumulator.content if entry.accumulator is not None else ''
-                metadata = entry.build_metadata(stream_status=final_status)
-                _checkpoint_chat_task(cm, entry, force=True, stream_status=final_status)
-                entry.append_control_event({
-                    "event": "task_done",
-                    "status": final_status,
-                    "assistant_message_id": entry.assistant_message_id,
-                    "result_message_id": entry.assistant_message_id,
-                    **({"llm_usage": entry.llm_usage} if entry.llm_usage else {}),
-                    **({"context_window_stats": entry.accumulator.context_window_stats} if entry.accumulator is not None and entry.accumulator.context_window_stats else {}),
-                    **({"error": final_error_message} if final_error_message else {}),
-                })
-                update_task_status(
-                    task_key, final_status,
-                    result_message_id=entry.assistant_message_id,
-                    result_content=reply,
-                    result_metadata=metadata,
-                    error_message=final_error_message,
-                    retry_count=retry_count,
-                )
-                cleanup_task(task_key)
-
-        ctx.run(
-            _run_chat_background_context,
-            user_id=str(user_id),
-            project_name=project_name,
-            is_admin=bool(user.get('is_admin')),
-            locale=request_locale,
-            llm_usage_context=_make_llm_usage_context(entry.task_id),
-            chat_agent_id=agent_id,
-            chat_context_key=context_key,
-            callback=_in_context,
-        )
-
-
-    thread = threading.Thread(target=_run_chat_background, daemon=True, name=f"chat_bg_{task_key}")
-    thread.start()
 
     return StreamingResponse(_observe_chat_task_events(request, entry, include_snapshot=True), media_type=_NDJSON_MEDIA_TYPE)
 

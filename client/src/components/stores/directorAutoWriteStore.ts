@@ -13,14 +13,14 @@
  * 设计原则：
  * - 遮罩可见性绑定到「当前项目」：切换项目时遮罩自动消失（后台任务继续）
  * - 切换回来后，若该项目状态仍为 running，重新显示遮罩
- * - 导演触发：轮询模式（工具调用不支持流式）
- * - 手动触发：SSE 观察者模式（实时文字流）+ 轮询兜底
+ * - 导演与手动触发统一走可恢复 SSE 观察者，轮询只负责状态兜底
  */
 
 import { defineStore } from 'pinia';
 import { ref, computed, watch } from 'vue';
 import { fetchWithAuth, resolveApiUrl, getSessionToken } from '@/services/apiClient';
 import { useProjectStore } from '@/components/stores/projectStore';
+import { consumeSSEReader, parseSSEEventPayload } from '@/utils/streamingRuntime';
 
 export type AutoWriteStatus =
   | 'idle'
@@ -77,6 +77,8 @@ interface DirectorAutoWriteTask {
 }
 
   const POLL_INTERVAL_MS = 5000; // 5 秒轮询一次
+  const SSE_RECONNECT_BASE_MS = 750;
+  const SSE_RECONNECT_MAX_MS = 10000;
 
   /**
    * 导演触发后的"启动宽限期"：后端后台线程从启动到落盘 running 状态存在延迟，
@@ -236,8 +238,10 @@ export const useDirectorAutoWriteStore = defineStore('directorAutoWrite', () => 
     };
     // 记录启动时间戳，供轮询宽限期判定使用
     directorStartedAtMap[project_name] = Date.now();
+    _sseAfterSeq[project_name] = 0;
     // 立即拉一次最新状态
     _pollSnapshot(project_name);
+    _connectProgressSSE(project_name);
     _startPolling();
   }
 
@@ -294,8 +298,7 @@ export const useDirectorAutoWriteStore = defineStore('directorAutoWrite', () => 
           }
         };
 
-        // 如果是手动触发的活跃任务，重连 SSE 观察者
-        if (data.status === 'running' && !tasks.value[projectName].fromDirector) {
+        if (data.status === 'running') {
           _connectProgressSSE(projectName);
         }
       } else {
@@ -332,6 +335,9 @@ export const useDirectorAutoWriteStore = defineStore('directorAutoWrite', () => 
       if (activeProjects.value.length > 0) {
         _startPolling();
       }
+      if (data.status === 'running' && tasks.value[projectName] && !tasks.value[projectName].sseConnected) {
+        _connectProgressSSE(projectName);
+      }
     } catch {
       // 容错处理
     }
@@ -358,6 +364,7 @@ export const useDirectorAutoWriteStore = defineStore('directorAutoWrite', () => 
   async function dismissTask(projectName: string): Promise<void> {
     _disconnectProgressSSE(projectName);
     delete directorStartedAtMap[projectName];
+    delete _sseAfterSeq[projectName];
     delete tasks.value[projectName];
     if (activeProjects.value.length === 0) {
       _stopPolling();
@@ -379,6 +386,33 @@ export const useDirectorAutoWriteStore = defineStore('directorAutoWrite', () => 
 
   /** SSE 观察者的 AbortController，按 projectName 存储 */
   const _sseControllers: Record<string, AbortController> = {};
+  const _sseAfterSeq: Record<string, number> = {};
+  const _sseReconnectTimers: Record<string, ReturnType<typeof setTimeout>> = {};
+  const _sseReconnectAttempts: Record<string, number> = {};
+
+  function _clearProgressReconnect(projectName: string): void {
+    const timer = _sseReconnectTimers[projectName];
+    if (timer) {
+      clearTimeout(timer);
+      delete _sseReconnectTimers[projectName];
+    }
+  }
+
+  function _scheduleProgressReconnect(projectName: string): void {
+    const task = tasks.value[projectName];
+    if (!task || task.snapshot.status !== 'running' || _sseReconnectTimers[projectName]) return;
+
+    const attempt = _sseReconnectAttempts[projectName] || 0;
+    const delay = Math.min(SSE_RECONNECT_MAX_MS, SSE_RECONNECT_BASE_MS * (2 ** attempt));
+    _sseReconnectAttempts[projectName] = attempt + 1;
+    _sseReconnectTimers[projectName] = setTimeout(() => {
+      delete _sseReconnectTimers[projectName];
+      const current = tasks.value[projectName];
+      if (current?.snapshot.status === 'running' && !current.sseConnected) {
+        _connectProgressSSE(projectName);
+      }
+    }, delay);
+  }
 
   /**
    * 手动触发 Auto-Write：调用后端 /auto-write-start 启动后台线程，
@@ -398,6 +432,7 @@ export const useDirectorAutoWriteStore = defineStore('directorAutoWrite', () => 
     const startSceneIndex = config.startSceneIndex ?? 0;
     const autoReview = config.autoReview === true;
     let exportFormat = 'arc';
+    _sseAfterSeq[projectName] = 0;
 
     try {
       const res = await fetchWithAuth(
@@ -465,17 +500,17 @@ export const useDirectorAutoWriteStore = defineStore('directorAutoWrite', () => 
    * 前端断连后任务不受影响，重连后可重新调用此方法恢复实时流。
    */
   function _connectProgressSSE(projectName: string): void {
-    // 先断开已有连接
-    _disconnectProgressSSE(projectName);
+    _clearProgressReconnect(projectName);
+    const previousController = _sseControllers[projectName];
+    if (previousController) previousController.abort();
 
     const controller = new AbortController();
     _sseControllers[projectName] = controller;
 
     const url = resolveApiUrl(
-      `/api/outline/${encodeURIComponent(projectName)}/auto-write-progress-stream`,
+      `/api/outline/${encodeURIComponent(projectName)}/auto-write-progress-stream?afterSeq=${_sseAfterSeq[projectName] || 0}`,
     );
 
-    // 使用 fetch + ReadableStream 手动解析 SSE
     const headers: Record<string, string> = { Accept: 'text/event-stream' };
     const token = getSessionToken();
     if (token) headers['X-Session-Token'] = token;
@@ -486,50 +521,35 @@ export const useDirectorAutoWriteStore = defineStore('directorAutoWrite', () => 
     })
       .then((response) => {
         if (!response.ok || !response.body) {
-          return;
+          throw new Error(`自动写作进度流连接失败: ${response.status}`);
         }
         const task = tasks.value[projectName];
         if (task) task.sseConnected = true;
 
-        const reader = response.body.getReader();
-        const decoder = new TextDecoder();
-        let buffer = '';
-
-        function read(): Promise<void> {
-          return reader.read().then(({ done, value }) => {
-            if (done) {
-              const t = tasks.value[projectName];
-              if (t) t.sseConnected = false;
-              return;
+        return consumeSSEReader(response.body.getReader(), {
+          signal: controller.signal,
+          onEvent: ({ data }) => {
+            _sseReconnectAttempts[projectName] = 0;
+            const parsed = parseSSEEventPayload(data);
+            const seq = Number(parsed.streamSeq || 0);
+            if (Number.isInteger(seq) && seq > 0) {
+              _sseAfterSeq[projectName] = Math.max(_sseAfterSeq[projectName] || 0, seq);
             }
-            buffer += decoder.decode(value, { stream: true });
-            // 解析 SSE 事件
-            const lines = buffer.split('\n');
-            // 保留最后一行（可能不完整）
-            buffer = lines.pop() || '';
-
-            for (const line of lines) {
-              if (line.startsWith('data: ')) {
-                try {
-                  const data = JSON.parse(line.slice(6));
-                  _handleProgressEvent(projectName, data);
-                } catch {
-                  // 解析失败静默忽略
-                }
-              }
-              // 忽略 heartbeat（: heartbeat）和其他注释行
-            }
-
-            return read();
-          });
-        }
-
-        return read();
+            _handleProgressEvent(projectName, parsed);
+          },
+        });
       })
       .catch(() => {
-        const t = tasks.value[projectName];
-        if (t) t.sseConnected = false;
-        // SSE 断连后回退到轮询模式，轮询已在 _startPolling 中运行
+        // 主动中止、网络断线与服务端自然结束统一在 finally 判定是否需要恢复。
+      })
+      .finally(() => {
+        if (_sseControllers[projectName] !== controller) return;
+        delete _sseControllers[projectName];
+        const task = tasks.value[projectName];
+        if (task) task.sseConnected = false;
+        if (!controller.signal.aborted) {
+          _scheduleProgressReconnect(projectName);
+        }
       });
   }
 
@@ -537,6 +557,8 @@ export const useDirectorAutoWriteStore = defineStore('directorAutoWrite', () => 
    * 断开指定项目的 SSE 观察者连接
    */
   function _disconnectProgressSSE(projectName: string): void {
+    _clearProgressReconnect(projectName);
+    delete _sseReconnectAttempts[projectName];
     const controller = _sseControllers[projectName];
     if (controller) {
       controller.abort();
@@ -583,6 +605,7 @@ export const useDirectorAutoWriteStore = defineStore('directorAutoWrite', () => 
     } else if (data.status === 'paused') {
       snap.status = 'chapter_paused';
       snap.nextChapterIndex = (data.next_chapter_index as number) ?? snap.nextChapterIndex;
+      _disconnectProgressSSE(projectName);
     } else if (data.status === 'complete') {
       snap.status = 'complete';
       // 完成时强制进度条到顶
@@ -592,11 +615,14 @@ export const useDirectorAutoWriteStore = defineStore('directorAutoWrite', () => 
       } else if (snap.totalScenes) {
         snap.completedScenes = snap.totalScenes;
       }
+      _disconnectProgressSSE(projectName);
     } else if (data.status === 'error') {
       snap.status = 'error';
       snap.lastError = (data.message as string) ?? snap.lastError;
+      _disconnectProgressSSE(projectName);
     } else if (data.status === 'cancelled') {
       snap.status = 'interrupted';
+      _disconnectProgressSSE(projectName);
     }
   }
 

@@ -103,6 +103,60 @@ def test_read_chapter_scene_reads_nested_persisted_arc(monkeypatch, tmp_path: Pa
     assert "嵌套目录中的正文" in result
 
 
+def test_agent_context_provider_lists_and_reads_novel_files(monkeypatch, tmp_path: Path) -> None:
+    from agents.context_provider import AgentContextProvider
+
+    monkeypatch.setattr("core.utils.USERDATA_ROOT", str(tmp_path))
+    stories_path = tmp_path / "uid_7" / "projects" / "demo" / "stories" / "第一卷"
+    stories_path.mkdir(parents=True)
+    novel_path = stories_path / "第一章.md"
+    arc_path = stories_path / "第一场.arc"
+    novel_path.write_text("这是小说正文。", encoding="utf-8")
+    arc_path.write_text("# 第一场\n[-1]\n这是剧本正文。", encoding="utf-8")
+
+    provider = AgentContextProvider("7", "demo")
+    scene_list = provider.get_scene_list()
+
+    assert "第一章" in scene_list
+    assert "第一场" in scene_list
+    novel_content = provider.get_scene_content("第一卷/第一章.md")
+    assert "```markdown" in novel_content
+    assert "这是小说正文。" in novel_content
+
+
+def test_scene_context_groups_nested_scene_files_by_chapter_identity(monkeypatch, tmp_path: Path) -> None:
+    from agents.routes.context_builder import build_scene_context
+    from story.file_naming import build_scene_story_filename
+
+    monkeypatch.setattr("core.utils.USERDATA_ROOT", str(tmp_path))
+    stories_path = tmp_path / "uid_32" / "projects" / "demo" / "stories"
+    chapter_one = stories_path / "第一章"
+    chapter_two = stories_path / "第二章"
+    chapter_one.mkdir(parents=True)
+    chapter_two.mkdir(parents=True)
+
+    files = [
+        (chapter_one, build_scene_story_filename(1, 1, "开端"), "# 开端\n[-1]\n第一章第一场。"),
+        (chapter_one, build_scene_story_filename(1, 2, "尾声"), "# 尾声\n[-1]\n第一章最后一场。"),
+        (chapter_two, build_scene_story_filename(2, 1, "承接"), "# 承接\n[-1]\n第二章已完成场景。"),
+        (chapter_two, build_scene_story_filename(2, 2, "当前"), "# 当前\n[-1]\n不应进入前文。"),
+    ]
+    for directory, filename, content in files:
+        (directory / filename).write_text(content, encoding="utf-8")
+
+    context = build_scene_context(
+        "32",
+        "demo",
+        1,
+        current_scene_index=1,
+    )
+
+    assert "第一章最后一场" in context
+    assert "第二章已完成场景" in context
+    assert "第一章第一场" not in context
+    assert "不应进入前文" not in context
+
+
 def test_patch_script_updates_nested_arc(monkeypatch, tmp_path: Path) -> None:
     from agents.tools.scriptwriter import patch_script
     from core.request_context import current_project_name, current_user_id

@@ -12,7 +12,6 @@ attachment_id = sha256(content)[:16]，天然去重：同一 user/project 下
 from __future__ import annotations
 
 import hashlib
-import json
 import os
 import shutil
 from dataclasses import dataclass
@@ -20,6 +19,7 @@ from datetime import datetime, timezone
 from typing import Any, Iterable, Optional
 
 from core.utils import get_project_path
+from core.json_state import load_json_file, save_json_file_atomic
 
 
 ATTACHMENTS_DIR_NAME = ".attachments"
@@ -180,8 +180,7 @@ def save_attachment(
     )
 
     # 覆盖 meta.json（即便是旧 id 也更新 filename/uploaded_at，以反映最近一次上传）
-    with open(_meta_path(user_id, project_name, attachment_id), "w", encoding="utf-8") as f:
-        json.dump(meta.to_dict(), f, ensure_ascii=False, indent=2)
+    save_json_file_atomic(_meta_path(user_id, project_name, attachment_id), meta.to_dict())
 
     return meta
 
@@ -193,12 +192,8 @@ def get_attachment_meta(user_id: str, project_name: str, attachment_id: str) -> 
     path = _meta_path(user_id, project_name, attachment_id)
     if not os.path.exists(path):
         return None
-    try:
-        with open(path, "r", encoding="utf-8") as f:
-            data = json.load(f)
-        return AttachmentMeta.from_dict(data) if isinstance(data, dict) else None
-    except Exception:
-        return None
+    data = load_json_file(path, dict)
+    return AttachmentMeta.from_dict(data) if isinstance(data, dict) and data else None
 
 
 def load_attachment_text(user_id: str, project_name: str, attachment_id: str) -> str:
@@ -237,8 +232,7 @@ def touch_last_referenced(user_id: str, project_name: str, attachment_id: str) -
         return
     meta.last_referenced_at = datetime.now(timezone.utc).isoformat()
     try:
-        with open(_meta_path(user_id, project_name, attachment_id), "w", encoding="utf-8") as f:
-            json.dump(meta.to_dict(), f, ensure_ascii=False, indent=2)
+        save_json_file_atomic(_meta_path(user_id, project_name, attachment_id), meta.to_dict())
     except Exception:
         pass
 

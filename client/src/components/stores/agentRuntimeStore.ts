@@ -26,17 +26,6 @@ type AgentRuntimeState = {
   loading: boolean;
 };
 
-function createDefaultSignalState(isBeaconOpen = false): AgentSignalState {
-  return {
-    isBeaconOpen,
-    hasHorn: false,
-    hasBaton: false,
-    allowedIntents: [],
-    beaconLocked: false,
-    hornLocked: false,
-  };
-}
-
 function normalizeSignalState(value: unknown): AgentSignalState {
   const record = value && typeof value === 'object' ? value as Record<string, unknown> : {};
   return {
@@ -55,39 +44,6 @@ function normalizeSignalStateMap(value: unknown): Record<string, AgentSignalStat
   if (!value || typeof value !== 'object') return {};
   const entries = Object.entries(value as Record<string, unknown>);
   return Object.fromEntries(entries.map(([agentId, state]) => [agentId, normalizeSignalState(state)]));
-}
-
-function normalizeAgentMessage(value: unknown): AgentMessage | null {
-  if (!value || typeof value !== 'object') return null;
-  const record = value as Record<string, unknown>;
-  const sender = typeof record.sender === 'string' ? record.sender : 'System';
-  const content = typeof record.content === 'string' ? record.content : '';
-  const intent = typeof record.intent === 'string' ? record.intent : undefined;
-  const senderInfo = record.senderInfo && typeof record.senderInfo === 'object'
-    ? record.senderInfo as Record<string, unknown>
-    : null;
-  const rawTimestamp = record.timestamp;
-  const timestamp = typeof rawTimestamp === 'number'
-    ? rawTimestamp
-    : typeof rawTimestamp === 'string'
-      ? Date.parse(rawTimestamp) || Date.now()
-      : Date.now();
-
-  return {
-    ...record,
-    sender,
-    senderInfo,
-    intent,
-    content,
-    timestamp,
-  };
-}
-
-function normalizeAgentMessageList(value: unknown): AgentMessage[] {
-  if (!Array.isArray(value)) return [];
-  return value
-    .map(normalizeAgentMessage)
-    .filter((item): item is AgentMessage => item !== null);
 }
 
 export const useAgentRuntimeStore = defineStore('agentRuntime', {
@@ -114,11 +70,11 @@ export const useAgentRuntimeStore = defineStore('agentRuntime', {
         if (response.ok) {
           this.signalStates = normalizeSignalStateMap(await response.json());
         } else {
-          this.mockBeaconData();
+          this.signalStates = {};
         }
       } catch (e: unknown) {
-        console.warn('Failed to fetch runtime signal states, using mock data:', e);
-        this.mockBeaconData();
+        console.warn('Failed to fetch runtime signal states:', e);
+        this.signalStates = {};
       } finally {
         this.loading = false;
       }
@@ -126,19 +82,7 @@ export const useAgentRuntimeStore = defineStore('agentRuntime', {
 
     async fetchAgentMessages(agentId: string | null | undefined) {
       if (!agentId) return;
-      try {
-        // Proposed endpoint: GET /api/agents/runtime/messages/{agent_id}
-        const response = await fetchWithAuth(`/api/agents/runtime/messages/${agentId}`);
-        if (response.ok) {
-          this.messageLogs[agentId] = normalizeAgentMessageList(await response.json());
-        } else {
-          // Mock data if backend not ready
-          this.mockMessageData(agentId);
-        }
-      } catch (e: unknown) {
-        console.warn(`Failed to fetch messages for ${agentId}, using mock data:`, e);
-        this.mockMessageData(agentId);
-      }
+      this.messageLogs[agentId] = [];
     },
 
     async toggleBeacon(agentId: string, active: boolean) {
@@ -151,12 +95,6 @@ export const useAgentRuntimeStore = defineStore('agentRuntime', {
 
         if (response.ok) {
           this.signalStates[agentId] = normalizeSignalState(await response.json());
-        } else {
-          if (this.signalStates[agentId]) {
-            this.signalStates[agentId].isBeaconOpen = active;
-          } else {
-            this.signalStates[agentId] = createDefaultSignalState(active);
-          }
         }
       } catch (e: unknown) {
         console.error('Failed to toggle beacon:', e);
@@ -173,10 +111,6 @@ export const useAgentRuntimeStore = defineStore('agentRuntime', {
 
         if (response.ok) {
           this.signalStates[agentId] = normalizeSignalState(await response.json());
-        } else {
-          if (this.signalStates[agentId]) {
-            this.signalStates[agentId].hasHorn = active;
-          }
         }
       } catch (e: unknown) {
         console.error('Failed to toggle horn:', e);
@@ -206,62 +140,6 @@ export const useAgentRuntimeStore = defineStore('agentRuntime', {
         ...message,
         timestamp: message.timestamp || Date.now()
       });
-    },
-
-    mockBeaconData() {
-      this.signalStates = {
-        agent_director: {
-          isBeaconOpen: true,
-          hasHorn: true,
-          hasBaton: false,
-          beaconLocked: true,
-          hornLocked: true,
-          allowedIntents: [],
-        },
-        agent_scriptwriter: {
-          isBeaconOpen: false,
-          hasHorn: false,
-          hasBaton: false,
-          beaconLocked: false,
-          hornLocked: false,
-          allowedIntents: ['write_scene', 'review_feedback'],
-        },
-        agent_critic: {
-          isBeaconOpen: false,
-          hasHorn: false,
-          hasBaton: false,
-          beaconLocked: false,
-          hornLocked: false,
-          allowedIntents: ['critique_script'],
-        },
-        agent_showrunner: {
-          isBeaconOpen: false,
-          hasHorn: false,
-          hasBaton: false,
-          beaconLocked: false,
-          hornLocked: false,
-          allowedIntents: ['coordinate_flow'],
-        },
-      };
-    },
-
-    mockMessageData(agentId: string) {
-      if (!this.messageLogs[agentId]) {
-        this.messageLogs[agentId] = [
-          {
-            sender: 'System',
-            intent: 'init',
-            content: `Initial message for ${agentId}`,
-            timestamp: Date.now() - 5000
-          },
-          {
-            sender: 'Showrunner',
-            intent: 'coordinate',
-            content: `Hello ${agentId}, please start working on the scene.`,
-            timestamp: Date.now() - 2000
-          }
-        ];
-      }
     }
   }
 });

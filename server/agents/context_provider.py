@@ -11,6 +11,7 @@ from typing import Optional, List, Dict, Any
 from core.utils import get_project_path, get_project_stories_path
 from agents.routes.context_builder import build_story_tags_hint, load_project_context_bundle
 from core.project_settings import get_project_story_tags
+from story.file_naming import resolve_story_file_path
 
 
 class AgentContextProvider:
@@ -164,8 +165,9 @@ class AgentContextProvider:
                     if os.path.isdir(item_path):
                         items.append(f"{prefix}📁 {item}/")
                         items.extend(scan_dir(item_path, prefix + "  "))
-                    elif item.endswith(".arc"):
-                        items.append(f"{prefix}📄 {item[:-4]}")
+                    elif item.lower().endswith((".arc", ".md")):
+                        display_name, _ = os.path.splitext(item)
+                        items.append(f"{prefix}📄 {display_name}")
                 return items
             
             file_list = scan_dir(stories_path)
@@ -185,17 +187,15 @@ class AgentContextProvider:
             return ""
         try:
             stories_path = get_project_stories_path(self.user_id, self.project_name)
-            full_path = os.path.join(stories_path, file_path)
-            if not full_path.endswith(".arc"):
-                full_path += ".arc"
-            
-            if not os.path.exists(full_path):
+            full_path, file_format, _ = resolve_story_file_path(stories_path, file_path)
+            if not full_path or not file_format or not os.path.exists(full_path):
                 return ""
             
             with open(full_path, "r", encoding="utf-8") as f:
                 content = f.read()
 
-            return f"### 场景内容: {file_path}\n```arc\n{content}\n```"
+            code_language = "markdown" if file_format == "novel" else "arc"
+            return f"### 场景内容: {file_path}\n```{code_language}\n{content}\n```"
         except Exception as e:
             print(f"[ContextProvider] Error loading scene: {e}")
             return ""

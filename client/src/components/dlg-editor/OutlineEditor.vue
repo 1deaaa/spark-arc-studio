@@ -76,7 +76,7 @@ import { NButton, NIcon, useMessage, useDialog } from 'naive-ui';
 import SparkTag from '../share/SparkTag.vue';
 import { Clock, FileText, Plus, Save, Sparkles, Workflow } from '@lucide/vue';
 import OutlineNode from './OutlineNode.vue';
-// ScriptGenerationModal 已废弃，Auto Write 已迁移到 DirectorAutoWriteOverlay
+// Auto Write 统一由 DirectorAutoWriteOverlay 承载
 import { exportOutlineToFiles } from '@/services/api';
 import { useProjectStore } from '@/components/stores/projectStore';
 import bus from '@/eventBus';

@@ -3,10 +3,56 @@ from __future__ import annotations
 import asyncio
 import inspect
 import json
+import threading
+import time
+from concurrent.futures import ThreadPoolExecutor
 from pathlib import Path
 
 from agents.story_memory import StoryMemoryFacade
 from agents.tools.registry import get_tools_for_agent
+
+
+def test_story_memory_serializes_same_project_updates(monkeypatch, tmp_path: Path) -> None:
+    monkeypatch.setattr("core.utils.USERDATA_ROOT", str(tmp_path))
+    (tmp_path / "uid_31" / "projects" / "demo").mkdir(parents=True)
+
+    original_extract = StoryMemoryFacade.extract_state_delta
+    active = 0
+    max_active = 0
+    counter_lock = threading.Lock()
+
+    def slow_extract(self, *args, **kwargs):
+        nonlocal active, max_active
+        with counter_lock:
+            active += 1
+            max_active = max(max_active, active)
+        try:
+            time.sleep(0.03)
+            return original_extract(self, *args, **kwargs)
+        finally:
+            with counter_lock:
+                active -= 1
+
+    monkeypatch.setattr(StoryMemoryFacade, "extract_state_delta", slow_extract)
+
+    def record(scene_index: int) -> None:
+        StoryMemoryFacade("31", "demo").record_scene_write(
+            scene_text=f"第 {scene_index + 1} 场正文。",
+            chapter_index=0,
+            scene_index=scene_index,
+            scene_title=f"场景 {scene_index + 1}",
+            use_llm_extractor=False,
+        )
+
+    with ThreadPoolExecutor(max_workers=2) as executor:
+        futures = [executor.submit(record, index) for index in range(2)]
+        for future in futures:
+            future.result(timeout=2)
+
+    state = StoryMemoryFacade("31", "demo").load_state()
+    assert max_active == 1
+    assert [scene["scene_id"] for scene in state["scenes"]] == ["ch001-sc001", "ch001-sc002"]
+    assert not list((tmp_path / "uid_31" / "projects" / "demo" / ".story_memory").glob("*.tmp"))
 
 
 def test_story_memory_records_scene_and_builds_task_pack(monkeypatch, tmp_path: Path) -> None:

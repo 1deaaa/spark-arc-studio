@@ -96,7 +96,10 @@ class LLMConfigGUI(
                 self.root.after(0, self.root.destroy)
                 return
 
-            self.ai_manager.ensure_database_ready()
+            from core.auto_migrate import run_db_upgrade
+
+            run_db_upgrade("llm", _SERVER_DIR)
+            self.ai_manager.initialize_defaults()
             self.load_config_from_db()
         except Exception as e:
             messagebox.showerror("初始化失败", f"GUI 启动失败: {e}")

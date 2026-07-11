@@ -37,6 +37,7 @@ from .storage import (
     save_attachment,
     touch_last_referenced,
 )
+from .gc import collect_orphan_attachments
 
 __all__ = [
     "AttachmentMeta",
@@ -50,4 +51,5 @@ __all__ = [
     "load_chunks",
     "save_attachment",
     "touch_last_referenced",
+    "collect_orphan_attachments",
 ]

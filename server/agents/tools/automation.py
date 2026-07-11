@@ -110,7 +110,7 @@ def trigger_auto_write(
 
     total_scenes = sum(len(ch.get("children") or []) for ch in chapter_nodes[start_chapter_index:])
 
-    start_auto_write_background(
+    start_result = start_auto_write_background(
         user_id=str(user_id),
         project_name=project_name,
         outline=outline,
@@ -122,6 +122,8 @@ def trigger_auto_write(
         auto_review=auto_review,
         from_director=True,
     )
+    if not start_result.started:
+        return f"触发写作失败：{start_result.error or '当前项目已有自动写作任务正在运行。'}"
 
     remaining_chapters = total_chapters - start_chapter_index
 
