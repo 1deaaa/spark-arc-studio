@@ -203,21 +203,38 @@ It will automatically detect server APIs upon startup and attempt to connect.
 To make it easier for everyone to experience, I maintain a server instance. If you do not start your own server, the client will automatically select mine, where you can register to experience the platform.
 **Due to limited time and funding, I cannot guarantee stability. Therefore, this test instance may be frequently inaccessible. Please do not store important data on it. Deploy your own server for serious use.**
 
-### Option 1: Windows One-Click Launcher (Recommended for Beginners)
+### Option 1: Managed Desktop Launcher (Recommended for Beginners)
 
-Considering Docker's resource load and potential configuration issues, we provide a one-click startup script for Windows users.
+The GitHub Release desktop Launcher supports Windows, macOS, and Linux. It is the low-barrier path: install the desktop package, then let Launcher prepare the local backend.
 
-**System Requirements**: Windows 10 or higher.
+**Requirements**:
 
-#### How to Use
+- Release Launcher users do **not** need system Git or Node.js. Launcher uses an embedded Git implementation and a private managed Node.js runtime.
+- On macOS and Linux, the portable Python bootstrap still needs the normal base tools `bash`, `curl`, and `tar`.
+- Source users who clone the repository and run `start.bat` / `start.sh` still need Git for cloning and Node.js 20+ for the frontend build.
 
-1. Clone (downloading as a zip is not recommended, as you won't receive updates) this repository to an empty folder: `git clone https://github.com/1deaaa/spark-arc-studio`
-2. **Double-click `start.bat` in the project root directory.**
-3. On first run, it will automatically download portable Python (approx. 40MB) and install dependencies without any manual intervention.
-4. After installation, the backend service will start automatically.
-5. In subsequent runs, the script will detect the deployment flag and **skip installation, launching directly**.
+#### How to Use the Release Launcher
 
-Access Address: **<http://localhost:6688>**, or download the client from Releases (recommended).
+1. Download and open the desktop package from GitHub Releases.
+2. Choose **Start Local Backend** when no local backend is detected.
+3. Launcher downloads its managed `main` checkout into `~/.sparkarc/sparkarc-server`, then prepares private Node.js, portable Python, and locked dependencies.
+4. The local backend starts at **<http://localhost:6688>**. Launcher only updates this managed checkout; it never overwrites a manual clone, a `dev` worktree, or local source edits.
+5. Launcher checks `main` for updates and asks before applying an update. It stops its own managed service before switching code, while retaining user data and runtime caches.
+6. Launcher shell updates are discovered directly from GitHub Releases. When the API is rate-limited, it falls back to GitHub's standard Release redirect page and available mirrors; the first release only opens the matching download page and uses no custom update manifest.
+
+#### Source Script Path
+
+Clone the repository with Git, then run the root script:
+
+```bash
+git clone https://github.com/1deaaa/spark-arc-studio
+cd spark-arc-studio
+```
+
+- Windows: double-click `start.bat`
+- macOS / Linux: run `bash start.sh`
+
+The scripts reuse their deployment marker on later launches. You own branch selection and `git pull` timing on this path. See the [managed Launcher deployment design](docs/local-deployment-manager.zh-CN.md) for the ownership and update boundaries.
 For mobile devices, simply access **<http://192.168.x.x(your_lan_ip):6688>**.
 If you want remote access, you can learn about intranet penetration (if you have a server, you probably won't use this method anyway ~~~).
 
@@ -326,7 +343,7 @@ SparkArc's backend directly hosts the frontend pages. Once self-deployment is co
 * Local Bare-Metal Launch: `http://localhost:6688`
 * Remote Server Deployment: `http://your_server_address:port`
 
-The client provided in GitHub Releases is merely a convenient shell/frontend portal and does not automatically connect to your private backend. **If you download the desktop or mobile client, please change the default server address to your own actual address before logging in**. The default address may point to the official instance hosted by the maintainer, which is not suitable for private deployment users.
+The desktop client from GitHub Releases first detects local backends (`6688` / `7788`) and can prepare its managed local backend through Launcher. For an existing private or remote backend, configure the actual server address before signing in. Mobile clients cannot deploy a backend locally and must be pointed at a PC or server address. The default address may point to the maintainer's demo instance and is not suitable for long-term private use.
 
 Common configuration entries:
 * Desktop client accessing local backend: `http://localhost:6688` or `http://localhost:7788`

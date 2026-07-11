@@ -17,18 +17,9 @@ PYTHON_ENV="$SERVER_DIR/.runtime/python"
 MARKER_FILE="$PYTHON_ENV/.deploy_complete"
 PYTHON_EXE="$PYTHON_ENV/bin/python3"
 CLIENT_DIR="$(pwd)/client"
-CLIENT_BUILD_SCRIPT="$CLIENT_DIR/build-frontend.ps1"
+CLIENT_BUILD_SCRIPT="$CLIENT_DIR/build-frontend.mjs"
 
 echo "[launcher] Running environment deployment..."
-
-# ===== 并行启动前端构建（如果脚本存在）=====
-if [ -f "$CLIENT_BUILD_SCRIPT" ] && command -v pwsh >/dev/null 2>&1; then
-    echo "[launcher] Starting frontend build in parallel..."
-    # 前端构建脚本自己写日志到 client/.frontend_build.log
-    nohup pwsh -NoProfile -ExecutionPolicy Bypass -File "$CLIENT_BUILD_SCRIPT" >/dev/null 2>&1 &
-elif [ -f "$CLIENT_BUILD_SCRIPT" ]; then
-    echo "[launcher] PowerShell not found, skipping parallel frontend build."
-fi
 
 # ===== 部署后端环境 =====
 bash "$SERVER_DIR/pyloader.unix.sh"
@@ -37,8 +28,8 @@ if [ $? -ne 0 ]; then
     exit 1
 fi
 
-# 记录当前 SparkArc 项目根目录到用户目录，方便 launcher 后续定位
-"$PYTHON_EXE" -X utf8 -c "from core.service_registry import record_service_install; record_service_install('$(pwd)')"
+# 通过环境变量传递路径，避免目录名中的单引号破坏 Python 代码字符串。
+SPARKARC_SERVICE_PROJECT_ROOT="$(pwd)" "$PYTHON_EXE" -X utf8 -c 'import os; from core.service_registry import record_service_install; record_service_install(os.environ["SPARKARC_SERVICE_PROJECT_ROOT"])'
 
 if [ ! -f "$MARKER_FILE" ]; then
     echo "[ERROR] Deployment script finished but marker file missing. Aborting."
@@ -49,6 +40,19 @@ if [ ! -x "$PYTHON_EXE" ]; then
     echo "[ERROR] Python executable not found: $PYTHON_EXE"
     exit 1
 fi
+
+if [ ! -f "$CLIENT_BUILD_SCRIPT" ]; then
+    echo "[ERROR] Frontend build script not found: $CLIENT_BUILD_SCRIPT"
+    exit 1
+fi
+
+if ! command -v node >/dev/null 2>&1; then
+    echo "[ERROR] Node.js was not found. Use Launcher managed deployment or install Node.js 20+."
+    exit 1
+fi
+
+echo "[launcher] Building frontend..."
+node "$CLIENT_BUILD_SCRIPT"
 
 # ===== 启动后端 =====
 echo "[launcher] Starting SparkArc backend..."

@@ -110,9 +110,10 @@ chat_system: |
 
   ## 工作追踪规范（work_tracker）
   - 当用户交给你**多场景/多章节**的写作任务时，在开始前先调用 `work_tracker(action="read")` 检查是否有未完成的历史进度。
-  - 若有历史进度，向用户简短说明后从断点继续；若为全新任务，用 `work_tracker(action="update")` 创建写作清单，逐一列出每个待写场景/章节。
-  - 每完成一个场景或章节后，立即用 `work_tracker(action="update")` 将对应条目状态更新为 `completed`。
-  - 全部完成后，调用 `work_tracker(action="clear")`。
+  - 若有历史进度，向用户简短说明后从断点继续；若为全新任务，用 `work_tracker(action="update", overwrite=true)` 创建写作清单，逐一列出每个待写场景/章节。
+  - 每完成一个场景或章节后，立即用 `work_tracker(action="update", operations=[...])` 对对应任务 ID 执行 `set_status=completed`；可以在同一次调用中把下一项标记为 `in_progress`。
+  - 新增、插入、修改、删除分别使用 `add`、`insert`、`edit`、`delete`。完成任务必须标记 `completed`，只有用户明确取消且彻底不再需要的任务才能删除。
+  - 全部完成后保留最终任务板，禁止清空。只有创建全新任务板或用户明确要求重建时才使用 `overwrite=true`。
   - 单场景或单轮修改无需使用此工具。
 
 tool_rules: |

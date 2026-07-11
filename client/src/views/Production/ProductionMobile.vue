@@ -14,42 +14,26 @@
         </n-button>
       </div>
 
-      <!-- 顶部操作栏（仅剧本模式） -->
-      <div v-if="!isNovelMode" class="detail-top-actions">
-        <n-button
-          secondary
-          size="small"
-          @click="showNodeEditor = true"
-          :disabled="!sceneStore.selectionType"
-        >
-          <template #icon><n-icon :component="Pencil" /></template>
-          {{ t('views.production.mobile.editNode') }}
-        </n-button>
-        <n-button
-          secondary
-          size="small"
-          @click="showRuntimeTestDrawer = true"
-          :disabled="!currentScene"
-        >
-          <template #icon><n-icon :component="RadioTower" /></template>
-          {{ t('views.production.mobile.triggerTest') }}
-        </n-button>
-        <n-button
-          type="primary"
-          secondary
-          size="small"
-          @click="showAiDrawer = true"
-          :disabled="!currentScene"
-        >
-          <template #icon><n-icon :component="Sparkles" /></template>
-          {{ t('views.production.mobile.sceneGeneration') }}
-        </n-button>
-      </div>
-
       <!-- 剧情阅读区 -->
       <div class="detail-content">
         <DialogueTree v-if="workspaceMode === 'script'" />
         <NovelReader v-else :content="typeof sceneStore.scriptData === 'string' ? sceneStore.scriptData : ''" />
+      </div>
+
+      <!-- 底部创作工具栏（仅剧本模式） -->
+      <div v-if="!isNovelMode" class="detail-bottom-actions">
+        <n-button quaternary @click="showNodeEditor = true" :disabled="!sceneStore.selectionType">
+          <template #icon><n-icon :component="Pencil" /></template>
+          {{ t('views.production.mobile.editNode') }}
+        </n-button>
+        <n-button quaternary @click="showRuntimeTestDrawer = true" :disabled="!currentScene">
+          <template #icon><n-icon :component="RadioTower" /></template>
+          {{ t('views.production.mobile.triggerTest') }}
+        </n-button>
+        <n-button type="primary" @click="showAiDrawer = true" :disabled="!currentScene">
+          <template #icon><n-icon :component="Sparkles" /></template>
+          {{ t('views.production.mobile.sceneGeneration') }}
+        </n-button>
       </div>
 
     </template>
@@ -57,38 +41,8 @@
     <!-- 场景列表视图 -->
     <template v-else>
       <n-spin :show="loading" class="production-list-state">
-        <section class="mobile-workbench-panel">
-          <div class="workbench-heading">
-            <div class="workbench-copy">
-              <span class="workbench-kicker">{{ t('views.production.mobile.workbenchKicker') }}</span>
-              <h3>{{ isNovelMode ? t('views.production.mobile.workbenchTitleNovel') : t('views.production.mobile.workbenchTitleScript') }}</h3>
-            </div>
-            <div class="workbench-heading-actions">
-              <SparkTag :type="isNovelMode ? 'warning' : 'info'" size="small">
-                {{ isNovelMode ? t('views.scriptWriter.desktop.modeNovel') : t('views.scriptWriter.desktop.modeScript') }}
-              </SparkTag>
-              <n-dropdown
-                v-if="isNovelMode"
-                trigger="click"
-                :options="submissionExportOptions"
-                :disabled="!projectId || exportingSubmission"
-                @select="handleSubmissionExport"
-              >
-                <n-button
-                  class="submission-platform-button mobile"
-                  secondary
-                  size="small"
-                  :loading="exportingSubmission"
-                  :disabled="!projectId"
-                >
-                  <template #icon><n-icon :component="Send" /></template>
-                  {{ t('components.novelEditor.submissionExport.button') }}
-                </n-button>
-              </n-dropdown>
-            </div>
-          </div>
-
-          <div class="file-selector-bar">
+        <header class="workbench-context-bar">
+          <div class="file-selector-row">
             <n-select
               v-model:value="selectedFilePath"
               :options="groupedStoryOptions"
@@ -97,86 +51,85 @@
               clearable
               @update:value="handleFileChange"
             />
-          </div>
-
-          <div class="workbench-stats">
-            <div class="workbench-stat">
-              <span>{{ isNovelMode ? t('views.scriptWriter.desktop.chapterNav') : t('views.scriptWriter.desktop.sceneCount') }}</span>
-              <strong>{{ isNovelMode ? (selectedFilePath ? 1 : 0) : scenes.length }}</strong>
-            </div>
-            <div class="workbench-stat">
-              <span>{{ t('views.production.mobile.outlineStatus') }}</span>
-              <strong>{{ outlineReady ? t('views.production.mobile.outlineReady') : t('views.production.mobile.outlineMissing') }}</strong>
-            </div>
-          </div>
-
-          <div v-if="selectedFilePath" class="workbench-action-row">
-            <n-button
-              secondary
-              size="small"
-              @click="createScene"
+            <n-dropdown
+              v-if="isNovelMode"
+              trigger="click"
+              :options="submissionExportOptions"
+              :disabled="!projectId || exportingSubmission"
+              @select="handleSubmissionExport"
             >
-              <template #icon><n-icon :component="Plus" /></template>
-              {{ isNovelMode ? t('views.production.mobile.openNovelEditor') : t('views.production.mobile.createSceneScript') }}
-            </n-button>
-            <n-button
-              type="primary"
-              secondary
-              size="small"
-              :disabled="!outlineReady"
-              @click="openAutoWrite"
-            >
-              <template #icon><n-icon :component="SquarePen" /></template>
-              {{ t('views.production.mobile.autoGeneration') }}
-            </n-button>
+              <n-button
+                quaternary
+                circle
+                :loading="exportingSubmission"
+                :disabled="!projectId"
+                :aria-label="t('components.novelEditor.submissionExport.button')"
+              >
+                <template #icon><n-icon :component="Send" /></template>
+              </n-button>
+            </n-dropdown>
           </div>
+          <div class="workbench-status-line">
+            <span>
+              <n-icon :component="Layers3" size="14" />
+              {{ t('views.production.mobile.sceneQueueCount', { count: isNovelMode ? (selectedFilePath ? 1 : 0) : scenes.length }) }}
+            </span>
+            <span :class="{ 'is-warning': !outlineReady }">
+              <n-icon :component="outlineReady ? CircleCheck : CircleAlert" size="14" />
+              {{ outlineReady ? t('views.production.mobile.outlineReady') : t('views.production.mobile.outlineMissing') }}
+            </span>
+          </div>
+        </header>
 
-          <n-text v-if="selectedFilePath && !outlineReady" depth="3" class="auto-write-hint">
-            {{ t('views.production.mobile.needOutlineHint') }}
-          </n-text>
-        </section>
+        <div v-if="scenes.length > 0" class="scene-list-heading">
+          <strong>{{ t('views.production.mobile.sceneQueue') }}</strong>
+          <span>{{ scenes.length }}</span>
+        </div>
 
-        <!-- 场景卡片列表 -->
+        <!-- 场景队列 -->
         <div v-if="scenes.length > 0" class="scene-list">
-          <div
+          <button
             v-for="{ scene: s, summary, index: idx } in sceneCards"
             :key="String(s.clientId ?? idx)"
+            type="button"
             class="scene-card"
             :class="{ 'is-active': currentScene?.clientId === s.clientId }"
             @click="enterSceneDetail(s)"
           >
-            <div class="scene-card-header">
-              <span class="scene-card-name">{{ s.scene || t('views.production.mobile.sceneDefaultName', { index: idx + 1 }) }}</span>
-              <span class="scene-card-badges">
+            <span class="scene-card-index">{{ idx + 1 }}</span>
+            <span class="scene-card-body">
+              <span class="scene-card-header">
+                <span class="scene-card-name">{{ s.scene || t('views.production.mobile.sceneDefaultName', { index: idx + 1 }) }}</span>
                 <SparkTag :type="contentKindTagType(summary.kind)" size="small">{{ contentKindLabel(summary.kind) }}</SparkTag>
-                <SparkTag v-if="s.dia?.length" type="info" size="small">{{ s.dia.length }} {{ t('views.production.mobile.dialogueCount') }}</SparkTag>
               </span>
-            </div>
-            <div class="scene-card-intro" v-if="s.intro">{{ s.intro.substring(0, 80) }}{{ s.intro.length > 80 ? '…' : '' }}</div>
-            <div class="scene-card-runtime" v-if="runtimeMetaLine(summary)">
-              <n-icon :component="RadioTower" size="14" />
-              <span>{{ runtimeMetaLine(summary) }}</span>
-            </div>
-            <div class="scene-card-meta" v-if="s.guide">
-              <n-icon :component="BookOpen" size="14" />
-              <span>{{ s.guide.substring(0, 40) }}{{ s.guide.length > 40 ? '…' : '' }}</span>
-            </div>
-          </div>
+              <span class="scene-card-intro">
+                {{ s.intro || s.guide || t('views.production.mobile.noSceneSummary') }}
+              </span>
+              <span class="scene-card-meta-line">
+                <span>{{ s.dia?.length || 0 }} {{ t('views.production.mobile.dialogueCount') }}</span>
+                <span v-if="runtimeMetaLine(summary)">{{ runtimeMetaLine(summary) }}</span>
+              </span>
+            </span>
+            <n-icon :component="ChevronRight" size="17" class="scene-card-chevron" />
+          </button>
         </div>
 
         <!-- 空状态 -->
         <div v-else-if="!loading" class="empty-state">
-          <div class="empty-icon">
-            <svg width="48" height="48" viewBox="0 0 48 48" fill="none" xmlns="http://www.w3.org/2000/svg">
-              <rect x="6" y="8" width="36" height="32" rx="4" stroke="currentColor" stroke-width="2" opacity="0.3"/>
-              <path d="M16 20h16M16 26h10" stroke="currentColor" stroke-width="2" stroke-linecap="round" opacity="0.2"/>
-            </svg>
-          </div>
+          <n-icon :component="Clapperboard" size="40" class="empty-icon" />
           <p class="empty-text">{{ isNovelMode ? t('views.production.mobile.fileSceneHintNovel') : t('views.production.mobile.fileSceneHintScript') }}</p>
-          <n-button size="small" type="primary" @click="createScene" :disabled="!selectedFilePath">
-            {{ isNovelMode ? t('views.production.mobile.createSceneNovel') : t('views.production.mobile.createSceneScript') }}
-          </n-button>
         </div>
+
+        <footer class="workbench-bottom-actions">
+          <n-button secondary @click="createScene" :disabled="!selectedFilePath">
+            <template #icon><n-icon :component="isNovelMode ? BookOpen : Plus" /></template>
+            {{ isNovelMode ? t('views.production.mobile.openNovelEditor') : t('views.production.mobile.createSceneScript') }}
+          </n-button>
+          <n-button type="primary" :disabled="!selectedFilePath || !outlineReady" @click="openAutoWrite">
+            <template #icon><n-icon :component="Sparkles" /></template>
+            {{ t('views.production.mobile.autoGeneration') }}
+          </n-button>
+        </footer>
 
       </n-spin>
     </template>
@@ -302,7 +255,6 @@
       <n-drawer-content closable>
         <template #header>{{ t('views.production.mobile.sceneGeneration') }}</template>
         <div class="ai-drawer-body">
-          <p class="ai-hint">{{ t('views.production.mobile.sceneGenerationHint') }}</p>
           <AiPanel
             default-mode="multi-node"
           />
@@ -317,9 +269,9 @@
 
 <script setup lang="ts">
 import { ref, computed, h, onMounted, onUnmounted, inject, watch, type Ref } from 'vue';
-import { NIcon, NSpin, NButton, NInput, NInputNumber, NSelect, NDrawer, NDrawerContent, NTabs, NTabPane, NSwitch, NText, NDropdown, useMessage, type DropdownOption } from 'naive-ui';
+import { NIcon, NSpin, NButton, NInput, NInputNumber, NSelect, NDrawer, NDrawerContent, NTabs, NTabPane, NSwitch, NDropdown, useMessage, type DropdownOption } from 'naive-ui';
 import { useI18n } from 'vue-i18n';
-import { ArrowLeft, BookOpen, Clipboard, Pencil, Plus, RadioTower, Save, Send, Sparkles, SquarePen } from '@lucide/vue';
+import { ArrowLeft, BookOpen, ChevronRight, CircleAlert, CircleCheck, Clapperboard, Clipboard, Layers3, Pencil, Plus, RadioTower, Save, Send, Sparkles, SquarePen } from '@lucide/vue';
 import { useSceneStore, type SceneWithClientId } from '../../components/stores/sceneStore';
 import { useFileStore } from '../../components/stores/fileStore';
 import { getOutline } from '../../services/api';
@@ -652,173 +604,124 @@ onUnmounted(() => {
   flex-direction: column;
 }
 
-.mobile-workbench-panel {
-  display: flex;
-  flex-direction: column;
-  gap: 10px;
-  padding: 12px;
-  margin-bottom: 12px;
-  border: 1px solid var(--spark-border);
-  border-radius: 8px;
-  background: color-mix(in srgb, var(--spark-panel-bg) 94%, var(--spark-primary) 6%);
-}
-
-.workbench-heading {
-  display: flex;
-  align-items: flex-start;
-  justify-content: space-between;
-  gap: 12px;
-}
-
-.workbench-copy {
-  min-width: 0;
-}
-
-.workbench-heading-actions {
+.workbench-context-bar {
   flex: 0 0 auto;
   display: flex;
   flex-direction: column;
-  align-items: flex-end;
+  gap: 7px;
+  padding: 2px 2px 9px;
+  border-bottom: 1px solid var(--spark-border);
+}
+
+.file-selector-row {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  align-items: center;
   gap: 6px;
-  max-width: 52%;
 }
 
-.workbench-kicker {
-  display: block;
-  margin-bottom: 2px;
-  font-size: var(--spark-fs-3xs);
-  font-weight: 700;
-  color: var(--spark-primary);
-}
-
-.workbench-copy h3 {
-  margin: 0;
-  font-size: var(--spark-fs-md);
-  font-weight: 650;
-  color: var(--spark-text);
-}
-
-.file-selector-bar {
-  min-width: 0;
-}
-
-.submission-platform-button.mobile {
-  max-width: 100%;
-}
-
-.submission-platform-button.mobile :deep(.n-button__content) {
-  min-width: 0;
-  overflow: hidden;
-  white-space: nowrap;
-  text-overflow: ellipsis;
-}
-
-.workbench-stats {
-  display: grid;
-  grid-template-columns: repeat(2, minmax(0, 1fr));
+.workbench-status-line {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
   gap: 8px;
-}
-
-.workbench-stat {
-  min-width: 0;
-  padding: 8px 10px;
-  border: 1px solid color-mix(in srgb, var(--spark-border) 80%, transparent);
-  border-radius: 8px;
-  background: color-mix(in srgb, var(--spark-bg) 38%, transparent);
-}
-
-.workbench-stat span,
-.workbench-stat strong {
-  display: block;
-  min-width: 0;
-  overflow: hidden;
-  white-space: nowrap;
-  text-overflow: ellipsis;
-}
-
-.workbench-stat span {
-  font-size: var(--spark-fs-3xs);
   color: var(--spark-text-muted);
-}
-
-.workbench-stat strong {
-  margin-top: 2px;
   font-size: var(--spark-fs-xs);
-  color: var(--spark-text);
 }
 
-.workbench-action-row {
-  display: grid;
-  grid-template-columns: repeat(2, minmax(0, 1fr));
-  gap: 8px;
-}
-
-.workbench-action-row :deep(.n-button) {
+.workbench-status-line span {
   min-width: 0;
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
 }
 
-.workbench-action-row :deep(.n-button__content) {
-  min-width: 0;
-  overflow: hidden;
-  white-space: nowrap;
-  text-overflow: ellipsis;
+.workbench-status-line .is-warning {
+  color: var(--spark-warning);
 }
 
-/* 场景卡片列表 */
+.scene-list-heading {
+  flex: 0 0 auto;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 9px 4px 5px;
+  color: var(--spark-text-secondary);
+  font-size: var(--spark-fs-sm);
+}
+
+.scene-list-heading span {
+  color: var(--spark-text-muted);
+  font-size: var(--spark-fs-xs);
+}
+
+/* 场景队列 */
 .scene-list {
   flex: 1;
   min-height: 0;
-  display: flex;
-  flex-direction: column;
-  gap: 10px;
   overflow-y: auto;
   overscroll-behavior: contain;
-  padding-bottom: 12px;
+  padding-bottom: 6px;
 }
 
 .scene-card {
-  display: flex;
-  flex-direction: column;
-  gap: 6px;
-  padding: 12px 14px;
-  background: var(--spark-panel-bg);
-  border: 1px solid var(--spark-border);
-  border-radius: 12px;
+  width: 100%;
+  min-height: 76px;
+  display: grid;
+  grid-template-columns: 30px minmax(0, 1fr) auto;
+  align-items: center;
+  gap: 10px;
+  padding: 9px 5px;
+  background: transparent;
+  border: 0;
+  border-bottom: 1px solid color-mix(in srgb, var(--spark-border) 72%, transparent);
+  color: inherit;
+  text-align: left;
+  font: inherit;
   cursor: pointer;
-  transition: all 0.2s;
+  -webkit-tap-highlight-color: transparent;
 }
 
 .scene-card:active {
-  transform: scale(0.98);
-  background: rgba(var(--spark-primary-rgb), 0.04);
+  background: color-mix(in srgb, var(--spark-primary) 7%, transparent);
 }
 
 .scene-card.is-active {
-  border-color: rgba(var(--spark-primary-rgb), 0.4);
-  background: rgba(var(--spark-primary-rgb), 0.06);
+  background: color-mix(in srgb, var(--spark-primary) 6%, transparent);
+}
+
+.scene-card-index {
+  width: 28px;
+  height: 28px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  border-radius: 6px;
+  background: var(--spark-primary-dim);
+  color: var(--spark-primary);
+  font-size: var(--spark-fs-xs);
+  font-weight: 700;
+}
+
+.scene-card-body {
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 3px;
 }
 
 .scene-card-header {
   display: flex;
-  align-items: flex-start;
-  justify-content: space-between;
-  gap: 8px;
-}
-
-.scene-card-badges {
-  flex: 0 0 auto;
-  display: inline-flex;
   align-items: center;
-  justify-content: flex-end;
-  flex-wrap: wrap;
-  gap: 4px;
-  max-width: 42%;
+  justify-content: space-between;
+  gap: 6px;
 }
 
 .scene-card-name {
   min-width: 0;
-  font-size: var(--spark-fs-md);
-  font-weight: 600;
+  flex: 1;
+  font-size: var(--spark-fs-base);
+  font-weight: 650;
   color: var(--spark-text);
   white-space: nowrap;
   overflow: hidden;
@@ -826,43 +729,59 @@ onUnmounted(() => {
 }
 
 .scene-card-intro {
-  font-size: var(--spark-fs-sm);
-  color: var(--spark-text-secondary);
-  line-height: 1.5;
-  display: -webkit-box;
-  -webkit-line-clamp: 2;
-  -webkit-box-orient: vertical;
+  display: block;
   overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  font-size: var(--spark-fs-xs);
+  color: var(--spark-text-secondary);
 }
 
-.scene-card-runtime {
+.scene-card-meta-line {
   display: flex;
   align-items: center;
-  gap: 5px;
+  gap: 8px;
   min-width: 0;
   font-size: var(--spark-fs-xs);
-  color: var(--spark-primary);
+  color: var(--spark-text-muted);
 }
 
-.scene-card-runtime span {
+.scene-card-meta-line span {
   min-width: 0;
   overflow: hidden;
   white-space: nowrap;
   text-overflow: ellipsis;
 }
 
-.scene-card-meta {
-  display: flex;
-  align-items: center;
-  gap: 4px;
-  font-size: var(--spark-fs-xs);
+.scene-card-chevron {
   color: var(--spark-text-muted);
+}
+
+.workbench-bottom-actions {
+  flex: 0 0 auto;
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 8px;
+  padding: 9px 0 calc(var(--sab, 0px) + 2px);
+  border-top: 1px solid var(--spark-border);
+  background: var(--spark-bg);
+}
+
+.workbench-bottom-actions :deep(.n-button) {
+  min-width: 0;
+}
+
+.workbench-bottom-actions :deep(.n-button__content) {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
 }
 
 /* 空状态 */
 .empty-state {
   flex: 1;
-  min-height: 180px;
+  min-height: 0;
   display: flex;
   flex-direction: column;
   align-items: center;
@@ -908,41 +827,29 @@ onUnmounted(() => {
   overflow-y: auto;
   -webkit-overflow-scrolling: touch;
   border: 1px solid var(--spark-border);
-  border-radius: 12px;
+  border-radius: 6px;
   background: var(--spark-panel-bg);
   padding: 8px;
 }
 
-.detail-top-actions {
+.detail-bottom-actions {
+  flex: 0 0 auto;
   display: grid;
   grid-template-columns: repeat(3, minmax(0, 1fr));
   gap: 8px;
-  padding: 8px 0;
-  margin-bottom: 8px;
+  padding: 8px 0 calc(var(--sab, 0px) + 2px);
+  border-top: 1px solid var(--spark-border);
 }
 
-.detail-top-actions :deep(.n-button) {
+.detail-bottom-actions :deep(.n-button) {
   min-width: 0;
 }
 
-.detail-top-actions :deep(.n-button__content) {
+.detail-bottom-actions :deep(.n-button__content) {
   min-width: 0;
   overflow: hidden;
   white-space: nowrap;
   text-overflow: ellipsis;
-}
-
-/* 全自动生成入口 */
-.auto-write-entry {
-  display: flex;
-  flex-direction: column;
-  gap: 6px;
-  margin-bottom: 12px;
-}
-
-.auto-write-hint {
-  font-size: var(--spark-fs-xs);
-  line-height: 1.4;
 }
 
 /* 场景信息表单 */
@@ -1032,9 +939,4 @@ onUnmounted(() => {
   gap: 12px;
 }
 
-.ai-hint {
-  font-size: var(--spark-fs-sm);
-  color: var(--spark-text-muted);
-  margin: 0;
-}
 </style>

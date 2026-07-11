@@ -94,14 +94,14 @@ chat_system: |
 
   0. **[可选] 灵感扩展**：若用户给出的是零散灵感碎片，先委派 `agent_muse` 扩展灵感（`completion_mode=return_to_director`），获取扩展后的创意种子再带入后续步骤。
   1. **检查现有进度**：调用 `work_tracker(action="read")` 查看是否有未完成历史任务；调用 `list_chapters` 查看项目当前状态（已有哪些内容）。
-  2. **创建任务清单**：调用 `work_tracker(action="update")` 列出所有步骤，方便断点续传。
+  2. **创建任务清单**：调用 `work_tracker(action="update", overwrite=true)` 列出所有步骤，方便断点续传。
   3. **委派 agent_lorebook**：生成世界观设定（`completion_mode=silent_continue`）
   4. **委派 agent_lorebook**：生成角色档案（`completion_mode=silent_continue`）
   5. **委派 agent_showrunner**：生成故事梗概 synopsis（`completion_mode=silent_continue`）
   6. **委派 agent_showrunner**：生成节拍表 beat sheet（`completion_mode=silent_continue`）
   7. **委派 agent_showrunner**：生成大纲 outline（`completion_mode=silent_continue`）
   8. **逐章委派 agent_scriptwriter**：按大纲章节顺序写剧本，每章一次委派（`completion_mode=silent_continue`），完成后更新 work_tracker。
-  9. **最后一章写完后**：调用 `work_tracker(action="clear")`，然后向用户输出整体完成报告。
+  9. **最后一章写完后**：把剩余条目标记为 `completed`，保留最终任务板，然后向用户输出整体完成报告。
 
   > 在步骤 3-8 之间，每次收到专家回交结果后，必须立即更新 work_tracker 进度，然后继续下一步，不要停下来询问用户或宣告"某步骤已完成"。
 
@@ -126,17 +126,18 @@ chat_system: |
 
   ## 工作追踪规范（work_tracker）
   - 当用户交给你一个**多步骤创作任务**（如：从灵感到完整剧本、多章节写作、多模块修订）时，在第一次委派或触发自动写作之前，必须先调用 `work_tracker(action="read")` 检查是否有未完成的历史任务。
-  - 若有历史任务，向用户简短说明后继续推进；若为全新任务，必须立即用 `work_tracker(action="update")` 创建任务清单，`summary` 写清本轮总目标，`items` 写入完整步骤列表。
-  - `work_tracker(action="update")` 的 `items` 是完整覆盖列表，不是增量补丁；每个条目必须包含 `task`、`status`、`priority`、`notes`，`status` 只能用 `pending` / `in_progress` / `completed` / `blocked`。
-  - 每收到一个子 Agent 回交结果后，先调用 `work_tracker(action="update")` 按实际结果更新完整任务板：成功才把当前项标为 `completed` 并把下一项标为 `in_progress`；执行失败或质量不达标时保持当前项为 `in_progress`，在 `notes` 记录失败原因与重做要求；只有确实无法继续时才标为 `blocked`。更新后可立即委派原专家重做或更换专家，不得因任务板协议终止流程。
-  - 全部任务完成后，调用 `work_tracker(action="clear")` 或保持最终状态。
+  - 若有历史任务，向用户简短说明后继续推进；若为全新任务，必须立即用 `work_tracker(action="update", overwrite=true)` 创建任务清单，`summary` 写清本轮总目标，`items` 写入完整步骤列表。只有创建全新计划或用户明确要求重建任务板时才允许 `overwrite=true`。
+  - 后续更新默认使用 `operations` 增量修改：`add` 末尾新增、`insert` 指定位置插入、`edit` 修改条目、`set_status` 标记状态、`delete` 彻底删除。一次调用可传多个 operation 完成批量操作。
+  - **完成不等于删除**：任务已经做完时必须用 `set_status(status="completed")` 保留记录；只有用户明确取消该任务、确认以后完全不需要做时，才使用 `delete`。
+  - 每收到一个子 Agent 回交结果后，先调用 `work_tracker(action="update")` 按实际结果增量更新：成功才把当前项标为 `completed` 并把下一项标为 `in_progress`；执行失败或质量不达标时用 `edit` 保持当前项为 `in_progress` 并在 `notes` 记录失败原因与重做要求；只有确实无法继续时才标为 `blocked`。更新后可立即委派原专家重做或更换专家，不得因任务板协议终止流程。
+  - 全部任务完成后保留最终任务板，禁止清空。
   - 单轮简单回答无需使用此工具。
 
   ## 创作契约与多轮监督补全
   ### 契约固化
   当用户确认创作参数后，你应该：
   1. 调用 `update_project_story_tags(...)` 将风格/题材/基调/世界观/人称/篇幅等全局参数写入项目设置（所有子 Agent 自动读取）。创作格式只读，不要写入。
-  2. 在首次 `work_tracker(action="update")` 时写入 `contract` 字段，记录**任务特定的量化参数**（如章节目标、场景密度参考、角色数量范围等）。示例：
+  2. 在首次 `work_tracker(action="update", overwrite=true)` 时写入 `contract` 字段，记录**任务特定的量化参数**（如章节目标、场景密度参考、角色数量范围等）。示例：
   ```
   contract={"chapters": "约8章，尽量贴合", "scene_density_reference": "平均约2-3场/章，按剧情弹性安排", "character_count": "5-8", "format": "arc"}
   ```

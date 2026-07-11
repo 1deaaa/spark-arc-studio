@@ -2,14 +2,16 @@
   <div class="work-tracker-board">
     <div v-if="parsed.summary" class="wt-summary">{{ parsed.summary }}</div>
     <div v-if="parsed.items.length" class="wt-items">
-      <div v-for="(item, index) in parsed.items" :key="index" class="wt-item" :class="`is-${item.status}`">
+      <div v-for="(item, index) in parsed.items" :key="item.id || index" class="wt-item" :class="`is-${item.status}`">
         <span class="wt-item-dot" :class="`is-${item.status}`" />
         <span v-if="item.priority" class="wt-item-priority" :class="`is-${item.priority}`">{{ item.priority }}</span>
         <span class="wt-item-task">{{ item.task }}</span>
         <span v-if="item.notes" class="wt-item-notes">{{ item.notes }}</span>
       </div>
     </div>
-    <div v-if="!parsed.summary && !parsed.items.length" class="wt-empty">{{ parsed.raw }}</div>
+    <div v-if="!parsed.summary && !parsed.items.length" class="wt-empty">
+      {{ t('components.chatPanel.noProgressBoard') }}
+    </div>
     <div v-if="parsed.updatedAt" class="wt-updated">
       {{ t('components.chatMessageList.workTrackerUpdatedAt', { time: formatRelativeTime(parsed.updatedAt, t) }) }}
     </div>
@@ -31,7 +33,10 @@ const parsed = computed(() => parseWorkTrackerResult(props.result));
 
 <style scoped>
 .work-tracker-board {
+  width: 100%;
   min-width: 0;
+  max-width: 100%;
+  overflow-x: hidden;
   color: var(--spark-text);
 }
 
@@ -42,6 +47,8 @@ const parsed = computed(() => parseWorkTrackerResult(props.result));
   color: var(--spark-primary);
   font-size: var(--spark-fs-xs);
   font-weight: 600;
+  overflow-wrap: anywhere;
+  word-break: break-word;
 }
 
 .wt-items {
@@ -57,6 +64,8 @@ const parsed = computed(() => parseWorkTrackerResult(props.result));
   color: var(--spark-text);
   font-size: var(--spark-fs-xs);
   line-height: 1.4;
+  max-width: 100%;
+  overflow: hidden;
 }
 
 .wt-item.is-completed {
@@ -106,6 +115,9 @@ const parsed = computed(() => parseWorkTrackerResult(props.result));
   font-weight: 600;
   letter-spacing: 0;
   text-transform: uppercase;
+  max-width: 100%;
+  overflow: hidden;
+  text-overflow: ellipsis;
 }
 
 .wt-item-priority.is-high {
@@ -126,8 +138,9 @@ const parsed = computed(() => parseWorkTrackerResult(props.result));
 .wt-item-task {
   flex: 1;
   min-width: 0;
-  overflow-wrap: break-word;
+  overflow-wrap: anywhere;
   word-break: break-word;
+  white-space: normal;
 }
 
 .wt-item-notes {
@@ -137,7 +150,9 @@ const parsed = computed(() => parseWorkTrackerResult(props.result));
   color: var(--spark-text-secondary);
   font-size: var(--spark-fs-2xs);
   opacity: 0.8;
-  overflow-wrap: break-word;
+  overflow-wrap: anywhere;
+  word-break: break-word;
+  white-space: normal;
 }
 
 .wt-empty {
@@ -146,6 +161,7 @@ const parsed = computed(() => parseWorkTrackerResult(props.result));
   font-size: var(--spark-fs-xs);
   opacity: 0.7;
   white-space: pre-wrap;
+  overflow-wrap: anywhere;
 }
 
 .wt-updated {
@@ -167,4 +183,15 @@ const parsed = computed(() => parseWorkTrackerResult(props.result));
     animation: none;
   }
 }
+
+:global(html.viewport-mobile) .wt-items {
+  padding-inline: 4px;
+}
+
+:global(html.viewport-mobile) .wt-item {
+  gap: 5px;
+  padding: 7px 0;
+  align-items: flex-start;
+}
+
 </style>

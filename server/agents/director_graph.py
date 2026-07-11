@@ -240,17 +240,9 @@ def _director_tracker_has_open_items(user_id: str, project_name: str) -> bool:
     if not user_id or not project_name:
         return False
     try:
-        from core.utils import get_project_path
+        from agents.work_tracker import load_work_tracker
 
-        tracker_path = os.path.join(
-            get_project_path(user_id, project_name),
-            "work_tracker_agent_director.json",
-        )
-        if not os.path.exists(tracker_path):
-            return False
-        with open(tracker_path, "r", encoding="utf-8") as f:
-            data = json.load(f)
-        items = data.get("items") if isinstance(data, dict) else []
+        items = load_work_tracker(user_id, project_name, "agent_director").get("items") or []
         if not isinstance(items, list):
             return False
         return any(
@@ -274,18 +266,21 @@ def _is_tracker_progress_update(tool_name: str, tool_args: Any, tool_result: Any
         if "items" in tool_args
         else tool_args.get("tasks", tool_args.get("todo_items"))
     )
-    if not isinstance(items, list) or not items:
+    operations = tool_args.get("operations")
+    has_overwrite = bool(tool_args.get("overwrite")) and isinstance(items, list)
+    has_operations = isinstance(operations, list) and bool(operations)
+    if not has_overwrite and not has_operations:
         return False
 
     result_text = str(tool_result or "")
-    return "执行失败" not in result_text and "未知操作类型" not in result_text
+    return "任务板更新失败" not in result_text and "未知操作类型" not in result_text
 
 
 def _tracker_update_required_message() -> str:
     """返回不会把失败回交误判为完成的任务板协议提示。"""
     return (
         "进度板协议错误：刚收到专家回交结果，且导演任务板仍有未完成条目。"
-        "请先调用 work_tracker(action=\"update\", items=[完整任务列表])，并按实际结果更新："
+        "请先调用 work_tracker(action=\"update\", operations=[增量操作])，并按实际结果更新："
         "成功才标为 completed；执行失败或质量不达标时保持 in_progress，"
         "在 notes 记录失败原因和重做要求；只有确实无法继续时才标为 blocked。"
         "更新后可以立即重新委派原专家重做，也可以更换专家，不会终止当前流程。"

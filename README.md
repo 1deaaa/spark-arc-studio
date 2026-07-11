@@ -201,7 +201,7 @@ flowchart TB
 
 ## 🚀 快速开始
 
-⚠️本项目服务端、客户端分离，**必须要按以下文档部署服务端才能使用**。
+⚠️本项目服务端、客户端分离，使用前需要有可访问的服务端；桌面 Launcher 可以为个人用户自动准备本地服务端。
 
 **客户端直接使用浏览器访问服务端的 URL 即可。推荐去 release 里面下载专门的桌面客户端。**
 桌面客户端启动时会自动检测本机服务端接口，并可引导你一键下载、安装并启动本地后端。
@@ -211,13 +211,14 @@ flowchart TB
 
 ### 方式一：桌面三平台一键启动（推荐新手）
 
-考虑到 Docker 的资源负载和配置时可能遇到的问题，SparkArc 为 Windows / macOS / Linux 桌面用户提供了一键安装并启动后端的方案。
+考虑到 Docker 的资源负载和配置时可能遇到的问题，SparkArc 为 Windows / macOS / Linux 桌面用户提供两条明确分离的一键启动路径：Release Launcher 面向普通使用者，源码脚本面向自部署者与开发者。
 
 **环境要求**：
 
 - Windows：Windows 10 或更高版本（首发版本即可）。
-- macOS / Linux：系统需具备 `bash`、`curl`、`tar`。
-- 若使用桌面 launcher 的“启动本地后端”自动下载能力，系统需能运行 `git`。中国大陆网络会自动尝试使用 GitHub 代理地址。
+- macOS / Linux：便携 Python 的首次准备仍需要系统提供 `bash`、`curl`、`tar`；常见桌面发行版与新版 macOS 默认具备这些基础工具。
+- **从 GitHub Release 安装桌面 Launcher 的用户不需要安装系统 Git 或 Node.js。**Launcher 内嵌 Git 实现，并在用户目录维护受管 Node.js。
+- 手动 clone 源码、运行 `start.bat` / `start.sh` 的用户仍需要系统 Git（用于 clone）和 Node.js 20+（用于构建前端）。这条路径不会被 Launcher 自动更新或覆盖。
 
 #### 使用方法
 
@@ -225,9 +226,11 @@ flowchart TB
 
 1. 打开桌面客户端。
 2. 如果本机没有后端，launcher 会提示你“启动本地后端”。
-3. 点击后会自动把后端下载到用户目录 `~/.sparkarc/sparkarc-server`，并在 `~/.sparkarc/service.json` 注册位置。
-4. 首次运行会自动下载便携版 Python（约 40MB）并安装依赖，全程无需手动配置。
-5. 后端就绪后，launcher 会自动连接 `http://localhost:6688` 并进入工作台。
+3. 点击后会自动从 `main` 下载受管源码到 `~/.sparkarc/sparkarc-server`，并在 `~/.sparkarc/service.json` 注册位置。
+4. 首次运行会自动准备受管 Node.js、便携版 Python（约 40MB）并安装依赖；不会修改系统 PATH，也不要求安装 VS Code、Git 或 Node.js。
+5. 后端就绪后，launcher 会自动连接 `http://localhost:6688` 并进入工作台。它只更新自己创建且带有受管标记的 `main` 工作树，不会覆盖你的 `dev`、手动 clone 或本地改造目录。
+6. Launcher 会检查 `main` 是否有新提交；发现更新时由用户选择“更新并启动”，不会静默切换运行中的代码。用户数据、运行时缓存和前端产物会保留。
+7. Launcher 壳本身直接检查 GitHub Release。API 受限时会回退到 GitHub 的标准 Release 跳转页，并自动尝试可用镜像；首期只打开对应下载页，不另行维护自定义更新清单。
 
 也可以先克隆项目，再直接运行根目录脚本：
 
@@ -248,6 +251,7 @@ cd spark-arc-studio
 > 💡 **零污染设计**：脚本启动时，便携 Python 和依赖产物均在 `server/.runtime/python/` 内；launcher 自动下载时，后端副本位于 `~/.sparkarc/sparkarc-server`。删除对应目录即可还原。
 > 💡 **幂等安全**：脚本内置版本检测与部署标记，重复运行不会重复下载或安装。
 > 💡 **pip 缓存唯一例外**：pip 下载缓存默认写入用户级缓存目录（Windows 通常为 `%LOCALAPPDATA%\pip\Cache\`），不影响系统。如需清理可执行 `pip cache purge`。
+> 💡 **更新边界**：Launcher 受管部署固定跟踪 `main`；源码路径由你自己决定分支和 `git pull` 时机。完整的受管部署与网络回退说明见 [Launcher 本地部署管理器](docs/local-deployment-manager.zh-CN.md)。
 
 
 ### 方式二：Docker 一键部署（推荐）
@@ -845,6 +849,7 @@ graph TB
 | :--- | :--- |
 | [架构深度文档](docs/architecture.md) | 导演调度 vs 信标协作对比、Agent 三模态完整协议、Critic 审核机制、风格克隆集群、信标总线核心机制、ARC 解析策略、工具注册表、流式基础设施层 |
 | [聊天上下文管理](docs/context-management.zh-CN.md) | 自适应预算、自动压缩、原始历史持久化、checkpoint 事务、按需原文检索与 StoryMemory 边界 |
+| [Launcher 本地部署管理器](docs/local-deployment-manager.zh-CN.md) | Release Launcher 受管 `main`、系统 Git/Node 边界、网络回退、数据保护与更新流程 |
 | [火柴Agent网关指南](server/llm/agen_matchbox/README.md) | 双通道设计、接入链路、槽位配置、推理流兼容 |
 | [数据库自动迁移指南](docs/database-migration.md) | 开发者工作流、迁移接入指南、清理历史风险 |
 | [CI/CD 部署指南](docs/cicd-deployment.md) | Runner 配置、CI Secret、GitHub Actions 迁移 |

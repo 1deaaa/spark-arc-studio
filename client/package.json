@@ -1,7 +1,7 @@
 {
   "name": "sparkarc-studio",
   "private": true,
-  "version": "0.0.0",
+  "version": "0.0.1",
   "type": "module",
   "scripts": {
     "dev": "vite",
@@ -31,7 +31,6 @@
     "@tauri-apps/plugin-fs": "^2.5.1",
     "@tauri-apps/plugin-opener": "^2.5.4",
     "@tauri-apps/plugin-os": "^2.3.2",
-    "@tauri-apps/plugin-shell": "^2.3.5",
     "@types/three": "^0.184.1",
     "@vueuse/core": "^14.3.0",
     "cn-fontsource-lxgw-wen-kai-screen": "^1.0.6",

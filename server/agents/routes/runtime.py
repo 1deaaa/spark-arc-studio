@@ -2,11 +2,11 @@
 Runtime API - Agent 运行态管理
 """
 
-from fastapi import APIRouter, Depends
+from fastapi import APIRouter, Depends, Query
 from fastapi.responses import JSONResponse
 
 from core.auth import get_current_user
-from core.request_context import get_current_locale
+from core.request_context import get_current_locale, get_current_project_name, resolve_project_name
 from agents.registry import get_agent_registry
 
 from .schemas import AgentSignalToggleRequest
@@ -19,6 +19,25 @@ async def get_registry_api(user: dict = Depends(get_current_user)):
     """返回所有可用 Agent 的注册信息（按当前 locale 展开多语言字段）"""
     locale = get_current_locale()
     return get_agent_registry(locale)
+
+
+@runtime_router.get('/api/agents/work-trackers')
+async def get_work_trackers_api(
+    projectName: str | None = Query(default=None),
+    user: dict = Depends(get_current_user),
+):
+    """读取当前项目所有已持久化的 Agent 任务板。"""
+    from agents.work_tracker import list_work_trackers
+
+    project_name = resolve_project_name(get_current_project_name(), projectName)
+    if not project_name:
+        return JSONResponse(status_code=400, content={"error": "缺少有效的 projectName"})
+    agent_ids = [str(item.get("key") or "") for item in get_agent_registry(get_current_locale())]
+    trackers = list_work_trackers(str(user["user_id"]), project_name, [item for item in agent_ids if item])
+    return {
+        "projectName": project_name,
+        "trackers": trackers,
+    }
 
 
 _FORCED_OPEN_BEACON_AGENTS = {'agent_director'}

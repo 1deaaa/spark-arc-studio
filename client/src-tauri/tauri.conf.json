@@ -33,33 +33,6 @@
 		]
 	},
 	"plugins": {
-		"shell": {
-			"open": "^https?://",
-			"execute": true,
-			"sidecar": false,
-			"scope": [
-				{
-					"name": "powershell",
-					"cmd": "powershell",
-					"args": [
-						"-NoProfile",
-						"-ExecutionPolicy",
-						"Bypass",
-						true
-					]
-				},
-				{
-					"name": "git",
-					"cmd": "git",
-					"args": [true]
-				},
-				{
-					"name": "bash",
-					"cmd": "bash",
-					"args": [true]
-				}
-			]
-		},
 		"fs": {
 			"scope": {
 				"allow": [

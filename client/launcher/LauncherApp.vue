@@ -147,6 +147,40 @@
           {{ localBackendDeploying ? t('launcher.localDeploy.starting') : t('launcher.localDeploy.startButton') }}
         </button>
 
+        <button
+          v-if="isTauriDesktop && localBackendDirExists && !serverStatusOk"
+          type="button"
+          class="launcher-secondary-action"
+          :disabled="localBackendDeploying || localUpdateChecking"
+          @click="checkLocalUpdate"
+        >
+          {{ localUpdateChecking ? t('launcher.localDeploy.checkingUpdate') : t('launcher.localDeploy.checkUpdate') }}
+        </button>
+
+        <button
+          v-if="isTauriDesktop && localUpdateAvailable"
+          type="button"
+          class="launcher-secondary-action launcher-secondary-action--update"
+          :disabled="localBackendDeploying || localUpdateChecking"
+          @click="startLocalDeployment(true)"
+        >
+          {{ t('launcher.localDeploy.applyUpdateAndStart') }}
+        </button>
+
+        <p v-if="localUpdateStatusText" class="launcher-update-status">
+          {{ localUpdateStatusText }}
+        </p>
+
+        <a
+          v-if="launcherReleaseStatus?.updateAvailable && launcherReleaseStatus.releaseUrl"
+          class="launcher-release-link"
+          :href="launcherReleaseStatus.releaseUrl"
+          target="_blank"
+          rel="noreferrer"
+        >
+          {{ t('launcher.localDeploy.launcherUpdateAvailable') }} · {{ t('launcher.localDeploy.openRelease') }}
+        </a>
+
         <div class="launcher-status" @click="toggleServerPanel">
           <span
             class="launcher-status__dot"
@@ -359,6 +393,19 @@ import {
   LAUNCHER_LOCAL_PORTS,
 } from './constants';
 
+type DeploymentStatusSnapshot = {
+  managed: boolean;
+  phase: string;
+  updateAvailable: boolean;
+  checkedAt?: string | null;
+  lastError: string | null;
+};
+
+type LauncherReleaseStatus = {
+  updateAvailable: boolean;
+  releaseUrl: string | null;
+};
+
 const APP_DEFAULT_SERVER = LAUNCHER_DEFAULT_REMOTE_SERVER;
 const AUTO_ENTER_KEY = 'spark_launcher_auto_enter';
 const DEPLOYMENT_LOG_POLL_MS = 1200;
@@ -423,6 +470,10 @@ const localBackendDeploying = ref(false);
 const deploymentReady = ref(false);
 const deploymentError = ref('');
 const deploymentLog = ref('');
+const deploymentStatus = ref<DeploymentStatusSnapshot | null>(null);
+const localUpdateChecking = ref(false);
+const localUpdateError = ref('');
+const launcherReleaseStatus = ref<LauncherReleaseStatus | null>(null);
 
 const serverDisplayAddr = computed(() => {
   const addr = serverInput.value || APP_DEFAULT_SERVER;
@@ -440,6 +491,16 @@ const deploymentStatusText = computed(() => {
   if (deploymentReady.value) return t('launcher.localDeploy.ready');
   if (localBackendDeploying.value) return t('launcher.localDeploy.running');
   return t('launcher.localDeploy.idle');
+});
+
+const localUpdateAvailable = computed(() => deploymentStatus.value?.updateAvailable === true);
+
+const localUpdateStatusText = computed(() => {
+  if (localUpdateChecking.value) return t('launcher.localDeploy.checkingUpdate');
+  if (localUpdateError.value) return t('launcher.localDeploy.checkUpdateFailed');
+  if (localUpdateAvailable.value) return t('launcher.localDeploy.updateAvailable');
+  if (deploymentStatus.value?.managed) return t('launcher.localDeploy.upToDate');
+  return '';
 });
 
 let mediaQuery: MediaQueryList | null = null;
@@ -563,6 +624,50 @@ async function detectLocalBackendDir(): Promise<boolean> {
   }
 }
 
+async function refreshDeploymentStatus(): Promise<DeploymentStatusSnapshot | null> {
+  if (!isTauriDesktop.value) return null;
+  try {
+    const status = await invoke<DeploymentStatusSnapshot>('get_deployment_status');
+    deploymentStatus.value = status;
+    return status;
+  } catch {
+    return null;
+  }
+}
+
+async function checkLocalUpdate(): Promise<DeploymentStatusSnapshot | null> {
+  if (!isTauriDesktop.value || localBackendDeploying.value) return null;
+  localUpdateChecking.value = true;
+  localUpdateError.value = '';
+  try {
+    deploymentStatus.value = await invoke<DeploymentStatusSnapshot>('check_local_update');
+    return deploymentStatus.value;
+  } catch {
+    localUpdateError.value = t('launcher.localDeploy.checkUpdateFailed');
+    return null;
+  } finally {
+    localUpdateChecking.value = false;
+  }
+}
+
+async function checkLauncherRelease() {
+  if (!isTauriDesktop.value) return;
+  try {
+    launcherReleaseStatus.value = await invoke<LauncherReleaseStatus>('check_launcher_update');
+  } catch {
+    // 壳层更新检查失败不影响服务部署。
+  }
+}
+
+async function initializeLocalUpdateState(): Promise<DeploymentStatusSnapshot | null> {
+  const status = await refreshDeploymentStatus();
+  if (status?.managed) {
+    void checkLocalUpdate();
+  }
+  void checkLauncherRelease();
+  return status;
+}
+
 function acknowledgeDefaultRemote() {
   persistAckPreference();
   showDisclaimer.value = false;
@@ -608,7 +713,8 @@ function closeDeploymentPanel() {
   showDeploymentPanel.value = false;
 }
 
-async function startLocalDeployment() {
+async function startLocalDeployment(applyUpdateOrEvent: boolean | Event = false) {
+  const applyUpdate = applyUpdateOrEvent === true;
   showDisclaimer.value = false;
 
   if (!isTauriDesktop.value) {
@@ -625,6 +731,12 @@ async function startLocalDeployment() {
   startDeploymentLogPolling();
 
   try {
+    if (applyUpdate) {
+      await invoke('stop_managed_local_backend');
+      deploymentStatus.value = await invoke<DeploymentStatusSnapshot>('apply_local_update');
+      localUpdateError.value = '';
+      await refreshDeploymentLog();
+    }
     await invoke('start_local_deployment');
     const localDetected = await waitForLocalBackendReady();
     await refreshDeploymentLog();
@@ -636,6 +748,7 @@ async function startLocalDeployment() {
 
     deploymentReady.value = true;
     localBackendDirExists.value = true;
+    void refreshDeploymentStatus();
     setApiBaseUrl(localDetected);
     serverInput.value = localDetected;
     serverStatusOk.value = true;
@@ -669,6 +782,9 @@ async function checkServerOnLauncherStartup() {
 
   // 提前探测本地后端目录，供免责声明决策使用
   localBackendDirExists.value = await detectLocalBackendDir();
+  const initialDeploymentStatus = isTauriDesktop.value
+    ? await initializeLocalUpdateState()
+    : null;
 
   if (startupHints?.serverBase) {
     setApiBaseUrl(startupHints.serverBase);
@@ -715,7 +831,10 @@ async function checkServerOnLauncherStartup() {
     return;
   }
 
-  const shouldAutoEnter = autoEnterNextTime.value && !skipAutoConnectOnce.value;
+  const shouldAutoEnter =
+    autoEnterNextTime.value &&
+    !skipAutoConnectOnce.value &&
+    !initialDeploymentStatus?.updateAvailable;
 
   if (shouldAutoEnter && openRemoteApp(configured)) {
     return;
@@ -1297,6 +1416,31 @@ watch(autoEnterNextTime, (nextValue) => {
 .launcher-secondary-action:disabled {
   opacity: 0.55;
   cursor: wait;
+}
+
+.launcher-secondary-action--update {
+  border-color: color-mix(in srgb, var(--spark-success, #16a34a), transparent 45%);
+  color: color-mix(in srgb, var(--spark-success, #16a34a), var(--spark-text) 20%);
+}
+
+.launcher-update-status {
+  margin: -20px 0 -14px;
+  max-width: 320px;
+  color: color-mix(in srgb, var(--spark-text), transparent 34%);
+  font-size: 12px;
+  line-height: 1.45;
+  text-align: center;
+}
+
+.launcher-release-link {
+  margin: -20px 0 -14px;
+  color: color-mix(in srgb, var(--spark-primary), white 18%);
+  font-size: 12px;
+  text-decoration: none;
+}
+
+.launcher-release-link:hover {
+  text-decoration: underline;
 }
 
 .launcher-status__dot {

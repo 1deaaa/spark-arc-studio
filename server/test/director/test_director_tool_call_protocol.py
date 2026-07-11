@@ -115,11 +115,12 @@ def test_pending_delegate_history_injects_fallback_tool_call_id() -> None:
     assert pruned.additional_kwargs["tool_calls"][0]["id"] == response.tool_call_id
 
 
-def test_tracker_progress_update_requires_full_visible_items() -> None:
+def test_tracker_progress_update_requires_explicit_overwrite_or_operations() -> None:
     assert _is_tracker_progress_update(
         "work_tracker",
         {
             "action": "update",
+            "overwrite": True,
             "items": [
                 {"task": "生成梗概", "status": "completed"},
                 {"task": "生成节拍", "status": "in_progress"},
@@ -127,6 +128,24 @@ def test_tracker_progress_update_requires_full_visible_items() -> None:
         },
         "共 2 个任务",
     ) is True
+    assert _is_tracker_progress_update(
+        "work_tracker",
+        {
+            "action": "update",
+            "operations": [
+                {"operation": "set_status", "item_id": "task_1", "status": "completed"},
+            ],
+        },
+        '{"items": []}',
+    ) is True
+    assert _is_tracker_progress_update(
+        "work_tracker",
+        {
+            "action": "update",
+            "items": [{"task": "不允许隐式覆盖", "status": "completed"}],
+        },
+        "共 1 个任务",
+    ) is False
     assert _is_tracker_progress_update(
         "work_tracker",
         {"action": "read"},

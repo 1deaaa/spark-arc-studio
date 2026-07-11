@@ -7,6 +7,10 @@ use std::{
 };
 use tauri::{AppHandle, Manager};
 
+mod deployment;
+
+use deployment::{DeploymentManager, DeploymentStatus, LauncherReleaseStatus};
+
 #[derive(Debug, Clone, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
 struct LauncherThemeState {
@@ -18,8 +22,6 @@ struct LauncherThemeState {
     font_family: Option<String>,
     updated_at: Option<u64>,
 }
-
-const SPARKARC_REPO_URL: &str = "https://github.com/1deaaa/spark-arc-studio.git";
 
 fn launcher_theme_state_path(app: &AppHandle) -> Result<PathBuf, String> {
     let dir = app.path().app_data_dir().map_err(|err| err.to_string())?;
@@ -62,6 +64,31 @@ fn sparkarc_user_dir() -> Result<PathBuf, String> {
 /// 服务安装记录文件路径：~/.sparkarc/service.json
 fn service_record_path() -> Result<PathBuf, String> {
     Ok(sparkarc_user_dir()?.join("service.json"))
+}
+
+/// 由 Launcher 写入的服务记录与后端 `service_registry` 保持同一格式。
+fn write_service_record(project_root: &Path) -> Result<(), String> {
+    let user_dir = sparkarc_user_dir()?;
+    fs::create_dir_all(&user_dir).map_err(|err| err.to_string())?;
+    let record = serde_json::json!({
+        "projectRoot": project_root,
+        "installedAt": chrono::Utc::now().to_rfc3339(),
+        "platform": std::env::consts::OS,
+        "machine": std::env::consts::ARCH,
+    });
+    let path = service_record_path()?;
+    let temporary = path.with_extension("tmp");
+    let content = serde_json::to_vec_pretty(&record).map_err(|err| err.to_string())?;
+    fs::write(&temporary, content).map_err(|err| err.to_string())?;
+    if let Err(first_error) = fs::rename(&temporary, &path) {
+        if path.exists() {
+            fs::remove_file(&path).map_err(|err| err.to_string())?;
+            fs::rename(&temporary, &path).map_err(|err| err.to_string())?;
+        } else {
+            return Err(first_error.to_string());
+        }
+    }
+    Ok(())
 }
 
 /// 部署日志文件路径：~/.sparkarc/deploy.log
@@ -140,6 +167,11 @@ fn check_local_backend_dir() -> Result<bool, String> {
         return Ok(false);
     }
 
+    let manager = DeploymentManager::new()?;
+    if manager.managed_project_root()?.is_some() {
+        return Ok(true);
+    }
+
     // 优先读取用户目录记录
     if let Some(record) = read_service_record()? {
         if is_record_valid(&record) {
@@ -197,13 +229,10 @@ fn deployment_child_is_running() -> Result<bool, String> {
     }
 }
 
-/// 命令：启动本地一键部署。
+/// 命令：启动本地服务。
 ///
-/// 流程：
-/// 1. 优先复用用户目录注册的项目或 launcher 同级项目。
-/// 2. 若不存在可用项目，再探测网络环境，选择 Git 克隆 URL（国内使用 gh-proxy）。
-/// 3. 调用系统 Git 克隆仓库。
-/// 4. 克隆完成后运行平台对应的 start 脚本。
+/// 手动登记的工作树只会被启动；没有手动目录时，才会使用 Launcher 自己
+/// 管理的 `main` 工作树。这样开发者的 dev 分支和用户手工修改不会被覆盖。
 #[tauri::command]
 async fn start_local_deployment(_app: AppHandle) -> Result<(), String> {
     if is_mobile_runtime() {
@@ -215,31 +244,11 @@ async fn start_local_deployment(_app: AppHandle) -> Result<(), String> {
         return Ok(());
     }
 
-    let user_dir = sparkarc_user_dir()?;
-    let target_dir = user_dir.join("sparkarc-server");
-    fs::create_dir_all(&user_dir).map_err(|err| err.to_string())?;
-    let launcher_dir = launcher_dir()?;
-    let log_path = deploy_log_path()?;
-
-    // 清空旧日志
-    let _ = fs::write(&log_path, "");
+    let manager = DeploymentManager::new()?;
 
     let os = tauri_plugin_os::type_();
     let is_windows = matches!(os, tauri_plugin_os::OsType::Windows);
-
-    // 写入启动日志
-    let append_log = |msg: &str| {
-        let line = format!(
-            "{} {}\n",
-            chrono::Local::now().format("%Y-%m-%d %H:%M:%S"),
-            msg
-        );
-        let _ = fs::OpenOptions::new()
-            .create(true)
-            .append(true)
-            .open(&log_path)
-            .and_then(|mut f| std::io::Write::write_all(&mut f, line.as_bytes()));
-    };
+    let append_log = |msg: &str| manager.append_log(msg);
 
     append_log("开始本地部署...");
 
@@ -248,7 +257,26 @@ async fn start_local_deployment(_app: AppHandle) -> Result<(), String> {
             "检测到已注册的后端目录，尝试启动: {:?}",
             project_root
         ));
-        return start_backend(&project_root, is_windows, &append_log).await;
+        let is_managed = manager
+            .managed_project_root()?
+            .as_deref()
+            .is_some_and(|root| root == project_root.as_path());
+        if is_managed {
+            let node_manager = manager.clone();
+            let node_bin_dir =
+                tauri::async_runtime::spawn_blocking(move || node_manager.ensure_node_runtime())
+                    .await
+                    .map_err(|err| format!("受管 Node 准备任务异常结束: {err}"))??;
+            return start_backend(
+                &project_root,
+                is_windows,
+                Some(&node_bin_dir),
+                true,
+                &append_log,
+            )
+            .await;
+        }
+        return start_backend(&project_root, is_windows, None, false, &append_log).await;
     }
 
     if let Some(project_root) = find_sibling_backend() {
@@ -256,248 +284,108 @@ async fn start_local_deployment(_app: AppHandle) -> Result<(), String> {
             "检测到启动器同级后端目录，尝试启动: {:?}",
             project_root
         ));
-        return start_backend(&project_root, is_windows, &append_log).await;
+        return start_backend(&project_root, is_windows, None, false, &append_log).await;
     }
 
-    // 先尝试 probe 脚本 / Python 获取网络镜像信息
-    let probe_result = probe_network_for_git_url(&launcher_dir, &append_log).await?;
-    let git_url = probe_result.git_url;
-    append_log(&format!("使用 Git URL: {}", git_url));
-
-    // 如果目标目录已存在，先尝试复用
-    if target_dir.is_dir() {
-        append_log("检测到已有后端目录，尝试直接启动...");
-        return start_backend(&target_dir, is_windows, &append_log).await;
-    }
-
-    // 克隆仓库
-    append_log(&format!("正在克隆仓库到 {:?} ...", target_dir));
-    let clone_output = if is_windows {
-        Command::new("powershell.exe")
-            .args([
-                "-NoProfile",
-                "-ExecutionPolicy",
-                "Bypass",
-                "-Command",
-                &format!(
-                    "git clone --depth 1 --single-branch {} '{}'",
-                    git_url,
-                    target_dir.to_string_lossy()
-                ),
-            ])
-            .stdout(Stdio::piped())
-            .stderr(Stdio::piped())
-            .output()
-            .map_err(|err| format!("Git 克隆失败: {}", err))?
-    } else {
-        Command::new("git")
-            .args([
-                "clone",
-                "--depth",
-                "1",
-                "--single-branch",
-                &git_url,
-                &target_dir.to_string_lossy(),
-            ])
-            .stdout(Stdio::piped())
-            .stderr(Stdio::piped())
-            .output()
-            .map_err(|err| format!("Git 克隆失败: {}", err))?
-    };
-
-    let clone_stdout = String::from_utf8_lossy(&clone_output.stdout);
-    let clone_stderr = String::from_utf8_lossy(&clone_output.stderr);
-    for line in clone_stdout.lines() {
-        append_log(line);
-    }
-    for line in clone_stderr.lines() {
-        append_log(line);
-    }
-
-    if !clone_output.status.success() {
-        return Err(format!("Git 克隆失败: {}", clone_stderr));
-    }
-
-    append_log("仓库克隆完成，准备启动后端...");
-
-    // 写入服务记录
-    let record = serde_json::json!({
-        "projectRoot": target_dir,
-        "installedAt": chrono::Utc::now().to_rfc3339(),
-        "platform": std::env::consts::OS,
-        "machine": std::env::consts::ARCH,
-    });
-    fs::write(
-        service_record_path()?,
-        serde_json::to_string_pretty(&record).unwrap(),
+    let install_manager = manager.clone();
+    let project_root =
+        tauri::async_runtime::spawn_blocking(move || install_manager.ensure_managed_checkout())
+            .await
+            .map_err(|err| format!("本地源码部署任务异常结束: {err}"))??;
+    let node_manager = manager.clone();
+    let node_bin_dir =
+        tauri::async_runtime::spawn_blocking(move || node_manager.ensure_node_runtime())
+            .await
+            .map_err(|err| format!("受管 Node 准备任务异常结束: {err}"))??;
+    write_service_record(&project_root)?;
+    append_log(&format!(
+        "受管 main 工作树已就绪，尝试启动: {:?}",
+        project_root
+    ));
+    start_backend(
+        &project_root,
+        is_windows,
+        Some(&node_bin_dir),
+        true,
+        &append_log,
     )
-    .map_err(|err| err.to_string())?;
-
-    start_backend(&target_dir, is_windows, &append_log).await
+    .await
 }
 
-#[derive(Debug, Clone)]
-struct ProbeResult {
-    git_url: String,
+/// 返回受管 main 工作树的持久状态，不会执行网络请求。
+#[tauri::command]
+fn get_deployment_status() -> Result<DeploymentStatus, String> {
+    if is_mobile_runtime() {
+        return Ok(DeploymentStatus::default());
+    }
+    Ok(DeploymentManager::new()?.read_status())
 }
 
-/// 通过 PowerShell 或 Python 探测网络环境，返回推荐 Git URL。
-async fn probe_network_for_git_url<F>(launcher_dir: &Path, log: &F) -> Result<ProbeResult, String>
-where
-    F: Fn(&str),
-{
-    let repo_url = SPARKARC_REPO_URL;
-
-    // Windows 优先用 PowerShell probe
-    #[cfg(target_os = "windows")]
-    {
-        let probe_script = launcher_dir
-            .join("..")
-            .join("scripts")
-            .join("network_probe.ps1");
-        if probe_script.is_file() {
-            let output = Command::new("powershell.exe")
-                .args([
-                    "-NoProfile",
-                    "-ExecutionPolicy",
-                    "Bypass",
-                    "-File",
-                    &probe_script.to_string_lossy(),
-                ])
-                .stdout(Stdio::piped())
-                .stderr(Stdio::piped())
-                .output()
-                .map_err(|err| format!("网络探测失败: {}", err))?;
-            let stdout = String::from_utf8_lossy(&output.stdout);
-            if let Some(json_start) = stdout.find('{') {
-                if let Ok(json) = serde_json::from_str::<serde_json::Value>(&stdout[json_start..]) {
-                    if let Some(git_url) = json.get("git_clone").and_then(|v| v.as_str()) {
-                        return Ok(ProbeResult {
-                            git_url: git_url.to_string(),
-                        });
-                    }
-                }
-            }
-        }
+/// 静默检查 main 是否有新提交。该命令只 fetch，不会改写当前工作树。
+#[tauri::command]
+async fn check_local_update() -> Result<DeploymentStatus, String> {
+    if is_mobile_runtime() {
+        return Err("移动端不支持本地服务更新。".to_string());
     }
+    let manager = DeploymentManager::new()?;
+    tauri::async_runtime::spawn_blocking(move || manager.check_main_update())
+        .await
+        .map_err(|err| format!("更新检查任务异常结束: {err}"))?
+}
 
-    // 非 Windows 或 probe 失败时，尝试 Python probe
-    let python_probe = launcher_dir
-        .join("..")
-        .join("server")
-        .join("core")
-        .join("network_probe.py");
-    if python_probe.is_file() {
-        let output = Command::new("python3")
-            .arg(&python_probe)
-            .stdout(Stdio::piped())
-            .stderr(Stdio::piped())
-            .output()
-            .or_else(|_| {
-                Command::new("python")
-                    .arg(&python_probe)
-                    .stdout(Stdio::piped())
-                    .stderr(Stdio::piped())
-                    .output()
-            })
-            .map_err(|err| format!("网络探测失败: {}", err))?;
-        let stdout = String::from_utf8_lossy(&output.stdout);
-        if let Some(json_start) = stdout.find('{') {
-            if let Ok(json) = serde_json::from_str::<serde_json::Value>(&stdout[json_start..]) {
-                if let Some(git_url) = json.get("git_clone").and_then(|v| v.as_str()) {
-                    return Ok(ProbeResult {
-                        git_url: git_url.to_string(),
-                    });
-                }
-            }
-        }
+/// 显式应用 main 更新。运行中的服务必须先停止，避免进程内外代码混合。
+#[tauri::command]
+async fn apply_local_update() -> Result<DeploymentStatus, String> {
+    if is_mobile_runtime() {
+        return Err("移动端不支持本地服务更新。".to_string());
     }
-
-    if let Some(country_code) = probe_country_code_without_repo_files() {
-        log(&format!("内置网络探测国家/地区: {}", country_code));
-        if country_code == "CN" {
-            return Ok(ProbeResult {
-                git_url: format!("https://gh-proxy.com/{}", repo_url),
-            });
-        }
-    } else {
-        log("内置网络探测失败，使用默认 GitHub 地址。");
+    if deployment_child_is_running()? {
+        return Err("本地服务仍在运行。请返回 Launcher 并停止当前服务后再应用更新。".to_string());
     }
+    let manager = DeploymentManager::new()?;
+    manager.ensure_managed_service_stopped()?;
+    tauri::async_runtime::spawn_blocking(move || manager.apply_main_update())
+        .await
+        .map_err(|err| format!("应用更新任务异常结束: {err}"))?
+}
 
-    Ok(ProbeResult {
-        git_url: repo_url.to_string(),
+/// 显式停止 Launcher 自己启动并登记的受管后端，为更新切换留出无进程占用的窗口。
+#[tauri::command]
+async fn stop_managed_local_backend() -> Result<(), String> {
+    if is_mobile_runtime() {
+        return Err("移动端不支持本地服务更新。".to_string());
+    }
+    let manager = DeploymentManager::new()?;
+    tauri::async_runtime::spawn_blocking(move || manager.stop_managed_service())
+        .await
+        .map_err(|err| format!("停止本地服务任务异常结束: {err}"))??;
+    let mut guard = DEPLOYMENT_CHILD.lock().map_err(|err| err.to_string())?;
+    if let Some(mut child) = guard.take() {
+        let _ = child.wait();
+    }
+    Ok(())
+}
+
+/// 直接查询 GitHub Releases API，首期仅用于提示 Launcher 壳更新。
+#[tauri::command]
+async fn check_launcher_update(app: AppHandle) -> Result<LauncherReleaseStatus, String> {
+    let manager = DeploymentManager::new()?;
+    let current_version = app.package_info().version.to_string();
+    tauri::async_runtime::spawn_blocking(move || {
+        Ok::<LauncherReleaseStatus, String>(manager.check_launcher_release(&current_version))
     })
-}
-
-fn probe_country_code_without_repo_files() -> Option<String> {
-    let providers = [
-        "https://freeipapi.com/api/json/",
-        "https://ipapi.co/json/",
-        "https://ipwho.is/json/",
-    ];
-
-    for provider in providers {
-        let Some(stdout) = fetch_geoip_json(provider) else {
-            continue;
-        };
-        let Ok(json) = serde_json::from_str::<serde_json::Value>(&stdout) else {
-            continue;
-        };
-        let country_code = json
-            .get("countryCode")
-            .or_else(|| json.get("country_code"))
-            .or_else(|| json.get("country"))
-            .and_then(|v| v.as_str())
-            .unwrap_or("")
-            .trim()
-            .to_uppercase();
-        if country_code.len() >= 2 {
-            return Some(country_code);
-        }
-    }
-    None
-}
-
-#[cfg(target_os = "windows")]
-fn fetch_geoip_json(url: &str) -> Option<String> {
-    let script = format!(
-        "(Invoke-WebRequest -Uri '{}' -TimeoutSec 3 -UseBasicParsing).Content",
-        url.replace('\'', "''")
-    );
-    let output = Command::new("powershell.exe")
-        .args([
-            "-NoProfile",
-            "-ExecutionPolicy",
-            "Bypass",
-            "-Command",
-            &script,
-        ])
-        .stdout(Stdio::piped())
-        .stderr(Stdio::null())
-        .output()
-        .ok()?;
-    if !output.status.success() {
-        return None;
-    }
-    Some(String::from_utf8_lossy(&output.stdout).to_string())
-}
-
-#[cfg(not(target_os = "windows"))]
-fn fetch_geoip_json(url: &str) -> Option<String> {
-    let output = Command::new("curl")
-        .args(["-fsSL", "--max-time", "3", url])
-        .stdout(Stdio::piped())
-        .stderr(Stdio::null())
-        .output()
-        .ok()?;
-    if !output.status.success() {
-        return None;
-    }
-    Some(String::from_utf8_lossy(&output.stdout).to_string())
+    .await
+    .map_err(|err| format!("Launcher Release 检查任务异常结束: {err}"))?
 }
 
 /// 启动后端服务。
-async fn start_backend<F>(project_root: &Path, is_windows: bool, log: &F) -> Result<(), String>
+async fn start_backend<F>(
+    project_root: &Path,
+    is_windows: bool,
+    managed_node_bin_dir: Option<&Path>,
+    managed_process: bool,
+    log: &F,
+) -> Result<(), String>
 where
     F: Fn(&str),
 {
@@ -519,25 +407,41 @@ where
         .map_err(|err| err.to_string())?;
     let err_log_file = log_file.try_clone().map_err(|err| err.to_string())?;
 
-    let child = if is_windows {
-        Command::new("cmd.exe")
-            .args(["/C", &format!("\"{}\"", script_path.to_string_lossy())])
-            .current_dir(project_root)
-            .stdin(Stdio::null())
-            .stdout(Stdio::from(log_file))
-            .stderr(Stdio::from(err_log_file))
-            .spawn()
-            .map_err(|err| format!("启动后端失败: {}", err))?
+    let mut command = if is_windows {
+        let mut command = Command::new("cmd.exe");
+        // `call "..."` 保持脚本路径为一个参数，支持用户目录中的空格和 `&` 等字符。
+        command.args([
+            "/D",
+            "/S",
+            "/C",
+            &format!("call \"{}\"", script_path.to_string_lossy()),
+        ]);
+        command
     } else {
-        Command::new("bash")
-            .arg(&script_path)
-            .current_dir(project_root)
-            .stdin(Stdio::null())
-            .stdout(Stdio::from(log_file))
-            .stderr(Stdio::from(err_log_file))
-            .spawn()
-            .map_err(|err| format!("启动后端失败: {}", err))?
+        let mut command = Command::new("bash");
+        command.arg(&script_path);
+        command
     };
+    command
+        .current_dir(project_root)
+        .stdin(Stdio::null())
+        .stdout(Stdio::from(log_file))
+        .stderr(Stdio::from(err_log_file));
+    if let Some(node_bin_dir) = managed_node_bin_dir {
+        prepend_command_path(&mut command, node_bin_dir)?;
+    }
+    let mut child = command
+        .spawn()
+        .map_err(|err| format!("启动后端失败: {}", err))?;
+
+    if managed_process {
+        let manager = DeploymentManager::new()?;
+        if let Err(err) = manager.record_managed_service_process(child.id()) {
+            let _ = child.kill();
+            let _ = child.wait();
+            return Err(format!("无法登记受管后端进程，已终止本次启动: {err}"));
+        }
+    }
 
     {
         let mut guard = DEPLOYMENT_CHILD.lock().map_err(|err| err.to_string())?;
@@ -545,6 +449,17 @@ where
     }
 
     log("后端启动命令已发出，正在等待服务就绪...");
+    Ok(())
+}
+
+fn prepend_command_path(command: &mut Command, directory: &Path) -> Result<(), String> {
+    let mut paths = vec![directory.to_path_buf()];
+    if let Some(existing) = std::env::var_os("PATH") {
+        paths.extend(std::env::split_paths(&existing));
+    }
+    let joined =
+        std::env::join_paths(paths).map_err(|err| format!("无法为受管 Node 设置 PATH: {err}"))?;
+    command.env("PATH", joined);
     Ok(())
 }
 
@@ -556,15 +471,18 @@ pub fn run() {
             set_launcher_theme_state,
             check_local_backend_dir,
             read_deployment_log,
-            start_local_deployment
+            start_local_deployment,
+            get_deployment_status,
+            check_local_update,
+            apply_local_update,
+            stop_managed_local_backend,
+            check_launcher_update
         ])
         .plugin(tauri_plugin_opener::init())
         .plugin(tauri_plugin_os::init());
 
     #[cfg(not(mobile))]
-    let builder = builder
-        .plugin(tauri_plugin_shell::init())
-        .plugin(tauri_plugin_fs::init());
+    let builder = builder.plugin(tauri_plugin_fs::init());
 
     builder
         .run(tauri::generate_context!())

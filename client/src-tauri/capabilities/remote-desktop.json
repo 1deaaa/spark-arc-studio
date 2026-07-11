@@ -22,7 +22,9 @@
     {
       "identifier": "opener:allow-open-url",
       "allow": [
-        { "url": "https://github.com/1deaaa/spark-arc-studio*" }
+        { "url": "https://github.com/1deaaa/spark-arc-studio*" },
+        { "url": "https://ghfast.top/https://github.com/1deaaa/spark-arc-studio*" },
+        { "url": "https://ghproxy.net/https://github.com/1deaaa/spark-arc-studio*" }
       ]
     }
   ]

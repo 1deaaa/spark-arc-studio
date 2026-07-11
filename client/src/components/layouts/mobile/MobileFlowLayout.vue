@@ -107,6 +107,7 @@
         :title="t('mobileFlow.cards.productionTitle')" 
         :subtitle="t('mobileFlow.cards.productionSubtitle')"
         :is-active="currentStep === 4"
+        :show-next-button="false"
       >
         <ProductionMobile />
       </FlowCard>

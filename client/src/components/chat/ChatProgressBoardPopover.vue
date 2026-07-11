@@ -1,81 +1,74 @@
 <template>
   <n-popover
-    v-if="entries.length"
+    v-if="!isMobile"
+    v-model:show="desktopVisible"
     trigger="click"
     placement="bottom-start"
     :show-arrow="false"
     :overlap="false"
+    @update:show="handleDesktopVisibility"
   >
     <template #trigger>
       <n-button
-        class="progress-board-trigger has-progress"
+        class="progress-board-trigger"
+        :class="{ 'has-progress': hasBoardContent }"
         size="small"
         circle
         quaternary
         :aria-label="t('components.chatPanel.openProgressBoard')"
         @mousedown.stop
-        @touchstart.stop
       >
         <template #icon><n-icon :component="ListChecks" :size="16" /></template>
       </n-button>
     </template>
-
-    <div class="progress-board-popover" role="region" :aria-label="t('components.chatPanel.progressBoard')">
-      <div class="progress-board-header">
-        <n-icon :component="ListChecks" :size="16" />
-        <span>{{ t('components.chatPanel.progressBoard') }}</span>
-      </div>
-      <div v-if="entries.length > 1" class="progress-board-tabs" role="tablist">
-        <button
-          v-for="entry in entries"
-          :key="entry.agentId"
-          type="button"
-          class="progress-board-tab"
-          :class="{ 'is-active': entry.agentId === selectedAgentId }"
-          role="tab"
-          :aria-selected="entry.agentId === selectedAgentId"
-          @click="selectedAgentId = entry.agentId"
-        >
-          <AgentAvatar :agent-id="entry.agentId" :size="20" />
-          <span>{{ entry.agentName }}</span>
-        </button>
-      </div>
-      <div v-if="selectedEntry" class="progress-board-content">
-        <div v-if="entries.length === 1" class="progress-board-agent">
-          <AgentAvatar :agent-id="selectedEntry.agentId" :size="22" />
-          <span>{{ selectedEntry.agentName }}</span>
-        </div>
-        <WorkTrackerBoard :result="selectedEntry.result" />
-      </div>
-    </div>
+    <ChatProgressBoardPanel :trackers="trackers" :agent-id="agentId" :loading="loading" />
   </n-popover>
 
-  <n-tooltip v-else trigger="hover">
-    <template #trigger>
-      <n-button
-        class="progress-board-trigger"
-        size="small"
-        circle
-        quaternary
-        disabled
-        :aria-label="t('components.chatPanel.noProgressBoard')"
-      >
-        <template #icon><n-icon :component="ListChecks" :size="16" /></template>
-      </n-button>
-    </template>
-    {{ t('components.chatPanel.noProgressBoard') }}
-  </n-tooltip>
+  <n-button
+    v-else
+    class="progress-board-trigger"
+    :class="{ 'has-progress': hasBoardContent }"
+    size="small"
+    circle
+    quaternary
+    :aria-label="t('components.chatPanel.openProgressBoard')"
+    @click.stop="openMobileBoard"
+  >
+    <template #icon><n-icon :component="ListChecks" :size="16" /></template>
+  </n-button>
+
+  <n-drawer
+    v-if="isMobile"
+    v-model:show="mobileVisible"
+    placement="bottom"
+    height="76%"
+    class="chat-progress-board-drawer"
+  >
+    <n-drawer-content closable :native-scrollbar="false">
+      <template #header>
+        <span>{{ t('components.chatPanel.progressBoard') }}</span>
+      </template>
+      <ChatProgressBoardPanel
+        :trackers="trackers"
+        :agent-id="agentId"
+        :loading="loading"
+        :show-header="false"
+      />
+    </n-drawer-content>
+  </n-drawer>
 </template>
 
 <script setup lang="ts">
 import { computed, ref, watch, type PropType } from 'vue';
-import { NButton, NIcon, NPopover, NTooltip } from 'naive-ui';
+import { NButton, NDrawer, NDrawerContent, NIcon, NPopover } from 'naive-ui';
 import { ListChecks } from '@lucide/vue';
 import { useI18n } from 'vue-i18n';
-import AgentAvatar from '@/components/share/AgentAvatar.vue';
-import { useAgentRegistry } from '@/composables/useAgentRegistry';
-import WorkTrackerBoard from './message/WorkTrackerBoard.vue';
+import { useMobile } from '@/composables/useMobile';
+import { useProjectStore } from '@/components/stores/projectStore';
+import { fetchWithAuth } from '@/services/apiClient';
+import ChatProgressBoardPanel from './ChatProgressBoardPanel.vue';
 import { collectLatestWorkTrackers, type ChatMessageItem } from './message/render';
+import { parseWorkTrackerResult } from './message/workTracker';
 
 const props = defineProps({
   history: { type: Array as PropType<ChatMessageItem[]>, default: () => [] },
@@ -83,25 +76,66 @@ const props = defineProps({
 });
 
 const { t } = useI18n();
-const { getAgentName } = useAgentRegistry();
-const selectedAgentId = ref('');
+const { isMobile } = useMobile();
+const projectStore = useProjectStore();
+const desktopVisible = ref(false);
+const mobileVisible = ref(false);
+const loading = ref(false);
+const persistedTrackers = ref<Record<string, unknown>>({});
+let requestSequence = 0;
 
-const entries = computed(() => {
-  const trackers = collectLatestWorkTrackers(props.history);
-  return Object.entries(trackers)
-    .map(([agentId, result]) => ({ agentId, agentName: getAgentName(agentId), result }))
-    .sort((a, b) => Number(b.agentId === props.agentId) - Number(a.agentId === props.agentId));
+const historyTrackers = computed(() => collectLatestWorkTrackers(props.history));
+const emptyTracker = Object.freeze({ summary: '', contract: {}, items: [], updated_at: '' });
+const trackers = computed<Record<string, unknown>>(() => {
+  const merged = { ...persistedTrackers.value, ...historyTrackers.value };
+  const currentAgentId = String(props.agentId || '').trim();
+  if (currentAgentId && !merged[currentAgentId]) merged[currentAgentId] = emptyTracker;
+  return merged;
 });
-
-watch(entries, (nextEntries) => {
-  if (!nextEntries.some(entry => entry.agentId === selectedAgentId.value)) {
-    selectedAgentId.value = nextEntries[0]?.agentId || '';
-  }
-}, { immediate: true });
-
-const selectedEntry = computed(() => (
-  entries.value.find(entry => entry.agentId === selectedAgentId.value) || entries.value[0] || null
+const hasBoardContent = computed(() => (
+  Object.values(trackers.value).some(result => {
+    const parsed = parseWorkTrackerResult(result);
+    return !!parsed.summary || parsed.items.length > 0;
+  })
 ));
+
+async function refreshPersistedTrackers() {
+  const projectName = projectStore.currentProject;
+  if (!projectName) {
+    persistedTrackers.value = {};
+    return;
+  }
+  const sequence = ++requestSequence;
+  loading.value = true;
+  try {
+    const response = await fetchWithAuth(
+      `/api/agents/work-trackers?projectName=${encodeURIComponent(projectName)}`,
+    );
+    if (!response.ok) return;
+    const payload = await response.json();
+    if (sequence !== requestSequence) return;
+    persistedTrackers.value = payload?.trackers && typeof payload.trackers === 'object'
+      ? payload.trackers
+      : {};
+  } finally {
+    if (sequence === requestSequence) loading.value = false;
+  }
+}
+
+function handleDesktopVisibility(visible: boolean) {
+  desktopVisible.value = visible;
+  if (visible) refreshPersistedTrackers();
+}
+
+function openMobileBoard() {
+  mobileVisible.value = true;
+  refreshPersistedTrackers();
+}
+
+watch(() => projectStore.currentProject, () => {
+  persistedTrackers.value = {};
+  refreshPersistedTrackers();
+}, { immediate: true });
 </script>
 
 <style scoped>
@@ -113,67 +147,42 @@ const selectedEntry = computed(() => (
 
 .progress-board-trigger.has-progress {
   color: var(--spark-primary);
-  background: rgba(var(--spark-primary-rgb), 0.1);
+  background: color-mix(in srgb, var(--spark-primary) 10%, transparent);
 }
 
-.progress-board-popover {
-  width: min(360px, calc(100vw - 24px));
-  max-height: min(440px, calc(100dvh - var(--sat, 0px) - 32px));
-  overflow: hidden;
+:global(.chat-progress-board-drawer.n-drawer) {
+  inset-inline: 0 !important;
+  width: 100% !important;
+  min-width: 0 !important;
+  max-width: 100% !important;
+  box-sizing: border-box;
+  left: 0 !important;
+  right: 0 !important;
+  border-radius: 10px 10px 0 0;
+  overflow-x: hidden;
 }
 
-.progress-board-header,
-.progress-board-agent {
-  display: flex;
-  align-items: center;
-  gap: 7px;
-  min-height: 36px;
-  color: var(--spark-primary);
-  font-size: var(--spark-fs-sm);
-  font-weight: 700;
-}
-
-.progress-board-header {
-  padding: 8px 10px;
-  border-bottom: 1px solid var(--spark-border);
-}
-
-.progress-board-agent {
-  padding: 4px 4px 8px;
-}
-
-.progress-board-tabs {
-  display: flex;
-  gap: 4px;
-  padding: 8px 8px 0;
-  overflow-x: auto;
-}
-
-.progress-board-tab {
-  display: inline-flex;
-  align-items: center;
-  gap: 6px;
+:global(.chat-progress-board-drawer .n-drawer-content) {
+  width: 100%;
   min-width: 0;
-  min-height: 30px;
-  padding: 4px 8px;
-  border: 0;
-  border-radius: 6px;
-  background: transparent;
-  color: var(--spark-text-muted);
-  font: inherit;
-  white-space: nowrap;
-  cursor: pointer;
+  max-width: 100%;
+  box-sizing: border-box;
 }
 
-.progress-board-tab.is-active {
-  background: rgba(var(--spark-primary-rgb), 0.1);
-  color: var(--spark-primary);
+:global(.chat-progress-board-drawer .n-drawer-header) {
+  padding: 12px !important;
 }
 
-.progress-board-content {
-  max-height: min(370px, calc(100dvh - var(--sat, 0px) - 90px));
-  padding: 8px;
-  overflow: auto;
-  overscroll-behavior: contain;
+:global(.chat-progress-board-drawer .n-drawer-body),
+:global(.chat-progress-board-drawer .n-drawer-body-content-wrapper) {
+  min-width: 0 !important;
+  width: 100% !important;
+  max-width: 100% !important;
+  box-sizing: border-box;
+  overflow-x: hidden !important;
+}
+
+:global(.chat-progress-board-drawer .n-drawer-body-content-wrapper) {
+  padding: 8px 8px calc(var(--sab, 0px) + 8px) !important;
 }
 </style>

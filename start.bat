@@ -8,7 +8,7 @@ set "PYTHON_ENV=%SERVER_DIR%\.runtime\python"
 set "MARKER=%PYTHON_ENV%\.deploy_complete"
 set "PYTHON_EXE=%PYTHON_ENV%\python.exe"
 set "CLIENT_DIR=%~dp0client"
-set "CLIENT_BUILD_SCRIPT=%CLIENT_DIR%\build-frontend.ps1"
+set "CLIENT_BUILD_SCRIPT=%CLIENT_DIR%\build-frontend.mjs"
 
 echo [launcher] Running environment deployment...
 
@@ -17,12 +17,6 @@ set "PS_CMD=powershell"
 where pwsh >nul 2>&1
 if not errorlevel 1 set "PS_CMD=pwsh"
 
-REM 并行启动前端构建（如果存在脚本）。最小化窗口、独立日志，不阻塞后端部署。
-if exist "%CLIENT_BUILD_SCRIPT%" (
-    echo [launcher] Starting frontend build in parallel...
-    start /min "SparkArc Frontend Build" %PS_CMD% -NoProfile -ExecutionPolicy Bypass -File "%CLIENT_BUILD_SCRIPT%"
-)
-
 %PS_CMD% -NoProfile -ExecutionPolicy Bypass -File "%SERVER_DIR%\pyloader.win.ps1"
 if errorlevel 1 (
     echo [ERROR] Environment deployment failed.
@@ -30,11 +24,33 @@ if errorlevel 1 (
     exit /b 1
 )
 
-REM 记录当前 SparkArc 项目根目录到用户目录，方便 launcher 后续定位
-"%PYTHON_EXE%" -X utf8 -c "from core.service_registry import record_service_install; record_service_install(r'%~dp0')"
+REM 通过环境变量传递路径，避免用户目录包含单引号时破坏 Python 代码字符串。
+set "SPARKARC_SERVICE_PROJECT_ROOT=%~dp0"
+"%PYTHON_EXE%" -X utf8 -c "import os; from core.service_registry import record_service_install; record_service_install(os.environ['SPARKARC_SERVICE_PROJECT_ROOT'])"
 
 if not exist "%MARKER%" (
     echo [ERROR] Deployment script finished but marker file missing. Aborting.
+    pause
+    exit /b 1
+)
+
+if not exist "%CLIENT_BUILD_SCRIPT%" (
+    echo [ERROR] Frontend build script not found: %CLIENT_BUILD_SCRIPT%
+    pause
+    exit /b 1
+)
+
+where node >nul 2>&1
+if errorlevel 1 (
+    echo [ERROR] Node.js was not found. Use Launcher managed deployment or install Node.js 20+.
+    pause
+    exit /b 1
+)
+
+echo [launcher] Building frontend...
+node "%CLIENT_BUILD_SCRIPT%"
+if errorlevel 1 (
+    echo [ERROR] Frontend build failed.
     pause
     exit /b 1
 )

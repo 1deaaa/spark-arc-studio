@@ -257,7 +257,7 @@ export function getMessageSegments(message: ChatMessageItem | null | undefined):
   return segments;
 }
 
-/** 汇总聊天历史中每个 Agent 最新的工作追踪结果，clear 操作会移除对应入口。 */
+/** 汇总聊天历史中每个 Agent 最新的工作追踪结果。持久任务板不会因历史 clear 事件消失。 */
 export function collectLatestWorkTrackers(history: ChatMessageItem[] | null | undefined): Record<string, unknown> {
   const latest: Record<string, unknown> = {};
   for (const message of history || []) {
@@ -265,10 +265,7 @@ export function collectLatestWorkTrackers(history: ChatMessageItem[] | null | un
       if (String(segment.tool_name || '').trim() !== 'work_tracker') continue;
       const agentId = String(segment.source_agent || '').trim();
       if (!agentId) continue;
-      if (String(segment.tool_action || '').trim() === 'clear') {
-        delete latest[agentId];
-        continue;
-      }
+      if (String(segment.tool_action || '').trim() === 'clear') continue;
       if (segment.tool_result !== null && segment.tool_result !== undefined && String(segment.tool_result).trim()) {
         latest[agentId] = segment.tool_result;
       }

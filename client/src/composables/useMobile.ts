@@ -32,11 +32,14 @@ function ensureSafeAreaFallback() {
 
     // 区分普通网页访问与全屏 App / PWA 独立应用模式
     // 普通网页访问时，浏览器视口已避开状态栏，无需任何兜底留白
-    const isStandalone = 
-        (window.navigator as any).standalone || 
-        window.matchMedia('(display-mode: standalone)').matches ||
-        window.matchMedia('(display-mode: fullscreen)').matches ||
-        window.matchMedia('(display-mode: minimal-ui)').matches;
+    const supportsMatchMedia = typeof window.matchMedia === 'function';
+    const isStandalone =
+        (window.navigator as any).standalone ||
+        (supportsMatchMedia && (
+            window.matchMedia('(display-mode: standalone)').matches ||
+            window.matchMedia('(display-mode: fullscreen)').matches ||
+            window.matchMedia('(display-mode: minimal-ui)').matches
+        ));
 
     const isTauri = !!(
         (window as any).__TAURI_INTERNALS__ || 
