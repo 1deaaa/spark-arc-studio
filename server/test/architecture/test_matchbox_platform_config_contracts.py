@@ -19,6 +19,7 @@ SERVER_ROOT = Path(__file__).resolve().parents[2]
 def _run_probe(code: str, tmp_path: Path) -> str:
     env = os.environ.copy()
     env["AGENT_MATCHBOX_HOME"] = str(tmp_path / "matchbox-home")
+    env["LLM_KEY"] = "matchbox-contract-test-key"
 
     completed = subprocess.run(
         [sys.executable, "-X", "utf8", "-c", code],
@@ -26,8 +27,9 @@ def _run_probe(code: str, tmp_path: Path) -> str:
         env=env,
         text=True,
         capture_output=True,
-        check=True,
+        check=False,
     )
+    assert completed.returncode == 0, completed.stderr or completed.stdout
     return completed.stdout
 
 
