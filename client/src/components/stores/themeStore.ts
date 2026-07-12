@@ -1,10 +1,14 @@
 import { defineStore } from 'pinia';
-import { ref } from 'vue';
+import { computed, ref } from 'vue';
 
 export const useThemeStore = defineStore('theme', () => {
   // 'light', 'dark', 'system'
   const themeMode = ref(localStorage.getItem('themeMode') || 'system');
   const prefersDark = ref(false);
+  const isDark = computed(() => (
+    themeMode.value === 'dark'
+    || (themeMode.value === 'system' && prefersDark.value)
+  ));
 
   // UI 偏好：主题主色（按亮/暗两套） + 全局字体（由具体组件决定字号/风格，这里只控制 family）
   // 兼容旧版本：sparkPrimaryColor 迁移到暗色主色（不做强制覆盖亮色）
@@ -17,9 +21,8 @@ export const useThemeStore = defineStore('theme', () => {
   const fontFamily = ref(localStorage.getItem('sparkFontFamily') || '');
 
   const syncBodyClass = () => {
-    const isDark = themeMode.value === 'dark' || (themeMode.value === 'system' && prefersDark.value);
-    document.body.classList.toggle('dark-mode', isDark);
-    document.body.classList.toggle('light-mode', !isDark);
+    document.body.classList.toggle('dark-mode', isDark.value);
+    document.body.classList.toggle('light-mode', !isDark.value);
   };
 
   const setThemeMode = (mode) => {
@@ -64,6 +67,7 @@ export const useThemeStore = defineStore('theme', () => {
   return {
     themeMode,
     prefersDark,
+    isDark,
     primaryColorDark,
     primaryColorLight,
     fontKey,

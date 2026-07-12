@@ -21,7 +21,7 @@
 </template>
 
 <script setup lang="ts">
-import { computed, onBeforeUnmount, onMounted, ref } from 'vue';
+import { computed } from 'vue';
 import 'markstream-vue/index.css';
 import 'katex/dist/katex.min.css';
 import {
@@ -35,6 +35,7 @@ import {
   parseMarkdownToStructure,
   setCustomComponents,
 } from 'markstream-vue';
+import { useThemeStore } from '@/components/stores/themeStore';
 
 enableKatex(() => import('katex'));
 enableMermaid(() => import('mermaid'));
@@ -59,45 +60,9 @@ const props = defineProps({
   },
 });
 
-const bodyDark = ref(false);
-
-let bodyObserver: MutationObserver | null = null;
-let mediaQuery: MediaQueryList | null = null;
-
-function readDarkMode() {
-  if (typeof document === 'undefined' || typeof window === 'undefined') {
-    bodyDark.value = false;
-    return;
-  }
-  bodyDark.value = (
-    document.body.classList.contains('dark-mode')
-    || (
-      !document.body.classList.contains('light-mode')
-      && window.matchMedia?.('(prefers-color-scheme: dark)').matches
-    )
-  );
-}
-
-onMounted(() => {
-  readDarkMode();
-  if (typeof MutationObserver !== 'undefined' && typeof document !== 'undefined') {
-    bodyObserver = new MutationObserver(readDarkMode);
-    bodyObserver.observe(document.body, { attributes: true, attributeFilter: ['class'] });
-  }
-  if (typeof window !== 'undefined') {
-    mediaQuery = window.matchMedia?.('(prefers-color-scheme: dark)') || null;
-    mediaQuery?.addEventListener?.('change', readDarkMode);
-  }
-});
-
-onBeforeUnmount(() => {
-  bodyObserver?.disconnect();
-  bodyObserver = null;
-  mediaQuery?.removeEventListener?.('change', readDarkMode);
-  mediaQuery = null;
-});
-
-const isDark = computed(() => bodyDark.value);
+// 主题监听统一由 themeStore 在应用根部维护，避免每个 Markdown 实例各建一套全局监听器。
+const themeStore = useThemeStore();
+const isDark = computed(() => themeStore.isDark);
 
 const renderMode = computed(() => (props.streaming ? 'chat' : 'minimal'));
 

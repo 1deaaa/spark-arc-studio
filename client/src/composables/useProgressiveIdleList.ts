@@ -31,6 +31,7 @@ export function useProgressiveIdleList<T>(
   options: ProgressiveIdleListOptions = {},
 ): {
   visibleItems: ComputedRef<T[]>;
+  hiddenItemCount: ComputedRef<number>;
   pending: Ref<boolean>;
   block: () => void;
   release: () => void;
@@ -152,6 +153,10 @@ export function useProgressiveIdleList<T>(
     if (blocked.value) return [];
     return source().slice(visibleStart.value);
   });
+  const hiddenItemCount = computed(() => Math.min(
+    source().length,
+    Math.max(0, visibleStart.value),
+  ));
 
-  return { visibleItems, pending, block, release, showAll, loadMore };
+  return { visibleItems, hiddenItemCount, pending, block, release, showAll, loadMore };
 }

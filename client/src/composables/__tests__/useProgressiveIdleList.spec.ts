@@ -58,17 +58,20 @@ describe('useProgressiveIdleList', () => {
 
     api!.release();
     expect(api!.visibleItems.value).toEqual([]);
+    expect(api!.hiddenItemCount.value).toBe(14);
     expect(idle.callbacks.size).toBe(1);
 
     await idle.runNext();
     expect(api!.pending.value).toBe(false);
     expect(api!.visibleItems.value).toEqual([10, 11, 12, 13]);
+    expect(api!.hiddenItemCount.value).toBe(10);
 
     await idle.runNext();
     expect(api!.visibleItems.value).toEqual([5, 6, 7, 8, 9, 10, 11, 12, 13]);
 
     await idle.runNext();
     expect(api!.visibleItems.value).toEqual(source.value);
+    expect(api!.hiddenItemCount.value).toBe(0);
     expect(idle.callbacks.size).toBe(0);
 
     wrapper.unmount();

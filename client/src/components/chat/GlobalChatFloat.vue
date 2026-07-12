@@ -281,6 +281,7 @@ import { useProjectStore } from '@/components/stores/projectStore';
 import { useViewStore } from '@/components/stores/viewStore';
 import { useSceneStore } from '@/components/stores/sceneStore';
 import { useMobile } from '@/composables/useMobile';
+import { resolveMobileDrawerHeight } from '@/components/chat/mobileDrawerSizing';
 
 const { t } = useI18n();
 
@@ -290,8 +291,13 @@ const sceneStore = useSceneStore();
 const viewStore = useViewStore();
 const { isMobile } = useMobile();
 
-const desktopListRef = ref(null);
-const mobileListRef = ref(null);
+type ChatPanelExpose = {
+  listRef?: HTMLElement | null;
+  shouldFillHistoryViewport?: () => boolean;
+};
+
+const desktopListRef = ref<ChatPanelExpose | null>(null);
+const mobileListRef = ref<ChatPanelExpose | null>(null);
 const rootEl = ref(null);
 const fitOffset = ref(0); // Vertical offset to keep panel onscreen without moving anchor
 
@@ -444,8 +450,13 @@ function measureDrawerNaturalPx(): number {
   const list = surface.querySelector('.chat-list') as HTMLElement | null;
   // 面板除消息列表外的固定结构（头部 / 输入框）高度
   const chrome = surface.offsetHeight - (list?.clientHeight ?? 0);
-  const contentNatural = chrome + (list?.scrollHeight ?? 0) + 4;
-  return Math.min(max, Math.max(min, Math.round(contentNatural)));
+  return resolveMobileDrawerHeight({
+    min,
+    max,
+    chromeHeight: chrome,
+    visibleContentHeight: list?.scrollHeight ?? 0,
+    hasHiddenHistory: mobileListRef.value?.shouldFillHistoryViewport?.() ?? false,
+  });
 }
 
 /**

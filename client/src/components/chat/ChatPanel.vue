@@ -295,6 +295,7 @@ const slots = useSlots();
 type ChatListExpose = { listRef?: HTMLElement | null };
 type ScrollSnapshot = { scrollTop: number; scrollHeight: number };
 const chatListRef = ref<ChatListExpose | null>(null);
+const HISTORY_INITIAL_BATCH_SIZE = 6;
 
 function getChatListElement(): HTMLElement | null {
   return chatListRef.value?.listRef || null;
@@ -302,13 +303,14 @@ function getChatListElement(): HTMLElement | null {
 
 const {
   visibleItems: visibleHistory,
+  hiddenItemCount,
   pending: agentContentPending,
   block: blockAgentContent,
   release: releaseAgentContent,
   showAll: showAllAgentContent,
   loadMore: loadMoreAgentContent,
 } = useProgressiveIdleList(() => props.history, {
-  initialBatchSize: 6,
+  initialBatchSize: HISTORY_INITIAL_BATCH_SIZE,
   batchSize: 6,
   idleTimeout: 400,
   hydrateOnMount: props.hydrateHistoryOnMount,
@@ -340,6 +342,10 @@ let pendingPickerAgentId = '';
 
 function loadOlderHistory(): void {
   loadMoreAgentContent();
+}
+
+function shouldFillHistoryViewport(): boolean {
+  return props.history.length > HISTORY_INITIAL_BATCH_SIZE && hiddenItemCount.value > 0;
 }
 
 watch(() => props.agentId, (nextAgentId, previousAgentId) => {
@@ -454,7 +460,7 @@ function onAgentPickerClosed(): void {
 // 暴露 ChatMessageList 内部的 DOM listRef，保持与 useChatActions scrollToBottom 兼容
 // useChatActions 做 listRef.value?.listRef -> 应得到 DOM element
 // chatListRef.value 是 ChatMessageList 组件 ref，chatListRef.value.listRef 是 DOM el
-defineExpose({ listRef: chatListRef });
+defineExpose({ listRef: chatListRef, shouldFillHistoryViewport });
 </script>
 
 <style scoped>

@@ -89,6 +89,7 @@ describe('ChatPanel Agent 切换非阻塞渲染契约', () => {
     // 首次渲染不能先创建全部历史，否则 mounted 后再隐藏也无法避免主线程阻塞。
     expect(wrapper.find('.history-probe').attributes('data-count')).toBe('0');
     expect(wrapper.find('.history-probe').attributes('data-loading')).toBe('true');
+    expect((wrapper.vm as unknown as { shouldFillHistoryViewport: () => boolean }).shouldFillHistoryViewport()).toBe(true);
     expect(idle.callbacks.size).toBe(1);
 
     await idle.runNext();
@@ -101,6 +102,7 @@ describe('ChatPanel Agent 切换非阻塞渲染契约', () => {
     expect(idle.callbacks.size).toBe(1);
     await idle.runNext();
     expect(wrapper.find('.history-probe').attributes('data-count')).toBe('10');
+    expect((wrapper.vm as unknown as { shouldFillHistoryViewport: () => boolean }).shouldFillHistoryViewport()).toBe(false);
     expect(wrapper.emitted('history-rendered')).toHaveLength(2);
 
     wrapper.unmount();

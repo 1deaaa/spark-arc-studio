@@ -10,7 +10,11 @@
       </slot>
     </div>
     <template v-for="(m, idx) in history" :key="getMessageKey(m, idx)">
-      <div v-if="shouldRenderMessage(m)" class="chat-msg" :class="m.role">
+      <div
+        v-if="shouldRenderMessage(m)"
+        class="chat-msg"
+        :class="[m.role, { 'chat-msg--realtime': isRealtimeMessage(m, idx) }]"
+      >
         <!-- 动态代理隔离方案：如果这条消息是 assistant 且旧版本没有 source_agent，或用户消息，不显示统一头像。头像和名字被下移到具体的段落气泡外侧 -->
         <div class="chat-bubble-container">
         <!-- 编辑模式 -->
@@ -520,6 +524,11 @@ function canMutateMessage(message) {
   return hasPersistedId || hasLocalClientId;
 }
 
+function isRealtimeMessage(message, idx: number): boolean {
+  if (props.editingMessageId === getMutableMessageId(message)) return true;
+  return idx >= Math.max(0, (props.history?.length ?? 0) - 2);
+}
+
 const { getAgentName: _getAgentNameFromRegistry } = useAgentRegistry();
 
 function getAgentName(agentId?: string): string {
@@ -725,6 +734,18 @@ defineExpose({ listRef });
   background-color: var(--spark-bg);
   /* 防止滚动条出现/消失导致的布局抖动 */
   scrollbar-gutter: stable;
+}
+
+/* 浏览器级列表虚拟化：离屏历史保留滚动高度，但跳过其布局与绘制。 */
+.chat-msg {
+  content-visibility: auto;
+  contain-intrinsic-size: auto 160px;
+}
+
+/* 当前对话回合必须即时参与布局，确保流式输出与输入联动不延迟。 */
+.chat-msg--realtime {
+  content-visibility: visible;
+  contain-intrinsic-size: none;
 }
 
 .chat-hint {
@@ -1091,6 +1112,8 @@ defineExpose({ listRef });
   min-height: 200px;
   max-height: 100%;
   overflow-y: auto;
+  overscroll-behavior: contain;
+  -webkit-overflow-scrolling: touch;
   padding: 12px;
   background: var(--spark-bg);
   border-radius: var(--spark-radius-sm);
