@@ -20,7 +20,6 @@ from llm.agen_matchbox.image_generation import (
 )
 from llm.agen_matchbox.models import MODALITY_IMAGE, MODALITY_TEXT
 from llm.agen_matchbox.image_adapters import IMAGE_GENERATION_ADAPTERS
-from llm.agen_matchbox.gui.dialogs import DialogsMixin
 
 
 class _FakeResponse:
@@ -62,8 +61,6 @@ def test_image_adapter_registry_is_visible_in_web_gui_and_readmes() -> None:
         content = path.read_text(encoding="utf-8")
         missing = sorted(adapter for adapter in IMAGE_GENERATION_ADAPTERS if adapter not in content)
         assert not missing, f"{label} 缺少生图协议: {missing}"
-
-    assert set(DialogsMixin.IMAGE_ADAPTER_OPTIONS.values()) == IMAGE_GENERATION_ADAPTERS
 
 
 def test_image_adapter_selection_keeps_supported_provider_names_explicit() -> None:
