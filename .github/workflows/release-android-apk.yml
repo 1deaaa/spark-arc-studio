@@ -78,6 +78,31 @@ jobs:
           ndk-version: r28
           link-to-sdk: true
 
+      - name: Configure Android cross compilation tools
+        shell: bash
+        env:
+          NDK_PATH: ${{ steps.setup-ndk.outputs.ndk-path }}
+        run: |
+          TOOLCHAIN_BIN="$NDK_PATH/toolchains/llvm/prebuilt/linux-x86_64/bin"
+          test -x "$TOOLCHAIN_BIN/llvm-ar"
+          test -x "$TOOLCHAIN_BIN/llvm-ranlib"
+
+          COMPAT_BIN="$RUNNER_TEMP/android-cross-bin"
+          mkdir -p "$COMPAT_BIN"
+          ln -sf "$TOOLCHAIN_BIN/llvm-ar" "$COMPAT_BIN/aarch64-linux-android-ar"
+          ln -sf "$TOOLCHAIN_BIN/llvm-ranlib" "$COMPAT_BIN/aarch64-linux-android-ranlib"
+
+          {
+            echo "NDK_HOME=$NDK_PATH"
+            echo "ANDROID_NDK_HOME=$NDK_PATH"
+            echo "ANDROID_NDK_ROOT=$NDK_PATH"
+            echo "AR=$TOOLCHAIN_BIN/llvm-ar"
+            echo "RANLIB=$TOOLCHAIN_BIN/llvm-ranlib"
+            echo "AR_aarch64_linux_android=$TOOLCHAIN_BIN/llvm-ar"
+            echo "RANLIB_aarch64_linux_android=$TOOLCHAIN_BIN/llvm-ranlib"
+          } >> "$GITHUB_ENV"
+          echo "$COMPAT_BIN" >> "$GITHUB_PATH"
+
       - name: Install Rust stable
         uses: dtolnay/rust-toolchain@stable
         with:
