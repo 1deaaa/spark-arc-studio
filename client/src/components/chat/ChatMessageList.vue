@@ -1,5 +1,5 @@
 <template>
-  <div ref="listRef" class="chat-list" :class="extraClass">
+  <div ref="listRef" class="chat-list" :class="extraClass" @scroll.passive="onListScroll">
     <div v-if="loading" class="chat-loading-state" role="status" aria-live="polite">
       <SparkLoaderAnimation class="chat-list-loader-animation" />
       <div class="chat-loading-text">{{ t('components.chatMessageList.loading') }}</div>
@@ -357,7 +357,13 @@ const emit = defineEmits([
   'edit-keydown',
   'delete-msg',
   'retry',
+  'reach-top',
 ]);
+
+function onListScroll(event: Event) {
+  const target = event.currentTarget as HTMLElement | null;
+  if (target && target.scrollTop <= 80) emit('reach-top');
+}
 
 // Naive UI 消息提示
 const message = useMessage();

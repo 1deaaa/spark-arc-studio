@@ -107,6 +107,7 @@
         @edit-keydown="(e, id) => $emit('edit-keydown', e, id)"
         @delete-msg="$emit('delete-msg', $event)"
         @retry="(id, content) => $emit('retry', id, content)"
+        @reach-top="loadOlderHistory"
       >
         <template #empty-state>
           <slot name="empty-state"></slot>
@@ -261,6 +262,10 @@ const props = defineProps({
   contextWindowStats: { type: [Object, null] as PropType<ContextWindowStats | null>, default: null },
   /** 当前面板专属全局加载 target，用于只覆盖本聊天框主体 */
   loadingTarget: { type: String, default: 'chat-primary' },
+  /** 首次挂载时是否渐进加载历史，避免长会话阻塞抽屉打开 */
+  hydrateHistoryOnMount: { type: Boolean, default: false },
+  /** 是否在空闲时自动补齐全部历史；移动端应关闭并改为触顶加载 */
+  autoHydrateHistory: { type: Boolean, default: true },
 });
 
 // 编辑内容的双向绑定代理
@@ -282,6 +287,7 @@ const emit = defineEmits([
   'retry',
   'header-mousedown',
   'header-touchstart',
+  'history-rendered',
 ]);
 
 const { t } = useI18n();
@@ -300,28 +306,41 @@ const {
   block: blockAgentContent,
   release: releaseAgentContent,
   showAll: showAllAgentContent,
+  loadMore: loadMoreAgentContent,
 } = useProgressiveIdleList(() => props.history, {
   initialBatchSize: 6,
   batchSize: 6,
   idleTimeout: 400,
+  hydrateOnMount: props.hydrateHistoryOnMount,
+  autoComplete: props.autoHydrateHistory,
   beforeBatch: () => {
     const list = getChatListElement();
     return list ? { scrollTop: list.scrollTop, scrollHeight: list.scrollHeight } : null;
   },
   afterBatch: (rawSnapshot, firstBatch) => {
     const list = getChatListElement();
-    if (!list) return;
-    if (firstBatch) {
+    if (list && firstBatch) {
       list.scrollTop = list.scrollHeight;
-      return;
-    }
-    const snapshot = rawSnapshot as ScrollSnapshot | null;
-    if (snapshot) {
+    } else if (list) {
+      const snapshot = rawSnapshot as ScrollSnapshot | null;
+      if (!snapshot) {
+        emit('history-rendered');
+        return;
+      }
       list.scrollTop = snapshot.scrollTop + Math.max(0, list.scrollHeight - snapshot.scrollHeight);
+    }
+    emit('history-rendered');
+    // 最近一批过短时尚无滚动条，用户无法触发触顶事件；只补到形成可滚动区域为止。
+    if (!props.autoHydrateHistory && list && list.scrollHeight <= list.clientHeight + 1) {
+      loadMoreAgentContent();
     }
   },
 });
 let pendingPickerAgentId = '';
+
+function loadOlderHistory(): void {
+  loadMoreAgentContent();
+}
 
 watch(() => props.agentId, (nextAgentId, previousAgentId) => {
   if (nextAgentId === previousAgentId || nextAgentId === pendingPickerAgentId) return;

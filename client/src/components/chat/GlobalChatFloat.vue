@@ -208,6 +208,8 @@
           :editing-message-id="editingMessageId"
           :editing-content="editingContent"
           :draft="draft"
+          :hydrate-history-on-mount="true"
+          :auto-hydrate-history="false"
           list-extra-class="mobile-chat-list"
           input-wrapper-class="mobile-input-wrapper"
           :hide-header-icon="true"
@@ -225,6 +227,7 @@
           @edit-keydown="onEditKeydown"
           @delete-msg="deleteMsg"
           @retry="retryMsg"
+          @history-rendered="syncMobileDrawerHeight"
         >
           <template #input-prefix>
             <ChatFileImportButton :session-id="primarySessionId" :agent-id="chat.currentAgentId" />

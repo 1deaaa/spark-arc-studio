@@ -42,18 +42,20 @@ const AgentRadialPickerStub = defineComponent({
 
 const ChatMessageListStub = defineComponent({
   name: 'ChatMessageList',
+  emits: ['reach-top'],
   props: {
     history: { type: Array, default: () => [] },
     loading: { type: Boolean, default: false },
   },
-  template: '<div class="history-probe" :data-count="history.length" :data-loading="loading" />',
+  template: '<div class="history-probe" :data-count="history.length" :data-loading="loading"><button class="reach-top" @click="$emit(\'reach-top\')" /></div>',
 });
 
-function mountPanel(history: Array<Record<string, unknown>>) {
+function mountPanel(history: Array<Record<string, unknown>>, extraProps: Record<string, unknown> = {}) {
   return mount(ChatPanel, {
     props: {
       agentId: 'agent_director',
       history,
+      ...extraProps,
     },
     global: {
       plugins: [i18n],
@@ -72,6 +74,38 @@ function mountPanel(history: Array<Record<string, unknown>>) {
 }
 
 describe('ChatPanel Agent 切换非阻塞渲染契约', () => {
+  it('移动端首次只挂载最近一批，触顶后才按需加载更早历史', async () => {
+    const idle = installIdleQueue();
+    const history = Array.from({ length: 10 }, (_, index) => ({
+      id: index,
+      role: 'user',
+      content: `消息 ${index}`,
+    }));
+    const wrapper = mountPanel(history, {
+      hydrateHistoryOnMount: true,
+      autoHydrateHistory: false,
+    });
+
+    // 首次渲染不能先创建全部历史，否则 mounted 后再隐藏也无法避免主线程阻塞。
+    expect(wrapper.find('.history-probe').attributes('data-count')).toBe('0');
+    expect(wrapper.find('.history-probe').attributes('data-loading')).toBe('true');
+    expect(idle.callbacks.size).toBe(1);
+
+    await idle.runNext();
+    expect(wrapper.find('.history-probe').attributes('data-count')).toBe('6');
+    expect(wrapper.find('.history-probe').attributes('data-loading')).toBe('false');
+    expect(idle.callbacks.size).toBe(0);
+    expect(wrapper.emitted('history-rendered')).toHaveLength(1);
+
+    await wrapper.find('.reach-top').trigger('click');
+    expect(idle.callbacks.size).toBe(1);
+    await idle.runNext();
+    expect(wrapper.find('.history-probe').attributes('data-count')).toBe('10');
+    expect(wrapper.emitted('history-rendered')).toHaveLength(2);
+
+    wrapper.unmount();
+  });
+
   it('轮盘离场前不挂载历史，离场后才在空闲片段挂载最近批次', async () => {
     const idle = installIdleQueue();
     const history = Array.from({ length: 10 }, (_, index) => ({
