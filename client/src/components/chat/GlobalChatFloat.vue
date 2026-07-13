@@ -176,6 +176,7 @@
     :trap-focus="true"
     :block-scroll="true"
     :class="['chat-mobile-drawer', { 'chat-mobile-drawer--settling': mobileDrawerSettling, 'chat-mobile-drawer--anim': drawerHeightAnimating }]"
+    @after-enter="onMobileDrawerEntered"
     @after-leave="onDrawerClosed"
   >
     <n-drawer-content :native-scrollbar="false" body-content-style="padding: 0; display: flex; flex-direction: column; height: 100%;">
@@ -208,8 +209,6 @@
           :editing-message-id="editingMessageId"
           :editing-content="editingContent"
           :draft="draft"
-          :hydrate-history-on-mount="true"
-          :auto-hydrate-history="false"
           list-extra-class="mobile-chat-list"
           input-wrapper-class="mobile-input-wrapper"
           :hide-header-icon="true"
@@ -292,8 +291,7 @@ const viewStore = useViewStore();
 const { isMobile } = useMobile();
 
 type ChatPanelExpose = {
-  listRef?: HTMLElement | null;
-  shouldFillHistoryViewport?: () => boolean;
+  listRef?: unknown;
 };
 
 const desktopListRef = ref<ChatPanelExpose | null>(null);
@@ -384,6 +382,15 @@ function onPanelEntered() {
   }
 }
 
+function onMobileDrawerEntered() {
+  if (!isMobile.value || !mobileDrawerVisible.value || contentReady.value) return;
+  contentReady.value = true;
+  nextTick(() => {
+    scrollToBottom(true);
+    syncMobileDrawerHeight();
+  });
+}
+
 // 抽屉高度（像素字符串），由内容自适应驱动。
 const drawerHeight = ref('50%');
 const mobileDrawerSettling = ref(false);
@@ -455,7 +462,6 @@ function measureDrawerNaturalPx(): number {
     max,
     chromeHeight: chrome,
     visibleContentHeight: list?.scrollHeight ?? 0,
-    hasHiddenHistory: mobileListRef.value?.shouldFillHistoryViewport?.() ?? false,
   });
 }
 
@@ -512,8 +518,9 @@ watch(() => chat.expanded, (expanded) => {
     mobileDrawerVisible.value = expanded;
   }
   if (expanded) {
-    // 打开：先占位，动画落地后再挂载内容
-    scheduleContentReady();
+    // 移动端等待抽屉进场完成；桌面浮窗继续使用短延迟挂载。
+    if (isMobile.value) resetContentReady();
+    else scheduleContentReady();
   } else {
     resetContentReady();
   }

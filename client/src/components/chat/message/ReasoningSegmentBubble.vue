@@ -92,6 +92,8 @@ const panelHeight = ref(0);
 const measuredHeight = ref(0);
 const layoutVersion = ref(0);
 let animationTimer = 0;
+let streamingLayoutRaf = 0;
+let streamingLayoutQueued = false;
 
 const avatarAriaLabel = computed(() => `${props.agentName} (${t('components.chatMessageList.thinking')})`);
 const panelStyle = computed(() => ({
@@ -125,27 +127,8 @@ function getVisibleHeight() {
 
 function measureRenderedContentHeight(root: HTMLElement | null) {
   if (!root) return 0;
-
-  const inner = (root.querySelector('.reasoning-inner') as HTMLElement | null) || root;
-  const markdown = (inner.querySelector('.reasoning-markdown') as HTMLElement | null) || inner;
-  const innerRect = inner.getBoundingClientRect();
-  const innerStyle = window.getComputedStyle(inner);
-  const paddingBottom = Number.parseFloat(innerStyle.paddingBottom || '0') || 0;
-  const children = Array.from(markdown.children || []) as HTMLElement[];
-  let bottom = 0;
-
-  for (const child of children) {
-    const rect = child.getBoundingClientRect();
-    if (rect.width <= 0 && rect.height <= 0) continue;
-    bottom = Math.max(bottom, rect.bottom - innerRect.top);
-  }
-
-  if (bottom > 0) {
-    return Math.ceil(bottom + paddingBottom);
-  }
-
-  const innerRectHeight = innerRect.height || 0;
-  if (innerRectHeight > 0) return Math.ceil(innerRectHeight);
+  const scrollHeight = Math.ceil(root.scrollHeight || 0);
+  if (scrollHeight > 0) return scrollHeight;
   return Math.ceil(root.getBoundingClientRect().height || 0);
 }
 
@@ -275,11 +258,38 @@ function scrollToBottom() {
 }
 
 function syncStreamingHeight() {
-  const nextHeight = measurePanelHeight(true);
+  const content = contentRef.value;
+  if (!content) return;
+  const contentHeight = Math.ceil(content.scrollHeight || 0);
+  const nextHeight = Math.min(contentHeight, measureStreamingContentMaxHeight(content));
   if (nextHeight <= 0) return;
   panelHeight.value = nextHeight;
   measuredHeight.value = nextHeight;
-  scrollToBottom();
+  content.scrollTop = contentHeight;
+}
+
+function cancelStreamingLayout() {
+  streamingLayoutQueued = false;
+  if (!streamingLayoutRaf) return;
+  window.cancelAnimationFrame(streamingLayoutRaf);
+  streamingLayoutRaf = 0;
+}
+
+/** 将密集流式 chunk 的布局读取合并为每帧至多一次。 */
+function scheduleStreamingLayout() {
+  if (streamingLayoutQueued) return;
+  streamingLayoutQueued = true;
+  nextTick(() => {
+    if (!props.streaming) {
+      streamingLayoutQueued = false;
+      return;
+    }
+    streamingLayoutRaf = window.requestAnimationFrame(() => {
+      streamingLayoutRaf = 0;
+      streamingLayoutQueued = false;
+      syncStreamingHeight();
+    });
+  });
 }
 
 function openPanel(streaming = props.streaming) {
@@ -346,7 +356,7 @@ watch(() => props.streaming, (streaming, wasStreaming) => {
         return;
       }
     }
-    nextTick(() => syncStreamingHeight());
+    scheduleStreamingLayout();
     return;
   }
 
@@ -357,11 +367,12 @@ watch(() => props.streaming, (streaming, wasStreaming) => {
 
 watch(() => props.text, () => {
   if (!props.streaming) return;
-  nextTick(() => syncStreamingHeight());
+  scheduleStreamingLayout();
 });
 
 onBeforeUnmount(() => {
   clearAnimationTimer();
+  cancelStreamingLayout();
 });
 </script>
 

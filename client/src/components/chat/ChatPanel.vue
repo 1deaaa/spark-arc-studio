@@ -88,6 +88,7 @@
         ref="chatListRef"
         :history="visibleHistory"
         :loading="loading || agentContentPending"
+        :thread-key="`${loadingTarget}:${agentId}`"
         :last-error="lastError"
         :sending="sending"
         :thinking-seconds="thinkingSeconds"
@@ -107,7 +108,7 @@
         @edit-keydown="(e, id) => $emit('edit-keydown', e, id)"
         @delete-msg="$emit('delete-msg', $event)"
         @retry="(id, content) => $emit('retry', id, content)"
-        @reach-top="loadOlderHistory"
+        @content-height-change="$emit('history-rendered')"
       >
         <template #empty-state>
           <slot name="empty-state"></slot>
@@ -168,14 +169,13 @@
  * 2. 状态驱动：通过 props 接收对话数据，通过 events 发出交互指令，本身不持有业务 Store。
  * 3. 高复用性：同时服务于 GlobalChatFloat（单例主入口）和 ExtraChatWindow（多实例窗口）。
  */
-import { ref, computed, useSlots, watch, type PropType } from 'vue';
+import { ref, computed, onBeforeUnmount, useSlots, watch, type PropType } from 'vue';
 import { useI18n } from 'vue-i18n';
 import { NButton, NInput, NPopconfirm, NTooltip } from 'naive-ui';
 import ChatMessageList from '@/components/chat/ChatMessageList.vue';
 import AgentRadialPicker from '@/components/chat/AgentRadialPicker.vue';
 import ChatProgressBoardPopover from '@/components/chat/ChatProgressBoardPopover.vue';
 import GlobalLoading from '@/components/share/GlobalLoading.vue';
-import { useProgressiveIdleList } from '@/composables/useProgressiveIdleList';
 import type { ChatMessage } from '@/services/chatService';
 
 type AgentOption = {
@@ -262,10 +262,6 @@ const props = defineProps({
   contextWindowStats: { type: [Object, null] as PropType<ContextWindowStats | null>, default: null },
   /** 当前面板专属全局加载 target，用于只覆盖本聊天框主体 */
   loadingTarget: { type: String, default: 'chat-primary' },
-  /** 首次挂载时是否渐进加载历史，避免长会话阻塞抽屉打开 */
-  hydrateHistoryOnMount: { type: Boolean, default: false },
-  /** 是否在空闲时自动补齐全部历史；移动端应关闭并改为触顶加载 */
-  autoHydrateHistory: { type: Boolean, default: true },
 });
 
 // 编辑内容的双向绑定代理
@@ -293,66 +289,27 @@ const emit = defineEmits([
 const { t } = useI18n();
 const slots = useSlots();
 type ChatListExpose = { listRef?: HTMLElement | null };
-type ScrollSnapshot = { scrollTop: number; scrollHeight: number };
 const chatListRef = ref<ChatListExpose | null>(null);
-const HISTORY_INITIAL_BATCH_SIZE = 6;
-
-function getChatListElement(): HTMLElement | null {
-  return chatListRef.value?.listRef || null;
-}
-
-const {
-  visibleItems: visibleHistory,
-  hiddenItemCount,
-  pending: agentContentPending,
-  block: blockAgentContent,
-  release: releaseAgentContent,
-  showAll: showAllAgentContent,
-  loadMore: loadMoreAgentContent,
-} = useProgressiveIdleList(() => props.history, {
-  initialBatchSize: HISTORY_INITIAL_BATCH_SIZE,
-  batchSize: 6,
-  idleTimeout: 400,
-  hydrateOnMount: props.hydrateHistoryOnMount,
-  autoComplete: props.autoHydrateHistory,
-  beforeBatch: () => {
-    const list = getChatListElement();
-    return list ? { scrollTop: list.scrollTop, scrollHeight: list.scrollHeight } : null;
-  },
-  afterBatch: (rawSnapshot, firstBatch) => {
-    const list = getChatListElement();
-    if (list && firstBatch) {
-      list.scrollTop = list.scrollHeight;
-    } else if (list) {
-      const snapshot = rawSnapshot as ScrollSnapshot | null;
-      if (!snapshot) {
-        emit('history-rendered');
-        return;
-      }
-      list.scrollTop = snapshot.scrollTop + Math.max(0, list.scrollHeight - snapshot.scrollHeight);
-    }
-    emit('history-rendered');
-    // 最近一批过短时尚无滚动条，用户无法触发触顶事件；只补到形成可滚动区域为止。
-    if (!props.autoHydrateHistory && list && list.scrollHeight <= list.clientHeight + 1) {
-      loadMoreAgentContent();
-    }
-  },
-});
+const agentContentPending = ref(false);
+const visibleHistory = computed(() => agentContentPending.value ? [] : props.history);
 let pendingPickerAgentId = '';
+let releaseFrame = 0;
 
-function loadOlderHistory(): void {
-  loadMoreAgentContent();
-}
-
-function shouldFillHistoryViewport(): boolean {
-  return props.history.length > HISTORY_INITIAL_BATCH_SIZE && hiddenItemCount.value > 0;
+function scheduleContentRelease(): void {
+  if (releaseFrame) cancelAnimationFrame(releaseFrame);
+  releaseFrame = requestAnimationFrame(() => {
+    releaseFrame = requestAnimationFrame(() => {
+      releaseFrame = 0;
+      agentContentPending.value = false;
+    });
+  });
 }
 
 watch(() => props.agentId, (nextAgentId, previousAgentId) => {
   if (nextAgentId === previousAgentId || nextAgentId === pendingPickerAgentId) return;
   pendingPickerAgentId = '';
-  blockAgentContent();
-  releaseAgentContent();
+  agentContentPending.value = true;
+  scheduleContentRelease();
 }, { flush: 'sync' });
 
 const editingContentLocal = computed({
@@ -439,28 +396,25 @@ const contextTokenHint = computed(() => {
 function onAgentSelected(val: string): void {
   if (!val || val === props.agentId) return;
   pendingPickerAgentId = val;
-  blockAgentContent();
+  agentContentPending.value = true;
   emit('update:agentId', val);
 }
 
-/** 轮盘真实离场后才释放历史，并用空闲任务分批挂载，避免与收起动画争抢主线程。 */
+/** 轮盘真实离场后才让虚拟时间线接管新会话，避免与收起动画争抢主线程。 */
 function onAgentPickerClosed(): void {
   if (!pendingPickerAgentId) return;
-  if (props.agentId === pendingPickerAgentId) {
-    pendingPickerAgentId = '';
-    releaseAgentContent();
-    return;
-  }
-
-  // 上层因 Agent 占用等原因拒绝切换时，恢复当前会话，不能留下永久加载态。
   pendingPickerAgentId = '';
-  showAllAgentContent();
+  agentContentPending.value = false;
 }
+
+onBeforeUnmount(() => {
+  if (releaseFrame) cancelAnimationFrame(releaseFrame);
+});
 
 // 暴露 ChatMessageList 内部的 DOM listRef，保持与 useChatActions scrollToBottom 兼容
 // useChatActions 做 listRef.value?.listRef -> 应得到 DOM element
 // chatListRef.value 是 ChatMessageList 组件 ref，chatListRef.value.listRef 是 DOM el
-defineExpose({ listRef: chatListRef, shouldFillHistoryViewport });
+defineExpose({ listRef: chatListRef });
 </script>
 
 <style scoped>
@@ -585,6 +539,8 @@ defineExpose({ listRef: chatListRef, shouldFillHistoryViewport });
   gap: 8px;
   padding: 8px 12px;
   border-top: 1px solid var(--spark-border);
+  contain: layout style;
+  flex: 0 0 auto;
 }
 
 .chat-input-prefix {

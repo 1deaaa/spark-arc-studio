@@ -1,6 +1,6 @@
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import { mount } from '@vue/test-utils';
-import { defineComponent, nextTick } from 'vue';
+import { defineComponent, h, nextTick } from 'vue';
 import ChatMessageList from '../ChatMessageList.vue';
 import { i18n } from '@/i18n';
 
@@ -17,12 +17,33 @@ vi.mock('naive-ui', async () => {
   };
 });
 
+vi.mock('markstream-vue', async () => {
+  const actual = await vi.importActual<typeof import('markstream-vue')>('markstream-vue');
+  return {
+    ...actual,
+    MarkstreamVirtualTimeline: defineComponent({
+      name: 'MarkstreamVirtualTimeline',
+      props: {
+        items: { type: Array, default: () => [] },
+        overscan: { type: Number, default: 0 },
+        overscanPx: { type: Number, default: 0 },
+      },
+      setup(props, { slots }) {
+        return () => h('div', { class: 'timeline-stub' }, props.items.flatMap((item, index) => (
+          slots.default?.({ item, index, measureRef: () => undefined }) ?? []
+        )));
+      },
+    }),
+  };
+});
+
 vi.mock('@/components/share/MarkdownRenderer.vue', () => ({
   default: defineComponent({
     name: 'MarkdownRenderer',
     props: {
       content: { type: String, default: '' },
       streaming: { type: Boolean, default: false },
+      maxLiveNodes: { type: Number, default: 320 },
     },
     template: '<div class="mock-markdown"><div class="node-slot">{{ content }}</div></div>',
   }),
@@ -41,6 +62,65 @@ afterEach(() => {
 });
 
 describe('ChatMessageList 深度思考块展开性能契约', () => {
+  it('活动助手正文使用流式 Markdown，完成后保持原视觉并切回最终态', async () => {
+    const history = [{
+      id: 'assistant-streaming',
+      role: 'assistant',
+      content: '正在生成',
+      segments: [{ type: 'text', text: '正在生成', source_agent: 'agent_director' }],
+    }];
+    const wrapper = mount(ChatMessageList, {
+      props: { history, sending: true },
+      global: {
+        plugins: [i18n],
+        stubs: {
+          NButton: defineComponent({ template: '<button><slot /><slot name="icon" /></button>' }),
+          NTooltip: defineComponent({ template: '<span><slot name="trigger" /><slot /></span>' }),
+          NPopover: defineComponent({ template: '<span><slot name="trigger" /><slot /></span>' }),
+          NInput: defineComponent({ template: '<textarea />' }),
+          SparkAlert: defineComponent({ template: '<div><slot /></div>' }),
+          ContextCompactionSegment: true,
+          ToolTraceSegment: true,
+        },
+      },
+    });
+
+    const markdown = wrapper.findComponent({ name: 'MarkdownRenderer' });
+    expect(markdown.props('streaming')).toBe(true);
+    expect(markdown.props('maxLiveNodes')).toBe(96);
+
+    await wrapper.setProps({ sending: false });
+    expect(wrapper.findComponent({ name: 'MarkdownRenderer' }).props('streaming')).toBe(false);
+  });
+
+  it('长历史完整交给虚拟时间线而不做消息条数截断', () => {
+    const history = Array.from({ length: 80 }, (_, index) => ({
+      id: `message-${index}`,
+      role: 'user',
+      content: `历史消息 ${index}`,
+    }));
+    const wrapper = mount(ChatMessageList, {
+      props: { history },
+      global: {
+        plugins: [i18n],
+        stubs: {
+          NButton: true,
+          NTooltip: true,
+          NPopover: true,
+          NInput: true,
+          SparkAlert: true,
+          ContextCompactionSegment: true,
+          ToolTraceSegment: true,
+        },
+      },
+    });
+
+    const timeline = wrapper.findComponent({ name: 'MarkstreamVirtualTimeline' });
+    expect(timeline.props('items')).toHaveLength(80);
+    expect(timeline.props('overscan')).toBe(1);
+    expect(timeline.props('overscanPx')).toBe(120);
+  });
+
   it('长思考内容展开和收起不会触发递归渲染，并保留 Markdown 渲染', async () => {
     vi.useFakeTimers();
     const longReasoning = Array.from({ length: 260 }, (_, index) => (
@@ -226,6 +306,49 @@ describe('ChatMessageList 深度思考块展开性能契约', () => {
     expect(wrapper.find('.reasoning-content-wrapper').classes()).not.toContain('is-expanded');
   });
 
+  it('密集思考 chunk 在同一帧只安排一次布局测量', async () => {
+    vi.useFakeTimers();
+    const rafSpy = vi.spyOn(window, 'requestAnimationFrame').mockImplementation((callback: FrameRequestCallback) => {
+      callback(performance.now());
+      return 1;
+    });
+    const makeHistory = (text: string) => [{
+      id: 'assistant-coalesced',
+      role: 'assistant',
+      content: '',
+      segments: [{ type: 'reasoning', text, source_agent: 'agent_director' }],
+    }];
+    const wrapper = mount(ChatMessageList, {
+      props: { history: makeHistory('第一段'), sending: true },
+      global: {
+        plugins: [i18n],
+        stubs: {
+          NButton: true,
+          NTooltip: true,
+          NPopover: defineComponent({ template: '<span><slot name="trigger" /><slot /></span>' }),
+          NInput: true,
+          SparkAlert: true,
+          ContextCompactionSegment: true,
+          ToolTraceSegment: true,
+        },
+      },
+    });
+
+    await nextTick();
+    await Promise.resolve();
+    const queuedFrames: FrameRequestCallback[] = [];
+    rafSpy.mockImplementation((callback: FrameRequestCallback) => {
+      queuedFrames.push(callback);
+      return queuedFrames.length + 10;
+    });
+
+    await wrapper.setProps({ history: makeHistory('第一段\n第二段') });
+    await wrapper.setProps({ history: makeHistory('第一段\n第二段\n第三段') });
+    await wrapper.setProps({ history: makeHistory('第一段\n第二段\n第三段\n第四段') });
+
+    expect(queuedFrames).toHaveLength(1);
+  });
+
   it('流式思考窗口随内容撑高到五行后保持稳定', async () => {
     vi.useFakeTimers();
     vi.spyOn(window, 'requestAnimationFrame').mockImplementation((callback: FrameRequestCallback) => {
@@ -254,17 +377,10 @@ describe('ChatMessageList 深度思考块展开性能契约', () => {
         },
       }) as CSSStyleDeclaration;
     });
-    vi.spyOn(HTMLElement.prototype, 'getBoundingClientRect').mockImplementation(function getMockRect(this: HTMLElement) {
-      const el = this;
-      const lineCount = Math.max(1, (el.textContent || '').split('\n').length);
-      const contentHeight = (lineCount * 20) + 4;
-      if (el.classList?.contains('reasoning-inner')) {
-        return { width: 420, height: contentHeight + 9, top: 0, left: 0, right: 420, bottom: contentHeight + 9, x: 0, y: 0, toJSON: () => ({}) } as DOMRect;
-      }
-      if (el.classList?.contains('node-slot')) {
-        return { width: 420, height: contentHeight, top: 0, left: 0, right: 420, bottom: contentHeight, x: 0, y: 0, toJSON: () => ({}) } as DOMRect;
-      }
-      return { width: 420, height: 0, top: 0, left: 0, right: 420, bottom: 0, x: 0, y: 0, toJSON: () => ({}) } as DOMRect;
+    vi.spyOn(HTMLElement.prototype, 'scrollHeight', 'get').mockImplementation(function getMockScrollHeight(this: HTMLElement) {
+      if (!this.classList?.contains('reasoning-content')) return 0;
+      const lineCount = Math.max(1, (this.textContent || '').split('\n').length);
+      return (lineCount * 20) + 12;
     });
 
     const wrapper = mount(ChatMessageList, {
@@ -364,17 +480,15 @@ describe('ChatMessageList 深度思考块展开性能契约', () => {
     let livePanel: HTMLElement | null = null;
     let livePanelAutoSeen = false;
 
+    vi.spyOn(HTMLElement.prototype, 'scrollHeight', 'get').mockImplementation(function getMockScrollHeight(this: HTMLElement) {
+      return this.classList?.contains('reasoning-content') ? 314 : 0;
+    });
+
     vi.spyOn(HTMLElement.prototype, 'getBoundingClientRect').mockImplementation(function getMockRect(this: HTMLElement) {
       const el = this;
       const panel = el.closest?.('.reasoning-content-wrapper') as HTMLElement | null;
       if (livePanel && panel === livePanel && panel.style.height === 'auto') {
         livePanelAutoSeen = true;
-      }
-      if (el.classList?.contains('reasoning-inner')) {
-        return { width: 420, height: 613, top: 0, left: 0, right: 420, bottom: 613, x: 0, y: 0, toJSON: () => ({}) } as DOMRect;
-      }
-      if (el.classList?.contains('node-slot')) {
-        return { width: 420, height: 314, top: 0, left: 0, right: 420, bottom: 314, x: 0, y: 0, toJSON: () => ({}) } as DOMRect;
       }
       return { width: 420, height: 0, top: 0, left: 0, right: 420, bottom: 0, x: 0, y: 0, toJSON: () => ({}) } as DOMRect;
     });

@@ -1,13 +1,12 @@
 import { resolveMobileDrawerHeight } from '@/components/chat/mobileDrawerSizing';
 
 describe('移动端聊天抽屉高度', () => {
-  it('仍有渐进历史未挂载时直接撑到可用最大高度', () => {
+  it('虚拟时间线完整高度超过视口时撑到可用最大高度', () => {
     expect(resolveMobileDrawerHeight({
       min: 360,
       max: 720,
       chromeHeight: 140,
-      visibleContentHeight: 120,
-      hasHiddenHistory: true,
+      visibleContentHeight: 1200,
     })).toBe(720);
   });
 
@@ -17,7 +16,6 @@ describe('移动端聊天抽屉高度', () => {
       max: 720,
       chromeHeight: 140,
       visibleContentHeight: 300,
-      hasHiddenHistory: false,
     })).toBe(444);
   });
 });

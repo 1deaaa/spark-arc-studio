@@ -1,16 +1,18 @@
 <template>
   <MarkdownRender
     class="markdown-content"
-    :nodes="parsedNodes"
+    :content="content"
     custom-id="sparkarc-markdown"
     :mode="renderMode"
     :final="!streaming"
+    :parse-options="parseOptions"
+    :parse-coalesce-ms="streaming ? 16 : 0"
     :is-dark="isDark"
     :fade="false"
     :smooth-streaming="streaming ? 'auto' : false"
     :typewriter="streaming"
     :batch-rendering="streaming"
-    :max-live-nodes="streaming ? 0 : 320"
+    :max-live-nodes="streaming ? 0 : maxLiveNodes"
     :render-batch-size="streaming ? 16 : 48"
     :render-batch-delay="streaming ? 8 : 0"
     :render-batch-budget-ms="streaming ? 4 : 8"
@@ -28,11 +30,9 @@ import {
   MarkdownRender,
   enableKatex,
   enableMermaid,
-  getMarkdown,
   MathBlockNode,
   MathInlineNode,
   MermaidBlockNode,
-  parseMarkdownToStructure,
   setCustomComponents,
 } from 'markstream-vue';
 import { useThemeStore } from '@/components/stores/themeStore';
@@ -58,6 +58,11 @@ const props = defineProps({
     type: Boolean,
     default: false,
   },
+  /** 完成态保留的活动块节点数；聊天历史使用更小窗口，完整内容仍可正常滚动查看。 */
+  maxLiveNodes: {
+    type: Number,
+    default: 320,
+  },
 });
 
 // 主题监听统一由 themeStore 在应用根部维护，避免每个 Markdown 实例各建一套全局监听器。
@@ -70,9 +75,6 @@ const parseOptions = computed(() => ({
   final: !props.streaming,
   streamParse: props.streaming ? 'auto' : false,
 } as const));
-
-const markdownIt = getMarkdown(`sparkarc-markdown-${Math.random().toString(36).slice(2)}`);
-const parsedNodes = computed(() => parseMarkdownToStructure(props.content, markdownIt, parseOptions.value));
 
 const codeBlockProps = computed(() => ({
   theme: {

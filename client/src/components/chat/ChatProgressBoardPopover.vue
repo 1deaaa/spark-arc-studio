@@ -59,7 +59,7 @@
 </template>
 
 <script setup lang="ts">
-import { computed, ref, watch, type PropType } from 'vue';
+import { computed, onBeforeUnmount, ref, shallowRef, watch, type PropType } from 'vue';
 import { NButton, NDrawer, NDrawerContent, NIcon, NPopover } from 'naive-ui';
 import { ListChecks } from '@lucide/vue';
 import { useI18n } from 'vue-i18n';
@@ -83,8 +83,9 @@ const mobileVisible = ref(false);
 const loading = ref(false);
 const persistedTrackers = ref<Record<string, unknown>>({});
 let requestSequence = 0;
+let trackerRefreshTimer: ReturnType<typeof setTimeout> | null = null;
 
-const historyTrackers = computed(() => collectLatestWorkTrackers(props.history));
+const historyTrackers = shallowRef(collectLatestWorkTrackers(props.history));
 const emptyTracker = Object.freeze({ summary: '', contract: {}, items: [], updated_at: '' });
 const trackers = computed<Record<string, unknown>>(() => {
   const merged = { ...persistedTrackers.value, ...historyTrackers.value };
@@ -136,6 +137,18 @@ watch(() => projectStore.currentProject, () => {
   persistedTrackers.value = {};
   refreshPersistedTrackers();
 }, { immediate: true });
+
+watch(() => props.history, () => {
+  if (trackerRefreshTimer) return;
+  trackerRefreshTimer = setTimeout(() => {
+    trackerRefreshTimer = null;
+    historyTrackers.value = collectLatestWorkTrackers(props.history);
+  }, 120);
+}, { flush: 'post' });
+
+onBeforeUnmount(() => {
+  if (trackerRefreshTimer) clearTimeout(trackerRefreshTimer);
+});
 </script>
 
 <style scoped>
