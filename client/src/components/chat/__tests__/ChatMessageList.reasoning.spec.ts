@@ -486,13 +486,14 @@ describe('ChatMessageList 深度思考块展开性能契约', () => {
     await nextTick();
     expect(livePanel.style.height).not.toBe('auto');
 
-    const callback = rafCallbacks.shift();
-    expect(callback).toBeTruthy();
-    callback?.(performance.now());
-    await Promise.resolve();
-    await Promise.resolve();
-    await nextTick();
-    await nextTick();
+    for (let frame = 0; frame < 2; frame += 1) {
+      const callback = rafCallbacks.shift();
+      expect(callback).toBeTruthy();
+      callback?.(performance.now());
+      await Promise.resolve();
+      await Promise.resolve();
+      await nextTick();
+    }
 
     expect(livePanelAutoSeen).toBe(false);
     expect(livePanel.getAttribute('style')).toContain('--reasoning-panel-height: 314px');
@@ -500,5 +501,78 @@ describe('ChatMessageList 深度思考块展开性能契约', () => {
     vi.runOnlyPendingTimers();
     await nextTick();
     expect(wrapper.find('.reasoning-content-wrapper').classes()).toContain('is-expanded');
+  });
+
+  it('首次展开忽略 Markdown content-visibility 的 600px 固有占位', async () => {
+    vi.useFakeTimers();
+    vi.spyOn(window, 'requestAnimationFrame').mockImplementation((callback: FrameRequestCallback) => {
+      callback(performance.now());
+      return 1;
+    });
+    const actualGetComputedStyle = window.getComputedStyle.bind(window);
+    vi.spyOn(window, 'getComputedStyle').mockImplementation((element: Element) => {
+      const style = actualGetComputedStyle(element);
+      return new Proxy(style, {
+        get(target, property, receiver) {
+          if (element.classList?.contains('reasoning-markdown') && property === 'contentVisibility') {
+            return 'auto';
+          }
+          if (element.classList?.contains('reasoning-inner') && property === 'paddingBottom') {
+            return '8px';
+          }
+          const value = Reflect.get(target, property, receiver);
+          return typeof value === 'function' ? value.bind(target) : value;
+        },
+      }) as CSSStyleDeclaration;
+    });
+    vi.spyOn(HTMLElement.prototype, 'scrollHeight', 'get').mockImplementation(function getMockScrollHeight(this: HTMLElement) {
+      return this.classList?.contains('reasoning-content') ? 613 : 0;
+    });
+    vi.spyOn(HTMLElement.prototype, 'getBoundingClientRect').mockImplementation(function getMockRect(this: HTMLElement) {
+      if (this.classList?.contains('reasoning-markdown')) {
+        return { width: 420, height: 600, top: 0, left: 0, right: 420, bottom: 600, x: 0, y: 0, toJSON: () => ({}) } as DOMRect;
+      }
+      if (this.classList?.contains('node-slot')) {
+        return { width: 420, height: 18, top: 4, left: 0, right: 420, bottom: 22, x: 0, y: 4, toJSON: () => ({}) } as DOMRect;
+      }
+      return { width: 420, height: 0, top: 0, left: 0, right: 420, bottom: 0, x: 0, y: 0, toJSON: () => ({}) } as DOMRect;
+    });
+
+    const wrapper = mount(ChatMessageList, {
+      props: {
+        history: [{
+          id: 'assistant-intrinsic-placeholder',
+          role: 'assistant',
+          content: '',
+          segments: [{
+            type: 'reasoning',
+            text: '短思考内容',
+            source_agent: 'agent_director',
+          }],
+        }],
+        sending: false,
+      },
+      global: {
+        plugins: [i18n],
+        stubs: {
+          NButton: true,
+          NTooltip: true,
+          NPopover: defineComponent({ template: '<span><slot name="trigger" /><slot /></span>' }),
+          NInput: true,
+          SparkAlert: true,
+          ContextCompactionSegment: true,
+          ToolTraceSegment: true,
+        },
+      },
+    });
+
+    await wrapper.find('.reasoning-toggle').trigger('click');
+    await nextTick();
+    await Promise.resolve();
+    await nextTick();
+
+    const panelStyle = wrapper.find('.reasoning-content-wrapper').attributes('style');
+    expect(panelStyle).toContain('--reasoning-panel-height: 30px');
+    expect(panelStyle).not.toContain('613px');
   });
 });

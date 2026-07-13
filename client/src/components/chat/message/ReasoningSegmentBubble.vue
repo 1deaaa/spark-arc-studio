@@ -68,6 +68,7 @@ const STREAMING_REASONING_FALLBACK_MAX_HEIGHT = 108;
 const REASONING_REVEAL_TIMER_MS = 360;
 const REASONING_HEIGHT_STABLE_FRAMES = 2;
 const REASONING_HEIGHT_MAX_SAMPLES = 5;
+const REASONING_INTRINSIC_PLACEHOLDER_GAP_PX = 32;
 const DEFERRED_REASONING_CHAR_THRESHOLD = 6000;
 
 const { t } = useI18n();
@@ -128,9 +129,40 @@ function getVisibleHeight() {
   return Math.max(0, Math.round(wrapper.getBoundingClientRect().height));
 }
 
+function measureRenderedChildHeight(root: HTMLElement) {
+  const inner = (root.querySelector('.reasoning-inner') as HTMLElement | null) || root;
+  const markdown = (inner.querySelector('.reasoning-markdown') as HTMLElement | null) || inner;
+  const innerRect = inner.getBoundingClientRect();
+  const paddingBottom = parseCssPx(window.getComputedStyle(inner).paddingBottom);
+  let bottom = 0;
+
+  for (const child of Array.from(markdown.children || []) as HTMLElement[]) {
+    const rect = child.getBoundingClientRect();
+    if (rect.width <= 0 && rect.height <= 0) continue;
+    bottom = Math.max(bottom, rect.bottom - innerRect.top);
+  }
+
+  return bottom > 0 ? Math.ceil(bottom + paddingBottom) : 0;
+}
+
 function measureRenderedContentHeight(root: HTMLElement | null) {
   if (!root) return 0;
   const scrollHeight = Math.ceil(root.scrollHeight || 0);
+  if (scrollHeight > 0 && typeof window !== 'undefined' && typeof window.getComputedStyle === 'function') {
+    const markdown = root.querySelector('.reasoning-markdown') as HTMLElement | null;
+    if (markdown) {
+      const markdownStyle = window.getComputedStyle(markdown);
+      const markdownHeight = Math.ceil(markdown.getBoundingClientRect().height || 0);
+      const childHeight = measureRenderedChildHeight(root);
+      const usesIntrinsicPlaceholder = (
+        markdownStyle.contentVisibility === 'auto'
+        && childHeight > 0
+        && markdownHeight - childHeight >= REASONING_INTRINSIC_PLACEHOLDER_GAP_PX
+        && scrollHeight - childHeight >= REASONING_INTRINSIC_PLACEHOLDER_GAP_PX
+      );
+      if (usesIntrinsicPlaceholder) return childHeight;
+    }
+  }
   if (scrollHeight > 0) return scrollHeight;
   return Math.ceil(root.getBoundingClientRect().height || 0);
 }
@@ -231,7 +263,7 @@ function waitAnimationFrame() {
 }
 
 async function measureStableTargetHeight(streaming = props.streaming, version: number) {
-  let lastHeight = getTargetHeight(streaming);
+  let lastHeight = 0;
   let stableFrames = 0;
 
   for (let index = 0; index < REASONING_HEIGHT_MAX_SAMPLES; index += 1) {
@@ -239,7 +271,7 @@ async function measureStableTargetHeight(streaming = props.streaming, version: n
     if (!isLayoutVersionCurrent(version)) return 0;
 
     const nextHeight = getTargetHeight(streaming);
-    if (nextHeight > 0 && Math.abs(nextHeight - lastHeight) <= 1) {
+    if (lastHeight > 0 && nextHeight > 0 && Math.abs(nextHeight - lastHeight) <= 1) {
       stableFrames += 1;
     } else {
       stableFrames = 0;
@@ -251,7 +283,7 @@ async function measureStableTargetHeight(streaming = props.streaming, version: n
     }
   }
 
-  return lastHeight;
+  return lastHeight || getTargetHeight(streaming);
 }
 
 function scrollToBottom() {
@@ -425,6 +457,11 @@ onBeforeUnmount(() => {
 
 .reasoning-block.is-revealing {
   overflow-anchor: none;
+}
+
+.reasoning-block.is-revealing .reasoning-markdown {
+  content-visibility: visible;
+  contain-intrinsic-size: none;
 }
 
 .reasoning-toggle {
