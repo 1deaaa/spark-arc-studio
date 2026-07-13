@@ -245,11 +245,6 @@ defineProps({
   }
 });
 
-// 暴露方法给父组件
-defineExpose({
-  saveWorldview
-});
-
 const worldview = ref('');
 const { t } = useI18n();
 
@@ -380,8 +375,7 @@ async function saveWorldview() {
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ projectName: projectId, fileName: fileId, content: worldview.value })
     });
-    const result = await res.json();
-    if (res.ok && result?.success !== false) bus.emit('toast', { message: t('components.lorebookEditor.saveSuccess'), type: 'success' });
+    await res.json();
     saveLorebookSnapshot();
   } catch {}
 }

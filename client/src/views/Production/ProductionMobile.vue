@@ -208,10 +208,6 @@
               </div>
             </n-tab-pane>
           </n-tabs>
-          <n-button type="primary" block @click="saveSceneMeta" style="margin-top: 16px;">
-            <template #icon><n-icon :component="Save" /></template>
-            {{ t('views.production.mobile.saveSceneInfo') }}
-          </n-button>
         </div>
       </n-drawer-content>
     </n-drawer>
@@ -271,7 +267,7 @@
 import { ref, computed, h, onMounted, onUnmounted, inject, watch, type Ref } from 'vue';
 import { NIcon, NSpin, NButton, NInput, NInputNumber, NSelect, NDrawer, NDrawerContent, NTabs, NTabPane, NSwitch, NDropdown, useMessage, type DropdownOption } from 'naive-ui';
 import { useI18n } from 'vue-i18n';
-import { ArrowLeft, BookOpen, ChevronRight, CircleAlert, CircleCheck, Clapperboard, Clipboard, Layers3, Pencil, Plus, RadioTower, Save, Send, Sparkles, SquarePen } from '@lucide/vue';
+import { ArrowLeft, BookOpen, ChevronRight, CircleAlert, CircleCheck, Clapperboard, Clipboard, Layers3, Pencil, Plus, RadioTower, Send, Sparkles, SquarePen } from '@lucide/vue';
 import { useSceneStore, type SceneWithClientId } from '../../components/stores/sceneStore';
 import { useFileStore } from '../../components/stores/fileStore';
 import { getOutline } from '../../services/api';
@@ -512,7 +508,7 @@ function hydrateSceneForm() {
   sceneEffects.value = (currentScene.value.effects != null) ? currentScene.value.effects : null;
 }
 
-async function saveSceneMeta() {
+function syncSceneMeta() {
   if (!currentScene.value) return;
   sceneStore.updateCurrentScene({
     scene: sceneTitle.value.trim() || currentScene.value.scene,
@@ -527,8 +523,6 @@ async function saveSceneMeta() {
     conditions: sceneConditions.value,
     effects: sceneEffects.value,
   });
-  await sceneStore._saveStory();
-  showSceneMetaDrawer.value = false;
 }
 
 function openAutoWrite() {
@@ -566,6 +560,14 @@ watch(() => fileStore.selectedFile?.path, (val) => {
 watch(currentScene, () => {
   hydrateSceneForm();
 });
+
+watch(
+  [sceneTitle, sceneIntro, sceneGuide, sceneThought, sceneButtonText, sceneTriggerEvent, scenePriority, sceneOnceKey, sceneHidden, sceneConditions, sceneEffects],
+  () => {
+    if (showSceneMetaDrawer.value) syncSceneMeta();
+  },
+  { deep: true },
+);
 
 // 进入场景详情（沉浸阅读）时通知外层隐藏右侧步骤导航，避免下滑误触跳走工作流
 watch(viewMode, (mode) => {

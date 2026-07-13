@@ -119,11 +119,6 @@
               >
                 {{ t('views.common.delete') }}
               </n-button>
-              <div style="flex:1"></div>
-              <n-button type="primary" class="brand-btn" @click="saveSingleCharacter">
-                <template #icon><n-icon :component="Save" /></template>
-                {{ t('views.lorebook.mobile.saveCharacter') }}
-              </n-button>
            </div>
         </div>
       </n-drawer-content>
@@ -152,13 +147,13 @@ import { useI18n } from 'vue-i18n';
 import bus from '../../eventBus';
 import { NButton, NIcon, NInput, NSpin, NEmpty, NDrawer, NDrawerContent, useMessage } from 'naive-ui';
 import SparkTag from '../../components/share/SparkTag.vue';
-import { ArrowRight, ChevronRight, CircleUser, Globe, Save, UserPlus, Users, Wrench } from '@lucide/vue';
+import { ArrowRight, ChevronRight, CircleUser, Globe, UserPlus, Users, Wrench } from '@lucide/vue';
 import LorebookEditor from '../../components/lorebook/LorebookEditor.vue';
 import GlobalLoading from '../../components/share/GlobalLoading.vue';
 import CharacterGeneratorPanel from '../../components/lorebook/CharacterGeneratorPanel.vue';
 import WorldGeneratorPanel from '../../components/lorebook/WorldGeneratorPanel.vue';
 import MobileTextArea from '../../components/editors/mobile/MobileTextArea.vue';
-import { fetchWithAuth, fetchCharacters, saveCharacter, deleteCharacter, createCharacter, renameCharacter } from '../../services/api';
+import { fetchWithAuth, fetchCharacters, saveCharacter, deleteCharacter, renameCharacter } from '../../services/api';
 import { useProjectStore } from '../../components/stores/projectStore';
 import { useCharacterStore } from '../../components/stores/characterStore';
 import { useSceneStore } from '../../components/stores/sceneStore';
@@ -166,6 +161,7 @@ import { useViewStore } from '../../components/stores/viewStore';
 import { scrollToFlowStep } from '../../utils/mobileFlow';
 import { extractLoglineFromInspiration } from '../../utils/inspiration';
 import { buildCreativeCacheKey, isCreativeCacheEqual, loadCreativeCache, saveCreativeCache } from '@/utils/creativeLocalCache';
+import { createAutoSaveScheduler } from '@/utils/autoSaveScheduler';
 
 const { t } = useI18n();
 const message = useMessage();
@@ -197,6 +193,34 @@ const editingChar = reactive<{
   id: null,
   name: '',
   content: ''
+});
+
+type CharacterSavePayload = {
+  projectName: string;
+  id: number | string;
+  name: string;
+  content: string;
+};
+
+const characterSaveScheduler = createAutoSaveScheduler<CharacterSavePayload>(async payload => {
+  const original = characters.value.find((character: any) => character.id === payload.id);
+  const oldName = String(original?.name || '').trim();
+  await saveCharacter(payload.projectName, payload.id, payload.content);
+  if (payload.name && payload.name !== oldName) {
+    await renameCharacter(payload.projectName, payload.id, payload.name);
+    sceneStore.renameSpeaker(oldName, payload.name);
+  }
+  if (original) {
+    original.name = payload.name || oldName;
+    original.content = payload.content;
+  }
+  saveLorebookSnapshot();
+  await characterStore.reload(payload.projectName);
+}, {
+  onError: error => {
+    message.error(t('views.common.saveFailed'));
+    console.error('自动保存角色失败:', error);
+  },
 });
 
 type LorebookMobileCacheSnapshot = {
@@ -273,7 +297,7 @@ async function loadWorldview() {
 }
 
 // 保存世界观
-async function saveWorldview(silent = false) {
+async function saveWorldview() {
   const pid = projectId.value;
   const fileId = '世界观.txt';
   if (!pid) return;
@@ -286,14 +310,9 @@ async function saveWorldview(silent = false) {
     const result = await res.json();
     if (res.ok && result?.success !== false) {
       saveLorebookSnapshot();
-      if (!silent) {
-        message.success(t('views.lorebook.mobile.worldviewSaved'));
-      }
     }
   } catch {
-    if (!silent) {
-      message.error(t('views.common.saveFailed'));
-    }
+    message.error(t('views.common.saveFailed'));
   }
 }
 
@@ -304,12 +323,12 @@ watch(worldview, () => {
     clearTimeout(worldviewSaveTimer);
   }
   worldviewSaveTimer = setTimeout(() => {
-    void saveWorldview(true);
+    void saveWorldview();
   }, 600);
 });
 
 async function goToSynopsisStep() {
-  await saveWorldview(true);
+  await saveWorldview();
   const inspiration = (projectStore.boundInspiration || '').trim();
   const payload = {
     projectName: projectStore.currentProject,
@@ -342,76 +361,13 @@ async function loadCharacters() {
   }
 }
 
-function openCreateChar() {
-  editingChar.id = null; // null for new
-  editingChar.name = '';
-  editingChar.content = '';
-  showSingleCharDrawer.value = true;
-}
-
-function editCharacter(ch) {
+async function editCharacter(ch) {
+  await characterSaveScheduler.flush();
   editingChar.id = ch.id;
   editingChar.name = ch.name;
   editingChar.content = ch.content;
   showSingleCharDrawer.value = true;
   saveLorebookSnapshot();
-}
-
-async function saveSingleCharacter() {
-  const pid = projectId.value;
-  if (!pid) return;
-  
-  try {
-    if (editingChar.id) {
-       const normalizedName = String(editingChar.name || '').trim();
-       // Update Content
-       await saveCharacter(pid, editingChar.id, editingChar.content || '');
-       
-       // Check if name changed
-       const original = characters.value.find(c => c.id === editingChar.id);
-       const oldName = String(original?.name || '').trim();
-       if (original && normalizedName && oldName !== normalizedName) {
-           await renameCharacter(pid, editingChar.id, normalizedName);
-           sceneStore.renameSpeaker(oldName, normalizedName);
-           editingChar.name = normalizedName;
-       }
-    } else {
-       const normalizedName = String(editingChar.name || '').trim();
-       // Create New
-       if (!normalizedName) {
-         message.warning(t('views.lorebook.mobile.enterCharacterName'));
-           return;
-       }
-       // 先创建角色
-       await createCharacter(pid, normalizedName);
-       editingChar.name = normalizedName;
-       message.success(t('views.lorebook.mobile.characterCreated')); 
-       
-       // 如果有内容，尝试更新内容（需要重新获取ID）
-       // 由于API限制，这里最简单的做法是重新加载列表，找到同名角色，然后更新内容
-       // 但为了用户体验，我们可以只创建，让用户再次点击编辑内容。
-       // 或者：fetchCharacters 获取最新列表，匹配名字，拿到 ID，再 update。
-       
-       if (editingChar.content) {
-          const list = await fetchCharacters(pid, false);
-          // 假设没有重名，或取最后一个匹配的
-          const created = list.find(c => c.name === normalizedName);
-          if (created) {
-             await saveCharacter(pid, created.id, editingChar.content);
-          }
-       }
-    }
-    
-    // 重新加载列表
-    await loadCharacters();
-    await characterStore.reload(pid);
-    showSingleCharDrawer.value = false;
-    saveLorebookSnapshot();
-    message.success(t('views.common.saveSuccess'));
-  } catch (e) {
-    message.error(t('views.common.saveFailed'));
-    console.error(e);
-  }
 }
 
 async function handleDeleteChar() {
@@ -437,11 +393,24 @@ function onLorebookRefresh() {
 }
 
 watch(
-  [() => editingChar.id, () => editingChar.name, () => editingChar.content, showSingleCharDrawer],
+  [() => editingChar.name, () => editingChar.content],
   () => {
     saveLorebookSnapshot();
+    const pid = projectId.value;
+    if (!showSingleCharDrawer.value || !pid || editingChar.id === null) return;
+    characterSaveScheduler.schedule({
+      projectName: pid,
+      id: editingChar.id,
+      name: String(editingChar.name || '').trim(),
+      content: editingChar.content || '',
+    });
   }
 );
+
+watch(showSingleCharDrawer, (visible) => {
+  saveLorebookSnapshot();
+  if (!visible) void characterSaveScheduler.flush();
+});
 
 onMounted(() => {
   hydrateLorebookFromCache();
@@ -457,8 +426,14 @@ onBeforeUnmount(() => {
     clearTimeout(worldviewSaveTimer);
     worldviewSaveTimer = null;
   }
+  void characterSaveScheduler.flush();
 });
 watch(projectId, () => {
+  characterSaveScheduler.cancel();
+  if (worldviewSaveTimer) {
+    clearTimeout(worldviewSaveTimer);
+    worldviewSaveTimer = null;
+  }
   hydrateLorebookFromCache();
   loadData();
 });

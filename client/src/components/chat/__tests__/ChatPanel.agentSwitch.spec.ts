@@ -16,12 +16,16 @@ const AgentRadialPickerStub = defineComponent({
 
 const ChatMessageListStub = defineComponent({
   name: 'ChatMessageList',
+  emits: ['reach-top'],
   props: {
     history: { type: Array, default: () => [] },
     loading: { type: Boolean, default: false },
-    threadKey: { type: String, default: '' },
   },
-  template: '<div class="history-probe" :data-count="history.length" :data-loading="loading" :data-thread="threadKey" />',
+  template: `
+    <div class="history-probe" :data-count="history.length" :data-loading="loading">
+      <button class="reach-top" @click="$emit('reach-top')" />
+    </div>
+  `,
 });
 
 function mountPanel(history: Array<Record<string, unknown>>, extraProps: Record<string, unknown> = {}) {
@@ -48,22 +52,23 @@ function mountPanel(history: Array<Record<string, unknown>>, extraProps: Record<
 }
 
 describe('ChatPanel Agent 切换渲染契约', () => {
-  it('把完整历史一次性交给虚拟时间线，不再按消息条数渐进截断', () => {
+  it('200 条历史首屏最多只挂载尾部 4 条，并通知移动抽屉直接撑满', async () => {
     const history = Array.from({ length: 100 }, (_, index) => ({
       id: index,
       role: 'user',
       content: `消息 ${index}`,
     }));
     const wrapper = mountPanel(history);
+    await nextTick();
 
-    expect(wrapper.find('.history-probe').attributes('data-count')).toBe('100');
+    expect(wrapper.find('.history-probe').attributes('data-count')).toBe('4');
     expect(wrapper.find('.history-probe').attributes('data-loading')).toBe('false');
-    expect(wrapper.find('.history-probe').attributes('data-thread')).toBe('chat-primary:agent_director');
+    expect(wrapper.emitted('history-rendered')?.at(-1)).toEqual([true]);
 
     wrapper.unmount();
   });
 
-  it('轮盘离场前不挂载新历史，离场后交给虚拟时间线', async () => {
+  it('轮盘离场前不挂载新历史，离场后只挂载尾部窗口', async () => {
     const history = Array.from({ length: 20 }, (_, index) => ({
       id: index,
       role: 'user',
@@ -78,7 +83,7 @@ describe('ChatPanel Agent 切换渲染契约', () => {
 
     await wrapper.find('.finish-close').trigger('click');
     await nextTick();
-    expect(wrapper.find('.history-probe').attributes('data-count')).toBe('20');
+    expect(wrapper.find('.history-probe').attributes('data-count')).toBe('4');
     expect(wrapper.find('.history-probe').attributes('data-loading')).toBe('false');
 
     wrapper.unmount();
@@ -95,6 +100,24 @@ describe('ChatPanel Agent 切换渲染契约', () => {
     await nextTick();
     expect(wrapper.find('.history-probe').attributes('data-count')).toBe('1');
     expect(wrapper.find('.history-probe').attributes('data-loading')).toBe('false');
+
+    wrapper.unmount();
+  });
+
+  it('触顶时只补一个有界批次，不会一次挂载全部历史', async () => {
+    const history = Array.from({ length: 100 }, (_, index) => ({
+      id: index,
+      role: index % 2 === 0 ? 'user' : 'assistant',
+      content: `消息 ${index}`,
+    }));
+    const wrapper = mountPanel(history);
+    expect(wrapper.find('.history-probe').attributes('data-count')).toBe('4');
+
+    await wrapper.find('.reach-top').trigger('click');
+    await nextTick();
+    const visibleCount = Number(wrapper.find('.history-probe').attributes('data-count'));
+    expect(visibleCount).toBeGreaterThan(4);
+    expect(visibleCount).toBeLessThanOrEqual(11);
 
     wrapper.unmount();
   });

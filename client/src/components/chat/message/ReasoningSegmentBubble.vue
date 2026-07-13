@@ -40,11 +40,13 @@
         :style="panelStyle"
       >
         <div ref="contentRef" class="reasoning-content">
-          <div class="reasoning-inner">
+          <div v-if="streaming || expanded || animating" class="reasoning-inner">
             <MarkdownRenderer
               class="reasoning-markdown"
               :content="text"
               :streaming="streaming"
+              :deferred="!streaming && text.length > DEFERRED_REASONING_CHAR_THRESHOLD"
+              :max-live-nodes="96"
             />
           </div>
         </div>
@@ -66,6 +68,7 @@ const STREAMING_REASONING_FALLBACK_MAX_HEIGHT = 108;
 const REASONING_REVEAL_TIMER_MS = 360;
 const REASONING_HEIGHT_STABLE_FRAMES = 2;
 const REASONING_HEIGHT_MAX_SAMPLES = 5;
+const DEFERRED_REASONING_CHAR_THRESHOLD = 6000;
 
 const { t } = useI18n();
 

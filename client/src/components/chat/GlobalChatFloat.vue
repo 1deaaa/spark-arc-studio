@@ -1,8 +1,8 @@
 <template>
-  <div v-show="!isChatWorkspaceActive" ref="rootEl" class="chat-float-root" :class="{ expanded: chat.expanded && !isMobile, 'is-dragging': drag.isDragging, 'is-long-pressing': isLongPressing }" :style="rootStyle">
+  <div v-show="chatFloatSurface.rootVisible" ref="rootEl" class="chat-float-root" :class="{ expanded: chat.expanded && !isMobile, 'is-dragging': drag.isDragging, 'is-long-pressing': isLongPressing }" :style="rootStyle">
     <!-- Collapsed button -->
     <transition name="chat-float-btn">
-      <div v-if="!chat.expanded" class="chat-float-launch-wrap">
+      <div v-if="chatFloatSurface.launchVisible" class="chat-float-launch-wrap">
         <n-tooltip trigger="hover">
           <template #trigger>
             <button
@@ -29,7 +29,7 @@
 
     <!-- 桌面端: Expanded panel -->
     <transition name="chat-float-panel" @after-enter="onPanelEntered">
-      <n-card v-if="chat.expanded && !isMobile" size="small" :bordered="true" class="chat-float-panel" :style="panelStyle">
+      <n-card v-if="chatFloatSurface.desktopPanelVisible" size="small" :bordered="true" class="chat-float-panel" :style="panelStyle">
         <!-- 左上角调整尺寸手柄 -->
         <n-tooltip trigger="hover">
           <template #trigger>
@@ -281,6 +281,7 @@ import { useViewStore } from '@/components/stores/viewStore';
 import { useSceneStore } from '@/components/stores/sceneStore';
 import { useMobile } from '@/composables/useMobile';
 import { resolveMobileDrawerHeight } from '@/components/chat/mobileDrawerSizing';
+import { clampFloatingChatPosition, resolveChatFloatSurface } from '@/components/chat/chatFloatVisibility';
 
 const { t } = useI18n();
 
@@ -299,10 +300,11 @@ const mobileListRef = ref<ChatPanelExpose | null>(null);
 const rootEl = ref(null);
 const fitOffset = ref(0); // Vertical offset to keep panel onscreen without moving anchor
 
-// 计算当前是否在沉浸式聊天视图中，以隐藏悬浮球
-const isChatWorkspaceActive = computed(() => {
-  return !isMobile.value && viewStore.currentView === 'chat';
-});
+const chatFloatSurface = computed(() => resolveChatFloatSurface({
+  expanded: chat.expanded,
+  isMobile: isMobile.value,
+  currentView: viewStore.currentView,
+}));
 
 const primarySessionId = computed(() => chat.primarySession?.id ?? null);
 
@@ -494,12 +496,14 @@ function animateDrawerTo(targetPx: number) {
 }
 
 /** 根据内容自适应高度。 */
-function syncMobileDrawerHeight() {
+function syncMobileDrawerHeight(forceFull = false) {
   if (!isMobile.value || !mobileDrawerVisible.value) return;
+  const { max } = getDrawerBounds();
+  if (!forceFull && drawerCurrentPx >= max) return;
   if (drawerMeasureRAF) cancelAnimationFrame(drawerMeasureRAF);
   drawerMeasureRAF = requestAnimationFrame(() => {
     drawerMeasureRAF = null;
-    animateDrawerTo(measureDrawerNaturalPx());
+    animateDrawerTo(forceFull ? max : measureDrawerNaturalPx());
   });
 }
 
@@ -512,19 +516,17 @@ function triggerMobileDrawerSettle() {
   }, 260);
 }
 
-// 同步抽屉显示状态与 chat.expanded (移动端)
-watch(() => chat.expanded, (expanded) => {
-  if (isMobile.value) {
-    mobileDrawerVisible.value = expanded;
-  }
+// 展开状态和响应式断点必须一起同步，避免跨端或重新挂载时三个入口同时不可见。
+watch([() => chat.expanded, isMobile], ([expanded, mobile]) => {
+  mobileDrawerVisible.value = mobile && expanded;
   if (expanded) {
     // 移动端等待抽屉进场完成；桌面浮窗继续使用短延迟挂载。
-    if (isMobile.value) resetContentReady();
+    if (mobile) resetContentReady();
     else scheduleContentReady();
   } else {
     resetContentReady();
   }
-});
+}, { immediate: true });
 
 watch(mobileDrawerVisible, (visible) => {
   if (isMobile.value && !visible && chat.expanded) {
@@ -547,9 +549,9 @@ watch(mobileDrawerVisible, (visible) => {
   }
 });
 
-// 内容（历史 / 流式增量）变化时，自适应跟随高度（用户拖动后不再跟随）
+// 仅在消息结构或发送阶段变化时测量高度，避免每个流式增量都读取 scrollHeight。
 watch(
-  () => [chat.history, chat.history?.length, chat.sending],
+  () => [chat.currentAgentId, chat.history?.length, chat.sending],
   () => {
     if (isMobile.value && mobileDrawerVisible.value) {
       syncMobileDrawerHeight();
@@ -720,11 +722,17 @@ function adjustFit() {
 
 // Rename for clarity (deprecated old clamp)
 function clampIntoViewport() {
-  // 移除移动端强行归位的逻辑，允许自定义位置
-  // Horizontal clamp: Ensure button/panel fits horizontally
   const { w, h } = getCurrentSize();
-  const maxRight = Math.max(8, window.innerWidth - w - 8);
-  pos.right = Math.min(Math.max(8, pos.right), maxRight);
+  const clamped = clampFloatingChatPosition({
+    right: pos.right,
+    top: pos.top,
+    width: w,
+    height: h,
+    viewportWidth: window.innerWidth,
+    viewportHeight: window.innerHeight,
+  });
+  pos.right = clamped.right;
+  pos.top = clamped.top;
   
   // 拖动时直接同步计算，避免异步导致的闪烁
   if (drag.isDragging) {

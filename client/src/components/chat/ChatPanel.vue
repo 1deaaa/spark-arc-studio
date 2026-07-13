@@ -88,7 +88,6 @@
         ref="chatListRef"
         :history="visibleHistory"
         :loading="loading || agentContentPending"
-        :thread-key="`${loadingTarget}:${agentId}`"
         :last-error="lastError"
         :sending="sending"
         :thinking-seconds="thinkingSeconds"
@@ -108,7 +107,7 @@
         @edit-keydown="(e, id) => $emit('edit-keydown', e, id)"
         @delete-msg="$emit('delete-msg', $event)"
         @retry="(id, content) => $emit('retry', id, content)"
-        @content-height-change="$emit('history-rendered')"
+        @reach-top="loadOlderHistory"
       >
         <template #empty-state>
           <slot name="empty-state"></slot>
@@ -169,7 +168,7 @@
  * 2. 状态驱动：通过 props 接收对话数据，通过 events 发出交互指令，本身不持有业务 Store。
  * 3. 高复用性：同时服务于 GlobalChatFloat（单例主入口）和 ExtraChatWindow（多实例窗口）。
  */
-import { ref, computed, onBeforeUnmount, useSlots, watch, type PropType } from 'vue';
+import { computed, nextTick, onMounted, ref, useSlots, watch, type PropType } from 'vue';
 import { useI18n } from 'vue-i18n';
 import { NButton, NInput, NPopconfirm, NTooltip } from 'naive-ui';
 import ChatMessageList from '@/components/chat/ChatMessageList.vue';
@@ -177,6 +176,10 @@ import AgentRadialPicker from '@/components/chat/AgentRadialPicker.vue';
 import ChatProgressBoardPopover from '@/components/chat/ChatProgressBoardPopover.vue';
 import GlobalLoading from '@/components/share/GlobalLoading.vue';
 import type { ChatMessage } from '@/services/chatService';
+import {
+  selectChatTailWindowStart,
+  selectOlderChatWindowStart,
+} from '@/components/chat/message/render';
 
 type AgentOption = {
   label: string;
@@ -291,25 +294,45 @@ const slots = useSlots();
 type ChatListExpose = { listRef?: HTMLElement | null };
 const chatListRef = ref<ChatListExpose | null>(null);
 const agentContentPending = ref(false);
-const visibleHistory = computed(() => agentContentPending.value ? [] : props.history);
+const INITIAL_WINDOW = Object.freeze({ maxMessages: 4, maxContentChars: 6000 });
+const OLDER_WINDOW = Object.freeze({ maxMessages: 6, maxContentChars: 12000 });
+const visibleStartIndex = ref(selectChatTailWindowStart(props.history, INITIAL_WINDOW));
+const hasLoadedOlder = ref(false);
+const visibleHistory = computed(() => (
+  agentContentPending.value ? [] : props.history.slice(visibleStartIndex.value)
+));
 let pendingPickerAgentId = '';
-let releaseFrame = 0;
 
-function scheduleContentRelease(): void {
-  if (releaseFrame) cancelAnimationFrame(releaseFrame);
-  releaseFrame = requestAnimationFrame(() => {
-    releaseFrame = requestAnimationFrame(() => {
-      releaseFrame = 0;
-      agentContentPending.value = false;
-    });
-  });
+function getChatListElement(): HTMLElement | null {
+  return chatListRef.value?.listRef || null;
+}
+
+function notifyHistoryRendered(): void {
+  nextTick(() => emit('history-rendered', visibleStartIndex.value > 0));
+}
+
+function resetHistoryWindow(): void {
+  visibleStartIndex.value = selectChatTailWindowStart(props.history, INITIAL_WINDOW);
+  hasLoadedOlder.value = false;
 }
 
 watch(() => props.agentId, (nextAgentId, previousAgentId) => {
-  if (nextAgentId === previousAgentId || nextAgentId === pendingPickerAgentId) return;
-  pendingPickerAgentId = '';
-  agentContentPending.value = true;
-  scheduleContentRelease();
+  if (nextAgentId === previousAgentId) return;
+  resetHistoryWindow();
+  if (nextAgentId !== pendingPickerAgentId) {
+    pendingPickerAgentId = '';
+    agentContentPending.value = false;
+    notifyHistoryRendered();
+  }
+}, { flush: 'sync' });
+
+watch(() => props.history.length, (nextLength, previousLength) => {
+  if (nextLength < previousLength || visibleStartIndex.value > nextLength) {
+    resetHistoryWindow();
+  } else if (nextLength > previousLength && !hasLoadedOlder.value) {
+    visibleStartIndex.value = selectChatTailWindowStart(props.history, INITIAL_WINDOW);
+  }
+  notifyHistoryRendered();
 }, { flush: 'sync' });
 
 const editingContentLocal = computed({
@@ -400,16 +423,35 @@ function onAgentSelected(val: string): void {
   emit('update:agentId', val);
 }
 
-/** 轮盘真实离场后才让虚拟时间线接管新会话，避免与收起动画争抢主线程。 */
+/** 轮盘真实离场后才挂载新会话的尾部窗口，避免与收起动画争抢主线程。 */
 function onAgentPickerClosed(): void {
   if (!pendingPickerAgentId) return;
   pendingPickerAgentId = '';
   agentContentPending.value = false;
+  notifyHistoryRendered();
 }
 
-onBeforeUnmount(() => {
-  if (releaseFrame) cancelAnimationFrame(releaseFrame);
-});
+/** 用户触顶时补一批更早历史，并保持当前内容在视口中的像素位置。 */
+function loadOlderHistory(): void {
+  const currentStart = visibleStartIndex.value;
+  if (currentStart <= 0 || agentContentPending.value) return;
+  const nextStart = selectOlderChatWindowStart(props.history, currentStart, OLDER_WINDOW);
+  if (nextStart === currentStart) return;
+
+  const list = getChatListElement();
+  const previousScrollTop = list?.scrollTop ?? 0;
+  const previousScrollHeight = list?.scrollHeight ?? 0;
+  hasLoadedOlder.value = true;
+  visibleStartIndex.value = nextStart;
+  nextTick(() => {
+    if (list) {
+      list.scrollTop = previousScrollTop + Math.max(0, list.scrollHeight - previousScrollHeight);
+    }
+    emit('history-rendered', visibleStartIndex.value > 0);
+  });
+}
+
+onMounted(notifyHistoryRendered);
 
 // 暴露 ChatMessageList 内部的 DOM listRef，保持与 useChatActions scrollToBottom 兼容
 // useChatActions 做 listRef.value?.listRef -> 应得到 DOM element

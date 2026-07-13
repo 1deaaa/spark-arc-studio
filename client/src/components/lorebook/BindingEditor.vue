@@ -399,7 +399,6 @@ async function saveAllActionBindings() {
   
   try {
     await actionBindingStore.saveActionBindingsForProject(projectStore.currentProject);
-    bus.emit('toast', { type: 'success', message: '行为函数绑定保存成功' });
   } catch (e: unknown) {
     const errorMessage = e instanceof Error ? e.message : String(e || '未知错误');
     bus.emit('toast', { type: 'error', message: `保存失败: ${errorMessage}` });
@@ -456,7 +455,6 @@ async function saveAllRegistries() {
   
   try {
     await actionBindingStore.saveRegistriesForProject(projectStore.currentProject);
-    bus.emit('toast', { type: 'success', message: '注册表保存成功' });
   } catch (e: unknown) {
     const errorMessage = e instanceof Error ? e.message : String(e || '未知错误');
     bus.emit('toast', { type: 'error', message: `保存失败: ${errorMessage}` });

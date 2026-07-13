@@ -147,16 +147,10 @@
             <div class="world-panel-title-row">
               <h3 class="world-panel-title">{{ t('views.world.desktop.worldAndCharacter') }}</h3>
               <div class="title-row-actions">
-                <n-button size="tiny" type="primary" @click="handleSaveWorldview">
-                  <template #icon>
-                    <n-icon :component="Save" />
-                  </template>
-                  {{ t('views.world.desktop.saveWorld') }}
-                </n-button>
                 <AiSettingsPanel :visible="true" :compact="true" agent-name="agent_lorebook" />
               </div>
             </div>
-            <LorebookEditor ref="lorebookEditorRef" :visible="true" :embedded="true" />
+            <LorebookEditor :visible="true" :embedded="true" />
           </div>
         </div>
       </section>
@@ -178,7 +172,7 @@
 import { ref } from 'vue';
 import { NInput, NButton, NIcon, NEmpty, NBadge } from 'naive-ui';
 import { useI18n } from 'vue-i18n';
-import { ArrowRight, ChevronDown, ChevronUp, Clock, Pin, RefreshCw, Save, Sparkles, X, Zap } from '@lucide/vue';
+import { ArrowRight, ChevronDown, ChevronUp, Clock, Pin, RefreshCw, Sparkles, X, Zap } from '@lucide/vue';
 import LorebookEditor from '../../components/lorebook/LorebookEditor.vue';
 import CharacterGeneratorPanel from '../../components/lorebook/CharacterGeneratorPanel.vue';
 import AiSettingsPanel from '../../components/lorebook/AiSettingsPanel.vue';
@@ -190,12 +184,6 @@ import InspireTagSelector from '../../components/lorebook/InspireTagSelector.vue
 import { useWorldLogic } from '../../composables/useWorldLogic';
 
 const { t } = useI18n();
-
-const lorebookEditorRef = ref<InstanceType<typeof LorebookEditor> | null>(null);
-
-function handleSaveWorldview() {
-  lorebookEditorRef.value?.saveWorldview();
-}
 
 function handleGenerateFromMuseClick() {
   void handleGenerateFromMuse();

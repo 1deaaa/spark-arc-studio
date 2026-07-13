@@ -133,8 +133,8 @@
     <!-- 步骤指示器 -->
     <StepIndicator v-show="!immersiveMode" :steps="flowSteps" :container-ref="containerRef" />
     
-    <!-- AI 悬浮聊天（仅灵感/世界观步骤） -->
-    <GlobalChatFloat v-if="showChatFloat" />
+    <!-- 移动端所有创作步骤都保留 AI 悬浮聊天入口 -->
+    <GlobalChatFloat />
     
     <!-- 发布管理抽屉 -->
     <n-drawer v-model:show="publishDrawerVisible" placement="bottom" height="90%">
@@ -251,8 +251,6 @@ const flowSteps = computed(() => [
 const currentStepLabel = computed(() => {
   return flowSteps.value[currentStep.value]?.label || t('mobileFlow.sparkArc');
 });
-
-const showChatFloat = ref(true);
 
 const stepViewMap: AppViewKey[] = ['world', 'lorebook', 'synopsis', 'structure', 'production', 'blueprint'];
 watch(currentStep, (idx) => {

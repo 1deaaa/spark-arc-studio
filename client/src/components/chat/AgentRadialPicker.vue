@@ -582,10 +582,19 @@ async function open(): Promise<void> {
 
 function close(): void {
   if (!isOpen.value) return;
+  restoreTriggerFocus();
   isOpen.value = false;
   hoverIndex.value = -1;
   isPointerDragging.value = false;
   pointerDownOnTrigger.value = false;
+}
+
+/** 在遮罩隐藏前把焦点归还触发器，避免焦点落入 aria-hidden 的焦点陷阱哨兵。 */
+function restoreTriggerFocus(): void {
+  const trigger = getTriggerElement();
+  if (trigger && typeof trigger.focus === 'function') {
+    trigger.focus({ preventScroll: true });
+  }
 }
 
 /**
@@ -603,6 +612,7 @@ function onOverlayAfterEnter(): void {
  */
 function onOverlayBeforeLeave(): void {
   overlayStable.value = false;
+  restoreTriggerFocus();
 }
 
 function onOverlayAfterLeave(): void {
@@ -614,6 +624,7 @@ function commitSelectionAndClose(value: string, idx: number): void {
   renderSnapshot.value = [...renderableOptions.value];
   hoverIndex.value = idx;
   emit('update:value', value);
+  restoreTriggerFocus();
   isOpen.value = false;
   isPointerDragging.value = false;
   pointerDownOnTrigger.value = false;

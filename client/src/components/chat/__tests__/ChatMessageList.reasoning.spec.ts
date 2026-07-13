@@ -1,6 +1,6 @@
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import { mount } from '@vue/test-utils';
-import { defineComponent, h, nextTick } from 'vue';
+import { defineComponent, nextTick } from 'vue';
 import ChatMessageList from '../ChatMessageList.vue';
 import { i18n } from '@/i18n';
 
@@ -13,26 +13,6 @@ vi.mock('naive-ui', async () => {
       error: vi.fn(),
       warning: vi.fn(),
       info: vi.fn(),
-    }),
-  };
-});
-
-vi.mock('markstream-vue', async () => {
-  const actual = await vi.importActual<typeof import('markstream-vue')>('markstream-vue');
-  return {
-    ...actual,
-    MarkstreamVirtualTimeline: defineComponent({
-      name: 'MarkstreamVirtualTimeline',
-      props: {
-        items: { type: Array, default: () => [] },
-        overscan: { type: Number, default: 0 },
-        overscanPx: { type: Number, default: 0 },
-      },
-      setup(props, { slots }) {
-        return () => h('div', { class: 'timeline-stub' }, props.items.flatMap((item, index) => (
-          slots.default?.({ item, index, measureRef: () => undefined }) ?? []
-        )));
-      },
     }),
   };
 });
@@ -93,34 +73,6 @@ describe('ChatMessageList 深度思考块展开性能契约', () => {
     expect(wrapper.findComponent({ name: 'MarkdownRenderer' }).props('streaming')).toBe(false);
   });
 
-  it('长历史完整交给虚拟时间线而不做消息条数截断', () => {
-    const history = Array.from({ length: 80 }, (_, index) => ({
-      id: `message-${index}`,
-      role: 'user',
-      content: `历史消息 ${index}`,
-    }));
-    const wrapper = mount(ChatMessageList, {
-      props: { history },
-      global: {
-        plugins: [i18n],
-        stubs: {
-          NButton: true,
-          NTooltip: true,
-          NPopover: true,
-          NInput: true,
-          SparkAlert: true,
-          ContextCompactionSegment: true,
-          ToolTraceSegment: true,
-        },
-      },
-    });
-
-    const timeline = wrapper.findComponent({ name: 'MarkstreamVirtualTimeline' });
-    expect(timeline.props('items')).toHaveLength(80);
-    expect(timeline.props('overscan')).toBe(1);
-    expect(timeline.props('overscanPx')).toBe(120);
-  });
-
   it('长思考内容展开和收起不会触发递归渲染，并保留 Markdown 渲染', async () => {
     vi.useFakeTimers();
     const longReasoning = Array.from({ length: 260 }, (_, index) => (
@@ -165,6 +117,7 @@ describe('ChatMessageList 深度思考块展开性能契约', () => {
 
     const toggle = wrapper.find('.reasoning-toggle');
     expect(toggle.exists()).toBe(true);
+    expect(wrapper.find('.reasoning-bubble .mock-markdown').exists()).toBe(false);
 
     await toggle.trigger('click');
     await nextTick();
@@ -173,7 +126,7 @@ describe('ChatMessageList 深度思考块展开性能契约', () => {
 
     const panel = wrapper.find('.reasoning-content-wrapper');
     expect(panel.classes()).toContain('is-expanded');
-    expect(wrapper.find('.mock-markdown').text()).toContain('推理段 260');
+    expect(wrapper.find('.reasoning-bubble .mock-markdown').text()).toContain('推理段 260');
     expect(wrapper.find('.reasoning-bubble').exists()).toBe(true);
     expect(wrapper.find('.reasoning-block').exists()).toBe(true);
     expect(wrapper.find('.reasoning-bubble').classes()).toContain('reasoning-bubble');
@@ -184,6 +137,7 @@ describe('ChatMessageList 深度思考块展开性能契约', () => {
     await nextTick();
 
     expect(wrapper.find('.reasoning-content-wrapper').classes()).not.toContain('is-expanded');
+    expect(wrapper.find('.reasoning-bubble .mock-markdown').exists()).toBe(false);
   });
 
   it('展开动画过程中再次点击可以立即切换为收起状态', async () => {
@@ -304,6 +258,7 @@ describe('ChatMessageList 深度思考块展开性能契约', () => {
     await nextTick();
 
     expect(wrapper.find('.reasoning-content-wrapper').classes()).not.toContain('is-expanded');
+    expect(wrapper.find('.reasoning-bubble .mock-markdown').exists()).toBe(false);
   });
 
   it('密集思考 chunk 在同一帧只安排一次布局测量', async () => {

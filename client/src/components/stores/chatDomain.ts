@@ -287,6 +287,27 @@ function normalizeAssistantContent(message: AnyRecord = {}) {
   return normalizeMessageText(message.content || '');
 }
 
+/** 历史装载时一次完成助手正文与思考拆分，避免对同一长字符串重复执行全文正则。 */
+function normalizeAssistantTextPayload(message: AnyRecord = {}) {
+  const rawContent = message.content || '';
+  let content = '';
+  let embeddedReasoning = '';
+  if (typeof rawContent === 'string') {
+    const split = splitThinkTaggedText(rawContent);
+    content = split.display;
+    embeddedReasoning = split.reasoning;
+  } else {
+    content = normalizeMessageText(rawContent);
+    embeddedReasoning = extractReasoningText(rawContent);
+  }
+  const reasoning = normalizeMessageText(
+    normalizeReasoningText(message.reasoning || '')
+    || normalizeReasoningText(message.metadata?.reasoning || '')
+    || embeddedReasoning,
+  );
+  return { content, reasoning };
+}
+
 function normalizeAssistantSegments(message: AnyRecord = {}) {
   const directSegments = Array.isArray(message.segments) ? message.segments : [];
   if (directSegments.length > 0) return directSegments;
@@ -311,20 +332,23 @@ function getComparableSegmentSignature(segments: AnyRecord[] = []) {
 
 export function normalizeHistoryMessage(message: AnyRecord = {}): AnyRecord {
   if (!message || typeof message !== 'object') return message;
-  if (message.role !== 'assistant') {
+  const source = { ...message };
+  if (source.role !== 'assistant') {
     return {
-      ...message,
-      content: normalizeMessageText(message.content || ''),
+      ...source,
+      content: normalizeMessageText(source.content || ''),
     };
   }
 
+  const textPayload = normalizeAssistantTextPayload(source);
+
   return {
-    ...message,
-    content: normalizeAssistantContent(message),
-    reasoning: normalizeAssistantReasoning(message),
-    reasoning_duration: message.reasoning_duration || message.metadata?.reasoning_duration || 0,
-    tool_traces: normalizeToolTraceList(message.tool_traces || message.metadata?.tool_traces || []),
-    segments: normalizeAssistantSegments(message),
+    ...source,
+    content: textPayload.content,
+    reasoning: textPayload.reasoning,
+    reasoning_duration: source.reasoning_duration || source.metadata?.reasoning_duration || 0,
+    tool_traces: normalizeToolTraceList(source.tool_traces || source.metadata?.tool_traces || []),
+    segments: normalizeAssistantSegments(source),
   };
 }
 

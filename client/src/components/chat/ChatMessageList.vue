@@ -1,32 +1,21 @@
 <template>
-  <MarkstreamVirtualTimeline
-    ref="timelineRef"
-    class="chat-list"
-    :class="extraClass"
-    :items="timelineItems"
-    :thread-key="threadKey"
-    :layout-revision="timelineLayoutRevision"
-    :get-key="getTimelineItemKey"
-    :get-kind="getTimelineItemKind"
-    :estimate-item-height="estimateTimelineItemHeight"
-    :overscan="1"
-    :overscan-px="120"
-    stick-to-bottom="auto"
-    @height-change="onTimelineHeightChange"
-  >
-    <template #default="{ item: { kind, message: m, messageIndex: idx }, measureRef }">
-    <div v-if="kind === 'loading'" :ref="measureRef" class="chat-loading-state" role="status" aria-live="polite">
+  <div ref="listRef" class="chat-list" :class="extraClass" @scroll.passive="onListScroll">
+    <div class="chat-list-content">
+    <div v-if="loading" class="chat-loading-state" role="status" aria-live="polite">
       <SparkLoaderAnimation class="chat-list-loader-animation" />
       <div class="chat-loading-text">{{ t('components.chatMessageList.loading') }}</div>
     </div>
-    <div v-else-if="kind === 'empty'" :ref="measureRef" class="chat-empty-state">
+    <div v-else-if="(history || []).length === 0 && !lastError" class="chat-empty-state">
       <slot name="empty-state">
         <div class="chat-hint">{{ t('components.chatMessageList.noMessages') }}</div>
       </slot>
     </div>
+    <template
+      v-for="({ message: m, displayContent, segments, renderable, key }, idx) in renderItems"
+      :key="key"
+    >
       <div
-        v-else-if="kind === 'message'"
-        :ref="measureRef"
+        v-if="renderable"
         class="chat-msg"
         :class="m.role"
       >
@@ -49,22 +38,23 @@
         <!-- 用户消息 -->
         <div v-else-if="m.role === 'user'" class="chat-bubble">
           <MarkdownRenderer
-            v-if="typeof getDisplayContent(m) === 'string' && getDisplayContent(m)"
-            :content="getDisplayContent(m)"
+            v-if="typeof displayContent === 'string' && displayContent"
+            :content="displayContent"
+            :deferred="shouldDeferMarkdown(displayContent)"
             :max-live-nodes="96"
           />
           <pre v-else-if="m.content && typeof m.content === 'object'" class="chat-json">{{ formatObject(m.content) }}</pre>
         </div>
         <!-- 助手消息：按 segments 顺序渲染 -->
         <template v-else-if="m.role === 'assistant'">
-          <template v-for="(seg, segIdx) in getMessageSegments(m)" :key="`seg-${idx}-${segIdx}`">
+          <template v-for="(seg, segIdx) in segments" :key="`seg-${idx}-${segIdx}`">
             <ReasoningSegmentBubble
               v-if="seg.type === 'reasoning' && getReasoningSegmentText(seg)"
               :text="getReasoningSegmentText(seg)"
               :source-agent="String(seg.source_agent || '')"
               :agent-name="getAgentName(seg.source_agent)"
-              :streaming="isReasoningSegmentThinking(m, idx, segIdx)"
-              :active="isAgentSegmentActive(m, idx, segIdx)"
+              :streaming="isReasoningSegmentThinking(m, idx, segIdx, segments)"
+              :active="isAgentSegmentActive(m, idx, segIdx, segments)"
             />
             <ContextCompactionSegment
               v-else-if="seg.type === 'context_compaction' || seg.type === 'context_compaction_summary'"
@@ -75,8 +65,8 @@
             <ToolTraceSegment
               v-else-if="seg.type === 'tool_trace'"
               :segment="seg"
-              :status="effectiveTraceStatus(idx, segIdx, getMessageSegments(m), seg)"
-              :label="formatToolTraceLabel(seg, effectiveTraceStatus(idx, segIdx, getMessageSegments(m), seg))"
+              :status="effectiveTraceStatus(idx, segIdx, segments, seg)"
+              :label="formatToolTraceLabel(seg, effectiveTraceStatus(idx, segIdx, segments, seg))"
               :expanded="!!toolTraceExpanded[getToolTraceKey(m, idx, segIdx)]"
               @toggle="toggleToolTrace(getToolTraceKey(m, idx, segIdx))"
             />
@@ -86,11 +76,12 @@
                 class="agent-avatar-anchor"
                 :agent-id="seg.source_agent"
                 :size="28"
-                :active="isAgentSegmentActive(m, idx, segIdx)"
+                :active="isAgentSegmentActive(m, idx, segIdx, segments)"
               />
               <MarkdownRenderer
                 :content="seg.text"
-                :streaming="isTextSegmentStreaming(m, idx, segIdx)"
+                :streaming="isTextSegmentStreaming(m, idx, segIdx, segments)"
+                :deferred="shouldDeferMarkdown(seg.text, isTextSegmentStreaming(m, idx, segIdx, segments))"
                 :max-live-nodes="96"
               />
             </div>
@@ -99,7 +90,7 @@
             </div>
           </template>
           <!-- 助手操作按钮（始终在最后，发送时隐藏；纯上下文压缩通知不显示） -->
-          <div v-if="!sending && getMessageSegments(m).some(s => s.type !== 'context_compaction' && s.type !== 'context_compaction_summary')" class="bubble-actions bubble-actions-assistant">
+          <div v-if="!sending && segments.some(s => s.type !== 'context_compaction' && s.type !== 'context_compaction_summary')" class="bubble-actions bubble-actions-assistant">
             <div class="bubble-action-buttons">
               <n-tooltip trigger="hover">
                 <template #trigger>
@@ -208,7 +199,8 @@
         </div>
         </div>
       </div>
-    <div v-else-if="kind === 'error'" :ref="measureRef" class="chat-msg assistant chat-error-msg">
+    </template>
+    <div v-if="lastError" class="chat-msg assistant chat-error-msg">
       <div class="chat-bubble-container">
         <SparkAlert
           type="error"
@@ -224,7 +216,7 @@
     </div>
 
     <!-- 重试状态提示 -->
-    <div v-else-if="kind === 'retry'" :ref="measureRef" class="chat-msg assistant retry-msg">
+    <div v-if="retryAttempt != null && sending" class="chat-msg assistant retry-msg">
       <div class="chat-role">
         <svg viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg" class="ai-icon">
           <path d="M12 2L14.5 9.5L22 12L14.5 14.5L12 22L9.5 14.5L2 12L9.5 9.5L12 2Z" fill="currentColor" />
@@ -249,7 +241,7 @@
     </div>
 
     <!-- 思考中动画 -->
-    <div v-else-if="kind === 'thinking'" :ref="measureRef" class="chat-msg assistant thinking-msg">
+    <div v-if="showPendingThinking" class="chat-msg assistant thinking-msg">
       <div class="chat-role">
         <svg viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg" class="ai-icon">
           <path d="M12 2L14.5 9.5L22 12L14.5 14.5L12 22L9.5 14.5L2 12L9.5 9.5L12 2Z" fill="currentColor" />
@@ -287,8 +279,8 @@
         </div>
       </div>
     </div>
-    </template>
-  </MarkstreamVirtualTimeline>
+    </div>
+  </div>
 </template>
 
 <script setup lang="ts">
@@ -297,10 +289,9 @@
  * 从 GlobalChatFloat.vue 提取的桌面端/移动端共用消息渲染模板
  * 模板和对应的 scoped CSS 一同搬运，确保样式完整
  */
-import { computed, ref, shallowReactive, shallowRef, watch, type PropType } from 'vue';
+import { computed, ref, type PropType } from 'vue';
 import { useI18n } from 'vue-i18n';
 import { NButton, NInput, NPopover, NTooltip, useMessage } from 'naive-ui';
-import { MarkstreamVirtualTimeline } from 'markstream-vue';
 import MarkdownRenderer from '@/components/share/MarkdownRenderer.vue';
 import SparkAlert from '@/components/share/SparkAlert.vue';
 import AgentAvatar from '@/components/share/AgentAvatar.vue';
@@ -321,20 +312,8 @@ import {
   type MessageId,
 } from './message/render';
 
-type ChatTimelineKind = 'message' | 'loading' | 'empty' | 'error' | 'retry' | 'thinking';
-type ChatTimelineItem = {
-  id: string;
-  kind: ChatTimelineKind;
-  message?: ChatMessageItem;
-  messageIndex?: number;
-};
-type TimelineExpose = {
-  $el?: HTMLElement;
-  scrollToBottom?: () => void;
-};
-const timelineItemHeightEstimates = new WeakMap<object, number>();
-
 const { t } = useI18n();
+const DEFERRED_MARKDOWN_CHAR_THRESHOLD = 6000;
 
 const props = defineProps({
   /** 消息历史列表 */
@@ -359,8 +338,6 @@ const props = defineProps({
   editingContent: { type: String, default: '' },
   /** 额外的 CSS class */
   extraClass: { type: String, default: '' },
-  /** 虚拟列表线程标识，用于隔离不同 Agent/会话的高度与滚动锚点。 */
-  threadKey: { type: String, default: 'chat' },
   /** 当前重试次数（null 表示未在重试） */
   retryAttempt: { type: [Number, null], default: null },
   /** 重试来源 */
@@ -379,56 +356,16 @@ const emit = defineEmits([
   'edit-keydown',
   'delete-msg',
   'retry',
-  'content-height-change',
+  'reach-top',
 ]);
+
+function onListScroll(event: Event) {
+  const target = event.currentTarget as HTMLElement | null;
+  if (target && target.scrollTop <= 80) emit('reach-top');
+}
 
 // Naive UI 消息提示
 const message = useMessage();
-
-const messageTimelineItems = shallowRef<ChatTimelineItem[]>([]);
-let previousHistory: ChatMessageItem[] = [];
-
-function createMessageTimelineItem(message: ChatMessageItem, index: number): ChatTimelineItem {
-  return shallowReactive({
-    id: `message:${getMessageKey(message, index)}`,
-    kind: 'message' as const,
-    message,
-    messageIndex: index,
-  });
-}
-
-function rebuildMessageTimelineItems(history: ChatMessageItem[]) {
-  messageTimelineItems.value = history.flatMap((message, index) => (
-    shouldRenderMessage(message) ? [createMessageTimelineItem(message, index)] : []
-  ));
-}
-
-watch(() => props.history, (history) => {
-  const previous = previousHistory;
-  const lastIndex = history.length - 1;
-  const onlyTailChanged = (
-    history.length > 0
-    && history.length === previous.length
-    && history[lastIndex] !== previous[lastIndex]
-    && (lastIndex === 0 || history[lastIndex - 1] === previous[lastIndex - 1])
-  );
-
-  if (onlyTailChanged) {
-    const tailItem = messageTimelineItems.value[messageTimelineItems.value.length - 1];
-    const nextTail = history[lastIndex];
-    const nextRenderable = shouldRenderMessage(nextTail);
-    const tailAlreadyRendered = tailItem?.messageIndex === lastIndex;
-    if (nextRenderable && tailAlreadyRendered) {
-      tailItem.message = nextTail;
-    } else if (nextRenderable !== tailAlreadyRendered) {
-      rebuildMessageTimelineItems(history);
-    }
-  } else if (history !== previous) {
-    rebuildMessageTimelineItems(history);
-  }
-
-  previousHistory = history;
-}, { immediate: true, flush: 'sync' });
 
 // 双向绑定编辑内容
 const editingContentLocal = computed({
@@ -436,50 +373,29 @@ const editingContentLocal = computed({
   set: (val) => emit('update:editingContent', val),
 });
 
-const timelineRef = ref<TimelineExpose | null>(null);
-const listRef = computed(() => timelineRef.value?.$el || null);
+const listRef = ref<HTMLElement | null>(null);
+
+/**
+ * 将单条消息的正文与 segments 在一个计算周期内只派生一次。
+ * 长历史尾部消息可能包含大量思考和工具段，模板重复调用会把同一正文反复扫描多次。
+ */
+const renderItems = computed(() => (props.history || []).map((message, index) => {
+  const segments = message?.role === 'assistant' ? getMessageSegments(message) : [];
+  return {
+    message,
+    key: getMessageKey(message, index),
+    displayContent: getDisplayContent(message),
+    segments,
+    renderable: shouldRenderMessage(message, segments),
+  };
+}));
 
 const showPendingThinking = computed(() => {
   if (!props.sending) return false;
-  const history = props.history || [];
-  const lastMessage = history[history.length - 1];
-  if (!lastMessage || lastMessage.role !== 'assistant') return true;
-  return !hasRenderableAssistantActivity(lastMessage);
+  const lastItem = renderItems.value[renderItems.value.length - 1];
+  if (!lastItem || lastItem.message.role !== 'assistant') return true;
+  return !hasRenderableAssistantActivity(lastItem.message, lastItem.segments);
 });
-
-const timelineItems = computed<ChatTimelineItem[]>(() => {
-  const items: ChatTimelineItem[] = [];
-  if (props.loading) {
-    items.push({ id: 'status:loading', kind: 'loading' });
-  }
-
-  const renderableCount = messageTimelineItems.value.length;
-  items.push(...messageTimelineItems.value);
-
-  if (!props.loading && renderableCount === 0 && !props.lastError) {
-    items.push({ id: 'status:empty', kind: 'empty' });
-  }
-  if (props.lastError) {
-    items.push({ id: 'status:error', kind: 'error' });
-  }
-  if (props.retryAttempt != null && props.sending) {
-    items.push({
-      id: 'status:retry',
-      kind: 'retry',
-    });
-  }
-  if (showPendingThinking.value) {
-    items.push({
-      id: 'status:thinking',
-      kind: 'thinking',
-    });
-  }
-  return items;
-});
-
-const timelineLayoutRevision = computed(() => (
-  `${props.threadKey}:${props.history.length}:${props.sending}:${props.editingMessageId ?? ''}`
-));
 
 const thinkingDisplayText = computed(() => {
   if (props.toolCalling) {
@@ -592,41 +508,8 @@ function getMessageKey(message, idx) {
   return `${role}:${timestamp}:${idx}`;
 }
 
-function getTimelineItemKey(item: ChatTimelineItem): string {
-  return item.id;
-}
-
-function getTimelineItemKind(item: ChatTimelineItem): string {
-  return item.kind;
-}
-
-function estimateTimelineItemHeight(item: ChatTimelineItem): number {
-  if (item.kind === 'loading' || item.kind === 'empty') return 360;
-  if (item.kind === 'error') return 128;
-  if (item.kind === 'retry' || item.kind === 'thinking') return 72;
-  if (!item.message) return 96;
-  const cached = timelineItemHeightEstimates.get(item);
-  if (cached) return cached;
-
-  const segments = getMessageSegments(item.message);
-  let visibleChars = item.message.role === 'user'
-    ? String(getDisplayContent(item.message) ?? '').length
-    : 0;
-  let fixedSegments = 0;
-  for (const segment of segments) {
-    if (segment?.type === 'text') visibleChars += String(segment.text ?? '').length;
-    else if (segment?.type === 'json') visibleChars += String(segment.content ?? '').length;
-    else fixedSegments += 1;
-  }
-
-  const charHeight = item.message.role === 'user' ? 0.9 : 0.62;
-  const estimate = Math.min(2400, Math.max(72, 64 + (visibleChars * charHeight) + (fixedSegments * 44)));
-  timelineItemHeightEstimates.set(item, estimate);
-  return estimate;
-}
-
-function onTimelineHeightChange() {
-  emit('content-height-change');
+function shouldDeferMarkdown(content: unknown, streaming = false): boolean {
+  return !streaming && typeof content === 'string' && content.length > DEFERRED_MARKDOWN_CHAR_THRESHOLD;
 }
 
 function getMutableMessageId(message) {
@@ -724,32 +607,30 @@ function toggleToolTrace(key: string) {
   toolTraceExpanded.value = { ...toolTraceExpanded.value, [key]: !toolTraceExpanded.value[key] };
 }
 
-function hasVisibleContentAfterSegment(message, segIdx) {
-  const segments = getMessageSegments(message);
+function hasVisibleContentAfterSegment(segments, segIdx) {
   return segments.slice(segIdx + 1).some(seg => (
     (seg?.type === 'text' && String(seg?.text || '').trim())
     || seg?.type === 'json'
   ));
 }
 
-function isReasoningSegmentThinking(message, idx, segIdx) {
+function isReasoningSegmentThinking(message, idx, segIdx, segments) {
   return Boolean(
     props.sending
     && idx === (props.history || []).length - 1
-    && !hasVisibleContentAfterSegment(message, segIdx)
+    && !hasVisibleContentAfterSegment(segments, segIdx)
   );
 }
 
-function isTextSegmentStreaming(message, idx: number, segIdx: number): boolean {
-  const segment = getMessageSegments(message)[segIdx];
-  return Boolean(segment?.type === 'text' && isAgentSegmentActive(message, idx, segIdx));
+function isTextSegmentStreaming(message, idx: number, segIdx: number, segments: any[]): boolean {
+  const segment = segments[segIdx];
+  return Boolean(segment?.type === 'text' && isAgentSegmentActive(message, idx, segIdx, segments));
 }
 
-function isAgentSegmentActive(message, idx, segIdx) {
+function isAgentSegmentActive(_message, idx, segIdx, segments) {
   if (!props.sending) return false;
   const history = props.history || [];
   if (idx !== history.length - 1) return false;
-  const segments = getMessageSegments(message);
   let lastRenderableIdx = -1;
   for (let i = segments.length - 1; i >= 0; i -= 1) {
     const seg = segments[i];
@@ -861,7 +742,8 @@ defineExpose({ listRef });
   contain: layout paint style;
 }
 
-.chat-list :deep(.markstream-virtual-timeline__item) {
+.chat-list-content {
+  min-height: 100%;
   min-width: 0;
 }
 
@@ -933,6 +815,8 @@ defineExpose({ listRef });
   gap: 8px;
   margin-bottom: 12px;
   position: relative;
+  content-visibility: auto;
+  contain-intrinsic-size: auto 160px;
 }
 
 /* AI 侧样式 */

@@ -1,29 +1,36 @@
 <template>
   <MarkdownRender
+    v-if="!workerParsing || parsedNodes || workerFallback"
     class="markdown-content"
-    :content="content"
+    :content="parsedNodes ? undefined : content"
+    :nodes="parsedNodes || undefined"
     custom-id="sparkarc-markdown"
     :mode="renderMode"
     :final="!streaming"
     :parse-options="parseOptions"
-    :parse-coalesce-ms="streaming ? 16 : 0"
+    :parse-coalesce-ms="streaming || deferred ? 16 : 0"
     :is-dark="isDark"
     :fade="false"
     :smooth-streaming="streaming ? 'auto' : false"
     :typewriter="streaming"
-    :batch-rendering="streaming"
+    :batch-rendering="streaming || deferred"
+    :initial-render-batch-size="deferred && !streaming ? 8 : 16"
     :max-live-nodes="streaming ? 0 : maxLiveNodes"
-    :render-batch-size="streaming ? 16 : 48"
-    :render-batch-delay="streaming ? 8 : 0"
-    :render-batch-budget-ms="streaming ? 4 : 8"
+    :render-batch-size="streaming ? 16 : (deferred ? 24 : 48)"
+    :render-batch-delay="streaming || deferred ? 8 : 0"
+    :render-batch-budget-ms="streaming || deferred ? 4 : 8"
     :render-code-blocks-as-pre="true"
     :code-block-props="codeBlockProps"
     :mermaid-props="mermaidProps"
   />
+  <div v-else class="markdown-content markdown-content-preparing" aria-busy="true">
+    <span class="markdown-preparing-line"></span>
+    <span class="markdown-preparing-line is-short"></span>
+  </div>
 </template>
 
 <script setup lang="ts">
-import { computed } from 'vue';
+import { computed, ref, shallowRef, watch } from 'vue';
 import 'markstream-vue/index.css';
 import 'katex/dist/katex.min.css';
 import {
@@ -34,8 +41,10 @@ import {
   MathInlineNode,
   MermaidBlockNode,
   setCustomComponents,
+  type BaseNode,
 } from 'markstream-vue';
 import { useThemeStore } from '@/components/stores/themeStore';
+import { parseMarkdownOffThread } from '@/components/share/markdownParseWorker';
 
 enableKatex(() => import('katex'));
 enableMermaid(() => import('mermaid'));
@@ -58,6 +67,11 @@ const props = defineProps({
     type: Boolean,
     default: false,
   },
+  /** 完成态长文分批提交节点；最终样式与交互不变，仅避免首次挂载长期占用主线程。 */
+  deferred: {
+    type: Boolean,
+    default: false,
+  },
   /** 完成态保留的活动块节点数；聊天历史使用更小窗口，完整内容仍可正常滚动查看。 */
   maxLiveNodes: {
     type: Number,
@@ -68,6 +82,25 @@ const props = defineProps({
 // 主题监听统一由 themeStore 在应用根部维护，避免每个 Markdown 实例各建一套全局监听器。
 const themeStore = useThemeStore();
 const isDark = computed(() => themeStore.isDark);
+const parsedNodes = shallowRef<BaseNode[] | null>(null);
+const workerFallback = ref(false);
+const workerParsing = computed(() => props.deferred && !props.streaming && !!props.content);
+let parseSequence = 0;
+
+watch(
+  () => [workerParsing.value, props.content] as const,
+  async ([shouldParse, content]) => {
+    const sequence = ++parseSequence;
+    parsedNodes.value = null;
+    workerFallback.value = false;
+    if (!shouldParse) return;
+    const nodes = await parseMarkdownOffThread(content);
+    if (sequence !== parseSequence) return;
+    if (nodes) parsedNodes.value = nodes;
+    else workerFallback.value = true;
+  },
+  { immediate: true },
+);
 
 const renderMode = computed(() => (props.streaming ? 'chat' : 'minimal'));
 
@@ -188,6 +221,32 @@ const mermaidProps = computed(() => ({
   font-family: var(--spark-font, inherit);
   font-size: inherit;
   line-height: inherit;
+}
+
+.markdown-content-preparing {
+  display: grid;
+  gap: 8px;
+  min-height: 44px;
+  align-content: center;
+}
+
+.markdown-preparing-line {
+  display: block;
+  width: 88%;
+  height: 8px;
+  border-radius: 4px;
+  background: color-mix(in srgb, var(--spark-text-muted), transparent 86%);
+  animation: markdownPreparingPulse 1.1s ease-in-out infinite;
+}
+
+.markdown-preparing-line.is-short {
+  width: 56%;
+  animation-delay: 120ms;
+}
+
+@keyframes markdownPreparingPulse {
+  0%, 100% { opacity: 0.45; }
+  50% { opacity: 0.85; }
 }
 
 .markdown-content :deep(h1),

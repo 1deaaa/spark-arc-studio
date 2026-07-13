@@ -97,17 +97,6 @@
             </template>
             {{ t('nodeEditor.presentation.uploadStyleReference') }}
           </n-button>
-          <n-button
-            type="primary"
-            :loading="presentationSettingsSaving"
-            :disabled="!styleReferencePrompt.trim() && selectedProjectStyleReferenceIds.length === 0"
-            @click="saveProjectVisualStyle"
-          >
-            <template #icon>
-              <n-icon :component="Save" />
-            </template>
-            {{ t('components.lorebookEditor.saveProjectStyle') }}
-          </n-button>
         </n-space>
 
         <section class="background-library-section">
@@ -187,7 +176,7 @@
 import { computed, onActivated, onBeforeUnmount, onMounted, ref, watch } from 'vue';
 import { useI18n } from 'vue-i18n';
 import { NButton, NCard, NIcon, NSelect, NSpace, NSwitch, NText } from 'naive-ui';
-import { Check, Save, Sparkles, Upload } from '@lucide/vue';
+import { Check, Sparkles, Upload } from '@lucide/vue';
 import StudioSeamlessTextarea from '@/components/editors/StudioSeamlessTextarea.vue';
 import bus from '@/eventBus';
 import {
@@ -206,6 +195,7 @@ import {
 import { supportsImageInput } from '@/services/modelModalities';
 import { useProjectStore } from '@/components/stores/projectStore';
 import { useSceneStore } from '@/components/stores/sceneStore';
+import { createAutoSaveScheduler } from '@/utils/autoSaveScheduler';
 
 defineProps({
   embedded: { type: Boolean, default: false },
@@ -233,6 +223,25 @@ const visualIllustrationEnabled = ref(false);
 const presentationSettingsSaving = ref(false);
 const missingCharacterSprites = ref<Array<{ id: string; name: string }>>([]);
 const isScriptMode = computed(() => sceneStore.workspaceMode === 'script');
+let suppressProjectStyleAutoSave = false;
+
+type ProjectStyleSavePayload = {
+  projectName: string;
+  styleSeedPrompt: string;
+  styleReferenceAssetIds: string[];
+};
+
+const projectStyleSaveScheduler = createAutoSaveScheduler<ProjectStyleSavePayload>(async payload => {
+  await updatePresentationSettings(payload.projectName, {
+    styleSeedPrompt: payload.styleSeedPrompt,
+    styleReferenceAssetIds: payload.styleReferenceAssetIds,
+  });
+  bus.emit('presentation-settings-updated', { projectName: payload.projectName });
+}, {
+  onError: error => {
+    bus.emit('toast', { type: 'error', message: presentationErrorMessage(error, t('components.lorebookEditor.projectStyleSaveFailed')) });
+  },
+});
 
 const manifestAssets = computed<Record<string, PresentationAsset>>(() => {
   const assets = presentationManifest.value?.assets;
@@ -288,6 +297,8 @@ const canGenerateProjectBackground = computed(() =>
 );
 
 watch([() => projectStore.currentProject, () => sceneStore.workspaceMode], () => {
+  projectStyleSaveScheduler.cancel();
+  suppressProjectStyleAutoSave = true;
   styleReferencePrompt.value = '';
   selectedProjectStyleReferenceIds.value = [];
   visualIllustrationEnabled.value = false;
@@ -296,11 +307,21 @@ watch([() => projectStore.currentProject, () => sceneStore.workspaceMode], () =>
     presentationManifest.value = null;
     imageModels.value = [];
     selectedImageModelKey.value = null;
+    suppressProjectStyleAutoSave = false;
     return;
   }
   void loadPresentationManifest();
   void loadPresentationImageModels();
 }, { immediate: true });
+
+watch([styleReferencePrompt, selectedProjectStyleReferenceIds], () => {
+  if (suppressProjectStyleAutoSave || !projectStore.currentProject || !isScriptMode.value) return;
+  projectStyleSaveScheduler.schedule({
+    projectName: projectStore.currentProject,
+    styleSeedPrompt: styleReferencePrompt.value.trim(),
+    styleReferenceAssetIds: selectedProjectStyleReferenceIds.value.slice(0, 5),
+  });
+}, { deep: true });
 
 function imageModelKey(model: PresentationImageModel) {
   return `${model.platform_id}:${model.model_id}`;
@@ -352,6 +373,7 @@ async function loadPresentationManifest() {
     return;
   }
   try {
+    suppressProjectStyleAutoSave = true;
     const result = await fetchPresentationManifest(projectStore.currentProject);
     presentationManifest.value = result.manifest || null;
     styleReferencePrompt.value = result.settings?.visualStyle?.seed_prompt || '';
@@ -362,6 +384,8 @@ async function loadPresentationManifest() {
     missingCharacterSprites.value = result.settings?.readiness?.missingCharacterSprites || [];
   } catch {
     presentationManifest.value = null;
+  } finally {
+    suppressProjectStyleAutoSave = false;
   }
 }
 
@@ -374,27 +398,9 @@ async function saveVisualIllustrationEnabled(enabled: boolean) {
     });
     visualIllustrationEnabled.value = !!result.settings?.visualIllustration?.enabled;
     bus.emit('presentation-settings-updated', { projectName: projectStore.currentProject });
-    bus.emit('toast', { type: 'success', message: t('components.lorebookEditor.visualIllustrationSaved') });
   } catch (error: unknown) {
     visualIllustrationEnabled.value = !enabled;
     bus.emit('toast', { type: 'error', message: presentationErrorMessage(error, t('components.lorebookEditor.visualIllustrationSaveFailed')) });
-  } finally {
-    presentationSettingsSaving.value = false;
-  }
-}
-
-async function saveProjectVisualStyle() {
-  if (!projectStore.currentProject || !isScriptMode.value) return;
-  presentationSettingsSaving.value = true;
-  try {
-    await updatePresentationSettings(projectStore.currentProject, {
-      styleSeedPrompt: styleReferencePrompt.value.trim(),
-      styleReferenceAssetIds: selectedProjectStyleReferenceIds.value.slice(0, 5),
-    });
-    bus.emit('presentation-settings-updated', { projectName: projectStore.currentProject });
-    bus.emit('toast', { type: 'success', message: t('components.lorebookEditor.projectStyleSaved') });
-  } catch (error: unknown) {
-    bus.emit('toast', { type: 'error', message: presentationErrorMessage(error, t('components.lorebookEditor.projectStyleSaveFailed')) });
   } finally {
     presentationSettingsSaving.value = false;
   }
@@ -565,6 +571,7 @@ onMounted(() => {
 
 onBeforeUnmount(() => {
   bus.off('presentation-manifest-updated', onPresentationManifestUpdated);
+  void projectStyleSaveScheduler.flush();
 });
 
 onActivated(() => {

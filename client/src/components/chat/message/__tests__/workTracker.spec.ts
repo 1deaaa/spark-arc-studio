@@ -29,7 +29,7 @@ describe('Agent 最新进度板聚合', () => {
   });
 
   it('从消息 tool_traces 回退结构中保留任务板结果', () => {
-    const segments = getMessageSegments({
+    const message = {
       role: 'assistant',
       content: '',
       tool_traces: [
@@ -40,13 +40,32 @@ describe('Agent 最新进度板聚合', () => {
           tool_result: '历史任务板',
         },
       ],
-    });
+    };
+    const segments = getMessageSegments(message);
 
     expect(segments[0]).toMatchObject({
       tool_name: 'work_tracker',
       source_agent: 'agent_director',
       tool_result: '历史任务板',
     });
+    expect(collectLatestWorkTrackers([message])).toEqual({
+      agent_director: '历史任务板',
+    });
+  });
+
+  it('聚合完整历史时不读取普通聊天正文', () => {
+    let contentReads = 0;
+    const ordinaryMessage = {
+      role: 'assistant',
+      get content() {
+        contentReads += 1;
+        return '<think>很长的历史思考</think>很长的历史正文';
+      },
+      segments: [],
+    };
+
+    expect(collectLatestWorkTrackers([ordinaryMessage])).toEqual({});
+    expect(contentReads).toBe(0);
   });
 
   it('直接解析持久任务板结构和稳定任务 ID', () => {

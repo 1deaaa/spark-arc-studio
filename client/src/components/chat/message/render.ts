@@ -261,7 +261,15 @@ export function getMessageSegments(message: ChatMessageItem | null | undefined):
 export function collectLatestWorkTrackers(history: ChatMessageItem[] | null | undefined): Record<string, unknown> {
   const latest: Record<string, unknown> = {};
   for (const message of history || []) {
-    for (const segment of getMessageSegments(message)) {
+    const explicitSegments = Array.isArray(message?.segments) && message.segments.length > 0
+      ? message.segments
+      : (Array.isArray(message?.metadata?.segments) ? message.metadata.segments : []);
+    const trackerCandidates = explicitSegments.length > 0
+      ? explicitSegments
+      : (Array.isArray(message?.tool_traces) && message.tool_traces.length > 0
+        ? message.tool_traces
+        : (Array.isArray(message?.metadata?.tool_traces) ? message.metadata.tool_traces : []));
+    for (const segment of trackerCandidates) {
       if (String(segment.tool_name || '').trim() !== 'work_tracker') continue;
       const agentId = String(segment.source_agent || '').trim();
       if (!agentId) continue;
@@ -273,8 +281,11 @@ export function collectLatestWorkTrackers(history: ChatMessageItem[] | null | un
   return latest;
 }
 
-export function hasRenderableAssistantActivity(message: ChatMessageItem | null | undefined) {
-  return getMessageSegments(message).some(seg => {
+export function hasRenderableAssistantActivity(
+  message: ChatMessageItem | null | undefined,
+  segments: MessageSegment[] = getMessageSegments(message),
+) {
+  return segments.some(seg => {
     if (seg?.type === 'reasoning') return !!getReasoningSegmentText(seg).trim();
     if (seg?.type === 'text') return !!String(seg?.text || '').trim();
     if (seg?.type === 'tool_trace') return true;
@@ -285,9 +296,101 @@ export function hasRenderableAssistantActivity(message: ChatMessageItem | null |
   });
 }
 
-export function shouldRenderMessage(message: ChatMessageItem | null | undefined) {
+export function shouldRenderMessage(
+  message: ChatMessageItem | null | undefined,
+  segments?: MessageSegment[],
+) {
   if (!message || message.role !== 'assistant') return true;
-  return hasRenderableAssistantActivity(message);
+  return hasRenderableAssistantActivity(message, segments);
+}
+
+export type ChatRenderWindowOptions = {
+  maxMessages: number;
+  maxContentChars: number;
+};
+
+/**
+ * 估算单条消息的前端渲染成本，只读取现成字符串，不做 Markdown 解析或深层序列化。
+ * 该值用于限制首屏挂载量，不参与正文展示，因此不会截断任何消息内容。
+ */
+export function estimateChatMessageRenderCost(message: ChatMessageItem | null | undefined): number {
+  if (!message) return 0;
+  let cost = typeof message.content === 'string' ? message.content.length : 0;
+  if (typeof message.reasoning === 'string') cost += message.reasoning.length;
+  if (typeof message.metadata?.reasoning === 'string') cost += message.metadata.reasoning.length;
+
+  const segments = Array.isArray(message.segments) && message.segments.length > 0
+    ? message.segments
+    : (Array.isArray(message.metadata?.segments) ? message.metadata.segments : []);
+  for (const segment of segments) {
+    if (typeof segment?.text === 'string') cost += segment.text.length;
+    else if (typeof segment?.content === 'string') cost += segment.content.length;
+    else cost += 160;
+  }
+  return Math.max(80, cost);
+}
+
+/** 从历史尾部选择一个有明确成本上限的初始窗口。 */
+export function selectChatTailWindowStart(
+  history: ChatMessageItem[] | null | undefined,
+  options: ChatRenderWindowOptions,
+): number {
+  const messages = history || [];
+  if (messages.length === 0) return 0;
+  const maxMessages = Math.max(1, Math.floor(options.maxMessages));
+  const maxContentChars = Math.max(1, Math.floor(options.maxContentChars));
+  let start = messages.length - 1;
+  let count = 1;
+  let cost = estimateChatMessageRenderCost(messages[start]);
+
+  while (start > 0 && count < maxMessages) {
+    const candidateCost = estimateChatMessageRenderCost(messages[start - 1]);
+    if (cost + candidateCost > maxContentChars) break;
+    start -= 1;
+    count += 1;
+    cost += candidateCost;
+  }
+
+  // 最后一条助手消息应尽量和它前面的用户请求同时出现，保证重试入口仍然可用。
+  const tailIndex = messages.length - 1;
+  if (
+    messages[tailIndex]?.role === 'assistant'
+    && tailIndex > 0
+    && messages[tailIndex - 1]?.role === 'user'
+    && start > tailIndex - 1
+    && maxMessages >= 2
+  ) {
+    start = tailIndex - 1;
+  }
+  return start;
+}
+
+/** 从当前窗口顶部向前补一批历史，并尽量让批次从用户消息开始。 */
+export function selectOlderChatWindowStart(
+  history: ChatMessageItem[] | null | undefined,
+  currentStart: number,
+  options: ChatRenderWindowOptions,
+): number {
+  const messages = history || [];
+  let start = Math.min(Math.max(0, Math.floor(currentStart)), messages.length);
+  if (start <= 0) return 0;
+  const maxMessages = Math.max(1, Math.floor(options.maxMessages));
+  const maxContentChars = Math.max(1, Math.floor(options.maxContentChars));
+  let count = 0;
+  let cost = 0;
+
+  while (start > 0 && count < maxMessages) {
+    const candidateCost = estimateChatMessageRenderCost(messages[start - 1]);
+    if (count > 0 && cost + candidateCost > maxContentChars) break;
+    start -= 1;
+    count += 1;
+    cost += candidateCost;
+  }
+
+  if (start > 0 && messages[start]?.role === 'assistant' && messages[start - 1]?.role === 'user') {
+    start -= 1;
+  }
+  return start;
 }
 
 export function formatTokenCount(value: number) {
