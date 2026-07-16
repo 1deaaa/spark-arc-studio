@@ -20,7 +20,10 @@ namespace SparkArc.Unity.EditorTools
         private const string ScenePath = "Assets/Scenes/SparkArcMinimalRuntime.unity";
         private const string ExampleRoot = "Assets/SparkArc/Examples/MinimalRuntime";
         private const string CharacterDbPath = ExampleRoot + "/SparkArcDemoCharacters.asset";
+        private const string ChineseFontAssetPath = ExampleRoot + "/Fonts/SparkArcChinese SDF.asset";
         private const string DemoDbPath = "Assets/StreamingAssets/stories.db";
+
+        private static TMP_FontAsset _chineseFont;
 
         [MenuItem("SparkArc/Demo/Rebuild Minimal Runtime Scene")]
         public static void Rebuild()
@@ -99,6 +102,7 @@ namespace SparkArc.Unity.EditorTools
             EnsureFolder("Assets/SparkArc");
             EnsureFolder("Assets/SparkArc/Examples");
             EnsureFolder(ExampleRoot);
+            EnsureFolder(ExampleRoot + "/Fonts");
             EnsureFolder(ExampleRoot + "/Materials");
             EnsureFolder("Assets/Scenes");
             EnsureFolder("Assets/StreamingAssets");
@@ -140,21 +144,21 @@ namespace SparkArc.Unity.EditorTools
                 ExecuteSql(connection, "CREATE TABLE binding_act (id INTEGER PRIMARY KEY AUTOINCREMENT, act_type TEXT, act_name TEXT NOT NULL, func_name TEXT NOT NULL, act_description TEXT, act_args TEXT)");
                 ExecuteSql(connection, "CREATE TABLE registry (id INTEGER PRIMARY KEY AUTOINCREMENT, name TEXT NOT NULL, value TEXT NOT NULL)");
 
-                ExecuteSql(connection, "INSERT INTO characters (character_id, name) VALUES (-1, '旁白'), (0, '旅行者'), (1, '风丘信使')");
-                ExecuteSql(connection, "INSERT INTO registry (name, value) VALUES ('player_name', '[\"旅行者\"]'), ('place', '[\"风丘\"]')");
-                ExecuteSql(connection, "INSERT INTO binding_act (act_type, act_name, func_name, act_description, act_args) VALUES ('audio', 'bgm', 'PlayBGM', '播放指定背景音乐', '{\"musicName\":[\"town_theme\",\"battle_theme\"]}'), ('world', 'weather', 'ChangeWeather', '切换天气、持续时间和地点', '{\"weatherType\":[\"sunny\",\"rainy\"],\"duration\":\"12\",\"location\":\"{place}\"}')");
+                ExecuteSql(connection, "INSERT INTO characters (character_id, name) VALUES (-1, '旁白'), (0, '林照'), (1, '遥')");
+                ExecuteSql(connection, "INSERT INTO registry (name, value) VALUES ('player_name', '[\"林照\"]'), ('place', '[\"雾港\"]'), ('lost_name', '[\"阿策\"]')");
+                ExecuteSql(connection, "INSERT INTO binding_act (act_type, act_name, func_name, act_description, act_args) VALUES ('audio', 'bgm', 'PlayBGM', '切换叙事环境音乐', '{\"musicName\":[\"harbor_alarm\",\"quiet_signal\"]}'), ('world', 'weather', 'ChangeWeather', '切换雾港天气和时段', '{\"weatherType\":[\"dense_fog\",\"clear_night\"],\"duration\":\"8\",\"location\":\"{place}\"}')");
 
-                var dialogues = "[{\"id\":1,\"chr\":-1,\"txt\":\"你靠近路边的信使。风从草坡上穿过，像有人轻轻翻开了一页剧情数据库。\",\"act\":{\"bgm\":\"town_theme\"}},{\"id\":2,\"chr\":1,\"txt\":\"终于等到你了，{player_name}。SparkArc 的 stories.db 已经被 Unity 读取，这段话不是写死在场景里的。\",\"act\":{\"weather\":[\"sunny\",\"12\",\"{place}\"]}},{\"id\":3,\"chr\":0,\"txt\":\"所以按钮文案、触发条件、角色名、行为绑定和对话内容都来自同一份导出库？\"},{\"id\":4,\"chr\":1,\"txt\":\"对。你刚刚按下 F，只是触发了 scene_name=windrise_first_meet 的剧情入口。\",\"opt\":[{\"optn\":\"询问下一步\",\"dia\":[{\"id\":5,\"chr\":1,\"txt\":\"下一步可以把 act 行为接到镜头、BGM、任务、战斗结算，剧情就能真正驱动游戏系统。\"}]},{\"optn\":\"结束演示\",\"dia\":[{\"id\":6,\"chr\":1,\"txt\":\"好。对话结束后，effects 会写回 StoryStateStore，证明运行时状态链路也通了。\"}]}]}]";
-                var effects = "[{\"op\":\"set\",\"key\":\"quest.demo.step\",\"value\":2},{\"op\":\"mark_played\",\"key\":\"demo.windrise_first_meet\"}]";
+                var dialogues = "[{\"id\":1,\"chr\":-1,\"txt\":\"雾港的宵禁钟敲到第三声，港口的雾却没有散。它像一封没有署名的信，把整座城封在潮湿的信封里。\",\"act\":{\"bgm\":\"harbor_alarm\"}},{\"id\":2,\"chr\":1,\"txt\":\"林照，别往海堤走。明天的你会在那里捡到一枚旧怀表，然后把所有人都忘了。\",\"act\":{\"weather\":[\"dense_fog\",\"8\",\"{place}\"]}},{\"id\":3,\"chr\":0,\"txt\":\"你是谁？还有，你怎么知道我弟弟 {lost_name} 的怀表？\"},{\"id\":4,\"chr\":1,\"txt\":\"我叫遥，是从明天凌晨逃回来的。广播塔会在零点发出错误的疏散令；{lost_name} 正被困在塔下的旧换乘井。\"},{\"id\":5,\"chr\":-1,\"txt\":\"遥递来一张被海水浸透的车票，背面只写着一行字：别让恐惧替你选择。\"},{\"id\":6,\"chr\":0,\"txt\":\"我该相信你吗？\",\"opt\":[{\"optn\":\"登上广播塔，向全城公开真相\",\"dia\":[{\"id\":7,\"chr\":0,\"txt\":\"把频道切到公共频段。雾港的人有权知道，他们不是被雾困住，而是被谎言困住。\"},{\"id\":8,\"chr\":1,\"txt\":\"好。我去打开备用电源。钟声停下前，别回头。\"}]},{\"optn\":\"先去换乘井救出阿策\",\"dia\":[{\"id\":9,\"chr\":0,\"txt\":\"真相可以等十分钟，阿策不能。带路。\"},{\"id\":10,\"chr\":1,\"txt\":\"那就沿着蓝灯走。它们会熄灭两次，第三次亮起时，你会看见他。\"}]}]}]";
+                var effects = "[{\"op\":\"set\",\"key\":\"quest.fogport.signal_started\",\"value\":true},{\"op\":\"set\",\"key\":\"quest.fogport.step\",\"value\":2},{\"op\":\"mark_played\",\"key\":\"fogport.last_signal\"}]";
                 using (var command = connection.CreateCommand())
                 {
                     command.CommandText = "INSERT INTO stories (chapter, scene_name, button_text, progress, guide, conditions, effects, trigger_event, priority, once_key, intro, dlg_json, hiden) VALUES (1, @scene, @button, 1, @guide, NULL, @effects, NULL, 0, @onceKey, @intro, @dlg, 0)";
-                    command.Parameters.AddWithValue("@scene", "windrise_first_meet");
-                    command.Parameters.AddWithValue("@button", "按 F 与信使对话");
-                    command.Parameters.AddWithValue("@guide", "验证 SparkArc story DB 驱动 Unity 对话、行为和状态写回。");
+                    command.Parameters.AddWithValue("@scene", "fogport_last_signal");
+                    command.Parameters.AddWithValue("@button", "按 F 阅读遥的来信");
+                    command.Parameters.AddWithValue("@guide", "雾港宵禁前夜：决定先公开真相，还是先救出阿策。");
                     command.Parameters.AddWithValue("@effects", effects);
-                    command.Parameters.AddWithValue("@onceKey", "demo.windrise_first_meet");
-                    command.Parameters.AddWithValue("@intro", "最小 Unity 运行时接入示例");
+                    command.Parameters.AddWithValue("@onceKey", "fogport.last_signal");
+                    command.Parameters.AddWithValue("@intro", "《雾港来信》· 第一幕：最后的信号");
                     command.Parameters.AddWithValue("@dlg", dialogues);
                     command.ExecuteNonQuery();
                 }
@@ -243,6 +247,25 @@ namespace SparkArc.Unity.EditorTools
             db.characters.Add(new CharacterDatabase.CharacterInfo { id = 1, name = "风丘信使" });
             EditorUtility.SetDirty(db);
             return db;
+        }
+
+        private static TMP_FontAsset GetChineseFont()
+        {
+            if (_chineseFont != null) return _chineseFont;
+
+            _chineseFont = AssetDatabase.LoadAssetAtPath<TMP_FontAsset>(ChineseFontAssetPath);
+            if (_chineseFont != null) return _chineseFont;
+
+            _chineseFont = TMP_FontAsset.CreateFontAsset("Microsoft YaHei", "Regular", 90);
+            if (_chineseFont == null)
+            {
+                Debug.LogError("SparkArc: 未找到可用的中文字体，无法创建对话字体资源。");
+                return null;
+            }
+
+            _chineseFont.name = "SparkArcChinese SDF";
+            AssetDatabase.CreateAsset(_chineseFont, ChineseFontAssetPath);
+            return _chineseFont;
         }
 
         private static GameObject CreateSparkArcManager(CharacterDatabase characterDb)
@@ -346,6 +369,7 @@ namespace SparkArc.Unity.EditorTools
             var obj = new GameObject(name);
             obj.transform.SetParent(parent, false);
             var text = obj.AddComponent<TextMeshProUGUI>();
+            text.font = GetChineseFont();
             text.fontSize = size;
             text.fontStyle = style;
             text.color = color;
@@ -417,17 +441,18 @@ namespace SparkArc.Unity.EditorTools
             trigger.radius = 2.2f;
 
             var dialogueTrigger = npc.AddComponent<DialogueTrigger>();
-            dialogueTrigger.sceneName = "windrise_first_meet";
+            dialogueTrigger.sceneName = "fogport_last_signal";
             dialogueTrigger.mode = DialogueTrigger.TriggerMode.Manual;
             dialogueTrigger.interactHint = hintPanel;
             dialogueTrigger.interactHintText = hintText;
-            dialogueTrigger.fallbackHintText = "按 F 对话";
+            dialogueTrigger.fallbackHintText = "按 F 阅读来信";
 
             var labelRoot = new GameObject("Name_Label");
             labelRoot.transform.SetParent(npc.transform, false);
             labelRoot.transform.localPosition = new Vector3(0f, 2.25f, 0f);
             var label = labelRoot.AddComponent<TextMeshPro>();
-            label.text = "风丘信使";
+            label.font = GetChineseFont();
+            label.text = "遥";
             label.fontSize = 3f;
             label.alignment = TextAlignmentOptions.Center;
             label.color = new Color(1f, 0.86f, 0.58f);
