@@ -1,11 +1,12 @@
 from __future__ import annotations
 
 import inspect
+from types import SimpleNamespace
 
 import pytest
 
 from agents.agent_critic import CriticAgent
-from agents.agent_lorebook import WorldviewAgent
+from agents.agent_lorebook import WorldviewAgent, _is_invalid_worldview_document
 from agents.agent_scriptwriter import ScriptwriterAgent
 from agents.agent_showrunner import ShowrunnerAgent
 from agents.agent_utils import load_prompt
@@ -89,6 +90,64 @@ def test_showrunner_outline_prompt_requires_scene_contract_fields() -> None:
     for token in ("情绪", "张力", "登场", "对应节拍", "指引", "@key_dialogue"):
         assert token in prompt
     assert "场景元数据必填" in prompt
+
+
+def test_lorebook_worldview_prompt_forbids_frontend_code() -> None:
+    prompt = load_prompt("lorebook")["system"]
+
+    for token in ("Markdown 纯文本", "HTML", "CSS", "JavaScript", "代码围栏", "创意种子"):
+        assert token in prompt
+
+
+@pytest.mark.parametrize(
+    "content",
+    [
+        "```html\n<!DOCTYPE html>\n<html></html>\n```",
+        "<!DOCTYPE html><html><head><style>body { color: red; }</style></head></html>",
+        "<script>document.body.innerHTML = '世界观';</script>",
+        "",
+    ],
+)
+def test_lorebook_worldview_output_rejects_frontend_documents(content: str) -> None:
+    assert _is_invalid_worldview_document(content)
+
+
+def test_lorebook_worldview_output_accepts_markdown_document() -> None:
+    assert not _is_invalid_worldview_document("# 弦暮城\n\n## 地理与环境\n终年被潮汐雾包围。")
+
+
+def test_lorebook_worldview_generation_retries_before_exposing_frontend_code(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    class FakeLlm:
+        def __init__(self) -> None:
+            self.calls = 0
+
+        def stream(self, _messages):
+            self.calls += 1
+            content = (
+                "```html\n<!DOCTYPE html><html><body>错误结果</body></html>\n```"
+                if self.calls == 1
+                else "# 弦暮城\n\n## 地理与环境\n终年被潮汐雾包围。"
+            )
+            yield SimpleNamespace(content=content)
+
+    monkeypatch.setattr(
+        "agents.agent_lorebook.load_prompt",
+        lambda *_args, **_kwargs: {"system": "系统提示", "user": "创意种子"},
+    )
+    monkeypatch.setattr(
+        "agents.agent_lorebook.build_prompt_messages",
+        lambda **kwargs: kwargs,
+    )
+    agent = object.__new__(WorldviewAgent)
+    agent.llm = FakeLlm()
+
+    result = "".join(agent.build_worldview(seed="种子"))
+
+    assert agent.llm.calls == 2
+    assert result.startswith("# 弦暮城")
+    assert "html" not in result.lower()
 
 
 def test_showrunner_pipeline_requires_in_task_append_until_complete() -> None:

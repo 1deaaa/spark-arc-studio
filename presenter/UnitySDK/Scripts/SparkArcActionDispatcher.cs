@@ -30,12 +30,20 @@ namespace SparkArc.Unity
 
         void OnEnable()
         {
-            DialogueEvents.OnActionTriggered += Dispatch;
+            DialogueEvents.OnActionTriggered += DispatchFromDialogue;
         }
 
         void OnDisable()
         {
-            DialogueEvents.OnActionTriggered -= Dispatch;
+            DialogueEvents.OnActionTriggered -= DispatchFromDialogue;
+        }
+
+        /// <summary>
+        /// 将不关心返回值的对话事件桥接到可供调用方判定结果的调度方法。
+        /// </summary>
+        private void DispatchFromDialogue(string actName, string[] args)
+        {
+            Dispatch(actName, args);
         }
 
         void Start()

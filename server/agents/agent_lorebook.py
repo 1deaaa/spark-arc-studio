@@ -20,6 +20,47 @@ from core.utils import (
 from .communication import SparkBaseAgent
 
 
+_WORLDVIEW_RETRY_INSTRUCTION = """
+
+### 输出格式纠偏
+上一轮结果错误地输出了网页或程序代码。请重新生成完整世界观，并严格遵守：
+- 只输出可直接保存的 Markdown 纯文本设定文档；
+- 禁止输出 HTML、CSS、JavaScript、Vue、React 或其他前端代码；
+- 禁止使用任何 Markdown 代码围栏；
+- 第一行直接使用 Markdown 标题开始正文。
+"""
+
+
+def _is_invalid_worldview_document(content: str) -> bool:
+    """识别误生成的网页、前端代码或代码围栏，防止其进入设定文件。"""
+    normalized = (content or "").lstrip().lower()
+    if not normalized:
+        return True
+
+    forbidden_prefixes = (
+        "```",
+        "<!doctype html",
+        "<html",
+        "<head",
+        "<body",
+        "<style",
+        "<script",
+    )
+    if normalized.startswith(forbidden_prefixes):
+        return True
+
+    frontend_signatures = (
+        "```html",
+        "```css",
+        "```javascript",
+        "```typescript",
+        "</html>",
+    )
+    if any(signature in normalized for signature in frontend_signatures):
+        return True
+    return re.search(r"</?(?:html|head|body|style|script)\b", normalized) is not None
+
+
 class WorldviewAgent(SparkBaseAgent, SparkAgentExecutor):
     """封装世界观生成逻辑，供 FastAPI 路由调用。"""
 
@@ -122,18 +163,34 @@ class WorldviewAgent(SparkBaseAgent, SparkAgentExecutor):
             story_tags=story_tags or "",
         )
 
-        messages = build_prompt_messages(system_prompt=prompts["system"], user_prompt=prompts["user"])
+        def generate_once(user_prompt: str) -> list[str]:
+            messages = build_prompt_messages(
+                system_prompt=prompts["system"], user_prompt=user_prompt
+            )
+            parser = PrefixReasoningStreamParser()
+            visible_chunks: list[str] = []
+            for chunk in self.llm.stream(messages):
+                content = getattr(chunk, "content", None)
+                if isinstance(content, str) and content:
+                    _, visible = parser.push(content)
+                    if visible:
+                        visible_chunks.append(visible)
+            _, trailing_visible = parser.flush()
+            if trailing_visible:
+                visible_chunks.append(trailing_visible)
+            return visible_chunks
 
-        parser = PrefixReasoningStreamParser()
-        for chunk in self.llm.stream(messages):
-            content = getattr(chunk, "content", None)
-            if isinstance(content, str) and content:
-                _, visible = parser.push(content)
-                if visible:
-                    yield visible
-        _, trailing_visible = parser.flush()
-        if trailing_visible:
-            yield trailing_visible
+        # 校验完成后再向路由交付，避免错误网页在流式阶段写入编辑器并被持久化。
+        visible_chunks = generate_once(prompts["user"])
+        full_text = "".join(visible_chunks)
+        if _is_invalid_worldview_document(full_text):
+            visible_chunks = generate_once(prompts["user"] + _WORLDVIEW_RETRY_INSTRUCTION)
+            full_text = "".join(visible_chunks)
+
+        if _is_invalid_worldview_document(full_text):
+            raise ValueError("世界观生成结果包含网页或前端代码，已拒绝写入，请重试")
+
+        yield from visible_chunks
 
     def generate_character(
         self,
