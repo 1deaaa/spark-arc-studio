@@ -1,22 +1,19 @@
 """
 主窗口 — LLMConfigGUI 主类，混入所有 Mixin，构建产品化 GUI 布局。
 """
-import os
 import sys
 import tkinter as tk
+from pathlib import Path
 from tkinter import messagebox, ttk
 import customtkinter as ctk
 
 if __package__ in (None, "", "gui"):
-    _GUI_DIR = os.path.dirname(os.path.abspath(__file__))
-    _PKG_DIR = os.path.dirname(_GUI_DIR)
-    _PARENT_DIR = os.path.dirname(_PKG_DIR)
-    _SERVER_DIR = os.path.dirname(_PARENT_DIR)
-    if _SERVER_DIR not in sys.path:
-        sys.path.insert(0, _SERVER_DIR)
-    if _PARENT_DIR not in sys.path:
-        sys.path.insert(0, _PARENT_DIR)
-    __package__ = f"{os.path.basename(_PKG_DIR)}.{os.path.basename(_GUI_DIR)}"
+    _component_dir = Path(__file__).resolve().parents[1]
+    for _import_root in (_component_dir.parent.parent, _component_dir.parent):
+        _import_root_text = str(_import_root)
+        if _import_root_text not in sys.path:
+            sys.path.insert(0, _import_root_text)
+    __package__ = f"{_component_dir.name}.gui"
 
 from ..manager import AIManager
 from ..security import SecurityManager
@@ -96,9 +93,9 @@ class LLMConfigGUI(
                 self.root.after(0, self.root.destroy)
                 return
 
-            from core.auto_migrate import run_db_upgrade
+            from core.auto_migrate import BASE_DIR as migration_base_dir, run_db_upgrade
 
-            run_db_upgrade("llm", _SERVER_DIR)
+            run_db_upgrade("llm", migration_base_dir)
             self.ai_manager.initialize_defaults()
             self.load_config_from_db()
         except Exception as e:
