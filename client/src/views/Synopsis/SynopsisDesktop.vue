@@ -5,6 +5,7 @@
       <div class="spark-desktop-header__left">
         <div class="spark-desktop-header__title-row">
           <h2 class="spark-desktop-title">{{ t('views.synopsis.desktop.title') }}</h2>
+          <OnboardingHelpButton scene-id="page-synopsis" />
           <AiSettingsPanel :visible="true" compact agent-name="agent_showrunner" />
           <span class="spark-desktop-subtitle">{{ t('views.synopsis.desktop.subtitle') }}</span>
         </div>
@@ -153,6 +154,7 @@ import { ArrowRight, RefreshCw, X, Zap } from '@lucide/vue';
 import { useSynopsisLogic } from '../../composables/useSynopsisLogic';
 import AiSettingsPanel from '../../components/lorebook/AiSettingsPanel.vue';
 import GlobalLoading from '../../components/share/GlobalLoading.vue';
+import OnboardingHelpButton from '../../onboarding/components/OnboardingHelpButton.vue';
 
 const { t } = useI18n();
 

@@ -5,6 +5,7 @@
       <div class="spark-desktop-header__left">
         <div class="spark-desktop-header__title-row">
           <h2 class="spark-desktop-title">{{ t('views.structure.desktop.title') }}</h2>
+          <OnboardingHelpButton scene-id="page-structure" />
           <AiSettingsPanel :visible="true" compact agent-name="agent_showrunner" />
           <span class="spark-desktop-subtitle">{{ t('views.structure.desktop.subtitle') }}</span>
         </div>
@@ -171,6 +172,7 @@ import { useI18n } from 'vue-i18n';
 import GlobalLoading from '../../components/share/GlobalLoading.vue';
 import { ArrowRight, Info, Workflow, Zap } from '@lucide/vue';
 import AiSettingsPanel from '../../components/lorebook/AiSettingsPanel.vue';
+import OnboardingHelpButton from '../../onboarding/components/OnboardingHelpButton.vue';
 import OutlineEditor from '../../components/dlg-editor/OutlineEditor.vue';
 import HistoryPanel from '../../components/dlg-editor/HistoryPanel.vue';
 import { useStructureLogic } from '../../composables/useStructureLogic';

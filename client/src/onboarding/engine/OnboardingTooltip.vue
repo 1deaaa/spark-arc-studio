@@ -9,18 +9,22 @@
     >
       <!-- 进度指示 -->
       <div class="tooltip-progress">
-        <div
-          v-for="i in engine.totalSteps.value"
-          :key="i"
-          class="progress-dot"
-          :class="{ active: i - 1 === engine.currentStepIndex.value, done: i - 1 < engine.currentStepIndex.value }"
-        />
+        <span class="progress-label">{{ engine.currentStepIndex.value + 1 }} / {{ engine.totalSteps.value }}</span>
+        <span class="progress-track">
+          <span class="progress-value" :style="{ width: progressPercent }" />
+        </span>
       </div>
 
       <!-- 内容区 -->
       <div class="tooltip-body">
         <h4 class="tooltip-title">{{ t(currentStep.titleKey) }}</h4>
         <p class="tooltip-desc">{{ t(currentStep.descKey) }}</p>
+        <ul v-if="currentStep.detailKeys?.length" class="tooltip-details">
+          <li v-for="detailKey in currentStep.detailKeys" :key="detailKey">
+            <span class="detail-marker" aria-hidden="true" />
+            <span>{{ t(detailKey) }}</span>
+          </li>
+        </ul>
         <!-- 桌面端引导提示行（仅完成步骤有 hintKey 时显示） -->
         <div v-if="currentStep.hintKey" class="tooltip-hint">
           <svg class="hint-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round">
@@ -71,6 +75,10 @@ const currentStep = computed(() => engine.getCurrentStep());
 const isLastStep = computed(() => {
   if (!engine.currentSceneId.value) return false;
   return engine.currentStepIndex.value >= engine.totalSteps.value - 1;
+});
+const progressPercent = computed(() => {
+  const total = Math.max(engine.totalSteps.value, 1);
+  return `${Math.round(((engine.currentStepIndex.value + 1) / total) * 100)}%`;
 });
 
 const tooltipStyle = computed<StyleValue>(() => {
@@ -201,6 +209,8 @@ watch(() => engine.targetRect.value, async (rect) => {
 .onboarding-tooltip {
   position: fixed;
   z-index: 10002;
+  box-sizing: border-box;
+  width: min(360px, calc(100vw - 24px));
   min-width: 200px;
   max-width: 360px;
   background: var(--spark-panel-bg, var(--n-color-modal, #1e1e1e));
@@ -239,26 +249,32 @@ watch(() => engine.targetRect.value, async (rect) => {
 
 .tooltip-progress {
   display: flex;
-  gap: 6px;
+  align-items: center;
+  gap: 10px;
   margin-bottom: 12px;
 }
 
-.progress-dot {
-  width: 6px;
-  height: 6px;
-  border-radius: 50%;
+.progress-label {
+  flex: 0 0 auto;
+  color: var(--spark-text-muted);
+  font-size: var(--spark-fs-xs);
+  font-variant-numeric: tabular-nums;
+}
+
+.progress-track {
+  flex: 1;
+  height: 4px;
+  overflow: hidden;
+  border-radius: 999px;
   background: var(--spark-border);
-  transition: all 0.3s ease;
 }
 
-.progress-dot.active {
+.progress-value {
+  display: block;
+  height: 100%;
+  border-radius: inherit;
   background: var(--spark-primary);
-  box-shadow: 0 0 6px var(--spark-primary);
-  transform: scale(1.3);
-}
-
-.progress-dot.done {
-  background: var(--spark-success);
+  transition: width 0.25s ease;
 }
 
 .tooltip-body {
@@ -277,6 +293,33 @@ watch(() => engine.targetRect.value, async (rect) => {
   color: var(--spark-text-muted);
   line-height: 1.5;
   margin: 0;
+}
+
+.tooltip-details {
+  display: grid;
+  gap: 8px;
+  margin: 12px 0 0;
+  padding: 0;
+  list-style: none;
+}
+
+.tooltip-details li {
+  display: flex;
+  align-items: flex-start;
+  gap: 9px;
+  color: var(--spark-text);
+  font-size: var(--spark-fs-sm);
+  line-height: 1.45;
+}
+
+.detail-marker {
+  flex: 0 0 auto;
+  width: 7px;
+  height: 7px;
+  margin-top: 7px;
+  border-radius: 50%;
+  background: var(--spark-primary);
+  box-shadow: 0 0 8px color-mix(in srgb, var(--spark-primary), transparent 45%);
 }
 
 /* 桌面端引导提示行 */

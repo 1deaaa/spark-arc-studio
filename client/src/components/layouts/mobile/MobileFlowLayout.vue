@@ -8,6 +8,7 @@
       
       <div class="header-center">
         <span class="current-step-label">{{ currentStepLabel }}</span>
+        <OnboardingHelpButton scene-id="mobile-workspace" />
       </div>
       
       <div class="header-right">
@@ -187,6 +188,7 @@ import { Archive, BookOpen, CircleCheckBig, CirclePlus, Clapperboard, FolderOpen
 import { useI18n } from 'vue-i18n';
 
 import FlowCard from './FlowCard.vue';
+import OnboardingHelpButton from '../../../onboarding/components/OnboardingHelpButton.vue';
 import StepIndicator from './StepIndicator.vue';
 import GlobalChatFloat from '../../chat/GlobalChatFloat.vue';
 
@@ -593,6 +595,8 @@ onUnmounted(() => {
   min-width: 0;
   display: flex;
   justify-content: center;
+  align-items: center;
+  gap: 2px;
 }
 
 .header-right {

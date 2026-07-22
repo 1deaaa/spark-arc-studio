@@ -24,7 +24,7 @@ function switchViewBeforeEnter(view: string): () => Promise<void> {
 
 // ==================== 桌面端步骤定义 ====================
 
-export const desktopWorkspaceSteps: OnboardingStep[] = [
+const desktopWorkspaceBaseSteps: OnboardingStep[] = [
   // ── 顶部区域 ──
   // 1. 全局操作栏（屏幕最顶部）
   {
@@ -190,6 +190,141 @@ export const desktopWorkspaceSteps: OnboardingStep[] = [
   },
 ];
 
+function pageStep(
+  id: string,
+  target: OnboardingStep['target'],
+  placement: OnboardingStep['placement'],
+  page: string,
+  section: string,
+  beforeEnter?: () => Promise<void>,
+): OnboardingStep {
+  return {
+    id,
+    target,
+    placement,
+    titleKey: `onboarding.pages.${page}.${section}Title`,
+    descKey: `onboarding.pages.${page}.${section}Desc`,
+    spotlight: true,
+    spotlightPadding: 8,
+    beforeEnter,
+  };
+}
+
+const desktopChatSteps = [
+  pageStep('chat-team', '.chat-desktop-view .chat-panel-header', 'bottom', 'chat', 'team', switchViewBeforeEnter('chat')),
+  pageStep('chat-history', '.chat-desktop-view .chat-panel-body', 'left', 'chat', 'history'),
+  pageStep('chat-input', '.chat-desktop-view .chat-input-wrapper', 'top', 'chat', 'input'),
+];
+
+const desktopWorldSteps = [
+  pageStep('world-seed', '.world-view .world-panel-left', 'right', 'world', 'seed', switchViewBeforeEnter('world')),
+  pageStep('world-workshop', '.world-view .world-panel-result', 'right', 'world', 'workshop'),
+  pageStep('world-lorebook', '.world-view .world-panel-center', 'left', 'world', 'lorebook'),
+  pageStep('world-tools', '.world-view .world-panel-right', 'left', 'world', 'tools'),
+];
+
+const desktopSynopsisSteps = [
+  pageStep('synopsis-context', '.synopsis-grid .context-panel', 'right', 'synopsis', 'context', switchViewBeforeEnter('synopsis')),
+  pageStep('synopsis-beats', '.synopsis-grid .beats-panel', 'right', 'synopsis', 'beats'),
+  pageStep('synopsis-editor', '.synopsis-grid .editor-panel', 'left', 'synopsis', 'editor'),
+];
+
+const desktopStructureSteps = [
+  pageStep('structure-outline', '.view-container .outline-panel', 'right', 'structure', 'outline', switchViewBeforeEnter('structure')),
+  pageStep('structure-planning', '.view-container .planning-panel', 'left', 'structure', 'planning'),
+];
+
+const desktopProductionSteps = [
+  pageStep('production-files', '.production-shell .sidebar-panel', 'right', 'production', 'files', switchViewBeforeEnter('production')),
+  pageStep('production-editor', '.production-shell .center-panel', 'left', 'production', 'editor'),
+  pageStep(
+    'production-inspector',
+    () => {
+      const inspector = document.querySelector('.production-shell .inspector-panel');
+      if (inspector && inspector.getClientRects().length > 0) return inspector;
+      return document.querySelector('.production-shell .center-panel');
+    },
+    'left',
+    'production',
+    'inspector',
+  ),
+];
+
+const desktopBlueprintSteps = [
+  pageStep('blueprint-toolbar', '.blueprint-desktop .blueprint-toolbar', 'bottom', 'blueprint', 'toolbar', switchViewBeforeEnter('blueprint')),
+  pageStep('blueprint-canvas', '.blueprint-desktop .blueprint-canvas', 'left', 'blueprint', 'canvas'),
+];
+
+const desktopStyleSteps = [
+  pageStep('style-actions', '.view-container .spark-desktop-header__actions', 'bottom', 'style', 'actions', switchViewBeforeEnter('style')),
+  pageStep('style-library', '.view-container .style-content', 'left', 'style', 'library'),
+];
+
+const desktopEngineSteps = [
+  pageStep('engine-flow', '.agent-flow-blueprint .blueprint-canvas', 'left', 'engine', 'flow', switchViewBeforeEnter('engine')),
+  pageStep('engine-skills', '.view-container .skills-trigger-btn', 'right', 'engine', 'skills'),
+];
+
+const desktopDashboardSteps = [
+  pageStep('dashboard-usage', '.admin-container .admin-column:first-child', 'right', 'dashboard', 'usage', switchViewBeforeEnter('dashboard')),
+  pageStep('dashboard-projects', '.admin-container .admin-column:nth-child(2)', 'left', 'dashboard', 'projects'),
+];
+
+const desktopSettingsSteps = [
+  pageStep('settings-models', '.settings-columns .settings-col--left', 'right', 'settings', 'models', switchViewBeforeEnter('settings')),
+  pageStep('settings-platforms', '.settings-columns .settings-col--middle', 'right', 'settings', 'platforms'),
+  pageStep('settings-preferences', '.settings-columns .settings-col--right', 'left', 'settings', 'preferences'),
+];
+
+export const desktopPageScenes: OnboardingScene[] = [
+  { id: 'page-chat', steps: desktopChatSteps },
+  { id: 'page-world', steps: desktopWorldSteps },
+  { id: 'page-synopsis', steps: desktopSynopsisSteps },
+  { id: 'page-structure', steps: desktopStructureSteps },
+  { id: 'page-production', steps: desktopProductionSteps },
+  { id: 'page-blueprint', steps: desktopBlueprintSteps },
+  { id: 'page-style', steps: desktopStyleSteps },
+  { id: 'page-engine', steps: desktopEngineSteps },
+  { id: 'page-dashboard', steps: desktopDashboardSteps },
+  { id: 'page-settings', steps: desktopSettingsSteps },
+];
+
+const workspaceChromeSteps = desktopWorkspaceBaseSteps.filter(step =>
+  ['dw-header-toolbar', 'dw-activity-bar'].includes(step.id),
+);
+const workspaceClosingSteps = desktopWorkspaceBaseSteps.filter(step =>
+  ['dw-chat-float', 'dw-complete'].includes(step.id),
+);
+
+export const desktopWorkspaceSteps: OnboardingStep[] = [
+  {
+    id: 'dw-workflow-overview',
+    target: 'body',
+    placement: 'center',
+    titleKey: 'onboarding.desktop.workspace.workflowTitle',
+    descKey: 'onboarding.desktop.workspace.workflowDesc',
+    detailKeys: [
+      'onboarding.desktop.workflow.inspiration',
+      'onboarding.desktop.workflow.world',
+      'onboarding.desktop.workflow.synopsis',
+      'onboarding.desktop.workflow.structure',
+      'onboarding.desktop.workflow.production',
+      'onboarding.desktop.workflow.finish',
+    ],
+    spotlight: false,
+  },
+  ...workspaceChromeSteps,
+  ...desktopChatSteps,
+  ...desktopWorldSteps,
+  ...desktopSynopsisSteps,
+  ...desktopStructureSteps,
+  ...desktopProductionSteps,
+  ...desktopBlueprintSteps,
+  ...desktopStyleSteps,
+  ...desktopEngineSteps,
+  ...workspaceClosingSteps,
+];
+
 // ==================== 移动端步骤定义 ====================
 
 /**
@@ -218,6 +353,22 @@ function scrollMobileStep(stepNum: number): () => Promise<void> {
  * - 设置/风格/引擎/管理 在抽屉中
  */
 export const mobileWorkspaceSteps: OnboardingStep[] = [
+  {
+    id: 'mw-workflow-overview',
+    target: 'body',
+    placement: 'center',
+    titleKey: 'onboarding.desktop.workspace.workflowTitle',
+    descKey: 'onboarding.desktop.workspace.workflowDesc',
+    detailKeys: [
+      'onboarding.desktop.workflow.inspiration',
+      'onboarding.desktop.workflow.world',
+      'onboarding.desktop.workflow.synopsis',
+      'onboarding.desktop.workflow.structure',
+      'onboarding.desktop.workflow.production',
+      'onboarding.desktop.workflow.finish',
+    ],
+    spotlight: false,
+  },
   // ── 顶部导航栏 ──
   // 1. 顶部操作栏
   {
@@ -244,61 +395,61 @@ export const mobileWorkspaceSteps: OnboardingStep[] = [
   // 3. 灵感
   {
     id: 'mw-muse',
-    target: '#step-1',
-    placement: 'center',
+    target: '#step-1 .world-mobile-flow .flow-section:first-child',
+    placement: 'bottom',
     titleKey: 'onboarding.mobile.flow.museTitle',
     descKey: 'onboarding.mobile.flow.museDesc',
-    spotlight: false,
+    spotlight: true,
     beforeEnter: scrollMobileStep(1),
   },
   // 4. 世界观
   {
     id: 'mw-world',
-    target: '#step-2',
-    placement: 'center',
+    target: '#step-2 .lorebook-mobile-flow .flow-section:first-child',
+    placement: 'bottom',
     titleKey: 'onboarding.mobile.flow.worldTitle',
     descKey: 'onboarding.mobile.flow.worldDesc',
-    spotlight: false,
+    spotlight: true,
     beforeEnter: scrollMobileStep(2),
   },
   // 5. 故事梗概
   {
     id: 'mw-synopsis',
-    target: '#step-3',
-    placement: 'center',
+    target: '#step-3 .synopsis-mobile-flow .flow-section:first-child',
+    placement: 'bottom',
     titleKey: 'onboarding.mobile.flow.synopsisTitle',
     descKey: 'onboarding.mobile.flow.synopsisDesc',
-    spotlight: false,
+    spotlight: true,
     beforeEnter: scrollMobileStep(3),
   },
   // 6. 大纲编排
   {
     id: 'mw-structure',
-    target: '#step-4',
-    placement: 'center',
+    target: '#step-4 .structure-mobile-flow .control-section',
+    placement: 'top',
     titleKey: 'onboarding.mobile.flow.structureTitle',
     descKey: 'onboarding.mobile.flow.structureDesc',
-    spotlight: false,
+    spotlight: true,
     beforeEnter: scrollMobileStep(4),
   },
   // 7. 剧本创作
   {
     id: 'mw-production',
-    target: '#step-5',
-    placement: 'center',
+    target: '#step-5 .production-mobile .workbench-context-bar',
+    placement: 'bottom',
     titleKey: 'onboarding.mobile.flow.productionTitle',
     descKey: 'onboarding.mobile.flow.productionDesc',
-    spotlight: false,
+    spotlight: true,
     beforeEnter: scrollMobileStep(5),
   },
   // 8. 故事蓝图
   {
     id: 'mw-blueprint',
-    target: '#step-6',
-    placement: 'center',
+    target: '#step-6 .relation-checker-mobile .relation-control-bar',
+    placement: 'bottom',
     titleKey: 'onboarding.mobile.flow.blueprintTitle',
     descKey: 'onboarding.mobile.flow.blueprintDesc',
-    spotlight: false,
+    spotlight: true,
     beforeEnter: scrollMobileStep(6),
   },
   // ── AI 聊天浮窗 ──

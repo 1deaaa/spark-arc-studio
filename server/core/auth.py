@@ -9,10 +9,20 @@ import os
 from fastapi import APIRouter, Depends, HTTPException, status, Response, Request
 from fastapi.responses import JSONResponse
 from pydantic import BaseModel
-from sqlalchemy import select, update, func
+from sqlalchemy import delete, func, select, update
 from sqlalchemy.orm import sessionmaker
 
-from .models import User, UserSession, user_engine, UserInfoSession, SystemPlatformQuota
+from .models import (
+    ChatMessage,
+    ProjectVersion,
+    Share,
+    SystemPlatformQuota,
+    User,
+    UserFeedback,
+    UserInfoSession,
+    UserSession,
+    user_engine,
+)
 from .utils import ensure_project_directory, ensure_project_stories_directory, ensure_project_characters_directory
 from .request_context import set_current_context, extract_project_name
 from .verification import (
@@ -161,17 +171,37 @@ class UserDatabase:
             return False
 
     def delete_user(self, user_id: int) -> bool:
-        """删除用户及其所有会话"""
-        try:
-            with self._session() as s:
-                user = s.execute(select(User).where(User.id == user_id)).scalar_one_or_none()
-                if not user:
-                    return False
-                s.delete(user)
-                s.commit()
-                return True
-        except Exception:
-            return False
+        """删除用户及其专属数据，并解除需保留记录的用户引用。"""
+        with self._session() as s:
+            user = s.execute(select(User).where(User.id == user_id)).scalar_one_or_none()
+            if not user:
+                return False
+
+            # 删除账户私有数据，避免历史数据库中未级联的外键阻止删除。
+            s.execute(delete(ChatMessage).where(ChatMessage.user_id == user_id))
+            s.execute(delete(ProjectVersion).where(ProjectVersion.user_id == user_id))
+            s.execute(delete(Share).where(Share.user_id == user_id))
+            s.execute(delete(UserSession).where(UserSession.user_id == user_id))
+
+            # 保留平台配置与反馈内容，但移除已删除账户的身份引用。
+            s.execute(
+                update(SystemPlatformQuota)
+                .where(SystemPlatformQuota.updated_by == user_id)
+                .values(updated_by=None)
+            )
+            s.execute(
+                update(UserFeedback)
+                .where(UserFeedback.user_id == user_id)
+                .values(user_id=None)
+            )
+            s.execute(
+                update(UserFeedback)
+                .where(UserFeedback.replied_by == user_id)
+                .values(replied_by=None)
+            )
+            s.delete(user)
+            s.commit()
+            return True
 
     def get_all_users(self) -> List[Dict[str, Any]]:
         """获取所有用户（管理员功能）"""

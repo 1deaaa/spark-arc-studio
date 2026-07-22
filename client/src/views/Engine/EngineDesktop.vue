@@ -1,5 +1,9 @@
 <template>
   <div class="view-container">
+    <div class="engine-page-heading">
+      <h2>{{ t('activityBar.engine') }}</h2>
+      <OnboardingHelpButton scene-id="page-engine" />
+    </div>
     <n-tooltip trigger="hover">
       <template #trigger>
         <n-button
@@ -40,6 +44,7 @@ import { NButton, NIcon, NModal, NTooltip } from 'naive-ui';
 import { BrainCircuit } from '@lucide/vue';
 import AgentFlowBlueprint from '../../components/lorebook/AgentFlowBlueprint.vue';
 import AgentSkillManager from '../../components/settings/AgentSkillManager.vue';
+import OnboardingHelpButton from '../../onboarding/components/OnboardingHelpButton.vue';
 
 const { t } = useI18n();
 const skillsModalVisible = ref(false);
@@ -62,6 +67,24 @@ const skillsModalVisible = ref(false);
   top: 16px;
   left: 16px;
   z-index: 40;
+}
+
+.engine-page-heading {
+  position: absolute;
+  top: 16px;
+  left: 72px;
+  z-index: 40;
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  min-height: 40px;
+}
+
+.engine-page-heading h2 {
+  margin: 0;
+  color: var(--spark-text);
+  font-size: var(--spark-fs-lg);
+  font-weight: 650;
 }
 
 .engine-main {

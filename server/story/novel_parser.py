@@ -5,8 +5,10 @@ from typing import Dict, Any, List, Optional, Tuple
 from core.utils import get_project_stories_path, get_project_path
 from story.file_naming import (
     build_scene_story_filename,
+    list_story_files,
     strip_story_filename_meta,
     parse_story_filename,
+    story_extension,
 )
 
 
@@ -23,7 +25,7 @@ def _find_scene_file(
     优先按元数据（chap=xxx, scene=xxx）匹配，支持文件在任意子目录。
     返回 (文件绝对路径, 是否存在)。
     """
-    target_ext = ".md" if file_format == "novel" else ".arc"
+    target_ext = story_extension(file_format)
 
     # 递归扫描 stories 目录
     for root, _, files in os.walk(stories_path):
@@ -135,10 +137,12 @@ def aggregate_novel(user_id: str, project_name: str, export_format: str = "md") 
     按 大纲.txt 顺序聚合所有场景 .md 文件，返回完整 Markdown 文本。
     """
     toc = get_novel_chapter_list(user_id, project_name, export_format)
+    stories_path = get_project_stories_path(user_id, project_name)
     
     full_text_blocks = []
     full_text_blocks.append(f"# {project_name}\n")
     
+    matched_scene_keys: set[tuple[int, int]] = set()
     for chapter in toc:
         has_content = any(s["exists"] and s["content"].strip() for s in chapter["scenes"])
         if not has_content:
@@ -150,10 +154,24 @@ def aggregate_novel(user_id: str, project_name: str, export_format: str = "md") 
         for scene in chapter["scenes"]:
             if not scene["exists"] or not scene["content"].strip():
                 continue
+            matched_scene_keys.add((int(chapter["chapter_num"]), int(scene["scene_idx"]) + 1))
             
             # 场景正文（自带 # 场景名，如果是 AI 生成的话。为避免重复，可以直接使用清洗后的 content）
             full_text_blocks.append(scene["content"])
             
         full_text_blocks.append("")  # 章节末尾加空行
-        
+
+    # 大纲可能尚未生成，旧文件也可能没有规划场景元数据。此时仍应把所有小说正文
+    # 纳入演出快照；已有大纲命中的文件按场景身份去重，其余文件沿统一文件排序追加。
+    for _, absolute_path, parsed in list_story_files(stories_path, file_format=export_format):
+        scene_key = None
+        if parsed and parsed.get("chapter_num") is not None and parsed.get("scene_num") is not None:
+            scene_key = (int(parsed["chapter_num"]), int(parsed["scene_num"]))
+        if scene_key and scene_key in matched_scene_keys:
+            continue
+        with open(absolute_path, "r", encoding="utf-8") as f:
+            content = parse_scene_md(f.read())
+        if content:
+            full_text_blocks.append(content)
+
     return "\n\n".join(full_text_blocks).strip()

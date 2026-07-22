@@ -19,6 +19,8 @@ export default {
         startCta: 'Enter Workspace',
       },
       workspace: {
+        workflowTitle: 'Start with the creative workflow',
+        workflowDesc: 'SparkArc turns a complex production into an iterative path. You can revisit any stage or ask the AI Director to coordinate the next step.',
         activityBarTitle: 'Creative Navigation',
         activityBarDesc: 'Each creative step has its own tool and view. Click icons to switch.',
         worldTitle: 'Inspiration & World',
@@ -47,6 +49,62 @@ export default {
         adminDesc: 'System keys, user management, public sharing — the admin control panel.',
         completeTitle: "You're All Set!",
         completeDesc: 'You now know the full workspace layout. Start your creative journey!',
+      },
+      workflow: {
+        inspiration: 'Begin with a line, an image, or a dramatic conflict',
+        world: 'Define characters, places, and rules that make the world credible',
+        synopsis: 'Set the main arc, emotion, and turns with a synopsis and beats',
+        structure: 'Turn the story into executable chapters and scenes',
+        production: 'Draft each scene as a novel or interactive script',
+        finish: 'Validate the structure in Blueprint, then preview and publish',
+      },
+    },
+    pages: {
+      chat: {
+        teamTitle: 'Choose the right AI specialist', teamDesc: 'Switch between the Director and specialists, and monitor task progress and context usage. Give complex work to the Director for coordination.',
+        historyTitle: 'Keep the full collaboration trail', historyDesc: 'Replies, reasoning, and tool calls stay in chronological order, including running tasks restored after refresh.',
+        inputTitle: 'Give the team a clear goal', inputDesc: 'Describe the outcome and attach source files. Name the project, scope, and expected result whenever possible.',
+      },
+      world: {
+        seedTitle: 'Start from an idea seed', seedDesc: 'Enter the initial idea or continue from history. Tags constrain genre, mood, point of view, and length.',
+        workshopTitle: 'Select a direction in the workshop', workshopDesc: 'Edit the expanded idea, pin it to the project, or use it as the basis for world generation.',
+        lorebookTitle: 'Record world and character truth', lorebookDesc: 'Maintain characters, places, items, and rules here so later generation can use consistent facts.',
+        toolsTitle: 'Fill gaps with focused tools', toolsDesc: 'Style, character, and world tools cover specific gaps without forcing everything into one prompt.',
+      },
+      synopsis: {
+        contextTitle: 'Define the story proposition', contextDesc: 'The logline captures protagonist, goal, obstacle, and stakes. Guidance records what to preserve or avoid.',
+        beatsTitle: 'Control tension with beats', beatsDesc: 'Break down turns, emotional goals, and tension. Adjust each beat before moving into the outline.',
+        editorTitle: 'Build an executable synopsis', editorDesc: 'This is the canonical main arc. Confirm causality and the ending before structuring chapters.',
+      },
+      structure: {
+        outlineTitle: 'Review the chapter and scene tree', outlineDesc: 'The left side is the production plan. Reorder chapters and scenes before drafting.',
+        planningTitle: 'Configure and generate structure', planningDesc: 'The right side combines synopsis, guidance, and length controls. Edit the result before continuous writing.',
+      },
+      production: {
+        filesTitle: 'Manage manuscript files', filesDesc: 'Organize novel Markdown or interactive ARC files by chapter. Select a file before editing or auto-writing.',
+        editorTitle: 'Draft in the main editor', editorDesc: 'Novel mode edits prose directly; script mode edits scenes and dialogue trees through the same save pipeline.',
+        inspectorTitle: 'Refine the current node', inspectorDesc: 'In script mode, adjust speakers, choices, conditions, and presentation details here.',
+      },
+      blueprint: {
+        toolbarTitle: 'Choose the blueprint level', toolbarDesc: 'Switch between file and scene views and control how the graph is organized.',
+        canvasTitle: 'Inspect story connections', canvasDesc: 'Arrange nodes and connect ports. Use the graph to find broken paths, dead ends, and branch issues.',
+      },
+      style: {
+        actionsTitle: 'Create or import a style profile', actionsDesc: 'Analyze samples or import an existing profile. Styles are reusable creative assets.',
+        libraryTitle: 'Manage project style bindings', libraryDesc: 'Preview, set defaults, or bind styles to the current project. Runtime bindings control specialist usage.',
+      },
+      engine: {
+        flowTitle: 'Configure the AI team runtime', flowDesc: 'The canvas shows specialist, model, and prompt relationships. Select a node to tune its runtime configuration.',
+        skillsTitle: 'Manage specialist references', skillsDesc: 'Skills supply quality and domain references without replacing project tools or persistence rules.',
+      },
+      dashboard: {
+        usageTitle: 'Understand personal usage', usageDesc: 'Review requests, tokens, and credits by time range to understand production cost.',
+        projectsTitle: 'Check project and account state', projectsDesc: 'Review project, quota, and account information. Administrators also see system data.',
+      },
+      settings: {
+        modelsTitle: 'Map tasks to models', modelsDesc: 'Choose models for each use and configure semantic search. This affects quality, speed, and cost.',
+        platformsTitle: 'Connect AI platforms', platformsDesc: 'Manage providers, keys, and billing. Check this column first when a connection fails.',
+        preferencesTitle: 'Tune workspace preferences', preferencesDesc: 'Announcements, appearance, language, and administration live here, along with the full onboarding replay.',
       },
     },
     mobile: {

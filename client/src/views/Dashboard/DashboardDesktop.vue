@@ -2,7 +2,10 @@
   <div class="view-container">
     <div class="panel-header spark-desktop-header">
       <div class="spark-desktop-header__left">
-        <h2 class="spark-desktop-title">{{ t('views.dashboard.desktop.title') }}</h2>
+        <div class="spark-desktop-header__title-row">
+          <h2 class="spark-desktop-title">{{ t('views.dashboard.desktop.title') }}</h2>
+          <OnboardingHelpButton scene-id="page-dashboard" />
+        </div>
         <p class="spark-desktop-subtitle">{{ t('views.dashboard.desktop.subtitle') }}</p>
       </div>
       <div class="header-actions spark-desktop-header__actions">
@@ -272,6 +275,7 @@ import {
 } from 'naive-ui';
 import SparkTag from '../../components/share/SparkTag.vue';
 import SparkSegment from '../../components/share/SparkSegment.vue';
+import OnboardingHelpButton from '../../onboarding/components/OnboardingHelpButton.vue';
 import SparkAlert from '../../components/share/SparkAlert.vue';
 import SparkIcon from '../../components/share/CreditIcon.vue';
 import { Key, RefreshCw, ShieldCheck } from '@lucide/vue';

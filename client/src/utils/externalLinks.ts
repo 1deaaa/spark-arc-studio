@@ -57,7 +57,8 @@ export async function openExternalUrl(url: string): Promise<void> {
     const { openUrl } = await import('@tauri-apps/plugin-opener');
     await openUrl(target.toString());
   } catch (error) {
-    console.warn('[SparkArc] Failed to open external URL via Tauri opener:', error);
+    console.warn('[SparkArc] Tauri 外部链接打开失败，回退到 WebView 导航：', error);
+    openBrowserTab(target.toString());
   }
 }
 

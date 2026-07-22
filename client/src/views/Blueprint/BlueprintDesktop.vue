@@ -4,6 +4,7 @@
       <div class="spark-desktop-header__left">
         <div class="spark-desktop-header__title-row">
           <h1 class="spark-desktop-title">{{ t('views.blueprint.desktop.title') }}</h1>
+          <OnboardingHelpButton scene-id="page-blueprint" />
           <p class="spark-desktop-subtitle">{{ t('views.blueprint.desktop.subtitle') }}</p>
         </div>
       </div>
@@ -19,6 +20,7 @@ import StoryBlueprint from '@/components/dlg-editor/StoryBlueprint.vue';
 import { useProjectStore } from '@/components/stores/projectStore';
 import { computed } from 'vue';
 import { useI18n } from 'vue-i18n';
+import OnboardingHelpButton from '../../onboarding/components/OnboardingHelpButton.vue';
 
 const { t } = useI18n();
 const projectStore = useProjectStore();

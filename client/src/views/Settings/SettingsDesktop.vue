@@ -3,7 +3,10 @@
   <div class="view-container">
         <div class="panel-header spark-desktop-header">
             <div class="spark-desktop-header__left">
-                <h2 class="spark-desktop-title">{{ t('settings.title') }}</h2>
+                <div class="spark-desktop-header__title-row">
+                    <h2 class="spark-desktop-title">{{ t('settings.title') }}</h2>
+                    <OnboardingHelpButton scene-id="page-settings" />
+                </div>
                 <p class="spark-desktop-subtitle">{{ t('settings.subtitle') }}</p>
             </div>
         </div>
@@ -52,6 +55,7 @@ import { ref, onMounted } from 'vue';
 import { fetchWithAuth } from '../../services/api';
 import { useI18n } from 'vue-i18n';
 import { useOnboarding } from '../../onboarding';
+import OnboardingHelpButton from '../../onboarding/components/OnboardingHelpButton.vue';
 
 const { aiStore } = useSettingsLogic();
 const isAdmin = ref(false);

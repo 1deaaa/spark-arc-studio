@@ -22,6 +22,8 @@ export interface OnboardingStep {
   titleKey: string;
   /** i18n key（描述） */
   descKey: string;
+  /** i18n key 列表（用于流程地图或操作要点） */
+  detailKeys?: string[];
   /** i18n key（额外高亮提示，如桌面端引导） */
   hintKey?: string;
   /** 是否高亮目标元素 */
@@ -201,6 +203,7 @@ export class OnboardingEngine {
   // ==================== 内部方法 ====================
 
   private _reset(): void {
+    this._stopTracking();
     this.state.value = 'idle';
     this.isActive.value = false;
     this.currentScene = null;
@@ -224,8 +227,8 @@ export class OnboardingEngine {
       await step.beforeEnter();
     }
 
-    // 获取目标元素并计算位置
-    this._updateTargetRect(step);
+    // 视图切换后目标可能仍在渲染，短暂等待可避免气泡错误回退到屏幕中央。
+    await this._waitForTarget(step);
 
     // 滚动到目标
     if (step.scrollIntoView) {
@@ -262,6 +265,10 @@ export class OnboardingEngine {
     if (el) {
       const padding = step.spotlightPadding ?? 8;
       const rect = el.getBoundingClientRect();
+      if (rect.width < 1 || rect.height < 1) {
+        this.targetRect.value = null;
+        return;
+      }
       // 扩展矩形以包含 padding
       this.targetRect.value = DOMRect.fromRect({
         x: rect.left - padding,
@@ -271,6 +278,14 @@ export class OnboardingEngine {
       }) as DOMRect;
     } else {
       this.targetRect.value = null;
+    }
+  }
+
+  private async _waitForTarget(step: OnboardingStep): Promise<void> {
+    for (let attempt = 0; attempt < 8; attempt++) {
+      this._updateTargetRect(step);
+      if (this.targetRect.value) return;
+      await new Promise<void>(resolve => requestAnimationFrame(() => resolve()));
     }
   }
 

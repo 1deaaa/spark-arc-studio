@@ -403,7 +403,7 @@ export const finale = {
     '让 AI 臣服于你的创造力，而不是反过来。',
   ],
   ctaPrimary: { label: '写下你的第一句', to: '/login' },
-  ctaSecondary: { label: '先在本地跑一遍试试', to: 'https://github.com/' },
+  ctaSecondary: { label: '先在本地跑一遍试试', to: SPARKARC_GITHUB_URL },
   micro: '项目基于 AGPL-3.0 开源 · 由 1deaaa 独立开发 · 献给所有还在写的人。',
 };
 

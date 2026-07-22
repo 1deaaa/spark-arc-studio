@@ -7,6 +7,7 @@
       <div class="spark-desktop-header__left">
         <div class="spark-desktop-header__title-row">
           <h2 class="spark-desktop-title">{{ t('views.style.desktop.title') }}</h2>
+          <OnboardingHelpButton scene-id="page-style" />
           <AiSettingsPanel :visible="true" compact agent-name="agent_style" />
           <span class="spark-desktop-subtitle">{{ t('views.style.desktop.subtitle') }}</span>
         </div>
@@ -203,6 +204,7 @@ import { Bookmark, Download, Palette, Plus, RefreshCw, Trash, Upload } from '@lu
 import AiSettingsPanel from '../../components/lorebook/AiSettingsPanel.vue';
 import BindingEditor from '../../components/lorebook/BindingEditor.vue';
 import GlobalLoading from '../../components/share/GlobalLoading.vue';
+import OnboardingHelpButton from '../../onboarding/components/OnboardingHelpButton.vue';
 import { useStyleLogic } from '../../composables/useStyleLogic';
 import { renderStyleMarkdown } from '../../utils/styleMarkdown';
 

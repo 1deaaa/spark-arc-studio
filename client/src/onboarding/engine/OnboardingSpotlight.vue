@@ -1,6 +1,9 @@
 <template>
   <!-- 聚光灯效果：SVG clip-path 挖洞高亮目标元素 -->
-  <div v-if="engine.isActive.value && rect && !engine.isTransitioning.value" class="onboarding-spotlight">
+  <div
+    v-if="engine.isActive.value && currentStep?.spotlight !== false && rect && !engine.isTransitioning.value"
+    class="onboarding-spotlight"
+  >
     <svg class="spotlight-svg" xmlns="http://www.w3.org/2000/svg">
       <defs>
         <mask id="spotlight-mask">
@@ -20,13 +23,12 @@
       <!-- 半透明遮罩层，挖洞处透明（亮色用白底，暗色用黑底） -->
       <rect
         x="0" y="0" width="100%" height="100%"
-        :fill="isLightMode ? 'rgba(255, 255, 255, 0.6)' : 'rgba(0, 0, 0, 0.55)'"
+        :fill="isLightMode ? 'rgba(247, 248, 250, 0.82)' : 'rgba(3, 5, 9, 0.78)'"
         mask="url(#spotlight-mask)"
       />
     </svg>
     <!-- 高亮边框 -->
     <div
-      v-if="showBorder"
       class="spotlight-border"
       :style="borderStyle"
     />
@@ -40,7 +42,7 @@ import { getOnboardingEngine } from './OnboardingEngine';
 const engine = getOnboardingEngine();
 
 const rect = computed(() => engine.targetRect.value);
-const showBorder = computed(() => engine.allowInteraction.value);
+const currentStep = computed(() => engine.getCurrentStep());
 
 // 检测亮色模式
 const isLightMode = computed(() => document.body.classList.contains('light-mode'));
@@ -55,7 +57,7 @@ const borderStyle = computed<StyleValue>(() => {
     width: `${r.width}px`,
     height: `${r.height}px`,
     borderRadius: '8px',
-    boxShadow: '0 0 0 2px var(--spark-primary, #ffaa40), 0 0 20px rgba(255, 170, 64, 0.3)',
+    boxShadow: '0 0 0 3px var(--spark-primary, #ffaa40), 0 0 0 7px color-mix(in srgb, var(--spark-primary, #ffaa40), transparent 78%), 0 18px 48px rgba(0, 0, 0, 0.34)',
     pointerEvents: 'none',
     zIndex: 10001,
   };
@@ -75,8 +77,4 @@ const borderStyle = computed<StyleValue>(() => {
   height: 100%;
 }
 
-/* 允许交互穿透时，遮罩层可点击穿透到下方元素 */
-.onboarding-spotlight.interactive {
-  pointer-events: auto;
-}
 </style>

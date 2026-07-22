@@ -5,7 +5,7 @@
  * 使用方式：在 App.vue 中调用 setupOnboarding() 即可完成全局注册。
  */
 import { getOnboardingEngine } from './engine/OnboardingEngine';
-import { desktopWorkspaceScene, mobileWorkspaceScene } from './engine/stepDefinitions';
+import { desktopPageScenes, desktopWorkspaceScene, mobileWorkspaceScene } from './engine/stepDefinitions';
 import type { OnboardingScene } from './engine/OnboardingEngine';
 import { loadOnboardingState, saveOnboardingState } from './engine/useOnboarding';
 
@@ -80,6 +80,7 @@ export function setupOnboarding(): void {
   const scenes: OnboardingScene[] = [
     desktopWorkspaceScene,
     mobileWorkspaceScene,
+    ...desktopPageScenes,
   ];
   // 注册前绑定持久化回调，确保完成/跳过时状态一定会写入 localStorage
   scenes.forEach(bindPersistenceCallbacks);

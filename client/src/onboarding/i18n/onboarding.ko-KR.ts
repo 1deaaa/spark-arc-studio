@@ -19,6 +19,8 @@ export default {
         startCta: '작업실 입장',
       },
       workspace: {
+        workflowTitle: '먼저 전체 창작 흐름을 살펴보세요',
+        workflowDesc: 'SparkArc는 복잡한 제작을 반복 가능한 단계로 나눕니다. 언제든 이전 단계로 돌아가거나 AI 감독에게 다음 작업을 맡길 수 있습니다.',
         activityBarTitle: '창작 내비게이션 바',
         activityBarDesc: '각 창작 단계마다 전용 도구와 뷰가 준비되어 있습니다. 아이콘을 눌러 전환하세요.',
         worldTitle: '영감과 세계관',
@@ -47,6 +49,62 @@ export default {
         adminDesc: '마스터 보안 키 연동, 가입 유저 권한 제어 등 최고 관리자 전용 제어 센터입니다.',
         completeTitle: '모두 준비되었습니다!',
         completeDesc: '작업대의 모든 구성을 둘러보셨습니다. 이제 본격적으로 당신의 스토리를 개시해 보세요!',
+      },
+      workflow: {
+        inspiration: '한 문장, 한 장면 또는 갈등에서 영감을 시작합니다',
+        world: '인물, 장소, 규칙을 세워 설득력 있는 세계를 만듭니다',
+        synopsis: '시놉시스와 비트로 주선, 감정, 전환점을 정합니다',
+        structure: '이야기를 집필 가능한 장과 씬으로 나눕니다',
+        production: '소설 또는 인터랙티브 대본으로 본문을 씁니다',
+        finish: '블루프린트에서 구조를 확인하고 미리보기와 배포를 진행합니다',
+      },
+    },
+    pages: {
+      chat: {
+        teamTitle: '적합한 AI 전문가 선택', teamDesc: '감독과 분야별 전문가를 전환하고 작업 진행 및 컨텍스트 사용량을 확인합니다. 복잡한 요청은 감독에게 맡기세요.',
+        historyTitle: '협업 과정을 모두 보관', historyDesc: '답변, 추론, 도구 실행이 시간순으로 표시되며 새로 고침 후에도 실행 중인 작업을 복원합니다.',
+        inputTitle: '목표와 자료 전달', inputDesc: '결과물과 범위, 기대 결과를 설명하고 필요한 파일을 첨부합니다.',
+      },
+      world: {
+        seedTitle: '영감 씨앗에서 시작', seedDesc: '초기 아이디어를 입력하고 장르, 분위기, 시점, 길이를 태그로 제한합니다.',
+        workshopTitle: '아이디어 공방에서 방향 선택', workshopDesc: '확장된 아이디어를 편집하고 프로젝트에 고정하거나 세계관 생성의 출발점으로 사용합니다.',
+        lorebookTitle: '세계와 인물의 사실 기록', lorebookDesc: '인물, 장소, 물품, 규칙을 통합 관리하여 이후 생성의 일관성을 유지합니다.',
+        toolsTitle: '전용 도구로 빈틈 보완', toolsDesc: '문체, 인물, 세계 생성기를 활용해 하나의 프롬프트에 모든 작업을 몰아넣지 않습니다.',
+      },
+      synopsis: {
+        contextTitle: '이야기의 명제 정의', contextDesc: '로그라인에 주인공, 목표, 장애물, 대가를 담고 유지하거나 피할 방향을 지침에 기록합니다.',
+        beatsTitle: '비트로 긴장감 제어', beatsDesc: '주요 전환, 감정 목표, 긴장 변화를 나누고 아웃라인 전에 조정합니다.',
+        editorTitle: '실행 가능한 시놉시스 완성', editorDesc: '이곳이 이야기 주선의 기준입니다. 인과와 결말을 확인한 뒤 장 구조로 이동합니다.',
+      },
+      structure: {
+        outlineTitle: '장과 씬 트리 확인', outlineDesc: '왼쪽은 본문 제작 계획입니다. 집필 전에 장과 씬 순서를 정리합니다.',
+        planningTitle: '구조 설정 및 생성', planningDesc: '오른쪽에서 시놉시스, 지침, 분량을 설정하고 생성 결과를 다듬은 뒤 연속 집필을 시작합니다.',
+      },
+      production: {
+        filesTitle: '본문 파일 관리', filesDesc: '소설 Markdown 또는 ARC 대본을 장별로 정리하고 편집할 파일을 선택합니다.',
+        editorTitle: '메인 편집기에서 집필', editorDesc: '소설은 본문을 직접 편집하고 대본은 씬과 대화 트리를 같은 저장 경로로 관리합니다.',
+        inspectorTitle: '현재 노드 세부 조정', inspectorDesc: '대본 모드에서 화자, 선택지, 조건, 연출 정보를 설정합니다.',
+      },
+      blueprint: {
+        toolbarTitle: '블루프린트 단계 선택', toolbarDesc: '파일과 씬 보기를 전환하고 그래프 정리 방식을 제어합니다.',
+        canvasTitle: '이야기 연결 관계 점검', canvasDesc: '노드를 배치하고 포트를 연결해 끊긴 경로, 막다른 길, 분기 문제를 찾습니다.',
+      },
+      style: {
+        actionsTitle: '문체 프로필 생성 또는 가져오기', actionsDesc: '샘플을 분석하거나 기존 프로필을 가져와 재사용 가능한 창작 자산으로 관리합니다.',
+        libraryTitle: '프로젝트 문체 바인딩 관리', libraryDesc: '미리보기, 기본 설정, 현재 프로젝트 적용과 전문가별 사용 방식을 관리합니다.',
+      },
+      engine: {
+        flowTitle: 'AI 팀 실행 경로 설정', flowDesc: '전문가, 모델, 프롬프트 관계를 보고 노드별 실행 구성을 조정합니다.',
+        skillsTitle: '전문가 참고 스킬 관리', skillsDesc: '스킬은 품질과 분야 지식을 보완하며 프로젝트 도구와 저장 규칙을 바꾸지 않습니다.',
+      },
+      dashboard: {
+        usageTitle: '개인 사용량 이해', usageDesc: '기간별 요청, 토큰, 크레딧을 확인하여 제작 비용을 파악합니다.',
+        projectsTitle: '프로젝트 및 계정 상태 확인', projectsDesc: '프로젝트, 할당량, 계정 정보를 확인하며 관리자는 시스템 데이터도 볼 수 있습니다.',
+      },
+      settings: {
+        modelsTitle: '작업별 모델 연결', modelsDesc: '용도별 모델과 시맨틱 검색을 설정하여 품질, 속도, 비용을 조절합니다.',
+        platformsTitle: 'AI 플랫폼 연결', platformsDesc: '제공자, 키, 결제 방식을 관리합니다. 연결 오류가 나면 이 영역을 먼저 확인하세요.',
+        preferencesTitle: '작업대 환경 설정', preferencesDesc: '공지, 외형, 언어, 관리자 설정과 전체 가이드 다시 보기를 제공합니다.',
       },
     },
     mobile: {

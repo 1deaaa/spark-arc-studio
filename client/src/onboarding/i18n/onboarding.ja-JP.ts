@@ -19,6 +19,8 @@ export default {
         startCta: 'ワークスペースへ',
       },
       workspace: {
+        workflowTitle: 'まず創作フローを確認しましょう',
+        workflowDesc: 'SparkArcは複雑な制作を反復可能な流れに分けます。いつでも前の工程へ戻り、AIディレクターに次の作業を任せられます。',
         activityBarTitle: '創作ナビゲーション',
         activityBarDesc: '各創作ステップには専用のツールとビューがあります。アイコンをクリックして切り替え。',
         worldTitle: 'インスピレーション & 世界観',
@@ -47,6 +49,62 @@ export default {
         adminDesc: 'システムキー、ユーザー管理、公開共有 — 管理者専用コントロールパネル。',
         completeTitle: '準備完了！',
         completeDesc: 'ワークスペースの全レイアウトを理解しました。創作の旅を始めましょう！',
+      },
+      workflow: {
+        inspiration: '一文、ひとつの情景、または対立から着想を始める',
+        world: '人物・場所・規則を定義し、信頼できる世界を作る',
+        synopsis: 'あらすじとビートで主線、感情、転換点を決める',
+        structure: '物語を執筆可能な章とシーンへ分解する',
+        production: '小説またはインタラクティブ脚本として本文を書く',
+        finish: 'ブループリントで構造を確認し、プレビューして公開する',
+      },
+    },
+    pages: {
+      chat: {
+        teamTitle: '最適なAI専門家を選ぶ', teamDesc: 'ディレクターと各専門家を切り替え、進行状況とコンテキスト使用量を確認します。複雑な依頼はディレクターに任せましょう。',
+        historyTitle: '協働の履歴を残す', historyDesc: '回答、推論、ツール実行が時系列で表示され、更新後も進行中のタスクを復元できます。',
+        inputTitle: '目標と資料を伝える', inputDesc: '成果物、対象範囲、期待する結果を説明し、必要に応じて資料を添付します。',
+      },
+      world: {
+        seedTitle: '着想の種から始める', seedDesc: '最初のアイデアを入力し、ジャンル、雰囲気、視点、長さをタグで制御します。',
+        workshopTitle: '工房で方向性を選ぶ', workshopDesc: '展開された案を編集し、プロジェクトに固定するか世界設定の出発点にします。',
+        lorebookTitle: '世界と人物の事実を記録', lorebookDesc: '人物、場所、アイテム、規則を一元管理し、後続生成の整合性を保ちます。',
+        toolsTitle: '専用ツールで不足を補う', toolsDesc: '文体、人物、世界生成ツールを使い、ひとつの指示に全作業を詰め込まずに進めます。',
+      },
+      synopsis: {
+        contextTitle: '物語の命題を定義', contextDesc: 'ログラインに主人公、目標、障害、代償をまとめ、ガイダンスに維持・回避したい方向を書きます。',
+        beatsTitle: 'ビートで緊張感を制御', beatsDesc: '転換点、感情目標、緊張の変化を分解し、大綱へ進む前に調整します。',
+        editorTitle: '実行可能なあらすじを作る', editorDesc: 'ここが物語の主線の基準です。因果関係と結末を確認してから章構成へ進みます。',
+      },
+      structure: {
+        outlineTitle: '章とシーンのツリーを確認', outlineDesc: '左側が本文制作の計画です。執筆前に章とシーンの順序を整えます。',
+        planningTitle: '構造を設定して生成', planningDesc: '右側であらすじ、指示、長さをまとめ、生成後に修正して連続執筆へ進みます。',
+      },
+      production: {
+        filesTitle: '本文ファイルを管理', filesDesc: '小説MarkdownまたはARC脚本を章ごとに整理し、編集するファイルを選択します。',
+        editorTitle: 'メイン編集領域で執筆', editorDesc: '小説は文章を直接、脚本はシーンと会話ツリーを編集し、同じ保存経路で管理します。',
+        inspectorTitle: '現在のノードを調整', inspectorDesc: '脚本では話者、選択肢、条件、演出をここで細かく設定します。',
+      },
+      blueprint: {
+        toolbarTitle: 'ブループリント階層を選ぶ', toolbarDesc: 'ファイル表示とシーン表示を切り替え、グラフの整理方法を制御します。',
+        canvasTitle: '物語の接続を確認', canvasDesc: 'ノードを配置しポートを接続して、断線、行き止まり、分岐の問題を見つけます。',
+      },
+      style: {
+        actionsTitle: '文体プロファイルを作成・読込', actionsDesc: 'サンプルから分析するか既存プロファイルを読み込み、再利用可能な資産として管理します。',
+        libraryTitle: 'プロジェクト文体を管理', libraryDesc: 'プレビュー、既定設定、現在のプロジェクトへの割り当てを行います。',
+      },
+      engine: {
+        flowTitle: 'AIチームの実行経路を設定', flowDesc: '専門家、モデル、プロンプトの関係を表示し、ノードごとの実行設定を調整します。',
+        skillsTitle: '専門家の参考スキルを管理', skillsDesc: 'スキルは品質と専門知識を補い、プロジェクトのツールや保存規則は変更しません。',
+      },
+      dashboard: {
+        usageTitle: '個人使用量を確認', usageDesc: '期間別のリクエスト、トークン、クレジットから制作コストを把握します。',
+        projectsTitle: 'プロジェクトとアカウントを確認', projectsDesc: 'プロジェクト、割当量、アカウント情報を確認します。管理者にはシステム情報も表示されます。',
+      },
+      settings: {
+        modelsTitle: '用途ごとにモデルを設定', modelsDesc: '各用途のモデルとセマンティック検索を設定し、品質、速度、コストを調整します。',
+        platformsTitle: 'AIプラットフォームを接続', platformsDesc: 'プロバイダー、キー、課金方法を管理します。接続不良時はここを確認します。',
+        preferencesTitle: 'ワークスペース設定を調整', preferencesDesc: 'お知らせ、外観、言語、管理設定と、完全ガイドの再表示があります。',
       },
     },
     mobile: {

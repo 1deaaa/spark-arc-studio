@@ -19,6 +19,8 @@ export default {
         startCta: '进入工作台',
       },
       workspace: {
+        workflowTitle: '先认识完整创作流程',
+        workflowDesc: 'SparkArc 把复杂创作拆成一条可反复迭代的工作流。你不必一次做完，也可以随时让 AI 导演协调专家推进下一步。',
         activityBarTitle: '创作导航栏',
         activityBarDesc: '每一步创作都有专属工具和视图。点击图标即可切换。',
         worldTitle: '灵感与世界观',
@@ -47,6 +49,62 @@ export default {
         adminDesc: '系统密钥、用户管理、公开分享——管理员专属控制台。',
         completeTitle: '准备就绪！',
         completeDesc: '你已了解工作台全部布局。开始你的创作之旅吧！',
+      },
+      workflow: {
+        inspiration: '从一句话、一个画面或一个冲突点燃灵感',
+        world: '建立角色、地点与规则，让故事拥有可信的世界',
+        synopsis: '用梗概与节拍表确定主线、情绪和转折',
+        structure: '把故事拆成章节与场景，形成可执行的大纲',
+        production: '在正文工作台完成小说或互动剧本的逐场写作',
+        finish: '用蓝图检查结构，通过预览与发布交付作品',
+      },
+    },
+    pages: {
+      chat: {
+        teamTitle: '选择合适的 AI 专家', teamDesc: '顶部可切换导演与各领域专家，并查看任务进度和上下文用量。复杂需求优先交给导演统一调度。',
+        historyTitle: '协作过程完整保留', historyDesc: '正文回复、思考过程与工具调用按时间顺序展示；刷新后也能恢复正在执行的任务。',
+        inputTitle: '把目标和素材交给团队', inputDesc: '在这里描述目标，也可导入文件。尽量说明要修改的项目、范围和期望结果。',
+      },
+      world: {
+        seedTitle: '从灵感种子开始', seedDesc: '输入最初的想法，并从历史灵感中继续发展；标签用于约束题材、氛围、视角和篇幅。',
+        workshopTitle: '在创意工坊筛选方向', workshopDesc: 'AI 扩展结果可继续编辑、固定到当前项目，或作为生成世界设定的起点。',
+        lorebookTitle: '沉淀世界与角色真相', lorebookDesc: '角色、地点、物品和规则都在设定集中统一维护，后续生成会读取这些事实。',
+        toolsTitle: '用专项工具补全设定', toolsDesc: '项目文风、角色与世界生成器用于补齐缺口，不必在一个提示词里完成所有工作。',
+      },
+      synopsis: {
+        contextTitle: '先写故事命题', contextDesc: 'Logline 说明主角、目标、阻力与赌注；创作指导补充你希望保留或避免的方向。',
+        beatsTitle: '用节拍控制张力', beatsDesc: '节拍表拆解关键转折、情绪目标和张力变化，可逐项调整后再进入大纲。',
+        editorTitle: '形成可执行的完整梗概', editorDesc: '这里是故事主线的统一文本版本。确认因果与结局后，再进入章节结构会更稳定。',
+      },
+      structure: {
+        outlineTitle: '查看章节与场景树', outlineDesc: '左侧展示最终大纲结构，可调整章节、场景顺序和层级，作为正文生产的任务清单。',
+        planningTitle: '配置并生成结构', planningDesc: '右侧汇总梗概、创作指导和篇幅参数；生成后仍可手工修改，再启动连续写作。',
+      },
+      production: {
+        filesTitle: '管理正文文件', filesDesc: '左侧按章节组织小说 Markdown 或互动剧本 ARC 文件。先选中文件，再进行编辑或自动写作。',
+        editorTitle: '在主编辑区写正文', editorDesc: '小说模式直接编辑段落；剧本模式编辑场景与对话树。修改会进入统一保存链路。',
+        inspectorTitle: '精修当前节点', inspectorDesc: '剧本模式可在检查器中调整说话人、选项、条件与演出；不需要时可收起以扩大编辑区。',
+      },
+      blueprint: {
+        toolbarTitle: '选择蓝图层级', toolbarDesc: '工具栏用于在文件与场景视图间切换，并控制蓝图的显示与整理。',
+        canvasTitle: '检查故事连接关系', canvasDesc: '拖动节点整理布局，连接端口建立跳转。它最适合发现断线、死路和分支结构问题。',
+      },
+      style: {
+        actionsTitle: '创建或导入文风档案', actionsDesc: '可从样文分析新风格，也能导入已有档案；文风是一项可复用资产。',
+        libraryTitle: '管理并绑定项目文风', libraryDesc: '在风格库中预览、设为默认或绑定当前项目，运行时绑定区决定具体专家如何使用它。',
+      },
+      engine: {
+        flowTitle: '配置 AI 团队运行链路', flowDesc: '画布展示专家、模型与提示词关系。选择节点可查看和调整该专家的运行配置。',
+        skillsTitle: '管理专家技能参考', skillsDesc: '技能库为专家提供写作质量与领域知识参考，不会替代项目的工具和落盘规则。',
+      },
+      dashboard: {
+        usageTitle: '了解个人用量', usageDesc: '查看请求、Token 与额度消耗，按时间范围判断当前创作成本。',
+        projectsTitle: '检查项目与账户状态', projectsDesc: '这里汇总项目、配额和账户信息；管理员还会看到系统级管理数据。',
+      },
+      settings: {
+        modelsTitle: '设置任务与模型映射', modelsDesc: '为不同用途选择模型，并配置语义检索能力。模型选择会直接影响质量、速度与成本。',
+        platformsTitle: '连接 AI 平台', platformsDesc: '在这里管理平台、密钥和计费方式，连接状态异常时优先检查这一列。',
+        preferencesTitle: '调整工作台偏好', preferencesDesc: '公告、外观、语言和管理配置集中在此；完整新手引导也可从这里重看。',
       },
     },
     mobile: {

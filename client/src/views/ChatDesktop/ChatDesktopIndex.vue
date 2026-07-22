@@ -35,6 +35,9 @@
         @delete-msg="deleteMsg"
         class="desktop-chat-panel"
       >
+        <template #header-actions>
+          <OnboardingHelpButton scene-id="page-chat" />
+        </template>
         <template #empty-state>
           <ChatWelcomeScreen v-if="chat.currentAgentId === 'agent_director'" />
         </template>
@@ -51,6 +54,7 @@ import { ref, computed, onMounted, onActivated, nextTick, watch } from 'vue';
 import ChatPanel from '@/components/chat/ChatPanel.vue';
 import ChatWelcomeScreen from '@/components/chat/ChatWelcomeScreen.vue';
 import ChatFileImportButton from '@/components/chat/ChatFileImportButton.vue';
+import OnboardingHelpButton from '@/onboarding/components/OnboardingHelpButton.vue';
 
 import { useChatStore } from '@/components/stores/chatStore';
 import { useProjectStore } from '@/components/stores/projectStore';

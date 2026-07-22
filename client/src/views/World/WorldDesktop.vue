@@ -8,6 +8,7 @@
       <div class="spark-desktop-header__left">
         <div class="spark-desktop-header__title-row">
           <h2 class="spark-desktop-title">{{ t('views.world.desktop.title') }}</h2>
+          <OnboardingHelpButton scene-id="page-world" />
           <span class="spark-desktop-subtitle">{{ t('views.world.desktop.subtitle') }}</span>
         </div>
       </div>
@@ -178,6 +179,7 @@ import CharacterGeneratorPanel from '../../components/lorebook/CharacterGenerato
 import AiSettingsPanel from '../../components/lorebook/AiSettingsPanel.vue';
 import WorldGeneratorPanel from '../../components/lorebook/WorldGeneratorPanel.vue';
 import ProjectStyleToolbox from '../../components/lorebook/ProjectStyleToolbox.vue';
+import OnboardingHelpButton from '../../onboarding/components/OnboardingHelpButton.vue';
 import HistoryPanel from '../../components/dlg-editor/HistoryPanel.vue';
 import GlobalLoading from '../../components/share/GlobalLoading.vue';
 import InspireTagSelector from '../../components/lorebook/InspireTagSelector.vue';

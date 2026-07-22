@@ -58,6 +58,7 @@
                 <h2 v-if="settingsVisible">{{ t('views.scriptWriter.desktop.settingEditor') }}</h2>
                 <h2 v-else-if="!isNovelWorkspace">{{ t('views.scriptWriter.desktop.dialogueTree') }}</h2>
                 <h2 v-else>{{ t('views.scriptWriter.desktop.modeNovel') }}</h2>
+                <OnboardingHelpButton v-if="!settingsVisible" scene-id="page-production" />
               </div>
 
               <Transition name="workspace-mode" mode="out-in">
@@ -124,6 +125,7 @@ import CharacterGeneratorPanel from '../../components/lorebook/CharacterGenerato
 import GlobalLoading from '../../components/share/GlobalLoading.vue';
 import GlobalChatFloat from '../../components/chat/GlobalChatFloat.vue';
 import ActivityBar from '../../components/layouts/desktop/ActivityBar.vue';
+import OnboardingHelpButton from '../../onboarding/components/OnboardingHelpButton.vue';
 
 // 这里的 View 引用改为新的分发器路径
 import WorldView from '../World/WorldIndex.vue';
