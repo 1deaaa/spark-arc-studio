@@ -35,14 +35,13 @@ import os
 import re
 from typing import Any, Dict, List, Optional, Tuple
 
+from core.character_store import read_character_records
 from core.utils import (
-    ensure_project_characters_directory,
     get_project_path,
     get_project_stories_path,
 )
 from core.project_settings import normalize_scene_length_hint
 from story.file_naming import list_story_files
-from story.project_files import _coerce_character_name
 
 
 # ─────────────────────── Story Tags 共享构建器 ───────────────────────
@@ -134,7 +133,7 @@ def load_worldview(user_id: str, project_name: str) -> str:
 
 def load_character_bundle(user_id: str, project_name: str) -> Dict[str, Any]:
     """
-    统一读取角色绑定、详情文本与 prompt 用文本。
+    统一读取角色仓库并构建 prompt 用文本。
 
     返回字段：
       - characters: [{id, name, desc, content}]
@@ -143,22 +142,7 @@ def load_character_bundle(user_id: str, project_name: str) -> Dict[str, Any]:
       - summary_text: 简要列表文本
       - detailed_summary_text: 详细摘要文本
     """
-    characters_path = ensure_project_characters_directory(user_id, project_name)
-    bind_file = os.path.join(characters_path, "chr.bind")
-    if not os.path.exists(bind_file):
-        return {
-            "characters": [],
-            "chr_map": {},
-            "roles_text": "",
-            "summary_text": "",
-            "detailed_summary_text": "",
-        }
-
-    try:
-        with open(bind_file, "r", encoding="utf-8") as f:
-            raw_map: Dict[str, Any] = json.load(f) or {}
-    except Exception:
-        raw_map = {}
+    records = read_character_records(user_id, project_name)
 
     characters: List[Dict[str, Any]] = []
     chr_map: Dict[int, str] = {}
@@ -166,33 +150,14 @@ def load_character_bundle(user_id: str, project_name: str) -> Dict[str, Any]:
     summary_lines: List[str] = ["### 角色列表"]
     detailed_lines: List[str] = ["### 已有角色设定"]
 
-    for cid_str, raw_info in raw_map.items():
-        try:
-            cid = int(cid_str)
-        except Exception:
-            continue
-
-        raw_name = _coerce_character_name(raw_info)
-        if cid == -1:
-            display_name = "旁白"
-        elif cid == -2:
-            display_name = "?"
-        else:
-            display_name = raw_name
+    for cid_str, record in records.items():
+        cid = int(cid_str)
+        display_name = record["name"]
         chr_map[cid] = display_name
         if cid in (-1, -2):
             continue
 
-        content = ""
-        detail_path = os.path.join(characters_path, f"{cid_str}.txt")
-        if os.path.exists(detail_path):
-            try:
-                with open(detail_path, "r", encoding="utf-8") as f:
-                    text = f.read().strip()
-                if text:
-                    content = text
-            except Exception:
-                continue
+        content = record["content"].strip()
 
         desc = content.replace("\n", " ") if content else ""
         characters.append(
@@ -208,14 +173,13 @@ def load_character_bundle(user_id: str, project_name: str) -> Dict[str, Any]:
             f"--- 角色: {display_name} ---\n{content or '(暂无详细设定)'}"
         )
 
-        if cid not in (-1, -2):
-            summary_entry = f"- {display_name}"
-            if desc:
-                summary_entry += f": {desc}"
-            summary_lines.append(summary_entry)
+        summary_entry = f"- {display_name}"
+        if desc:
+            summary_entry += f": {desc}"
+        summary_lines.append(summary_entry)
 
-            detailed_lines.append(f"\n#### {display_name}")
-            detailed_lines.append(content if content else "(尚无详细设定)")
+        detailed_lines.append(f"\n#### {display_name}")
+        detailed_lines.append(content if content else "(尚无详细设定)")
 
     summary_text = "\n".join(summary_lines) if len(summary_lines) > 1 else ""
     detailed_summary_text = "\n".join(detailed_lines) if len(detailed_lines) > 1 else ""

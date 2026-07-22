@@ -82,7 +82,7 @@ def list_projects() -> str:
     """列出当前用户的所有项目。
 
     Returns:
-        项目名称列表文本（按字母排序）。合法项目至少包含 chr/chr.bind 文件。
+        项目名称列表文本（按字母排序）。合法项目至少包含角色仓库文件。
     """
     user_id = current_user_id.get()
     if not user_id:
@@ -229,7 +229,7 @@ def _build_project_overview(user_id: str, project_name: str) -> dict:
     exists = (
         bool(project_name)
         and os.path.isdir(project_path)
-        and os.path.isfile(os.path.join(project_path, "chr", "chr.bind"))
+        and os.path.isfile(os.path.join(project_path, "chr", CHARACTER_STORE_FILENAME))
     )
     payload = {
         "project_name": project_name,
@@ -258,7 +258,7 @@ def _list_user_projects(user_id: str) -> list[str]:
         name
         for name in os.listdir(projects_root)
         if os.path.isdir(os.path.join(projects_root, name))
-        and os.path.isfile(os.path.join(projects_root, name, "chr", "chr.bind"))
+        and os.path.isfile(os.path.join(projects_root, name, "chr", CHARACTER_STORE_FILENAME))
     ]
     return sorted(projects)
 
@@ -287,3 +287,4 @@ def _build_project_background_status(user_id: str, project_name: str) -> dict:
         status["graphrag"] = {"status": "unknown", "error": str(exc), "progress": {}}
 
     return {"background_status": status}
+from core.character_store import CHARACTER_STORE_FILENAME

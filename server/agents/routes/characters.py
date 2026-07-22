@@ -8,13 +8,17 @@ from fastapi import APIRouter, Depends, Query
 from fastapi.responses import JSONResponse
 from typing import Optional
 import os
-import json
 import re
 
 from core.auth import get_current_user, get_optional_user
+from core.character_store import (
+    delete_character_record,
+    next_character_id,
+    read_character_records,
+    upsert_character,
+)
 from core.request_context import get_current_project_name, resolve_project_name
 from core.utils import (
-    SYSTEM_CHARACTER_NAMES,
     ensure_project_characters_directory,
     get_project_stories_path,
     is_system_character_id,
@@ -27,76 +31,6 @@ from .schemas import (
 )
 
 characters_router = APIRouter()
-
-
-# ==================== 辅助函数 ====================
-
-def _read_character_content(chr_dir: str, char_id: str) -> str:
-    """读取角色设定内容（.txt 格式：名字\n\n内容）"""
-    txt_file = os.path.join(chr_dir, f'{char_id}.txt')
-    if not os.path.exists(txt_file):
-        return ''
-    with open(txt_file, 'r', encoding='utf-8') as f:
-        text = f.read()
-    parts = text.split('\n', 2)
-    if len(parts) >= 3:
-        return parts[2]
-    elif len(parts) == 2:
-        return parts[1]
-    return parts[0] if parts else ''
-
-
-def _write_character_content(chr_dir: str, char_id: str, content: str):
-    """写入角色设定内容（.txt 格式）"""
-    txt_file = os.path.join(chr_dir, f'{char_id}.txt')
-    with open(txt_file, 'w', encoding='utf-8') as f:
-        f.write(content)
-
-
-def _delete_character_files(chr_dir: str, char_id: str):
-    """删除角色的设定文件"""
-    file_path = os.path.join(chr_dir, f'{char_id}.txt')
-    if os.path.exists(file_path):
-        try:
-            os.remove(file_path)
-        except Exception:
-            pass
-
-
-def _load_bind_file(bind_file: str) -> dict:
-    """加载 chr.bind 文件，返回 dict"""
-    if not os.path.exists(bind_file):
-        return {}
-    try:
-        with open(bind_file, 'r', encoding='utf-8') as f:
-            data = json.load(f)
-            return data if isinstance(data, dict) else {}
-    except Exception:
-        return {}
-
-
-def _save_bind_file(bind_file: str, data: dict):
-    """保存 chr.bind 文件"""
-    with open(bind_file, 'w', encoding='utf-8') as f:
-        json.dump(data, f, ensure_ascii=False, indent=2)
-
-
-def _coerce_bind_name(entry) -> str:
-    """从 bind 条目提取角色名，兼容 dict 与 string 两种格式"""
-    if isinstance(entry, dict):
-        return str(entry.get('name', '')).strip()
-    return str(entry or '').strip()
-
-
-def _display_character_name(chr_id: str, info) -> str:
-    """返回前端可读角色名，系统保留角色用固定显示名。"""
-    try:
-        numeric_id = int(chr_id)
-    except Exception:
-        numeric_id = None
-    if numeric_id in SYSTEM_CHARACTER_NAMES:
-        return SYSTEM_CHARACTER_NAMES[numeric_id]
-    return _coerce_bind_name(info)
 
 
 def _validate_arc_speaker_name(name: str) -> Optional[str]:
@@ -162,10 +96,8 @@ async def get_characters(
     if not project_name:
         return JSONResponse(status_code=400, content={'error': '缺少项目名称'})
 
-    chr_dir = ensure_project_characters_directory(user_id, project_name)
-    bind_file = os.path.join(chr_dir, 'chr.bind')
-    
-    chr_data = _load_bind_file(bind_file)
+    ensure_project_characters_directory(user_id, project_name)
+    chr_data = read_character_records(user_id, project_name)
     
     characters = []
     for chr_id, info in chr_data.items():
@@ -173,12 +105,12 @@ async def get_characters(
             continue
         char = {
             'id': int(chr_id),
-            'name': _display_character_name(chr_id, info),
+            'name': info['name'],
             'desc': ''
         }
         
         if includeContent:
-            char['content'] = _read_character_content(chr_dir, chr_id)
+            char['content'] = info['content']
         
         characters.append(char)
     
@@ -197,17 +129,15 @@ async def get_character_content(
     if not project_name:
         return JSONResponse(status_code=400, content={'error': '缺少项目名称'})
 
-    chr_dir = ensure_project_characters_directory(user_id, project_name)
-    bind_file = os.path.join(chr_dir, 'chr.bind')
-    
-    chr_data = _load_bind_file(bind_file)
+    ensure_project_characters_directory(user_id, project_name)
+    chr_data = read_character_records(user_id, project_name)
     chr_id = str(character_id)
     
     if chr_id not in chr_data:
         return JSONResponse(status_code=404, content={'error': '角色不存在'})
     
-    name = _display_character_name(chr_id, chr_data[chr_id])
-    content = _read_character_content(chr_dir, chr_id)
+    name = chr_data[chr_id]['name']
+    content = chr_data[chr_id]['content']
     
     return {
         'id': character_id,
@@ -228,35 +158,24 @@ async def create_character(
     if not project_name:
         return JSONResponse(status_code=400, content={'error': '缺少项目名称'})
 
-    chr_dir = ensure_project_characters_directory(user_id, project_name)
-    bind_file = os.path.join(chr_dir, 'chr.bind')
-    
-    chr_data = _load_bind_file(bind_file)
-    
-    # 生成新 ID（找最大值 + 1）
-    existing_ids = []
-    for raw_id in chr_data.keys() if chr_data else []:
-        try:
-            numeric_id = int(raw_id)
-        except Exception:
-            continue
-        if numeric_id >= 0:
-            existing_ids.append(numeric_id)
-    new_id = max(existing_ids, default=-1) + 1
+    ensure_project_characters_directory(user_id, project_name)
+    chr_data = read_character_records(user_id, project_name)
+    new_id = next_character_id(chr_data)
     
     name = str(data.name or '新角色').strip()
     validation_error = _validate_arc_speaker_name(name)
     if validation_error:
         return JSONResponse(status_code=400, content={'error': validation_error})
-    existing_names = {_display_character_name(raw_id, info) for raw_id, info in chr_data.items()}
+    existing_names = {info['name'] for info in chr_data.values()}
     if name in existing_names:
         return JSONResponse(status_code=409, content={'error': '角色名已存在'})
-    chr_data[str(new_id)] = name
-    
-    _save_bind_file(bind_file, chr_data)
-    
-    # 创建角色设定文件（.txt）
-    _write_character_content(chr_dir, str(new_id), f'{name}\n\n在这里描述你的角色...')
+    upsert_character(
+        user_id,
+        project_name,
+        new_id,
+        name=name,
+        content=f'# {name}\n\n在这里描述你的角色...',
+    )
     
     return {'success': True, 'id': new_id, 'name': name}
 
@@ -272,11 +191,21 @@ async def save_character(
     if not project_name:
         return JSONResponse(status_code=400, content={'error': '缺少项目名称'})
 
-    chr_dir = ensure_project_characters_directory(user_id, project_name)
+    ensure_project_characters_directory(user_id, project_name)
     if is_system_character_id(data.id):
         return JSONResponse(status_code=403, content={'error': '系统保留角色不能编辑'})
     
-    _write_character_content(chr_dir, str(data.id), data.content or '')
+    records = read_character_records(user_id, project_name)
+    record = records.get(str(data.id))
+    if record is None:
+        return JSONResponse(status_code=404, content={'error': '角色不存在'})
+    upsert_character(
+        user_id,
+        project_name,
+        data.id,
+        name=record['name'],
+        content=data.content or '',
+    )
     
     return {'success': True}
 
@@ -292,10 +221,8 @@ async def rename_character(
     if not project_name:
         return JSONResponse(status_code=400, content={'error': '缺少项目名称'})
 
-    chr_dir = ensure_project_characters_directory(user_id, project_name)
-    bind_file = os.path.join(chr_dir, 'chr.bind')
-    
-    chr_data = _load_bind_file(bind_file)
+    ensure_project_characters_directory(user_id, project_name)
+    chr_data = read_character_records(user_id, project_name)
     chr_id = str(data.id)
     if is_system_character_id(chr_id):
         return JSONResponse(status_code=403, content={'error': '系统保留角色不能重命名'})
@@ -308,17 +235,21 @@ async def rename_character(
     if validation_error:
         return JSONResponse(status_code=400, content={'error': validation_error})
     existing_names = {
-        _display_character_name(raw_id, info)
+        info['name']
         for raw_id, info in chr_data.items()
         if str(raw_id) != chr_id
     }
     if new_name in existing_names:
         return JSONResponse(status_code=409, content={'error': '角色名已存在'})
 
-    old_name = _display_character_name(chr_id, chr_data[chr_id])
-    chr_data[chr_id] = new_name
-    
-    _save_bind_file(bind_file, chr_data)
+    old_name = chr_data[chr_id]['name']
+    upsert_character(
+        user_id,
+        project_name,
+        chr_id,
+        name=new_name,
+        content=chr_data[chr_id]['content'],
+    )
     updated_files = _sync_story_speaker_marker_rename(user_id, project_name, old_name, new_name)
     
     return {'success': True, 'updatedFiles': updated_files}
@@ -336,19 +267,11 @@ async def delete_character(
     if not project_name:
         return JSONResponse(status_code=400, content={'error': '缺少项目名称'})
 
-    chr_dir = ensure_project_characters_directory(user_id, project_name)
-    bind_file = os.path.join(chr_dir, 'chr.bind')
+    ensure_project_characters_directory(user_id, project_name)
     chr_id = str(id)
     if is_system_character_id(chr_id):
         return JSONResponse(status_code=403, content={'error': '系统保留角色不能删除'})
     
-    # 从 bind 文件中删除
-    chr_data = _load_bind_file(bind_file)
-    if chr_id in chr_data:
-        del chr_data[chr_id]
-        _save_bind_file(bind_file, chr_data)
-    
-    # 删除设定文件
-    _delete_character_files(chr_dir, chr_id)
+    delete_character_record(user_id, project_name, chr_id)
     
     return {'success': True}

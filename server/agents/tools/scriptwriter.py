@@ -78,12 +78,10 @@ def read_worldview() -> str:
 def read_character(character_name: str) -> str:
     """读取角色设定。
 
-    历史 Bug：旧版本是用"文件名包含字符串"做匹配，但角色文件是用 ID 命名
-    （如 ``0.txt``），传入真实角色名（如"沈逐流"）永远命中不到。现已改为
-    通过统一工具 ``lookup_character_id_by_name`` 走 chr.bind 反查。
+    先按姓名反查稳定 ID，再通过统一门面读取角色正文。
     """
     from story.project_files import (
-        get_character_file_path,
+        load_character_content,
         lookup_character_id_by_name,
     )
 
@@ -92,12 +90,7 @@ def read_character(character_name: str) -> str:
     if not char_id:
         return f"未找到名为 '{character_name}' 的角色档案。"
 
-    char_file = get_character_file_path(user_id, project_name, char_id)
-    if not char_file:
-        return f"找到角色 '{character_name}' 但其设定文件丢失。"
-
-    with open(char_file, "r", encoding="utf-8") as f:
-        return f.read()
+    return load_character_content(user_id, project_name, char_id)
 
 
 @tool

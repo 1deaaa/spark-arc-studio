@@ -1,5 +1,4 @@
 import os
-import json
 
 # 一致的用户数据根目录，统一为 server/_userdata
 USERDATA_ROOT = os.path.abspath(os.path.join(os.path.dirname(__file__), '../_userdata'))
@@ -24,31 +23,6 @@ def is_system_character_id(character_id) -> bool:
         return False
 
 
-def get_character_bind_file_path(character_settings_dir):
-    """获取角色绑定文件路径"""
-    return os.path.join(character_settings_dir, 'chr.bind')
-
-def load_character_bindings(character_settings_dir):
-    """加载所有角色的绑定数据"""
-    bind_file_path = get_character_bind_file_path(character_settings_dir)
-    if not os.path.exists(bind_file_path):
-        return {}
-    
-    try:
-        with open(bind_file_path, 'r', encoding='utf-8') as f:
-            content = f.read()
-            if not content:
-                return {}
-            return json.loads(content)
-    except (json.JSONDecodeError, Exception):
-        return {}
-
-def save_character_bindings(character_settings_dir, bindings):
-    """保存所有角色的绑定数据"""
-    bind_file_path = get_character_bind_file_path(character_settings_dir)
-    with open(bind_file_path, 'w', encoding='utf-8') as f:
-        json.dump(bindings, f, ensure_ascii=False, indent=2)
- 
 def get_user_projects_root(user_id):
     """获取用户所有项目的根目录"""
     return os.path.join(USERDATA_ROOT, f'uid_{user_id}', 'projects')
@@ -136,25 +110,11 @@ def ensure_project_worldview_file(user_id, project_name):
     return worldview_path
 
 def ensure_project_characters_directory(user_id, project_name):
-    """确保项目的角色设定目录存在"""
+    """确保项目的单文件角色仓库存在。"""
     characters_path = get_project_characters_path(user_id, project_name)
-    if not os.path.exists(characters_path):
-        os.makedirs(characters_path)
-
-    bindings = load_character_bindings(characters_path)
-    changed = False
-    for character_id, name in SYSTEM_CHARACTER_NAMES.items():
-        character_file = os.path.join(characters_path, f"{character_id}.txt")
-        if not os.path.exists(character_file):
-            with open(character_file, 'w', encoding='utf-8') as f:
-                f.write(SYSTEM_CHARACTER_DESCRIPTIONS[character_id])
-        bind_name = " " if character_id == SYSTEM_CHARACTER_NARRATOR_ID else name
-        if str(character_id) not in bindings:
-            bindings[str(character_id)] = bind_name
-            changed = True
-
-    if changed:
-        save_character_bindings(characters_path, bindings)
+    os.makedirs(characters_path, exist_ok=True)
+    from .character_store import ensure_character_store
+    ensure_character_store(str(user_id), project_name)
         
     return characters_path
 

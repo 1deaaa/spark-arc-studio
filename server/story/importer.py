@@ -7,13 +7,16 @@ from sqlalchemy.orm import sessionmaker
 from sqlalchemy.pool import NullPool
 
 from core.models import Story, StoryData
+from core.character_store import (
+    get_character_store_path_from_project_root,
+    read_character_records_from_path,
+)
 from core.utils import (
     ensure_project_directory,
     ensure_project_stories_directory,
 )
 from .file_naming import parse_story_filename, story_sort_key
 from .presentation_manifest import filter_act_for_target, get_ignored_node_keys, load_manifest_from_root
-from .project_files import _coerce_character_name
 from .scene_loader import load_story_file
 
 
@@ -74,31 +77,11 @@ def _filter_dialogue_acts_for_target(dialogues: list, manifest: dict, target: st
     return dialogues
 
 
-def _load_chr_bindings(project_root: str) -> dict:
-    """读取项目角色绑定，供 ARC 说话人名反查隐藏 ID。"""
-    chr_bind_path = os.path.join(project_root, 'chr', 'chr.bind')
-    if not os.path.exists(chr_bind_path):
-        return {}
-    try:
-        with open(chr_bind_path, 'r', encoding='utf-8') as handle:
-            data = json.load(handle) or {}
-        return data if isinstance(data, dict) else {}
-    except Exception:
-        return {}
-
-
-def _chr_map_from_bindings(chr_bindings: dict) -> dict[int, str]:
-    """把 chr.bind 整理成解析器可用的 ``{id: name}``。"""
-    result: dict[int, str] = {}
-    for raw_id, raw_value in (chr_bindings or {}).items():
-        try:
-            cid = int(raw_id)
-        except (TypeError, ValueError):
-            continue
-        name = _coerce_character_name(raw_value)
-        if name:
-            result[cid] = name
-    return result
+def _load_character_records(project_root: str) -> dict[str, dict[str, str]]:
+    """读取项目角色仓库，供 ARC 解析与运行时导出使用。"""
+    return read_character_records_from_path(
+        get_character_store_path_from_project_root(project_root)
+    )
 
 
 def import_project_stories_to_db(user_id: str, project_name: str, *, reset: bool = True, target: str = "web") -> dict:
@@ -108,8 +91,11 @@ def import_project_stories_to_db(user_id: str, project_name: str, *, reset: bool
     project_root = ensure_project_directory(user_id, project_name)
     stories_dir = ensure_project_stories_directory(user_id, project_name)
     db_path = os.path.join(project_root, 'stories.db')
-    chr_bindings = _load_chr_bindings(project_root)
-    chr_map_for_parse = _chr_map_from_bindings(chr_bindings)
+    character_records = _load_character_records(project_root)
+    chr_map_for_parse = {
+        int(character_id): record['name']
+        for character_id, record in character_records.items()
+    }
     presentation_manifest = load_manifest_from_root(project_root)
     runtime_target = str(target or "web").strip().lower() or "web"
 
@@ -201,10 +187,10 @@ def import_project_stories_to_db(user_id: str, project_name: str, *, reset: bool
         # 1. 兼容旧表 BindChr
         try:
             session.execute(delete(BindChr))
-            for chr_id_str, raw_value in chr_bindings.items():
-                try:
-                    chr_id_int = int(chr_id_str)
-                    chr_name = _coerce_character_name(raw_value)
+            for chr_id_str, record in character_records.items():
+                try:
+                    chr_id_int = int(chr_id_str)
+                    chr_name = record['name']
                     if not chr_name:
                         continue
                     session.add(BindChr(chr_id=chr_id_int, chr_name=chr_name))
@@ -218,14 +204,13 @@ def import_project_stories_to_db(user_id: str, project_name: str, *, reset: bool
             # 始终重建 Character 表以确保最新
             session.execute(delete(Character))
             
-            # 合并 ARC 中扫描到的 ID 和绑定文件中的 ID
-            bound_ids = {int(k) for k in chr_bindings.keys() if k.lstrip('-').isdigit()}
+            # 合并 ARC 中扫描到的 ID 和角色仓库中的 ID
+            bound_ids = {int(k) for k in character_records}
             all_ids = seen_char_ids.union(bound_ids)
             
             for cid in all_ids:
-                # 优先使用绑定文件中的名字（兼容 dict 与 string 两种格式）
-                raw = chr_bindings.get(str(cid))
-                name = _coerce_character_name(raw) if raw else None
+                record = character_records.get(str(cid))
+                name = record['name'] if record else None
                 if not name:
                     if cid == -1:
                         name = "旁白"

@@ -13,6 +13,7 @@ from datetime import datetime
 from urllib.parse import quote
 
 from core.auth import get_current_user, get_optional_user
+from core.character_store import CHARACTER_STORE_FILENAME
 from core.request_context import normalize_project_name
 from core.utils import (
     ensure_project_directory,
@@ -24,7 +25,6 @@ from core.utils import (
 )
 from core.models import UserInfoSession, ProjectVersion
 from agents.chat_manager import ChatManager
-from story.file_naming import build_story_filename
 from agents.project_background_builds import cancel_project_background_builds
 
 project_router = APIRouter()
@@ -97,8 +97,8 @@ async def get_projects(user: Optional[dict] = Depends(get_optional_user)):
             name for name in os.listdir(projects_root)
             if os.path.isdir(os.path.join(projects_root, name))
             # 防御：过滤掉被 ensure_project_* 意外创建的不完整目录
-            # 合法项目至少有 chr/chr.bind（注册/创建时初始化）
-            and os.path.isfile(os.path.join(projects_root, name, 'chr', 'chr.bind'))
+            # 合法项目至少有单文件角色仓库（注册/创建时初始化）
+            and os.path.isfile(os.path.join(projects_root, name, 'chr', CHARACTER_STORE_FILENAME))
         ]
         return sorted(projects)
     except Exception as exc:
@@ -136,18 +136,6 @@ async def create_project(data: ProjectCreate, user: dict = Depends(get_current_u
                 set_project_setting(user_id, project_name, "semantic_search_enabled", True)
         except Exception as e:
             print(f"Failed to initialize semantic search config: {e}")
-
-        # 剧本项目复制示例剧本；小说项目不写入 .arc，避免创建时污染格式边界。
-        try:
-            if workspace_mode == "script":
-                server_root = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
-                template_path = os.path.join(server_root, 'ARC_Example.arc')
-                if os.path.exists(template_path):
-                    target_name = build_story_filename('示例剧本', file_format='arc', group='example', order=1, free=True)
-                    target_path = os.path.join(get_project_stories_path(user_id, project_name), target_name)
-                    shutil.copy2(template_path, target_path)
-        except Exception as e:
-            print(f"Failed to copy template script: {e}")
 
         return {"success": True, "message": "项目创建成功", "workspaceMode": workspace_mode}
     except Exception as exc:

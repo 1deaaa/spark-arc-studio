@@ -24,9 +24,12 @@ def test_import_project_stories_keeps_presentation_and_ignores_legacy_visual_dir
     stories_dir = Path(core_utils.ensure_project_stories_directory(user_id, project_name))
     chr_dir = Path(core_utils.ensure_project_characters_directory(user_id, project_name))
 
-    (chr_dir / "chr.bind").write_text(
-        json.dumps({"-1": "旁白", "1": "信使"}, ensure_ascii=False),
-        encoding="utf-8",
+    from core.character_store import write_character_records
+
+    write_character_records(
+        user_id,
+        project_name,
+        {"1": {"name": "信使", "content": "# 信使"}},
     )
     (stories_dir / "001_测试.arc").write_text(
         "\n".join(

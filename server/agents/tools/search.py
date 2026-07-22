@@ -2,12 +2,14 @@ from __future__ import annotations
 
 import bisect
 import os
+import tempfile
 from typing import Any, ClassVar
 
 from langchain.tools import tool
 from pydantic import BaseModel, Field, field_validator
 
 from core.request_context import current_user_id, get_current_project_name
+from core.character_store import read_character_records, upsert_character
 from core.utils import get_project_path
 from agents.text_search import (
     RegexPatternError,
@@ -28,12 +30,12 @@ class SearchProjectInput(BaseModel):
 
 class SemanticSearchInput(BaseModel):
     query: str = Field(description="自然语言查询，用于语义搜索当前项目文本与已上传附件。例如 '女主角哭的地方'、'主角与反派的对峙'，或 '附件里关于工厂安全规范的段落'")
-    scope: list[str] | None = Field(default=None, description="搜索范围过滤，限定格式类型。可选值：outline, synopsis, beats, worldview, character, arc, novel, chrbind, attachment。例如 ['arc', 'outline'] 只搜剧本和大纲，['attachment'] 只搜已上传附件")
+    scope: list[str] | None = Field(default=None, description="搜索范围过滤，限定格式类型。可选值：outline, synopsis, beats, worldview, character, arc, novel, attachment。例如 ['arc', 'outline'] 只搜剧本和大纲，['attachment'] 只搜已上传附件")
     k: int = Field(default=8, description="返回结果数量上限")
 
     VALID_SCOPE_VALUES: ClassVar[set[str]] = {
         "outline", "synopsis", "beats", "worldview",
-        "character", "arc", "novel", "chrbind", "attachment",
+        "character", "arc", "novel", "attachment",
     }
 
     @field_validator("scope", mode="before")
@@ -106,6 +108,63 @@ def _build_match_context(text: str, start: int, end: int, radius: int = 40) -> s
     if context_end < len(text):
         context = context + "..."
     return context
+
+
+def _character_id_from_rel_path(rel_path: str) -> str:
+    marker = "#character="
+    if marker not in rel_path:
+        return ""
+    return rel_path.rsplit(marker, 1)[1].strip()
+
+
+def _apply_character_patch(
+    user_id: str,
+    project_name: str,
+    character_id: str,
+    search_text: str,
+    replace_text: str,
+) -> str:
+    records = read_character_records(user_id, project_name)
+    record = records.get(str(character_id))
+    if not record:
+        return f"局部修改失败：角色 {character_id} 不存在。"
+
+    temp_root = os.path.abspath(
+        os.path.join(os.path.dirname(__file__), "..", "..", "..", ".tmp")
+    )
+    os.makedirs(temp_root, exist_ok=True)
+    temp_path = ""
+    try:
+        with tempfile.NamedTemporaryFile(
+            mode="w",
+            encoding="utf-8",
+            suffix=".txt",
+            dir=temp_root,
+            delete=False,
+        ) as handle:
+            handle.write(record["content"])
+            temp_path = handle.name
+        result = _apply_patch(
+            temp_path,
+            search_text,
+            replace_text,
+            file_label=f"角色档案：{record['name']}",
+        )
+        if result.startswith("局部修改失败"):
+            return result
+        with open(temp_path, "r", encoding="utf-8") as handle:
+            updated_content = handle.read()
+        upsert_character(
+            user_id,
+            project_name,
+            character_id,
+            name=record["name"],
+            content=updated_content,
+        )
+        return result
+    finally:
+        if temp_path and os.path.isfile(temp_path):
+            os.remove(temp_path)
 
 
 def _fallback_locate_match(
@@ -218,16 +277,24 @@ def search_project(pattern: str, case_sensitive: bool = False) -> str:
     results: list[dict] = []
     for project_file in project_files:
         rel_path = project_file.rel_path
-        try:
-            with open(project_file.abs_path, "r", encoding="utf-8", errors="ignore") as f:
-                file_text = f.read()
-        except Exception:
+        if project_file.format_key == "character":
             file_text = project_file.content or ""
+        else:
+            try:
+                with open(project_file.abs_path, "r", encoding="utf-8", errors="ignore") as f:
+                    file_text = f.read()
+            except Exception:
+                file_text = project_file.content or ""
         if not file_text:
             continue
 
         line_starts = _build_line_starts(file_text)
-        narrative_ref = build_narrative_ref(rel_path, project_file.format_key, outline_data)
+        narrative_ref = build_narrative_ref(
+            rel_path,
+            project_file.format_key,
+            outline_data,
+            **project_file.metadata,
+        )
         try:
             for match in iter_search_matches(compiled, file_text):
                 if match.start() == match.end():
@@ -250,8 +317,13 @@ def search_project(pattern: str, case_sensitive: bool = False) -> str:
                         "chunk_text": match.group(0),
                         "pattern": pattern,
                         "case_sensitive": case_sensitive,
-                        "file_span_start": match.start(),
-                        "file_span_end": match.end(),
+                        "file_span_start": (
+                            None if project_file.format_key == "character" else match.start()
+                        ),
+                        "file_span_end": (
+                            None if project_file.format_key == "character" else match.end()
+                        ),
+                        "character_id": project_file.metadata.get("character_id", ""),
                     }
                 )
         except RegexSearchTimeoutError as exc:
@@ -444,8 +516,9 @@ def replace_from_search(indices: list[int], replacement: str) -> str:
 
     processed_regex_indices: set[int] = set()
     for rel_path, hit_items in regex_hits_by_file.items():
+        character_id = _character_id_from_rel_path(rel_path)
         file_path = os.path.join(project_path, rel_path)
-        if not os.path.isfile(file_path):
+        if not character_id and not os.path.isfile(file_path):
             for idx, _ in hit_items:
                 reports.append(f"[{idx}] 文件不存在: {rel_path}")
                 fail_count += 1
@@ -453,8 +526,15 @@ def replace_from_search(indices: list[int], replacement: str) -> str:
             continue
 
         try:
-            with open(file_path, "r", encoding="utf-8") as f:
-                original = f.read()
+            character_record = None
+            if character_id:
+                character_record = read_character_records(user_id, project_name).get(character_id)
+                if not character_record:
+                    raise FileNotFoundError(f"角色 {character_id} 不存在")
+                original = character_record["content"]
+            else:
+                with open(file_path, "r", encoding="utf-8") as f:
+                    original = f.read()
 
             working = original
             local_success: list[tuple[int, dict]] = []
@@ -496,8 +576,17 @@ def replace_from_search(indices: list[int], replacement: str) -> str:
                 local_success.append((idx, hit))
 
             if working != original:
-                with open(file_path, "w", encoding="utf-8") as f:
-                    f.write(working)
+                if character_record:
+                    upsert_character(
+                        user_id,
+                        project_name,
+                        character_id,
+                        name=character_record["name"],
+                        content=working,
+                    )
+                else:
+                    with open(file_path, "w", encoding="utf-8") as f:
+                        f.write(working)
 
             for idx, hit in sorted(local_success, key=lambda item: item[0]):
                 reports.append(f"[{idx}] 已替换: {hit.get('narrative_ref', rel_path)}")
@@ -521,6 +610,25 @@ def replace_from_search(indices: list[int], replacement: str) -> str:
 
         hit = cached[idx]
         rel_path = hit.get("rel_path", "")
+        character_id = _character_id_from_rel_path(rel_path)
+        if character_id:
+            search_text = hit.get("chunk_text", "")[:500]
+            if search_text.startswith("# 角色：") and "\n\n" in search_text:
+                search_text = search_text.split("\n\n", 1)[1]
+            result = _apply_character_patch(
+                user_id,
+                project_name,
+                character_id,
+                search_text,
+                replacement,
+            )
+            if result.startswith("局部修改失败"):
+                reports.append(f"[{idx}] {result}")
+                fail_count += 1
+            else:
+                reports.append(f"[{idx}] 已替换: {hit.get('narrative_ref', rel_path)}")
+                success_count += 1
+            continue
         file_path = os.path.join(project_path, rel_path)
 
         if not os.path.isfile(file_path):

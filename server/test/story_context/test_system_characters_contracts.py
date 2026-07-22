@@ -1,6 +1,5 @@
 from __future__ import annotations
 
-import json
 import os
 import asyncio
 from pathlib import Path
@@ -14,14 +13,12 @@ def test_project_character_directory_initializes_system_characters(monkeypatch, 
     from core.utils import ensure_project_characters_directory
 
     chr_dir = ensure_project_characters_directory("7", "demo")
-    bind_path = os.path.join(chr_dir, "chr.bind")
-    with open(bind_path, "r", encoding="utf-8") as f:
-        mapping = json.load(f)
+    from core.character_store import read_character_records
 
-    assert mapping["-1"] == " "
-    assert mapping["-2"] == "?"
-    assert os.path.exists(os.path.join(chr_dir, "-1.txt"))
-    assert os.path.exists(os.path.join(chr_dir, "-2.txt"))
+    records = read_character_records("7", "demo")
+    assert records["-1"]["name"] == "旁白"
+    assert records["-2"]["name"] == "?"
+    assert os.listdir(chr_dir) == ["characters.json"]
 
 
 def test_character_api_hides_and_protects_system_characters(monkeypatch, tmp_path: Path) -> None:
@@ -81,3 +78,52 @@ def test_character_name_map_understands_unknown_system_character(monkeypatch, tm
 
     assert load_character_id_name_map("7", "demo")["-2"] == "?"
     assert "-2" not in load_character_id_name_map("7", "demo", include_system=False)
+
+
+def test_character_crud_keeps_a_single_physical_file(monkeypatch, tmp_path: Path) -> None:
+    monkeypatch.setattr("core.utils.USERDATA_ROOT", str(tmp_path))
+
+    from core.character_store import (
+        delete_character_record,
+        read_character_records,
+        upsert_character,
+    )
+    from core.utils import ensure_project_characters_directory
+
+    chr_dir = ensure_project_characters_directory("8", "demo")
+    upsert_character("8", "demo", 0, name="沈棠", content="# 沈棠\n\n档案管理员")
+    upsert_character("8", "demo", 1, name="林烬", content="# 林烬\n\n调查员")
+    delete_character_record("8", "demo", 0)
+
+    records = read_character_records("8", "demo")
+    assert records["1"]["name"] == "林烬"
+    assert "0" not in records
+    assert os.listdir(chr_dir) == ["characters.json"]
+
+
+def test_semantic_collection_expands_character_records(monkeypatch, tmp_path: Path) -> None:
+    monkeypatch.setattr("core.utils.USERDATA_ROOT", str(tmp_path))
+
+    from core.character_store import write_character_records
+    from story.project_files import collect_project_files
+    from story.semantic_chunker import SemanticChunker
+
+    write_character_records(
+        "9",
+        "demo",
+        {
+            "0": {"name": "沈棠", "content": "职业：档案管理员"},
+            "1": {"name": "林烬", "content": "别名：阿烬\n职业：调查员"},
+        },
+    )
+
+    project_files = collect_project_files("9", "demo")
+    character_files = [item for item in project_files if item.format_key == "character"]
+    assert [item.metadata["character_name"] for item in character_files] == ["沈棠", "林烬"]
+    assert len({item.abs_path for item in character_files}) == 1
+    assert all("characters.json#character=" in item.rel_path for item in character_files)
+
+    chunker = SemanticChunker()
+    chunks = [chunker.chunk_file(item, {"nodes": []})[0] for item in character_files]
+    assert [chunk.metadata["character_id"] for chunk in chunks] == ["0", "1"]
+    assert [chunk.metadata["character_name"] for chunk in chunks] == ["沈棠", "林烬"]

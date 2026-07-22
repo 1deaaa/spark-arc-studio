@@ -2,7 +2,6 @@ from datetime import datetime, timedelta, timezone
 import hashlib
 import secrets
 from typing import Optional, Dict, Any, Tuple, List
-import shutil
 import json
 import os
 
@@ -23,14 +22,13 @@ from .models import (
     UserSession,
     user_engine,
 )
-from .utils import ensure_project_directory, ensure_project_stories_directory, ensure_project_characters_directory
+from .default_project import DEFAULT_PROJECT_NAME, initialize_default_project
 from .request_context import set_current_context, extract_project_name
 from .verification import (
     VerificationUnavailableError,
     get_registration_verification_config,
     verify_registration_challenge,
 )
-from story.file_naming import build_story_filename
 
 # ===================== 数据访问层 =====================
 class UserDatabase:
@@ -468,45 +466,10 @@ async def register(data: AuthRequest, request: Request):
         return JSONResponse(status_code=400, content={"success": False, "message": res})
         
     user_id = res
-    default_project_name = "默认项目"
-    project_path = ensure_project_directory(str(user_id), default_project_name)
-    
-    # 1. 复制示例剧本到 stories 目录
     try:
-        stories_path = ensure_project_stories_directory(str(user_id), default_project_name)
-        # 获取 server 目录路径 (假设当前文件在 server/core/auth.py)
-        server_root = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
-        source_script_path = os.path.join(server_root, 'ARC_Example.arc')
-        
-        if os.path.exists(source_script_path):
-            target_name = build_story_filename('示例剧本', file_format='arc', group='example', order=1, free=True)
-            shutil.copy2(source_script_path, os.path.join(stories_path, target_name))
-        else:
-            print(f"Warning: sample script file not found at {source_script_path}")
+        initialize_default_project(str(user_id), DEFAULT_PROJECT_NAME)
     except Exception as e:  # pragma: no cover
-        print(f"Failed to create sample script file: {e}")
-
-    # 2. 复制示例世界观
-    try:
-        server_root = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
-        source_lorebook_path = os.path.join(server_root, '世界观示例.txt')
-        dest_lorebook_path = os.path.join(project_path, '世界观.txt')
-        if os.path.exists(source_lorebook_path):
-            shutil.copy2(source_lorebook_path, dest_lorebook_path)
-        else:
-            print(f"Warning: sample worldview file not found at {source_lorebook_path}")
-    except Exception as e:
-        print(f"Failed to create sample worldview file: {e}")
-
-    # 3. 初始化默认角色 "旁白" (ID: -1)
-    # 注意：旁白角色的ID必须是-1，名字在chr.bind中存储为空格（用于显示时为空）
-    # 但在传给AI时会强制显示为"旁白"
-    try:
-        characters_path = ensure_project_characters_directory(str(user_id), default_project_name)
-        # ensure_project_characters_directory 已经会创建 id=-1 的旁白角色
-        # 这里不需要额外操作，因为 utils.py 中的函数已经处理了
-    except Exception as e: # pragma: no cover
-        print(f"Failed to initialize character directory: {e}")
+        print(f"Failed to initialize default project: {e}")
             
     return {"success": True, "message": "注册成功！请登录"}
 

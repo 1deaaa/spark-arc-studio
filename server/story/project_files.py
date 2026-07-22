@@ -8,14 +8,18 @@
 import json
 import os
 import re
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from typing import Optional
 
+from core.character_store import (
+    CHARACTER_STORE_FILENAME,
+    get_character_store_path,
+    load_character_id_name_map as _load_character_id_name_map,
+    read_character_records,
+)
 from core.utils import (
-    SYSTEM_CHARACTER_NAMES,
     get_project_path,
     get_project_stories_path,
-    get_project_characters_path,
     is_system_character_id,
 )
 from story.arc_safety import sanitize_arc_for_ai_context
@@ -30,8 +34,9 @@ class ProjectFile:
     abs_path: str           # 绝对路径
     rel_path: str           # 相对路径（/ 分隔）
     filename: str           # 文件名
-    format_key: str         # 格式分类：outline / synopsis / beats / worldview / character / arc / novel / chrbind
+    format_key: str         # 格式分类：outline / synopsis / beats / worldview / character / arc / novel
     content: str            # 文件文本内容
+    metadata: dict = field(default_factory=dict)
 
 
 # ==================== 文件格式分类 ====================
@@ -54,15 +59,7 @@ def classify_file(rel_path: str, filename: str) -> Optional[str]:
     if "/" not in rel_path and "\\" not in rel_path:
         return _ROOT_FILE_MAP.get(filename)
 
-    # chr/ 目录
     parts = rel_path.replace("\\", "/").split("/")
-    if len(parts) >= 2 and parts[0] == "chr":
-        if filename == "chr.bind":
-            return "chrbind"
-        if filename.endswith(".txt"):
-            return "character"
-        return None
-
     # stories/ 目录
     if len(parts) >= 2 and parts[0] == "stories":
         if filename.endswith(".arc"):
@@ -87,107 +84,19 @@ def _read_file_text(file_path: str) -> str:
         return f.read()
 
 
-# ==================== 角色卡隐藏绑定表（项目级资源绑定真相源） ====================
-#
-# 设计原则：创作层与 ARC 正文以角色名为真相；chr.bind 只服务角色卡、
-# 资源绑定、SQLite/Unity 导出等运行时边界。绑定表解析仍集中在此处，
-# 避免其他模块散落实现。
-#
-# chr.bind 实际结构有两种历史形态，本工具一并兼容：
-#   1) {"0": "沈逐流"}                   —— 早期纯字符串
-#   2) {"0": {"name": "沈逐流", ...}}    —— 新版含结构化扩展字段
-#
-# 特殊 ID："-1" 视作"旁白"，仅在 ``include_narrator=True`` 时回填默认名"旁白"。
-
-_CHARACTER_NARRATOR_ID = "-1"
-_CHARACTER_NARRATOR_NAME = SYSTEM_CHARACTER_NAMES.get(-1, "旁白")
-_CHARACTER_UNKNOWN_ID = "-2"
-_CHARACTER_UNKNOWN_NAME = SYSTEM_CHARACTER_NAMES.get(-2, "?")
-
-
-def _character_bind_path(user_id: str, project_name: str) -> str:
-    """计算 chr.bind 的绝对路径。"""
-    return os.path.join(get_project_characters_path(user_id, project_name), "chr.bind")
-
-
-def _coerce_character_name(value) -> str:
-    """从 chr.bind 单条记录抽出"角色名"字段，兼容字符串与字典两种形态。"""
-    if isinstance(value, dict):
-        return str(value.get("name") or "").strip()
-    return str(value or "").strip()
-
-
-def load_character_id_name_map_from_bind_path(
-    bind_path: str,
-    *,
-    include_narrator: bool = True,
-    include_system: bool = True,
-    include_empty: bool = False,
-) -> dict[str, str]:
-    """底层版本：直接按 chr.bind 文件绝对路径读取 ID→名字映射。
-
-    专供"没有 user_id/project_name 上下文"的场景使用（例如语义切块器、
-    某些只有 ``ProjectFile.abs_path`` 的策略实现）。一般业务层应该用
-    :func:`load_character_id_name_map`。
-    """
-    if not bind_path or not os.path.isfile(bind_path):
-        return {}
-
-    try:
-        with open(bind_path, "r", encoding="utf-8") as f:
-            mapping = json.load(f) or {}
-    except Exception:
-        return {}
-
-    if not isinstance(mapping, dict):
-        return {}
-
-    result: dict[str, str] = {}
-    for raw_cid, raw_value in mapping.items():
-        cid = str(raw_cid)
-        name = _coerce_character_name(raw_value)
-        if cid == _CHARACTER_NARRATOR_ID:
-            if not include_narrator:
-                continue
-            # 旁白角色名约定为"旁白"，即便 chr.bind 内是空字符串也补上
-            name = name or _CHARACTER_NARRATOR_NAME
-        elif cid == _CHARACTER_UNKNOWN_ID:
-            if not include_system:
-                continue
-            name = name or _CHARACTER_UNKNOWN_NAME
-        if not name and not include_empty:
-            continue
-        result[cid] = name
-    return result
-
-
 def load_character_id_name_map(
     user_id: str,
     project_name: str,
     *,
     include_narrator: bool = True,
     include_system: bool = True,
-    include_empty: bool = False,
 ) -> dict[str, str]:
-    """读取 chr.bind，返回 ``{character_id: character_name}`` 映射。
-
-    Args:
-        user_id: 用户 ID。
-        project_name: 项目名。
-        include_narrator: 是否把 ID="-1" 的旁白角色纳入映射。默认 True。
-            对于"想拿到全部角色名做实体识别"的场景应保持 True；
-            对于"列出可写作的角色"的场景可以设 False 把旁白排除。
-        include_system: 是否把除旁白外的系统保留角色纳入映射。默认 True。
-        include_empty: 是否保留名字为空的条目。默认 False（过滤掉）。
-
-    Returns:
-        ``{cid: name}``。即便 chr.bind 不存在或解析失败，也保证返回 ``{}``。
-    """
-    return load_character_id_name_map_from_bind_path(
-        _character_bind_path(user_id, project_name),
+    """从单文件角色仓库读取 ID→姓名映射。"""
+    return _load_character_id_name_map(
+        user_id,
+        project_name,
         include_narrator=include_narrator,
         include_system=include_system,
-        include_empty=include_empty,
     )
 
 
@@ -223,22 +132,10 @@ def lookup_character_id_by_name(
     return ""
 
 
-def get_character_file_path(
-    user_id: str,
-    project_name: str,
-    character_id: str,
-    *,
-    extensions: tuple[str, ...] = (".txt", ".md"),
-) -> str:
-    """根据角色 ID 找到设定文件的绝对路径。找不到时返回空字符串。"""
-    chr_dir = get_project_characters_path(user_id, project_name)
-    if not os.path.isdir(chr_dir):
-        return ""
-    for ext in extensions:
-        path = os.path.join(chr_dir, f"{character_id}{ext}")
-        if os.path.isfile(path):
-            return path
-    return ""
+def load_character_content(user_id: str, project_name: str, character_id: str) -> str:
+    """读取单个角色正文。"""
+    record = read_character_records(user_id, project_name).get(str(character_id))
+    return record["content"] if record else ""
 
 
 def enrich_character_content(
@@ -345,14 +242,14 @@ def collect_project_files(
 
     扫描范围：
       项目根/世界观.txt, 梗概.txt, 节拍表.txt, 大纲.txt
-      chr/chr.bind, chr/*.txt
+      chr/characters.json（按角色展开为虚拟文件）
       stories/**/*.arc, stories/**/*.md
 
     内容增强：
-      对 ``format_key == "character"`` 的文件，会在 ``content`` 头部注入
+      对 ``format_key == "character"`` 的虚拟文件，会在 ``content`` 头部注入
       "# 角色：xxx" 前缀（参见 :func:`enrich_character_content`）。
       下游（vector_index、GraphRAG、grep）由此可以识别"沈逐流"对应
-      ``chr/0.txt``，而不必各自再写一份 ID→名字解析。
+      对应角色，而不必各自再写一份 ID→名字解析。
       对 ``format_key == "arc"`` 的文件，会在模型可见文本头部注入紧凑
       可用说话人清单（参见 :func:`enrich_arc_content_for_model`），但不修改原始
       ``.arc`` 文件，也不改变运行时解析协议。
@@ -361,70 +258,37 @@ def collect_project_files(
     if not os.path.isdir(project_path):
         return []
 
-    # 一次性加载角色 ID → 名字映射（chr.bind 可能不存在，结果为空字典）
-    character_map = load_character_id_name_map(user_id, project_name)
+    character_records = read_character_records(user_id, project_name)
+    character_map = {
+        character_id: record["name"]
+        for character_id, record in character_records.items()
+    }
     from core.project_settings import is_visual_illustration_enabled
     allow_visual_illustration = is_visual_illustration_enabled(user_id, project_name)
 
-    # 按叙事顺序构建候选文件列表
-    candidate_files: list[str] = []
-
-    # 根目录文件（固定顺序：世界观 → 梗概 → 节拍表 → 大纲）
-    for name in ("世界观.txt", "梗概.txt", "节拍表.txt", "大纲.txt"):
-        candidate_files.append(os.path.join(project_path, name))
-
-    # chr/ 目录
-    chr_dir = get_project_characters_path(user_id, project_name)
-    if os.path.isdir(chr_dir):
-        chr_bind = os.path.join(chr_dir, "chr.bind")
-        if os.path.isfile(chr_bind):
-            candidate_files.append(chr_bind)
-        for name in sorted(os.listdir(chr_dir)):
-            if name.endswith(".txt") and name != "chr.bind":
-                candidate_files.append(os.path.join(chr_dir, name))
-
-    # stories/ 目录
-    stories_dir = get_project_stories_path(user_id, project_name)
-    if os.path.isdir(stories_dir):
-        # 按目录与文件名排序保证章节 / 场景顺序；支持“章节文件夹 > 场景文件”的作品管理器结构。
-        for root, dirs, files in os.walk(stories_dir):
-            dirs.sort()
-            for name in sorted(files):
-                if name.endswith((".arc", ".md")):
-                    candidate_files.append(os.path.join(root, name))
-
-    # 读取文件内容并分类
     results: list[ProjectFile] = []
     total_chars = 0
 
-    for file_path in candidate_files:
-        if not os.path.isfile(file_path):
-            continue
-        if total_chars >= max_source_chars:
-            break
-
+    def append_physical_file(file_path: str) -> None:
+        nonlocal total_chars
+        if not os.path.isfile(file_path) or total_chars >= max_source_chars:
+            return
         rel_path = os.path.relpath(file_path, project_path).replace("\\", "/")
         filename = os.path.basename(file_path)
         format_key = classify_file(rel_path, filename)
         if format_key is None:
-            continue
+            return
 
         try:
             text = _read_file_text(file_path)
         except Exception:
-            continue
+            return
 
         text = (text or "").strip()
         if not text:
-            continue
+            return
 
-        # 角色文件：从文件名推断隐藏 ID，只把"# 角色：xxx"前缀注入 content。
-        # 这一步必须放在字符截断之前，避免前缀被截掉。
-        if format_key == "character":
-            character_id = os.path.splitext(filename)[0]
-            character_name = character_map.get(character_id, "")
-            text = enrich_character_content(text, character_id, character_name)
-        elif format_key == "arc":
+        if format_key == "arc":
             text = enrich_arc_content_for_model(
                 text,
                 character_map,
@@ -433,7 +297,7 @@ def collect_project_files(
 
         remaining = max_source_chars - total_chars
         if remaining <= 0:
-            break
+            return
         if len(text) > remaining:
             text = text[:remaining]
 
@@ -445,6 +309,42 @@ def collect_project_files(
             format_key=format_key,
             content=text,
         ))
+
+    # 固定叙事顺序：项目设定 → 角色 → 故事正文。
+    for name in ("世界观.txt", "梗概.txt", "节拍表.txt", "大纲.txt"):
+        append_physical_file(os.path.join(project_path, name))
+
+    store_path = get_character_store_path(user_id, project_name)
+    for character_id, record in character_records.items():
+        if is_system_character_id(character_id) or total_chars >= max_source_chars:
+            continue
+        text = enrich_character_content(
+            record["content"], character_id, record["name"]
+        ).strip()
+        if not text:
+            continue
+        remaining = max_source_chars - total_chars
+        text = text[:remaining]
+        total_chars += len(text)
+        results.append(ProjectFile(
+            abs_path=store_path,
+            rel_path=f"chr/{CHARACTER_STORE_FILENAME}#character={character_id}",
+            filename=CHARACTER_STORE_FILENAME,
+            format_key="character",
+            content=text,
+            metadata={
+                "character_id": character_id,
+                "character_name": record["name"],
+            },
+        ))
+
+    stories_dir = get_project_stories_path(user_id, project_name)
+    if os.path.isdir(stories_dir):
+        for root, dirs, files in os.walk(stories_dir):
+            dirs.sort()
+            for name in sorted(files):
+                if name.endswith((".arc", ".md")):
+                    append_physical_file(os.path.join(root, name))
 
     return results
 
@@ -535,12 +435,6 @@ def build_narrative_ref(
         if char_name:
             return f"角色档案 > {char_name}"
         return "角色档案"
-
-    if format_key == "chrbind":
-        char_name = kwargs.get("character_name", "")
-        if char_name:
-            return f"角色绑定 > {char_name}"
-        return "角色绑定"
 
     # 回退：使用文件名
     return rel_path

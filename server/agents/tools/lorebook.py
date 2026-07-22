@@ -1,12 +1,12 @@
 from __future__ import annotations
 
-import json
 import os
 
 from langchain.tools import tool
 from pydantic import BaseModel, Field
 
-from core.utils import ensure_project_characters_directory, get_project_path
+from core.character_store import upsert_character
+from core.utils import get_project_path
 
 from .common import ToolExecutionContext, _apply_patch
 
@@ -74,9 +74,6 @@ def update_character(character_name: str, overwrite_content: str) -> str:
     from story.project_files import lookup_character_id_by_name
 
     user_id, project_name = ToolExecutionContext.get_context()
-    characters_path = ensure_project_characters_directory(user_id, project_name)
-
-    # 复用统一工具，避免重复实现 chr.bind 解析与按名字反查
     char_id = lookup_character_id_by_name(user_id, project_name, character_name)
     if not char_id:
         return f"未找到名为 '{character_name}' 的角色。"
@@ -85,21 +82,13 @@ def update_character(character_name: str, overwrite_content: str) -> str:
     if not content:
         return f"修改角色 '{character_name}' 失败：overwrite_content 为空。"
 
-    char_file = os.path.join(characters_path, f"{char_id}.txt")
-    with open(char_file, "w", encoding="utf-8") as f:
-        f.write(f"{character_name}\n\n{content}")
-
-    # 同步更新 chr.bind 中的角色名（使用 dict 格式）
-    bind_path = os.path.join(characters_path, "chr.bind")
-    if os.path.exists(bind_path):
-        try:
-            with open(bind_path, "r", encoding="utf-8") as f:
-                bind_data = json.load(f) or {}
-            bind_data[str(char_id)] = character_name
-            with open(bind_path, "w", encoding="utf-8") as f:
-                json.dump(bind_data, f, ensure_ascii=False, indent=2)
-        except Exception:
-            pass
+    upsert_character(
+        user_id,
+        project_name,
+        char_id,
+        name=character_name,
+        content=content,
+    )
 
     return f"已成功修改角色 '{character_name}' 的设定。"
 

@@ -149,7 +149,7 @@ def register_query_tools(mcp) -> None:
         Args:
             project_name: 目标项目名称
             query: 自然语言查询，例如 '女主角哭的地方'
-            scope: 搜索范围过滤。可选值：outline, synopsis, beats, worldview, character, arc, novel, chrbind, attachment
+            scope: 搜索范围过滤。可选值：outline, synopsis, beats, worldview, character, arc, novel, attachment
             k: 返回结果数量上限（默认 8）
         Returns:
             语义匹配结果列表（含相似度评分与上下文）

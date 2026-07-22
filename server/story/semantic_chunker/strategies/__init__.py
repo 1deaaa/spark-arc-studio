@@ -9,7 +9,6 @@ from .arc_strategy import ArcChunkStrategy
 from .novel_strategy import NovelChunkStrategy
 from .heading_strategy import HeadingChunkStrategy
 from .character_strategy import CharacterChunkStrategy
-from .chrbind_strategy import ChrBindChunkStrategy
 
 from ..base import register_strategy
 
@@ -24,4 +23,3 @@ def register_all_strategies():
     for key in heading.format_keys:
         register_strategy(HeadingChunkStrategy(key))
     register_strategy(CharacterChunkStrategy())
-    register_strategy(ChrBindChunkStrategy())

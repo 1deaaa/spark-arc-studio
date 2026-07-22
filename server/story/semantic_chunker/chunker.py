@@ -22,7 +22,7 @@ from story.project_files import (
 from .base import SemanticChunk, get_strategy
 
 
-SEMANTIC_CHUNKER_CACHE_VERSION = "2.1"
+SEMANTIC_CHUNKER_CACHE_VERSION = "3.0"
 
 
 class SemanticChunker:

@@ -11,9 +11,8 @@ from agents.agent_utils import load_prompt, build_length_hint_str, SparkAgentExe
 from agents.prompt_layout import build_prompt_messages
 
 from core.request_context import current_user_id, get_current_project_name, resolve_project_name
+from core.character_store import replace_regular_characters
 from core.utils import (
-    SYSTEM_CHARACTER_IDS,
-    ensure_project_characters_directory,
     get_project_worldview_path,
     ensure_project_worldview_and_character_settings,
 )
@@ -228,68 +227,6 @@ class WorldviewAgent(SparkBaseAgent, SparkAgentExecutor):
         with open(path, "w", encoding="utf-8") as f:
             f.write(content or "")
 
-    def _snapshot_characters(self, user_id: str, project_name: str):
-        from story.project_files import _coerce_character_name
-
-        characters_path = ensure_project_characters_directory(user_id, project_name)
-        bind_path = os.path.join(characters_path, "chr.bind")
-
-        mapping = {}
-        if os.path.exists(bind_path):
-            try:
-                with open(bind_path, "r", encoding="utf-8") as f:
-                    mapping = json.load(f) or {}
-            except Exception:
-                mapping = {}
-
-        lines = []
-        for cid, raw_value in mapping.items():
-            try:
-                name = _coerce_character_name(raw_value)
-                char_file = os.path.join(characters_path, f"{cid}.txt")
-                content = ""
-                if os.path.exists(char_file):
-                    with open(char_file, "r", encoding="utf-8") as f:
-                        text = f.read()
-                        parts = text.split("\n", 2)
-                        content = parts[2] if len(parts) >= 3 else text
-                content = (content or "").strip()
-                if len(content) > 400:
-                    content = content[:400] + "…"
-                lines.append(f"- {name}: {content}")
-            except Exception:
-                continue
-
-        system_mapping = {}
-        for cid, raw_value in mapping.items():
-            try:
-                if int(cid) in SYSTEM_CHARACTER_IDS:
-                    system_mapping[str(cid)] = raw_value
-            except Exception:
-                continue
-        existing_block = "\n".join(lines) if lines else ""
-        return characters_path, bind_path, mapping, existing_block, system_mapping
-
-    def _reset_characters_keep_system(
-        self, bind_path: str, characters_path: str, system_mapping: dict | None
-    ):
-        for filename in os.listdir(characters_path):
-            stem = os.path.splitext(filename)[0]
-            try:
-                is_system_file = int(stem) in SYSTEM_CHARACTER_IDS
-            except Exception:
-                is_system_file = False
-            if filename.endswith(".txt") and not is_system_file:
-                try:
-                    os.remove(os.path.join(characters_path, filename))
-                except Exception:
-                    pass
-
-        mapping = dict(system_mapping or {})
-        with open(bind_path, "w", encoding="utf-8") as f:
-            json.dump(mapping, f, ensure_ascii=False, indent=2)
-        return mapping
-
     def _parse_characters_overwrite_text(self, full_text: str) -> list[tuple[str, str]]:
         text = (full_text or "").strip()
         if not text:
@@ -375,49 +312,18 @@ class WorldviewAgent(SparkBaseAgent, SparkAgentExecutor):
     def _write_characters_overwrite(
         self, user_id: str, project_name: str, overwrite_content: str
     ) -> str:
-        characters_path, bind_path, mapping, existing_block, system_mapping = (
-            self._snapshot_characters(user_id, project_name)
-        )
         parsed_characters = self._parse_characters_overwrite_text(overwrite_content)
         if not parsed_characters:
-            return "角色覆盖失败：overwrite_content 格式不正确。请使用 JSON characters 列表、XML <character><name>角色名</name><content>角色设定</content></character>，或兼容旧的“角色名 + 空行 + 角色内容”并用 --- 分隔多个角色。"
+            return "角色覆盖失败：overwrite_content 格式不正确。请使用 JSON characters 列表、XML <character><name>角色名</name><content>角色设定</content></character>，或“角色名 + 空行 + 角色内容”并用 --- 分隔多个角色。"
 
-        mapping = self._reset_characters_keep_system(
-            bind_path, characters_path, system_mapping
-        )
-
-        existing_ids = {int(k) for k in mapping.keys()} if mapping else set()
-        created = 0
-
-        for name, content in parsed_characters:
-            char_id = 0
-            while char_id in existing_ids:
-                char_id += 1
-            existing_ids.add(char_id)
-
-            safe_name = (name or "新角色").strip() or "新角色"
-            safe_content = (content or "").strip()
-            if not safe_content:
-                continue
-
-            mapping[str(char_id)] = safe_name
-            char_file = os.path.join(characters_path, f"{char_id}.txt")
-            with open(char_file, "w", encoding="utf-8") as f:
-                f.write(f"{safe_name}\n\n{safe_content}")
-
-            created += 1
-
-        with open(bind_path, "w", encoding="utf-8") as f:
-            json.dump(mapping, f, ensure_ascii=False, indent=2)
-
+        created = replace_regular_characters(user_id, project_name, parsed_characters)
         return f"已使用工具参数中的完整文本覆盖角色设定，共写入 {created} 个角色。"
 
 
 def get_all_characters() -> List[str]:
     """返回当前上下文项目的所有角色名称。
 
-    复用 ``story.project_files.load_character_id_name_map``——chr.bind 解析
-    的真相源在那里，本方法不再自己读 JSON，避免 6 处重复实现。
+    复用 ``story.project_files.load_character_id_name_map`` 公共门面。
     """
     from story.project_files import load_character_id_name_map
 
@@ -438,11 +344,10 @@ def get_all_characters() -> List[str]:
 def get_character_info(character_name: str) -> str:
     """返回指定角色的详细设定文本。
 
-    复用统一工具 ``lookup_character_id_by_name`` + ``get_character_file_path``，
-    不再各自重写 chr.bind 解析与文件查找。
+    复用统一角色读取门面，不在工具侧直接解析存储文件。
     """
     from story.project_files import (
-        get_character_file_path,
+        load_character_content,
         lookup_character_id_by_name,
     )
 
@@ -456,12 +361,7 @@ def get_character_info(character_name: str) -> str:
         if not char_id:
             return f"未找到名为 '{character_name}' 的角色。"
 
-        char_file_path = get_character_file_path(user_id, project_name, char_id)
-        if not char_file_path:
-            return f"找到了角色 '{character_name}' 但其设定文件丢失。"
-
-        with open(char_file_path, "r", encoding="utf-8") as file:
-            return file.read()
+        return load_character_content(user_id, project_name, char_id)
     except Exception as exc:  # pragma: no cover - 调试日志
         print(f"Failed to fetch character '{character_name}': {exc}")
         return f"Failed to fetch character '{character_name}' 信息时发生错误。"

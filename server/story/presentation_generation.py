@@ -10,7 +10,7 @@ from core.project_settings import (
     get_visual_illustration_settings,
     get_visual_style_settings,
 )
-from story.project_files import get_character_file_path, load_character_id_name_map
+from story.project_files import load_character_content, load_character_id_name_map
 
 
 REFERENCE_ROLES = {"style", "scene", "character", "continuity"}
@@ -66,14 +66,7 @@ def _load_character_contexts(
     result: list[dict[str, str]] = []
     for character_id in _unique_strings(character_ids, limit=8):
         name = name_map.get(character_id, "")
-        path = get_character_file_path(user_id, project_name, character_id)
-        content = ""
-        if path and os.path.isfile(path):
-            try:
-                with open(path, "r", encoding="utf-8") as handle:
-                    content = handle.read()
-            except OSError:
-                content = ""
+        content = load_character_content(user_id, project_name, character_id)
         result.append({
             "id": character_id,
             "name": name,

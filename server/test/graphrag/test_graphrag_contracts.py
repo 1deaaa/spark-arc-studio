@@ -28,14 +28,16 @@ def test_graphrag_uses_semantic_chunks_with_narrative_metadata(monkeypatch, tmp_
     monkeypatch.setattr("core.utils.USERDATA_ROOT", str(tmp_path))
     project_path = tmp_path / "uid_12" / "projects" / "demo"
     story_dir = project_path / "stories" / "一 · 开端"
-    chr_dir = project_path / "chr"
     story_dir.mkdir(parents=True)
-    chr_dir.mkdir(parents=True)
-    (chr_dir / "chr.bind").write_text(
-        json.dumps({"1": {"name": "沈棠"}, "2": {"name": "林烬"}}, ensure_ascii=False),
-        encoding="utf-8",
+    from core.character_store import write_character_records
+    write_character_records(
+        "12",
+        "demo",
+        {
+            "1": {"name": "沈棠", "content": "职业：档案管理员\n秘密：知道旧钥匙来历。"},
+            "2": {"name": "林烬", "content": "职业：调查员"},
+        },
     )
-    (chr_dir / "1.txt").write_text("职业：档案管理员\n秘密：知道旧钥匙来历。", encoding="utf-8")
     (project_path / "大纲.txt").write_text(
         "## 一 · 开端\n### 1-1 钟楼交易\n沈棠把旧钥匙交给林烬。",
         encoding="utf-8",
@@ -109,12 +111,15 @@ def test_arc_chunks_expose_character_names_without_changing_arc_runtime_contract
     monkeypatch.setattr("core.utils.USERDATA_ROOT", str(tmp_path))
     project_path = tmp_path / "uid_16" / "projects" / "demo"
     story_dir = project_path / "stories" / "一 · 开端"
-    chr_dir = project_path / "chr"
     story_dir.mkdir(parents=True)
-    chr_dir.mkdir(parents=True)
-    (chr_dir / "chr.bind").write_text(
-        json.dumps({"-1": "旁白", "-2": "?", "1": {"name": "沈棠"}, "2": {"name": "林烬"}}, ensure_ascii=False),
-        encoding="utf-8",
+    from core.character_store import write_character_records
+    write_character_records(
+        "16",
+        "demo",
+        {
+            "1": {"name": "沈棠", "content": "# 沈棠"},
+            "2": {"name": "林烬", "content": "# 林烬"},
+        },
     )
     arc_text = "# 钟楼交易\n[沈棠]\n把钥匙收好。\n[林烬]\n我会查清楚。"
     (story_dir / "1-1 钟楼交易.arc").write_text(arc_text, encoding="utf-8")

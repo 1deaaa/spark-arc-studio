@@ -17,6 +17,7 @@ import networkx as nx
 from langchain_core.documents import Document
 from langchain_core.messages import HumanMessage, SystemMessage
 
+from core.character_store import read_character_records
 from core.utils import get_project_path
 from llm.agen_matchbox import matchbox
 from agents.language_policy import prepend_prompt_language_policy
@@ -308,10 +309,8 @@ class GraphRAGService:
     def _compute_file_hashes(self) -> dict[str, str]:
         """计算当前构建源的内容哈希（仅含真正喂给图谱的文件）。
 
-        与 :meth:`_collect_source_documents` 的过滤边界一致；同时把
-        ``chr/chr.bind`` 单独纳入指纹——它本身不入图谱，但会通过
-        ``collect_project_files`` 影响每个角色文件的"# 角色：xxx" 前缀，
-        进而改变图谱抽取结果，必须参与 freshness 比对。
+        与 :meth:`_collect_source_documents` 的过滤边界一致。角色姓名与正文
+        已展开为独立虚拟文件，因此任一变化都会直接反映在对应内容哈希中。
         """
         hashes: dict[str, str] = {}
 
@@ -326,21 +325,10 @@ class GraphRAGService:
 
         for pf in project_files:
             # 只对 GraphRAG 真正消费的文件做 freshness 比对，
-            # 节拍表 / chr.bind 等不入图谱的文件单独处理（chr.bind 见下方），
             # 避免用户改节拍表触发无谓的图谱重建。
             if pf.format_key not in self._GRAPHRAG_INDEX_FORMAT_KEYS:
                 continue
             hashes[pf.rel_path] = self._hash_text(pf.content)
-
-        # 别名表 chr.bind 自身不入图谱，但它驱动 enrich_character_content 的
-        # 名字注入；改了它，所有角色文件的实际 content 会变。所以单独指纹化。
-        try:
-            bind_path = os.path.join(self._project_path, "chr", "chr.bind")
-            if os.path.exists(bind_path):
-                with open(bind_path, "r", encoding="utf-8") as f:
-                    hashes["chr/chr.bind"] = self._hash_text(f.read())
-        except Exception:
-            pass
 
         return hashes
 
@@ -453,12 +441,12 @@ class GraphRAGService:
         基础映射（ID → 主名）来自统一工具 ``load_character_id_name_map``；
         本方法在此之上额外扩展两类别名：
         1. 从主名本身解析（"主名(别名)"、"主名/别名"等写法）；
-        2. 从角色 .md/.txt 头部的"别名："行解析。
+        2. 从角色正文头部的"别名："行解析。
         """
         from story.project_files import load_character_id_name_map
 
         alias_map: dict[str, str] = {}
-        chr_dir = os.path.join(self._project_path, "chr")
+        records = read_character_records(self.user_id, self.project_name)
         # 旁白角色对实体合并没有意义，去掉
         id_to_name = load_character_id_name_map(
             self.user_id, self.project_name, include_narrator=False, include_system=False,
@@ -475,17 +463,10 @@ class GraphRAGService:
                 if item and item not in aliases:
                     aliases.append(item)
 
-            # 从角色档案头部抽取显式声明的别名
-            detail_path = os.path.join(chr_dir, f"{cid}.txt")
-            if os.path.exists(detail_path):
-                try:
-                    with open(detail_path, "r", encoding="utf-8", errors="ignore") as f:
-                        detail_text = f.read()
-                    for alias in self._extract_aliases_from_text(detail_text):
-                        if alias not in aliases:
-                            aliases.append(alias)
-                except Exception:
-                    pass
+            detail_text = records.get(str(cid), {}).get("content", "")
+            for alias in self._extract_aliases_from_text(detail_text):
+                if alias not in aliases:
+                    aliases.append(alias)
 
             for alias in aliases:
                 key = self._normalize_entity_name(alias)
@@ -495,10 +476,7 @@ class GraphRAGService:
         return alias_map
 
     # GraphRAG 索引只关心叙事内容：世界观 / 梗概 / 大纲 / 角色设定 / 剧本或小说正文。
-    # 其余 format_key（chrbind 元数据、beats 节拍表）一律不入图谱：
-    #   - chrbind 是 ID→名字 JSON，没有叙事信息，且角色名已经通过 collect_project_files
-    #     的 enrich_character_content 写入到每个角色文件 content 头部；
-    #   - beats 节拍表与大纲信息高度重叠，会让 LLM 抽出大量重复关系。
+    # beats 节拍表与大纲信息高度重叠，不纳入图谱，避免抽出大量重复关系。
     _GRAPHRAG_INDEX_FORMAT_KEYS: frozenset[str] = frozenset(
         {"worldview", "synopsis", "outline", "character", "arc", "novel"}
     )

@@ -11,9 +11,13 @@ import json
 import threading
 
 from core.auth import get_current_user, get_optional_user
+from core.character_store import (
+    read_character_records,
+    reset_regular_characters,
+    upsert_character,
+)
 from core.request_context import get_current_project_name, normalize_project_name, resolve_project_name
 from core.utils import (
-    SYSTEM_CHARACTER_IDS,
     get_project_path,
     get_project_worldview_path,
     get_project_lorebook_path,
@@ -168,39 +172,8 @@ async def reset_lorebook(
         # 1. 重置世界观
         _write_worldview(user_id, project_name, "")
 
-        # 2. 删除所有普通角色（保留旁白、? 等系统保留角色）
-        characters_path = ensure_project_characters_directory(user_id, project_name)
-        bind_file = os.path.join(characters_path, "chr.bind")
-
-        mapping = {}
-        if os.path.exists(bind_file):
-            try:
-                with open(bind_file, "r", encoding="utf-8") as f:
-                    old_mapping = json.load(f) or {}
-                    for cid, value in old_mapping.items():
-                        try:
-                            if int(cid) in SYSTEM_CHARACTER_IDS:
-                                mapping[str(cid)] = value
-                        except Exception:
-                            continue
-            except Exception:
-                mapping = {}
-
-        # 删除所有普通角色文件，保留系统角色文件
-        for filename in os.listdir(characters_path):
-            stem = os.path.splitext(filename)[0]
-            try:
-                is_system_file = int(stem) in SYSTEM_CHARACTER_IDS
-            except Exception:
-                is_system_file = False
-            if filename.endswith(".txt") and not is_system_file:
-                try:
-                    os.remove(os.path.join(characters_path, filename))
-                except Exception:
-                    pass
-
-        with open(bind_file, "w", encoding="utf-8") as f:
-            json.dump(mapping, f, ensure_ascii=False, indent=2)
+        # 2. 删除所有普通角色，系统角色由仓库统一保留
+        reset_regular_characters(user_id, project_name)
 
         return {"success": True, "message": "世界观与角色已重置"}
     except Exception as exc:
@@ -371,63 +344,25 @@ async def gen_characters_stream(
                 with open(worldview_path, "r", encoding="utf-8") as f:
                     worldview = f.read()
 
-            characters_path = ensure_project_characters_directory(user_id, projectName)
-            bind_path = os.path.join(characters_path, "chr.bind")
-
-            mapping = {}
-            if os.path.exists(bind_path):
-                try:
-                    with open(bind_path, "r", encoding="utf-8") as f:
-                        mapping = json.load(f) or {}
-                except Exception:
-                    mapping = {}
+            ensure_project_characters_directory(user_id, projectName)
+            records = read_character_records(user_id, projectName)
 
             lines = []
-            for cid, name in mapping.items():
-                try:
-                    char_file = os.path.join(characters_path, f"{cid}.txt")
-                    content = ""
-                    if os.path.exists(char_file):
-                        with open(char_file, "r", encoding="utf-8") as f:
-                            text = f.read()
-                            parts = text.split("\n", 2)
-                            content = parts[2] if len(parts) >= 3 else text
-                    content = (content or "").strip()
-                    if len(content) > 400:
-                        content = content[:400] + "…"
-                    lines.append(f"- {name}: {content}")
-                except Exception:
+            for cid, record in records.items():
+                if int(cid) < 0:
                     continue
+                content = record["content"].strip()
+                if len(content) > 400:
+                    content = content[:400] + "…"
+                lines.append(f"- {record['name']}: {content}")
             existing_block = "\n".join(lines) if lines else ""
 
             if overwrite:
-                # 清空普通角色文件（保留系统角色）但保留旧设定作为生成参考
-                system_mapping = {}
-                for cid, value in mapping.items():
-                    try:
-                        if int(cid) in SYSTEM_CHARACTER_IDS:
-                            system_mapping[str(cid)] = value
-                    except Exception:
-                        continue
+                # 保留旧设定作为生成参考，再清空普通角色。
+                reset_regular_characters(user_id, projectName)
+                records = read_character_records(user_id, projectName)
 
-                for filename in os.listdir(characters_path):
-                    stem = os.path.splitext(filename)[0]
-                    try:
-                        is_system_file = int(stem) in SYSTEM_CHARACTER_IDS
-                    except Exception:
-                        is_system_file = False
-                    if filename.endswith(".txt") and not is_system_file:
-                        try:
-                            os.remove(os.path.join(characters_path, filename))
-                        except Exception:
-                            pass
-
-                mapping = system_mapping
-
-                with open(bind_path, "w", encoding="utf-8") as f:
-                    json.dump(mapping, f, ensure_ascii=False, indent=2)
-
-            existing_ids = {int(k) for k in mapping.keys()} if mapping else set()
+            existing_ids = {int(k) for k in records}
             story_tags = get_project_story_tags(user_id, projectName)
             story_tags_hint = build_story_tags_hint(story_tags)
 
@@ -438,10 +373,6 @@ async def gen_characters_stream(
                 while char_id in existing_ids:
                     char_id += 1
                 existing_ids.add(char_id)
-
-                mapping[str(char_id)] = "生成中..."
-                with open(bind_path, "w", encoding="utf-8") as f:
-                    json.dump(mapping, f, ensure_ascii=False, indent=2)
 
                 agent = WorldviewAgent(user_id)
 
@@ -536,13 +467,13 @@ async def gen_characters_stream(
                     final_name = parsed_name or "新角色"
                 final_content = (parsed_content or "").strip()
 
-                mapping[str(char_id)] = final_name
-                with open(bind_path, "w", encoding="utf-8") as f:
-                    json.dump(mapping, f, ensure_ascii=False, indent=2)
-
-                char_file = os.path.join(characters_path, f"{char_id}.txt")
-                with open(char_file, "w", encoding="utf-8") as f:
-                    f.write(f"{final_name}\n\n{final_content}")
+                upsert_character(
+                    user_id,
+                    projectName,
+                    char_id,
+                    name=final_name,
+                    content=final_content,
+                )
 
                 yield {
                     "event": "character-end",
