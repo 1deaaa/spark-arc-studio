@@ -62,10 +62,18 @@
                                 <n-descriptions-item :label="t('components.mcpConnectCard.typeLabel')">
                                     {{ t('components.mcpConnectCard.streamableHttp') }}
                                 </n-descriptions-item>
-                                <n-descriptions-item :label="t('components.mcpConnectCard.urlLabel')">
+                                <n-descriptions-item :label="t('components.mcpConnectCard.inspirationUrlLabel')">
                                     <n-input-group style="width: 100%">
-                                        <n-input :value="mcpUrl" readonly size="small" class="mcp-config-input" />
-                                        <n-button size="small" @click="copyText(mcpUrl)">
+                                        <n-input :value="mcpInspirationUrl" readonly size="small" class="mcp-config-input" />
+                                        <n-button size="small" @click="copyText(mcpInspirationUrl)">
+                                            <template #icon><n-icon :component="Copy" /></template>
+                                        </n-button>
+                                    </n-input-group>
+                                </n-descriptions-item>
+                                <n-descriptions-item :label="t('components.mcpConnectCard.controlUrlLabel')">
+                                    <n-input-group style="width: 100%">
+                                        <n-input :value="mcpControlUrl" readonly size="small" class="mcp-config-input" />
+                                        <n-button size="small" @click="copyText(mcpControlUrl)">
                                             <template #icon><n-icon :component="Copy" /></template>
                                         </n-button>
                                     </n-input-group>
@@ -124,15 +132,26 @@ const displayKey = computed(() => {
     return apiKey.value;
 });
 
-const mcpUrl = computed(() => `${window.location.protocol}//${window.location.hostname}:${window.location.port}/api/mcp/`);
+const mcpBaseUrl = computed(() => `${window.location.protocol}//${window.location.host}`);
+const mcpInspirationUrl = computed(() => `${mcpBaseUrl.value}/api/mcp/`);
+const mcpControlUrl = computed(() => `${mcpBaseUrl.value}/api/mcp/control/`);
 
 const claudeConfigJson = computed(() => {
     const keyStr = apiKey.value || "YOUR_API_KEY_HERE";
     return JSON.stringify({
         "mcpServers": {
             "spark-inspiration": {
-                "type": "sse",
-                "url": mcpUrl.value,
+                "type": "http",
+                "url": mcpInspirationUrl.value,
+                "headers": {
+                    "Content-Type": "application/json",
+                    "Accept": "application/json, text/event-stream",
+                    "Authorization": `${keyStr}`
+                }
+            },
+            "spark-control": {
+                "type": "http",
+                "url": mcpControlUrl.value,
                 "headers": {
                     "Content-Type": "application/json",
                     "Accept": "application/json, text/event-stream",

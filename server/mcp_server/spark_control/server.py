@@ -22,7 +22,7 @@ from typing import Literal
 from fastmcp import FastMCP
 
 from core.auth import user_db
-from core.utils import get_user_projects_root
+from core.utils import get_project_path, get_user_projects_root, validate_project_name
 from mcp_server.spark_inspiration.logic import current_user_id
 from mcp_server.spark_control.director_tasks import (
     cancel_director_task,
@@ -105,7 +105,11 @@ def get_project_overview(project_name: str) -> str:
     user_id = current_user_id.get()
     if not user_id:
         return "错误：缺少用户上下文（MCP 鉴权未通过）。"
-    return _json_dumps(_build_project_overview(str(user_id), project_name))
+    try:
+        safe_project_name = validate_project_name(project_name)
+    except ValueError as exc:
+        return _json_dumps({"error": f"非法项目名称：{exc}"})
+    return _json_dumps(_build_project_overview(str(user_id), safe_project_name))
 
 
 @mcp.tool()
@@ -125,13 +129,16 @@ def submit_director_task(
     user_id = current_user_id.get()
     if not user_id:
         return "错误：缺少用户上下文（MCP 鉴权未通过）。"
-    payload = submit_director_task_impl(
-        user_id=str(user_id),
-        project_name=project_name,
-        instruction=instruction,
-        intent=intent,
-        return_style=return_style,
-    )
+    try:
+        payload = submit_director_task_impl(
+            user_id=str(user_id),
+            project_name=project_name,
+            instruction=instruction,
+            intent=intent,
+            return_style=return_style,
+        )
+    except ValueError as exc:
+        return _json_dumps({"error": f"非法项目名称：{exc}"})
     payload["next"] = {
         "status": f"调用 get_task_status(task_id='{payload.get('task_id')}') 查询当前进度",
         "events": f"调用 read_task_events(task_id='{payload.get('task_id')}', after_seq=0) 读取事件",
@@ -143,7 +150,10 @@ def submit_director_task(
 @mcp.tool()
 def get_task_status(task_id: str) -> str:
     """查询导演工单状态。"""
-    return _json_dumps(get_director_task(task_id))
+    user_id = current_user_id.get()
+    if not user_id:
+        return "错误：缺少用户上下文（MCP 鉴权未通过）。"
+    return _json_dumps(get_director_task(task_id, user_id=str(user_id)))
 
 
 @mcp.tool()
@@ -165,19 +175,33 @@ def list_tasks(
 @mcp.tool()
 def read_task_events(task_id: str, after_seq: int = 0, limit: int = 50) -> str:
     """读取导演工单事件日志，支持 after_seq 游标回放。"""
-    return _json_dumps(read_director_task_events(task_id, after_seq=after_seq, limit=limit))
+    user_id = current_user_id.get()
+    if not user_id:
+        return "错误：缺少用户上下文（MCP 鉴权未通过）。"
+    return _json_dumps(read_director_task_events(
+        task_id,
+        user_id=str(user_id),
+        after_seq=after_seq,
+        limit=limit,
+    ))
 
 
 @mcp.tool()
 def read_task_result(task_id: str) -> str:
     """读取导演工单最终结果摘要、工具调用和改动范围。"""
-    return _json_dumps(read_director_task_result(task_id))
+    user_id = current_user_id.get()
+    if not user_id:
+        return "错误：缺少用户上下文（MCP 鉴权未通过）。"
+    return _json_dumps(read_director_task_result(task_id, user_id=str(user_id)))
 
 
 @mcp.tool()
 def cancel_task(task_id: str) -> str:
     """取消正在运行的导演工单。"""
-    return _json_dumps(cancel_director_task(task_id))
+    user_id = current_user_id.get()
+    if not user_id:
+        return "错误：缺少用户上下文（MCP 鉴权未通过）。"
+    return _json_dumps(cancel_director_task(task_id, user_id=str(user_id)))
 
 
 @mcp.tool()
@@ -191,12 +215,16 @@ def get_all_work_status(project_name: str = "") -> str:
     if not user_id:
         return "错误：缺少用户上下文（MCP 鉴权未通过）。"
     if project_name:
-        payload = _build_project_background_status(str(user_id), project_name)
+        try:
+            safe_project_name = validate_project_name(project_name)
+        except ValueError as exc:
+            return _json_dumps({"error": f"非法项目名称：{exc}"})
+        payload = _build_project_background_status(str(user_id), safe_project_name)
         payload["director_tasks"] = list_director_tasks(
             user_id=str(user_id),
-            project_name=project_name,
+            project_name=safe_project_name,
         )
-        payload["project_name"] = project_name
+        payload["project_name"] = safe_project_name
         return _json_dumps(payload)
 
     projects = _list_user_projects(str(user_id))
@@ -224,8 +252,7 @@ def _json_dumps(payload) -> str:
 
 
 def _build_project_overview(user_id: str, project_name: str) -> dict:
-    projects_root = get_user_projects_root(str(user_id))
-    project_path = os.path.join(projects_root, project_name)
+    project_path = get_project_path(str(user_id), project_name)
     exists = (
         bool(project_name)
         and os.path.isdir(project_path)

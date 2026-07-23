@@ -354,6 +354,10 @@ GitHub Releases의 데스크톱 클라이언트는 먼저 로컬 백엔드(`6688
 
 > 💡 만일 독립 배포 서버의 회원가입을 불특정 다수에게 공개 오픈하는 경우 반드시 HTTPS 보안 통신을 연동하시고, 가입 단 단계의 봇 방지 보안 연동, 역프록시/방화벽을 활용한 접근 횟수 제한, `LLM_KEY`를 비롯한 각종 핵심 키 보안에 극도로 유의하시길 강력히 경고합니다.
 
+#### MCP 클라이언트 연결
+
+로그인한 뒤 데스크톱 대시보드 또는 모바일 AI 관리 화면에서 「MCP 연결 서비스」를 여십시오. 공통 설정 카드가 영감 엔드포인트 `/api/mcp/`와 제어 엔드포인트 `/api/mcp/control/`를 함께 생성하며, 두 서비스는 동일한 사용자 MCP API Key와 Streamable HTTP(`"type": "http"`)를 사용합니다. 전체 설정, 도구 목록 및 Director 작업 흐름은 [MCP 연결 가이드](docs/mcp-integration.zh-CN.md)를 참고하십시오.
+
 ---
 
 ## 시스템 아키텍처
@@ -522,7 +526,7 @@ flowchart LR
 * **콘텍스트 빌더**: `communication.py` 파일이 안정적인 전반부 뼈대를 형성하며, `prompt_layout.py`가 실시간 편집 중인 텍스트 영역 정보와 전송된 질문을 맨 뒷단에 조화롭게 이어 붙여줍니다. `context_budget.py`는 대화 내역의 한계 토큰을 산정하고 대화 기록 압축 및 툴 가동 시 가용한 한계량을 재산출해 줍니다.
 * **통합 실행 규약**: 모든 전문가 에이전트는 `SparkBaseAgent`와 `SparkAgentExecutor`를 상속해 `build_context -> execute -> write_result` 순으로 비즈니스 프로세스 흐름을 일체화 관리합니다. 일반 대화 및 위임 태스크들은 모두 `chat_stream(skip_tool_confirmation)` 창구를 경유하여 실행됩니다.
 * **통합 도구 체계**: 연동 툴들은 [registry.py](file:///d:/Desktop/sparkarc/server/agents/tools/registry.py) 파일에 분류 기입되어 등록되며 `agent_tools.py` 창구를 거쳐 외부에 정식 노출됩니다. 시나리오, 아웃라인 및 설정을 교체·치환할 때는 언제나 `_apply_patch` 공통 라이브러리를 사용하며, 토큰 슬라이서와 세맨틱 덩어리 분석기도 공통 베이스 모듈을 공유합니다.
-* **스킬 및 MCP의 연동 경계**: 에이전트 스킬 기능은 `search_skills` / `read_skill` / `read_skill_reference` 명령을 경유하여 필요한 시점에 한해 참고서처럼 열람되며, 캐시 전반부 템플릿을 임의로 훼손하지 않습니다. MCP 영감 포스트는 `/api/mcp` 경로를 거쳐 `capture_inspiration` 툴만 독점 제공하며 일반 대화형 툴 목록과는 엄격히 격리되어 있습니다.
+* **스킬 및 MCP의 연동 경계**: AgentSkills는 `search_skills` / `read_skill` / `read_skill_reference`를 통해 필요할 때만 읽습니다. MCP는 `/api/mcp/` 영감 서비스와 `/api/mcp/control/` 제어 서비스로 분리됩니다. 제어 서비스가 직접 공개하는 것은 프로젝트 조회와 Director 작업 접수이며, 쓰기 작업은 기존 Agent 도구 파이프라인을 거쳐 실행됩니다.
 * **화면 연동 규칙**: 에이전트 표기명, 소개글, 아이콘 및 고유 색상값 정보는 [registry.py](file:///d:/Desktop/sparkarc/server/agents/registry.py) 데이터를 유일한 소스 정보로 바라봅니다. 툴 호출과 관련된 연동 메타데이터는 백엔드의 `build_tool_stream_event` 라이브러리가 실시간으로 스트림에 주입하며, 화면의 `chatStore` 모듈이 통합 소비하여 화면에 맞게 뿌려줍니다.
 
 > 📗 콘텍스트의 상세 구성 형태, 캐시 적중률 기입 상세, 에이전트 역할 상세 정의, 스킬 및 MCP 연동 사양은 [아키텍처 문서 §2-§3](file:///d:/Desktop/sparkarc/docs/architecture.md#2-agent-统一调用管线)을 참고해 주십시오.

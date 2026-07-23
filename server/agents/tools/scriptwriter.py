@@ -101,7 +101,8 @@ def read_synopsis() -> str:
     if not os.path.exists(synopsis_path):
         return "未找到故事梗概。"
     with open(synopsis_path, "r", encoding="utf-8") as f:
-        return f.read()
+        content = f.read().strip()
+    return content or "故事梗概文件为空。"
 
 
 @tool
@@ -112,7 +113,8 @@ def read_beat_sheet() -> str:
     if not os.path.exists(beats_path):
         return "未找到节拍表。"
     with open(beats_path, "r", encoding="utf-8") as f:
-        return f.read()
+        content = f.read().strip()
+    return content or "节拍表文件为空。"
 
 
 @tool(args_schema=PrepareScriptCreationInput)

@@ -16,6 +16,27 @@
 
 import asyncio
 
+import pytest
+
+
+@pytest.fixture(autouse=True)
+def isolate_mcp_director_task_state(monkeypatch, tmp_path):
+    """MCP 工单测试统一使用临时状态目录，禁止污染用户数据。"""
+    from mcp_server.spark_control import director_tasks
+
+    monkeypatch.setattr(
+        director_tasks,
+        "_task_state_path",
+        lambda user_id: str(tmp_path / f"uid_{user_id}" / "mcp_director_tasks.json"),
+    )
+    with director_tasks._lock:
+        director_tasks._tasks.clear()
+        director_tasks._loaded_users.clear()
+    yield
+    with director_tasks._lock:
+        director_tasks._tasks.clear()
+        director_tasks._loaded_users.clear()
+
 
 # ── 白名单一致性 ──────────────────────────────────────────────
 
@@ -184,6 +205,48 @@ def test_invoke_langchain_tool_unknown_tool():
         mcp_uid_var.set(orig)
 
 
+@pytest.mark.parametrize("project_name", ["../demo", "..\\demo", "/tmp/demo", "C:\\demo"])
+def test_invoke_langchain_tool_rejects_path_like_project_name(project_name):
+    """MCP 查询工具不得接受目录穿越或绝对路径形式的项目名。"""
+    from mcp_server.shared.tool_adapter import invoke_langchain_tool
+    from mcp_server.spark_inspiration.logic import current_user_id as mcp_uid_var
+
+    token = mcp_uid_var.set("test_user")
+    try:
+        result = invoke_langchain_tool("list_chapters", project_name, {})
+        assert "非法项目名称" in result
+    finally:
+        mcp_uid_var.reset(token)
+
+
+def test_read_beat_sheet_empty_file_returns_explicit_state(monkeypatch, tmp_path):
+    """空节拍表必须返回明确状态，MCP 客户端不能收到空工具结果。"""
+    from agents.tools import scriptwriter
+    from core.request_context import current_project_name, current_user_id
+
+    project_path = tmp_path / "demo"
+    project_path.mkdir()
+    (project_path / "节拍表.txt").write_text("", encoding="utf-8")
+    monkeypatch.setattr(scriptwriter, "get_project_path", lambda user_id, project_name: str(project_path))
+    user_token = current_user_id.set("owner")
+    project_token = current_project_name.set("demo")
+    try:
+        result = scriptwriter.read_beat_sheet.invoke({})
+    finally:
+        current_project_name.reset(project_token)
+        current_user_id.reset(user_token)
+
+    assert result == "节拍表文件为空。"
+
+
+def test_get_project_path_rejects_path_like_project_name():
+    """公共项目路径底座必须拒绝把相对路径伪装成项目名。"""
+    from core.utils import get_project_path
+
+    with pytest.raises(ValueError, match="路径"):
+        get_project_path("u1", "..\\uid_u2\\projects\\secret")
+
+
 # ── 导演工单契约 ─────────────────────────────────────────
 
 def test_director_task_manager_is_non_blocking_entry(monkeypatch):
@@ -236,13 +299,106 @@ def test_director_task_events_and_cancel_contract(monkeypatch):
         return_style="report",
     )
     task_id = payload["task_id"]
-    cancel_payload = director_tasks.cancel_director_task(task_id)
-    events_payload = director_tasks.read_director_task_events(task_id, after_seq=0)
-    status_payload = director_tasks.get_director_task(task_id)
+    cancel_payload = director_tasks.cancel_director_task(task_id, user_id="u2")
+    events_payload = director_tasks.read_director_task_events(task_id, user_id="u2", after_seq=0)
+    status_payload = director_tasks.get_director_task(task_id, user_id="u2")
 
     assert cancel_payload["cancelled"] is True
     assert status_payload["status"] == "cancelled"
     assert events_payload["events"]
+
+
+def test_director_task_operations_reject_other_users(monkeypatch):
+    """任务 ID 即使泄露，其他用户也不得读取事件、结果或取消任务。"""
+    from mcp_server.spark_control import director_tasks
+
+    class FakeThread:
+        def __init__(self, *, target, args, daemon, name):
+            pass
+
+        def start(self):
+            return None
+
+    monkeypatch.setattr(director_tasks.threading, "Thread", FakeThread)
+    payload = director_tasks.submit_director_task(
+        user_id="owner",
+        project_name="demo",
+        instruction="隔离测试",
+    )
+    task_id = payload["task_id"]
+
+    status_payload = director_tasks.get_director_task(task_id, user_id="other")
+    events_payload = director_tasks.read_director_task_events(task_id, user_id="other")
+    result_payload = director_tasks.read_director_task_result(task_id, user_id="other")
+    cancel_payload = director_tasks.cancel_director_task(task_id, user_id="other")
+
+    assert "error" in status_payload
+    assert "error" in events_payload and events_payload["events"] == []
+    assert "error" in result_payload
+    assert cancel_payload["cancelled"] is False
+    assert director_tasks.get_director_task(task_id, user_id="owner")["status"] == "queued"
+
+
+def test_director_tasks_restore_as_interrupted_after_restart(monkeypatch):
+    """运行中工单重启后必须可查询，并转为明确的中断终态。"""
+    from mcp_server.spark_control import director_tasks
+
+    class FakeThread:
+        def __init__(self, *, target, args, daemon, name):
+            pass
+
+        def start(self):
+            return None
+
+    monkeypatch.setattr(director_tasks.threading, "Thread", FakeThread)
+    payload = director_tasks.submit_director_task(
+        user_id="owner",
+        project_name="demo",
+        instruction="恢复测试",
+    )
+    task_id = payload["task_id"]
+
+    with director_tasks._lock:
+        director_tasks._tasks.clear()
+        director_tasks._loaded_users.clear()
+
+    restored = director_tasks.get_director_task(task_id, user_id="owner")
+    events = director_tasks.read_director_task_events(task_id, user_id="owner")
+
+    assert restored["status"] == "error"
+    assert restored["phase"] == "interrupted"
+    assert restored["result_available"] is True
+    assert any(event.get("event") == "error" for event in events["events"])
+
+
+def test_director_task_persistence_coerces_non_json_event_values(monkeypatch):
+    """事件含运行时对象时应降级为字符串，不得打断工单主链路。"""
+    from mcp_server.spark_control import director_tasks
+
+    class FakeThread:
+        def __init__(self, *, target, args, daemon, name):
+            pass
+
+        def start(self):
+            return None
+
+    monkeypatch.setattr(director_tasks.threading, "Thread", FakeThread)
+    payload = director_tasks.submit_director_task(
+        user_id="owner",
+        project_name="demo",
+        instruction="序列化测试",
+    )
+    entry = director_tasks._get_task_or_none(payload["task_id"])
+    assert entry is not None
+    entry.append_event({"event": "probe", "runtime_value": object()})
+
+    with director_tasks._lock:
+        director_tasks._tasks.clear()
+        director_tasks._loaded_users.clear()
+
+    events = director_tasks.read_director_task_events(payload["task_id"], user_id="owner")
+    probe = next(event for event in events["events"] if event.get("event") == "probe")
+    assert isinstance(probe["runtime_value"], str)
 
 
 def test_get_all_work_status_includes_project_background(monkeypatch):
@@ -295,6 +451,9 @@ def test_app_py_mounts_spark_control():
     assert "mcp_control_inst" in source, "app.py 未导入 spark_control mcp 实例"
     assert "/api/mcp/control" in source, "app.py 未挂载 spark_control 到 /api/mcp/control"
     assert "mcp_control_redirect" in source, "app.py 未添加 /api/mcp/control 重定向"
+    control_mount = source.index('app.mount("/api/mcp/control"')
+    inspiration_mount = source.index('app.mount("/api/mcp"')
+    assert control_mount < inspiration_mount, "控制 MCP 子路径必须先于 /api/mcp 父路径挂载"
 
 
 def test_app_py_middleware_sets_core_context():
