@@ -516,6 +516,18 @@
     margin-bottom: 8px;
 }
 
+.extra-body-editor {
+    width: 100%;
+}
+
+.extra-body-toolbar {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    flex-wrap: wrap;
+    margin-bottom: 6px;
+}
+
 .add-model-mode-toggle {
     --n-blank-height: auto;
     margin-top: 2px;
@@ -796,13 +808,15 @@
 }
 
 :global(html.viewport-mobile .ai-manager .compact-field-row) {
-    grid-template-columns: 1fr;
+    gap: 5px;
 }
 
-@media (max-width: 640px) {
-    .compact-field-row {
-        grid-template-columns: 1fr;
-    }
+:global(html.viewport-mobile .ai-manager .compact-field-row--double) {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+}
+
+:global(html.viewport-mobile .ai-manager .compact-field-row--triple) {
+    grid-template-columns: repeat(3, minmax(0, 1fr));
 }
 
 /* 超窄宽度 - 小屏手机 */

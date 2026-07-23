@@ -129,7 +129,13 @@ from agents.tools.showrunner import (
     rewrite_synopsis,
 )
 from agents.tools.story_memory import StoryMemoryToolInput, story_memory_tool
-from agents.tools.web_search import WebSearchInput, web_search
+from agents.tools.web_search import (
+    ExaSearchOptions,
+    SearchProvider,
+    TavilySearchOptions,
+    WebSearchInput,
+    web_search,
+)
 
 __all__ = [
     "ALL_TOOLS",
@@ -169,6 +175,7 @@ __all__ = [
     "RewriteOutlineInput",
     "RewriteSynopsisInput",
     "RewriteWorldviewInput",
+    "SearchProvider",
     "SCRIPTWRITER_TOOLS",
     "SHARED_CHAT_HISTORY_TOOLS",
     "SHARED_READ_TOOLS",
@@ -178,6 +185,8 @@ __all__ = [
     "SearchSkillsInput",
     "SearchProjectInput",
     "SemanticSearchInput",
+    "ExaSearchOptions",
+    "TavilySearchOptions",
     "StoryMemoryToolInput",
     "TOOLS_BY_NAME",
     "ToolExecutionContext",

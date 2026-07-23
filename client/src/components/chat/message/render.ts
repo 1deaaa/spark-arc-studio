@@ -246,6 +246,7 @@ export function getMessageSegments(message: ChatMessageItem | null | undefined):
       source_agent: String(trace.source_agent || ''),
       tool_result: trace.tool_result,
       tool_action: trace.tool_action,
+      tool_provider: trace.tool_provider,
     });
   }
   const content = getDisplayContent(message);

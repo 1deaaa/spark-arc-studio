@@ -488,6 +488,33 @@ export const mobileWorkspaceSteps: OnboardingStep[] = [
   },
 ];
 
+/**
+ * 移动端标题会随当前创作卡片变化，因此为每张卡片注册独立的页面教程。
+ * 完整工作台教程仍复用 mobileWorkspaceSteps，不与页面重看入口混用。
+ */
+export const mobilePageSceneIds = [
+  'page-mobile-muse',
+  'page-mobile-world',
+  'page-mobile-synopsis',
+  'page-mobile-structure',
+  'page-mobile-production',
+  'page-mobile-blueprint',
+] as const;
+
+const mobilePageStepIds = [
+  'mw-muse',
+  'mw-world',
+  'mw-synopsis',
+  'mw-structure',
+  'mw-production',
+  'mw-blueprint',
+] as const;
+
+export const mobilePageScenes: OnboardingScene[] = mobilePageSceneIds.map((sceneId, index) => ({
+  id: sceneId,
+  steps: mobileWorkspaceSteps.filter(step => step.id === mobilePageStepIds[index]),
+}));
+
 // ==================== 场景组装 ====================
 
 export const desktopWorkspaceScene: OnboardingScene = {

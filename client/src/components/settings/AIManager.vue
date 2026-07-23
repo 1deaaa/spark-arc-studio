@@ -504,6 +504,11 @@
             
         </div>
 
+        <SearchProviderSettings
+            :is-admin="isAdmin"
+            :system-service-enabled="systemConfig.llm_auto_key"
+        />
+
         <!-- 添加平台弹窗 -->
         <n-modal v-model:show="showAddPlatformModal">
             <n-card 
@@ -786,12 +791,31 @@
                         </template>
                     </n-form-item>
                     <n-form-item class="add-model-extra-body" :show-feedback="false" :label="t('components.aiManager.form.extraBodyOptional')">
-                        <n-input 
-                            v-model:value="newModel.extraBody" 
-                            type="textarea" 
-                            :autosize="{ minRows: 2, maxRows: 10 }"
-                            :placeholder="addModelExtraBodyPlaceholder"
-                        />
+                        <div class="extra-body-editor">
+                            <div class="extra-body-toolbar">
+                                <n-button size="tiny" secondary @click="formatExtraBody(newModel)">
+                                    <template #icon><n-icon><Braces /></n-icon></template>
+                                    {{ t('components.aiManager.form.formatJson') }}
+                                </n-button>
+                                <template v-if="isNewModelText">
+                                    <n-button
+                                        v-for="effort in reasoningEffortOptions"
+                                        :key="effort"
+                                        size="tiny"
+                                        quaternary
+                                        @click="setReasoningEffort(newModel, effort)"
+                                    >
+                                        {{ t('components.aiManager.form.addReasoningEffort', { effort }) }}
+                                    </n-button>
+                                </template>
+                            </div>
+                            <n-input
+                                v-model:value="newModel.extraBody"
+                                type="textarea"
+                                :autosize="{ minRows: 2, maxRows: 10 }"
+                                :placeholder="addModelExtraBodyPlaceholder"
+                            />
+                        </div>
                     </n-form-item>
                 </n-form>
                 <template #footer>
@@ -905,12 +929,31 @@
                         </template>
                     </n-form-item>
                     <n-form-item :show-feedback="false" :label="t('components.aiManager.form.extraBody')">
-                        <n-input 
-                            v-model:value="editingModel.extraBody" 
-                            type="textarea" 
-                            :autosize="{ minRows: 2, maxRows: 10 }"
-                            :placeholder="editModelExtraBodyPlaceholder"
-                        />
+                        <div class="extra-body-editor">
+                            <div class="extra-body-toolbar">
+                                <n-button size="tiny" secondary @click="formatExtraBody(editingModel)">
+                                    <template #icon><n-icon><Braces /></n-icon></template>
+                                    {{ t('components.aiManager.form.formatJson') }}
+                                </n-button>
+                                <template v-if="isEditModelText">
+                                    <n-button
+                                        v-for="effort in reasoningEffortOptions"
+                                        :key="effort"
+                                        size="tiny"
+                                        quaternary
+                                        @click="setReasoningEffort(editingModel, effort)"
+                                    >
+                                        {{ t('components.aiManager.form.addReasoningEffort', { effort }) }}
+                                    </n-button>
+                                </template>
+                            </div>
+                            <n-input
+                                v-model:value="editingModel.extraBody"
+                                type="textarea"
+                                :autosize="{ minRows: 2, maxRows: 10 }"
+                                :placeholder="editModelExtraBodyPlaceholder"
+                            />
+                        </div>
                     </n-form-item>
                 </n-form>
                 <template #footer>
@@ -942,10 +985,11 @@ import {
 } from 'naive-ui';
 import SparkAlert from '@/components/share/SparkAlert.vue';
 import SparkCollapseTransition from '@/components/share/SparkCollapseTransition.vue';
-import { Activity, CircleAlert, CircleCheck, CreditCard, Download, Info, Key, Lock, Menu, Plus, Server, SquarePen, Trash, Unlock, Upload, User, X, Zap } from '@lucide/vue';
+import { Activity, Braces, CircleAlert, CircleCheck, CreditCard, Download, Info, Key, Lock, Menu, Plus, Server, SquarePen, Trash, Unlock, Upload, User, X, Zap } from '@lucide/vue';
 import SparkTag from '@/components/share/SparkTag.vue';
 import SparkIcon from '@/components/share/CreditIcon.vue';
 import SparkLoaderAnimation from '@/components/share/SparkLoaderAnimation.vue';
+import SearchProviderSettings from '@/components/settings/SearchProviderSettings.vue';
 
 import { useAIPlatformManager } from '@/composables/useAIPlatformManager';
 import { useAIModelManager } from '@/composables/useAIModelManager';
@@ -967,6 +1011,7 @@ import {
     type ModelModalitiesLike,
 } from '@/services/modelModalities';
 import { formatTokenKValue, parseTokenKValue } from '@/utils/modelTokenUnits';
+import { addReasoningEffort, formatExtraBodyJson } from '@/utils/extraBodyJson';
 
 const aiStore = useAiStore();
 const { t } = useI18n();
@@ -1580,6 +1625,23 @@ const isNewModelText = computed(() => isTextModel(newModel.value));
 const isEditModelText = computed(() => isTextModel(editingModel.value));
 const addModelExtraBodyPlaceholder = computed(() => extraBodyPlaceholderForModel(newModel.value));
 const editModelExtraBodyPlaceholder = computed(() => extraBodyPlaceholderForModel(editingModel.value));
+const reasoningEffortOptions = ['max', 'high', 'low'] as const;
+
+function formatExtraBody(target: { extraBody: string }) {
+    try {
+        target.extraBody = formatExtraBodyJson(target.extraBody);
+    } catch {
+        message.error(t('components.aiManager.messages.extraBodyInvalid'));
+    }
+}
+
+function setReasoningEffort(target: { extraBody: string }, effort: typeof reasoningEffortOptions[number]) {
+    try {
+        target.extraBody = addReasoningEffort(target.extraBody, effort);
+    } catch {
+        message.error(t('components.aiManager.messages.extraBodyInvalid'));
+    }
+}
 
 watch(() => showAddModelModal.value, (open) => { if (open) nextTick(syncAddTokenTexts); });
 watch(() => showEditModelModal.value, (open) => { if (open) nextTick(syncEditTexts); });

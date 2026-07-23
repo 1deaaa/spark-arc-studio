@@ -12,6 +12,11 @@ from .system_settings import (
     set_disable_public_share,
     set_force_public_share_review,
 )
+from .search_provider_settings import (
+    SearchProviderConfigError,
+    get_search_provider_admin_views,
+    update_search_provider_settings,
+)
 from .verification import (
     VerificationConfigError,
     get_registration_verification_admin_view,
@@ -42,6 +47,20 @@ class LLMKeyUpdate(BaseModel):
     key: str
     old_key: Optional[str] = None
     allow_clear_unrecoverable: bool = False
+
+
+class SearchProviderUpdate(BaseModel):
+    provider: str
+    url: Optional[str] = None
+    api_key: Optional[str] = None  # None 表示保留，空字符串表示清除并使用免密钥模式
+
+
+def _serialize_search_provider_view(view) -> Dict[str, Any]:
+    return {
+        "provider": view.provider,
+        "url": view.url,
+        "api_key_set": view.api_key_set,
+    }
 
 @admin_config_router.get("/global")
 async def get_global_config(admin_user: dict = Depends(require_admin)):
@@ -147,6 +166,42 @@ async def set_llm_key(data: LLMKeyUpdate, admin_user: dict = Depends(require_adm
         )
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))
+
+
+@admin_config_router.get("/search-providers")
+async def get_search_providers(admin_user: dict = Depends(require_admin)):
+    """读取搜索提供商配置，API Key 仅返回是否已设置。"""
+    try:
+        return {
+            "success": True,
+            "data": [_serialize_search_provider_view(view) for view in get_search_provider_admin_views()],
+        }
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+@admin_config_router.post("/search-providers")
+async def update_search_provider(
+    data: SearchProviderUpdate,
+    admin_user: dict = Depends(require_admin),
+):
+    """更新一个搜索提供商的 URL 与可选 API Key。"""
+    try:
+        view = update_search_provider_settings(
+            data.provider,
+            url=data.url,
+            api_key=data.api_key,
+        )
+    except SearchProviderConfigError as e:
+        raise HTTPException(status_code=400, detail=str(e))
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
+
+    return {
+        "success": True,
+        "message": "搜索提供商配置已更新",
+        "data": _serialize_search_provider_view(view),
+    }
 
 
 class RegistrationVerificationUpdate(BaseModel):

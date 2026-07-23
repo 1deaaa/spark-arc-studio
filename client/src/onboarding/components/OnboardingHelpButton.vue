@@ -6,13 +6,13 @@
         quaternary
         circle
         size="small"
-        :aria-label="t('onboarding.common.restartGuide')"
+        :aria-label="t('onboarding.common.replayPageGuide')"
         @click.stop="replayGuide"
       >
         <template #icon><n-icon :component="CircleHelp" /></template>
       </n-button>
     </template>
-    {{ t('onboarding.common.restartGuide') }}
+    {{ t('onboarding.common.replayPageGuide') }}
   </n-tooltip>
 </template>
 
@@ -27,11 +27,10 @@ const props = defineProps<{
 }>();
 
 const { t } = useI18n();
-const { engine, trigger } = useOnboarding();
+const { replayPage } = useOnboarding();
 
 function replayGuide(): void {
-  if (engine.isActive.value) engine.destroy();
-  void trigger(props.sceneId);
+  replayPage(props.sceneId);
 }
 </script>
 

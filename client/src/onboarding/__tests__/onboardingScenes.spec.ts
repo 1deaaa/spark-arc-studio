@@ -2,6 +2,8 @@ import { describe, expect, it } from 'vitest';
 import {
   desktopPageScenes,
   desktopWorkspaceSteps,
+  mobilePageSceneIds,
+  mobilePageScenes,
   mobileWorkspaceSteps,
 } from '../engine/stepDefinitions';
 
@@ -33,5 +35,17 @@ describe('onboarding 场景契约', () => {
   it('移动端也从完整流程说明开始', () => {
     expect(mobileWorkspaceSteps[0].id).toBe('mw-workflow-overview');
     expect(mobileWorkspaceSteps[0].detailKeys).toHaveLength(6);
+  });
+
+  it('移动端标题按钮的每个场景只包含当前页面教程', () => {
+    expect(mobilePageScenes.map(scene => scene.id)).toEqual([...mobilePageSceneIds]);
+    expect(mobilePageScenes.map(scene => scene.steps.map(step => step.id))).toEqual([
+      ['mw-muse'],
+      ['mw-world'],
+      ['mw-synopsis'],
+      ['mw-structure'],
+      ['mw-production'],
+      ['mw-blueprint'],
+    ]);
   });
 });

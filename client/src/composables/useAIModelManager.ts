@@ -16,6 +16,7 @@ import {
     getFriendlyErrorMessage
 } from '../services/api';
 import { consumeSSEReader } from '@/utils/streamingRuntime';
+import { parseExtraBodyJson } from '@/utils/extraBodyJson';
 import type { AiModelItem, AiPlatform, ApiId, SpeedTestEvent, RemoteModelInfo } from '../services/aiContracts';
 import {
     getModelModalities,
@@ -268,13 +269,11 @@ export function useAIModelManager(
     }
 
     function parseExtraBodyObject(extraBodyText: string) {
-        const raw = (extraBodyText || '').trim();
-        if (!raw) return {};
-        const parsed = JSON.parse(raw);
-        if (!isPlainObject(parsed)) {
-            throw new Error('Extra Body 必须是 JSON 对象');
+        try {
+            return parseExtraBodyJson(extraBodyText);
+        } catch {
+            throw new Error(t('components.aiManager.messages.extraBodyInvalid'));
         }
-        return parsed;
     }
 
     function serializeExtraBodyForModel(extraBodyText: string) {

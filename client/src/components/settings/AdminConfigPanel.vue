@@ -24,9 +24,9 @@
                             <n-switch v-model:value="config.llm_auto_key" @update:value="(val) => updateConfig('llm_auto_key', val)" />
                         </div>
 
-                        <n-divider v-if="!policyOnly" />
+                        <n-divider />
 
-                        <div v-if="!policyOnly" class="config-item">
+                        <div class="config-item">
                             <div class="item-label-group">
                                 <span>{{ t('components.adminConfigPanel.useSysConfig.label') }}</span>
                                 <n-tooltip trigger="hover">
@@ -37,9 +37,9 @@
                             <n-switch v-model:value="config.use_sys_llm_config" @update:value="(val) => updateConfig('use_sys_llm_config', val)" />
                         </div>
 
-                        <n-divider v-if="!policyOnly" />
+                        <n-divider />
 
-                        <div v-if="!policyOnly" class="config-item">
+                        <div class="config-item">
                             <div class="item-label-group">
                                 <span>{{ t('components.adminConfigPanel.disablePublicShare.label') }}</span>
                                 <n-tooltip trigger="hover">

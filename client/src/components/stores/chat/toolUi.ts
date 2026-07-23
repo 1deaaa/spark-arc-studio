@@ -56,14 +56,24 @@ export const TOOL_PRESENTATION_KEY_MAP: Record<string, string> = {
   search_chat_history: 'searchChatHistory',
 };
 
-export function getToolNameLabelKey(toolName: unknown) {
+function getSearchProviderSuffix(toolName: unknown, metadata: AnyRecord = {}) {
+  if (normalizeToolName(toolName) !== 'web_search') return '';
+  const provider = String(metadata.tool_provider || metadata.toolProvider || '').trim().toLowerCase();
+  if (provider === 'exa') return 'webSearchExa';
+  if (provider === 'tavily') return 'webSearchTavily';
+  return '';
+}
+
+export function getToolNameLabelKey(toolName: unknown, metadata: AnyRecord = {}) {
+  const providerSuffix = getSearchProviderSuffix(toolName, metadata);
+  if (providerSuffix) return `components.chatMessageList.tools.${providerSuffix}`;
   const suffix = TOOL_PRESENTATION_KEY_MAP[normalizeToolName(toolName)];
   return suffix ? `components.chatMessageList.tools.${suffix}` : '';
 }
 
-export function getToolProgressText(toolName: unknown, fallbackText = '') {
+export function getToolProgressText(toolName: unknown, fallbackText = '', metadata: AnyRecord = {}) {
   const normalizedToolName = normalizeToolName(toolName);
-  const suffix = TOOL_PRESENTATION_KEY_MAP[normalizedToolName];
+  const suffix = getSearchProviderSuffix(normalizedToolName, metadata) || TOOL_PRESENTATION_KEY_MAP[normalizedToolName];
   if (suffix) return i18n.global.t(`chatStore.toolProgress.${suffix}`);
   if (fallbackText && fallbackText.trim()) return fallbackText.trim();
   return i18n.global.t('chatStore.toolProgress.executingTool', { tool: normalizedToolName || 'unknown' });

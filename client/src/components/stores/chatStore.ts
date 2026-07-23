@@ -2022,6 +2022,7 @@ export const useChatStore = defineStore('chat', {
           ...(evt.tool_call_key || evt.toolCallKey ? { tool_call_key: evt.tool_call_key || evt.toolCallKey } : {}),
           ...(evt.target_agent ? { target_agent: evt.target_agent } : {}),
           ...(evt.tool_action ? { tool_action: evt.tool_action } : {}),
+          ...(evt.tool_provider || evt.toolProvider ? { tool_provider: evt.tool_provider || evt.toolProvider } : {}),
         });
         appendToolTraceSegment({
           tool_name: normalizedToolName,
@@ -2030,6 +2031,7 @@ export const useChatStore = defineStore('chat', {
           ...(evt.tool_call_key || evt.toolCallKey ? { tool_call_key: evt.tool_call_key || evt.toolCallKey } : {}),
           ...(evt.target_agent ? { target_agent: evt.target_agent } : {}),
           ...(evt.tool_action ? { tool_action: evt.tool_action } : {}),
+          ...(evt.tool_provider || evt.toolProvider ? { tool_provider: evt.tool_provider || evt.toolProvider } : {}),
         });
         // 记录当前工具调用的 segment ID，供 onToolCallEnd 更新时使用
         const segs = assistantMsg.segments;
@@ -2095,7 +2097,7 @@ export const useChatStore = defineStore('chat', {
         );
         if (activeToolSeg) {
           const activeToolName = normalizeToolName(activeToolSeg.tool_name || '');
-          const activeProgress = getToolProgressText(activeToolName, activeToolSeg.message || activeToolSeg.text || '');
+          const activeProgress = getToolProgressText(activeToolName, activeToolSeg.message || activeToolSeg.text || '', activeToolSeg);
           currentToolName = activeToolName;
           currentToolSegId = activeToolSeg._seg_id || activeToolSeg.tool_call_key || '';
           const panelTaskState = startPanelToolTask(activeToolName, activeProgress, activeToolSeg);
@@ -2118,7 +2120,7 @@ export const useChatStore = defineStore('chat', {
           streamState.lastSeq = Math.max(Number(streamState.lastSeq || 0), eventSeq);
         }
         const toolName = normalizeToolName(evt.tool_name || evt.toolName || '');
-        const progressText = getToolProgressText(toolName, evt.message || evt.text || '');
+        const progressText = getToolProgressText(toolName, evt.message || evt.text || '', evt);
         const isNested = !!evt.nested;
 
         if (eventType === 'task_snapshot') {
@@ -2195,7 +2197,7 @@ export const useChatStore = defineStore('chat', {
         if (eventType === 'tool_intent_started') {
           if (isNested) {
             const sourceAgent = evt.source_agent || '';
-            const nestedProgress = getToolProgressText(toolName, evt.message || evt.text || '');
+            const nestedProgress = getToolProgressText(toolName, evt.message || evt.text || '', evt);
             const panelTaskState = startPanelToolTask(toolName, nestedProgress, evt);
             setSessionToolState(toolName, nestedProgress, Date.now());
             if (panelTaskState.binding.scope) {
@@ -2208,6 +2210,7 @@ export const useChatStore = defineStore('chat', {
               source_agent: sourceAgent,
               nested: true,
               parent_tool: evt.parent_tool || '',
+              ...(evt.tool_provider || evt.toolProvider ? { tool_provider: evt.tool_provider || evt.toolProvider } : {}),
               ...(evt.tool_call_key || evt.toolCallKey ? { tool_call_key: evt.tool_call_key || evt.toolCallKey } : {}),
             };
             upsertAssistantToolTrace(toolName, traceData);
@@ -2224,7 +2227,7 @@ export const useChatStore = defineStore('chat', {
         if (eventType === 'tool_exec_started') {
           if (isNested) {
             const sourceAgent = evt.source_agent || '';
-            const nestedProgress = getToolProgressText(toolName, evt.message || evt.text || '');
+            const nestedProgress = getToolProgressText(toolName, evt.message || evt.text || '', evt);
             const panelTaskState = startPanelToolTask(toolName, nestedProgress, evt);
             setSessionToolState(toolName, nestedProgress, Date.now());
             if (panelTaskState.binding.scope) {
@@ -2250,7 +2253,7 @@ export const useChatStore = defineStore('chat', {
               syncAssistantSnapshot();
             } else {
               // 备用：万一只有 exec 没有 intent
-              const nestedProgress = getToolProgressText(toolName, evt.message || evt.text || '');
+              const nestedProgress = getToolProgressText(toolName, evt.message || evt.text || '', evt);
               setSessionToolState(toolName, nestedProgress, session.toolStateStartedAt || Date.now());
               const startedAt = Number((Date.now() / 1000).toFixed(3));
               const traceData = {
@@ -2259,6 +2262,7 @@ export const useChatStore = defineStore('chat', {
                 source_agent: sourceAgent,
                 nested: true,
                 parent_tool: evt.parent_tool || '',
+                ...(evt.tool_provider || evt.toolProvider ? { tool_provider: evt.tool_provider || evt.toolProvider } : {}),
                 ...(evt.tool_call_key || evt.toolCallKey ? { tool_call_key: evt.tool_call_key || evt.toolCallKey } : {}),
               };
               upsertAssistantToolTrace(toolName, traceData);
@@ -2281,21 +2285,24 @@ export const useChatStore = defineStore('chat', {
                 // 将 target_agent / tool_action 等额外字段从事件透传到 segment
                 if (evt.target_agent) existingSeg.target_agent = evt.target_agent;
                 if (evt.tool_action) existingSeg.tool_action = evt.tool_action;
+                if (evt.tool_provider || evt.toolProvider) existingSeg.tool_provider = evt.tool_provider || evt.toolProvider;
                 upsertAssistantToolTrace(normalizedTool, {
                   status: 'running',
                   ...(evt.target_agent ? { target_agent: evt.target_agent } : {}),
                   ...(evt.tool_action ? { tool_action: evt.tool_action } : {}),
+                  ...(evt.tool_provider || evt.toolProvider ? { tool_provider: evt.tool_provider || evt.toolProvider } : {}),
                 });
                 syncAssistantSnapshot();
                 session.toolProgressText = progressText || session.toolProgressText;
               } else {
                 onToolCallStart(toolName, progressText, 'running', evt);
                 // 补丁 extra 字段到刚创建的 segment，并强制更新快照
-                if (evt.target_agent || evt.tool_action) {
+                if (evt.target_agent || evt.tool_action || evt.tool_provider || evt.toolProvider) {
                   const patchSeg = assistantMsg.segments[assistantMsg.segments.length - 1];
                   if (patchSeg && patchSeg.type === 'tool_trace') {
                     if (evt.target_agent) patchSeg.target_agent = evt.target_agent;
                     if (evt.tool_action) patchSeg.tool_action = evt.tool_action;
+                    if (evt.tool_provider || evt.toolProvider) patchSeg.tool_provider = evt.tool_provider || evt.toolProvider;
                     syncAssistantSnapshot();
                   }
                 }
@@ -2330,6 +2337,7 @@ export const useChatStore = defineStore('chat', {
               source_agent: sourceAgent,
               nested: true,
               parent_tool: evt.parent_tool || '',
+              ...(evt.tool_provider || evt.toolProvider ? { tool_provider: evt.tool_provider || evt.toolProvider } : {}),
               _seg_id: nestedMatchSeg?._seg_id || '',
               ...(evt.tool_call_key || evt.toolCallKey ? { tool_call_key: evt.tool_call_key || evt.toolCallKey } : {}),
               ...(evt.tool_result ? { tool_result: evt.tool_result } : {}),
@@ -2348,6 +2356,7 @@ export const useChatStore = defineStore('chat', {
             onToolCallEnd(toolName || currentToolName, 'finished', {
               ...(evt.tool_call_key || evt.toolCallKey ? { tool_call_key: evt.tool_call_key || evt.toolCallKey } : {}),
               ...(evt.tool_result ? { tool_result: evt.tool_result } : {}),
+              ...(evt.tool_provider || evt.toolProvider ? { tool_provider: evt.tool_provider || evt.toolProvider } : {}),
             });
           }
           return;

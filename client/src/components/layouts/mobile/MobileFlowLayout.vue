@@ -8,7 +8,7 @@
       
       <div class="header-center">
         <span class="current-step-label">{{ currentStepLabel }}</span>
-        <OnboardingHelpButton scene-id="mobile-workspace" />
+        <OnboardingHelpButton :scene-id="currentTutorialSceneId" />
       </div>
       
       <div class="header-right">
@@ -212,6 +212,7 @@ import { useSceneStore } from '../../stores/sceneStore';
 import { useFileStore } from '../../stores/fileStore';
 import { useFullscreen } from '../../../composables/useFullscreen';
 import { useOnboarding } from '../../../onboarding';
+import { mobilePageSceneIds } from '../../../onboarding/engine/stepDefinitions';
 import AppBrand from '../../share/AppBrand.vue';
 import { SPARKARC_GITHUB_URL } from '@/config';
 import VersionManager from '../../dlg-editor/VersionManager.vue';
@@ -253,6 +254,10 @@ const flowSteps = computed(() => [
 const currentStepLabel = computed(() => {
   return flowSteps.value[currentStep.value]?.label || t('mobileFlow.sparkArc');
 });
+
+const currentTutorialSceneId = computed(() => (
+  mobilePageSceneIds[currentStep.value] || mobilePageSceneIds[0]
+));
 
 const stepViewMap: AppViewKey[] = ['world', 'lorebook', 'synopsis', 'structure', 'production', 'blueprint'];
 watch(currentStep, (idx) => {

@@ -316,6 +316,12 @@ async def delete_user(
     try:
         success = user_db.delete_user(user_id)
         if success:
+            from .search_provider_settings import delete_search_provider_user_settings
+
+            try:
+                delete_search_provider_user_settings(str(user_id))
+            except Exception as cleanup_error:
+                print(f"清理已删除用户的搜索配置失败: {cleanup_error}")
             return {"success": True, "message": "用户已删除"}
         else:
             return JSONResponse(

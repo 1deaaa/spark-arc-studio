@@ -127,6 +127,9 @@ def _collect_tool_trace_from_event(tool_trace_map: Dict[str, Dict[str, Any]], de
         trace["parent_tool"] = parent_tool
     if delta.get("nested"):
         trace["nested"] = True
+    tool_provider = str(delta.get("tool_provider") or delta.get("toolProvider") or "").strip().lower()
+    if tool_provider:
+        trace["tool_provider"] = tool_provider
 
     if event_type in {"tool_intent_started", "tool_exec_started"} and not isinstance(trace.get("started_at"), (int, float)):
         trace["started_at"] = ts
@@ -194,6 +197,7 @@ def _append_or_upgrade_tool_segment(
     tool_action: str = "",
     tool_call_key: str = "",
     parent_tool: str = "",
+    tool_provider: str = "",
 ) -> None:
     fallback_seg = None
     for seg in reversed(segments):
@@ -213,6 +217,8 @@ def _append_or_upgrade_tool_segment(
                 seg["_seg_id"] = seg.get("_seg_id") or tool_call_key
             if parent_tool:
                 seg["parent_tool"] = parent_tool
+            if tool_provider:
+                seg["tool_provider"] = tool_provider
             if status == "running" and seg.get("status") == "started":
                 seg["status"] = "running"
                 seg["exec_started_at"] = ts
@@ -225,6 +231,8 @@ def _append_or_upgrade_tool_segment(
             fallback_seg["tool_call_key"] = tool_call_key
         if parent_tool:
             fallback_seg["parent_tool"] = parent_tool
+        if tool_provider:
+            fallback_seg["tool_provider"] = tool_provider
         if status == "running" and fallback_seg.get("status") == "started":
             fallback_seg["status"] = "running"
             fallback_seg["exec_started_at"] = ts
@@ -249,6 +257,7 @@ def _append_or_upgrade_tool_segment(
         **({"tool_action": tool_action} if tool_action else {}),
         **({"tool_call_key": tool_call_key} if tool_call_key else {}),
         **({"parent_tool": parent_tool} if parent_tool else {}),
+        **({"tool_provider": tool_provider} if tool_provider else {}),
     })
 
 
@@ -370,6 +379,7 @@ def _collect_segment_from_event(
 
     is_nested = bool(delta.get("nested"))
     parent_tool = str(delta.get("parent_tool") or "").strip()
+    tool_provider = str(delta.get("tool_provider") or delta.get("toolProvider") or "").strip().lower()
 
     if event_type == "tool_intent_started":
         _append_or_upgrade_tool_segment(
@@ -382,6 +392,7 @@ def _collect_segment_from_event(
             invocation_counter=invocation_counter,
             tool_call_key=tool_call_key,
             parent_tool=parent_tool,
+            tool_provider=tool_provider,
         )
         return
 
@@ -398,6 +409,7 @@ def _collect_segment_from_event(
             tool_action=tool_action,
             tool_call_key=tool_call_key,
             parent_tool=parent_tool,
+            tool_provider=tool_provider,
         )
         return
 
@@ -427,6 +439,8 @@ def _collect_segment_from_event(
                     seg["tool_call_key"] = tool_call_key
                 if parent_tool:
                     seg["parent_tool"] = parent_tool
+                if tool_provider:
+                    seg["tool_provider"] = tool_provider
                 if final_status == "failed" and delta.get("message"):
                     seg["message"] = delta["message"]
                 break

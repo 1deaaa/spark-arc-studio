@@ -9,6 +9,7 @@ export default {
       skip: 'スキップ',
       done: '創作を始める',
       restartGuide: 'ガイドを再表示',
+      replayPageGuide: 'このページのチュートリアルを再表示',
     },
     desktop: {
       welcome: {

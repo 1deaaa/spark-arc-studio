@@ -9,6 +9,7 @@ export default {
       skip: '跳过',
       done: '开始创作',
       restartGuide: '重看新手引导',
+      replayPageGuide: '重看本页教程',
     },
     desktop: {
       welcome: {

@@ -83,6 +83,21 @@ describe('聊天工具 UI 绑定契约', () => {
     );
   });
 
+  it('联网搜索按提供商显示名称和执行文案', () => {
+    expect(getToolNameLabelKey('web_search', { tool_provider: 'exa' })).toBe(
+      'components.chatMessageList.tools.webSearchExa',
+    );
+    expect(getToolNameLabelKey('web_search', { tool_provider: 'tavily' })).toBe(
+      'components.chatMessageList.tools.webSearchTavily',
+    );
+    expect(getToolProgressText('web_search', '', { tool_provider: 'exa' })).toBe(
+      i18n.global.t('chatStore.toolProgress.webSearchExa'),
+    );
+    expect(getToolProgressText('web_search', '', { tool_provider: 'tavily' })).toBe(
+      i18n.global.t('chatStore.toolProgress.webSearchTavily'),
+    );
+  });
+
   it('所有已映射工具都有四语名称和执行中文案', () => {
     const locales = [zhCN, enUS, jaJP, koKR] as Array<Record<string, any>>;
     const suffixes = new Set(Object.values(TOOL_PRESENTATION_KEY_MAP));

@@ -9,6 +9,7 @@ export default {
       skip: 'Skip',
       done: 'Start Creating',
       restartGuide: 'Replay Onboarding',
+      replayPageGuide: 'Replay This Page Tutorial',
     },
     desktop: {
       welcome: {

@@ -1191,6 +1191,15 @@ class SparkBaseAgent:
         }
         return mapping.get(tool_name, f"正在执行工具 {tool_name} ...")
 
+    def _tool_event_metadata(self, tool_name: str, tool_args: Any = None) -> Dict[str, Any]:
+        """提取可安全展示、持久化的工具调用元数据。"""
+        if normalize_tool_name(tool_name) != "web_search" or not isinstance(tool_args, dict):
+            return {}
+        provider = str(tool_args.get("provider") or "").strip().lower()
+        if provider not in {"exa", "tavily"}:
+            return {}
+        return {"tool_provider": provider}
+
     def _extract_active_context_from_history(self, history: List[Dict[str, Any]] | None) -> Optional[str]:
         if not history:
             return None
@@ -1511,6 +1520,9 @@ class SparkBaseAgent:
                             or self._tool_call_event_key(tool_name, tool_spec.get("raw"), spec_index, len(tool_results))
                         )
                         progress_text = self._tool_progress_text(tool_name)
+                        tool_event_metadata = self._tool_event_metadata(tool_name, tool_spec.get("args"))
+                        if tool_event_metadata.get("tool_provider"):
+                            progress_text = f"正在使用 {tool_event_metadata['tool_provider'].title()} 搜索..."
 
                         if tool_call_key not in started_tools:
                             yield build_tool_stream_event(
@@ -1519,6 +1531,7 @@ class SparkBaseAgent:
                                 source_agent=self.agent_id,
                                 message=progress_text,
                                 tool_call_key=tool_call_key,
+                                **tool_event_metadata,
                             )
                             if is_stop_event_set(stop_event):
                                 cancelled_during_tools = True
@@ -1531,6 +1544,7 @@ class SparkBaseAgent:
                             source_agent=self.agent_id,
                             message=progress_text,
                             tool_call_key=tool_call_key,
+                            **tool_event_metadata,
                         )
                         if is_stop_event_set(stop_event):
                             cancelled_during_tools = True
@@ -1561,6 +1575,7 @@ class SparkBaseAgent:
                                 source_agent=self.agent_id,
                                 tool_call_key=tool_call_key,
                                 message="模型使用了错误的调用格式，正在尝试修正",
+                                **tool_event_metadata,
                             )
                         else:
                             yield build_tool_stream_event(
@@ -1568,6 +1583,7 @@ class SparkBaseAgent:
                                 tool_name,
                                 source_agent=self.agent_id,
                                 tool_call_key=tool_call_key,
+                                **tool_event_metadata,
                             )
 
                         if is_stop_event_set(stop_event):

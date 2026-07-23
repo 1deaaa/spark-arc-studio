@@ -407,8 +407,8 @@ const thinkingDisplayText = computed(() => {
 const thinkingNoticeText = computed(() => t('components.chatMessageList.thinkingNotice'));
 const thinkingNoticeVisible = ref(false);
 
-function getToolNameLabel(toolName: string) {
-  const key = getToolNameLabelKey(toolName);
+function getToolNameLabel(toolName: string, metadata: Record<string, unknown> = {}) {
+  const key = getToolNameLabelKey(toolName, metadata);
   return key ? t(key) : t('components.chatMessageList.toolFallback');
 }
 
@@ -574,7 +574,7 @@ function formatToolTraceLabel(trace: any, resolvedStatus?: string) {
     const targetName = getAgentName(trace.target_agent);
     label = t('components.chatMessageList.delegateTarget', { target: targetName });
   } else {
-    label = getToolNameLabel(toolName);
+    label = getToolNameLabel(toolName, trace);
   }
 
   const sourceAgent = trace?.source_agent ? getAgentName(trace.source_agent) : '';
@@ -723,8 +723,9 @@ defineExpose({ listRef });
 .agent-avatar-anchor {
   position: absolute;
   top: -16px;
-  left: -10px;
+  left: 0;
   z-index: 10;
+  transform: translateX(-50%);
 }
 
 
@@ -1121,6 +1122,13 @@ defineExpose({ listRef });
   padding: 12px;
   background: var(--spark-bg);
   border-radius: var(--spark-radius-sm);
+}
+
+@media (max-width: 640px) {
+  .chat-list {
+    padding-left: 18px;
+    padding-right: 8px;
+  }
 }
 
 </style>

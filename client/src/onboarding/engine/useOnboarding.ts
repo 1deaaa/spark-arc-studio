@@ -77,6 +77,19 @@ export function useOnboarding() {
     engine.start(sceneId);
   }
 
+  /**
+   * 重看当前页面教程。
+   * 页面标题入口只允许启动 page-* 场景，避免误接到完整工作台引导。
+   */
+  function replayPage(sceneId: string): void {
+    if (!sceneId.startsWith('page-')) {
+      console.warn(`[Onboarding] 页面教程场景必须以 "page-" 开头，已忽略 "${sceneId}"`);
+      return;
+    }
+    if (engine.isActive.value) engine.destroy();
+    engine.start(sceneId);
+  }
+
   /** 重置指定场景的完成状态（允许重看） */
   function resetScene(sceneId: string): void {
     const state = loadOnboardingState();
@@ -111,6 +124,7 @@ export function useOnboarding() {
     registerScenes,
     triggerIfFirst,
     trigger,
+    replayPage,
     resetScene,
     resetAll,
     isSceneCompleted,

@@ -420,8 +420,9 @@ onBeforeUnmount(() => {
 .agent-avatar-anchor {
   position: absolute;
   top: -16px;
-  left: -10px;
+  left: 0;
   z-index: 10;
+  transform: translateX(-50%);
 }
 
 .chat-bubble {

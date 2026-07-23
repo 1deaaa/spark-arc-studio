@@ -28,6 +28,7 @@ from sqlalchemy.orm import sessionmaker, selectinload
 
 from .models import (
     LLMPlatform, LLModels, LLMSysPlatformKey,
+    SearchProviderUserConfig,
     UserModelUsage, AgentModelBinding, ModelUsageStats, UserEmbeddingSelection,
     DEFAULT_MAX_CONTEXT_TOKENS, DEFAULT_MAX_OUTPUT_TOKENS,
     DEFAULT_MODEL_INPUT_MODALITIES, DEFAULT_MODEL_OUTPUT_MODALITIES,
@@ -735,6 +736,21 @@ class AIManagerBase:
                 if plan["action"] == "write":
                     rewrite_jobs.append(("db_sys_key", cred, plan))
 
+            for search_config in session.query(SearchProviderUserConfig).all():
+                plan = self._plan_secret_rewrite(
+                    raw_value=search_config.api_key,
+                    new_key=new_key,
+                    old_key=old_key,
+                    allow_clear_unrecoverable=allow_clear_unrecoverable,
+                )
+                if plan["action"] == "unresolved":
+                    unresolved_labels.append(
+                        f"DB搜索用户Key:{search_config.user_id}:{search_config.provider}"
+                    )
+                    continue
+                if plan["action"] == "write":
+                    rewrite_jobs.append(("db_search_user_key", search_config, plan))
+
             for base_url, key_entry in key_yaml_data.items():
                 if isinstance(key_entry, dict):
                     key_val = key_entry.get("api_key")
@@ -769,6 +785,8 @@ class AIManagerBase:
                 if job_type == "db_platform":
                     target.api_key = plan["value"]
                 elif job_type == "db_sys_key":
+                    target.api_key = plan["value"]
+                elif job_type == "db_search_user_key":
                     target.api_key = plan["value"]
                 elif job_type == "key_yaml":
                     base_url, key_data = target

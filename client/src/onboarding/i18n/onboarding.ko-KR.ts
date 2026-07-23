@@ -9,6 +9,7 @@ export default {
       skip: '건너뛰기',
       done: '창작 시작',
       restartGuide: '초보자 가이드 다시 보기',
+      replayPageGuide: '현재 페이지 튜토리얼 다시 보기',
     },
     desktop: {
       welcome: {

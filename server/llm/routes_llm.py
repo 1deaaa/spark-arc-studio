@@ -12,8 +12,14 @@ from pydantic import BaseModel, ConfigDict
 
 
 
-from core.auth import get_current_user
+from core.auth import get_current_user, require_admin
 from core.request_context import set_current_context
+from core.search_provider_settings import (
+    SearchProviderConfigError,
+    get_search_provider_user_view,
+    reset_search_provider_user_settings,
+    update_search_provider_user_settings,
+)
 
 from llm.agen_matchbox import matchbox
 
@@ -1516,6 +1522,15 @@ class SystemConfigUpdateRequest(BaseModel):
     billing_enabled: Optional[bool] = None
 
 
+class SearchProviderUserUpdateRequest(BaseModel):
+
+    provider: str
+
+    url: str
+
+    api_key: Optional[str] = None
+
+
 
 @llm_router.post('/api/ai/system-config')
 
@@ -1523,15 +1538,13 @@ async def update_system_config(
 
     data: SystemConfigUpdateRequest,
 
-    user: dict = Depends(get_current_user)
+    user: dict = Depends(require_admin)
 
 ):
 
     """更新系统级配置"""
 
     try:
-
-        # TODO: Add admin check here if needed. Currently assuming all authenticated users or just admin UI uses this.
 
         matchbox().set_system_config(
 
@@ -1546,6 +1559,81 @@ async def update_system_config(
     except Exception as e:
 
         print(f"Failed to update system config: {e}")
+
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+@llm_router.get('/api/ai/search-providers')
+
+async def get_user_search_providers(user: dict = Depends(get_current_user)):
+
+    """读取当前用户的搜索覆盖与系统回退状态。"""
+
+    try:
+
+        return get_search_provider_user_view(str(user['user_id']))
+
+    except Exception as e:
+
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+@llm_router.post('/api/ai/search-providers')
+
+async def update_user_search_provider(
+
+    data: SearchProviderUserUpdateRequest,
+
+    user: dict = Depends(get_current_user),
+
+):
+
+    """保存当前用户对一个搜索提供商的覆盖。"""
+
+    try:
+
+        return update_search_provider_user_settings(
+
+            str(user['user_id']),
+
+            data.provider,
+
+            url=data.url,
+
+            api_key=data.api_key,
+
+        )
+
+    except SearchProviderConfigError as e:
+
+        raise HTTPException(status_code=400, detail=str(e))
+
+    except Exception as e:
+
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+@llm_router.delete('/api/ai/search-providers/{provider}')
+
+async def reset_user_search_provider(
+
+    provider: str,
+
+    user: dict = Depends(get_current_user),
+
+):
+
+    """删除当前用户覆盖，恢复系统回退或不可用状态。"""
+
+    try:
+
+        return reset_search_provider_user_settings(str(user['user_id']), provider)
+
+    except SearchProviderConfigError as e:
+
+        raise HTTPException(status_code=400, detail=str(e))
+
+    except Exception as e:
 
         raise HTTPException(status_code=500, detail=str(e))
 
