@@ -399,3 +399,4 @@ print(f"normal_is_admin={{normal_info.get('is_admin')}}")
     assert "admin_is_admin=True" in output
     assert "normal_ok=True" in output
     assert "normal_is_admin=False" in output
+"""Matchbox 平台配置、密钥策略与会话身份回归。"""

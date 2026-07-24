@@ -161,3 +161,4 @@ def test_generated_public_address_outputs_are_in_sync() -> None:
         capture_output=True,
     )
     assert completed.returncode == 0, completed.stdout + completed.stderr
+"""仓库配置、网络探测与启动脚本配置回归。"""

@@ -106,3 +106,4 @@ def test_legacy_slot_preferences_are_merged(monkeypatch, tmp_path) -> None:
     assert "世界设定更冷峻" in state["effective_content"]
     assert "角色动机必须更隐秘" in state["effective_content"]
     assert state["customized"] is True
+"""用户提示词偏好的保存、重置与兼容回归。"""

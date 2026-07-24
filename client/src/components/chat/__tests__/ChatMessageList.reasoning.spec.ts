@@ -1,3 +1,6 @@
+import { readFileSync } from 'node:fs';
+import { resolve } from 'node:path';
+
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import { mount } from '@vue/test-utils';
 import { defineComponent, nextTick } from 'vue';
@@ -42,6 +45,27 @@ afterEach(() => {
 });
 
 describe('ChatMessageList 深度思考块展开性能契约', () => {
+  it('等待回复时将思考图标放在消息盒内部，避免绘制包含裁掉上半部分', () => {
+    const wrapper = mount(ChatMessageList, {
+      props: { history: [], sending: true, thinkingSeconds: 1 },
+      global: {
+        plugins: [i18n],
+        stubs: {
+          NPopover: defineComponent({ template: '<span><slot name="trigger" /><slot /></span>' }),
+          SparkLoaderAnimation: true,
+        },
+      },
+    });
+
+    const pendingMessage = wrapper.find('.thinking-msg');
+    expect(pendingMessage.exists()).toBe(true);
+    expect(pendingMessage.find('.chat-role').exists()).toBe(true);
+
+    const source = readFileSync(resolve(process.cwd(), 'src/components/chat/ChatMessageList.vue'), 'utf8');
+    expect(source).toMatch(/\.thinking-msg,\s*\.retry-msg\s*{\s*padding-top: 12px;/);
+    expect(source).toMatch(/\.thinking-msg \.chat-role,\s*\.retry-msg \.chat-role\s*{\s*top: 0;/);
+  });
+
   it('活动助手正文使用流式 Markdown，完成后保持原视觉并切回最终态', async () => {
     const history = [{
       id: 'assistant-streaming',

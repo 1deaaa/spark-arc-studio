@@ -405,7 +405,7 @@ Scriptwriter 有五类入口：导演委派、用户聊天微改、用户手动�
 6. 为赶进度创建“临时入口”而不接入 registry/director_graph/tools 门面。正确方式：新增 Agent/流程/工具后，必须同步在 `registry.py` 等四大收口点完成注册并走门面导出。
 7. 修改数据模型后不走迁移生成流程。正确方式：修改模型定义后必须通过 `python server/gen_migration.py` 自动派生 Alembic 迁移脚本，由系统启动生命周期自动执行升级。
 8. 把测试运行过程中生成的缓存、索引、向量库、图谱、中间文件、导出结果直接写入被 Git 跟踪的测试目录（如 `server/test/`、`client/**/__tests__/` 或人工维护的 fixture / baseline 目录），导致版本库被运行产物污染。正确方式：测试或调试产生的中间临时产物必须强制写入根目录下的 `/.tmp/`，禁止污染 Git 库。
-9. 在实现测试、调试脚本或一次性验证脚本时，默认复用现有测试目录作为输出目录，而不先确认该目录是否受 Git 跟踪、是否仅用于手工维护样例。正确方式：一次性脚本的输出应定向到项目根目录下的 `/.tmp/`，或写入被 `.gitignore` 覆盖的物理位置。
+9. 在实现临时测试、调试脚本或一次性验证脚本时，默认把脚本或输出放入正式测试目录，验证后又遗留在仓库中。正确方式：临时脚本及其输出统一放入项目根 `/.tmp/tests/<本次任务>/`，验证完成后在当前任务结束前全部删除；值得长期保留的场景应重写为所属领域的正式回归测试。
 10. 自行编写正则表达式或 `.replace()` 方式进行文本的定位和局部替换。正确方式：凡涉及在已有文本中定位并替换的逻辑，必须复用 `server/agents/tools/common.py` 的 `_apply_patch` 统一底层。
 11. 在业务层自写字符或段落 `split()` 等简陋方法来切分长文本。正确方式：涉及分块的逻辑，必须复用 `TokenTextSplitter`（按 Token 切分）或 `SemanticChunker`（语义分块）基建底座。
 
@@ -437,35 +437,68 @@ Scriptwriter 有五类入口：导演委派、用户聊天微改、用户手动�
   - `test_streaming_bridge_contracts.py`：同步生成器到异步流桥接、业务语义帧。
   - `test_common_infrastructure_contracts.py`：`_apply_patch`、`TokenTextSplitter`、迁移路径规格。
   - `test_matchbox_startup_contracts.py`：火柴 Agent 网关启动期懒加载契约。
-  - `test_mcp_control_contracts.py`：MCP 控制面与请求上下文注入契约。
-  - `test_prompt_preferences_contracts.py`：用户提示词偏好存储与注入边界契约。
-  - `test_skill_packs_contracts.py`：AgentSkills 质量视图与运行时工作流隔离契约。
-  - `test_specialized_context_budget_contracts.py`：专有工作模式稳定 system 前缀与动态 user 预算契约。
 - 其他后端业务/功能回归目录：
+  - `server/test/agents/`、`server/test/agent_skills/`：Agent 默认行为与 AgentSkills 功能回归。
+  - `server/test/auth/`、`server/test/projects/`：账号、权限、数据归属与项目生命周期回归。
+  - `server/test/chat/`、`server/test/context_budget/`：聊天功能与上下文预算策略回归。
   - `server/test/director/`：导演调度、委派边界、自动写作触发等业务护栏。
   - `server/test/graphrag/`：知识图谱、语义分块、项目文件收集等检索能力回归。
+  - `server/test/image_generation/`、`server/test/web_search/`：外部能力适配器与供应商配置回归。
+  - `server/test/matchbox/`、`server/test/llm/`：模型配置、模态与兼容网关回归。
+  - `server/test/mcp/`：MCP 服务、工具暴露与工单行为回归。
   - `server/test/story_context/`：大纲场景契约、生产上下文包、Scriptwriter 交接上下文。
   - `server/test/story_memory/`：StoryMemory 状态吸收、任务包、显式吸收接口、自动写作记忆回写。
   - `server/test/style/`：文风档案格式化、风格注入、风格相关生成路径。
-- 说明：`server/test/architecture/` 只放长期契约与基础建筑护栏测试；如果是普通业务回归、页面/接口功能回归或一次性 bug 回归，不要默认塞进这个目录。测试名称里已经出现明确业务对象（如 StoryMemory、GraphRAG、风格、导演委派）时，优先放入对应业务目录，除非它真的在守护全局基础协议。
+- 说明：`server/test/architecture/` 只放长期契约与基础建筑护栏测试；普通业务回归、页面/接口功能回归或具体 bug 回归必须放入所属领域目录。只为当前任务提供证据的一次性验证属于临时测试，应放入 `/.tmp/tests/` 并用完删除。测试名称里已经出现明确业务对象（如 StoryMemory、GraphRAG、风格、导演委派）时，优先放入对应业务目录，除非它真的在守护全局基础协议。
+
+**测试放置决策（新增测试前必须逐项执行）**：
+
+1. 先定位被测生产模块或业务能力，并在 `server/test/` 下寻找同名或同领域目录；默认放在该领域目录。
+2. 不存在合适目录时，创建职责单一、可长期复用的领域目录；禁止因为“不知道放哪”而塞入 `architecture/`。
+3. 只有同时满足以下三项才允许进入 `architecture/`：守护跨模块稳定不变量；直接覆盖统一 registry / facade / pipeline / protocol / 公共基建；普通产品迭代不会频繁改动断言。
+4. 单次 bug 的严重程度、修复紧迫度或复现难度都不是架构测试的判据。决定长期保留的回归测试必须放到缺陷所属领域，只有能抽象为稳定的跨模块协议时才可升格。
+5. 主要断言具体提示词措辞、供应商参数、单个接口结果、README / Dockerfile / 源码字符串或某次补丁实现细节的测试，禁止放入 `architecture/`；应改为行为测试、放入领域目录，或在价值不足时删除。
+6. 文件命名使用 `test_<能力>.py`；不要用 `contracts`、`architecture` 等后缀给普通功能测试伪装层级。测试函数命名应表达“条件 + 预期行为”，不要使用缺陷编号或“临时测试”。
+7. 新增目录或无法判断层级时，先阅读 `server/test/README.md`；评审时必须把测试位置本身作为审查项。
 - 前端：
   - `client/src/utils/__tests__/streamingRuntime.architecture.spec.ts`
   - `client/src/components/stores/chat/__tests__/toolUi.architecture.spec.ts`
   - `client/src/components/stores/__tests__/chatStore.stream.architecture.spec.ts`
 
-### 10.0.1 AI 维护测试站协议（强制）
+### 10.0.1 临时测试生命周期（强制）
+
+**临时测试**是只为本次调查或实现提供证据、验证结束后不承担防回归责任的一次性代码。例如：验证一个小函数当前输出、探测某个假设、打印中间状态、复现一次环境问题、确认某段迁移数据是否正常。
+
+临时测试不是“较小的正式测试”，也不是“先随手放进测试目录以后再说”。仓库只允许两种测试状态：
+
+- **临时验证**：不进入正式测试树，用完删除。
+- **正式回归测试**：有明确长期守护价值，放入所属领域目录并持续维护。
+
+AI 创建临时测试时必须遵守：
+
+1. **固定位置**：统一放在仓库根 `/.tmp/tests/<本次任务>/`。禁止放入 `server/test/`、`client/**/__tests__/`、`tests/` 或任何可能被正式测试命令自动收集的目录。
+2. **明确命名**：使用 `verify_*.py`、`probe_*.py`、`inspect_*.ts` 等一次性名称，不使用 `test_*.py` / `*.spec.ts`，避免伪装成正式测试或被默认收集。
+3. **显式运行**：临时脚本只能按明确路径单独执行；不得把 `/.tmp/tests/` 加入 pytest、Vitest、CI、coverage 或项目测试配置。
+4. **用完即删**：得到验证结论后，在当前任务结束前删除临时脚本及其输出。即使 `/.tmp/` 已被 `.gitignore` 忽略，也不得把清理责任留给用户。
+5. **先判定再升格**：如果测试揭示了可复发的生产缺陷，并且断言稳定、有长期防回归价值，应将核心场景**重新编写**为正式测试，放入对应领域目录；不要把临时探针原样移动过去。
+6. **架构升格更严格**：只有正式领域回归还能进一步抽象成跨模块稳定协议时，才允许写入 `architecture/`。
+7. **结束前检查**：汇报完成前检查 `/.tmp/tests/<本次任务>/` 已清理，并检查 Git 状态确认临时文件没有进入跟踪范围。
+
+判断口诀：**只回答“现在是否正常”就用临时验证并删除；要防止“以后再次坏掉”才写正式回归测试。** 不允许把“短期测试”提交进仓库等待未来清理。
+
+### 10.0.2 AI 维护测试站协议（强制）
 
 长期测试不是业务实现的影子副本，而是统一协议和架构不变量的护栏。测试过时优先重审测试层级，禁止为了变绿而无解释地削弱契约。
 
 AI 新增或修改测试时必须遵守：
 
-1. **先说明守护对象**：每个长期测试文件顶部应能看出它守护的协议或收口层。新增测试前先判断它属于基础建筑测试、烟雾集成测试还是短期业务回归测试。
+1. **先说明守护对象**：每个长期测试文件顶部应能看出它守护的协议或收口层。新增正式测试前先判断它属于基础建筑测试、烟雾集成测试还是领域业务回归测试；仅服务当前任务的验证必须按上一节作为临时测试处理。
 2. **测协议，不测实现细节**：优先断言事件名、事件形状、状态机终态、注册表一致性、恢复/重连/回放能力、工具 UI 元数据、统一入口是否被使用。禁止把 prompt 完整文案、DOM 细碎层级、CSS class、临时变量名、LLM 生成正文写成长期断言。
 3. **测收口，不测每个使用点**：优先测试 `streamingRuntime.ts`、`chatStore.ts`、`streaming_utils.py`、`stream_semantics.py`、工具 registry / facade、`_apply_patch`、`TokenTextSplitter` 等统一底座。页面级测试只做少量烟雾覆盖。
 4. **测不变量，不滥用快照**：长期测试应断言“必须存在/必须完成/必须回放/必须走统一门面”这类不变量。除非用户明确要求，禁止新增整段 HTML、整段 prompt、整段生成结果的脆弱快照。
 5. **禁止真实上游依赖**：基础建筑与常规回归测试不得调用真实 LLM、消耗 token、依赖 API key、联网搜索、访问远程服务或读取用户真实项目数据。需要外部行为时使用 fake / monkeypatch / 临时目录 / 内存流。
 6. **失败先判因，再改测试**：测试失败时，AI 禁止直接改断言变绿。必须先判断是代码回归、架构契约有意变化、测试层级错误、fixture 过时，还是环境依赖问题。只有确认是“契约有意变化”或“测试测错层级”时，才允许修改测试；否则应修代码。
-7. **新增 bug 回归要下沉**：高速修 bug 时可以先补短期回归测试，但修完后要判断能否下沉为收口层不变量测试。若只能测试易变业务细节，应在汇报中说明它是短期回归，不应长期大量堆积。
+7. **新增 bug 回归要下沉**：需要长期防止复发的 bug 测试应放入所属领域目录；仅用于定位和确认修复的探针属于临时测试，必须放在 `/.tmp/tests/` 并在任务结束前删除。不得在正式测试树中保留含糊的“短期回归”。
 8. **维护成本红线**：如果某个测试在普通业务迭代中频繁大改，优先重构测试到更稳定的协议边界，或拆成“基础建筑测试 + 少量业务烟雾测试”。不要把大段业务规格复制进测试。
 
 推荐在长期测试文件顶部写明：
@@ -505,11 +538,11 @@ AI 新增或修改测试时必须遵守：
   pytest test/architecture
 
   # 运行聊天与工具事件相关测试
-  pytest test/test_chat_stream_events.py test/test_chat_history_segments.py test/test_tool_event_ui_metadata.py
+  pytest test/architecture/test_chat_stream_contracts.py test/architecture/test_tool_registry_contracts.py test/chat
   # 运行导演调度与委派协议相关测试
-  pytest test/test_director_graph.py test/test_director_handoff_protocol.py test/test_director_skip_confirmation.py
+  pytest test/director
   # 运行流式语义相关测试
-  pytest test/test_stream_semantics_runtime.py
+  pytest test/architecture/test_streaming_bridge_contracts.py
   ```
 - **前端测试**：进入 `client` 目录，使用 `npm run test` 运行对应的 `.spec.ts` 测试。例如：
   ```bash
@@ -534,7 +567,7 @@ AI 新增或修改测试时必须遵守：
 3. 后端与前端的工具 UI 映射是否双端一致。
 4. 数据变更是否遵守迁移流程。
 5. 是否补齐了对应回归测试并确保通过。
-6. 新增测试、调试脚本或一次性验证逻辑时，是否避免把运行产物写入被 Git 跟踪的测试目录，并已将临时输出落到 `.gitignore` 覆盖的位置（如写入项目根 `/.tmp/`）。
+6. 新增临时测试、调试脚本或一次性验证逻辑时，是否将脚本和输出都放入 `/.tmp/tests/<本次任务>/`，并已在汇报完成前全部删除；需要长期保留的场景是否已重写为所属领域的正式测试。
 7. 新增的长耗时物理任务是否显式配备了并发写锁保护，且前端消费重连流时是否遵循了 clientId 校验规约。
 8. 公共服务或工具类是否完全独立，无任何指向路由层的反向依赖。
 

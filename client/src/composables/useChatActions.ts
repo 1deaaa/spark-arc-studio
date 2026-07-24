@@ -70,7 +70,7 @@ export function useChatActions(adapter: ChatActionsAdapter, options: UseChatActi
     const thinkingSeconds = ref(0);
     let thinkingTimer: ReturnType<typeof setInterval> | null = null;
 
-    // 智能自动下滑：用户上滚会锁住当前回复，下一轮 AI 回复才恢复。
+    // 智能自动下滑：用户上滚会暂停当前回复，手动回到底部后恢复跟随。
     const autoScrollEnabled = ref(true);
     const SCROLL_BOTTOM_THRESHOLD = 60; // 距底部多少像素内视为"在底部"
     let programmaticScrollUntil = 0;
@@ -136,11 +136,12 @@ export function useChatActions(adapter: ChatActionsAdapter, options: UseChatActi
                     return;
                 }
                 if (programmaticScrollActive && !userIntentActive) return;
-                if (adapter.getSending() && currentResponseInterrupted) return;
                 if (isNearBottom(el)) {
+                    currentResponseInterrupted = false;
                     autoScrollEnabled.value = true;
                     return;
                 }
+                if (adapter.getSending() && currentResponseInterrupted) return;
                 if (!autoScrollEnabled.value) return;
                 autoScrollEnabled.value = false;
             };

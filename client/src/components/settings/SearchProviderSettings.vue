@@ -14,25 +14,56 @@
       </div>
     </template>
 
-    <n-tabs v-model:value="activeTab" type="line" animated>
+    <n-tabs v-model:value="activeTab" class="search-provider-tabs" type="line" :animated="false">
+      <template #suffix>
+        <n-button
+          v-if="activeTab === 'personal'"
+          class="search-provider-save"
+          size="small"
+          type="primary"
+          :aria-label="t('components.aiManager.searchProviders.savePersonal')"
+          :title="t('components.aiManager.searchProviders.savePersonal')"
+          :loading="savingPersonal"
+          :disabled="loading || !personalCanSave"
+          @click="savePersonalSettings"
+        >
+          <template #icon><n-icon><Save /></n-icon></template>
+          <span class="search-provider-save-label">{{ t('components.aiManager.searchProviders.savePersonal') }}</span>
+        </n-button>
+        <n-button
+          v-else-if="isAdmin"
+          class="search-provider-save"
+          size="small"
+          type="primary"
+          :aria-label="t('components.aiManager.searchProviders.saveSystem')"
+          :title="t('components.aiManager.searchProviders.saveSystem')"
+          :loading="savingSystem"
+          :disabled="loading || !systemCanSave"
+          @click="saveSystemSettings"
+        >
+          <template #icon><n-icon><Save /></n-icon></template>
+          <span class="search-provider-save-label">{{ t('components.aiManager.searchProviders.saveSystem') }}</span>
+        </n-button>
+      </template>
+
       <n-tab-pane name="personal" :tab="t('components.aiManager.searchProviders.personalTab')">
         <div class="search-provider-list">
           <section v-for="provider in providers" :key="`personal-${provider.provider}`" class="search-provider-section">
-            <div class="provider-header">
-              <strong>{{ providerLabel(provider.provider) }}</strong>
-              <n-tag size="small" :type="effectiveTagType(provider)">
-                {{ effectiveLabel(provider) }}
-              </n-tag>
-            </div>
+            <div class="provider-toolbar">
+              <div class="provider-header">
+                <strong>{{ providerLabel(provider.provider) }}</strong>
+                <n-tag size="small" :type="effectiveTagType(provider)">
+                  {{ effectiveLabel(provider) }}
+                </n-tag>
+              </div>
 
-            <n-radio-group v-model:value="provider.personalMode" size="small">
-              <n-radio-button value="inherit">
-                {{ t('components.aiManager.searchProviders.inheritSystem') }}
-              </n-radio-button>
-              <n-radio-button value="custom">
-                {{ t('components.aiManager.searchProviders.personalOverride') }}
-              </n-radio-button>
-            </n-radio-group>
+              <SparkSegment
+                :model-value="provider.personalMode"
+                :options="personalModeOptions"
+                size="tiny"
+                @update:model-value="value => { provider.personalMode = value; }"
+              />
+            </div>
 
             <n-form v-if="provider.personalMode === 'custom'" class="provider-form" label-placement="top" :show-feedback="false">
               <n-form-item :label="t('components.aiManager.searchProviders.urlLabel')">
@@ -62,60 +93,46 @@
             </n-form>
           </section>
         </div>
-
-        <div class="search-provider-actions">
-          <n-button type="primary" :loading="savingPersonal" :disabled="loading || !personalCanSave" @click="savePersonalSettings">
-            <template #icon><n-icon><Save /></n-icon></template>
-            {{ t('components.aiManager.searchProviders.savePersonal') }}
-          </n-button>
-        </div>
       </n-tab-pane>
 
       <n-tab-pane v-if="isAdmin" name="system" :tab="t('components.aiManager.searchProviders.systemTab')">
         <div class="search-provider-list">
           <section v-for="provider in providers" :key="`system-${provider.provider}`" class="search-provider-section">
-            <div class="provider-header">
-              <strong>{{ providerLabel(provider.provider) }}</strong>
-              <n-tag size="small" :type="provider.systemKeyless ? 'default' : 'success'">
-                {{ provider.systemKeyless
-                  ? t('components.aiManager.searchProviders.keylessStatus')
-                  : t('components.aiManager.searchProviders.keyConfiguredStatus') }}
-              </n-tag>
+            <div class="provider-toolbar">
+              <div class="provider-header">
+                <strong>{{ providerLabel(provider.provider) }}</strong>
+                <n-tag size="small" :type="provider.systemKeyless ? 'default' : 'success'">
+                  {{ provider.systemKeyless
+                    ? t('components.aiManager.searchProviders.keylessStatus')
+                    : t('components.aiManager.searchProviders.keyConfiguredStatus') }}
+                </n-tag>
+              </div>
+              <n-checkbox v-model:checked="provider.systemKeyless" class="keyless-checkbox keyless-checkbox-toolbar">
+                {{ t('components.aiManager.searchProviders.keylessMode') }}
+              </n-checkbox>
             </div>
-            <n-form label-placement="top" :show-feedback="false">
+            <n-form class="provider-form provider-form-system" label-placement="top" :show-feedback="false">
               <n-form-item :label="t('components.aiManager.searchProviders.urlLabel')">
                 <n-input v-model:value="provider.systemUrl" :placeholder="provider.defaultUrl">
                   <template #prefix><n-icon><Link2 /></n-icon></template>
                 </n-input>
               </n-form-item>
-              <div class="provider-key-row">
-                <n-form-item class="provider-key-input" :label="t('components.aiManager.searchProviders.apiKeyLabel')">
-                  <n-input
-                    v-model:value="provider.systemApiKey"
-                    type="password"
-                    show-password-on="click"
-                    :disabled="provider.systemKeyless"
-                    :placeholder="provider.systemApiKeySet
-                      ? t('components.aiManager.searchProviders.keepKeyPlaceholder')
-                      : t('components.aiManager.searchProviders.apiKeyPlaceholder')"
-                    @update:value="() => { if (provider.systemApiKey) provider.systemKeyless = false; }"
-                  >
-                    <template #prefix><n-icon><KeyRound /></n-icon></template>
-                  </n-input>
-                </n-form-item>
-                <n-checkbox v-model:checked="provider.systemKeyless" class="keyless-checkbox">
-                  {{ t('components.aiManager.searchProviders.keylessMode') }}
-                </n-checkbox>
-              </div>
+              <n-form-item class="provider-key-input" :label="t('components.aiManager.searchProviders.apiKeyLabel')">
+                <n-input
+                  v-model:value="provider.systemApiKey"
+                  type="password"
+                  show-password-on="click"
+                  :disabled="provider.systemKeyless"
+                  :placeholder="provider.systemApiKeySet
+                    ? t('components.aiManager.searchProviders.keepKeyPlaceholder')
+                    : t('components.aiManager.searchProviders.apiKeyPlaceholder')"
+                  @update:value="() => { if (provider.systemApiKey) provider.systemKeyless = false; }"
+                >
+                  <template #prefix><n-icon><KeyRound /></n-icon></template>
+                </n-input>
+              </n-form-item>
             </n-form>
           </section>
-        </div>
-
-        <div class="search-provider-actions">
-          <n-button type="primary" :loading="savingSystem" :disabled="loading || !systemCanSave" @click="saveSystemSettings">
-            <template #icon><n-icon><Save /></n-icon></template>
-            {{ t('components.aiManager.searchProviders.saveSystem') }}
-          </n-button>
         </div>
       </n-tab-pane>
     </n-tabs>
@@ -133,8 +150,6 @@ import {
   NFormItem,
   NIcon,
   NInput,
-  NRadioButton,
-  NRadioGroup,
   NTabPane,
   NTabs,
   NTag,
@@ -143,6 +158,7 @@ import {
 import { KeyRound, Link2, Save, Search } from '@lucide/vue';
 
 import { fetchWithAuth } from '@/services/api';
+import SparkSegment from '@/components/share/SparkSegment.vue';
 
 type SearchProviderName = 'exa' | 'tavily';
 type PersonalMode = 'inherit' | 'custom';
@@ -190,6 +206,10 @@ const isAdmin = computed(() => Boolean(props.isAdmin));
 const systemServiceEnabledState = computed(() => (
   loadedSystemServiceEnabled.value ?? Boolean(props.systemServiceEnabled)
 ));
+const personalModeOptions = computed<Array<{ value: PersonalMode; label: string }>>(() => [
+  { value: 'inherit', label: t('components.aiManager.searchProviders.inheritSystem') },
+  { value: 'custom', label: t('components.aiManager.searchProviders.personalOverride') },
+]);
 const personalCanSave = computed(() => providers.value.every((provider) => {
   if (provider.personalMode === 'inherit') return true;
   if (!provider.personalUrl.trim()) return false;
@@ -353,21 +373,37 @@ onMounted(() => {
 
 <style scoped>
 .search-provider-settings {
-  margin-top: 20px;
+  align-self: flex-start;
+  width: 100%;
+  height: auto;
+  min-height: 0;
+  margin: 0;
+}
+
+.search-provider-settings :deep(.n-card-header) {
+  padding: 14px 16px 8px;
+}
+
+.search-provider-settings :deep(.n-card__content) {
+  padding: 0 16px 14px;
 }
 
 .search-provider-title-row,
 .search-provider-title,
 .provider-header,
-.search-provider-actions {
+.provider-toolbar {
   display: flex;
   align-items: center;
 }
 
 .search-provider-title-row,
-.provider-header {
+.provider-toolbar {
   justify-content: space-between;
   gap: 12px;
+}
+
+.search-provider-title-row {
+  min-width: 0;
 }
 
 .search-provider-title {
@@ -376,33 +412,77 @@ onMounted(() => {
   font-weight: 600;
 }
 
+.search-provider-tabs :deep(.n-tabs-nav) {
+  margin-bottom: 0;
+}
+
+.search-provider-tabs :deep(.n-tabs-nav__suffix) {
+  padding-left: 12px;
+}
+
+.search-provider-tabs :deep(.n-tabs-pane-wrapper) {
+  flex: none;
+  height: auto !important;
+  min-height: 0 !important;
+}
+
+.search-provider-tabs :deep(.n-tabs-pane-wrapper > .n-tab-pane) {
+  position: static;
+}
+
+.search-provider-tabs :deep(.n-tab-pane) {
+  min-height: 0;
+}
+
 .search-provider-list {
-  display: flex;
-  flex-direction: column;
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(min(260px, 100%), 1fr));
+  column-gap: 24px;
+  row-gap: 8px;
 }
 
 .search-provider-section {
-  padding: 8px 0 18px;
-}
-
-.search-provider-section + .search-provider-section {
-  padding-top: 20px;
+  min-width: 0;
+  padding: 12px 0 4px;
   border-top: 1px solid var(--spark-border);
 }
 
+.provider-toolbar {
+  min-height: 34px;
+  flex-wrap: wrap;
+  align-content: center;
+}
+
 .provider-header {
-  margin-bottom: 12px;
+  min-width: 0;
+  gap: 8px;
+}
+
+.provider-header strong {
+  line-height: 1.2;
 }
 
 .provider-form {
-  margin-top: 14px;
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(min(240px, 100%), 360px));
+  align-items: end;
+  gap: 12px;
+  margin-top: 12px;
+}
+
+.provider-form-system {
+  max-width: 732px;
+}
+
+.provider-form :deep(.n-form-item) {
+  margin-bottom: 0;
 }
 
 .provider-key-row {
   display: grid;
-  grid-template-columns: minmax(0, 1fr) auto;
+  grid-template-columns: minmax(120px, 280px) auto;
   align-items: end;
-  gap: 14px;
+  gap: 8px;
 }
 
 .provider-key-input {
@@ -411,27 +491,46 @@ onMounted(() => {
 
 .keyless-checkbox {
   min-height: 34px;
-  padding-bottom: 2px;
   white-space: nowrap;
 }
 
-.search-provider-actions {
-  justify-content: flex-end;
-  padding-top: 4px;
+.keyless-checkbox-toolbar {
+  min-height: auto;
 }
 
 @media (max-width: 640px) {
+  .search-provider-settings :deep(.n-card-header) {
+    padding: 12px 12px 6px;
+  }
+
+  .search-provider-settings :deep(.n-card__content) {
+    padding: 0 12px 12px;
+  }
+
   .search-provider-title-row {
     align-items: flex-start;
   }
 
-  .provider-key-row {
-    grid-template-columns: minmax(0, 1fr);
-    gap: 0;
+  .search-provider-save-label {
+    display: none;
+  }
+
+  .search-provider-save {
+    width: 34px;
+    min-width: 34px;
+    padding-inline: 0;
+  }
+
+  .provider-toolbar {
+    gap: 8px;
+  }
+
+  .provider-form {
+    margin-top: 8px;
   }
 
   .keyless-checkbox {
-    margin: 0 0 14px;
+    margin-bottom: 4px;
   }
 }
 </style>

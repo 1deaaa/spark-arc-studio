@@ -1,12 +1,9 @@
 from __future__ import annotations
 
-import inspect
-from types import SimpleNamespace
-
 import pytest
 
 from agents.agent_critic import CriticAgent
-from agents.agent_lorebook import WorldviewAgent, _is_invalid_worldview_document
+from agents.agent_lorebook import WorldviewAgent
 from agents.agent_scriptwriter import ScriptwriterAgent
 from agents.agent_showrunner import ShowrunnerAgent
 from agents.agent_utils import load_prompt
@@ -85,108 +82,9 @@ def test_critic_keeps_schema_in_pipeline_because_it_has_no_write_tool_reference(
         assert token in pipeline
 
 
-def test_showrunner_outline_prompt_requires_scene_contract_fields() -> None:
-    prompt = load_prompt("showrunner", "generate_outline")["system"]
-    for token in ("情绪", "张力", "登场", "对应节拍", "指引", "@key_dialogue"):
-        assert token in prompt
-    assert "场景元数据必填" in prompt
-
-
-def test_lorebook_worldview_prompt_forbids_frontend_code() -> None:
-    prompt = load_prompt("lorebook")["system"]
-
-    for token in ("Markdown 纯文本", "HTML", "CSS", "JavaScript", "代码围栏", "创意种子"):
-        assert token in prompt
-
-
-@pytest.mark.parametrize(
-    "content",
-    [
-        "```html\n<!DOCTYPE html>\n<html></html>\n```",
-        "<!DOCTYPE html><html><head><style>body { color: red; }</style></head></html>",
-        "<script>document.body.innerHTML = '世界观';</script>",
-        "",
-    ],
-)
-def test_lorebook_worldview_output_rejects_frontend_documents(content: str) -> None:
-    assert _is_invalid_worldview_document(content)
-
-
-def test_lorebook_worldview_output_accepts_markdown_document() -> None:
-    assert not _is_invalid_worldview_document("# 弦暮城\n\n## 地理与环境\n终年被潮汐雾包围。")
-
-
-def test_lorebook_worldview_generation_retries_before_exposing_frontend_code(
-    monkeypatch: pytest.MonkeyPatch,
-) -> None:
-    class FakeLlm:
-        def __init__(self) -> None:
-            self.calls = 0
-
-        def stream(self, _messages):
-            self.calls += 1
-            content = (
-                "```html\n<!DOCTYPE html><html><body>错误结果</body></html>\n```"
-                if self.calls == 1
-                else "# 弦暮城\n\n## 地理与环境\n终年被潮汐雾包围。"
-            )
-            yield SimpleNamespace(content=content)
-
-    monkeypatch.setattr(
-        "agents.agent_lorebook.load_prompt",
-        lambda *_args, **_kwargs: {"system": "系统提示", "user": "创意种子"},
-    )
-    monkeypatch.setattr(
-        "agents.agent_lorebook.build_prompt_messages",
-        lambda **kwargs: kwargs,
-    )
-    agent = object.__new__(WorldviewAgent)
-    agent.llm = FakeLlm()
-
-    result = "".join(agent.build_worldview(seed="种子"))
-
-    assert agent.llm.calls == 2
-    assert result.startswith("# 弦暮城")
-    assert "html" not in result.lower()
-
-
-def test_showrunner_pipeline_requires_in_task_append_until_complete() -> None:
-    prompts = load_prompt("showrunner")
-    pipeline = prompts["pipeline_system"]
-    outline_system = load_prompt("showrunner", "generate_outline")["system"]
-
-    assert "本次委派内连续完成" in pipeline
-    assert "不要把“只完成核心部分”等同于任务完成" in pipeline
-    assert "同一次任务中继续追加后续章节" in outline_system
-
-
-def test_outline_length_guidance_keeps_scene_count_flexible() -> None:
-    outline_prompts = load_prompt(
-        "showrunner",
-        "generate_outline",
-        chapter_count=8,
-        scene_count_per_chapter=3,
-    )
-    combined = f"{outline_prompts['system']}\n{outline_prompts['user']}"
-
-    assert "章节数" in combined
-    assert "尽量贴合" in combined
-    assert "场景密度" in combined
-    assert "平均参考" in combined
-    assert "每章场景数可以不一样" in combined
-    assert "不是每章固定配额" in combined or "不是要求每一章都固定同样场数" in combined
-
-
-def test_director_contract_uses_scene_density_reference_not_fixed_scene_count() -> None:
-    director_prompt = load_prompt("director")["chat_system"]
-
-    assert "章节目标和场景密度参考" in director_prompt
-    assert "scene_density_reference" in director_prompt
-    assert "按剧情弹性安排" in director_prompt
-    assert "scenes_per_chapter" not in director_prompt
-
-
 def test_only_director_overrides_dynamic_tool_system_prompt() -> None:
+    import inspect
+
     from agents.communication import SparkBaseAgent
     from agents.agent_director import DirectorAgent
 

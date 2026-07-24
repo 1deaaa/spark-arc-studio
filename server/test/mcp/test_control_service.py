@@ -469,3 +469,4 @@ def test_app_py_middleware_sets_core_context():
 
     assert "core_current_user_id" in source, "McpAuthMiddleware 未设置 core.request_context 上下文"
     assert "core.request_context" in source, "app.py 未导入 core.request_context"
+"""MCP 控制服务、任务归属与挂载行为回归。"""

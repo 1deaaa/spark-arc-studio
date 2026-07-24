@@ -89,6 +89,10 @@ export function isImageModel(model: ModelModalitiesLike | null | undefined): boo
   return modelOutputs(model, MODEL_MODALITIES.image);
 }
 
+export function isLanguageModel(model: ModelModalitiesLike | null | undefined): boolean {
+  return isTextModel(model) && !isImageModel(model) && !isEmbeddingModel(model);
+}
+
 export function supportsImageInput(model: ModelModalitiesLike | null | undefined): boolean {
   return modelAccepts(model, MODEL_MODALITIES.image);
 }

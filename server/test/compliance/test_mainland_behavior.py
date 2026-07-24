@@ -18,3 +18,4 @@ def test_public_share_review_is_effective_only_for_mainland_locale(monkeypatch) 
     for locale in ("en-US", "ja-JP", "ko-KR"):
         assert is_mainland_compliance_locale(locale) is False
         assert is_force_public_share_review_effective(locale) is False
+"""中国大陆地区合规行为回归。"""

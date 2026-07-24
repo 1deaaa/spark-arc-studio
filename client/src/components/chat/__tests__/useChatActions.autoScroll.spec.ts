@@ -139,7 +139,7 @@ describe('useChatActions 聊天自动滚动开关', () => {
     expect(el.scrollTop).toBe(260);
   });
 
-  it('流式回复被上滚打断后本轮不再恢复，下一轮回复才重新启用', async () => {
+  it('流式回复被上滚打断后暂停跟随，手动触底后在本轮恢复跟随', async () => {
     vi.spyOn(performance, 'now').mockReturnValue(1000);
 
     const wrapper = mountHarness();
@@ -164,18 +164,11 @@ describe('useChatActions 聊天自动滚动开关', () => {
     await nextTick();
     expect(el.scrollTop).toBe(640);
 
-    // 本轮即使用户手动回到底部，也不再重新跟随新增长的正文。
+    // 用户手动回到底部后，本轮应重新跟随新增长的正文。
     setScrollMetrics(el, { scrollTop: 880, scrollHeight: 1200, clientHeight: 320 });
     el.dispatchEvent(new Event('scroll'));
     setScrollMetrics(el, { scrollTop: 880, scrollHeight: 1400, clientHeight: 320 });
     exposed.actions.scrollToBottom();
-    await nextTick();
-    expect(el.scrollTop).toBe(880);
-
-    exposed.sending = false;
-    await nextTick();
-    exposed.sending = true;
-    await nextTick();
     await nextTick();
     expect(el.scrollTop).toBe(1400);
   });
