@@ -70,6 +70,7 @@ LOREBOOK_BASE_TOOLS = [
     rewrite_all_characters,
     update_character,
     patch_worldview,
+    *EXTERNAL_SEARCH_TOOLS,
 ]
 SHOWRUNNER_BASE_TOOLS = [
     rewrite_synopsis,
