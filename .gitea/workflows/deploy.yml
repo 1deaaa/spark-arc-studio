@@ -38,12 +38,19 @@ jobs:
         env:
           GITHUB_TOKEN: ${{ github.token }}
           GITEA_TOKEN: ${{ gitea.token }}
+          GITEA_INTERNAL_SERVER_URL: http://gitea:3000
         run: |
+          set -eu
           echo "📥 使用 git 检出代码（无 Node 依赖）..."
           apk add --no-cache git
 
-          TOKEN="${GITHUB_TOKEN:-${GITEA_TOKEN:-}}"
-          REPO_URL="${GITHUB_SERVER_URL}/${GITHUB_REPOSITORY}.git"
+          TOKEN="${GITEA_TOKEN:-${GITHUB_TOKEN:-}}"
+          PUBLIC_REPO_URL="${GITHUB_SERVER_URL}/${GITHUB_REPOSITORY}.git"
+          if [ -n "${GITEA_INTERNAL_SERVER_URL:-}" ]; then
+            REPO_URL="${GITEA_INTERNAL_SERVER_URL}/${GITHUB_REPOSITORY}.git"
+          else
+            REPO_URL="$PUBLIC_REPO_URL"
+          fi
 
           if [ -d .git ]; then
             git remote set-url origin "$REPO_URL" || true
@@ -52,11 +59,39 @@ jobs:
             git remote add origin "$REPO_URL"
           fi
 
-          if [ -n "$TOKEN" ]; then
-            git -c http.extraHeader="Authorization: Bearer ${TOKEN}" fetch --depth=1 origin "$GITHUB_SHA"
-          else
-            echo "⚠️ 未检测到 Token，尝试匿名拉取（仅公开仓库可用）"
-            git fetch --depth=1 origin "$GITHUB_SHA"
+          # 同机检出固定走 Gitea Docker 内网；HTTP/1.1 同时规避公网回退时的 HTTP/2 断流。
+          git config http.version HTTP/1.1
+
+          fetch_repository() {
+            fetch_url="$1"
+            attempt=1
+            git remote set-url origin "$fetch_url"
+
+            while [ "$attempt" -le 3 ]; do
+              echo "📡 拉取代码（第 ${attempt}/3 次）：${fetch_url}"
+              if [ -n "$TOKEN" ]; then
+                if git -c http.extraHeader="Authorization: token ${TOKEN}" fetch --depth=1 --no-tags origin "$GITHUB_SHA"; then
+                  return 0
+                fi
+              elif git fetch --depth=1 --no-tags origin "$GITHUB_SHA"; then
+                return 0
+              fi
+
+              attempt=$((attempt + 1))
+              [ "$attempt" -le 3 ] && sleep $((attempt * 3))
+            done
+
+            return 1
+          }
+
+          if ! fetch_repository "$REPO_URL"; then
+            if [ "$REPO_URL" = "$PUBLIC_REPO_URL" ]; then
+              echo "❌ 代码检出失败"
+              exit 1
+            fi
+
+            echo "⚠️ Gitea 内网检出失败，回退到公网地址"
+            fetch_repository "$PUBLIC_REPO_URL"
           fi
 
           git checkout --force FETCH_HEAD
