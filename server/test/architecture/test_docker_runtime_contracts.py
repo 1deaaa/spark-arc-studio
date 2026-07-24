@@ -14,6 +14,15 @@ def test_docker_runtime_keeps_local_embedding_native_dependencies() -> None:
     assert "libgomp.so.1" in dockerfile
 
 
+def test_docker_runtime_includes_project_manifest_and_smoke_tests_it() -> None:
+    dockerfile = (PROJECT_ROOT / "Dockerfile").read_text(encoding="utf-8")
+    gitea_deploy = (PROJECT_ROOT / ".gitea" / "workflows" / "deploy.yml").read_text(encoding="utf-8")
+
+    assert "COPY sparkarc.json ./sparkarc.json" in dockerfile
+    assert "Path('/app/sparkarc.json').is_file()" in gitea_deploy
+    assert "from core.network_probe import get_hf_candidates" in gitea_deploy
+
+
 def test_docker_deployments_keep_runtime_cache_persistent() -> None:
     compose = (PROJECT_ROOT / "docker-compose.yml").read_text(encoding="utf-8")
     gitea_deploy = (PROJECT_ROOT / ".gitea" / "workflows" / "deploy.yml").read_text(encoding="utf-8")

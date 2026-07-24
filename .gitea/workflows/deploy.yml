@@ -79,14 +79,15 @@ jobs:
           echo "✅ 镜像构建完成"
 
       # ========================================
-      # Step 3: 测试（预留）
+      # Step 3: 镜像运行时烟测
       # ========================================
-      # 将来可扩展：pytest 单元测试、前端测试等
-      # 示例: docker run --rm $IMAGE_TAG pytest server/test/ -v
+      # 在替换线上容器前验证根配置已进入镜像，且依赖该配置的模块可以导入。
       # ========================================
-      - name: 🧪 测试
+      - name: 🧪 验证镜像运行时
         shell: sh
-        run: echo "📋 待添加测试"
+        run: |
+          docker run --rm --entrypoint python "$IMAGE_TAG" -c \
+            "from pathlib import Path; assert Path('/app/sparkarc.json').is_file(); from core.network_probe import get_hf_candidates; print('✅ 镜像运行时验证通过')"
 
       # ========================================
       # Step 4: 部署
