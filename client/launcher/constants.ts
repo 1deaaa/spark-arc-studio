@@ -17,8 +17,5 @@ export const LAUNCHER_LOCAL_BACKEND_DIR_NAMES = ['server', 'sparkarc-server'] as
 /** 用户目录状态文件名（Tauri fs 插件使用） */
 export const LAUNCHER_SERVICE_RECORD_FILE = '.sparkarc/service.json';
 
-/** 项目 GitHub 仓库地址 */
-export const LAUNCHER_GITHUB_REPO_URL = 'https://github.com/1deaaa/spark-arc-studio.git';
-
 /** localStorage key：用户是否已确认过默认远端免责声明 */
 export const LAUNCHER_DEFAULT_REMOTE_ACK_KEY = 'spark_launcher_default_remote_acknowledged';

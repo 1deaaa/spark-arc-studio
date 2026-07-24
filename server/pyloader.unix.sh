@@ -29,6 +29,8 @@ REQ_HASH_FILE="$ENV_DIR/.requirements.sha256"
 PYTHON_EXE="$ENV_DIR/bin/python3"
 INIT_SCRIPT="$BASE_DIR/init_env.py"
 REQ_FILE="$BASE_DIR/requirements.txt"
+PROJECT_ROOT="$(cd "$BASE_DIR/.." && pwd)"
+SPARKARC_CONFIG="$PROJECT_ROOT/sparkarc.json"
 
 # ===== MIRROR CONFIG =====
 # 本脚本开头会根据出口 IP 自动探测网络区域并选择镜像。
@@ -36,24 +38,87 @@ REQ_FILE="$BASE_DIR/requirements.txt"
 PIP_MIRROR="${PYLOADER_PIP_MIRROR:-}"
 PYTHON_MIRROR_BASE="${PYLOADER_PYTHON_MIRROR_BASE:-}"
 
+read_network_config() {
+    local resource="$1"
+    local country="${2:-}"
+    if ! command -v python3 >/dev/null 2>&1; then
+        error "python3 is required to read $SPARKARC_CONFIG before portable Python is installed."
+        exit 1
+    fi
+    python3 - "$SPARKARC_CONFIG" "$resource" "$country" <<'PY'
+import json
+import sys
+
+path, resource, country = sys.argv[1:]
+with open(path, encoding="utf-8") as stream:
+    config = json.load(stream)
+route = config["network"]["resources"][resource]
+preferred = route["mainland"] if country == "CN" else route["default"]
+fallback = route["default"] if country == "CN" else route["mainland"]
+for value in [*preferred, *fallback]:
+    if isinstance(value, str) and value.strip():
+        print(value.strip())
+        break
+PY
+}
+
+read_geoip_providers() {
+    if ! command -v python3 >/dev/null 2>&1; then
+        return 0
+    fi
+    python3 - "$SPARKARC_CONFIG" <<'PY'
+import json
+import sys
+
+with open(sys.argv[1], encoding="utf-8") as stream:
+    config = json.load(stream)
+for value in config["network"]["geoIpProviders"]:
+    if isinstance(value, str) and value.strip():
+        print(value.strip())
+PY
+}
+
 # 探测 IP 归属地（中国大陆返回 CN），失败时返回空字符串。
 detect_country_code() {
-    local providers=(
-        "https://freeipapi.com/api/json/"
-        "https://ipapi.co/json/"
-        "https://ipwho.is/json/"
-    )
-    for provider in "${providers[@]}"; do
-        local code=""
+    local provider code candidate total best_code="" best_count=0 tied=0
+    local codes=()
+    local seen=" "
+
+    while IFS= read -r provider; do
+        code=""
         if command -v curl >/dev/null 2>&1; then
-            code="$(curl -fsSL --max-time 3 "$provider" 2>/dev/null | \
+            code="$(curl --noproxy '*' -fsSL --max-time 3 "$provider" 2>/dev/null | \
                 python3 -c "import sys,json; d=json.load(sys.stdin); print((d.get('countryCode') or d.get('country_code') or d.get('country') or '').strip().upper())" 2>/dev/null)" || true
         fi
-        if [ -n "$code" ] && [ "${#code}" -ge 2 ]; then
-            echo "$code"
-            return 0
+        if [ "${#code}" -eq 2 ]; then
+            codes+=("$code")
+        fi
+    done < <(read_geoip_providers)
+
+    for candidate in "${codes[@]}"; do
+        case "$seen" in
+            *" $candidate "*) continue ;;
+        esac
+        seen+="$candidate "
+        total=0
+        for code in "${codes[@]}"; do
+            if [ "$code" = "$candidate" ]; then
+                total=$((total + 1))
+            fi
+        done
+        if [ "$total" -gt "$best_count" ]; then
+            best_code="$candidate"
+            best_count="$total"
+            tied=0
+        elif [ "$total" -eq "$best_count" ]; then
+            tied=1
         fi
     done
+
+    if [ "$best_count" -ge 2 ] && [ "$tied" -eq 0 ]; then
+        echo "$best_code"
+        return 0
+    fi
     echo ""
     return 1
 }
@@ -67,17 +132,19 @@ resolve_mirrors() {
     local country=""
     country="$(detect_country_code)"
 
+    if [ -z "$PIP_MIRROR" ]; then
+        PIP_MIRROR="$(read_network_config pypi "$country")"
+    fi
+    if [ -z "$PYTHON_MIRROR_BASE" ]; then
+        PYTHON_MIRROR_BASE="$(read_network_config python_standalone "$country")"
+    fi
+
     if [ "$country" = "CN" ]; then
-        log "Detected mainland China network (CN), using domestic mirrors."
-        PIP_MIRROR="${PIP_MIRROR:-https://mirrors.aliyun.com/pypi/simple/}"
-        PYTHON_MIRROR_BASE="${PYTHON_MIRROR_BASE:-https://mirrors.ustc.edu.cn}"
+        log "Detected mainland China network (CN), using configured domestic candidates."
     else
-        log "Network region: ${country:-UNKNOWN}, using default mirrors."
-        PIP_MIRROR="${PIP_MIRROR:-https://pypi.org/simple/}"
-        PYTHON_MIRROR_BASE="${PYTHON_MIRROR_BASE:-https://github.com}"
+        log "Network region: ${country:-UNKNOWN}, using configured default candidates."
     fi
 }
-resolve_mirrors
 
 # ===== COLORS =====
 COLOR_YELLOW='\033[1;33m'
@@ -87,6 +154,8 @@ COLOR_RESET='\033[0m'
 
 log() { echo -e "${COLOR_YELLOW}[pyloader]${COLOR_RESET} $*"; }
 error() { echo -e "${COLOR_RED}[ERROR]${COLOR_RESET} $*" >&2; }
+
+resolve_mirrors
 
 # ===== PLATFORM DETECTION =====
 detect_platform() {

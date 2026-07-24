@@ -42,6 +42,7 @@ $ArchiveName       = $null
 $ArchiveLocal      = $null
 $ResolvedPythonVersion = $null
 $ResolvedReleaseTag    = $null
+$NetworkProbeScript = Join-Path (Split-Path -Parent $BasePath) "scripts\network_probe.ps1"
 
 # ===== FUNCTIONS =====
 function Exit-WithError {
@@ -52,43 +53,27 @@ function Exit-WithError {
 }
 
 function Resolve-Mirrors {
-    # 如果调用方已经显式覆盖了镜像，则跳过探测
-    if ($PipMirror -and $PythonMirrorBase) {
-        Write-Host "[mirror] Using caller-provided mirror overrides." -ForegroundColor Cyan
-        $script:MirrorLatestUrl = "$PythonMirrorBase/github-release/astral-sh/python-build-standalone/LatestRelease/"
-        return
+    if (-not (Test-Path $NetworkProbeScript)) {
+        Exit-WithError "Network probe script not found: $NetworkProbeScript"
+    }
+    . $NetworkProbeScript
+
+    $region = Get-NetworkRegion
+    if (-not $PipMirror) {
+        $script:PipMirror = (Get-RecommendedMirror -Type "pypi" -Probe $true).Primary
+    }
+    if (-not $PythonMirrorBase) {
+        $script:PythonMirrorBase = (Get-RecommendedMirror -Type "python_standalone" -Probe $true).Primary.TrimEnd("/")
     }
 
-    $providers = @(
-        "https://freeipapi.com/api/json/"
-        "https://ipapi.co/json/"
-        "https://ipwho.is/json/"
-    )
-
-    $countryCode = $null
-    foreach ($provider in $providers) {
-        try {
-            $resp = Invoke-RestMethod -Uri $provider -TimeoutSec 3 -ErrorAction Stop
-            $countryCode = ($resp.countryCode -or $resp.country_code -or $resp.country)
-            if ($countryCode) {
-                $countryCode = $countryCode.ToString().Trim().ToUpper()
-                if ($countryCode.Length -ge 2) { break }
-            }
-        }
-        catch {
-            continue
-        }
+    if ($env:PYLOADER_PIP_MIRROR -or $env:PYLOADER_PYTHON_MIRROR_BASE) {
+        Write-Host "[mirror] Using caller-provided mirror overrides where supplied." -ForegroundColor Cyan
     }
-
-    if ($countryCode -eq "CN") {
-        Write-Host "[mirror] Detected mainland China network (CN), using domestic mirrors." -ForegroundColor Cyan
-        $script:PipMirror         = if ($PipMirror) { $PipMirror } else { "https://mirrors.aliyun.com/pypi/simple/" }
-        $script:PythonMirrorBase  = if ($PythonMirrorBase) { $PythonMirrorBase } else { "https://mirrors.ustc.edu.cn" }
+    elseif ($region.IsMainlandChina) {
+        Write-Host "[mirror] Detected mainland China network (CN), using configured domestic candidates." -ForegroundColor Cyan
     }
     else {
-        Write-Host "[mirror] Network region: ${countryCode}, using default mirrors." -ForegroundColor Cyan
-        $script:PipMirror         = if ($PipMirror) { $PipMirror } else { "https://pypi.org/simple/" }
-        $script:PythonMirrorBase  = if ($PythonMirrorBase) { $PythonMirrorBase } else { "https://github.com" }
+        Write-Host "[mirror] Network region: $($region.CountryCode), using configured default candidates." -ForegroundColor Cyan
     }
 
     $script:MirrorLatestUrl = "$PythonMirrorBase/github-release/astral-sh/python-build-standalone/LatestRelease/"
@@ -116,11 +101,19 @@ function Get-RequirementsHash {
         return $null
     }
 
+    $stream = $null
+    $sha256 = $null
     try {
-        return (Get-FileHash -Path $ReqFile -Algorithm SHA256).Hash
+        $stream = [System.IO.File]::OpenRead($ReqFile)
+        $sha256 = [System.Security.Cryptography.SHA256]::Create()
+        return [System.BitConverter]::ToString($sha256.ComputeHash($stream)).Replace("-", "")
     }
     catch {
         return $null
+    }
+    finally {
+        if ($sha256) { $sha256.Dispose() }
+        if ($stream) { $stream.Dispose() }
     }
 }
 
@@ -196,7 +189,24 @@ function Download-ResolvedArchive {
     try {
         $mirrorHost = ([uri]$ResolvedInfo.MirrorUrl).Host
         $session = New-Object Microsoft.PowerShell.Commands.WebRequestSession
-        $session.Cookies.Add((New-Object System.Net.Cookie("addr", "122.195.16.144", "/", $mirrorHost)))
+
+        # USTC 大文件镜像会先返回 JavaScript 校验页，Cookie 值必须来自本次请求的实际出口 IP。
+        if ($mirrorHost -eq "mirrors.ustc.edu.cn") {
+            $verification = Invoke-WebRequest -Uri $ResolvedInfo.MirrorUrl -WebSession $session -UseBasicParsing
+            $cookieMatch = [regex]::Match(
+                [string]$verification.Content,
+                'document\.cookie\s*=\s*"addr=([^;"]+)'
+            )
+            if (-not $cookieMatch.Success) {
+                throw "USTC mirror verification page did not provide an address cookie"
+            }
+            $verificationAddress = $cookieMatch.Groups[1].Value
+            [System.Net.IPAddress]$parsedAddress = $null
+            if (-not [System.Net.IPAddress]::TryParse($verificationAddress, [ref]$parsedAddress)) {
+                throw "USTC mirror returned an invalid verification address"
+            }
+            $session.Cookies.Add((New-Object System.Net.Cookie("addr", $verificationAddress, "/", $mirrorHost)))
+        }
 
         Invoke-WebRequest -Uri $ResolvedInfo.MirrorUrl -WebSession $session -OutFile $ArchiveLocal -UseBasicParsing
         if ((Get-Item $ArchiveLocal).Length -lt 1MB) {
@@ -205,8 +215,10 @@ function Download-ResolvedArchive {
         Write-Host "      Download complete." -ForegroundColor Green
     }
     catch {
+        $failureReason = $_.Exception.Message
         if (Test-Path $ArchiveLocal) { Remove-Item $ArchiveLocal -Force }
         Exit-WithError ("Mirror download failed. Check your network.`n" +
+            "Reason: $failureReason`n" +
             "You can also download manually and place it here:`n" +
             "  File: $ArchiveName`n" +
             "  URL:  $($ResolvedInfo.MirrorUrl)")
@@ -473,8 +485,9 @@ else {
 $markerContent = "Deployed: $(Get-Date -Format 'yyyy-MM-dd HH:mm:ss') | Python $ResolvedPythonVersion (standalone, zero-registry) | Release $ResolvedReleaseTag"
 $markerContent | Set-Content -Path $MarkerFile -Encoding UTF8
 
-if ($CurrentReqHash) {
-    $CurrentReqHash | Set-Content -Path $ReqHashFile -Encoding UTF8
+$FinalReqHash = Get-RequirementsHash
+if ($FinalReqHash) {
+    $FinalReqHash | Set-Content -Path $ReqHashFile -Encoding UTF8
 }
 elseif (Test-Path $ReqHashFile) {
     Remove-Item $ReqHashFile -Force

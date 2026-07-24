@@ -1,8 +1,8 @@
 blank_issues_enabled: false
 contact_links:
   - name: SparkArc contribution guide
-    url: https://github.com/1deaaa/sparkarc/blob/main/.github/CONTRIBUTING.md
+    url: https://github.com/1deaaa/spark-arc-studio/blob/main/.github/CONTRIBUTING.md
     about: Read project-specific architecture and contribution rules before opening implementation-heavy issues or pull requests.
   - name: Security reporting policy
-    url: https://github.com/1deaaa/sparkarc/blob/main/.github/SECURITY.md
+    url: https://github.com/1deaaa/spark-arc-studio/blob/main/.github/SECURITY.md
     about: Please do not disclose vulnerabilities publicly before the maintainer has a chance to investigate.

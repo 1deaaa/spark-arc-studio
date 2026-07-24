@@ -25,13 +25,14 @@ from typing import Any
 
 import requests
 
-# 公益 IP 归属地 API（按优先级排列）。
-# freeipapi.com：完全免费、无需 Key、返回 countryCode/countryName，额度较宽松。
-_GEOIP_PROVIDERS: list[str] = [
-    "https://freeipapi.com/api/json/",
-    "https://ipapi.co/json/",
-    "https://ipwho.is/json/",
-]
+from core.sparkarc_config import (
+    geoip_providers,
+    network_candidates,
+    repository_urls,
+)
+
+# 公益 IP 归属地 API 与候选下载源统一由仓库根目录 sparkarc.json 声明。
+_GEOIP_PROVIDERS: list[str] = geoip_providers()
 
 _PROBE_TIMEOUT = 3.0
 # 区域探测缓存 TTL（秒）。这是所有 Python 端网络探测的统一缓存时间。
@@ -39,34 +40,15 @@ _PROBE_TIMEOUT = 3.0
 # 就能重新探测并切换镜像，而不用等很久。
 NETWORK_PROBE_CACHE_TTL_SECONDS = 5
 
-# 镜像表：同一资源类型，越靠前优先级越高。
-_MIRROR_TABLE: dict[str, dict[str, list[str]]] = {
-    "pypi": {
-        "default": ["https://pypi.org/simple/"],
-        "mainland": [
-            "https://mirrors.aliyun.com/pypi/simple/",
-            "https://pypi.tuna.tsinghua.edu.cn/simple/",
-            "https://mirrors.ustc.edu.cn/pypi/web/simple/",
-        ],
-    },
-    "github_release": {
-        "default": ["https://github.com/"],
-        "mainland": [
-            "https://mirrors.ustc.edu.cn/github-release/",
-            "https://gh-proxy.com/",
-        ],
-    },
-    "huggingface": {
-        # 国内最常用、额度最宽的 HF 公益镜像。
-        "default": ["https://huggingface.co"],
-        "mainland": [
-            "https://hf-mirror.com",
-        ],
-    },
-    "gh_proxy": {
-        "default": ["https://gh-proxy.com/"],
-        "mainland": ["https://gh-proxy.com/"],
-    },
+# 资源名称受 sparkarc.json 的 network.resources 约束；这里仅保留兼容入口白名单。
+_SUPPORTED_MIRROR_TYPES = {
+    "pypi",
+    "github_release",
+    "huggingface",
+    "gh_proxy",
+    "python_standalone",
+    "node_distribution",
+    "npm_registry",
 }
 
 _region_cache: tuple[float, dict[str, Any] | None] = (0.0, None)
@@ -76,14 +58,66 @@ def _now() -> float:
     return time.monotonic()
 
 
-def _fetch_json(url: str, timeout: float = 5.0) -> dict[str, Any] | None:
+def _fetch_json_direct(url: str, timeout: float = 5.0) -> dict[str, Any] | None:
+    """绕过 HTTP(S)_PROXY 查询独立 GeoIP 源，避免代理出口污染判断。"""
     try:
-        resp = requests.get(url, timeout=timeout)
-        resp.raise_for_status()
-        data = resp.json()
-        return data if isinstance(data, dict) else None
+        with requests.Session() as session:
+            session.trust_env = False
+            resp = session.get(url, timeout=timeout)
+            resp.raise_for_status()
+            data = resp.json()
+            return data if isinstance(data, dict) else None
     except Exception:
         return None
+
+
+def _extract_country(data: dict[str, Any]) -> tuple[str, str] | None:
+    country_code = (
+        data.get("countryCode")
+        or data.get("country_code")
+        or data.get("country")
+        or ""
+    )
+    country_name = (
+        data.get("countryName")
+        or data.get("country_name")
+        or data.get("country")
+        or ""
+    )
+    country_code = str(country_code).strip().upper()
+    if len(country_code) != 2:
+        return None
+    return country_code, str(country_name).strip()
+
+
+def _lookup_direct_consensus() -> dict[str, Any] | None:
+    """用至少两个无代理 GeoIP 服务的一致结果确认出口国家。"""
+    votes: dict[str, list[tuple[str, str]]] = {}
+    for provider in _GEOIP_PROVIDERS:
+        data = _fetch_json_direct(provider)
+        if not data:
+            continue
+        country = _extract_country(data)
+        if not country:
+            continue
+        country_code, country_name = country
+        votes.setdefault(country_code, []).append((country_name, provider))
+
+    if not votes:
+        return None
+    ordered = sorted(votes.items(), key=lambda item: (-len(item[1]), item[0]))
+    country_code, records = ordered[0]
+    is_tied = len(ordered) > 1 and len(ordered[1][1]) == len(records)
+    if len(records) < 2 or is_tied:
+        return None
+    country_name = next((name for name, _ in records if name), country_code)
+    return {
+        "country_code": country_code,
+        "country_name": country_name,
+        "is_mainland_china": country_code == "CN",
+        "provider": ", ".join(provider for _, provider in records),
+        "confidence": "direct_consensus",
+    }
 
 
 def probe_url(url: str, timeout: float | None = None, method: str = "HEAD") -> bool:
@@ -107,7 +141,8 @@ def probe_url(url: str, timeout: float | None = None, method: str = "HEAD") -> b
 def lookup_region() -> dict[str, Any]:
     """查询当前网络出口的 IP 归属地。
 
-    返回字段：country_code, country_name, is_mainland_china, provider
+    所有 GeoIP 请求必须绕过进程代理，且至少两个独立服务结果一致。
+    返回字段：country_code, country_name, is_mainland_china, provider, confidence。
     """
     global _region_cache
     cached_at, cached = _region_cache
@@ -117,37 +152,12 @@ def lookup_region() -> dict[str, Any]:
     result: dict[str, Any] = {
         "country_code": "UNKNOWN",
         "country_name": "Unknown",
-        "is_mainland_china": False,
+        "is_mainland_china": None,
         "provider": "fallback",
+        "confidence": "unknown",
     }
 
-    for provider in _GEOIP_PROVIDERS:
-        data = _fetch_json(provider)
-        if not data:
-            continue
-
-        country_code = (
-            data.get("countryCode")
-            or data.get("country_code")
-            or data.get("country")
-            or ""
-        )
-        country_name = (
-            data.get("countryName")
-            or data.get("country_name")
-            or data.get("country")
-            or ""
-        )
-        country_code = str(country_code).strip().upper()
-
-        if len(country_code) >= 2:
-            result = {
-                "country_code": country_code,
-                "country_name": str(country_name).strip(),
-                "is_mainland_china": country_code == "CN",
-                "provider": provider,
-            }
-            break
+    result = _lookup_direct_consensus() or result
 
     _region_cache = (_now(), result)
     return dict(result)
@@ -166,18 +176,12 @@ def get_country_code() -> str:
 def get_recommended_mirror(resource_type: str, probe: bool = True) -> str:
     """根据网络归属地返回某类资源的推荐镜像 URL。
 
-    resource_type 支持：pypi / github_release / huggingface / gh_proxy
+    资源类型由 sparkarc.json 的 network.resources 声明。
     """
-    if resource_type not in _MIRROR_TABLE:
+    if resource_type not in _SUPPORTED_MIRROR_TYPES:
         raise ValueError(f"不支持的资源类型：{resource_type}")
 
-    cfg = _MIRROR_TABLE[resource_type]
-    if is_mainland_china():
-        candidates = list(cfg.get("mainland", [])) + list(cfg.get("default", []))
-    else:
-        candidates = list(cfg.get("default", [])) + list(cfg.get("mainland", []))
-
-    candidates = [u for u in candidates if isinstance(u, str) and u.strip()]
+    candidates = network_candidates(resource_type, mainland=is_mainland_china())
     if not candidates:
         raise RuntimeError(f"资源类型 {resource_type} 没有可用镜像候选")
 
@@ -194,14 +198,7 @@ def get_recommended_mirror(resource_type: str, probe: bool = True) -> str:
 
 def get_hf_candidates(probe: bool = True) -> list[str]:
     """返回当前网络环境下 Hugging Face endpoint 的候选列表（按推荐顺序）。"""
-    if "huggingface" not in _MIRROR_TABLE:
-        return []
-    cfg = _MIRROR_TABLE["huggingface"]
-    if is_mainland_china():
-        candidates = list(cfg.get("mainland", [])) + list(cfg.get("default", []))
-    else:
-        candidates = list(cfg.get("default", [])) + list(cfg.get("mainland", []))
-    candidates = [u for u in candidates if isinstance(u, str) and u.strip()]
+    candidates = network_candidates("huggingface", mainland=is_mainland_china())
     if not probe:
         return candidates
     reachable = [u for u in candidates if probe_url(u)]
@@ -212,7 +209,9 @@ def get_hf_candidates(probe: bool = True) -> list[str]:
 def get_hf_endpoint(probe: bool = True) -> str:
     """返回当前网络环境下推荐的 Hugging Face endpoint。"""
     candidates = get_hf_candidates(probe=probe)
-    return candidates[0] if candidates else _MIRROR_TABLE["huggingface"]["default"][0]
+    if candidates:
+        return candidates[0]
+    return network_candidates("huggingface", mainland=False, include_fallback=False)[0]
 
 
 def get_pypi_mirror(probe: bool = True) -> str:
@@ -253,16 +252,22 @@ def probe_hf_endpoint(
     return probe_url(url, timeout=timeout, method="HEAD")
 
 
-def get_git_clone_url(repo_url: str = "https://github.com/1deaaa/spark-arc-studio.git") -> str:
-    """根据网络归属地返回适合 git clone 的 URL。
+def get_git_clone_candidates(repo_url: str | None = None, probe: bool = True) -> list[str]:
+    """按出口区域排序 Git 克隆候选，并始终保留代理回退。"""
+    official_url = repo_url or repository_urls()["clone"]
+    mainland = is_mainland_china()
+    proxies = network_candidates("gh_proxy", mainland=mainland)
+    if probe:
+        reachable = [proxy for proxy in proxies if probe_url(proxy)]
+        proxies = reachable + [proxy for proxy in proxies if proxy not in reachable]
+    proxied = [f"{proxy.rstrip('/')}/{official_url}" for proxy in proxies]
+    candidates = [*proxied, official_url] if mainland else [official_url, *proxied]
+    return list(dict.fromkeys(candidates))
 
-    中国大陆网络下通过 gh-proxy.com 代理 GitHub HTTPS 克隆地址，
-    其他地区直接返回原始地址。
-    """
-    if is_mainland_china():
-        proxy = get_gh_proxy().rstrip("/")
-        return f"{proxy}/{repo_url}"
-    return repo_url
+
+def get_git_clone_url(repo_url: str | None = None) -> str:
+    """返回当前网络环境下首选的 Git 克隆地址。"""
+    return get_git_clone_candidates(repo_url=repo_url)[0]
 
 
 def get_network_snapshot() -> dict[str, Any]:
