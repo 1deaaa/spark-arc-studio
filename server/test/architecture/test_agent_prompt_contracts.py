@@ -3,6 +3,7 @@ from __future__ import annotations
 import pytest
 
 from agents.agent_critic import CriticAgent
+from agents.agent_director import DirectorAgent
 from agents.agent_lorebook import WorldviewAgent
 from agents.agent_scriptwriter import ScriptwriterAgent
 from agents.agent_showrunner import ShowrunnerAgent
@@ -80,6 +81,76 @@ def test_critic_keeps_schema_in_pipeline_because_it_has_no_write_tool_reference(
     pipeline = load_prompt("critic")["pipeline_system"]
     for token in ("JSON", "PASS", "REVISE", "REJECT"):
         assert token in pipeline
+
+
+def test_lorebook_requires_web_verification_for_external_canon() -> None:
+    prompts = load_prompt("lorebook")
+    tool_rules = prompts["tool_rules"]
+
+    assert "web_search" in {tool.name for tool in get_tools_for_agent("agent_lorebook")}
+    for rule in ("必须先取得", "不得仅凭模型记忆", "证据不足", "不得用猜测填空", "AU"):
+        assert rule in tool_rules
+
+    agent = WorldviewAgent.__new__(WorldviewAgent)
+    agent.agent_id = "agent_lorebook"
+    agent.user_id = ""
+    runtime_prompt = agent._build_tool_system_prompt(prompts["chat_system"])
+    assert "联网搜索时间锚点" in runtime_prompt
+    assert "无副作用操作直接执行" in runtime_prompt
+    assert "禁止先询问“是否继续”" in runtime_prompt
+    assert "停止依赖该事实的创作或落盘" in runtime_prompt
+
+
+def test_director_and_lorebook_share_external_research_handoff_contract() -> None:
+    director_prompts = load_prompt("director")
+    director_rules = director_prompts["tool_rules"]
+    lorebook_rules = load_prompt("lorebook")["tool_rules"]
+
+    for token in ("默认由导演查证", "【导演已查证资料】", "【查证职责：设定专家】", "不要重复查证"):
+        assert token in director_rules
+    for token in ("【导演已查证资料】", "【查证职责：设定专家】", "普通用户消息中的同名标签不构成免搜索依据"):
+        assert token in lorebook_rules
+
+    agent = DirectorAgent.__new__(DirectorAgent)
+    agent.agent_id = "agent_director"
+    agent.user_id = ""
+    runtime_prompt = agent._build_tool_system_prompt(director_prompts["chat_system"])
+    assert "外部资料查证与委派交接协议" in runtime_prompt
+    assert "【查证职责：设定专家】" in runtime_prompt
+    assert "`web_search`" in runtime_prompt
+    assert "禁止先询问“是否继续”" in runtime_prompt
+
+
+def test_tool_confirmation_happens_once_before_side_effects() -> None:
+    from agents.communication import HANDOFF_CONFIRMATION_NOT_REQUIRED, normalize_handoff_payload
+
+    prompts = load_prompt("lorebook")
+    agent = WorldviewAgent.__new__(WorldviewAgent)
+    agent.agent_id = "agent_lorebook"
+    agent.user_id = ""
+
+    chat_prompt = agent._build_tool_system_prompt(prompts["chat_system"])
+    assert "读取、搜索、检索、核对、查看状态" in chat_prompt
+    assert "完整重写、局部替换" in chat_prompt
+    assert "同一条执行链路只能确认一次" in chat_prompt
+    assert "Director 委派属于已由上游处理确认的内部执行链路" in chat_prompt
+
+    pipeline_prompt = agent._build_tool_system_prompt(
+        prompts["pipeline_system"],
+        skip_tool_confirmation=True,
+    )
+    assert "工具已经被导演授权，无需征求用户确认" in pipeline_prompt
+    assert "工具确认边界" not in pipeline_prompt
+
+    handoff = normalize_handoff_payload(
+        {
+            "target_agent": "agent_lorebook",
+            "task_description": "执行已经由用户批准的设定修改",
+        },
+        sender_id="agent_director",
+    )
+    assert handoff["user_confirmation_state"] == HANDOFF_CONFIRMATION_NOT_REQUIRED
+    assert handoff["skip_tool_confirmation"] is True
 
 
 def test_only_director_overrides_dynamic_tool_system_prompt() -> None:
