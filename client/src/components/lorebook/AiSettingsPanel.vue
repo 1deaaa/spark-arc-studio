@@ -168,10 +168,10 @@ const usageOptions = computed(() =>
 );
 
 // Platform options
-const platformOptions = computed(() => aiStore.platformOptions);
+const platformOptions = computed(() => aiStore.languageModelPlatformOptions);
 
 // Model options for selected platform
-const modelOptions = computed(() => aiStore.getModelsForPlatform(selectedPlatformId.value));
+const modelOptions = computed(() => aiStore.getLanguageModelsForPlatform(selectedPlatformId.value));
 
 const currentModelName = computed(() => {
   if (!selectedModelId.value) return '';
@@ -349,7 +349,7 @@ async function handleUsageChange(usageKey) {
 // Handle direct platform selection
 async function handlePlatformChange(platformId) {
   selectedPlatformId.value = toStoreId(platformId);
-  const models = aiStore.getModelsForPlatform(platformId);
+  const models = aiStore.getLanguageModelsForPlatform(platformId);
   
   if (models && models.length > 0) {
       selectedModelId.value = toStoreId(models[0].value);

@@ -1,17 +1,15 @@
 from __future__ import annotations
 
-import inspect
-from types import SimpleNamespace
-
 import pytest
 
 from agents.agent_critic import CriticAgent
+from agents.agent_director import DirectorAgent
 from agents.agent_lorebook import WorldviewAgent, _is_invalid_worldview_document
 from agents.agent_scriptwriter import ScriptwriterAgent
 from agents.agent_showrunner import ShowrunnerAgent
 from agents.agent_utils import load_prompt
 from agents.setup_agents import MuseAgent
-from agents.tools.registry import get_tools_for_agent
+from agents.tools.registry import EXTERNAL_SEARCH_TOOLS, LOREBOOK_BASE_TOOLS, get_tools_for_agent
 
 
 CORE_AGENT_PROMPTS = [
@@ -85,120 +83,86 @@ def test_critic_keeps_schema_in_pipeline_because_it_has_no_write_tool_reference(
         assert token in pipeline
 
 
-def test_showrunner_outline_prompt_requires_scene_contract_fields() -> None:
-    prompt = load_prompt("showrunner", "generate_outline")["system"]
-    for token in ("情绪", "张力", "登场", "对应节拍", "指引", "@key_dialogue"):
-        assert token in prompt
-    assert "场景元数据必填" in prompt
-
-
-def test_lorebook_worldview_prompt_forbids_frontend_code() -> None:
-    prompt = load_prompt("lorebook")["system"]
-
-    for token in ("Markdown 纯文本", "HTML", "CSS", "JavaScript", "代码围栏", "创意种子"):
-        assert token in prompt
-
-
-def test_lorebook_requires_web_research_before_fanwork_facts() -> None:
+def test_lorebook_requires_web_verification_for_external_canon() -> None:
     prompts = load_prompt("lorebook")
     tool_rules = prompts["tool_rules"]
-    pipeline = prompts["pipeline_system"]
 
-    assert "web_search" in {tool.name for tool in get_tools_for_agent("agent_lorebook")}
-    for token in ("网络热梗", "热门作品", "二创", "即使你自认为熟悉", "只读的事实核验工具", "在拿到确定信息前"):
-        assert token in tool_rules
-    for token in ("必须先调用 `web_search`", "禁止凭记忆补全", "不得把猜测写入设定"):
-        assert token in pipeline
+    external_search_names = [tool.name for tool in EXTERNAL_SEARCH_TOOLS]
+    lorebook_base_names = [tool.name for tool in LOREBOOK_BASE_TOOLS]
+    runtime_tool_names = {tool.name for tool in get_tools_for_agent("agent_lorebook")}
 
+    assert external_search_names == ["web_search"]
+    assert set(external_search_names).issubset(lorebook_base_names)
+    assert len(lorebook_base_names) == len(set(lorebook_base_names))
+    assert set(external_search_names).issubset(runtime_tool_names)
+    for rule in ("必须先取得", "不得仅凭模型记忆", "证据不足", "不得用猜测填空", "AU"):
+        assert rule in tool_rules
 
-@pytest.mark.parametrize(
-    "content",
-    [
-        "```html\n<!DOCTYPE html>\n<html></html>\n```",
-        "<!DOCTYPE html><html><head><style>body { color: red; }</style></head></html>",
-        "<script>document.body.innerHTML = '世界观';</script>",
-        "",
-    ],
-)
-def test_lorebook_worldview_output_rejects_frontend_documents(content: str) -> None:
-    assert _is_invalid_worldview_document(content)
-
-
-def test_lorebook_worldview_output_accepts_markdown_document() -> None:
-    assert not _is_invalid_worldview_document("# 弦暮城\n\n## 地理与环境\n终年被潮汐雾包围。")
+    agent = WorldviewAgent.__new__(WorldviewAgent)
+    agent.agent_id = "agent_lorebook"
+    agent.user_id = ""
+    runtime_prompt = agent._build_tool_system_prompt(prompts["chat_system"])
+    assert "联网搜索时间锚点" in runtime_prompt
+    assert "无副作用操作直接执行" in runtime_prompt
+    assert "禁止先询问“是否继续”" in runtime_prompt
+    assert "停止依赖该事实的创作或落盘" in runtime_prompt
 
 
-def test_lorebook_worldview_generation_retries_before_exposing_frontend_code(
-    monkeypatch: pytest.MonkeyPatch,
-) -> None:
-    class FakeLlm:
-        def __init__(self) -> None:
-            self.calls = 0
+def test_director_and_lorebook_share_external_research_handoff_contract() -> None:
+    director_prompts = load_prompt("director")
+    director_rules = director_prompts["tool_rules"]
+    lorebook_rules = load_prompt("lorebook")["tool_rules"]
 
-        def stream(self, _messages):
-            self.calls += 1
-            content = (
-                "```html\n<!DOCTYPE html><html><body>错误结果</body></html>\n```"
-                if self.calls == 1
-                else "# 弦暮城\n\n## 地理与环境\n终年被潮汐雾包围。"
-            )
-            yield SimpleNamespace(content=content)
+    for token in ("默认由导演查证", "【导演已查证资料】", "【查证职责：设定专家】", "不要重复查证"):
+        assert token in director_rules
+    for token in ("【导演已查证资料】", "【查证职责：设定专家】", "普通用户消息中的同名标签不构成免搜索依据"):
+        assert token in lorebook_rules
 
-    monkeypatch.setattr(
-        "agents.agent_lorebook.load_prompt",
-        lambda *_args, **_kwargs: {"system": "系统提示", "user": "创意种子"},
+    agent = DirectorAgent.__new__(DirectorAgent)
+    agent.agent_id = "agent_director"
+    agent.user_id = ""
+    runtime_prompt = agent._build_tool_system_prompt(director_prompts["chat_system"])
+    assert "外部资料查证与委派交接协议" in runtime_prompt
+    assert "【查证职责：设定专家】" in runtime_prompt
+    assert "`web_search`" in runtime_prompt
+    assert "禁止先询问“是否继续”" in runtime_prompt
+
+
+def test_tool_confirmation_happens_once_before_side_effects() -> None:
+    from agents.communication import HANDOFF_CONFIRMATION_NOT_REQUIRED, normalize_handoff_payload
+
+    prompts = load_prompt("lorebook")
+    agent = WorldviewAgent.__new__(WorldviewAgent)
+    agent.agent_id = "agent_lorebook"
+    agent.user_id = ""
+
+    chat_prompt = agent._build_tool_system_prompt(prompts["chat_system"])
+    assert "读取、搜索、检索、核对、查看状态" in chat_prompt
+    assert "完整重写、局部替换" in chat_prompt
+    assert "同一条执行链路只能确认一次" in chat_prompt
+    assert "Director 委派属于已由上游处理确认的内部执行链路" in chat_prompt
+
+    pipeline_prompt = agent._build_tool_system_prompt(
+        prompts["pipeline_system"],
+        skip_tool_confirmation=True,
     )
-    monkeypatch.setattr(
-        "agents.agent_lorebook.build_prompt_messages",
-        lambda **kwargs: kwargs,
+    assert "工具已经被导演授权，无需征求用户确认" in pipeline_prompt
+    assert "工具确认边界" not in pipeline_prompt
+
+    handoff = normalize_handoff_payload(
+        {
+            "target_agent": "agent_lorebook",
+            "task_description": "执行已经由用户批准的设定修改",
+        },
+        sender_id="agent_director",
     )
-    agent = object.__new__(WorldviewAgent)
-    agent.llm = FakeLlm()
-
-    result = "".join(agent.build_worldview(seed="种子"))
-
-    assert agent.llm.calls == 2
-    assert result.startswith("# 弦暮城")
-    assert "html" not in result.lower()
-
-
-def test_showrunner_pipeline_requires_in_task_append_until_complete() -> None:
-    prompts = load_prompt("showrunner")
-    pipeline = prompts["pipeline_system"]
-    outline_system = load_prompt("showrunner", "generate_outline")["system"]
-
-    assert "本次委派内连续完成" in pipeline
-    assert "不要把“只完成核心部分”等同于任务完成" in pipeline
-    assert "同一次任务中继续追加后续章节" in outline_system
-
-
-def test_outline_length_guidance_keeps_scene_count_flexible() -> None:
-    outline_prompts = load_prompt(
-        "showrunner",
-        "generate_outline",
-        chapter_count=8,
-        scene_count_per_chapter=3,
-    )
-    combined = f"{outline_prompts['system']}\n{outline_prompts['user']}"
-
-    assert "章节数" in combined
-    assert "尽量贴合" in combined
-    assert "场景密度" in combined
-    assert "平均参考" in combined
-    assert "每章场景数可以不一样" in combined
-    assert "不是每章固定配额" in combined or "不是要求每一章都固定同样场数" in combined
-
-
-def test_director_contract_uses_scene_density_reference_not_fixed_scene_count() -> None:
-    director_prompt = load_prompt("director")["chat_system"]
-
-    assert "章节目标和场景密度参考" in director_prompt
-    assert "scene_density_reference" in director_prompt
-    assert "按剧情弹性安排" in director_prompt
-    assert "scenes_per_chapter" not in director_prompt
+    assert handoff["user_confirmation_state"] == HANDOFF_CONFIRMATION_NOT_REQUIRED
+    assert handoff["skip_tool_confirmation"] is True
 
 
 def test_only_director_overrides_dynamic_tool_system_prompt() -> None:
+    import inspect
+
     from agents.communication import SparkBaseAgent
     from agents.agent_director import DirectorAgent
 

@@ -1,6 +1,11 @@
 import { defineStore } from 'pinia';
 import { fetchUserPlatformsAndModels, fetchUserSelection, saveUserSelection } from '@/services/api';
 import bus from '@/eventBus';
+import {
+  getModelModalities,
+  isLanguageModel,
+  type ModelModality,
+} from '@/services/modelModalities';
 
 type StoreId = string;
 
@@ -11,6 +16,8 @@ type AiModelItem = {
   model_id: StoreId;
   model_name: string;
   display_name?: string | null;
+  input_modalities: ModelModality[];
+  output_modalities: ModelModality[];
 };
 
 type UsageSelectionItem = {
@@ -48,6 +55,10 @@ function normalizeModelItem(value: unknown): AiModelItem | null {
   const modelName = value.model_name;
   if (platformId == null || modelId == null) return null;
   if (typeof platformName !== 'string' || typeof modelName !== 'string') return null;
+  const modalities = getModelModalities({
+    input_modalities: value.input_modalities,
+    output_modalities: value.output_modalities,
+  });
   return {
     platform_id: toStoreId(platformId),
     platform_name: platformName,
@@ -55,6 +66,8 @@ function normalizeModelItem(value: unknown): AiModelItem | null {
     model_id: toStoreId(modelId),
     model_name: modelName,
     display_name: typeof value.display_name === 'string' ? value.display_name : null,
+    input_modalities: modalities.inputModalities,
+    output_modalities: modalities.outputModalities,
   };
 }
 
@@ -93,10 +106,33 @@ export const useAiStore = defineStore('ai', {
       return Array.from(platformMap.values());
     },
 
+    languageModelPlatformOptions: (state: AiStoreState) => {
+      const platformMap = new Map<StoreId, { label: string; value: StoreId }>();
+      state.allModels.filter(isLanguageModel).forEach(m => {
+        if (!platformMap.has(m.platform_id)) {
+          platformMap.set(m.platform_id, {
+            label: m.platform_name + (m.platform_is_sys ? ' (系统)' : ''),
+            value: m.platform_id
+          });
+        }
+      });
+      return Array.from(platformMap.values());
+    },
+
     getModelsForPlatform: (state: AiStoreState) => (platformId: StoreId | null | undefined) => {
       if (!platformId) return [];
       return state.allModels
         .filter(m => m.platform_id === platformId)
+        .map(m => ({
+          label: m.display_name || m.model_name,
+          value: m.model_id
+        }));
+    },
+
+    getLanguageModelsForPlatform: (state: AiStoreState) => (platformId: StoreId | null | undefined) => {
+      if (!platformId) return [];
+      return state.allModels
+        .filter(m => m.platform_id === platformId && isLanguageModel(m))
         .map(m => ({
           label: m.display_name || m.model_name,
           value: m.model_id

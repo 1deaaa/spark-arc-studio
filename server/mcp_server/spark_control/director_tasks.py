@@ -7,17 +7,22 @@ MCP 导演任务管理器。
 
 from __future__ import annotations
 
+import logging
 import threading
 import time
 import uuid
 from dataclasses import dataclass, field
+from pathlib import Path
 from typing import Any
 
 from agents.routes.chat_persistence import ChatStreamAccumulator
+from core.json_state import load_json_file, save_json_file_atomic
+from core.utils import USERDATA_ROOT, validate_project_name
 from mcp_server.shared.tool_adapter import ensure_query_context
 
 
 TERMINAL_STATUSES = {"completed", "cancelled", "error"}
+logger = logging.getLogger(__name__)
 
 
 @dataclass
@@ -66,7 +71,9 @@ class DirectorTaskEntry:
             self.accumulator.append_event(payload, seq=self.next_seq)
             self.updated_at = time.time()
             self._refresh_progress_from_event(payload)
-            return dict(payload)
+            result = dict(payload)
+        _persist_user_tasks(self.user_id)
+        return result
 
     def _refresh_progress_from_event(self, event: dict[str, Any]) -> None:
         event_name = str(event.get("event") or "").strip()
@@ -93,8 +100,8 @@ class DirectorTaskEntry:
             self.phase = "background_auto_write_started"
             self.summary = "导演已启动后台自动写作任务。"
         elif event_name == "error":
-            self.phase = "error"
-            self.summary = "导演任务发生错误。"
+            self.phase = str(event.get("phase") or "error")
+            self.summary = str(event.get("message") or "导演任务发生错误。")
 
     def events_after(self, after_seq: int = 0, limit: int = 50) -> list[dict[str, Any]]:
         cursor = max(0, int(after_seq or 0))
@@ -142,6 +149,7 @@ class DirectorTaskEntry:
 
 _tasks: dict[str, DirectorTaskEntry] = {}
 _lock = threading.RLock()
+_loaded_users: set[str] = set()
 
 
 def submit_director_task(
@@ -153,11 +161,13 @@ def submit_director_task(
     return_style: str = "brief",
 ) -> dict[str, Any]:
     """提交导演远程工单，立即返回任务状态。"""
+    _ensure_user_tasks_loaded(user_id)
+    safe_project_name = validate_project_name(project_name)
     task_id = f"dt_{uuid.uuid4().hex}"
     entry = DirectorTaskEntry(
         task_id=task_id,
         user_id=str(user_id),
-        project_name=str(project_name or "").strip(),
+        project_name=safe_project_name,
         instruction=str(instruction or "").strip(),
         intent=_normalize_intent(intent),
         return_style=_normalize_return_style(return_style),
@@ -180,8 +190,8 @@ def submit_director_task(
     return entry.status_payload(include_latest_events=False)
 
 
-def get_director_task(task_id: str) -> dict[str, Any]:
-    entry = _get_task_or_none(task_id)
+def get_director_task(task_id: str, *, user_id: str) -> dict[str, Any]:
+    entry = _get_owned_task_or_none(task_id, user_id)
     if not entry:
         return {"error": f"未找到导演任务：{task_id}"}
     return entry.status_payload()
@@ -193,6 +203,7 @@ def list_director_tasks(
     project_name: str | None = None,
     status: str | None = None,
 ) -> list[dict[str, Any]]:
+    _ensure_user_tasks_loaded(user_id)
     wanted_project = str(project_name or "").strip()
     wanted_status = str(status or "").strip()
     with _lock:
@@ -210,8 +221,14 @@ def list_director_tasks(
     return result
 
 
-def read_director_task_events(task_id: str, after_seq: int = 0, limit: int = 50) -> dict[str, Any]:
-    entry = _get_task_or_none(task_id)
+def read_director_task_events(
+    task_id: str,
+    *,
+    user_id: str,
+    after_seq: int = 0,
+    limit: int = 50,
+) -> dict[str, Any]:
+    entry = _get_owned_task_or_none(task_id, user_id)
     if not entry:
         return {"error": f"未找到导演任务：{task_id}", "events": []}
     return {
@@ -222,15 +239,15 @@ def read_director_task_events(task_id: str, after_seq: int = 0, limit: int = 50)
     }
 
 
-def read_director_task_result(task_id: str) -> dict[str, Any]:
-    entry = _get_task_or_none(task_id)
+def read_director_task_result(task_id: str, *, user_id: str) -> dict[str, Any]:
+    entry = _get_owned_task_or_none(task_id, user_id)
     if not entry:
         return {"error": f"未找到导演任务：{task_id}"}
     return entry.result_payload()
 
 
-def cancel_director_task(task_id: str) -> dict[str, Any]:
-    entry = _get_task_or_none(task_id)
+def cancel_director_task(task_id: str, *, user_id: str) -> dict[str, Any]:
+    entry = _get_owned_task_or_none(task_id, user_id)
     if not entry:
         return {"error": f"未找到导演任务：{task_id}", "cancelled": False}
     with entry.lock:
@@ -347,6 +364,134 @@ def _normalize_return_style(value: str) -> str:
 def _get_task_or_none(task_id: str) -> DirectorTaskEntry | None:
     with _lock:
         return _tasks.get(str(task_id or "").strip())
+
+
+def _get_owned_task_or_none(task_id: str, user_id: str) -> DirectorTaskEntry | None:
+    _ensure_user_tasks_loaded(user_id)
+    entry = _get_task_or_none(task_id)
+    if entry is None or entry.user_id != str(user_id):
+        return None
+    return entry
+
+
+def _task_state_path(user_id: str) -> str:
+    return str(Path(USERDATA_ROOT) / f"uid_{user_id}" / ".sparkarc" / "mcp_director_tasks.json")
+
+
+def _entry_state_payload(entry: DirectorTaskEntry) -> dict[str, Any]:
+    with entry.lock:
+        return {
+            "task_id": entry.task_id,
+            "user_id": entry.user_id,
+            "project_name": entry.project_name,
+            "instruction": entry.instruction,
+            "intent": entry.intent,
+            "return_style": entry.return_style,
+            "status": entry.status,
+            "phase": entry.phase,
+            "current_agent": entry.current_agent,
+            "summary": entry.summary,
+            "started_at": entry.started_at,
+            "updated_at": entry.updated_at,
+            "finished_at": entry.finished_at,
+            "error_message": entry.error_message,
+            "event_log": _json_safe(entry.event_log),
+            "next_seq": entry.next_seq,
+        }
+
+
+def _persist_user_tasks(user_id: str) -> None:
+    normalized_user_id = str(user_id)
+    with _lock:
+        entries = [entry for entry in _tasks.values() if entry.user_id == normalized_user_id]
+    try:
+        save_json_file_atomic(
+            _task_state_path(normalized_user_id),
+            {"version": 1, "tasks": [_entry_state_payload(entry) for entry in entries]},
+        )
+    except Exception as exc:
+        logger.warning("MCP 导演工单状态持久化失败: %s", exc)
+
+
+def _json_safe(value: Any) -> Any:
+    if value is None or isinstance(value, (bool, int, float, str)):
+        return value
+    if isinstance(value, dict):
+        return {str(key): _json_safe(item) for key, item in value.items()}
+    if isinstance(value, (list, tuple, set)):
+        return [_json_safe(item) for item in value]
+    return str(value)
+
+
+def _entry_from_state(payload: dict[str, Any], user_id: str) -> DirectorTaskEntry | None:
+    try:
+        entry = DirectorTaskEntry(
+            task_id=str(payload["task_id"]),
+            user_id=str(user_id),
+            project_name=validate_project_name(payload["project_name"]),
+            instruction=str(payload.get("instruction") or ""),
+            intent=_normalize_intent(payload.get("intent", "execute")),
+            return_style=_normalize_return_style(payload.get("return_style", "brief")),
+            stop_event=threading.Event(),
+            status=str(payload.get("status") or "error"),
+            phase=str(payload.get("phase") or "error"),
+            current_agent=str(payload.get("current_agent") or ""),
+            summary=str(payload.get("summary") or ""),
+            started_at=float(payload.get("started_at") or time.time()),
+            updated_at=float(payload.get("updated_at") or time.time()),
+            finished_at=float(payload.get("finished_at") or 0),
+            error_message=str(payload.get("error_message") or ""),
+        )
+    except (KeyError, TypeError, ValueError):
+        return None
+
+    events = [dict(event) for event in payload.get("event_log", []) if isinstance(event, dict)]
+    entry.event_log = events
+    entry.next_seq = max(
+        int(payload.get("next_seq") or 0),
+        max((int(event.get("seq") or 0) for event in events), default=0),
+    )
+    for event in events:
+        entry.accumulator.append_event(event, seq=int(event.get("seq") or 0))
+    return entry
+
+
+def _ensure_user_tasks_loaded(user_id: str) -> None:
+    normalized_user_id = str(user_id)
+    with _lock:
+        if normalized_user_id in _loaded_users:
+            return
+        state = load_json_file(_task_state_path(normalized_user_id), dict)
+        restored = []
+        for payload in state.get("tasks", []) if isinstance(state, dict) else []:
+            if isinstance(payload, dict):
+                entry = _entry_from_state(payload, normalized_user_id)
+                if entry is not None:
+                    restored.append(entry)
+
+        interrupted = []
+        for entry in restored:
+            if entry.task_id in _tasks:
+                continue
+            _tasks[entry.task_id] = entry
+            if entry.status not in TERMINAL_STATUSES:
+                interrupted.append(entry)
+        _loaded_users.add(normalized_user_id)
+
+    for entry in interrupted:
+        with entry.lock:
+            entry.status = "error"
+            entry.phase = "interrupted"
+            entry.summary = "服务重启，导演任务已中断。"
+            entry.error_message = "服务重启导致运行中的导演任务中断。"
+            entry.finished_at = time.time()
+        entry.append_event({
+            "event": "error",
+            "status": "error",
+            "phase": "interrupted",
+            "message": entry.summary,
+            "data": entry.error_message,
+        })
 
 
 def _collect_changed_artifacts(events: list[dict[str, Any]]) -> list[dict[str, Any]]:

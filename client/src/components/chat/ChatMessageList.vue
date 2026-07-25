@@ -823,7 +823,7 @@ defineExpose({ listRef });
 /* AI 侧样式 */
 .chat-msg.assistant {
   display: block; /* 移除独立的一列，让对话框占满 */
-  padding-left: 8px; /* 给左上角的头像标签留点空间 */
+  padding-left: 18px; /* 容纳 28px 头像向左悬挂的半径及脉冲边缘，避免被列表裁剪 */
 }
 
 .chat-role {
@@ -841,6 +841,17 @@ defineExpose({ listRef });
   box-shadow: 0 2px 6px rgba(0,0,0,0.06);
   border-radius: 6px;
   color: var(--spark-primary);
+}
+
+/* 等待态仍受 chat-msg 的绘制包含约束，必须在盒内为悬浮图标预留空间。 */
+.thinking-msg,
+.retry-msg {
+  padding-top: 12px;
+}
+
+.thinking-msg .chat-role,
+.retry-msg .chat-role {
+  top: 0;
 }
 
 .ai-icon {

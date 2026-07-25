@@ -485,3 +485,4 @@ def test_non_retryable_context_error_runs_once_and_never_persists_checkpoint(mon
     assert retry_count == 0
     assert attempts["count"] == 1
     assert manager.persisted == []
+"""聊天上下文压缩、检查点与历史搜索回归。"""

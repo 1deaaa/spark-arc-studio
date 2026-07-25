@@ -5,6 +5,7 @@ import { flushPromises, mount } from '@vue/test-utils';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 
 import { i18n } from '@/i18n';
+import SparkSegment from '@/components/share/SparkSegment.vue';
 import SearchProviderSettings from '../SearchProviderSettings.vue';
 
 const { fetchWithAuth } = vi.hoisted(() => ({
@@ -17,7 +18,7 @@ vi.mock('naive-ui', async () => {
   const { defineComponent } = await import('vue');
   const createStub = (name: string) => defineComponent({
     name,
-    template: '<div><slot name="header" /><slot name="prefix" /><slot name="icon" /><slot /></div>',
+    template: '<div><slot name="header" /><slot name="prefix" /><slot name="icon" /><slot /><slot name="suffix" /></div>',
   });
   return {
     NButton: createStub('NButton'),
@@ -74,13 +75,14 @@ describe('联网搜索配置模块', () => {
     i18n.global.locale.value = 'zh-CN';
   });
 
-  it('位于模型平台列表之后且不再挂在管理员配置面板', () => {
+  it('作为模型平台管理卡片下方的独立同级卡片', () => {
     const aiManagerSource = readFileSync(resolve(process.cwd(), 'src/components/settings/AIManager.vue'), 'utf8');
     const adminSource = readFileSync(resolve(process.cwd(), 'src/components/settings/AdminConfigPanel.vue'), 'utf8');
 
     const moduleIndex = aiManagerSource.indexOf('<SearchProviderSettings');
-    expect(moduleIndex).toBeGreaterThan(aiManagerSource.indexOf('<n-collapse'));
-    expect(moduleIndex).toBeLessThan(aiManagerSource.indexOf('<!-- 添加平台弹窗 -->'));
+    expect(moduleIndex).toBeGreaterThan(aiManagerSource.lastIndexOf('</n-modal>'));
+    expect(aiManagerSource.indexOf('</template>', moduleIndex)).toBeGreaterThan(moduleIndex);
+    expect(aiManagerSource).toMatch(/<\/div>\s*<SearchProviderSettings/);
     expect(adminSource).not.toContain('SearchProviderSettings');
   });
 
@@ -100,6 +102,22 @@ describe('联网搜索配置模块', () => {
     expect(wrapper.text()).toContain('联网搜索服务');
     expect(wrapper.text()).toContain('系统托管已开启');
     expect(wrapper.text()).toContain('个人配置');
+    expect(wrapper.text()).toContain('保存我的搜索配置');
+    expect(wrapper.findAll('.provider-toolbar')).toHaveLength(2);
+    expect(wrapper.findAll('.search-provider-section')).toHaveLength(2);
+    expect(wrapper.findAllComponents(SparkSegment)).toHaveLength(2);
     expect(wrapper.text()).not.toContain('保存系统搜索配置');
+  });
+
+  it('使用紧凑自适应列并复用统一分段选择器', () => {
+    const source = readFileSync(resolve(process.cwd(), 'src/components/settings/SearchProviderSettings.vue'), 'utf8');
+
+    expect(source).toContain('<SparkSegment');
+    expect(source).not.toContain('<n-radio-button');
+    expect(source).toContain(':animated="false"');
+    expect(source).toContain('repeat(auto-fit, minmax(min(260px, 100%), 1fr))');
+    expect(source).toContain('repeat(auto-fit, minmax(min(240px, 100%), 360px))');
+    expect(source).toContain('.n-tabs-pane-wrapper');
+    expect(source).toContain('height: auto !important');
   });
 });

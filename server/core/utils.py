@@ -27,9 +27,23 @@ def get_user_projects_root(user_id):
     """获取用户所有项目的根目录"""
     return os.path.join(USERDATA_ROOT, f'uid_{user_id}', 'projects')
 
+def validate_project_name(project_name):
+    """校验并规范化项目名，禁止把路径作为项目名传入。"""
+    normalized = str(project_name or '').strip()
+    if not normalized:
+        raise ValueError("项目名称不能为空")
+    if normalized in {'.', '..'} or '/' in normalized or '\\' in normalized or '\x00' in normalized:
+        raise ValueError("项目名称不能包含路径分隔符或路径跳转符")
+    return normalized
+
 def get_project_path(user_id, project_name):
     """获取用户特定项目的路径"""
-    return os.path.join(get_user_projects_root(user_id), project_name)
+    projects_root = os.path.abspath(get_user_projects_root(user_id))
+    normalized_name = validate_project_name(project_name)
+    project_path = os.path.abspath(os.path.join(projects_root, normalized_name))
+    if os.path.commonpath((projects_root, project_path)) != projects_root:
+        raise ValueError("项目路径超出当前用户的项目目录")
+    return project_path
 
 def get_project_worldview_path(user_id, project_name):
     """获取用户特定项目的世界观文件路径"""

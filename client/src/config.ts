@@ -1,10 +1,8 @@
 // src/config.js
 // 全局配置文件
 
-/**
- * SparkArc 项目 GitHub 地址（全局唯一声明，所有品牌水印链接统一引用此处）
- */
-export const SPARKARC_GITHUB_URL = 'https://github.com/1deaaa/spark-arc-studio';
+/** 项目公开仓库地址由根目录 sparkarc.json 派生。 */
+export { SPARKARC_GITHUB_URL } from './generated/sparkarcConfig';
 
 /**
  * 自动保存的防抖延迟时间（毫秒）

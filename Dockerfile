@@ -54,6 +54,9 @@ RUN --mount=type=cache,target=/root/.cache/pip \
 # 复制后端代码
 COPY server/ ./server/
 
+# 跨语言项目常量是后端启动期依赖，容器内路径必须与仓库布局一致
+COPY sparkarc.json ./sparkarc.json
+
 # 从构建阶段复制编译好的前端静态资源
 COPY --from=frontend-builder /app/client/dist ./client/dist
 

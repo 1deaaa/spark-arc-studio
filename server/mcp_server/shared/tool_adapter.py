@@ -18,6 +18,7 @@ from __future__ import annotations
 from typing import Any
 
 from core.request_context import set_agent_context
+from core.utils import validate_project_name
 from mcp_server.spark_inspiration.logic import current_user_id as mcp_inspiration_uid_var
 
 
@@ -57,7 +58,12 @@ def invoke_langchain_tool(
     if not user_id:
         return "错误：缺少用户上下文（MCP 鉴权未通过）。"
 
-    ensure_query_context(str(user_id), project_name)
+    try:
+        safe_project_name = validate_project_name(project_name)
+    except ValueError as exc:
+        return f"错误：非法项目名称：{exc}。"
+
+    ensure_query_context(str(user_id), safe_project_name)
     try:
         result = tool.invoke(args or {})
     except RuntimeError as e:

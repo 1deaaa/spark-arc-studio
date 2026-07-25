@@ -161,7 +161,7 @@ watch(loading, (isLoading) => {
 
 async function checkAndFixUsages() {
     const usages = aiStore.usageSelections;
-    const pOptions = aiStore.platformOptions;
+    const pOptions = aiStore.languageModelPlatformOptions;
     
     if (!usages || usages.length === 0) return;
     
@@ -202,7 +202,7 @@ async function checkAndFixUsages() {
 }
 
 const usageSelections = computed(() => aiStore.usageSelections);
-const platformOptions = computed(() => aiStore.platformOptions);
+const platformOptions = computed(() => aiStore.languageModelPlatformOptions);
 
 const showAddUsageModal = ref(false);
 const showEditUsageModal = ref(false);
@@ -218,7 +218,7 @@ const newUsage = ref<{ key: string; label: string; platformId: string | null; mo
 const editingUsage = ref({ usage_key: '', usage_label: '' });
 
 function getModelsForPlatform(platformId: string | null) {
-    return aiStore.getModelsForPlatform(platformId || '');
+    return aiStore.getLanguageModelsForPlatform(platformId || '');
 }
 
 async function loadData() {
@@ -227,7 +227,7 @@ async function loadData() {
 
 async function handlePlatformChange(usage, platformId: string | null) {
     usage.platform_id = platformId;
-    const models = aiStore.getModelsForPlatform(platformId || '');
+    const models = getModelsForPlatform(platformId);
     
     if (models && models.length > 0) {
         usage.model_id = models[0].value;

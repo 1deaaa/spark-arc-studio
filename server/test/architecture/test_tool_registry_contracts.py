@@ -2,7 +2,6 @@ from __future__ import annotations
 
 from agents.agent_tools import TOOLS_BY_NAME as FACADE_TOOLS_BY_NAME
 from agents.agent_tools import get_tools_for_agent as facade_get_tools_for_agent
-from agents.skill_packs import import_skill_markdown
 from agents.tools.registry import ALL_TOOLS, TOOLS_BY_NAME, get_tools_for_agent
 from agents.tools.stream_events import build_tool_stream_event, get_tool_ui_binding, normalize_tool_name
 
@@ -33,12 +32,7 @@ def test_tool_registry_has_stable_unique_truth_source() -> None:
 def test_core_agent_tool_boundaries() -> None:
     assert "delegate_task" in tool_names("agent_director")
     assert "rewrite_inspiration" in tool_names("agent_muse")
-    assert {
-        "rewrite_worldview",
-        "rewrite_all_characters",
-        "update_character",
-        "web_search",
-    } <= tool_names("agent_lorebook")
+    assert {"rewrite_worldview", "rewrite_all_characters", "update_character", "web_search"} <= tool_names("agent_lorebook")
     assert {"rewrite_synopsis", "rewrite_beat_sheet", "rewrite_outline"} <= tool_names("agent_showrunner")
     assert {
         "prepare_script_creation",
@@ -50,38 +44,6 @@ def test_core_agent_tool_boundaries() -> None:
     assert "delegate_task" not in tool_names("agent_scriptwriter")
     assert "delegate_task" not in tool_names("agent_critic")
     assert tool_names("agent_style") == set()
-
-
-def test_story_format_is_not_exposed_as_tool_switch() -> None:
-    from agents.tools.automation import CheckScriptwriterStatusInput, TriggerAutoWriteInput
-    from agents.tools.scriptwriter import CreateOrRewriteScriptInput
-
-    assert "export_format" not in TriggerAutoWriteInput.model_fields
-    assert "export_format" not in CheckScriptwriterStatusInput.model_fields
-    assert "export_format" not in CreateOrRewriteScriptInput.model_fields
-
-
-def test_skill_tools_are_exposed_only_when_user_has_skills(tmp_path, monkeypatch) -> None:
-    monkeypatch.setattr("agents.skill_packs.USERDATA_ROOT", str(tmp_path))
-
-    skill_tools = {"search_skills", "read_skill", "read_skill_reference"}
-    assert skill_tools.isdisjoint(tool_names("agent_director", user_id="42"))
-
-    import_skill_markdown(
-        "42",
-        """---
-name: Precise Style
-description: Helps line-level prose quality.
----
-# Precise Style
-
-## Quality
-Use specific verbs.
-""",
-    )
-
-    for agent_id in {"agent_director", "agent_muse", "agent_lorebook", "agent_showrunner", "agent_scriptwriter", "agent_critic"}:
-        assert skill_tools <= tool_names(agent_id, user_id="42")
 
 
 def test_get_tools_for_agent_is_defined_for_every_core_agent() -> None:

@@ -504,11 +504,6 @@
             
         </div>
 
-        <SearchProviderSettings
-            :is-admin="isAdmin"
-            :system-service-enabled="systemConfig.llm_auto_key"
-        />
-
         <!-- 添加平台弹窗 -->
         <n-modal v-model:show="showAddPlatformModal">
             <n-card 
@@ -965,6 +960,11 @@
             </n-card>
         </n-modal>
     </div>
+
+    <SearchProviderSettings
+        :is-admin="isAdmin"
+        :system-service-enabled="systemConfig.llm_auto_key"
+    />
 </template>
 
 

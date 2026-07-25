@@ -1,4 +1,6 @@
 use serde::{Deserialize, Serialize};
+#[cfg(windows)]
+use std::os::windows::process::CommandExt;
 use std::{
     fs,
     path::{Path, PathBuf},
@@ -8,6 +10,7 @@ use std::{
 use tauri::{AppHandle, Manager};
 
 mod deployment;
+mod project_config;
 
 use deployment::{DeploymentManager, DeploymentStatus, LauncherReleaseStatus};
 
@@ -409,13 +412,12 @@ where
 
     let mut command = if is_windows {
         let mut command = Command::new("cmd.exe");
-        // `call "..."` 保持脚本路径为一个参数，支持用户目录中的空格和 `&` 等字符。
-        command.args([
-            "/D",
-            "/S",
-            "/C",
-            &format!("call \"{}\"", script_path.to_string_lossy()),
-        ]);
+        // CMD 不遵循 C 运行时的引号转义；原样传入可保留路径中的空格和 `&`。
+        command.args(["/D", "/S", "/C"]);
+        #[cfg(windows)]
+        command.raw_arg(format!(r#"call "{}""#, script_path.to_string_lossy()));
+        #[cfg(not(windows))]
+        command.arg(format!(r#"call "{}""#, script_path.to_string_lossy()));
         command
     } else {
         let mut command = Command::new("bash");
@@ -465,6 +467,10 @@ fn prepend_command_path(command: &mut Command, directory: &Path) -> Result<(), S
 
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
 pub fn run() {
+    // Libgit2 超时是进程级设置，必须早于 Tauri 运行时创建。
+    unsafe {
+        deployment::configure_git_network_timeouts().expect("无法初始化 Launcher 的 Git 网络超时");
+    }
     let builder = tauri::Builder::default()
         .invoke_handler(tauri::generate_handler![
             get_launcher_theme_state,

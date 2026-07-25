@@ -1,12 +1,21 @@
 {
-  "$schema": "../gen/schemas/desktop-schema.json",
   "identifier": "remote-desktop-shell",
   "description": "Minimal desktop permissions for self-hosted SparkArc frontends loaded over HTTP(S). Kept intentionally small so developers can deploy to arbitrary domains without editing capability files.",
-  "windows": ["*"],
-  "platforms": ["windows", "macOS", "linux"],
+  "windows": [
+    "*"
+  ],
+  "$schema": "../gen/schemas/desktop-schema.json",
+  "platforms": [
+    "windows",
+    "macOS",
+    "linux"
+  ],
   "local": false,
   "remote": {
-    "urls": ["http://*:*/*", "https://*:*/*"]
+    "urls": [
+      "http://*:*/*",
+      "https://*:*/*"
+    ]
   },
   "permissions": [
     "core:event:allow-listen",
@@ -22,9 +31,18 @@
     {
       "identifier": "opener:allow-open-url",
       "allow": [
-        { "url": "https://github.com/1deaaa/spark-arc-studio*" },
-        { "url": "https://ghfast.top/https://github.com/1deaaa/spark-arc-studio*" },
-        { "url": "https://ghproxy.net/https://github.com/1deaaa/spark-arc-studio*" }
+        {
+          "url": "https://github.com/1deaaa/spark-arc-studio*"
+        },
+        {
+          "url": "https://gh-proxy.com/https://github.com/1deaaa/spark-arc-studio*"
+        },
+        {
+          "url": "https://ghfast.top/https://github.com/1deaaa/spark-arc-studio*"
+        },
+        {
+          "url": "https://ghproxy.net/https://github.com/1deaaa/spark-arc-studio*"
+        }
       ]
     }
   ]

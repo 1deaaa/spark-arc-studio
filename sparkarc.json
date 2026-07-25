@@ -1,0 +1,78 @@
+{
+  "$schema": "./schemas/sparkarc.schema.json",
+  "schemaVersion": 1,
+  "repository": {
+    "provider": "github",
+    "slug": "1deaaa/spark-arc-studio"
+  },
+  "network": {
+    "geoIpProviders": [
+      "https://api.country.is/",
+      "https://ipwho.is/",
+      "https://freeipapi.com/api/json/"
+    ],
+    "resources": {
+      "pypi": {
+        "default": [
+          "https://pypi.org/simple/"
+        ],
+        "mainland": [
+          "https://mirrors.aliyun.com/pypi/simple/",
+          "https://pypi.tuna.tsinghua.edu.cn/simple/",
+          "https://mirrors.ustc.edu.cn/pypi/web/simple/"
+        ]
+      },
+      "npm_registry": {
+        "default": [
+          "https://registry.npmjs.org/"
+        ],
+        "mainland": [
+          "https://registry.npmmirror.com/"
+        ]
+      },
+      "github_release": {
+        "default": [
+          "https://github.com/"
+        ],
+        "mainland": [
+          "https://mirrors.ustc.edu.cn/github-release/",
+          "https://gh-proxy.com/"
+        ]
+      },
+      "gh_proxy": {
+        "default": [
+          "https://gh-proxy.com/"
+        ],
+        "mainland": [
+          "https://ghfast.top/",
+          "https://ghproxy.net/",
+          "https://gh-proxy.com/"
+        ]
+      },
+      "huggingface": {
+        "default": [
+          "https://huggingface.co"
+        ],
+        "mainland": [
+          "https://hf-mirror.com"
+        ]
+      },
+      "python_standalone": {
+        "default": [
+          "https://github.com"
+        ],
+        "mainland": [
+          "https://mirrors.ustc.edu.cn"
+        ]
+      },
+      "node_distribution": {
+        "default": [
+          "https://nodejs.org/dist"
+        ],
+        "mainland": [
+          "https://npmmirror.com/mirrors/node"
+        ]
+      }
+    }
+  }
+}

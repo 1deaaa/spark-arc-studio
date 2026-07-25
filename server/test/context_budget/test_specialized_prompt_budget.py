@@ -111,3 +111,4 @@ def test_production_single_node_stream_uses_specialized_budget_guard() -> None:
     single_node_branch = source[source.index('if mode == "single-node"') :]
     assert "prepare_specialized_prompt_messages_with_budget" in single_node_branch
     assert single_node_branch.index("prepare_specialized_prompt_messages_with_budget") < single_node_branch.index("chat.stream(messages)")
+"""专有工作模式提示词预算行为回归。"""

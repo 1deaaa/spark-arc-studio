@@ -1,0 +1,55 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "SparkArc 跨语言项目常量",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["schemaVersion", "repository", "network"],
+  "properties": {
+    "$schema": { "type": "string" },
+    "schemaVersion": { "const": 1 },
+    "repository": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["provider", "slug"],
+      "properties": {
+        "provider": { "const": "github" },
+        "slug": {
+          "type": "string",
+          "pattern": "^[A-Za-z0-9_.-]+/[A-Za-z0-9_.-]+$"
+        }
+      }
+    },
+    "network": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["geoIpProviders", "resources"],
+      "properties": {
+        "geoIpProviders": {
+          "type": "array",
+          "minItems": 2,
+          "uniqueItems": true,
+          "items": { "type": "string", "format": "uri" }
+        },
+        "resources": {
+          "type": "object",
+          "minProperties": 1,
+          "additionalProperties": {
+            "type": "object",
+            "additionalProperties": false,
+            "required": ["default", "mainland"],
+            "properties": {
+              "default": {
+                "type": "array",
+                "items": { "type": "string", "format": "uri" }
+              },
+              "mainland": {
+                "type": "array",
+                "items": { "type": "string", "format": "uri" }
+              }
+            }
+          }
+        }
+      }
+    }
+  }
+}

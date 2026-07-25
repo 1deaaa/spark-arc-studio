@@ -5,6 +5,7 @@ import {
   getModelModalities,
   isEmbeddingModel,
   isImageModel,
+  isLanguageModel,
   isTextModel,
   normalizeModelModalities,
   supportsImageInput,
@@ -47,5 +48,15 @@ describe('模型输入输出模态', () => {
     expect(isEmbeddingModel(modalities)).toBe(true);
     expect(isTextModel(modalities)).toBe(false);
     expect(isImageModel(modalities)).toBe(false);
+  });
+
+  it('语言模型排除任何包含图片输出的模型', () => {
+    expect(isLanguageModel({ output_modalities: ['text'] })).toBe(true);
+    expect(isLanguageModel({
+      input_modalities: ['text', 'image'],
+      output_modalities: ['text'],
+    })).toBe(true);
+    expect(isLanguageModel({ output_modalities: ['image'] })).toBe(false);
+    expect(isLanguageModel({ output_modalities: ['text', 'image'] })).toBe(false);
   });
 });

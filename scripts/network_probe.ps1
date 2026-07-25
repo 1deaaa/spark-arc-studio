@@ -1,7 +1,7 @@
 # network_probe.ps1 - 通用网络环境探测与镜像选择组件
 #
 # 设计目标：
-#   1. 不依赖任何项目特有路径，可被 pyloader.ps1、start.bat 或其他 PowerShell 脚本复用。
+#   1. 镜像候选与仓库身份统一读取根目录 sparkarc.json，可被 pyloader.ps1、start.bat 或其他 PowerShell 脚本复用。
 #   2. 公益 IP 归属地 API，无 API Key、无明显频率限制。
 #   3. 探测结果缓存到临时文件，避免每次调用都查 IP（缓存 5 分钟）。
 #   4. 按国家/地区给出推荐镜像，并提供 URL 可达性探测函数。
@@ -37,55 +37,43 @@ param(
 $ErrorActionPreference = "Stop"
 
 # ===== 配置区 =====
+Add-Type -AssemblyName System.Net.Http -ErrorAction Stop
+
+$CacheSchemaVersion = 2
 $CacheTtlSeconds = 300
 $ProbeTimeoutSec = 3
 
 # 公益 IP 归属地 API（按优先级排列）
 # freeipapi.com：完全免费、无需 Key、返回 countryCode/countryName，额度较宽松。
-$GeoIpProviders = @(
-    "https://freeipapi.com/api/json/"
-    "https://ipapi.co/json/"
-    "https://ipwho.is/json/"
-)
+$ProjectRoot = Split-Path -Parent $PSScriptRoot
+$SparkArcConfigPath = Join-Path $ProjectRoot "sparkarc.json"
+
+function Get-SparkArcConfig {
+    if (-not (Test-Path $SparkArcConfigPath)) {
+        throw "未找到跨语言项目常量文件: $SparkArcConfigPath"
+    }
+    try {
+        $config = Get-Content -Path $SparkArcConfigPath -Raw | ConvertFrom-Json -ErrorAction Stop
+    }
+    catch {
+        throw "无法解析 ${SparkArcConfigPath}: $($_.Exception.Message)"
+    }
+    if ($config.schemaVersion -ne 1 -or $config.repository.provider -ne "github" -or -not $config.repository.slug -or @($config.network.geoIpProviders).Count -lt 2) {
+        throw "sparkarc.json 缺少有效的 GitHub 仓库身份。"
+    }
+    return $config
+}
+
+$SparkArcConfig = Get-SparkArcConfig
+$GeoIpProviders = @($SparkArcConfig.network.geoIpProviders | ForEach-Object { [string]$_ })
 
 # 镜像表：按区域归类，key 越小优先级越高（同一区域内）
-$MirrorTable = @{
-    pypi = @{
-        default  = "https://pypi.org/simple/"
-        mainland = @(
-            "https://mirrors.aliyun.com/pypi/simple/"
-            "https://pypi.tuna.tsinghua.edu.cn/simple/"
-            "https://mirrors.ustc.edu.cn/pypi/web/simple/"
-        )
-    }
-    github_release = @{
-        default  = "https://github.com/"
-        mainland = @(
-            "https://mirrors.ustc.edu.cn/github-release/"
-            "https://gh-proxy.com/"
-        )
-    }
-    huggingface = @{
-        default  = "https://huggingface.co"
-        mainland = @(
-            "https://hf-mirror.com"
-        )
-    }
-    gh_proxy = @{
-        default  = "https://gh-proxy.com/"
-        mainland = @("https://gh-proxy.com/")
-    }
-    git_clone = @{
-        # 默认仓库：SparkArc 主仓库；中国大陆通过 gh-proxy 代理 HTTPS clone
-        default  = "https://github.com/1deaaa/spark-arc-studio.git"
-        mainland = @("https://gh-proxy.com/https://github.com/1deaaa/spark-arc-studio.git")
-    }
-    python_standalone = @{
-        # 专为 pyloader 准备的完整 LatestRelease 索引页 URL
-        default  = ""
-        mainland = @(
-            "https://mirrors.ustc.edu.cn/github-release/astral-sh/python-build-standalone/LatestRelease/"
-        )
+$MirrorTable = @{}
+foreach ($property in $SparkArcConfig.network.resources.PSObject.Properties) {
+    $route = $property.Value
+    $MirrorTable[$property.Name] = @{
+        default = @($route.default | ForEach-Object { [string]$_ })
+        mainland = @($route.mainland | ForEach-Object { [string]$_ })
     }
 }
 
@@ -106,6 +94,7 @@ function Read-NetworkProbeCache {
     try {
         $raw = Get-Content $cacheFile -Raw -ErrorAction Stop
         $cached = $raw | ConvertFrom-Json -ErrorAction Stop
+        if ($cached.schemaVersion -ne $CacheSchemaVersion) { return $null }
         $ts = [datetime]$cached.timestamp
         if (([datetime]::UtcNow - $ts).TotalSeconds -gt $CacheTtlSeconds) { return $null }
         return $cached
@@ -120,6 +109,7 @@ function Write-NetworkProbeCache {
     $dir = Get-NetworkProbeCacheDir
     if (-not (Test-Path $dir)) { New-Item -ItemType Directory -Path $dir | Out-Null }
     $clone = $Payload | ConvertTo-Json -Depth 4 | ConvertFrom-Json
+    $clone | Add-Member -NotePropertyName "schemaVersion" -NotePropertyValue $CacheSchemaVersion -Force
     $clone | Add-Member -NotePropertyName "timestamp" -NotePropertyValue ([datetime]::UtcNow.ToString("O")) -Force
     $clone | ConvertTo-Json -Depth 4 | Set-Content -Path (Get-NetworkProbeCacheFile) -Encoding UTF8
 }
@@ -132,49 +122,122 @@ function Test-EndpointReachable {
         [int]$TimeoutSec = $ProbeTimeoutSec,
         [string]$Method = "HEAD"
     )
+    $handler = [System.Net.Http.HttpClientHandler]::new()
+    $client = [System.Net.Http.HttpClient]::new($handler)
+    $client.Timeout = [TimeSpan]::FromSeconds($TimeoutSec)
+    $client.DefaultRequestHeaders.UserAgent.ParseAdd("SparkArc-NetworkProbe/1.0")
     try {
-        $req = Invoke-WebRequest -Uri $Url -Method $Method -TimeoutSec $TimeoutSec -UseBasicParsing -ErrorAction Stop
-        return ($req.StatusCode -ge 200 -and $req.StatusCode -lt 400)
-    }
-    catch {
-        # 某些镜像对 HEAD 不友好，回退 GET 只读响应头
-        if ($Method -eq "HEAD") {
+        $httpMethod = if ($Method -eq "HEAD") {
+            [System.Net.Http.HttpMethod]::Head
+        }
+        else {
+            [System.Net.Http.HttpMethod]::Get
+        }
+        $request = [System.Net.Http.HttpRequestMessage]::new($httpMethod, $Url)
+        try {
+            $response = $client.SendAsync(
+                $request,
+                [System.Net.Http.HttpCompletionOption]::ResponseHeadersRead
+            ).GetAwaiter().GetResult()
             try {
-                $req = Invoke-WebRequest -Uri $Url -Method "GET" -TimeoutSec $TimeoutSec -UseBasicParsing -ErrorAction Stop
-                return ($req.StatusCode -ge 200 -and $req.StatusCode -lt 400)
+                $statusCode = [int]$response.StatusCode
+                if ($statusCode -ge 200 -and $statusCode -lt 400) { return $true }
+                $shouldRetryWithGet = $Method -eq "HEAD" -and $statusCode -in @(403, 405, 501)
             }
-            catch {
-                return $false
+            finally {
+                $response.Dispose()
+            }
+        }
+        finally {
+            $request.Dispose()
+        }
+
+        # 仅在服务端明确拒绝 HEAD 时回退 GET，仍只读取响应头。
+        if ($shouldRetryWithGet) {
+            $response = $client.GetAsync(
+                $Url,
+                [System.Net.Http.HttpCompletionOption]::ResponseHeadersRead
+            ).GetAwaiter().GetResult()
+            try {
+                $statusCode = [int]$response.StatusCode
+                return ($statusCode -ge 200 -and $statusCode -lt 400)
+            }
+            finally {
+                $response.Dispose()
             }
         }
         return $false
     }
+    catch {
+        return $false
+    }
+    finally {
+        $client.Dispose()
+        $handler.Dispose()
+    }
+}
+
+function Invoke-DirectJsonRequest {
+    <#
+    .SYNOPSIS
+        绕过 HTTP(S)_PROXY 请求 JSON，避免本地代理出口污染属地判断。
+    #>
+    param([Parameter(Mandatory = $true)][string]$Url)
+
+    $handler = [System.Net.Http.HttpClientHandler]::new()
+    $handler.UseProxy = $false
+    $client = [System.Net.Http.HttpClient]::new($handler)
+    $client.Timeout = [TimeSpan]::FromSeconds(5)
+    try {
+        $response = $client.GetAsync($Url).GetAwaiter().GetResult()
+        if (-not $response.IsSuccessStatusCode) { return $null }
+        $content = $response.Content.ReadAsStringAsync().GetAwaiter().GetResult()
+        return $content | ConvertFrom-Json -ErrorAction Stop
+    }
+    catch {
+        return $null
+    }
+    finally {
+        $client.Dispose()
+        $handler.Dispose()
+    }
 }
 
 function Invoke-GeoIpLookup {
+    <#
+    .SYNOPSIS
+        用至少两个无代理 GeoIP 源的一致结果确认出口国家。
+    #>
+    $votes = @()
     foreach ($provider in $GeoIpProviders) {
-        try {
-            $resp = Invoke-WebRequest -Uri $provider -TimeoutSec 5 -UseBasicParsing -ErrorAction Stop
-            $data = ($resp.Content | ConvertFrom-Json -ErrorAction Stop)
+        $data = Invoke-DirectJsonRequest -Url $provider
+        if (-not $data) { continue }
 
-            # 不同 API 的字段名略有差异，做兼容
-            $countryCode = if ($data.countryCode) { $data.countryCode } elseif ($data.country_code) { $data.country_code } elseif ($data.country) { $data.country } else { "" }
-            $countryName = if ($data.countryName) { $data.countryName } elseif ($data.country_name) { $data.country_name } elseif ($data.country) { $data.country } else { "" }
-
-            $countryCode = ($countryCode -as [string]).Trim().ToUpper()
-            if ($countryCode -and $countryCode.Length -ge 2) {
-                return [pscustomobject]@{
-                    Provider    = $provider
-                    CountryCode = $countryCode
-                    CountryName = ($countryName -as [string]).Trim()
-                }
-            }
-        }
-        catch {
-            continue
+        # 不同 API 的字段名略有差异，做兼容。
+        $countryCode = if ($data.countryCode) { $data.countryCode } elseif ($data.country_code) { $data.country_code } elseif ($data.country) { $data.country } else { "" }
+        $countryName = if ($data.countryName) { $data.countryName } elseif ($data.country_name) { $data.country_name } elseif ($data.country) { $data.country } else { "" }
+        $countryCode = ($countryCode -as [string]).Trim().ToUpper()
+        if ($countryCode.Length -ne 2) { continue }
+        $votes += [pscustomobject]@{
+            Provider    = $provider
+            CountryCode = $countryCode
+            CountryName = ($countryName -as [string]).Trim()
         }
     }
-    return $null
+
+    if ($votes.Count -eq 0) { return $null }
+    $groups = @($votes | Group-Object -Property CountryCode | Sort-Object -Property Count -Descending)
+    $winner = $groups | Select-Object -First 1
+    $isTied = $groups.Count -gt 1 -and $groups[1].Count -eq $winner.Count
+    if ($winner.Count -lt 2 -or $isTied) { return $null }
+
+    $firstVote = $winner.Group | Select-Object -First 1
+    return [pscustomobject]@{
+        Provider    = @($winner.Group | ForEach-Object { $_.Provider }) -join ", "
+        CountryCode = $winner.Name
+        CountryName = $firstVote.CountryName
+        Confidence  = "direct_consensus"
+    }
 }
 
 function Get-NetworkRegion {
@@ -191,6 +254,7 @@ function Get-NetworkRegion {
             CountryName       = $cached.countryName
             IsMainlandChina   = [bool]$cached.isMainlandChina
             Source            = "cache"
+            Confidence        = if ($cached.confidence) { $cached.confidence } else { "unknown" }
         }
     }
 
@@ -199,8 +263,9 @@ function Get-NetworkRegion {
         return [pscustomobject]@{
             CountryCode       = "UNKNOWN"
             CountryName       = "Unknown"
-            IsMainlandChina   = $false
+            IsMainlandChina   = $null
             Source            = "fallback"
+            Confidence        = "unknown"
         }
     }
 
@@ -210,6 +275,7 @@ function Get-NetworkRegion {
         CountryName       = $geo.CountryName
         IsMainlandChina   = $isCn
         Source            = $geo.Provider
+        Confidence        = $geo.Confidence
     }
 
     # 写缓存（只写稳定字段）
@@ -217,9 +283,35 @@ function Get-NetworkRegion {
         countryCode     = $result.CountryCode
         countryName     = $result.CountryName
         isMainlandChina = $result.IsMainlandChina
+        confidence      = $result.Confidence
     })
 
     return $result
+}
+
+function Get-GitCloneCandidates {
+    <#
+    .SYNOPSIS
+        从 sparkarc.json 派生官方仓库克隆地址；所有网络都保留代理候选作为失败回退。
+    #>
+    param([bool]$Probe = $true)
+
+    $repositoryUrl = "https://github.com/$($SparkArcConfig.repository.slug).git"
+    $region = Get-NetworkRegion
+    $proxyCandidates = (Get-RecommendedMirror -Type "gh_proxy" -Probe $Probe).Candidates
+    $proxiedCandidates = @($proxyCandidates | ForEach-Object { "$(($_ -as [string]).TrimEnd('/'))/$repositoryUrl" })
+    $candidates = if ($region.IsMainlandChina) {
+        $proxiedCandidates + @($repositoryUrl)
+    }
+    else {
+        @($repositoryUrl) + $proxiedCandidates
+    }
+    $ordered = @($candidates | Select-Object -Unique)
+    return [pscustomobject]@{
+        Primary = $ordered | Select-Object -First 1
+        Candidates = $ordered
+        CountryCode = $region.CountryCode
+    }
 }
 
 function Get-RecommendedMirror {
@@ -227,13 +319,13 @@ function Get-RecommendedMirror {
     .SYNOPSIS
         根据网络归属地返回某类下载资源的推荐镜像 URL。
     .PARAMETER Type
-        资源类型：pypi / github_release / huggingface / gh_proxy
+        资源类型：由 sparkarc.json 的 network.resources 声明。
     .PARAMETER Probe
         是否探测可达性并按可达性排序（默认 true）。
     #>
     param(
         [Parameter(Mandatory = $true)]
-        [ValidateSet("pypi", "github_release", "huggingface", "gh_proxy", "python_standalone", "git_clone")]
+        [ValidateSet("pypi", "github_release", "huggingface", "gh_proxy", "python_standalone", "node_distribution", "npm_registry")]
         [string]$Type,
         [bool]$Probe = $true
     )
@@ -285,6 +377,7 @@ function Invoke-NetworkProbe {
     foreach ($type in $MirrorTable.Keys) {
         $mirrors[$type] = (Get-RecommendedMirror -Type $type -Probe $true).Primary
     }
+    $mirrors["git_clone"] = (Get-GitCloneCandidates -Probe $true).Primary
 
     return [pscustomobject]@{
         CountryCode       = $region.CountryCode
@@ -310,7 +403,7 @@ if ($MyInvocation.InvocationName -ne '.') {
             }
             $url
         }
-        "git_clone"       { (Get-RecommendedMirror -Type "git_clone").Primary }
+        "git_clone"       { (Get-GitCloneCandidates).Primary }
         "country"         { (Get-NetworkRegion).CountryCode }
         default           { Invoke-NetworkProbe | ConvertTo-Json -Depth 4 }
     }

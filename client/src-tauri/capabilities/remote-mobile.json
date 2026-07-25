@@ -1,19 +1,29 @@
 {
-  "$schema": "../gen/schemas/mobile-schema.json",
   "identifier": "remote-mobile-shell",
   "description": "Minimal mobile permissions for self-hosted SparkArc frontends loaded over HTTP(S). Only OS information is exposed so runtime can keep mobile-specific branches and performance grading.",
-  "windows": ["main"],
-  "platforms": ["android", "iOS"],
+  "windows": [
+    "main"
+  ],
+  "$schema": "../gen/schemas/mobile-schema.json",
+  "platforms": [
+    "android",
+    "iOS"
+  ],
   "local": false,
   "remote": {
-    "urls": ["http://*:*/*", "https://*:*/*"]
+    "urls": [
+      "http://*:*/*",
+      "https://*:*/*"
+    ]
   },
   "permissions": [
     "os:default",
     {
       "identifier": "opener:allow-open-url",
       "allow": [
-        { "url": "https://github.com/1deaaa/spark-arc-studio*" }
+        {
+          "url": "https://github.com/1deaaa/spark-arc-studio*"
+        }
       ]
     }
   ]

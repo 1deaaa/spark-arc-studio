@@ -1,0 +1,6 @@
+# Windows 命令解释器要求批处理脚本使用 CRLF，避免 Libgit2 免 Git 部署时错误解析。
+*.bat text eol=crlf
+*.cmd text eol=crlf
+
+# Unix 启动脚本固定使用 LF，避免跨平台检出后出现解释器错误。
+*.sh text eol=lf

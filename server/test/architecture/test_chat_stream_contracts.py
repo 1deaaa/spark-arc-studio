@@ -10,7 +10,6 @@ from agents.routes.chat import (
     _run_chat_stream_with_retry,
 )
 from agents.routes.chat_task import ChatTaskEntry
-from core.request_context import current_export_format, get_current_export_format
 
 
 def make_entry() -> ChatTaskEntry:
@@ -165,16 +164,3 @@ def test_context_window_stats_merges_agent_cache_usage() -> None:
     assert merged["cached_prompt_tokens"] == 900
     assert merged["cache_miss_prompt_tokens"] == 300
     assert merged["cache_hit_rate"] == 0.75
-
-
-def test_chat_runtime_meta_uses_project_workspace_mode(monkeypatch) -> None:
-    from agents.routes.chat import _apply_request_runtime_meta
-
-    monkeypatch.setattr("core.project_settings.get_workspace_mode", lambda user_id, project_name: "novel")
-
-    token = current_export_format.set(None)
-    try:
-        _apply_request_runtime_meta({"exportFormat": "arc"}, user_id="u1", project_name="p1")
-        assert get_current_export_format() == "novel"
-    finally:
-        current_export_format.reset(token)

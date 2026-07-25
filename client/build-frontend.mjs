@@ -11,6 +11,8 @@ import { access, mkdir, readFile, readdir, stat, writeFile } from 'node:fs/promi
 import { dirname, join } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { spawnSync } from 'node:child_process';
+import { get as httpsGet } from 'node:https';
+import { networkCandidates, readSparkArcConfig } from '../scripts/sparkarc-config.mjs';
 
 const clientDir = dirname(fileURLToPath(import.meta.url));
 const packageJson = join(clientDir, 'package.json');
@@ -110,14 +112,65 @@ async function probeRegistry(registry) {
   }
 }
 
+function countryCodeFromPayload(data) {
+  const countryCode = String(data?.countryCode ?? data?.country_code ?? data?.country ?? '').trim().toUpperCase();
+  return countryCode.length === 2 ? countryCode : null;
+}
+
+function mainlandFromVotes(votes) {
+  const counts = new Map();
+  for (const countryCode of votes) counts.set(countryCode, (counts.get(countryCode) ?? 0) + 1);
+  const highest = Math.max(0, ...counts.values());
+  const winners = [...counts.entries()].filter(([, count]) => count === highest);
+  return highest >= 2 && winners.length === 1 ? winners[0][0] === 'CN' : null;
+}
+
+function getJsonDirect(url) {
+  return new Promise((resolve) => {
+    const request = httpsGet(url, {
+      headers: { Accept: 'application/json', 'User-Agent': 'SparkArc-FrontendBuilder/1.0' },
+    }, (response) => {
+      if (!response.statusCode || response.statusCode < 200 || response.statusCode >= 300) {
+        response.resume();
+        resolve(null);
+        return;
+      }
+      response.setEncoding('utf8');
+      let body = '';
+      response.on('data', (chunk) => {
+        body += chunk;
+        if (body.length > 64 * 1024) request.destroy();
+      });
+      response.on('end', () => {
+        try {
+          resolve(JSON.parse(body));
+        } catch {
+          resolve(null);
+        }
+      });
+    });
+    request.setTimeout(3_500, () => request.destroy());
+    request.on('error', () => resolve(null));
+  });
+}
+
+async function isMainlandChina(config) {
+  const votes = await Promise.all(config.network.geoIpProviders.map(async (provider) => {
+    const payload = await getJsonDirect(provider);
+    return payload ? countryCodeFromPayload(payload) : null;
+  }));
+  return mainlandFromVotes(votes.filter(Boolean)) === true;
+}
+
 async function selectRegistry() {
   const override = (process.env.SPARKARC_NPM_REGISTRY || process.env.NPM_CONFIG_REGISTRY || '').trim();
   if (override) return override.replace(/\/+$/, '/');
 
-  const candidates = [
-    'https://registry.npmjs.org/',
-    'https://registry.npmmirror.com/',
-  ];
+  const config = readSparkArcConfig();
+  const candidates = networkCandidates('npm_registry', {
+    mainland: await isMainlandChina(config),
+    config,
+  });
   for (const candidate of candidates) {
     const reachable = await probeRegistry(candidate);
     if (reachable) return reachable;

@@ -24,12 +24,17 @@ if errorlevel 1 (
     exit /b 1
 )
 
-REM 通过环境变量传递路径，避免用户目录包含单引号时破坏 Python 代码字符串。
-set "SPARKARC_SERVICE_PROJECT_ROOT=%~dp0"
-"%PYTHON_EXE%" -X utf8 -c "import os; from core.service_registry import record_service_install; record_service_install(os.environ['SPARKARC_SERVICE_PROJECT_ROOT'])"
-
 if not exist "%MARKER%" (
     echo [ERROR] Deployment script finished but marker file missing. Aborting.
+    pause
+    exit /b 1
+)
+
+REM 通过环境变量传递路径，避免用户目录包含单引号时破坏 Python 代码字符串。
+set "SPARKARC_SERVICE_PROJECT_ROOT=%~dp0"
+"%PYTHON_EXE%" -X utf8 -c "import os, sys; root = os.environ['SPARKARC_SERVICE_PROJECT_ROOT']; sys.path.insert(0, os.path.join(root, 'server')); from core.service_registry import record_service_install; record_service_install(root)"
+if errorlevel 1 (
+    echo [ERROR] Failed to register the local SparkArc service.
     pause
     exit /b 1
 )
@@ -64,8 +69,8 @@ if not exist "%PYTHON_EXE%" (
 
 echo [launcher] Starting SparkArc backend...
 set "WATCHFILES_IGNORE=**/*.db;**/alembic/versions/**"
-set "SPARKARC_SERVER_TRAY=1"
-set "SPARKARC_SERVER_RELOAD=0"
+if not defined SPARKARC_SERVER_TRAY set "SPARKARC_SERVER_TRAY=1"
+if not defined SPARKARC_SERVER_RELOAD set "SPARKARC_SERVER_RELOAD=0"
 "%PYTHON_EXE%" -X utf8 "%SERVER_DIR%\app.py"
 
 endlocal

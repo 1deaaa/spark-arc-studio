@@ -4,6 +4,7 @@
 //! 自己创建并带有 ownership 标记的 `main` 工作树执行 Git 操作；用户的开发
 //! 工作树和任意手动部署目录只能被启动，绝不会被此模块改写。
 
+use crate::project_config;
 use chrono::{DateTime, Utc};
 use flate2::read::GzDecoder;
 use git2::{
@@ -15,13 +16,15 @@ use semver::Version;
 use serde::{Deserialize, Serialize};
 use sha2::{Digest, Sha256};
 use std::{
+    collections::BTreeMap,
     fs,
     fs::File,
     io::Write,
     net::{IpAddr, Ipv4Addr, Ipv6Addr, SocketAddr, TcpStream},
     path::{Path, PathBuf},
+    sync::{Mutex, OnceLock},
     thread,
-    time::Duration,
+    time::{Duration, Instant},
 };
 use sysinfo::{Pid, System};
 use tar::Archive;
@@ -31,11 +34,6 @@ use zip::ZipArchive;
 #[cfg(windows)]
 use std::process::Command;
 
-const REPOSITORY_URL: &str = "https://github.com/1deaaa/spark-arc-studio.git";
-const REPOSITORY_IDENTITY: &str = "1deaaa/spark-arc-studio";
-const RELEASES_API_URL: &str =
-    "https://api.github.com/repos/1deaaa/spark-arc-studio/releases/latest";
-const RELEASES_LATEST_PAGE_URL: &str = "https://github.com/1deaaa/spark-arc-studio/releases/latest";
 const MANAGED_MARKER_FILE: &str = ".sparkarc-managed.json";
 const DEPLOYMENT_STATE_FILE: &str = "deployment.json";
 const DEPLOYMENT_LOG_FILE: &str = "deploy.log";
@@ -47,7 +45,25 @@ const MANAGED_SCHEMA_VERSION: u32 = 1;
 const MANAGED_NODE_VERSION: &str = "24.16.0";
 const LAUNCHER_RELEASE_CACHE_TTL_SECONDS: i64 = 6 * 60 * 60;
 const MANAGED_SERVICE_PORT: u16 = 6688;
-const GITHUB_PROXY_PREFIXES: [&str; 2] = ["https://ghfast.top/", "https://ghproxy.net/"];
+const REGION_CACHE_TTL: Duration = Duration::from_secs(5);
+const GIT_SERVER_CONNECT_TIMEOUT_MILLISECONDS: i32 = 12_000;
+const GIT_SERVER_IO_TIMEOUT_MILLISECONDS: i32 = 20_000;
+const GIT_SOURCE_PROBE_TIMEOUT: Duration = Duration::from_secs(5);
+
+/// 在任何线程与 Git 操作开始前，为 Launcher 的 Libgit2 远端访问设置超时护栏。
+///
+/// 这是 Libgit2 的进程级 C 全局选项；调用方必须满足其线程安全前置条件。
+pub unsafe fn configure_git_network_timeouts() -> Result<(), String> {
+    unsafe {
+        git2::opts::set_server_connect_timeout_in_milliseconds(
+            GIT_SERVER_CONNECT_TIMEOUT_MILLISECONDS,
+        )
+        .map_err(|err| format!("无法设置 Git 连接超时: {err}"))?;
+        git2::opts::set_server_timeout_in_milliseconds(GIT_SERVER_IO_TIMEOUT_MILLISECONDS)
+            .map_err(|err| format!("无法设置 Git 读写超时: {err}"))?;
+    }
+    Ok(())
+}
 
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
 #[serde(rename_all = "snake_case")]
@@ -358,6 +374,8 @@ impl DeploymentManager {
 
         let commit = repository_head_commit(&repository)?;
         self.write_marker(&staging_dir, &repository)?;
+        // Windows 不允许移动仍被 Libgit2 仓库句柄占用的 .git 目录。
+        drop(repository);
         fs::rename(&staging_dir, &self.target_dir)
             .map_err(|err| format!("无法将已校验的源码切换到受管目录: {err}"))?;
 
@@ -915,7 +933,7 @@ impl DeploymentManager {
 
     fn clone_main(&self, destination: &Path) -> Result<Repository, String> {
         let mut errors = Vec::new();
-        for source in git_remote_candidates() {
+        for source in prioritized_git_remote_candidates() {
             self.append_log(format!("尝试从 {source} 获取 main..."));
             let mut fetch_options = FetchOptions::new();
             fetch_options.download_tags(AutotagOption::None);
@@ -941,7 +959,7 @@ impl DeploymentManager {
         let refspec = format!("+refs/heads/main:{reference_name}");
         let mut errors = Vec::new();
 
-        for source in git_remote_candidates() {
+        for source in prioritized_git_remote_candidates() {
             self.append_log(format!("检查 main 源: {source}"));
             let mut fetch_options = FetchOptions::new();
             fetch_options.download_tags(AutotagOption::None);
@@ -973,7 +991,7 @@ impl DeploymentManager {
         let marker = ManagedInstallMarker {
             schema_version: MANAGED_SCHEMA_VERSION,
             channel: "main".to_string(),
-            repository: REPOSITORY_URL.to_string(),
+            repository: project_config::repository_urls().clone,
             installed_commit: commit,
             created_at: existing
                 .as_ref()
@@ -1056,8 +1074,12 @@ fn node_distribution_bases() -> Vec<String> {
             candidates.push(override_url.to_string());
         }
     }
-    candidates.push("https://nodejs.org/dist".to_string());
-    candidates.push("https://npmmirror.com/mirrors/node".to_string());
+    let mainland = matches!(lookup_mainland_china(), Some(true));
+    candidates.extend(project_config::network_candidates(
+        "node_distribution",
+        mainland,
+        true,
+    ));
     deduplicate_urls(candidates)
 }
 
@@ -1297,7 +1319,98 @@ fn repository_head_commit(repository: &Repository) -> Result<String, String> {
 fn is_project_repository(url: &str) -> bool {
     url.to_ascii_lowercase()
         .replace(".git", "")
-        .contains(REPOSITORY_IDENTITY)
+        .contains(&project_config::repository_urls().slug.to_ascii_lowercase())
+}
+
+static REGION_CACHE: OnceLock<Mutex<Option<(Instant, Option<bool>)>>> = OnceLock::new();
+
+fn country_code_from_payload(payload: &serde_json::Value) -> Option<String> {
+    payload
+        .get("countryCode")
+        .or_else(|| payload.get("country_code"))
+        .or_else(|| payload.get("country"))
+        .and_then(serde_json::Value::as_str)
+        .map(str::trim)
+        .map(str::to_ascii_uppercase)
+        .filter(|code| code.len() == 2)
+}
+
+fn mainland_from_direct_geoip_votes(votes: impl IntoIterator<Item = String>) -> Option<bool> {
+    let mut counts = BTreeMap::<String, usize>::new();
+    for country_code in votes {
+        *counts.entry(country_code).or_default() += 1;
+    }
+    let highest = counts.values().copied().max()?;
+    if highest < 2 || counts.values().filter(|count| **count == highest).count() != 1 {
+        return None;
+    }
+    counts
+        .into_iter()
+        .find_map(|(country_code, count)| (count == highest).then_some(country_code == "CN"))
+}
+
+/// 仅把出口地区作为候选排序提示；实际 Git/下载仍会逐项回退。
+fn lookup_mainland_china() -> Option<bool> {
+    let cache = REGION_CACHE.get_or_init(|| Mutex::new(None));
+    if let Ok(guard) = cache.lock() {
+        if let Some((checked_at, value)) = *guard {
+            if checked_at.elapsed() < REGION_CACHE_TTL {
+                return value;
+            }
+        }
+    }
+
+    let result = (|| {
+        let client = Client::builder()
+            .no_proxy()
+            .timeout(Duration::from_secs(3))
+            .user_agent("SparkArc-Launcher/1.0")
+            .build()
+            .ok()?;
+        let mut votes = Vec::new();
+        for provider in project_config::geoip_providers() {
+            let Ok(response) = client.get(provider).send() else {
+                continue;
+            };
+            let Ok(response) = response.error_for_status() else {
+                continue;
+            };
+            let Ok(payload) = response.json::<serde_json::Value>() else {
+                continue;
+            };
+            if let Some(country_code) = country_code_from_payload(&payload) {
+                votes.push(country_code);
+            }
+        }
+        mainland_from_direct_geoip_votes(votes)
+    })();
+    if let Ok(mut guard) = cache.lock() {
+        *guard = Some((Instant::now(), result));
+    }
+    result
+}
+
+fn github_proxy_prefixes(region: Option<bool>) -> Vec<String> {
+    project_config::network_candidates("gh_proxy", matches!(region, Some(true)), true)
+}
+
+fn github_url_candidates(official_url: String, region: Option<bool>) -> Vec<String> {
+    let proxied = github_proxy_prefixes(region)
+        .into_iter()
+        .map(|prefix| format!("{}/{}", prefix.trim_end_matches('/'), official_url))
+        .collect::<Vec<_>>();
+    let mut candidates = Vec::new();
+    match region {
+        Some(true) => {
+            candidates.extend(proxied);
+            candidates.push(official_url);
+        }
+        Some(false) | None => {
+            candidates.push(official_url);
+            candidates.extend(proxied);
+        }
+    }
+    deduplicate_urls(candidates)
 }
 
 fn git_remote_candidates() -> Vec<String> {
@@ -1308,13 +1421,42 @@ fn git_remote_candidates() -> Vec<String> {
             candidates.push(override_url.to_string());
         }
     }
-    candidates.push(REPOSITORY_URL.to_string());
-    candidates.extend(
-        GITHUB_PROXY_PREFIXES
-            .iter()
-            .map(|prefix| format!("{prefix}{REPOSITORY_URL}")),
-    );
+    candidates.extend(github_url_candidates(
+        project_config::repository_urls().clone,
+        lookup_mainland_china(),
+    ));
     deduplicate_urls(candidates)
+}
+
+fn prioritize_git_sources<F>(sources: Vec<String>, mut is_reachable: F) -> Vec<String>
+where
+    F: FnMut(&str) -> bool,
+{
+    let mut reachable = Vec::new();
+    let mut unreachable = Vec::new();
+    for source in sources {
+        if is_reachable(&source) {
+            reachable.push(source);
+        } else {
+            unreachable.push(source);
+        }
+    }
+    reachable.extend(unreachable);
+    reachable
+}
+
+/// 预检只影响候选顺序；任何预检失败源仍会保留，避免把 HEAD 不友好的服务误删。
+fn prioritized_git_remote_candidates() -> Vec<String> {
+    let candidates = git_remote_candidates();
+    let Ok(client) = Client::builder()
+        .connect_timeout(Duration::from_secs(4))
+        .timeout(GIT_SOURCE_PROBE_TIMEOUT)
+        .user_agent("SparkArc-Launcher/1.0")
+        .build()
+    else {
+        return candidates;
+    };
+    prioritize_git_sources(candidates, |source| client.head(source).send().is_ok())
 }
 
 fn github_release_api_candidates() -> Vec<String> {
@@ -1325,23 +1467,18 @@ fn github_release_api_candidates() -> Vec<String> {
             candidates.push(override_url.to_string());
         }
     }
-    candidates.push(RELEASES_API_URL.to_string());
-    candidates.extend(
-        GITHUB_PROXY_PREFIXES
-            .iter()
-            .map(|prefix| format!("{prefix}{RELEASES_API_URL}")),
-    );
+    candidates.extend(github_url_candidates(
+        project_config::repository_urls().release_api,
+        lookup_mainland_china(),
+    ));
     deduplicate_urls(candidates)
 }
 
 fn github_release_page_candidates() -> Vec<String> {
-    let mut candidates = vec![RELEASES_LATEST_PAGE_URL.to_string()];
-    candidates.extend(
-        GITHUB_PROXY_PREFIXES
-            .iter()
-            .map(|prefix| format!("{prefix}{RELEASES_LATEST_PAGE_URL}")),
-    );
-    deduplicate_urls(candidates)
+    github_url_candidates(
+        project_config::repository_urls().release_page,
+        lookup_mainland_china(),
+    )
 }
 
 fn deduplicate_urls(candidates: Vec<String>) -> Vec<String> {
@@ -1365,8 +1502,8 @@ fn normalize_release_version(value: &str) -> Option<String> {
 }
 
 fn release_url_for_source(source: &str, release_url: &str) -> String {
-    for prefix in GITHUB_PROXY_PREFIXES {
-        if source.starts_with(prefix) && release_url.starts_with("https://github.com/") {
+    for prefix in project_config::all_network_candidates("gh_proxy") {
+        if source.starts_with(&prefix) && release_url.starts_with("https://github.com/") {
             return format!("{prefix}{release_url}");
         }
     }
@@ -1520,6 +1657,278 @@ mod tests {
     use super::*;
     use git2::{IndexAddOption, Signature};
     use std::{env, process};
+    #[cfg(windows)]
+    use std::{ffi::OsString, os::windows::process::CommandExt, process::Stdio};
+
+    #[cfg(windows)]
+    const WINDOWS_E2E_CLEARED_ENV_NAMES: [&str; 16] = [
+        "HTTP_PROXY",
+        "HTTPS_PROXY",
+        "ALL_PROXY",
+        "http_proxy",
+        "https_proxy",
+        "all_proxy",
+        "NO_PROXY",
+        "no_proxy",
+        "PYLOADER_PIP_MIRROR",
+        "PYLOADER_PYTHON_MIRROR_BASE",
+        "SPARKARC_NPM_REGISTRY",
+        "NPM_CONFIG_REGISTRY",
+        "SPARKARC_NODE_DIST_MIRROR",
+        "SPARKARC_GIT_REMOTE",
+        "SPARKARC_GITHUB_RELEASE_API",
+        "GIT_CONFIG_GLOBAL",
+    ];
+
+    #[cfg(windows)]
+    const WINDOWS_E2E_ENV_NAMES: [&str; 24] = [
+        "PATH",
+        "HOME",
+        "USERPROFILE",
+        "APPDATA",
+        "LOCALAPPDATA",
+        "TEMP",
+        "TMP",
+        "CI",
+        "HTTP_PROXY",
+        "HTTPS_PROXY",
+        "ALL_PROXY",
+        "http_proxy",
+        "https_proxy",
+        "all_proxy",
+        "NO_PROXY",
+        "no_proxy",
+        "PYLOADER_PIP_MIRROR",
+        "PYLOADER_PYTHON_MIRROR_BASE",
+        "SPARKARC_NPM_REGISTRY",
+        "NPM_CONFIG_REGISTRY",
+        "SPARKARC_NODE_DIST_MIRROR",
+        "SPARKARC_GIT_REMOTE",
+        "SPARKARC_GITHUB_RELEASE_API",
+        "GIT_CONFIG_GLOBAL",
+    ];
+
+    #[cfg(windows)]
+    static WINDOWS_E2E_ENV_LOCK: OnceLock<Mutex<()>> = OnceLock::new();
+
+    #[cfg(windows)]
+    struct WindowsE2eEnvironment {
+        previous: Vec<(&'static str, Option<OsString>)>,
+    }
+
+    #[cfg(windows)]
+    impl WindowsE2eEnvironment {
+        fn without_proxy_or_developer_path(
+            path: OsString,
+            profile: &Path,
+            app_data: &Path,
+            local_app_data: &Path,
+            temp: &Path,
+        ) -> Self {
+            let previous = WINDOWS_E2E_ENV_NAMES
+                .iter()
+                .map(|name| (*name, env::var_os(name)))
+                .collect::<Vec<_>>();
+            for name in WINDOWS_E2E_CLEARED_ENV_NAMES {
+                env::remove_var(name);
+            }
+            env::set_var("PATH", path);
+            env::set_var("HOME", profile);
+            env::set_var("USERPROFILE", profile);
+            env::set_var("APPDATA", app_data);
+            env::set_var("LOCALAPPDATA", local_app_data);
+            env::set_var("TEMP", temp);
+            env::set_var("TMP", temp);
+            env::set_var("CI", "1");
+            Self { previous }
+        }
+    }
+
+    #[cfg(windows)]
+    impl Drop for WindowsE2eEnvironment {
+        fn drop(&mut self) {
+            for (name, value) in &self.previous {
+                match value {
+                    Some(value) => env::set_var(name, value),
+                    None => env::remove_var(name),
+                }
+            }
+        }
+    }
+
+    #[cfg(windows)]
+    struct WindowsE2eChild {
+        child: Option<std::process::Child>,
+    }
+
+    #[cfg(windows)]
+    impl WindowsE2eChild {
+        fn new(child: std::process::Child) -> Self {
+            Self { child: Some(child) }
+        }
+
+        fn stop(&mut self) {
+            let Some(child) = self.child.as_mut() else {
+                return;
+            };
+            // 仅终止本测试刚刚创建的 cmd.exe 及其子进程树。
+            let _ = terminate_process(child.id());
+            let _ = child.wait();
+            self.child = None;
+        }
+    }
+
+    #[cfg(windows)]
+    impl Drop for WindowsE2eChild {
+        fn drop(&mut self) {
+            self.stop();
+        }
+    }
+
+    #[cfg(windows)]
+    fn windows_e2e_system_paths() -> Vec<PathBuf> {
+        let system_root = PathBuf::from(env::var_os("SystemRoot").expect("缺少 SystemRoot"));
+        let system32 = system_root.join("System32");
+        vec![
+            system32.clone(),
+            system32.join("WindowsPowerShell").join("v1.0"),
+        ]
+    }
+
+    #[cfg(windows)]
+    fn windows_e2e_root() -> PathBuf {
+        let manifest_dir = Path::new(env!("CARGO_MANIFEST_DIR"));
+        let project_root = manifest_dir
+            .parent()
+            .and_then(Path::parent)
+            .expect("无法定位项目根目录")
+            .to_path_buf();
+        project_root.join(".tmp").join(format!(
+            "launcher-windows-e2e-{}-{}",
+            process::id(),
+            Utc::now().timestamp_nanos_opt().unwrap_or_default()
+        ))
+    }
+
+    #[cfg(windows)]
+    fn wait_for_windows_e2e_health(service: &mut WindowsE2eChild) -> Result<(), String> {
+        let client = Client::builder()
+            .no_proxy()
+            .timeout(Duration::from_secs(3))
+            .build()
+            .map_err(|err| err.to_string())?;
+        let deadline = Instant::now() + Duration::from_secs(15 * 60);
+        let mut last_detail = "服务尚未开始监听".to_string();
+        while Instant::now() < deadline {
+            if let Some(child) = service.child.as_mut() {
+                match child.try_wait() {
+                    Ok(Some(status)) => return Err(format!("启动脚本提前退出: {status}")),
+                    Ok(None) => {}
+                    Err(err) => return Err(format!("无法读取启动脚本进程状态: {err}")),
+                }
+            }
+            match client.get("http://127.0.0.1:6688/health").send() {
+                Ok(response) => match response.text() {
+                    Ok(content) if content.trim() == "sparkarc-ok" => return Ok(()),
+                    Ok(content) => last_detail = format!("健康接口返回了意外内容: {content}"),
+                    Err(err) => last_detail = format!("无法读取健康接口响应: {err}"),
+                },
+                Err(err) => last_detail = format!("健康接口尚不可达: {err}"),
+            }
+            thread::sleep(Duration::from_secs(1));
+        }
+        Err(last_detail)
+    }
+
+    #[cfg(windows)]
+    fn windows_e2e_log_tail(path: &Path) -> String {
+        let Ok(content) = fs::read_to_string(path) else {
+            return "未生成启动日志。".to_string();
+        };
+        let mut lines = content.lines().rev().take(80).collect::<Vec<_>>();
+        lines.reverse();
+        lines.join("\n")
+    }
+
+    #[cfg(windows)]
+    fn run_windows_e2e_start_script(
+        project_root: &Path,
+        node_bin: &Path,
+        test_root: &Path,
+    ) -> Result<(), String> {
+        let profile = test_root.join("profile");
+        let app_data = profile.join("AppData").join("Roaming");
+        let local_app_data = profile.join("AppData").join("Local");
+        let temp = test_root.join("temp");
+        for directory in [&profile, &app_data, &local_app_data, &temp] {
+            fs::create_dir_all(directory).map_err(|err| err.to_string())?;
+        }
+        let system_paths = windows_e2e_system_paths();
+        let child_path = env::join_paths(
+            std::iter::once(node_bin.to_path_buf()).chain(system_paths.iter().cloned()),
+        )
+        .map_err(|err| err.to_string())?;
+        let log_path = test_root.join("start.log");
+        let log_file = fs::File::create(&log_path).map_err(|err| err.to_string())?;
+        let error_log = log_file.try_clone().map_err(|err| err.to_string())?;
+        let script_path = project_root.join("start.bat");
+        if !script_path.is_file() {
+            return Err(format!("启动脚本不存在: {}", script_path.display()));
+        }
+
+        let mut command = std::process::Command::new(system_paths[0].join("cmd.exe"));
+        command
+            .args(["/D", "/S", "/C"])
+            .current_dir(project_root)
+            .env("PATH", child_path)
+            .env("USERPROFILE", &profile)
+            .env("HOME", &profile)
+            .env("APPDATA", &app_data)
+            .env("LOCALAPPDATA", &local_app_data)
+            .env("TEMP", &temp)
+            .env("TMP", &temp)
+            .env("CI", "1")
+            .env("SPARKARC_SERVER_TRAY", "0")
+            .env("SPARKARC_SERVER_RELOAD", "0")
+            .stdout(Stdio::from(log_file))
+            .stderr(Stdio::from(error_log));
+        command.raw_arg(format!(r#"call "{}""#, script_path.to_string_lossy()));
+        for name in WINDOWS_E2E_CLEARED_ENV_NAMES {
+            // 子进程必须模拟关闭 Clash 后的环境，不能继承测试机残留代理变量。
+            command.env_remove(name);
+        }
+        let child = command
+            .spawn()
+            .map_err(|err| format!("无法启动测试用 start.bat: {err}"))?;
+        let mut service = WindowsE2eChild::new(child);
+
+        if let Err(error) = wait_for_windows_e2e_health(&mut service) {
+            return Err(format!(
+                "一键部署后服务未就绪：{error}\n启动日志：\n{}",
+                windows_e2e_log_tail(&log_path)
+            ));
+        }
+        if !project_root
+            .join("client")
+            .join("dist")
+            .join("index.html")
+            .is_file()
+        {
+            return Err("前端构建产物 client/dist/index.html 不存在".to_string());
+        }
+
+        service.stop();
+        for _ in 0..20 {
+            if !managed_service_port_is_open() {
+                break;
+            }
+            thread::sleep(Duration::from_millis(250));
+        }
+        if managed_service_port_is_open() {
+            return Err("测试创建的服务进程树停止后，6688 端口仍被占用".to_string());
+        }
+        Ok(())
+    }
 
     fn create_test_repository() -> (PathBuf, Repository) {
         let root = env::temp_dir().join(format!(
@@ -1583,16 +1992,19 @@ mod tests {
 
     #[test]
     fn release_redirect_keeps_the_successful_proxy_source() {
-        let proxy_page =
-            "https://ghfast.top/https://github.com/1deaaa/spark-arc-studio/releases/latest";
-        let direct_release =
-            "https://github.com/1deaaa/spark-arc-studio/releases/tag/sparkarc-v0.5.0";
-        let proxied_release = release_url_for_source(proxy_page, direct_release);
-
-        assert_eq!(
-            proxied_release,
-            "https://ghfast.top/https://github.com/1deaaa/spark-arc-studio/releases/tag/sparkarc-v0.5.0"
+        let repository = project_config::repository_urls();
+        let proxy_prefix = project_config::all_network_candidates("gh_proxy")
+            .into_iter()
+            .next()
+            .unwrap();
+        let proxy_page = format!("{proxy_prefix}{}", repository.release_page);
+        let direct_release = format!(
+            "https://github.com/{}/releases/tag/sparkarc-v0.5.0",
+            repository.slug
         );
+        let proxied_release = release_url_for_source(&proxy_page, &direct_release);
+
+        assert_eq!(proxied_release, format!("{proxy_prefix}{direct_release}"));
         assert_eq!(
             release_tag_from_url(&proxied_release),
             Some("sparkarc-v0.5.0".to_string())
@@ -1655,13 +2067,67 @@ mod tests {
 
     #[test]
     fn repository_identity_accepts_direct_and_proxy_urls() {
-        assert!(is_project_repository(REPOSITORY_URL));
-        assert!(is_project_repository(
-            "https://ghfast.top/https://github.com/1deaaa/spark-arc-studio.git"
-        ));
+        let repository = project_config::repository_urls();
+        let proxy_prefix = project_config::all_network_candidates("gh_proxy")
+            .into_iter()
+            .next()
+            .unwrap();
+        assert!(is_project_repository(&repository.clone));
+        assert!(is_project_repository(&format!(
+            "{proxy_prefix}{}",
+            repository.clone
+        )));
         assert!(!is_project_repository(
             "https://github.com/example/other.git"
         ));
+    }
+
+    #[test]
+    fn direct_geoip_requires_an_unambiguous_majority() {
+        assert_eq!(
+            mainland_from_direct_geoip_votes(["CN".to_string(), "CN".to_string()]),
+            Some(true)
+        );
+        assert_eq!(
+            mainland_from_direct_geoip_votes(["US".to_string(), "US".to_string()]),
+            Some(false)
+        );
+        assert_eq!(mainland_from_direct_geoip_votes(["CN".to_string()]), None);
+        assert_eq!(
+            mainland_from_direct_geoip_votes(["CN".to_string(), "US".to_string()]),
+            None
+        );
+    }
+
+    #[test]
+    fn foreign_or_unknown_region_keeps_github_proxy_fallback() {
+        let official = project_config::repository_urls().clone;
+        for region in [Some(false), None] {
+            let candidates = github_url_candidates(official.clone(), region);
+            assert_eq!(candidates.first(), Some(&official));
+            assert!(candidates.len() > 1);
+            assert!(candidates
+                .iter()
+                .skip(1)
+                .all(|candidate| candidate.ends_with(&official)));
+        }
+    }
+
+    #[test]
+    fn git_preflight_prioritizes_reachable_sources_without_dropping_fallbacks() {
+        let sources = vec![
+            "https://slow.example.invalid/repository.git".to_string(),
+            "https://ready.example.invalid/repository.git".to_string(),
+            "https://head-blocked.example.invalid/repository.git".to_string(),
+        ];
+
+        let ordered = prioritize_git_sources(sources.clone(), |source| {
+            source.contains("ready.example.invalid")
+        });
+
+        assert_eq!(ordered[0], sources[1]);
+        assert_eq!(ordered[1], sources[0]);
+        assert_eq!(ordered[2], sources[2]);
     }
 
     #[test]
@@ -1712,5 +2178,131 @@ mod tests {
             "VERSION = 'two'\n"
         );
         fs::remove_dir_all(root).unwrap();
+    }
+
+    #[cfg(windows)]
+    #[test]
+    #[ignore = "真实网络验证：下载 Launcher 受管源码、Node、Python 依赖并启动完整服务"]
+    fn windows_launcher_first_run_works_without_proxy_or_system_node_or_git() {
+        let _lock = WINDOWS_E2E_ENV_LOCK
+            .get_or_init(|| Mutex::new(()))
+            .lock()
+            .expect("无法锁定 Windows 端到端测试环境");
+        // 该忽略测试单独运行，且在首次 Git 操作前设置 Libgit2 的进程级超时。
+        unsafe {
+            configure_git_network_timeouts().expect("无法设置端到端测试的 Git 网络超时");
+        }
+        assert!(
+            !managed_service_port_is_open(),
+            "6688 端口已被其他服务占用；端到端测试不会停止未知进程。"
+        );
+
+        let root = windows_e2e_root();
+        fs::create_dir_all(&root).expect("无法创建端到端测试临时目录");
+        let profile = root.join("profile");
+        let app_data = profile.join("AppData").join("Roaming");
+        let local_app_data = profile.join("AppData").join("Local");
+        let temp = root.join("temp");
+        for directory in [&profile, &app_data, &local_app_data, &temp] {
+            fs::create_dir_all(directory).expect("无法创建隔离用户目录");
+        }
+        let system_paths = windows_e2e_system_paths();
+        let system_path = env::join_paths(&system_paths).expect("无法构造最小 Windows PATH");
+        let deployment_result = (|| -> Result<(PathBuf, PathBuf), String> {
+            let _environment = WindowsE2eEnvironment::without_proxy_or_developer_path(
+                system_path,
+                &profile,
+                &app_data,
+                &local_app_data,
+                &temp,
+            );
+            if let Some(cache) = REGION_CACHE.get() {
+                *cache.lock().expect("无法重置网络区域缓存") = None;
+            }
+
+            let manager = DeploymentManager::from_user_dir(root.join("profile").join(".sparkarc"));
+            let project_root = manager.ensure_managed_checkout()?;
+            let node_bin = manager.ensure_node_runtime()?;
+            Ok::<_, String>((project_root, node_bin))
+        })();
+        let (project_root, node_bin) = deployment_result.unwrap_or_else(|error| {
+            panic!(
+                "Launcher 首次下载失败：{error}\n测试产物保留在 {}",
+                root.display()
+            )
+        });
+
+        let marker = fs::read_to_string(project_root.join(MANAGED_MARKER_FILE))
+            .expect("受管工作树缺少 ownership 标记");
+        assert!(
+            marker.contains(&project_config::repository_urls().clone),
+            "受管工作树没有记录官方项目仓库"
+        );
+        let node_executable = node_bin.join("node.exe");
+        let node_version = std::process::Command::new(&node_executable)
+            .arg("--version")
+            .output()
+            .expect("无法启动受管 Node")
+            .stdout;
+        assert!(
+            String::from_utf8_lossy(&node_version).contains(MANAGED_NODE_VERSION),
+            "受管 Node 版本不符合预期"
+        );
+
+        run_windows_e2e_start_script(&project_root, &node_bin, &root).unwrap_or_else(|error| {
+            panic!(
+                "Launcher 一键启动失败：{error}\n测试产物保留在 {}",
+                root.display()
+            )
+        });
+        fs::remove_dir_all(&root).expect("端到端测试成功后无法清理临时目录");
+    }
+
+    #[cfg(windows)]
+    #[test]
+    #[ignore = "真实网络验证：用当前源码快照完成无代理一键启动"]
+    fn windows_current_source_snapshot_starts_without_proxy() {
+        let _lock = WINDOWS_E2E_ENV_LOCK
+            .get_or_init(|| Mutex::new(()))
+            .lock()
+            .expect("无法锁定 Windows 端到端测试环境");
+        assert!(
+            !managed_service_port_is_open(),
+            "6688 端口已被其他服务占用；端到端测试不会停止未知进程。"
+        );
+
+        let project_root = env::var_os("SPARKARC_E2E_SOURCE_ROOT")
+            .map(PathBuf::from)
+            .expect("必须通过 SPARKARC_E2E_SOURCE_ROOT 指定干净源码快照");
+        let node_bin = env::var_os("SPARKARC_E2E_NODE_BIN")
+            .map(PathBuf::from)
+            .expect("必须通过 SPARKARC_E2E_NODE_BIN 指定受管 Node 目录");
+        assert!(
+            project_root.join("start.bat").is_file(),
+            "源码快照缺少 start.bat"
+        );
+        assert!(
+            node_bin.join("node.exe").is_file(),
+            "受管 Node 目录缺少 node.exe"
+        );
+
+        let root = windows_e2e_root();
+        fs::create_dir_all(&root).expect("无法创建端到端测试临时目录");
+        run_windows_e2e_start_script(&project_root, &node_bin, &root).unwrap_or_else(|error| {
+            panic!(
+                "当前源码快照一键启动失败：{error}\n测试产物保留在 {}",
+                root.display()
+            )
+        });
+        assert!(
+            project_root
+                .join("server")
+                .join(".runtime")
+                .join("python")
+                .join(".deploy_complete")
+                .is_file(),
+            "Python 便携运行时没有部署完成标记"
+        );
+        fs::remove_dir_all(&root).expect("端到端测试成功后无法清理临时目录");
     }
 }

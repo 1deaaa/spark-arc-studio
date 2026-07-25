@@ -625,13 +625,14 @@ async def delete_existing_notice(notice_id: str, admin_user: dict = Depends(requ
 async def health_check():
     return "sparkarc-ok"
 
+# 挂载 spark_control MCP Server（远程操控：聊天链路 + 导演调度 + 查询工具）
+# 子路径必须先于 /api/mcp 父路径挂载，否则会被父 Mount 提前匹配。
+app.mount("/api/mcp/control", _mcp_control_app_with_auth)
+
 # 挂载 MCP Server（带鉴权中间件）
 # 挂载到 /api/mcp/，确保尾部斜杠正确处理
 # 注意：Starlette mount 要求挂载路径不带尾部斜杠，但 MCP 端点需要尾部斜杠
 app.mount("/api/mcp", _mcp_app_with_auth)
-
-# 挂载 spark_control MCP Server（远程操控：聊天链路 + 导演调度 + 查询工具）
-app.mount("/api/mcp/control", _mcp_control_app_with_auth)
 
 
 # 处理不带尾部斜杠的 MCP 请求，重定向或代理到正确的端点

@@ -35,3 +35,4 @@ def test_delete_project_refuses_to_remove_directory_while_background_task_is_ali
     assert json.loads(response.body)["details"] == ["自动写作任务未在等待时间内停止"]
     assert remove_calls == []
     assert project_path.is_dir()
+"""项目删除与后台任务生命周期回归。"""

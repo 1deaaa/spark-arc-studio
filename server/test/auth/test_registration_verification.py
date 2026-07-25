@@ -60,3 +60,4 @@ def test_registration_verification_empty_container_env_falls_back_to_persisted_f
     assert config.enabled is True
     assert config.provider == "turnstile"
     assert config.site_key == "file-site-key"
+"""注册验证配置的持久化与环境变量回退行为。"""
