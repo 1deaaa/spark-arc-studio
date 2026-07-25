@@ -128,6 +128,18 @@ def test_director_and_lorebook_share_external_research_handoff_contract() -> Non
     assert "禁止先询问“是否继续”" in runtime_prompt
 
 
+def test_lorebook_pipeline_keeps_research_decisions_in_tool_rules() -> None:
+    prompts = load_prompt("lorebook")
+    pipeline = prompts["pipeline_system"]
+    tool_rules = prompts["tool_rules"]
+
+    # pipeline 只负责执行主干；搜索职责由 tool_rules 统一判断，避免覆盖导演交接包。
+    assert "外部事实先核验" not in pipeline
+    assert "必须先调用 `web_search`" not in pipeline
+    for token in ("【导演已查证资料】", "【查证职责：设定专家】", "不重复搜索"):
+        assert token in tool_rules
+
+
 def test_tool_confirmation_happens_once_before_side_effects() -> None:
     from agents.communication import HANDOFF_CONFIRMATION_NOT_REQUIRED, normalize_handoff_payload
 
