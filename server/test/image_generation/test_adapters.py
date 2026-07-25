@@ -1,3 +1,5 @@
+"""图片生成适配器协议与参数转换回归。"""
+
 from __future__ import annotations
 
 import base64
@@ -370,4 +372,3 @@ def test_reference_image_is_rejected_before_network_without_image_input(monkeypa
         )
 
     assert fake.calls == []
-"""图片生成适配器协议与参数转换回归。"""

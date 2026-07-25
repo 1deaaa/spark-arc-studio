@@ -102,4 +102,3 @@ def test_generic_400_uses_neutral_invalid_request_guidance(monkeypatch) -> None:
 
     assert "请求无效" in message
     assert "内容安全" not in message
-"""OpenAI 兼容网关的 Schema 与错误映射回归。"""

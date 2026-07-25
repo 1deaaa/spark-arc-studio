@@ -158,7 +158,8 @@ def test_generated_public_address_outputs_are_in_sync() -> None:
         ["node", "scripts/sync-sparkarc-config.mjs", "--check"],
         cwd=PROJECT_ROOT,
         text=True,
+        encoding="utf-8",
+        errors="replace",
         capture_output=True,
     )
     assert completed.returncode == 0, completed.stdout + completed.stderr
-"""仓库配置、网络探测与启动脚本配置回归。"""

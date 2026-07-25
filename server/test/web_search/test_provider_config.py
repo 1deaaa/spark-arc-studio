@@ -1,3 +1,5 @@
+"""联网搜索供应商配置、传输参数与持久化回归。"""
+
 from __future__ import annotations
 
 import pytest
@@ -351,4 +353,3 @@ def test_web_search_provider_metadata_survives_chat_persistence() -> None:
     assert snapshot["tool_traces"][0]["tool_provider"] == "tavily"
     tool_segment = next(segment for segment in snapshot["segments"] if segment["type"] == "tool_trace")
     assert tool_segment["tool_provider"] == "tavily"
-"""联网搜索供应商配置、传输参数与持久化回归。"""

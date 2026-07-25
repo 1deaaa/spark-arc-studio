@@ -2,10 +2,22 @@ import asyncio
 import json
 from types import SimpleNamespace
 
+import pytest
+
 from agents.agent_style import utils as style_utils
 from agents.routes.schemas import StyleApplyRequest
 from agents.routes.style import apply_style, get_style_profile, list_styles, style_router
+from core.request_context import current_project_name
 from story.routes_project import _build_project_style_snapshot, _restore_project_style_snapshot
+
+
+@pytest.fixture(autouse=True)
+def _isolate_project_context():
+    token = current_project_name.set(None)
+    try:
+        yield
+    finally:
+        current_project_name.reset(token)
 
 
 def _use_temporary_userdata(monkeypatch, tmp_path) -> str:

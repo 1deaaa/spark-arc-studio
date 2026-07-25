@@ -123,4 +123,3 @@ def test_explicit_agent_binding_wins_over_default(monkeypatch) -> None:
     manager.get_user_llm("user-1", agent_name="agent_director")
 
     assert selected_usage["key"] == "fast"
-"""Agent 默认模型用途选择回归。"""
