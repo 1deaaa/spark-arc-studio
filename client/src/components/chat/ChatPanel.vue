@@ -168,7 +168,7 @@
  * 2. 状态驱动：通过 props 接收对话数据，通过 events 发出交互指令，本身不持有业务 Store。
  * 3. 高复用性：同时服务于 GlobalChatFloat（单例主入口）和 ExtraChatWindow（多实例窗口）。
  */
-import { computed, nextTick, onMounted, ref, useSlots, watch, type PropType } from 'vue';
+import { computed, nextTick, onBeforeUnmount, onMounted, ref, useSlots, watch, type PropType } from 'vue';
 import { useI18n } from 'vue-i18n';
 import { NButton, NInput, NPopconfirm, NTooltip } from 'naive-ui';
 import ChatMessageList from '@/components/chat/ChatMessageList.vue';
@@ -302,13 +302,33 @@ const visibleHistory = computed(() => (
   agentContentPending.value ? [] : props.history.slice(visibleStartIndex.value)
 ));
 let pendingPickerAgentId = '';
+let listResizeObserver: ResizeObserver | null = null;
+let viewportFillPending = false;
 
 function getChatListElement(): HTMLElement | null {
   return chatListRef.value?.listRef || null;
 }
 
+/**
+ * 尾部窗口过短时不会产生滚动条，用户也就无法通过触顶加载更早历史。
+ * 自动补到列表可滚动为止，同时保留长历史的有界挂载策略。
+ */
+function fillHistoryViewport(): void {
+  if (viewportFillPending || agentContentPending.value || visibleStartIndex.value <= 0) return;
+  viewportFillPending = true;
+  nextTick(() => {
+    viewportFillPending = false;
+    const list = getChatListElement();
+    if (!list || list.clientHeight <= 0) return;
+    if (list.scrollHeight <= list.clientHeight + 1) loadOlderHistory();
+  });
+}
+
 function notifyHistoryRendered(): void {
-  nextTick(() => emit('history-rendered', visibleStartIndex.value > 0));
+  nextTick(() => {
+    emit('history-rendered', visibleStartIndex.value > 0);
+    fillHistoryViewport();
+  });
 }
 
 function resetHistoryWindow(): void {
@@ -448,10 +468,23 @@ function loadOlderHistory(): void {
       list.scrollTop = previousScrollTop + Math.max(0, list.scrollHeight - previousScrollHeight);
     }
     emit('history-rendered', visibleStartIndex.value > 0);
+    fillHistoryViewport();
   });
 }
 
-onMounted(notifyHistoryRendered);
+onMounted(() => {
+  notifyHistoryRendered();
+  const list = getChatListElement();
+  if (list && typeof ResizeObserver !== 'undefined') {
+    listResizeObserver = new ResizeObserver(fillHistoryViewport);
+    listResizeObserver.observe(list);
+  }
+});
+
+onBeforeUnmount(() => {
+  listResizeObserver?.disconnect();
+  listResizeObserver = null;
+});
 
 // 暴露 ChatMessageList 内部的 DOM listRef，保持与 useChatActions scrollToBottom 兼容
 // useChatActions 做 listRef.value?.listRef -> 应得到 DOM element

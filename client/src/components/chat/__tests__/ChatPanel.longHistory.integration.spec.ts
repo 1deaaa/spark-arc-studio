@@ -68,4 +68,55 @@ describe('ChatPanel 长历史组件集成', () => {
 
     wrapper.unmount();
   });
+
+  it('尾部只有用户消息和空助手占位时自动补载到视口可滚动', async () => {
+    const wrapper = mount(ChatPanel, {
+      props: {
+        agentId: 'agent_director',
+        history: [],
+      },
+      global: {
+        plugins: [i18n],
+        stubs: {
+          AgentRadialPicker: true,
+          ChatProgressBoardPopover: true,
+          GlobalLoading: true,
+          NButton: true,
+          NInput: true,
+          NPopconfirm: true,
+          NTooltip: true,
+          NPopover: true,
+          SparkAlert: true,
+          SparkLoaderAnimation: true,
+          ContextCompactionSegment: true,
+          ReasoningSegmentBubble: true,
+          ToolTraceSegment: true,
+        },
+      },
+    });
+    const list = wrapper.get('.chat-list').element;
+    Object.defineProperty(list, 'clientHeight', { configurable: true, value: 500 });
+    Object.defineProperty(list, 'scrollHeight', {
+      configurable: true,
+      get: () => wrapper.findAll('.chat-msg').length * 80,
+    });
+
+    await wrapper.setProps({
+      history: [
+        { id: 'old-user', role: 'user', content: '更早的用户消息' },
+        { id: 'old-assistant', role: 'assistant', content: '旧回复'.repeat(3000) },
+        { id: 'latest-user', role: 'user', content: '最新用户消息' },
+        { id: 'assistant-placeholder', role: 'assistant', content: '' },
+      ],
+    });
+    await nextTick();
+    await nextTick();
+    await nextTick();
+
+    expect(wrapper.text()).toContain('更早的用户消息');
+    expect(wrapper.text()).toContain('旧回复');
+    expect(wrapper.text()).toContain('最新用户消息');
+
+    wrapper.unmount();
+  });
 });
