@@ -103,6 +103,9 @@ def test_lorebook_requires_web_verification_for_external_canon() -> None:
     agent.user_id = ""
     runtime_prompt = agent._build_tool_system_prompt(prompts["chat_system"])
     assert "联网搜索时间锚点" in runtime_prompt
+    assert "`web_search` 是常驻工具" in runtime_prompt
+    assert "工具列表未显式暴露" in runtime_prompt
+    assert "禁止编造结果或声称已完成查证" in runtime_prompt
     assert "无副作用操作直接执行" in runtime_prompt
     assert "禁止先询问“是否继续”" in runtime_prompt
     assert "停止依赖该事实的创作或落盘" in runtime_prompt

@@ -3,7 +3,13 @@ from __future__ import annotations
 from agents.agent_tools import TOOLS_BY_NAME as FACADE_TOOLS_BY_NAME
 from agents.agent_tools import get_tools_for_agent as facade_get_tools_for_agent
 from agents.tools.registry import ALL_TOOLS, TOOLS_BY_NAME, get_tools_for_agent
-from agents.tools.stream_events import build_tool_stream_event, get_tool_ui_binding, normalize_tool_name
+from agents.tools.stream_events import (
+    build_tool_stream_event,
+    get_tool_result_failure_message,
+    get_tool_ui_binding,
+    is_tool_result_failure,
+    normalize_tool_name,
+)
 
 
 CORE_AGENT_IDS = {
@@ -77,3 +83,19 @@ def test_tool_name_aliases_match_ui_binding_normalization() -> None:
     assert normalize_tool_name("rewrite characters") == "rewrite_all_characters"
     assert normalize_tool_name("update story tags") == "update_project_story_tags"
     assert get_tool_ui_binding("rewrite characters")["target"] == "characters"
+
+
+def test_web_search_degraded_result_is_not_reported_as_success() -> None:
+    assert is_tool_result_failure(
+        "web_search",
+        "联网搜索暂时不可用（exa）：上游仍未恢复。",
+    ) is True
+    assert is_tool_result_failure("web_search", "使用 exa 搜索的外部资料如下。") is False
+    assert "上游暂不可用" in get_tool_result_failure_message(
+        "web_search",
+        "联网搜索暂时不可用（exa）：上游仍未恢复。",
+    )
+    assert "未能完成" in get_tool_result_failure_message(
+        "web_search",
+        "联网搜索失败（exa）：鉴权失败。",
+    )

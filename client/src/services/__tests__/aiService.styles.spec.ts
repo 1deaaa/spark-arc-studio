@@ -8,7 +8,7 @@ vi.mock('../apiClient', () => ({
   fetchWithAuth: mocks.fetchWithAuth,
 }));
 
-import { getStyles } from '../aiService';
+import { applyStyle, getStyles } from '../aiService';
 
 describe('风格列表响应', () => {
   beforeEach(() => {
@@ -19,12 +19,10 @@ describe('风格列表响应', () => {
     mocks.fetchWithAuth.mockResolvedValue(new Response(JSON.stringify({
       success: true,
       styles: [],
-      default_style_name: '',
     }), { status: 200, headers: { 'Content-Type': 'application/json' } }));
 
     await expect(getStyles()).resolves.toEqual({
       styles: [],
-      default_style_name: '',
     });
   });
 
@@ -38,5 +36,22 @@ describe('风格列表响应', () => {
     mocks.fetchWithAuth.mockResolvedValue(new Response('', { status: 503 }));
 
     await expect(getStyles()).rejects.toThrow('服务不可用 (503)');
+  });
+
+  it('项目应用与取消始终使用同一个 style_id', async () => {
+    mocks.fetchWithAuth.mockResolvedValue(new Response(JSON.stringify({
+      success: true,
+      applied: false,
+    }), { status: 200, headers: { 'Content-Type': 'application/json' } }));
+
+    const styleId = 'style_22222222222222222222222222222222';
+    await applyStyle(styleId, 'demo', false);
+
+    const [, options] = mocks.fetchWithAuth.mock.calls[0];
+    expect(JSON.parse(String(options.body))).toEqual({
+      styleId,
+      projectName: 'demo',
+      applied: false,
+    });
   });
 });

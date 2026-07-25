@@ -12,7 +12,11 @@ from agents.tools.web_search import (
     _build_exa_arguments,
     _build_tavily_arguments,
     _call_tavily_keyless_search,
+    _call_search_with_retry,
     _McpSearchClient,
+    SearchRetryExhaustedError,
+    SearchUpstreamUnavailableError,
+    web_search,
 )
 from core import search_provider_settings
 from core.search_provider_settings import (
@@ -25,6 +29,112 @@ def test_web_search_schema_exposes_provider_specific_options() -> None:
     fields = WebSearchInput.model_fields
     assert {"provider", "query", "num_results", "exa_options", "tavily_options"} <= set(fields)
     assert set(SearchProvider) == {SearchProvider.EXA, SearchProvider.TAVILY}
+
+
+def test_transient_search_failure_retries_until_upstream_recovers() -> None:
+    calls = []
+    waits = []
+
+    def operation() -> str:
+        calls.append(len(calls) + 1)
+        if len(calls) < 3:
+            raise SearchUpstreamUnavailableError("上游正在启动。")
+        return "recovered"
+
+    result = _call_search_with_retry(
+        "exa",
+        operation,
+        retry_window_seconds=60,
+        retry_delays=(2, 5, 10),
+        sleep=waits.append,
+        monotonic=lambda: 0,
+    )
+
+    assert result == "recovered"
+    assert calls == [1, 2, 3]
+    assert waits == [2, 5]
+
+
+def test_transient_search_failure_returns_precise_exhausted_state() -> None:
+    calls = []
+
+    def operation() -> str:
+        calls.append(len(calls) + 1)
+        raise SearchUpstreamUnavailableError("无法连接上游 MCP。")
+
+    with pytest.raises(SearchRetryExhaustedError) as exc_info:
+        _call_search_with_retry(
+            "tavily",
+            operation,
+            retry_window_seconds=60,
+            retry_delays=(2, 5),
+            sleep=lambda _delay: None,
+            monotonic=lambda: 0,
+        )
+
+    assert calls == [1, 2, 3]
+    assert exc_info.value.attempts == 3
+    assert exc_info.value.reason == "无法连接上游 MCP。"
+
+
+def test_permanent_search_error_does_not_retry() -> None:
+    calls = []
+
+    def operation() -> str:
+        calls.append(len(calls) + 1)
+        raise RuntimeError("exa MCP HTTP 401")
+
+    with pytest.raises(RuntimeError, match="401"):
+        _call_search_with_retry(
+            "exa",
+            operation,
+            retry_delays=(0, 0),
+            sleep=lambda _delay: None,
+            monotonic=lambda: 0,
+        )
+
+    assert calls == [1]
+
+
+def test_web_search_returns_model_safe_message_after_retry_exhaustion(monkeypatch) -> None:
+    monkeypatch.setattr(
+        "agents.tools.web_search.get_search_provider_runtime_config",
+        lambda *_args, **_kwargs: SearchProviderRuntimeConfig(
+            provider="exa",
+            url="https://mcp.exa.ai/mcp",
+        ),
+    )
+
+    def exhausted(*_args, **_kwargs):
+        raise SearchRetryExhaustedError("exa", 4, 60, "无法连接上游 MCP。")
+
+    monkeypatch.setattr("agents.tools.web_search._call_search_with_retry", exhausted)
+    result = web_search.invoke({"provider": "exa", "query": "latest news"})
+
+    assert result.startswith("联网搜索暂时不可用（exa）")
+    assert "尝试 4 次" in result
+    assert "本次未能联网核验" in result
+    assert "请勿编造搜索结果" in result
+
+
+def test_missing_search_configuration_is_not_sent_into_retry_loop(monkeypatch) -> None:
+    monkeypatch.setattr(
+        "agents.tools.web_search.get_search_provider_runtime_config",
+        lambda *_args, **_kwargs: (_ for _ in ()).throw(
+            SearchProviderUnavailableError("请配置个人 MCP URL。")
+        ),
+    )
+    retry_calls = []
+    monkeypatch.setattr(
+        "agents.tools.web_search._call_search_with_retry",
+        lambda *_args, **_kwargs: retry_calls.append(True),
+    )
+
+    result = web_search.invoke({"provider": "tavily", "query": "latest news"})
+
+    assert result.startswith("联网搜索当前不可用（tavily）")
+    assert "这是配置不可用" in result
+    assert retry_calls == []
 
 
 def test_provider_specific_arguments_keep_native_parameter_names() -> None:

@@ -17,7 +17,7 @@
           ref="styleProfileImportInput"
           class="hidden-file-input"
           type="file"
-          accept=".json,.md,application/json,text/markdown"
+          accept=".md,text/markdown"
           @change="handleStyleProfileImportFile"
         />
         <n-button
@@ -67,16 +67,16 @@
       <div v-else class="style-grid">
         <div 
           v-for="style in styles" 
-          :key="style" 
+          :key="style.style_id"
           class="style-card"
           @click="openStyleDetails(style)"
         >
-          <div class="card-preview" :style="{ background: getGradient(style) }">
+          <div class="card-preview" :style="{ background: getGradient(style.style_id) }">
             <div class="card-icon">
               <n-icon size="48" color="rgba(255,255,255,0.9)"><Palette /></n-icon>
             </div>
             <div class="card-name">
-              <h3>{{ style }}</h3>
+              <h3>{{ style.style_name }}</h3>
             </div>
           </div>
           <div class="card-body">
@@ -84,22 +84,14 @@
                <n-button
                  v-if="projectStore.currentProject"
                  size="small"
-                 type="primary"
                  secondary
-                 :disabled="isApplying || isStyleAppliedToCurrentProject(style)"
-                 :loading="isApplying && applyingStyleName === style"
+                 :type="isStyleAppliedToCurrentProject(style) ? 'success' : 'primary'"
+                 :disabled="isApplying"
+                 :loading="isApplying && applyingStyleId === style.style_id"
                  @click.stop="handleApplyToProject(style)"
                >
                  {{ isStyleAppliedToCurrentProject(style) ? t('views.style.common.applied') : t('views.style.desktop.applyToProject') }}
                </n-button>
-               <n-button
-                 size="small"
-                 :type="isDefaultStyle(style) ? 'warning' : 'default'"
-                 secondary
-                 @click.stop="handleToggleDefault(style)"
-                >
-                  {{ isDefaultStyle(style) ? t('views.style.common.isDefault') : t('views.style.common.setDefault') }}
-                </n-button>
                <n-button
                  size="small"
                  quaternary
@@ -162,19 +154,10 @@
             <n-button
               secondary
               size="small"
-              @click="handleExportStyle(selectedStyleName)"
+              @click="handleExportStyle(selectedStyle)"
             >
               <template #icon><n-icon><Download /></n-icon></template>
               {{ t('views.style.common.exportProfile') }}
-            </n-button>
-            <n-button
-              type="primary"
-              size="small"
-              @click="handleApplyToProject()"
-              :loading="isApplying && applyingStyleName === selectedStyleName"
-              :disabled="isApplying || isStyleAppliedToCurrentProject(selectedStyleName)"
-            >
-              {{ isStyleAppliedToCurrentProject(selectedStyleName) ? t('views.style.desktop.appliedToCurrentProject') : t('views.style.desktop.applyToCurrentProject') }}
             </n-button>
           </div>
         </template>
@@ -197,9 +180,8 @@ import { useI18n } from 'vue-i18n';
 import {
   NIcon, NSpin, NButton, NInput, NPopconfirm, NEmpty, NModal, NDrawer, NDrawerContent, NCollapse, NCollapseItem
 } from 'naive-ui';
-import SparkAlert from '../../components/share/SparkAlert.vue';
 import DocumentImportPicker from '../../components/import/DocumentImportPicker.vue';
-import { Bookmark, Download, Palette, Plus, RefreshCw, Trash, Upload } from '@lucide/vue';
+import { Download, Palette, Plus, RefreshCw, Trash, Upload } from '@lucide/vue';
 import AiSettingsPanel from '../../components/lorebook/AiSettingsPanel.vue';
 import BindingEditor from '../../components/lorebook/BindingEditor.vue';
 import GlobalLoading from '../../components/share/GlobalLoading.vue';
@@ -216,19 +198,15 @@ const {
   styleProfileImportInput,
   showCreateModal,
   showDetailsDrawer,
+  selectedStyle,
   selectedStyleName,
   currentProfile,
   isLoadingProfile,
   newStyleName,
   isApplying,
-  applyingStyleName,
+  applyingStyleId,
   hasRunningAnalysis,
-  hasProjectStyle,
-  projectStyleTitle,
-  projectStyleMessage,
   isStyleAppliedToCurrentProject,
-  isDefaultStyle,
-  handleToggleDefault,
   loadStyles,
   openCreateModal,
   openStyleDetails,

@@ -6,16 +6,10 @@
       ref="styleProfileImportInput"
       class="hidden-file-input"
       type="file"
-      accept=".json,.md,application/json,text/markdown"
+      accept=".md,text/markdown"
       @change="handleStyleProfileImportFile"
     />
     <div class="mobile-header">
-       <div class="status-summary" v-if="projectStore.currentProject">
-        <SparkTag :type="hasProjectStyle ? 'success' : 'warning'">
-            {{ projectStyleTitle }}
-        </SparkTag>
-       </div>
-       <div class="status-summary-placeholder" v-else></div>
        <n-button circle quaternary size="small" @click="loadStyles">
          <template #icon><n-icon><RefreshCw /></n-icon></template>
        </n-button>
@@ -28,33 +22,25 @@
         <div 
           v-else 
           v-for="style in styles" 
-          :key="style"
+          :key="style.style_id"
           class="mobile-style-item"
           @click="openStyleDetails(style)"
         >
-           <div class="style-indicator" :style="{ background: getGradient(style) }"></div>
+           <div class="style-indicator" :style="{ background: getGradient(style.style_id) }"></div>
            <div class="style-info">
-              <span class="style-name">{{ style }}</span>
+              <span class="style-name">{{ style.style_name }}</span>
             </div>
             <div class="mobile-style-actions">
              <n-button
                v-if="projectStore.currentProject"
                size="tiny"
-               type="primary"
                secondary
-               :disabled="isApplying || isStyleAppliedToCurrentProject(style)"
-               :loading="isApplying && applyingStyleName === style"
+               :type="isStyleAppliedToCurrentProject(style) ? 'success' : 'primary'"
+               :disabled="isApplying"
+               :loading="isApplying && applyingStyleId === style.style_id"
                @click.stop="handleApplyToProject(style)"
              >
                {{ isStyleAppliedToCurrentProject(style) ? t('views.style.common.applied') : t('views.style.common.apply') }}
-             </n-button>
-             <n-button
-               size="tiny"
-               :type="isDefaultStyle(style) ? 'warning' : 'default'"
-               secondary
-               @click.stop="handleToggleDefault(style)"
-             >
-               {{ isDefaultStyle(style) ? t('views.style.common.isDefault') : t('views.style.common.setDefault') }}
              </n-button>
              <n-button
                size="tiny"
@@ -100,19 +86,10 @@
                <n-button
                  secondary
                  size="small"
-                 @click="handleExportStyle(selectedStyleName)"
+                 @click="handleExportStyle(selectedStyle)"
                >
                  <template #icon><n-icon><Download /></n-icon></template>
                  {{ t('views.style.common.exportProfile') }}
-               </n-button>
-               <n-button
-                 type="primary"
-                 size="small"
-                 @click="handleApplyToProject()"
-                 :loading="isApplying && applyingStyleName === selectedStyleName"
-                 :disabled="isApplying || isStyleAppliedToCurrentProject(selectedStyleName)"
-               >
-                 {{ isStyleAppliedToCurrentProject(selectedStyleName) ? t('views.style.common.applied') : t('views.style.common.apply') }}
                </n-button>
              </div>
           </template>
@@ -157,7 +134,6 @@
 import { computed } from 'vue';
 import { useI18n } from 'vue-i18n';
 import { NIcon, NSpin, NButton, NInput, NEmpty, NDrawer, NDrawerContent, NModal, NFormItem } from 'naive-ui';
-import SparkTag from '../../components/share/SparkTag.vue';
 import DocumentImportPicker from '../../components/import/DocumentImportPicker.vue';
 import { ChevronRight, Download, Plus, RefreshCw, Upload } from '@lucide/vue';
 import GlobalLoading from '../../components/share/GlobalLoading.vue';
@@ -174,18 +150,15 @@ const {
   styleProfileImportInput,
   showCreateModal,
   showDetailsDrawer,
+  selectedStyle,
   selectedStyleName,
   currentProfile,
   isLoadingProfile,
   newStyleName,
   isApplying,
-  applyingStyleName,
+  applyingStyleId,
   hasRunningAnalysis,
-  hasProjectStyle,
-  projectStyleTitle,
   isStyleAppliedToCurrentProject,
-  isDefaultStyle,
-  handleToggleDefault,
   handleExportStyle,
   triggerStyleProfileImport,
   handleStyleProfileImportFile,
@@ -275,25 +248,10 @@ const profileMarkdown = computed(() => {
 
 .mobile-header {
   display: flex;
-  justify-content: space-between;
+  justify-content: flex-end;
   align-items: center;
   gap: 10px;
   min-height: 34px;
-}
-
-.status-summary {
-  display: flex;
-  justify-content: flex-start;
-  min-width: 0;
-}
-
-.status-summary :deep(.spark-tag) {
-  max-width: 100%;
-}
-
-.status-summary-placeholder {
-  flex: 1;
-  min-width: 0;
 }
 
 .style-list-mobile {

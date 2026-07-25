@@ -39,8 +39,12 @@ type StyleProfileLookupResult = JsonObject | string | { error: true } | null;
 
 type StyleProfileMetaResult = {
   style_profile: JsonObject | string | null;
+  style_id: string | null;
   style_name: string | null;
-  project_style_name: string | null;
+  project_binding: {
+    style_id: string;
+    style_name: string;
+  } | null;
 };
 
 async function fetchSSEAndGetResult<T extends Record<string, unknown>>(url: string, body: unknown, options: StreamOptions = {}): Promise<T> {
@@ -623,9 +627,9 @@ export async function exportOutlineToFiles(projectName: string, options: Record<
 }
 
 // --- 文风与衔接 ---
-export async function getStyleProfile(projectName: string | null | undefined, styleName: string | null | undefined): Promise<StyleProfileLookupResult> {
+export async function getStyleProfile(projectName: string | null | undefined, styleId: string | null | undefined): Promise<StyleProfileLookupResult> {
   let url = '/api/ai/style-profile?';
-  if (styleName) url += `styleName=${encodeURIComponent(styleName)}`;
+  if (styleId) url += `styleId=${encodeURIComponent(styleId)}`;
   else if (projectName) url += `projectName=${encodeURIComponent(projectName)}`;
 
   const response = await fetchWithAuth(url);
@@ -634,22 +638,24 @@ export async function getStyleProfile(projectName: string | null | undefined, st
   return result.style_profile ?? null;
 }
 
-export async function getStyleProfileMeta(projectName: string | null | undefined, styleName: string | null | undefined): Promise<StyleProfileMetaResult | null> {
+export async function getStyleProfileMeta(projectName: string | null | undefined, styleId: string | null | undefined): Promise<StyleProfileMetaResult | null> {
   let url = '/api/ai/style-profile?';
-  if (styleName) url += `styleName=${encodeURIComponent(styleName)}`;
+  if (styleId) url += `styleId=${encodeURIComponent(styleId)}`;
   else if (projectName) url += `projectName=${encodeURIComponent(projectName)}`;
 
   const response = await fetchWithAuth(url);
   if (!response.ok) return null;
   const result = await response.json() as {
     style_profile?: JsonObject | string | null;
+    style_id?: string | null;
     style_name?: string | null;
-    project_style_name?: string | null;
+    project_binding?: StyleProfileMetaResult['project_binding'];
   };
   return {
     style_profile: result?.style_profile ?? null,
+    style_id: result?.style_id || null,
     style_name: result?.style_name || null,
-    project_style_name: result?.project_style_name || null,
+    project_binding: result?.project_binding || null,
   };
 }
 

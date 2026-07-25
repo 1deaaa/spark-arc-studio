@@ -8,50 +8,26 @@
 - 同名 `.json` 老存量保留兼容读取(由 loader 处理)
 """
 
-import re
-from datetime import datetime
-from pathlib import Path
 from typing import List
 from starlette.concurrency import run_in_threadpool
 
-from .utils import get_user_style_dir
+from .utils import find_style_profile_by_name, save_style_profile_to_file, style_profile_summary
 from .text_splitter import split_text_for_style_analysis
 from .agents import UnifiedStyleAnalyzer
 
 
-def _style_md_path(author_id: str, user_id: str = None) -> Path:
-    """新的 markdown 风格档案落盘路径。"""
-    return get_user_style_dir(user_id) / f"{author_id}.md"
-
-
-def _build_frontmatter(author_id: str, chunks_count: int) -> str:
-    """构建 yaml frontmatter。字符串值用单引号包裹以避免冒号歧义。"""
-    safe_name = (author_id or "").replace("'", "''")
-    timestamp = datetime.now().isoformat(timespec="seconds")
-    return (
-        "---\n"
-        f"style_name: '{safe_name}'\n"
-        f"created_at: '{timestamp}'\n"
-        f"source_chunks: {chunks_count}\n"
-        "format_version: 2\n"
-        "---\n\n"
-    )
-
-
 async def stream_save_style_profile(
-    author_id: str,
+    style_name: str,
     chapter_texts: List[str],
     force_regenerate: bool = False,
     user_id: str = None,
 ):
     """
-    异步流式提取并保存作者风格(串行版)
+    异步流式提取并保存风格档案（串行版）
 
     Yields:
         Dict: 进度信息
     """
-    md_filepath = _style_md_path(author_id, user_id)
-
     valid_chapters = [text for text in chapter_texts if len(text.strip()) >= 50]
     if not valid_chapters:
         yield {"step": "error", "message": "没有有效的章节文本"}
@@ -129,12 +105,12 @@ async def stream_save_style_profile(
 
     if final_style_md and final_style_md.strip():
         def _write_style_file():
-            frontmatter = _build_frontmatter(author_id, len(chunks))
-            md_filepath.parent.mkdir(parents=True, exist_ok=True)
-            with open(md_filepath, "w", encoding="utf-8") as f:
-                f.write(frontmatter)
-                f.write(final_style_md.strip())
-                f.write("\n")
+            save_style_profile_to_file(
+                style_name,
+                final_style_md,
+                user_id=user_id,
+                source_chunks=len(chunks),
+            )
 
         try:
             await run_in_threadpool(_write_style_file)
@@ -143,6 +119,9 @@ async def stream_save_style_profile(
                 "step": "complete",
                 "message": "分析全部完成",
                 "style_profile": final_style_md,
+                "style": style_profile_summary(
+                    find_style_profile_by_name(style_name, user_id=user_id)
+                ),
             }
         except Exception as e:
             yield {"step": "error", "message": f"保存风格文件失败: {e}"}

@@ -20,6 +20,33 @@ def normalize_tool_name(raw_tool_name: str = "") -> str:
     return aliases.get(key, normalized)
 
 
+def is_tool_result_failure(tool_name: str, result: Any) -> bool:
+    """识别工具以文本返回的可恢复失败，避免把降级结果误标为成功。"""
+    if not isinstance(result, str):
+        return False
+    normalized = normalize_tool_name(tool_name)
+    if "执行失败" in result:
+        return True
+    if normalized == "web_search":
+        return result.startswith((
+            "联网搜索当前不可用",
+            "联网搜索暂时不可用",
+            "联网搜索失败",
+        ))
+    return False
+
+
+def get_tool_result_failure_message(tool_name: str, result: Any) -> str:
+    """为前端事件生成与实际失败类型一致的简短说明。"""
+    normalized = normalize_tool_name(tool_name)
+    text = result if isinstance(result, str) else ""
+    if normalized == "web_search":
+        if text.startswith(("联网搜索当前不可用", "联网搜索暂时不可用")):
+            return "联网搜索上游暂不可用，AI 将基于失败状态继续回应"
+        return "联网搜索未能完成，AI 将基于失败状态继续回应"
+    return "模型使用了错误的调用格式，正在尝试修正"
+
+
 def get_tool_ui_binding(tool_name: str) -> Dict[str, Any]:
     normalized = normalize_tool_name(tool_name)
     if normalized == "rewrite_inspiration":

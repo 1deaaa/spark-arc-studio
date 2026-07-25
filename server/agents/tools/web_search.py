@@ -1,6 +1,8 @@
 from __future__ import annotations
 
 import json
+import logging
+import time
 import uuid
 from dataclasses import replace
 from datetime import datetime
@@ -17,9 +19,31 @@ from core.search_provider_settings import (
     DEFAULT_EXA_MCP_URL,
     DEFAULT_TAVILY_MCP_URL,
     SearchProviderRuntimeConfig,
+    SearchProviderUnavailableError,
     get_search_provider_runtime_config,
 )
 from core.request_context import current_user_id
+
+
+logger = logging.getLogger(__name__)
+
+_SEARCH_RETRY_WINDOW_SECONDS = 60.0
+_SEARCH_RETRY_DELAYS_SECONDS = (2.0, 5.0, 10.0, 15.0, 28.0)
+
+
+class SearchUpstreamUnavailableError(RuntimeError):
+    """搜索上游的瞬时故障，可在当前调用内重试。"""
+
+
+class SearchRetryExhaustedError(RuntimeError):
+    """搜索上游在退避重试窗口内始终未恢复。"""
+
+    def __init__(self, provider: str, attempts: int, retry_window_seconds: float, reason: str):
+        super().__init__(reason)
+        self.provider = provider
+        self.attempts = attempts
+        self.retry_window_seconds = retry_window_seconds
+        self.reason = reason
 
 
 class SearchProvider(str, Enum):
@@ -130,14 +154,29 @@ class _McpSearchClient:
         if params is not None:
             payload["params"] = params
 
-        response = requests.post(self.config.request_url, headers=headers, json=payload, timeout=timeout)
+        try:
+            response = requests.post(self.config.request_url, headers=headers, json=payload, timeout=timeout)
+        except requests.Timeout as exc:
+            raise SearchUpstreamUnavailableError("连接上游 MCP 超时。") from exc
+        except requests.ConnectionError as exc:
+            raise SearchUpstreamUnavailableError("无法连接上游 MCP。") from exc
+        except requests.RequestException as exc:
+            raise SearchUpstreamUnavailableError("请求上游 MCP 时发生网络错误。") from exc
         try:
             response.raise_for_status()
         except requests.HTTPError as exc:
+            if response.status_code in {408, 425, 429} or response.status_code >= 500:
+                raise SearchUpstreamUnavailableError(
+                    f"上游 MCP 暂时不可用（HTTP {response.status_code}）。"
+                ) from exc
             raise RuntimeError(f"{self.config.provider} MCP HTTP {response.status_code}") from exc
         if response.status_code == 202 or not (response.text or "").strip():
             return None, response.headers.get("mcp-session-id"), response.status_code
-        return _parse_mcp_response(response), response.headers.get("mcp-session-id"), response.status_code
+        try:
+            payload = _parse_mcp_response(response)
+        except (ValueError, RuntimeError) as exc:
+            raise SearchUpstreamUnavailableError("上游 MCP 返回了无法解析的响应。") from exc
+        return payload, response.headers.get("mcp-session-id"), response.status_code
 
     def call_tool(self, tool_name: str, arguments: dict[str, Any]) -> str:
         client_name = f"sparkarc-{uuid.uuid4().hex[:8]}"
@@ -218,23 +257,37 @@ def _is_official_tavily_mcp_url(url: str) -> bool:
 def _call_tavily_keyless_search(arguments: dict[str, Any]) -> str:
     """复用 Tavily 官方 MCP 包的免密钥请求协议。"""
     session_id = str(uuid.uuid4())
-    response = requests.post(
-        "https://api.tavily.com/search",
-        headers={
-            "Accept": "application/json",
-            "Content-Type": "application/json",
-            "X-Tavily-Access-Mode": "keyless",
-            "X-Client-Source": "tavily-mcp-keyless",
-            "X-Session-Id": session_id,
-        },
-        json=arguments,
-        timeout=60,
-    )
+    try:
+        response = requests.post(
+            "https://api.tavily.com/search",
+            headers={
+                "Accept": "application/json",
+                "Content-Type": "application/json",
+                "X-Tavily-Access-Mode": "keyless",
+                "X-Client-Source": "tavily-mcp-keyless",
+                "X-Session-Id": session_id,
+            },
+            json=arguments,
+            timeout=60,
+        )
+    except requests.Timeout as exc:
+        raise SearchUpstreamUnavailableError("连接 Tavily 上游超时。") from exc
+    except requests.ConnectionError as exc:
+        raise SearchUpstreamUnavailableError("无法连接 Tavily 上游。") from exc
+    except requests.RequestException as exc:
+        raise SearchUpstreamUnavailableError("请求 Tavily 上游时发生网络错误。") from exc
     try:
         response.raise_for_status()
     except requests.HTTPError as exc:
+        if response.status_code in {408, 425, 429} or response.status_code >= 500:
+            raise SearchUpstreamUnavailableError(
+                f"Tavily 上游暂时不可用（HTTP {response.status_code}）。"
+            ) from exc
         raise RuntimeError(f"tavily keyless HTTP {response.status_code}") from exc
-    payload = response.json()
+    try:
+        payload = response.json()
+    except ValueError as exc:
+        raise SearchUpstreamUnavailableError("Tavily 上游返回了无法解析的响应。") from exc
     error = payload.get("error") if isinstance(payload, dict) else None
     if isinstance(error, dict):
         message = str(error.get("message") or error.get("code") or "Tavily 免密钥搜索失败。")
@@ -243,6 +296,78 @@ def _call_tavily_keyless_search(arguments: dict[str, Any]) -> str:
             message += f" 可在 {retry_after} 秒后重试。"
         raise RuntimeError(message)
     return json.dumps(payload, ensure_ascii=False)
+
+
+def _is_retryable_search_error(exc: Exception) -> bool:
+    if isinstance(exc, SearchUpstreamUnavailableError):
+        return True
+    message = str(exc).lower()
+    return any(token in message for token in (
+        "timeout",
+        "timed out",
+        "temporarily unavailable",
+        "service unavailable",
+        "connection reset",
+        "connection aborted",
+        "connection refused",
+        "连接超时",
+        "暂时不可用",
+        "无法连接",
+        "稍后重试",
+    ))
+
+
+def _safe_search_error_reason(exc: Exception) -> str:
+    if isinstance(exc, SearchUpstreamUnavailableError):
+        return str(exc)
+    return "上游 MCP 暂时无法完成请求。"
+
+
+def _call_search_with_retry(
+    provider: str,
+    operation,
+    *,
+    retry_window_seconds: float = _SEARCH_RETRY_WINDOW_SECONDS,
+    retry_delays: tuple[float, ...] = _SEARCH_RETRY_DELAYS_SECONDS,
+    sleep=time.sleep,
+    monotonic=time.monotonic,
+) -> str:
+    """在有限窗口内重连瞬时故障；永久配置/鉴权错误立即返回。"""
+    started_at = monotonic()
+    attempts = 0
+    last_error: Exception | None = None
+
+    while True:
+        attempts += 1
+        try:
+            return operation()
+        except Exception as exc:
+            if not _is_retryable_search_error(exc):
+                raise
+            last_error = exc
+
+        delay_index = attempts - 1
+        if delay_index >= len(retry_delays):
+            break
+        delay = max(float(retry_delays[delay_index]), 0.0)
+        elapsed = max(monotonic() - started_at, 0.0)
+        if elapsed + delay > retry_window_seconds:
+            break
+        logger.warning(
+            "联网搜索上游暂不可用，%.1f 秒后进行第 %d 次尝试：provider=%s reason=%s",
+            delay,
+            attempts + 1,
+            provider,
+            _safe_search_error_reason(last_error),
+        )
+        sleep(delay)
+
+    raise SearchRetryExhaustedError(
+        provider,
+        attempts,
+        retry_window_seconds,
+        _safe_search_error_reason(last_error or RuntimeError()),
+    ) from last_error
 
 
 def _coerce_exa_options(options: ExaSearchOptions | dict[str, Any] | None) -> ExaSearchOptions | None:
@@ -359,15 +484,35 @@ def web_search(
             tool_name, arguments = _build_exa_arguments(anchored_query, safe_num_results, exa_options)
             if tool_name == "web_search_advanced_exa":
                 config = _enable_exa_advanced_tool(config)
-            result_text = _McpSearchClient(config).call_tool(tool_name, arguments)
+            result_text = _call_search_with_retry(
+                provider_name,
+                lambda: _McpSearchClient(config).call_tool(tool_name, arguments),
+            )
         else:
             arguments = _build_tavily_arguments(anchored_query, safe_num_results, tavily_options)
             if not config.api_key and _is_official_tavily_mcp_url(config.url):
-                result_text = _call_tavily_keyless_search(arguments)
+                operation = lambda: _call_tavily_keyless_search(arguments)
             else:
-                result_text = _McpSearchClient(config).call_tool("tavily_search", arguments)
+                operation = lambda: _McpSearchClient(config).call_tool("tavily_search", arguments)
+            result_text = _call_search_with_retry(provider_name, operation)
+    except SearchProviderUnavailableError as exc:
+        return (
+            f"联网搜索当前不可用（{provider_name}）：{exc} "
+            "这是配置不可用，不代表搜索不到资料。请勿编造搜索结果或声称已完成联网查证；"
+            "应向用户说明当前无法联网核验。"
+        )
+    except SearchRetryExhaustedError as exc:
+        return (
+            f"联网搜索暂时不可用（{provider_name}）：已在最多 {exc.retry_window_seconds:g} 秒的重试窗口内"
+            f"尝试 {exc.attempts} 次，上游仍未恢复。原因：{exc.reason} "
+            "这不代表没有相关资料。请勿编造搜索结果或声称已完成联网查证；"
+            "应向用户明确说明本次未能联网核验，并可稍后再次调用 web_search。"
+        )
     except Exception as exc:
-        return f"联网搜索失败（{provider_name}）：{exc}"
+        return (
+            f"联网搜索失败（{provider_name}）：{exc} "
+            "本次没有取得可验证的外部资料。请勿编造搜索结果或声称已完成联网查证。"
+        )
 
     if not result_text:
         return f"使用 {provider_name} 搜索 \"{clean_query}\" 未找到可用结果。"

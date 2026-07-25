@@ -7,9 +7,9 @@ import {
     getStyles,
     deleteStyle,
     applyStyle,
-    setDefaultStyle,
     exportStyleProfile,
     importStyleProfile,
+    type StyleSummary,
 } from '../services/aiService';
 import { getStyleProfile, getStyleProfileMeta } from '../services/storyService';
 import { useProjectStore } from '../components/stores/projectStore';
@@ -45,13 +45,17 @@ export function useStyleLogic() {
     const { t } = useI18n();
 
     // State
-    const styles = ref<string[]>([]);
+    const styles = ref<StyleSummary[]>([]);
     const isLoadingList = ref(false);
     const isImportingStyleProfile = ref(false);
     const styleProfileImportInput = ref<HTMLInputElement | null>(null);
     const showCreateModal = ref(false);
     const showDetailsDrawer = ref(false);
-    const selectedStyleName = ref('');
+    const selectedStyleId = ref('');
+    const selectedStyle = computed(() =>
+        styles.value.find((style) => style.style_id === selectedStyleId.value) || null
+    );
+    const selectedStyleName = computed(() => selectedStyle.value?.style_name || '');
     const currentProfile = ref<string | null>(null);
     const isLoadingProfile = ref(false);
 
@@ -60,57 +64,13 @@ export function useStyleLogic() {
 
     // Apply State
     const isApplying = ref(false);
-    const applyingStyleName = ref('');
+    const applyingStyleId = ref('');
     const hasRunningAnalysis = computed(() => currentAnalysisTask.value?.status === 'running');
-    const currentProjectStyleName = ref('');
-    const defaultStyleName = ref('');
+    const currentProjectBinding = ref<StyleSummary | null>(null);
 
-    const hasProjectStyle = computed(() => !!currentProjectStyleName.value);
-
-    const projectStyleTitle = computed(() => {
-        if (hasProjectStyle.value) return '当前项目已配置风格';
-        if (defaultStyleName.value) return '当前项目未配置风格（将使用默认风格）';
-        return '当前项目未配置风格';
-    });
-    const projectStyleMessage = computed(() => {
-        if (hasProjectStyle.value) {
-            return `项目 "${projectStore.currentProject}" 已绑定风格「${currentProjectStyleName.value}」，AI 将按该风格进行创作。`;
-        }
-        if (defaultStyleName.value) {
-            return `项目 "${projectStore.currentProject}" 尚未绑定风格，将使用默认风格「${defaultStyleName.value}」。你也可以选择下方任一风格卡片应用到当前项目。`;
-        }
-        return `项目 "${projectStore.currentProject}" 尚未绑定风格，且未设置默认风格。请选择下方任一风格卡片，直接点击"应用至当前项目"，或将某个风格设为默认。`;
-    });
-
-    const isStyleAppliedToCurrentProject = (styleName: string | null | undefined) => {
-        if (!projectStore.currentProject || !styleName) return false;
-        return String(styleName) === String(currentProjectStyleName.value || '');
-    };
-
-    const isDefaultStyle = (styleName: string | null | undefined) => {
-        if (!styleName) return false;
-        return String(styleName) === String(defaultStyleName.value || '');
-    };
-
-    const handleSetDefault = async (styleName: string) => {
-        if (!styleName) return;
-        try {
-            const result = await setDefaultStyle(styleName);
-            defaultStyleName.value = result;
-            message.success(`已将「${styleName}」设为默认风格`);
-        } catch (e: unknown) {
-            message.error('设置默认风格失败: ' + getErrorMessage(e));
-        }
-    };
-
-    const handleClearDefault = async () => {
-        try {
-            await setDefaultStyle(null);
-            defaultStyleName.value = '';
-            message.success('已取消默认风格');
-        } catch (e: unknown) {
-            message.error('取消默认风格失败: ' + getErrorMessage(e));
-        }
+    const isStyleAppliedToCurrentProject = (style: StyleSummary | null | undefined) => {
+        if (!projectStore.currentProject || !style) return false;
+        return style.style_id === currentProjectBinding.value?.style_id;
     };
 
 
@@ -119,16 +79,15 @@ export function useStyleLogic() {
         isLoadingList.value = true;
         try {
             const result = await getStyles();
-            styles.value = result.styles.map((item) => String(item));
-            defaultStyleName.value = result.default_style_name || '';
+            styles.value = result.styles;
             if (projectStore.currentProject) {
                 const profileMeta = await getStyleProfileMeta(projectStore.currentProject, null);
-                currentProjectStyleName.value = profileMeta?.project_style_name || '';
+                currentProjectBinding.value = profileMeta?.project_binding || null;
             } else {
-                currentProjectStyleName.value = '';
+                currentProjectBinding.value = null;
             }
         } catch (e: unknown) {
-            message.error('加载风格列表失败: ' + getErrorMessage(e));
+            message.error(t('views.style.messages.loadListFailed', { reason: getErrorMessage(e) }));
         } finally {
             isLoadingList.value = false;
         }
@@ -139,40 +98,40 @@ export function useStyleLogic() {
         showCreateModal.value = true;
     };
 
-    const openStyleDetails = async (styleName: string) => {
-        selectedStyleName.value = styleName;
+    const openStyleDetails = async (style: StyleSummary) => {
+        selectedStyleId.value = style.style_id;
         showDetailsDrawer.value = true;
         currentProfile.value = null;
         isLoadingProfile.value = true;
 
         try {
-            const profile = await getStyleProfile(null, styleName);
+            const profile = await getStyleProfile(null, style.style_id);
             currentProfile.value = typeof profile === 'string' ? profile : null;
         } catch (e: unknown) {
-            message.error('加载风格详情失败: ' + getErrorMessage(e));
+            message.error(t('views.style.messages.loadProfileFailed', { reason: getErrorMessage(e) }));
         } finally {
             isLoadingProfile.value = false;
         }
     };
 
-    const handleDelete = async (styleName: string) => {
+    const handleDelete = async (style: StyleSummary) => {
         try {
-            await deleteStyle(styleName);
-            message.success(`已删除风格: ${styleName}`);
-            if (selectedStyleName.value === styleName) {
+            await deleteStyle(style.style_id);
+            message.success(t('views.style.messages.deleteSuccess', { name: style.style_name }));
+            if (selectedStyleId.value === style.style_id) {
                 showDetailsDrawer.value = false;
             }
             await loadStyles();
         } catch (e: unknown) {
-            message.error('删除失败: ' + getErrorMessage(e));
+            message.error(t('views.style.messages.deleteFailed', { reason: getErrorMessage(e) }));
         }
     };
 
-    const handleExportStyle = async (styleName: string) => {
-        if (!styleName) return;
+    const handleExportStyle = async (style: StyleSummary | null) => {
+        if (!style) return;
         try {
-            await exportStyleProfile(styleName);
-            message.success(t('views.style.messages.exportSuccess', { name: styleName }));
+            await exportStyleProfile(style);
+            message.success(t('views.style.messages.exportSuccess', { name: style.style_name }));
         } catch (e: unknown) {
             message.error(t('views.style.messages.exportFailed', { reason: getErrorMessage(e) }));
         }
@@ -187,8 +146,8 @@ export function useStyleLogic() {
         const file = input?.files?.[0];
         if (input) input.value = '';
         if (!file) return;
-        if (!file.name.toLowerCase().endsWith('.json')) {
-            message.warning(t('views.style.messages.importJsonOnly'));
+        if (!file.name.toLowerCase().endsWith('.md')) {
+            message.warning(t('views.style.messages.importMarkdownOnly'));
             return;
         }
 
@@ -204,36 +163,32 @@ export function useStyleLogic() {
         }
     };
 
-    const handleApplyToProject = async (styleName: string = selectedStyleName.value) => {
+    const handleApplyToProject = async (style: StyleSummary | null = selectedStyle.value) => {
         if (!projectStore.currentProject) {
-            message.warning('请先打开一个项目');
+            message.warning(t('views.style.messages.openProjectFirst'));
             return;
         }
-        if (!styleName) {
-            message.warning('请选择要应用的风格');
+        if (!style) {
+            message.warning(t('views.style.messages.selectStyleFirst'));
             return;
         }
 
+        const shouldApply = !isStyleAppliedToCurrentProject(style);
         isApplying.value = true;
-        applyingStyleName.value = styleName;
+        applyingStyleId.value = style.style_id;
         try {
-            await applyStyle(styleName, projectStore.currentProject);
+            await applyStyle(style.style_id, projectStore.currentProject, shouldApply);
             await loadStyles();
-            message.success(`已将 "${styleName}" 应用到当前项目`);
+            message.success(shouldApply
+                ? t('views.style.messages.applySuccess', { name: style.style_name })
+                : t('views.style.messages.cancelApplySuccess', { name: style.style_name })
+            );
         } catch (e: unknown) {
-            message.error('应用失败: ' + getErrorMessage(e));
+            message.error(t('views.style.messages.applyFailed', { reason: getErrorMessage(e) }));
         } finally {
             isApplying.value = false;
-            applyingStyleName.value = '';
+            applyingStyleId.value = '';
         }
-    };
-
-    const handleToggleDefault = async (styleName: string) => {
-        if (isDefaultStyle(styleName)) {
-            await handleClearDefault();
-            return;
-        }
-        await handleSetDefault(styleName);
     };
 
     const handleImportedFile = async (file: File) => {
@@ -250,17 +205,17 @@ export function useStyleLogic() {
      */
     const processFile = async (file: Blob | File) => {
         if (hasRunningAnalysis.value) {
-            message.warning('已有风格分析任务在进行中');
+            message.warning(t('views.style.messages.analysisAlreadyRunning'));
             return;
         }
 
         if (!newStyleName.value.trim()) {
-            message.warning('请输入风格名称');
+            message.warning(t('views.style.messages.styleNameRequired'));
             return;
         }
 
-        if (styles.value.includes(newStyleName.value)) {
-            message.warning('风格名称已存在，请换一个');
+        if (styles.value.some((style) => style.style_name === newStyleName.value)) {
+            message.warning(t('views.style.messages.styleNameExists'));
             return;
         }
 
@@ -271,13 +226,13 @@ export function useStyleLogic() {
         const task: StyleAnalysisTask = {
             id: taskId,
             styleName,
-            progressMessage: '正在初始化分析...',
+            progressMessage: t('views.style.messages.analysisInitializing'),
             analysisProgress: 0,
             status: 'running',
             error: null,
             streamTask: createStreamingTask('style', {
-                text: `正在分析风格「${styleName}」...`,
-                progress: '正在初始化分析...',
+                text: t('views.style.messages.analysisRunning', { name: styleName }),
+                progress: t('views.style.messages.analysisInitializing'),
                 canCancel: true,
                 statsMode: 'elapsed',
             }),
@@ -302,71 +257,74 @@ export function useStyleLogic() {
                 file,
                 task.styleName,
                 (data) => {
-                    const t = currentAnalysisTask.value?.id === task.id ? currentAnalysisTask.value : null;
-                    if (!t) return;
+                    const activeTask = currentAnalysisTask.value?.id === task.id ? currentAnalysisTask.value : null;
+                    if (!activeTask) return;
 
                     if (data.message) {
-                        t.progressMessage = data.message;
+                        activeTask.progressMessage = data.message;
                     }
 
                     if (data.step === 'analyzing_chunk') {
                         if (typeof data.total === 'number' && data.total > 0 && typeof data.current === 'number') {
                             // 分析阶段占 10%~95%
-                            t.analysisProgress = 10 + Math.floor((data.current / data.total) * 85);
+                            activeTask.analysisProgress = 10 + Math.floor((data.current / data.total) * 85);
                         }
                     } else if (data.step === 'chunking_complete') {
-                        t.analysisProgress = 10;
+                        activeTask.analysisProgress = 10;
                     } else if (data.step === 'save_complete') {
-                        t.analysisProgress = 100;
+                        activeTask.analysisProgress = 100;
                     } else if (data.step === 'preprocessing') {
-                        t.analysisProgress = 5;
+                        activeTask.analysisProgress = 5;
                     }
 
-                    const progressText = t.analysisProgress > 0 && t.analysisProgress < 100
-                        ? `${t.progressMessage}（${t.analysisProgress}%）`
-                        : t.progressMessage;
-                    t.streamTask?.setProgress?.(progressText);
+                    const progressText = activeTask.analysisProgress > 0 && activeTask.analysisProgress < 100
+                        ? `${activeTask.progressMessage}（${activeTask.analysisProgress}%）`
+                        : activeTask.progressMessage;
+                    activeTask.streamTask?.setProgress?.(progressText);
                 },
                 { signal: task.streamTask?.signal }
             );
 
             if (!profile) {
-                throw new Error('分析未返回结果');
+                throw new Error(t('views.style.messages.analysisNoResult'));
             }
 
             // 更新任务状态为完成
-            const t = currentAnalysisTask.value?.id === task.id ? currentAnalysisTask.value : null;
-            if (t) {
-                t.status = 'done';
-                t.analysisProgress = 100;
-                t.progressMessage = '分析完成！';
-                t.streamTask?.setProgress?.('分析完成');
+            const activeTask = currentAnalysisTask.value?.id === task.id ? currentAnalysisTask.value : null;
+            if (activeTask) {
+                activeTask.status = 'done';
+                activeTask.analysisProgress = 100;
+                activeTask.progressMessage = t('views.style.messages.analysisComplete');
+                activeTask.streamTask?.setProgress?.(t('views.style.messages.analysisComplete'));
             }
 
-            message.success(`风格 "${task.styleName}" 分析完成！`);
+            message.success(t('views.style.messages.analysisSuccess', { name: task.styleName }));
             // 刷新风格列表
             await loadStyles();
 
         } catch (e: unknown) {
             if (isAbortLikeError(e)) {
-                const t = currentAnalysisTask.value?.id === task.id ? currentAnalysisTask.value : null;
-                if (t) {
-                    t.status = 'cancelled';
-                    t.error = null;
-                    t.progressMessage = '已取消';
-                    t.streamTask?.setProgress?.('已取消');
+                const activeTask = currentAnalysisTask.value?.id === task.id ? currentAnalysisTask.value : null;
+                if (activeTask) {
+                    activeTask.status = 'cancelled';
+                    activeTask.error = null;
+                    activeTask.progressMessage = t('views.style.messages.analysisCancelled');
+                    activeTask.streamTask?.setProgress?.(t('views.style.messages.analysisCancelled'));
                 }
-                message.info(`已取消风格 "${task.styleName}" 分析`);
+                message.info(t('views.style.messages.analysisCancelledMessage', { name: task.styleName }));
                 return;
             }
-            const t = currentAnalysisTask.value?.id === task.id ? currentAnalysisTask.value : null;
-            if (t) {
-                t.status = 'error';
-                t.error = getErrorMessage(e);
-                t.progressMessage = '分析失败';
-                t.streamTask?.setProgress?.('分析失败');
+            const activeTask = currentAnalysisTask.value?.id === task.id ? currentAnalysisTask.value : null;
+            if (activeTask) {
+                activeTask.status = 'error';
+                activeTask.error = getErrorMessage(e);
+                activeTask.progressMessage = t('views.style.messages.analysisFailed');
+                activeTask.streamTask?.setProgress?.(t('views.style.messages.analysisFailed'));
             }
-            message.error(`风格 "${task.styleName}" 分析失败: ` + getErrorMessage(e));
+            message.error(t('views.style.messages.analysisFailedMessage', {
+                name: task.styleName,
+                reason: getErrorMessage(e),
+            }));
         } finally {
             if (task.streamTask) {
                 task.streamTask.dispose?.();
@@ -405,12 +363,12 @@ export function useStyleLogic() {
         if (newProject) {
             try {
                 const profileMeta = await getStyleProfileMeta(newProject, null);
-                currentProjectStyleName.value = profileMeta?.project_style_name || '';
+                currentProjectBinding.value = profileMeta?.project_binding || null;
             } catch {
-                currentProjectStyleName.value = '';
+                currentProjectBinding.value = null;
             }
         } else {
-            currentProjectStyleName.value = '';
+            currentProjectBinding.value = null;
         }
     });
 
@@ -429,22 +387,15 @@ export function useStyleLogic() {
         styleProfileImportInput,
         showCreateModal,
         showDetailsDrawer,
+        selectedStyle,
         selectedStyleName,
         currentProfile,
         isLoadingProfile,
         newStyleName,
         isApplying,
-        applyingStyleName,
+        applyingStyleId,
         hasRunningAnalysis,
-        hasProjectStyle,
-        projectStyleTitle,
-        projectStyleMessage,
-        defaultStyleName,
         isStyleAppliedToCurrentProject,
-        isDefaultStyle,
-        handleSetDefault,
-        handleClearDefault,
-        handleToggleDefault,
         loadStyles,
         openCreateModal,
         openStyleDetails,

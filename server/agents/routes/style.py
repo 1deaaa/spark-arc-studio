@@ -21,22 +21,22 @@ from core.file_ingest.service import (
     parse_uploaded_file,
 )
 from core.request_context import get_current_project_name, normalize_project_name, resolve_project_name
-from core.utils import get_user_projects_root
 
 from agents.agent_style.workflow import stream_save_style_profile
 from agents.agent_style.utils import (
-    load_style_profile_from_file,
+    clear_project_style_binding,
+    find_style_profile_by_name,
+    load_style_profile_record,
     load_project_style_profile,
-    resolve_project_style_author_id,
     save_project_style_binding,
-    load_project_style_binding,
-    load_user_default_style_binding,
-    save_user_default_style_binding,
-    list_all_authors,
-    delete_author_style,
+    load_project_style_binding_record,
+    list_style_profiles,
+    delete_style_profile,
     make_unique_style_name,
     normalize_style_name,
+    parse_style_profile_document,
     save_style_profile_to_file,
+    style_profile_summary,
 )
 
 from .schemas import StyleApplyRequest
@@ -67,23 +67,42 @@ def _style_download_headers(style_name: str) -> dict[str, str]:
 @style_router.post("/api/ai/style-apply")
 async def apply_style(data: StyleApplyRequest, user: dict = Depends(get_current_user)):
     user_id = str(user["user_id"])
-    source_style_name = data.styleName
+    style_id = str(data.styleId or "").strip()
     target_project_name = normalize_project_name(data.projectName)
 
     if not target_project_name:
         return JSONResponse(status_code=400, content={"error": "缺少项目名称"})
 
-    source_profile = load_style_profile_from_file(source_style_name, user_id=user_id)
-    if not source_profile:
-        return JSONResponse(status_code=404, content={"error": "源风格档案不存在"})
-
     try:
-        save_project_style_binding(user_id, target_project_name, source_style_name)
+        if data.applied:
+            if not style_id:
+                return JSONResponse(status_code=400, content={"error": "缺少风格标识"})
+            save_project_style_binding(user_id, target_project_name, style_id)
+            binding = load_project_style_binding_record(user_id, target_project_name)
+        else:
+            current_binding = load_project_style_binding_record(
+                user_id, target_project_name
+            )
+            if (
+                style_id
+                and current_binding
+                and current_binding["style_id"] != style_id
+            ):
+                return JSONResponse(
+                    status_code=409,
+                    content={"error": "项目风格绑定已变化，请刷新后重试"},
+                )
+            clear_project_style_binding(user_id, target_project_name)
+            binding = None
+
         return {
             "success": True,
             "project": target_project_name,
-            "style_name": source_style_name,
+            "applied": bool(binding),
+            "project_binding": binding,
         }
+    except ValueError as e:
+        return JSONResponse(status_code=404, content={"error": str(e)})
     except Exception as e:
         return JSONResponse(status_code=500, content={"error": str(e)})
 
@@ -102,14 +121,9 @@ async def analyze_style_stream(
         form.get("project_name"),
     )
 
-    style_name = form.get("styleName")
-
-    if style_name:
-        author_id = style_name
-    elif project_name:
-        author_id = f"{user_id}_{project_name}"
-    else:
-        author_id = f"{user_id}_default"
+    style_name = str(form.get("styleName") or "").strip()
+    if not style_name:
+        style_name = f"{project_name}-风格" if project_name else "未命名风格"
 
     suffix = os.path.splitext(file.filename or "")[1].lower()
     supported_formats = set(get_supported_formats("style_analysis"))
@@ -155,7 +169,7 @@ async def analyze_style_stream(
                     )
                 }
                 async for progress in stream_save_style_profile(
-                    author_id=author_id,
+                    style_name=style_name,
                     chapter_texts=chapters,
                     force_regenerate=force_regenerate,
                     user_id=user_id,
@@ -228,47 +242,33 @@ async def analyze_style_stream(
 async def list_styles(user: dict = Depends(get_current_user)):
     """列出用户所有的风格档案"""
     user_id = str(user["user_id"])
-    styles = list_all_authors(user_id=user_id)
+    styles = list_style_profiles(user_id=user_id)
 
-    try:
-        projects_root = get_user_projects_root(user_id)
-        if os.path.isdir(projects_root):
-            legacy_project_bound_styles = {
-                f"{user_id}_{entry}"
-                for entry in os.listdir(projects_root)
-                if os.path.isdir(os.path.join(projects_root, entry))
-            }
-            if legacy_project_bound_styles:
-                styles = [s for s in styles if s not in legacy_project_bound_styles]
-    except Exception:
-        pass
-
-    # 附带用户级默认风格名称
-    default_style_name = load_user_default_style_binding(user_id)
-    return {"success": True, "styles": styles, "default_style_name": default_style_name or ""}
+    return {"success": True, "styles": styles}
 
 
-@style_router.get("/api/ai/styles/{style_name}/export")
-async def export_style_profile(style_name: str, user: dict = Depends(get_current_user)):
+@style_router.get("/api/ai/styles/{style_id}/export")
+async def export_style_profile(style_id: str, user: dict = Depends(get_current_user)):
     """导出单个 Markdown 风格档案,带最小化 yaml frontmatter。"""
     user_id = str(user["user_id"])
-    profile = load_style_profile_from_file(style_name, user_id=user_id)
-    if not profile:
+    record = load_style_profile_record(style_id, user_id=user_id)
+    if not record:
         return JSONResponse(status_code=404, content={"success": False, "error": "风格档案不存在"})
 
     timestamp = datetime.now().isoformat(timespec="seconds")
-    safe_id = (style_name or "").replace("'", "''")
+    safe_name = str(record["style_name"]).replace("'", "''")
     frontmatter = (
         "---\n"
-        f"style_name: '{safe_id}'\n"
+        f"style_id: '{record['style_id']}'\n"
+        f"style_name: '{safe_name}'\n"
         f"exported_at: '{timestamp}'\n"
-        "format_version: 2\n"
+        "format_version: 3\n"
         "---\n\n"
     )
     return Response(
-        content=frontmatter + profile.strip() + "\n",
+        content=frontmatter + str(record["style_profile"]).strip() + "\n",
         media_type="text/markdown; charset=utf-8",
-        headers=_style_download_headers(style_name),
+        headers=_style_download_headers(record["style_name"]),
     )
 
 
@@ -286,36 +286,44 @@ async def import_style_profile(
         if not text:
             return JSONResponse(status_code=400, content={"success": False, "error": "Markdown 文件为空"})
 
-        # 尝试从 frontmatter 里挖出 style_name
-        source_name: str | None = None
-        if text.startswith("---"):
-            rest = text[3:]
-            sep = rest.find("\n---")
-            if sep != -1:
-                for line in rest[:sep].splitlines():
-                    m = line.strip()
-                    if m.lower().startswith("style_name:"):
-                        value = m.split(":", 1)[1].strip().strip("'\"")
-                        if value:
-                            source_name = value
-                            break
+        # 同一用户内已存在该 style_id 时，将导入内容视为一份新风格。
+        metadata, _ = parse_style_profile_document(text)
+        source_name = str(metadata.get("style_name") or "").strip() or None
+        source_style_id = str(metadata.get("style_id") or "").strip() or None
 
         filename_stem = os.path.splitext(file.filename or "")[0]
         preferred_name = styleName or source_name or filename_stem or "导入风格"
         final_name = make_unique_style_name(user_id, preferred_name)
-        save_style_profile_to_file(final_name, text, user_id=user_id)
-        return {"success": True, "style_name": final_name}
+        identity_conflict = bool(
+            source_style_id
+            and load_style_profile_record(source_style_id, user_id=user_id)
+        )
+        if identity_conflict:
+            source_style_id = None
+        save_style_profile_to_file(
+            final_name,
+            text,
+            user_id=user_id,
+            style_id=source_style_id,
+            use_embedded_identity=not identity_conflict,
+        )
+        record = find_style_profile_by_name(final_name, user_id=user_id)
+        return {
+            "success": True,
+            "style_name": final_name,
+            "style_id": (record or {}).get("style_id"),
+        }
     except ValueError as e:
         return JSONResponse(status_code=400, content={"success": False, "error": str(e)})
     except Exception as e:
         return JSONResponse(status_code=500, content={"success": False, "error": str(e)})
 
 
-@style_router.delete("/api/ai/styles/{style_name}")
-async def delete_style(style_name: str, user: dict = Depends(get_current_user)):
+@style_router.delete("/api/ai/styles/{style_id}")
+async def delete_style(style_id: str, user: dict = Depends(get_current_user)):
     """删除指定的风格档案"""
     user_id = str(user["user_id"])
-    success = delete_author_style(style_name, user_id=user_id)
+    success = delete_style_profile(style_id, user_id=user_id)
     if success:
         return {"success": True}
     return JSONResponse(status_code=500, content={"error": "删除失败"})
@@ -324,65 +332,36 @@ async def delete_style(style_name: str, user: dict = Depends(get_current_user)):
 @style_router.get("/api/ai/style-profile")
 async def get_style_profile(request: Request, user: dict = Depends(get_current_user)):
     user_id = str(user["user_id"])
-    style_name = request.query_params.get("styleName")
+    style_id = request.query_params.get("styleId")
     project_name = resolve_project_name(
         get_current_project_name(),
         request.query_params.get("projectName"),
         request.query_params.get("project_name"),
     )
 
-    if style_name:
-        author_id = style_name
-        profile = load_style_profile_from_file(author_id, user_id=user_id)
-        project_style_name = None
+    if style_id:
+        record = load_style_profile_record(style_id, user_id=user_id)
+        profile = (record or {}).get("style_profile")
+        style_summary = style_profile_summary(record)
+        project_binding = None
     elif project_name:
-        project_style_name = load_project_style_binding(user_id, project_name)
-        author_id = resolve_project_style_author_id(user_id, project_name)
+        project_binding = load_project_style_binding_record(user_id, project_name)
+        style_summary = project_binding
         profile = load_project_style_profile(user_id, project_name)
     else:
         return JSONResponse(
             status_code=400,
-            content={"success": False, "message": "缺少 styleName 或 projectName"},
+            content={"success": False, "message": "缺少 styleId 或 projectName"},
         )
 
     if profile:
         return {
             "success": True,
             "style_profile": profile,
-            "style_name": author_id,
-            "project_style_name": project_style_name,
+            "style_id": (style_summary or {}).get("style_id"),
+            "style_name": (style_summary or {}).get("style_name"),
+            "project_binding": project_binding,
         }
     return JSONResponse(
         status_code=404, content={"success": False, "message": "未找到风格分析结果"}
     )
-
-
-@style_router.get("/api/ai/style-default")
-async def get_default_style(user: dict = Depends(get_current_user)):
-    """获取用户级默认风格"""
-    user_id = str(user["user_id"])
-    default_style_name = load_user_default_style_binding(user_id)
-    return {"success": True, "default_style_name": default_style_name or ""}
-
-
-@style_router.post("/api/ai/style-set-default")
-async def set_default_style(request: Request, user: dict = Depends(get_current_user)):
-    """设置或取消用户级默认风格"""
-    user_id = str(user["user_id"])
-    body = await request.json()
-    style_name = body.get("styleName")  # 传空字符串或 null 则取消默认
-
-    # 如果传入了风格名称，验证其存在性
-    if style_name and str(style_name).strip():
-        style_name = str(style_name).strip()
-        profile = load_style_profile_from_file(style_name, user_id=user_id)
-        if not profile:
-            return JSONResponse(status_code=404, content={"error": "风格档案不存在"})
-    else:
-        style_name = None  # 取消默认
-
-    try:
-        save_user_default_style_binding(user_id, style_name)
-        return {"success": True, "default_style_name": style_name or ""}
-    except Exception as e:
-        return JSONResponse(status_code=500, content={"error": str(e)})

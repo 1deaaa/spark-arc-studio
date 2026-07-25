@@ -246,8 +246,9 @@ class CharacterSettingsDelete(BaseModel):
 
 
 class StyleApplyRequest(BaseModel):
-    styleName: str
+    styleId: str
     projectName: str
+    applied: bool = True
 
 
 class AgentSignalToggleRequest(BaseModel):

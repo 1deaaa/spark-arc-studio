@@ -43,7 +43,9 @@ from .attachment.chunk_history import (
 )
 from .tools.stream_events import (
     build_tool_stream_event,
+    get_tool_result_failure_message,
     get_tool_ui_binding,
+    is_tool_result_failure,
     normalize_tool_name,
 )
 
@@ -448,8 +450,10 @@ class SparkBaseAgent:
                 tool_instruction += f"""
 ### 联网搜索时间锚点（仅用于 web_search）
 当前真实日期（UTC+8）：{_search_date}
+- `web_search` 是常驻工具。即使搜索上游暂时不可用，它也不会从工具列表移除；不要以“工具列表未显式暴露”为由跳过调用。
 - 当用户要求"最新、当前、现在、最近、新闻、实时"等时间敏感信息时，调用 `web_search` 前必须以这个真实日期作为判断基准。
 - 为 `web_search.query` 编写查询词时，应显式包含当前年份/日期或等价时间范围，避免按模型记忆中的旧年份搜索。
+- 若工具返回“当前不可用”或“暂时不可用”，表示本次没有取得联网证据；必须准确告知用户，禁止编造结果或声称已完成查证。后续仍可再次调用，工具会自动尝试恢复。
 """
 
             if any(getattr(t, "name", "") == "search_skills" for t in tools):
@@ -658,7 +662,8 @@ class SparkBaseAgent:
                         results.append(tool_result_text)
                     finally:
                         current_agent_id.reset(agent_token)
-                    if sink is not None:
+                    tool_failed = is_tool_result_failure(tool_name, tool_result_text)
+                    if sink is not None and not tool_failed:
                         _extra_done: dict = {}
                         if tool_name == "work_tracker" and isinstance(tool_result_text, str) and tool_result_text.strip():
                             _extra_done["tool_result"] = tool_result_text
@@ -668,6 +673,14 @@ class SparkBaseAgent:
                             source_agent=self.agent_id,
                             tool_call_key=tool_call_key,
                             **_extra_done,
+                        ))
+                    elif sink is not None:
+                        sink.put(build_tool_stream_event(
+                            "tool_exec_failed",
+                            tool_name,
+                            source_agent=self.agent_id,
+                            tool_call_key=tool_call_key,
+                            message=get_tool_result_failure_message(tool_name, tool_result_text),
                         ))
                 except Exception as e:
                     tb = traceback.format_exc()
@@ -1569,14 +1582,14 @@ class SparkBaseAgent:
                             except queue.Empty:
                                 break
 
-                        _is_tool_failure = isinstance(tool_result, str) and "执行失败" in tool_result
+                        _is_tool_failure = is_tool_result_failure(tool_name, tool_result)
                         if _is_tool_failure:
                             yield build_tool_stream_event(
                                 "tool_exec_failed",
                                 tool_name,
                                 source_agent=self.agent_id,
                                 tool_call_key=tool_call_key,
-                                message="模型使用了错误的调用格式，正在尝试修正",
+                                message=get_tool_result_failure_message(tool_name, tool_result),
                                 **tool_event_metadata,
                             )
                         else:

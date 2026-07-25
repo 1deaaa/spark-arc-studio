@@ -31,7 +31,7 @@ project_router = APIRouter()
 
 _STYLE_EXPORT_SNAPSHOT_PATH = ".sparkarc/exported_style_profile.json"
 _STYLE_EXPORT_SNAPSHOT_KIND = "sparkarc.project_style_snapshot"
-_STYLE_EXPORT_SNAPSHOT_VERSION = 1
+_STYLE_EXPORT_SNAPSHOT_VERSION = 2
 
 
 def _cancel_project_background_builds(
@@ -265,37 +265,23 @@ def _build_project_style_snapshot(user_id: str, project_name: str) -> dict | Non
     """导出项目当前生效风格的快照；只写进导出包，不写回项目目录。"""
     try:
         from agents.agent_style.utils import (
-            load_project_style_binding,
             load_style_profile_from_file,
-            load_user_default_style_binding,
-            normalize_style_name,
-            resolve_project_style_author_id,
+            resolve_project_style_binding,
         )
 
-        author_id = resolve_project_style_author_id(user_id, project_name)
-        if not author_id:
+        binding = resolve_project_style_binding(user_id, project_name)
+        if not binding:
             return None
-        profile = load_style_profile_from_file(author_id, user_id=user_id)
+        profile = load_style_profile_from_file(binding["style_id"], user_id=user_id)
         if not isinstance(profile, str) or not profile.strip():
             return None
-
-        explicit_binding = load_project_style_binding(user_id, project_name)
-        default_binding = load_user_default_style_binding(user_id)
-        if explicit_binding == author_id:
-            binding_source = "project"
-        elif default_binding == author_id:
-            binding_source = "user_default"
-        elif author_id == f"{user_id}_{project_name}":
-            binding_source = "legacy_project"
-        else:
-            binding_source = "resolved"
 
         return {
             "kind": _STYLE_EXPORT_SNAPSHOT_KIND,
             "version": _STYLE_EXPORT_SNAPSHOT_VERSION,
             "source_project_name": project_name,
-            "style_name": normalize_style_name(author_id, fallback="风格") or "风格",
-            "binding_source": binding_source,
+            "style_id": binding["style_id"],
+            "style_name": binding["style_name"],
             "exported_at": datetime.now().isoformat(timespec="seconds"),
             "style_profile": profile,
         }
@@ -312,6 +298,8 @@ def _restore_project_style_snapshot(user_id: str, project_name: str, project_pat
 
     try:
         from agents.agent_style.utils import (
+            find_style_profile_by_name,
+            load_style_profile_record,
             make_unique_style_name,
             normalize_style_name,
             save_project_style_binding,
@@ -324,23 +312,37 @@ def _restore_project_style_snapshot(user_id: str, project_name: str, project_pat
         if not isinstance(profile, str) or not profile.strip():
             return None
 
-        source_name = normalize_style_name(payload.get("style_name"), fallback="风格") or "风格"
-        source_project = normalize_style_name(payload.get("source_project_name"), fallback="") or ""
-        looks_like_legacy_project_style = bool(source_project and source_name.endswith(f"_{source_project}"))
-        suffix = "风格" if source_name == source_project or looks_like_legacy_project_style else source_name
-        imported_style_name = make_unique_style_name(user_id, f"{project_name}-{suffix}")
+        source_style_id = str(payload.get("style_id") or "").strip()
+        if not source_style_id:
+            raise ValueError("项目导出包缺少 style_id")
+        existing_record = (
+            load_style_profile_record(source_style_id, user_id=user_id)
+        )
+        if existing_record:
+            imported_record = existing_record
+        else:
+            source_name = normalize_style_name(payload.get("style_name"), fallback="风格") or "风格"
+            imported_style_name = make_unique_style_name(user_id, f"{project_name}-{source_name}")
+            save_style_profile_to_file(
+                imported_style_name,
+                profile,
+                user_id=user_id,
+                style_id=source_style_id,
+            )
+            imported_record = find_style_profile_by_name(imported_style_name, user_id=user_id)
 
-        save_style_profile_to_file(imported_style_name, profile, user_id=user_id)
-        save_project_style_binding(user_id, project_name, imported_style_name)
+        if not imported_record:
+            raise ValueError("导入风格档案后无法解析身份")
+        save_project_style_binding(user_id, project_name, imported_record["style_id"])
         try:
             os.remove(snapshot_path)
         except Exception:
             pass
 
         return {
-            "styleName": imported_style_name,
-            "sourceStyleName": source_name,
-            "bindingSource": payload.get("binding_source") or "",
+            "styleName": imported_record["style_name"],
+            "styleId": imported_record["style_id"],
+            "sourceStyleName": payload.get("style_name") or "",
         }
     except Exception as exc:
         print(f"Failed to restore project style snapshot: {exc}")

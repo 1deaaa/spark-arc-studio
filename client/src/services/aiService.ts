@@ -709,7 +709,14 @@ export async function analyzeStyleStream(
   return finalProfile;
 }
 
-export async function getStyles(): Promise<{ styles: JsonObject[]; default_style_name: string }> {
+export type StyleSummary = {
+  style_id: string;
+  style_name: string;
+};
+
+export async function getStyles(): Promise<{
+  styles: StyleSummary[];
+}> {
   const response = await fetchWithAuth('/api/ai/styles');
   if (!response.ok) {
     throw new Error(await extractResponseError(response, '获取风格列表失败'));
@@ -720,7 +727,11 @@ export async function getStyles(): Promise<{ styles: JsonObject[]; default_style
     throw new Error('获取风格列表失败');
   }
 
-  let result: { success?: boolean; styles?: JsonObject[]; default_style_name?: string; error?: string };
+  let result: {
+    success?: boolean;
+    styles?: StyleSummary[];
+    error?: string;
+  };
   try {
     result = JSON.parse(rawText);
   } catch {
@@ -730,25 +741,27 @@ export async function getStyles(): Promise<{ styles: JsonObject[]; default_style
   if (result.success === false || !Array.isArray(result.styles)) {
     throw new Error(result.error || '获取风格列表失败');
   }
-  return { styles: result.styles, default_style_name: result.default_style_name || '' };
+  return {
+    styles: result.styles,
+  };
 }
 
-export async function deleteStyle(styleName: string) {
-  const response = await fetchWithAuth(`/api/ai/styles/${encodeURIComponent(styleName)}`, { method: 'DELETE' });
+export async function deleteStyle(styleId: string) {
+  const response = await fetchWithAuth(`/api/ai/styles/${encodeURIComponent(styleId)}`, { method: 'DELETE' });
   const result = await response.json();
   if (!response.ok || result.success === false) throw new Error(result.error || '删除风格失败');
   return result;
 }
 
-export async function exportStyleProfile(styleName: string): Promise<void> {
-  const response = await fetchWithAuth(`/api/ai/styles/${encodeURIComponent(styleName)}/export`);
+export async function exportStyleProfile(style: StyleSummary): Promise<void> {
+  const response = await fetchWithAuth(`/api/ai/styles/${encodeURIComponent(style.style_id)}/export`);
   if (!response.ok) {
     const result = await response.json().catch(() => ({ error: '导出风格失败' }));
     throw new Error(result.error || result.message || '导出风格失败');
   }
 
   const disposition = response.headers.get('Content-Disposition') || '';
-  let filename = `${styleName}.sparkarc-style.json`;
+  let filename = `${style.style_name}.md`;
   const utf8Match = disposition.match(/filename\*=UTF-8''(.+?)(?:;|$)/);
   if (utf8Match) {
     filename = decodeURIComponent(utf8Match[1]);
@@ -768,7 +781,7 @@ export async function exportStyleProfile(styleName: string): Promise<void> {
   URL.revokeObjectURL(url);
 }
 
-export async function importStyleProfile(file: File, styleName?: string): Promise<{ style_name: string }> {
+export async function importStyleProfile(file: File, styleName?: string): Promise<StyleSummary> {
   const formData = new FormData();
   formData.append('file', file);
   if (styleName) formData.append('styleName', styleName);
@@ -779,36 +792,21 @@ export async function importStyleProfile(file: File, styleName?: string): Promis
   });
   const result = await response.json();
   if (!response.ok || result.success === false) throw new Error(result.error || result.message || '导入风格失败');
-  return { style_name: result.style_name || '' };
+  return {
+    style_id: result.style_id || '',
+    style_name: result.style_name || '',
+  };
 }
 
-export async function applyStyle(styleName: string, projectName: string) {
+export async function applyStyle(styleId: string, projectName: string, applied: boolean) {
   const response = await fetchWithAuth('/api/ai/style-apply', {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({ styleName, projectName }),
+    body: JSON.stringify({ styleId, projectName, applied }),
   });
   const result = await response.json();
   if (!response.ok || result.success === false) throw new Error(result.error || '应用风格失败');
   return result;
-}
-
-export async function getDefaultStyle(): Promise<string> {
-  const response = await fetchWithAuth('/api/ai/style-default');
-  const result = await response.json();
-  if (!response.ok || result.success === false) return '';
-  return result.default_style_name || '';
-}
-
-export async function setDefaultStyle(styleName: string | null): Promise<string> {
-  const response = await fetchWithAuth('/api/ai/style-set-default', {
-    method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({ styleName: styleName || '' }),
-  });
-  const result = await response.json();
-  if (!response.ok || result.success === false) throw new Error(result.error || '设置默认风格失败');
-  return result.default_style_name || '';
 }
 
 export async function refreshPlatformsAndModels() {
