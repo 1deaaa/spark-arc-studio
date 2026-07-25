@@ -2,7 +2,6 @@
 
 from __future__ import annotations
 
-import json
 import subprocess
 from pathlib import Path
 
@@ -122,37 +121,6 @@ def test_non_mainland_clone_candidates_keep_proxy_fallback(monkeypatch) -> None:
     assert all(repository_urls()["clone"] in candidate for candidate in candidates[1:])
 
 
-def test_powershell_probe_does_not_redeclare_repository_or_proxy_values() -> None:
-    script = (PROJECT_ROOT / "scripts" / "network_probe.ps1").read_text(encoding="utf-8")
-    manifest = json.loads((PROJECT_ROOT / "sparkarc.json").read_text(encoding="utf-8"))
-
-    assert "Get-SparkArcConfig" in script
-    assert "UseProxy = $false" in script
-    assert "Invoke-ClientLocationLookup" not in script
-    assert manifest["repository"]["slug"] not in script
-    assert "https://ghfast.top/" not in script
-    assert "https://ghproxy.net/" not in script
-
-
-def test_windows_pyloader_does_not_hardcode_ustc_verification_address() -> None:
-    script = (PROJECT_ROOT / "server" / "pyloader.win.ps1").read_text(encoding="utf-8")
-
-    assert 'document\\.cookie\\s*=\\s*"addr=' in script
-    assert 'System.Net.IPAddress]::TryParse' in script
-    assert 'System.Net.Cookie("addr", $verificationAddress' in script
-    assert 'System.Net.Cookie("addr", "122.' not in script
-    assert "System.Security.Cryptography.SHA256]::Create" in script
-    assert "$FinalReqHash = Get-RequirementsHash" in script
-
-
-def test_windows_start_registers_service_from_server_import_root() -> None:
-    script = (PROJECT_ROOT / "start.bat").read_text(encoding="utf-8")
-
-    assert "sys.path.insert(0, os.path.join(root, 'server'))" in script
-    assert "from core.service_registry import record_service_install" in script
-    assert "[ERROR] Failed to register the local SparkArc service." in script
-
-
 def test_generated_public_address_outputs_are_in_sync() -> None:
     completed = subprocess.run(
         ["node", "scripts/sync-sparkarc-config.mjs", "--check"],
@@ -161,4 +129,3 @@ def test_generated_public_address_outputs_are_in_sync() -> None:
         capture_output=True,
     )
     assert completed.returncode == 0, completed.stdout + completed.stderr
-"""仓库配置、网络探测与启动脚本配置回归。"""

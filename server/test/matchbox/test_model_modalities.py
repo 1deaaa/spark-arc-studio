@@ -1,3 +1,5 @@
+"""Matchbox 模型模态与业务类型推导回归。"""
+
 from types import SimpleNamespace
 
 from llm.agen_matchbox.models import (
@@ -70,4 +72,3 @@ def test_embedding_model_is_not_selected_as_chat_or_image_model() -> None:
     assert is_embedding_model(model)
     assert not is_chat_model(model)
     assert not is_image_generation_model(model)
-"""Matchbox 模型模态与业务类型推导回归。"""

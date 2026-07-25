@@ -1,3 +1,5 @@
+"""附件缓存引用与回收行为回归。"""
+
 from __future__ import annotations
 
 
@@ -59,4 +61,3 @@ def test_attachment_gc_deletes_only_unreferenced_cache(monkeypatch, tmp_path) ->
     assert referenced.attachment_id in result["retained"]
     assert (project_path / ".attachments" / referenced.attachment_id).is_dir()
     assert not (project_path / ".attachments" / orphan.attachment_id).exists()
-"""附件缓存引用与回收行为回归。"""

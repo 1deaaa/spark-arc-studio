@@ -1,3 +1,5 @@
+"""AgentSkills 导入、质量视图和工具可见性回归。"""
+
 from __future__ import annotations
 
 import io
@@ -183,4 +185,3 @@ Use vivid sensory detail.
     assert {item.name for item in root_imports} == {"Alpha", "Beta"}
     assert {item.get("name") for item in root_skills} == {"Alpha", "Beta"}
     assert len({item.skill_id for item in root_imports}) == 2
-"""AgentSkills 导入、质量视图和工具可见性回归。"""

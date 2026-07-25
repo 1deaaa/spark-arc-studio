@@ -1,3 +1,5 @@
+"""用户删除的数据归属与共享记录保留行为。"""
+
 from __future__ import annotations
 
 from datetime import datetime, timedelta, timezone
@@ -81,4 +83,3 @@ def test_delete_user_removes_owned_data_and_keeps_shared_records(tmp_path, monke
         assert feedback.replied_by is None
 
     engine.dispose()
-"""用户删除的数据归属与共享记录保留行为。"""

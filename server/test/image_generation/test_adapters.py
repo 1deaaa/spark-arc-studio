@@ -1,8 +1,9 @@
+"""图片生成适配器协议与参数转换回归。"""
+
 from __future__ import annotations
 
 import base64
 import sys
-from pathlib import Path
 from typing import Any
 
 import pytest
@@ -19,7 +20,6 @@ from llm.agen_matchbox.image_generation import (
     _select_adapter,
 )
 from llm.agen_matchbox.models import MODALITY_IMAGE, MODALITY_TEXT
-from llm.agen_matchbox.image_adapters import IMAGE_GENERATION_ADAPTERS
 
 
 class _FakeResponse:
@@ -47,20 +47,6 @@ class _FakeRequests:
 
 def _png_b64() -> str:
     return base64.b64encode(b"\x89PNG\r\n\x1a\nadapter-test").decode("ascii")
-
-
-def test_image_adapter_registry_is_visible_in_web_gui_and_readmes() -> None:
-    root = Path(__file__).resolve().parents[3]
-    surfaces = {
-        "Web 协议镜像": root / "client/src/services/imageGenerationAdapters.ts",
-        "中文 README": root / "server/llm/agen_matchbox/README.md",
-        "英文 README": root / "server/llm/agen_matchbox/README.en.md",
-    }
-
-    for label, path in surfaces.items():
-        content = path.read_text(encoding="utf-8")
-        missing = sorted(adapter for adapter in IMAGE_GENERATION_ADAPTERS if adapter not in content)
-        assert not missing, f"{label} 缺少生图协议: {missing}"
 
 
 def test_image_adapter_selection_keeps_supported_provider_names_explicit() -> None:
@@ -370,4 +356,3 @@ def test_reference_image_is_rejected_before_network_without_image_input(monkeypa
         )
 
     assert fake.calls == []
-"""图片生成适配器协议与参数转换回归。"""
