@@ -40,6 +40,7 @@ type StyleProfileLookupResult = JsonObject | string | { error: true } | null;
 type StyleProfileMetaResult = {
   style_profile: JsonObject | string | null;
   style_name: string | null;
+  project_style_name: string | null;
 };
 
 async function fetchSSEAndGetResult<T extends Record<string, unknown>>(url: string, body: unknown, options: StreamOptions = {}): Promise<T> {
@@ -640,10 +641,15 @@ export async function getStyleProfileMeta(projectName: string | null | undefined
 
   const response = await fetchWithAuth(url);
   if (!response.ok) return null;
-  const result = await response.json() as { style_profile?: JsonObject | string | null; style_name?: string | null };
+  const result = await response.json() as {
+    style_profile?: JsonObject | string | null;
+    style_name?: string | null;
+    project_style_name?: string | null;
+  };
   return {
     style_profile: result?.style_profile ?? null,
     style_name: result?.style_name || null,
+    project_style_name: result?.project_style_name || null,
   };
 }
 

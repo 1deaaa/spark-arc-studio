@@ -711,8 +711,25 @@ export async function analyzeStyleStream(
 
 export async function getStyles(): Promise<{ styles: JsonObject[]; default_style_name: string }> {
   const response = await fetchWithAuth('/api/ai/styles');
-  const result = await response.json();
-  if (!response.ok || result.success === false) throw new Error(result.error || '获取风格列表失败');
+  if (!response.ok) {
+    throw new Error(await extractResponseError(response, '获取风格列表失败'));
+  }
+
+  const rawText = await response.text();
+  if (!rawText.trim()) {
+    throw new Error('获取风格列表失败');
+  }
+
+  let result: { success?: boolean; styles?: JsonObject[]; default_style_name?: string; error?: string };
+  try {
+    result = JSON.parse(rawText);
+  } catch {
+    throw new Error('获取风格列表失败');
+  }
+
+  if (result.success === false || !Array.isArray(result.styles)) {
+    throw new Error(result.error || '获取风格列表失败');
+  }
   return { styles: result.styles, default_style_name: result.default_style_name || '' };
 }
 

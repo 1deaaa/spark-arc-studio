@@ -2142,8 +2142,8 @@ const jaJP = {
       common: {
         applied: '適用済み',
         apply: '適用',
-        setDefault: 'デフォルトに設定',
-        isDefault: 'デフォルトスタイル',
+        setDefault: '未適用',
+        isDefault: '適用中',
         importProfile: 'スタイルをインポート',
         exportProfile: 'スタイルをエクスポート',
       },

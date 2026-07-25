@@ -2137,8 +2137,8 @@ const koKR = {
       common: {
         applied: '적용됨',
         apply: '적용',
-        setDefault: '기본 스타일로 지정',
-        isDefault: '글로벌 기본 문체',
+        setDefault: '미적용',
+        isDefault: '적용 중',
         importProfile: '스타일 가져오기',
         exportProfile: '스타일 내보내기',
       },

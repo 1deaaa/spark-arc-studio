@@ -33,7 +33,12 @@ def test_tool_registry_has_stable_unique_truth_source() -> None:
 def test_core_agent_tool_boundaries() -> None:
     assert "delegate_task" in tool_names("agent_director")
     assert "rewrite_inspiration" in tool_names("agent_muse")
-    assert {"rewrite_worldview", "rewrite_all_characters", "update_character"} <= tool_names("agent_lorebook")
+    assert {
+        "rewrite_worldview",
+        "rewrite_all_characters",
+        "update_character",
+        "web_search",
+    } <= tool_names("agent_lorebook")
     assert {"rewrite_synopsis", "rewrite_beat_sheet", "rewrite_outline"} <= tool_names("agent_showrunner")
     assert {
         "prepare_script_creation",

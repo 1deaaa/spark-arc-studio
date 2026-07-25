@@ -2142,8 +2142,8 @@ const enUS = {
       common: {
         applied: 'Applied',
         apply: 'Apply',
-        setDefault: 'Set as Default',
-        isDefault: 'Default Style',
+        setDefault: 'Not Applied',
+        isDefault: 'Applied',
         importProfile: 'Import Style',
         exportProfile: 'Export Style',
       },

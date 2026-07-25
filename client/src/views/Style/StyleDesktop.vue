@@ -96,8 +96,7 @@
                  size="small"
                  :type="isDefaultStyle(style) ? 'warning' : 'default'"
                  secondary
-                 :disabled="isDefaultStyle(style)"
-                 @click.stop="handleSetDefault(style)"
+                 @click.stop="handleToggleDefault(style)"
                 >
                   {{ isDefaultStyle(style) ? t('views.style.common.isDefault') : t('views.style.common.setDefault') }}
                 </n-button>
@@ -229,7 +228,7 @@ const {
   projectStyleMessage,
   isStyleAppliedToCurrentProject,
   isDefaultStyle,
-  handleSetDefault,
+  handleToggleDefault,
   loadStyles,
   openCreateModal,
   openStyleDetails,

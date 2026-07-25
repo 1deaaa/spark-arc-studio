@@ -2140,8 +2140,8 @@ const zhCN = {
       common: {
         applied: '已应用',
         apply: '应用',
-        setDefault: '设为默认',
-        isDefault: '默认风格',
+        setDefault: '未应用',
+        isDefault: '应用中',
         importProfile: '导入风格',
         exportProfile: '导出风格',
       },

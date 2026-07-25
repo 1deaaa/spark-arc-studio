@@ -99,6 +99,18 @@ def test_lorebook_worldview_prompt_forbids_frontend_code() -> None:
         assert token in prompt
 
 
+def test_lorebook_requires_web_research_before_fanwork_facts() -> None:
+    prompts = load_prompt("lorebook")
+    tool_rules = prompts["tool_rules"]
+    pipeline = prompts["pipeline_system"]
+
+    assert "web_search" in {tool.name for tool in get_tools_for_agent("agent_lorebook")}
+    for token in ("网络热梗", "热门作品", "二创", "即使你自认为熟悉", "只读的事实核验工具", "在拿到确定信息前"):
+        assert token in tool_rules
+    for token in ("必须先调用 `web_search`", "禁止凭记忆补全", "不得把猜测写入设定"):
+        assert token in pipeline
+
+
 @pytest.mark.parametrize(
     "content",
     [

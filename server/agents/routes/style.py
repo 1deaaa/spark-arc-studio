@@ -29,6 +29,7 @@ from agents.agent_style.utils import (
     load_project_style_profile,
     resolve_project_style_author_id,
     save_project_style_binding,
+    load_project_style_binding,
     load_user_default_style_binding,
     save_user_default_style_binding,
     list_all_authors,
@@ -333,7 +334,9 @@ async def get_style_profile(request: Request, user: dict = Depends(get_current_u
     if style_name:
         author_id = style_name
         profile = load_style_profile_from_file(author_id, user_id=user_id)
+        project_style_name = None
     elif project_name:
+        project_style_name = load_project_style_binding(user_id, project_name)
         author_id = resolve_project_style_author_id(user_id, project_name)
         profile = load_project_style_profile(user_id, project_name)
     else:
@@ -343,7 +346,12 @@ async def get_style_profile(request: Request, user: dict = Depends(get_current_u
         )
 
     if profile:
-        return {"success": True, "style_profile": profile, "style_name": author_id}
+        return {
+            "success": True,
+            "style_profile": profile,
+            "style_name": author_id,
+            "project_style_name": project_style_name,
+        }
     return JSONResponse(
         status_code=404, content={"success": False, "message": "未找到风格分析结果"}
     )

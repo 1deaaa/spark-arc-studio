@@ -123,7 +123,7 @@ export function useStyleLogic() {
             defaultStyleName.value = result.default_style_name || '';
             if (projectStore.currentProject) {
                 const profileMeta = await getStyleProfileMeta(projectStore.currentProject, null);
-                currentProjectStyleName.value = profileMeta?.style_name || '';
+                currentProjectStyleName.value = profileMeta?.project_style_name || '';
             } else {
                 currentProjectStyleName.value = '';
             }
@@ -226,6 +226,14 @@ export function useStyleLogic() {
             isApplying.value = false;
             applyingStyleName.value = '';
         }
+    };
+
+    const handleToggleDefault = async (styleName: string) => {
+        if (isDefaultStyle(styleName)) {
+            await handleClearDefault();
+            return;
+        }
+        await handleSetDefault(styleName);
     };
 
     const handleImportedFile = async (file: File) => {
@@ -397,7 +405,7 @@ export function useStyleLogic() {
         if (newProject) {
             try {
                 const profileMeta = await getStyleProfileMeta(newProject, null);
-                currentProjectStyleName.value = profileMeta?.style_name || '';
+                currentProjectStyleName.value = profileMeta?.project_style_name || '';
             } catch {
                 currentProjectStyleName.value = '';
             }
@@ -436,6 +444,7 @@ export function useStyleLogic() {
         isDefaultStyle,
         handleSetDefault,
         handleClearDefault,
+        handleToggleDefault,
         loadStyles,
         openCreateModal,
         openStyleDetails,
