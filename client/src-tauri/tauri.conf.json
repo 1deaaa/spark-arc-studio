@@ -30,18 +30,10 @@
 			"icons/icon.icns",
 			"icons/icon.png",
 			"icons/icon.ico"
-		]
-	},
-	"plugins": {
-		"fs": {
-			"scope": {
-				"allow": [
-					"$HOME/.sparkarc",
-					"$HOME/.sparkarc/**",
-					"$APPDATA/**",
-					"$RESOURCE/../sparkarc-server",
-					"$RESOURCE/../sparkarc-server/**"
-				]
+		],
+		"windows": {
+			"nsis": {
+				"installerHooks": "./windows/installer-hooks.nsh"
 			}
 		}
 	}

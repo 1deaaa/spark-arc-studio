@@ -1313,10 +1313,6 @@ input[type="password"] {
   z-index: 1000;
 }
 
-:global(.tauri-desktop) .login-lang-select {
-  display: none;
-}
-
 .lang-switch-btn {
   background: color-mix(in srgb, var(--spark-panel-bg), transparent 30%) !important;
   border: 1px solid color-mix(in srgb, var(--spark-border), transparent 60%) !important;

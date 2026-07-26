@@ -1,5 +1,6 @@
 import { normalizeApiBaseUrl } from '@/services/apiClient';
 import { LOCALE_QUERY_PARAM, LOCALE_STORAGE_KEY, normalizeLocale } from '@/i18n/types';
+import { preserveWorkspaceWindow } from './workspaceWindow';
 
 const LAUNCHER_ORIGIN_PARAM = 'spark_launcher_origin';
 const LAUNCHER_SERVER_PARAM = 'spark_server';
@@ -81,7 +82,10 @@ export function attachLauncherOrigin(targetUrl: string, launcherOrigin: string):
     if (locale) {
       url.searchParams.set(LOCALE_QUERY_PARAM, locale);
     }
-    return url.toString();
+    return preserveWorkspaceWindow(
+      url.toString(),
+      typeof window !== 'undefined' ? window.location.href : '',
+    );
   } catch {
     return absolute;
   }
@@ -110,7 +114,10 @@ export function buildLauncherReturnUrl(options: {
     if (skipAutoConnect) {
       url.searchParams.set(LAUNCHER_SKIP_AUTO_PARAM, '1');
     }
-    return url.toString();
+    return preserveWorkspaceWindow(
+      url.toString(),
+      typeof window !== 'undefined' ? window.location.href : '',
+    );
   } catch {
     return '';
   }

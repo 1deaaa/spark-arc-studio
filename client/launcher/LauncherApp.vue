@@ -137,6 +137,10 @@
           <span v-else>{{ t('launcher.openServer') }}</span>
         </button>
 
+        <p v-if="remoteOpenError" class="launcher-deploy-error launcher-open-error">
+          {{ remoteOpenError }}
+        </p>
+
         <button
           v-if="isTauriDesktop && localBackendDirExists && !serverStatusOk"
           type="button"
@@ -385,6 +389,7 @@ import {
   getLauncherTargetForServer,
   getLocalLauncherOrigin,
 } from '@/utils/launcherHandoff';
+import { markWorkspaceWindow } from '@/utils/workspaceWindow';
 import { setI18nLocale } from './i18n';
 import { SUPPORTED_LOCALES, normalizeLocale, type AppLocale } from '@/i18n/types';
 import {
@@ -460,6 +465,7 @@ const serverPanelOpen = ref(false);
 const serverChecking = ref(false);
 const serverInput = ref(getApiBaseUrl());
 const serverStatusOk = ref(false);
+const remoteOpenError = ref('');
 
 // 免责声明 / 本地部署相关状态
 const showDisclaimer = ref(false);
@@ -539,12 +545,22 @@ function toggleServerPanel() {
   serverPanelOpen.value = !serverPanelOpen.value;
 }
 
-function openRemoteApp(baseUrl: string): boolean {
+async function openRemoteApp(baseUrl: string): Promise<boolean> {
   const target = getLauncherTargetForServer(baseUrl, launcherOrigin.value);
   if (!target || typeof window === 'undefined') return false;
   clearLauncherResume();
-  window.location.replace(target);
-  return true;
+  remoteOpenError.value = '';
+  if (!isTauriDesktop.value) {
+    window.location.replace(target);
+    return true;
+  }
+  try {
+    await invoke('open_remote_app', { targetUrl: markWorkspaceWindow(target) });
+    return true;
+  } catch (error) {
+    remoteOpenError.value = t('server.errors.openFailed', { detail: String(error) });
+    return false;
+  }
 }
 
 async function applyServer() {
@@ -570,7 +586,7 @@ async function applyServer() {
   setApiBaseUrl(normalized);
   serverInput.value = normalized;
   serverStatusOk.value = true;
-  openRemoteApp(normalized);
+  await openRemoteApp(normalized);
 }
 
 function resetServer() {
@@ -753,7 +769,7 @@ async function startLocalDeployment(applyUpdateOrEvent: boolean | Event = false)
     serverInput.value = localDetected;
     serverStatusOk.value = true;
     showDeploymentPanel.value = false;
-    openRemoteApp(localDetected);
+    await openRemoteApp(localDetected);
   } catch (err) {
     await refreshDeploymentLog();
     deploymentError.value = String(err);
@@ -836,7 +852,7 @@ async function checkServerOnLauncherStartup() {
     !skipAutoConnectOnce.value &&
     !initialDeploymentStatus?.updateAvailable;
 
-  if (shouldAutoEnter && openRemoteApp(configured)) {
+  if (shouldAutoEnter && await openRemoteApp(configured)) {
     return;
   }
 
@@ -1429,6 +1445,12 @@ watch(autoEnterNextTime, (nextValue) => {
   color: color-mix(in srgb, var(--spark-text), transparent 34%);
   font-size: 12px;
   line-height: 1.45;
+  text-align: center;
+}
+
+.launcher-open-error {
+  width: min(520px, calc(100vw - 48px));
+  margin: 0;
   text-align: center;
 }
 

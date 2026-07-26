@@ -135,6 +135,8 @@ jobs:
             SparkArc client builds for supported desktop platforms.
             A working backend deployment is required. See the repository README for setup details.
 
+            Windows users must download the file ending in `_x64-setup.exe`. It is the installer and includes Start Menu, desktop shortcut, and startup registration. Do not distribute the bare `target/release/sparkarc.exe` executable.
+
             These release artifacts are intended for self-hosting, evaluation, and integration testing.
             Default connectivity assumptions may change over time and should not be treated as a guaranteed hosted service.
           releaseDraft: ${{ inputs.draft }}

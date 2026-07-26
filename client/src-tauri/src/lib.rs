@@ -56,6 +56,72 @@ fn set_launcher_theme_state(app: AppHandle, state: LauncherThemeState) -> Result
     fs::write(path, raw).map_err(|err| err.to_string())
 }
 
+fn parse_remote_app_url(target_url: &str) -> Result<tauri::Url, String> {
+    let target = target_url
+        .parse::<tauri::Url>()
+        .map_err(|err| format!("业务地址无效: {err}"))?;
+    if !matches!(target.scheme(), "http" | "https") {
+        return Err("业务地址仅支持 HTTP 或 HTTPS。".to_string());
+    }
+    Ok(target)
+}
+
+/// 在独立原生窗口中打开业务前端，避免远端页面覆盖 Launcher 恢复入口。
+#[cfg(not(mobile))]
+#[tauri::command]
+async fn open_remote_app(app: AppHandle, target_url: String) -> Result<(), String> {
+    let target = parse_remote_app_url(&target_url)?;
+
+    if let Some(existing) = app.get_webview_window("workspace") {
+        existing.navigate(target).map_err(|err| err.to_string())?;
+        existing.show().map_err(|err| err.to_string())?;
+        existing.set_focus().map_err(|err| err.to_string())?;
+        if let Some(launcher) = app.get_webview_window("main") {
+            launcher.hide().map_err(|err| err.to_string())?;
+        }
+        return Ok(());
+    }
+
+    let launcher = app.get_webview_window("main");
+    let workspace =
+        tauri::WebviewWindowBuilder::new(&app, "workspace", tauri::WebviewUrl::External(target))
+            .title("SparkArc Studio")
+            .inner_size(1600.0, 900.0)
+            .min_inner_size(1024.0, 640.0)
+            .resizable(true)
+            .decorations(false)
+            .visible(false)
+            .center()
+            .on_page_load(move |window, payload| {
+                if matches!(payload.event(), tauri::webview::PageLoadEvent::Finished) {
+                    let _ = window.show();
+                    let _ = window.set_focus();
+                    if let Some(launcher) = launcher.as_ref() {
+                        let _ = launcher.hide();
+                    }
+                }
+            })
+            .build()
+            .map_err(|err| format!("无法创建业务窗口: {err}"))?;
+
+    let app_on_workspace_close = app.clone();
+    workspace.on_window_event(move |event| {
+        if matches!(event, tauri::WindowEvent::CloseRequested { .. }) {
+            if let Some(launcher) = app_on_workspace_close.get_webview_window("main") {
+                let _ = launcher.show();
+                let _ = launcher.set_focus();
+            }
+        }
+    });
+    Ok(())
+}
+
+#[cfg(mobile)]
+#[tauri::command]
+async fn open_remote_app(_app: AppHandle, _target_url: String) -> Result<(), String> {
+    Err("移动端不支持创建独立业务窗口。".to_string())
+}
+
 // ===== 本地部署相关命令 =====
 
 /// 用户主目录下的 SparkArc 状态目录。
@@ -475,6 +541,7 @@ pub fn run() {
         .invoke_handler(tauri::generate_handler![
             get_launcher_theme_state,
             set_launcher_theme_state,
+            open_remote_app,
             check_local_backend_dir,
             read_deployment_log,
             start_local_deployment,
@@ -493,4 +560,17 @@ pub fn run() {
     builder
         .run(tauri::generate_context!())
         .expect("error while running tauri application");
+}
+
+#[cfg(test)]
+mod launcher_window_tests {
+    use super::parse_remote_app_url;
+
+    #[test]
+    fn remote_app_url_only_accepts_http_transports() {
+        assert!(parse_remote_app_url("https://example.com/login?from=launcher").is_ok());
+        assert!(parse_remote_app_url("http://127.0.0.1:6688").is_ok());
+        assert!(parse_remote_app_url("file:///C:/Windows/System32/calc.exe").is_err());
+        assert!(parse_remote_app_url("javascript:alert(1)").is_err());
+    }
 }

@@ -117,17 +117,107 @@ function Get-RequirementsHash {
     }
 }
 
+function Invoke-WebRequestWithRetry {
+    param(
+        [Parameter(Mandatory = $true)]
+        [string]$Uri,
+        [int]$MaximumAttempts = 3,
+        [int]$MaximumRedirection = 5
+    )
+
+    for ($attempt = 1; $attempt -le $MaximumAttempts; $attempt++) {
+        try {
+            return Invoke-WebRequest -Uri $Uri -UseBasicParsing -MaximumRedirection $MaximumRedirection
+        }
+        catch {
+            if ($attempt -eq $MaximumAttempts) {
+                throw
+            }
+            Write-Host "[network] Request failed, retrying ($attempt/$MaximumAttempts): $Uri" -ForegroundColor Yellow
+            Start-Sleep -Seconds $attempt
+        }
+    }
+}
+
 function Resolve-PythonArchive {
-    Write-Host "[scan] Querying latest standalone Python mirror..." -ForegroundColor Yellow
+    Write-Host "[scan] Querying latest standalone Python release..." -ForegroundColor Yellow
+
+    $escaped = [regex]::Escape($PythonMajorMinor)
+
+    if ($PythonMirrorBase -eq "https://github.com") {
+        try {
+            $latestUrl = "https://github.com/astral-sh/python-build-standalone/releases/latest"
+            $latestResponse = Invoke-WebRequestWithRetry -Uri $latestUrl -MaximumRedirection 10
+            $finalUri = $null
+            if ($latestResponse.BaseResponse.ResponseUri) {
+                $finalUri = [string]$latestResponse.BaseResponse.ResponseUri.AbsoluteUri
+            }
+            elseif ($latestResponse.BaseResponse.RequestMessage.RequestUri) {
+                $finalUri = [string]$latestResponse.BaseResponse.RequestMessage.RequestUri.AbsoluteUri
+            }
+
+            $tagMatch = [regex]::Match($finalUri, "/releases/tag/([^/?#]+)")
+            if (-not $tagMatch.Success) {
+                throw "GitHub latest release redirect did not include a release tag"
+            }
+
+            $releaseTag = $tagMatch.Groups[1].Value
+            $assetsUrl = "https://github.com/astral-sh/python-build-standalone/releases/expanded_assets/$releaseTag"
+            $assetsResponse = Invoke-WebRequestWithRetry -Uri $assetsUrl
+        }
+        catch {
+            Exit-WithError "Failed to query the official Python standalone release: $($_.Exception.Message)"
+        }
+
+        $assetPattern = "^/astral-sh/python-build-standalone/releases/download/([^/]+)/cpython-($escaped\.\d+)\+(\d+)-x86_64-pc-windows-msvc-install_only\.tar\.gz$"
+        $candidates = @()
+        foreach ($link in $assetsResponse.Links) {
+            $href = [string]$link.href
+            if ($href -match $assetPattern) {
+                $candidates += [pscustomobject]@{
+                    Href       = $href
+                    Version    = $matches[2]
+                    ReleaseTag = $matches[1]
+                    BuildTag   = $matches[3]
+                }
+            }
+        }
+
+        if (-not $candidates) {
+            Exit-WithError "The latest official release does not provide a matching Python $PythonMajorMinor.x standalone package."
+        }
+
+        $best = $candidates |
+            Sort-Object -Property @{
+                Expression = {
+                    $parts = $_.Version.Split('.') | ForEach-Object { [int]$_ }
+                    ($parts[0] * 1000000) + ($parts[1] * 1000) + $parts[2]
+                }
+            }, @{
+                Expression = { [int64]$_.BuildTag }
+            } -Descending |
+            Select-Object -First 1
+
+        $script:ResolvedPythonVersion = $best.Version
+        $script:ResolvedReleaseTag = $best.ReleaseTag
+        $script:ArchiveName = [System.IO.Path]::GetFileName($best.Href)
+        $script:ArchiveLocal = Join-Path $RuntimeRoot $ArchiveName
+
+        return [pscustomobject]@{
+            Version     = $ResolvedPythonVersion
+            ReleaseTag  = $ResolvedReleaseTag
+            ArchiveName = $ArchiveName
+            MirrorUrl   = "https://github.com$($best.Href)"
+        }
+    }
 
     try {
-        $resp = Invoke-WebRequest -Uri $MirrorLatestUrl -UseBasicParsing
+        $resp = Invoke-WebRequestWithRetry -Uri $MirrorLatestUrl
     }
     catch {
         Exit-WithError "Failed to query mirror index: $($_.Exception.Message)"
     }
 
-    $escaped = [regex]::Escape($PythonMajorMinor)
     $pattern = "^/github-release/astral-sh/python-build-standalone/LatestRelease/cpython-($escaped\.\d+)%2B(\d+)-x86_64-pc-windows-msvc-install_only\.tar\.gz$"
     $candidates = @()
 
@@ -163,11 +253,7 @@ function Resolve-PythonArchive {
     $script:ArchiveLocal = Join-Path $RuntimeRoot $ArchiveName
 
     # PythonMirrorBase 已根据网络区域自动选择：国内用 USTC 镜像，海外用 GitHub 官方
-    $mirrorUrl = if ($PythonMirrorBase -eq "https://github.com") {
-        "https://github.com/astral-sh/python-build-standalone/releases/download/$ResolvedReleaseTag/$ArchiveName"
-    } else {
-        "$PythonMirrorBase$($best.Href)"
-    }
+    $mirrorUrl = "$PythonMirrorBase$($best.Href)"
 
     return [pscustomobject]@{
         Version     = $ResolvedPythonVersion
