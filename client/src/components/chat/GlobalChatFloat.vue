@@ -884,6 +884,7 @@ function buildAgentOptions(sessionId: string | number | null = null) {
     const isOccupied = occupiedByOthers.has(a.value);
     return {
       ...a,
+      running: chat.runningAgentIds.has(a.value),
       disabled: isOccupied,
       disabledReason: isOccupied ? t('components.agentRadialPicker.agentInUse') : '',
     };

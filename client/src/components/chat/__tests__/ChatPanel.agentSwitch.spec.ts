@@ -6,8 +6,11 @@ import { i18n } from '@/i18n';
 const AgentRadialPickerStub = defineComponent({
   name: 'AgentRadialPicker',
   emits: ['update:value', 'closed'],
+  props: {
+    disabled: { type: Boolean, default: false },
+  },
   template: `
-    <div>
+    <div class="agent-picker-probe" :data-disabled="String(disabled)">
       <button class="select-agent" @click="$emit('update:value', 'agent_scriptwriter')" />
       <button class="finish-close" @click="$emit('closed')" />
     </div>
@@ -52,6 +55,19 @@ function mountPanel(history: Array<Record<string, unknown>>, extraProps: Record<
 }
 
 describe('ChatPanel Agent 切换渲染契约', () => {
+  it('允许发送中切换时不禁用 Agent 轮盘', () => {
+    const enabledWrapper = mountPanel([], {
+      sending: true,
+      allowAgentSwitchWhileSending: true,
+    });
+    expect(enabledWrapper.find('.agent-picker-probe').attributes('data-disabled')).toBe('false');
+    enabledWrapper.unmount();
+
+    const guardedWrapper = mountPanel([], { sending: true });
+    expect(guardedWrapper.find('.agent-picker-probe').attributes('data-disabled')).toBe('true');
+    guardedWrapper.unmount();
+  });
+
   it('200 条历史首屏最多只挂载尾部 4 条，并通知移动抽屉直接撑满', async () => {
     const history = Array.from({ length: 100 }, (_, index) => ({
       id: index,

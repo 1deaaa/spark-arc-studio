@@ -952,6 +952,7 @@ const jaJP = {
       switchAgent: 'Agent を切り替え',
       rerun: 'もう一度',
       agentInUse: 'この Agent は別のウィンドウで使用中です',
+      running: 'バックグラウンドで生成中',
     },
     fileExplorer: {
       newScene: '新規シーン',

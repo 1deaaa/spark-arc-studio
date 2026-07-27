@@ -400,6 +400,13 @@ export const useChatStore = defineStore('chat', {
         .filter((s) => s.kind === 'extra')
         .map((s) => s.agentId),
     ]),
+    /** 所有仍在生成或等待后台任务终态的 Agent，用于聊天入口展示跨会话运行状态。 */
+    runningAgentIds: (state: ChatStoreState) => new Set(
+      Object.values(state.sessions)
+        .filter((session) => session.sending || session.backgroundTaskStatus === 'running')
+        .map((session) => session.agentId)
+        .filter(Boolean),
+    ),
   },
 
   actions: {

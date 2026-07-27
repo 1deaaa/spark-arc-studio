@@ -157,6 +157,11 @@
                 :size="effectiveSlotSize"
                 :disabled="isOptionDisabled(opt)"
               />
+              <span
+                v-if="opt.running"
+                class="agent-radial-slot-running"
+                aria-hidden="true"
+              />
               <span class="agent-radial-slot-name">{{ opt.label }}</span>
             </button>
           </div>
@@ -187,6 +192,7 @@ type RadialOption = {
   label: string;
   disabled?: boolean;
   disabledReason?: string;
+  running?: boolean;
   [k: string]: unknown;
 };
 
@@ -453,13 +459,19 @@ function isOptionDisabled(opt: RadialOption): boolean {
 }
 
 function slotAriaLabel(opt: RadialOption): string {
-  return isOptionDisabled(opt) && opt.disabledReason
-    ? `${opt.label} - ${opt.disabledReason}`
-    : opt.label;
+  const states = [
+    opt.running ? t('components.agentRadialPicker.running') : '',
+    isOptionDisabled(opt) ? opt.disabledReason || '' : '',
+  ].filter(Boolean);
+  return states.length > 0 ? `${opt.label} - ${states.join(' - ')}` : opt.label;
 }
 
 function slotTitle(opt: RadialOption): string {
-  return isOptionDisabled(opt) ? (opt.disabledReason || opt.label) : opt.label;
+  const states = [
+    opt.running ? t('components.agentRadialPicker.running') : '',
+    isOptionDisabled(opt) ? opt.disabledReason || '' : '',
+  ].filter(Boolean);
+  return states.length > 0 ? `${opt.label} · ${states.join(' · ')}` : opt.label;
 }
 
 function angleOf(idx: number): number {
@@ -490,6 +502,7 @@ function slotStyle(idx: number, agentId: string): Record<string, string> {
     '--ux': `${ux}`,
     '--uy': `${uy}`,
     '--slot-color': color,
+    '--slot-size': `${effectiveSlotSize.value}px`,
   };
 }
 
@@ -1137,6 +1150,29 @@ onBeforeUnmount(() => {
   opacity: 0.45;
   cursor: not-allowed;
   filter: grayscale(0.45);
+}
+
+.agent-radial-slot-running {
+  position: absolute;
+  left: 50%;
+  top: 50%;
+  width: 10px;
+  height: 10px;
+  border: 2px solid var(--spark-surface, #fff);
+  border-radius: 50%;
+  background: var(--slot-color, var(--spark-primary));
+  box-shadow: 0 0 0 2px color-mix(in srgb, var(--slot-color, var(--spark-primary)) 25%, transparent);
+  transform: translate(
+    calc(var(--slot-size) / 2 - 7px),
+    calc(var(--slot-size) / -2 - 3px)
+  );
+  pointer-events: none;
+  animation: agent-running-pulse 1.4s ease-in-out infinite;
+}
+
+@keyframes agent-running-pulse {
+  0%, 100% { opacity: 0.72; box-shadow: 0 0 0 2px color-mix(in srgb, var(--slot-color, var(--spark-primary)) 20%, transparent); }
+  50% { opacity: 1; box-shadow: 0 0 0 5px color-mix(in srgb, var(--slot-color, var(--spark-primary)) 8%, transparent); }
 }
 
 /* 名字悬浮在外侧，高亮时体现专属主题色 */

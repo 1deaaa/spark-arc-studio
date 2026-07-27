@@ -952,6 +952,7 @@ const enUS = {
       switchAgent: 'Switch agent',
       rerun: 'Rerun',
       agentInUse: 'This agent is currently in use by another window',
+      running: 'Generating in the background',
     },
     fileExplorer: {
       newScene: 'New Scene',

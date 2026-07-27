@@ -950,6 +950,7 @@ const koKR = {
       switchAgent: '전담 전문가 교체',
       rerun: '다시 작성 지시',
       agentInUse: '해당 전문가는 현재 다른 활성 화면에서 사용 중입니다.',
+      running: '백그라운드에서 생성 중',
     },
     fileExplorer: {
       newScene: '새 씬 추가',

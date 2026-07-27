@@ -47,6 +47,31 @@ describe('chatStore NDJSON 消费契约', () => {
     vi.clearAllMocks();
   });
 
+  it('切换 Agent 只切换可见主会话，后台流状态与历史保持隔离', () => {
+    const store = useChatStore();
+    const directorSession = store.primarySession;
+    directorSession.sending = true;
+    directorSession.backgroundTaskStatus = 'running';
+    directorSession.history = [{ role: 'assistant', content: '导演仍在输出' }];
+
+    store.setAgent('agent_scriptwriter');
+    const scriptwriterSession = store.primarySession;
+    expect(scriptwriterSession.id).not.toBe(directorSession.id);
+    expect(scriptwriterSession.sending).toBe(false);
+    expect(scriptwriterSession.history).toEqual([]);
+    expect(store.runningAgentIds.has('agent_director')).toBe(true);
+
+    scriptwriterSession.sending = true;
+    scriptwriterSession.backgroundTaskStatus = 'running';
+    scriptwriterSession.history = [{ role: 'user', content: '编剧会话' }];
+    expect(store.runningAgentIds).toEqual(new Set(['agent_director', 'agent_scriptwriter']));
+
+    store.setAgent('agent_director');
+    expect(store.primarySession.id).toBe(directorSession.id);
+    expect(store.history).toEqual([{ role: 'assistant', content: '导演仍在输出' }]);
+    expect(store.sending).toBe(true);
+  });
+
   it('消费 task_snapshot / delta / tool 事件并维护 segments 与 tool_traces', async () => {
     const store = useChatStore();
     const session = store.primarySession;

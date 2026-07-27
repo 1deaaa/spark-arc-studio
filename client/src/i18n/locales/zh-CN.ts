@@ -950,6 +950,7 @@ const zhCN = {
       switchAgent: '切换 Agent',
       rerun: '再来一次',
       agentInUse: '该 Agent 正在其他窗口中使用',
+      running: '正在后台生成',
     },
     fileExplorer: {
       newScene: '新建场景',

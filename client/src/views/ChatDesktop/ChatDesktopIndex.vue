@@ -5,6 +5,7 @@
         ref="desktopListRef"
         :agent-id="chat.currentAgentId"
         :agent-options="agentOptions"
+        :allow-agent-switch-while-sending="true"
         :history="chat.history"
         :loading="chat.loading"
         :last-error="chat.lastError"
@@ -97,7 +98,11 @@ async function compactContext() {
 const { registry: agentRegistry, load: loadAgentRegistry } = useAgentRegistry();
 const agentOptions = computed(() => (agentRegistry.value || [])
   .filter(a => a.visibleInChat !== false)
-  .map(a => ({ label: a.name, value: a.key })));
+  .map(a => ({
+    label: a.name,
+    value: a.key,
+    running: chat.runningAgentIds.has(a.key),
+  })));
 const primarySessionId = computed(() => chat.primarySession?.id ?? null);
 
 async function loadRegistry() {
