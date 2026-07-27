@@ -1313,6 +1313,10 @@ input[type="password"] {
   z-index: 1000;
 }
 
+:global(.platform-desktop-shell) .login-lang-select {
+  top: calc(48px + var(--sat, env(safe-area-inset-top, 0px)));
+}
+
 .lang-switch-btn {
   background: color-mix(in srgb, var(--spark-panel-bg), transparent 30%) !important;
   border: 1px solid color-mix(in srgb, var(--spark-border), transparent 60%) !important;

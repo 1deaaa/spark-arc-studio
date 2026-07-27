@@ -354,9 +354,7 @@ function primeAppFontCacheInBackground() {
       return warmupCommonChineseCharacters();
     })
     .then((warmed) => {
-      if (warmed) {
-        markAppFontWarmCacheHint(true);
-      }
+      markAppFontWarmCacheHint(Boolean(warmed));
     });
 }
 

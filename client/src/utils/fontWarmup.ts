@@ -14,6 +14,25 @@ export type FontWarmupOptions = {
   maxChars?: number;
 };
 
+export function collectFontWarmupText(...sources: unknown[]): string {
+  const parts: string[] = [];
+  const visit = (value: unknown) => {
+    if (typeof value === 'string') {
+      parts.push(value);
+      return;
+    }
+    if (Array.isArray(value)) {
+      value.forEach(visit);
+      return;
+    }
+    if (value && typeof value === 'object') {
+      Object.values(value as Record<string, unknown>).forEach(visit);
+    }
+  };
+  sources.forEach(visit);
+  return parts.join(' ');
+}
+
 function compactSample(text: string, maxChars: number): string {
   const seen = new Set<string>();
   let result = '';
@@ -138,7 +157,7 @@ function getLoadTask(fontSet: FontFaceSet, descriptor: string, sample: string): 
 export async function ensureAppFontReadyForText(text: string, options: FontWarmupOptions = {}): Promise<boolean> {
   const fontSet = getFontApi();
   if (!fontSet) {
-    return true;
+    return false;
   }
   const sample = compactSample(text, options.maxChars ?? 120);
   if (!sample) {
@@ -191,7 +210,7 @@ export function warmupCommonChineseCharacters(): Promise<boolean> {
     return commonChineseWarmupPromise;
   }
 
-  commonChineseWarmupPromise = new Promise((resolve) => {
+  const scheduledWarmup = new Promise<boolean>((resolve) => {
     const idleCallback = window.requestIdleCallback;
 
     const triggerWarmup = () => {
@@ -207,6 +226,13 @@ export function warmupCommonChineseCharacters(): Promise<boolean> {
       return;
     }
     window.setTimeout(() => triggerWarmup(), 2500);
+  });
+
+  commonChineseWarmupPromise = scheduledWarmup.then((warmed) => {
+    if (!warmed) {
+      commonChineseWarmupPromise = null;
+    }
+    return warmed;
   });
 
   return commonChineseWarmupPromise;
