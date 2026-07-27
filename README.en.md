@@ -860,7 +860,7 @@ If you are a model API aggregation platform, please feel free to check out our [
 
 ## Author's Note
 
-The initial version of this project — from design and development to testing — was completed entirely by me, so it inevitably contains many shortcomings. My time is relatively tight, and maintenance work might not be very timely. Contributors are highly welcome to actively participate in maintenance.
+The initial version of this project — from design and development to testing — was completed entirely by us, so it inevitably contains many shortcomings. Our time is relatively tight, and maintenance work might not be very timely. Contributors are highly welcome to actively participate in maintenance.
 
 This project was originally used internally within our studio for game plot system development.
 
