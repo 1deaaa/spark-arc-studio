@@ -253,15 +253,15 @@ def probe_hf_endpoint(
 
 
 def get_git_clone_candidates(repo_url: str | None = None, probe: bool = True) -> list[str]:
-    """按出口区域排序 Git 克隆候选，并始终保留代理回退。"""
-    official_url = repo_url or repository_urls()["clone"]
+    """按出口区域排序 Git 克隆候选；默认仓库在大陆优先使用公开 Gitee 镜像。"""
+    del probe  # 保留兼容参数；仓库可达性由实际克隆过程逐项确认。
+    if repo_url:
+        return [repo_url]
+    repository = repository_urls()
+    official_url = repository["clone"]
+    mainland_mirrors = repository["mainland_clones"]
     mainland = is_mainland_china()
-    proxies = network_candidates("gh_proxy", mainland=mainland)
-    if probe:
-        reachable = [proxy for proxy in proxies if probe_url(proxy)]
-        proxies = reachable + [proxy for proxy in proxies if proxy not in reachable]
-    proxied = [f"{proxy.rstrip('/')}/{official_url}" for proxy in proxies]
-    candidates = [*proxied, official_url] if mainland else [official_url, *proxied]
+    candidates = [*mainland_mirrors, official_url] if mainland else [official_url, *mainland_mirrors]
     return list(dict.fromkeys(candidates))
 
 

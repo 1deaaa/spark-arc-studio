@@ -18,9 +18,11 @@ struct ProjectConfig {
 }
 
 #[derive(Debug, Deserialize)]
+#[serde(rename_all = "camelCase")]
 struct RepositoryConfig {
     provider: String,
     slug: String,
+    mainland_clone_urls: Vec<String>,
 }
 
 #[derive(Debug, Deserialize)]
@@ -39,8 +41,8 @@ struct NetworkRoute {
 
 #[derive(Debug, Clone)]
 pub struct RepositoryUrls {
-    pub slug: String,
     pub clone: String,
+    pub mainland_clones: Vec<String>,
     pub release_api: String,
     pub release_page: String,
 }
@@ -66,6 +68,10 @@ fn config() -> &'static ProjectConfig {
         assert!(
             config.repository.slug.split('/').count() == 2,
             "sparkarc.json repository.slug 必须是 owner/repository 格式"
+        );
+        assert!(
+            !config.repository.mainland_clone_urls.is_empty(),
+            "sparkarc.json repository.mainlandCloneUrls 至少需要一个地址"
         );
         for resource in [
             "pypi",
@@ -95,9 +101,9 @@ pub fn repository_urls() -> RepositoryUrls {
     let web = format!("https://github.com/{slug}");
     RepositoryUrls {
         clone: format!("{web}.git"),
+        mainland_clones: config().repository.mainland_clone_urls.clone(),
         release_api: format!("https://api.github.com/repos/{slug}/releases/latest"),
         release_page: format!("{web}/releases/latest"),
-        slug,
     }
 }
 
@@ -145,11 +151,18 @@ mod tests {
     #[test]
     fn repository_urls_are_derived_from_the_manifest() {
         let urls = repository_urls();
-        let web = format!("https://github.com/{}", urls.slug);
+        let web = format!("https://github.com/{}", config().repository.slug);
         assert_eq!(urls.clone, format!("{web}.git"));
         assert_eq!(
+            urls.mainland_clones.first().map(String::as_str),
+            Some("https://gitee.com/aideaaa/spark-arc-studio.git")
+        );
+        assert_eq!(
             urls.release_api,
-            format!("https://api.github.com/repos/{}/releases/latest", urls.slug)
+            format!(
+                "https://api.github.com/repos/{}/releases/latest",
+                config().repository.slug
+            )
         );
     }
 

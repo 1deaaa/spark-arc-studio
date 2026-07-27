@@ -33,6 +33,7 @@
     --spark-font: var(--spark-font-primary-stack);
     --spark-mono: 'JetBrains Mono', 'Fira Code', 'Consolas', 'Monaco', ui-monospace, SFMono-Regular, Menlo, monospace;
     --spark-font-logo: var(--spark-font-primary-stack);
+    --spark-desktop-titlebar-height: 40px;
 
     /* --- 排版字号 (Type Scale) --- */
     /* 基准：修改 --spark-fs-base 的 px 值即可全局等比缩放 */

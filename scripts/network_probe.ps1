@@ -58,8 +58,8 @@ function Get-SparkArcConfig {
     catch {
         throw "无法解析 ${SparkArcConfigPath}: $($_.Exception.Message)"
     }
-    if ($config.schemaVersion -ne 1 -or $config.repository.provider -ne "github" -or -not $config.repository.slug -or @($config.network.geoIpProviders).Count -lt 2) {
-        throw "sparkarc.json 缺少有效的 GitHub 仓库身份。"
+    if ($config.schemaVersion -ne 1 -or $config.repository.provider -ne "github" -or -not $config.repository.slug -or @($config.repository.mainlandCloneUrls).Count -lt 1 -or @($config.network.geoIpProviders).Count -lt 2) {
+        throw "sparkarc.json 缺少有效的仓库身份或大陆克隆源。"
     }
     return $config
 }
@@ -292,19 +292,18 @@ function Get-NetworkRegion {
 function Get-GitCloneCandidates {
     <#
     .SYNOPSIS
-        从 sparkarc.json 派生官方仓库克隆地址；所有网络都保留代理候选作为失败回退。
+        从 sparkarc.json 派生仓库克隆地址；中国大陆优先公开 Gitee 镜像。
     #>
     param([bool]$Probe = $true)
 
     $repositoryUrl = "https://github.com/$($SparkArcConfig.repository.slug).git"
     $region = Get-NetworkRegion
-    $proxyCandidates = (Get-RecommendedMirror -Type "gh_proxy" -Probe $Probe).Candidates
-    $proxiedCandidates = @($proxyCandidates | ForEach-Object { "$(($_ -as [string]).TrimEnd('/'))/$repositoryUrl" })
+    $mainlandCandidates = @($SparkArcConfig.repository.mainlandCloneUrls)
     $candidates = if ($region.IsMainlandChina) {
-        $proxiedCandidates + @($repositoryUrl)
+        $mainlandCandidates + @($repositoryUrl)
     }
     else {
-        @($repositoryUrl) + $proxiedCandidates
+        @($repositoryUrl) + $mainlandCandidates
     }
     $ordered = @($candidates | Select-Object -Unique)
     return [pscustomobject]@{

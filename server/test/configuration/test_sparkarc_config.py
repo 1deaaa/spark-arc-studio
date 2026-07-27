@@ -25,18 +25,18 @@ def test_repository_urls_are_derived_from_root_manifest() -> None:
     assert urls["slug"] == config["repository"]["slug"]
     assert urls["web"] == f"https://github.com/{urls['slug']}"
     assert urls["clone"] == f"{urls['web']}.git"
+    assert urls["mainland_clones"] == config["repository"]["mainlandCloneUrls"]
     assert urls["release_api"] == f"https://api.github.com/repos/{urls['slug']}/releases/latest"
     assert urls["release_page"] == f"{urls['web']}/releases/latest"
 
 
-def test_mainland_clone_candidates_use_configured_proxies_before_official(monkeypatch) -> None:
+def test_mainland_clone_candidates_use_gitee_before_official_without_proxies(monkeypatch) -> None:
     monkeypatch.setattr(network_probe, "is_mainland_china", lambda: True)
 
     candidates = network_probe.get_git_clone_candidates(probe=False)
-    prefixes = network_candidates("gh_proxy", mainland=True)
-
     assert candidates[-1] == repository_urls()["clone"]
-    assert candidates[0] == f"{prefixes[0].rstrip('/')}/{repository_urls()['clone']}"
+    assert candidates[:-1] == repository_urls()["mainland_clones"]
+    assert all("ghproxy" not in candidate and "gh-proxy" not in candidate for candidate in candidates)
 
 
 def test_network_probe_reads_geoip_and_route_data_from_manifest(monkeypatch) -> None:
@@ -112,14 +112,13 @@ def test_two_matching_direct_geoip_results_classify_mainland(monkeypatch) -> Non
     assert region["confidence"] == "direct_consensus"
 
 
-def test_non_mainland_clone_candidates_keep_proxy_fallback(monkeypatch) -> None:
+def test_non_mainland_clone_candidates_keep_gitee_fallback(monkeypatch) -> None:
     monkeypatch.setattr(network_probe, "is_mainland_china", lambda: False)
 
     candidates = network_probe.get_git_clone_candidates(probe=False)
 
     assert candidates[0] == repository_urls()["clone"]
-    assert len(candidates) > 1
-    assert all(repository_urls()["clone"] in candidate for candidate in candidates[1:])
+    assert candidates[1:] == repository_urls()["mainland_clones"]
 
 
 def test_powershell_probe_does_not_redeclare_repository_or_proxy_values() -> None:
@@ -133,6 +132,13 @@ def test_powershell_probe_does_not_redeclare_repository_or_proxy_values() -> Non
     assert "https://ghfast.top/" not in script
     assert "https://ghproxy.net/" not in script
 
+    clone_function = script.split("function Get-GitCloneCandidates", 1)[1].split(
+        "function Get-RecommendedMirror", 1
+    )[0]
+    assert "$SparkArcConfig.repository.mainlandCloneUrls" in clone_function
+    assert 'Get-RecommendedMirror -Type "gh_proxy"' not in clone_function
+    assert "$proxiedCandidates" not in clone_function
+
 
 def test_windows_pyloader_does_not_hardcode_ustc_verification_address() -> None:
     script = (PROJECT_ROOT / "server" / "pyloader.win.ps1").read_text(encoding="utf-8")
@@ -145,12 +151,26 @@ def test_windows_pyloader_does_not_hardcode_ustc_verification_address() -> None:
     assert "$FinalReqHash = Get-RequirementsHash" in script
 
 
-def test_windows_start_registers_service_from_server_import_root() -> None:
-    script = (PROJECT_ROOT / "start.bat").read_text(encoding="utf-8")
+def test_launcher_only_uses_managed_root_and_source_startup_cannot_override_it() -> None:
+    windows_script = (PROJECT_ROOT / "start.bat").read_text(encoding="utf-8")
+    unix_script = (PROJECT_ROOT / "start.sh").read_text(encoding="utf-8")
+    server_app = (PROJECT_ROOT / "server" / "app.py").read_text(encoding="utf-8")
+    launcher_lib = (PROJECT_ROOT / "client" / "src-tauri" / "src" / "lib.rs").read_text(
+        encoding="utf-8"
+    )
+    launcher_constants = (PROJECT_ROOT / "client" / "launcher" / "constants.ts").read_text(
+        encoding="utf-8"
+    )
 
-    assert "sys.path.insert(0, os.path.join(root, 'server'))" in script
-    assert "from core.service_registry import record_service_install" in script
-    assert "[ERROR] Failed to register the local SparkArc service." in script
+    for source in (windows_script, unix_script, server_app):
+        assert "record_service_install" not in source
+        assert "service_registry" not in source
+
+    assert "ensure_managed_checkout" in launcher_lib
+    assert "valid_record_project_root" not in launcher_lib
+    assert "find_sibling_backend" not in launcher_lib
+    assert "LAUNCHER_SERVICE_RECORD_FILE" not in launcher_constants
+    assert "LAUNCHER_LOCAL_BACKEND_DIR_NAMES" not in launcher_constants
 
 
 def test_generated_public_address_outputs_are_in_sync() -> None:

@@ -36,6 +36,7 @@ export function validateSparkArcConfig(config) {
   if (!/^[A-Za-z0-9_.-]+\/[A-Za-z0-9_.-]+$/.test(slug)) {
     throw new Error('sparkarc.json 的 repository.slug 必须是 owner/repository 格式。');
   }
+  requireUrlList(config.repository?.mainlandCloneUrls, 'repository.mainlandCloneUrls');
   if (!config.network || typeof config.network !== 'object') {
     throw new Error('sparkarc.json 缺少 network 配置。');
   }
@@ -75,6 +76,7 @@ export function repositoryUrls(config = readSparkArcConfig()) {
     slug,
     web,
     clone: `${web}.git`,
+    mainlandClones: [...config.repository.mainlandCloneUrls],
     releaseApi: `https://api.github.com/repos/${slug}/releases/latest`,
     releasePage: `${web}/releases/latest`,
   };

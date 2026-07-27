@@ -69,7 +69,7 @@ const isLoginPage = computed(() => route.name === 'Login');
 }
 
 .spark-titlebar.is-login {
-  height: 40px;
+  height: var(--spark-desktop-titlebar-height);
   padding-right: 0;
   /* 登录页：完全透明，与背景无缝融合 */
   background: transparent;

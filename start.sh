@@ -28,9 +28,6 @@ if [ $? -ne 0 ]; then
     exit 1
 fi
 
-# 通过环境变量传递路径，避免目录名中的单引号破坏 Python 代码字符串。
-SPARKARC_SERVICE_PROJECT_ROOT="$(pwd)" "$PYTHON_EXE" -X utf8 -c 'import os; from core.service_registry import record_service_install; record_service_install(os.environ["SPARKARC_SERVICE_PROJECT_ROOT"])'
-
 if [ ! -f "$MARKER_FILE" ]; then
     echo "[ERROR] Deployment script finished but marker file missing. Aborting."
     exit 1

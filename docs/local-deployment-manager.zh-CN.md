@@ -17,6 +17,8 @@ Launcher 不是第二套业务客户端。它只负责安装、启动、更新�
 
 Vue Launcher 页面只读取状态并调用 Tauri 命令，不直接执行 Git、下载或文件切换。`start.bat`、`start.sh` 只负责在源码已就绪后构建前端并启动服务。
 
+Launcher 的本地后端目录固定为 `~/.sparkarc/sparkarc-server`。
+
 ## 工作树所有权
 
 Launcher 首次拉取源码后，在根目录写入 `.sparkarc-managed.json`：
@@ -45,10 +47,12 @@ Launcher 首次拉取源码后，在根目录写入 `.sparkarc-managed.json`：
 Git 源按顺序尝试：
 
 1. `SPARKARC_GIT_REMOTE` 显式覆盖值。
-2. GitHub 官方 HTTPS 仓库。
-3. `ghfast.top` 和 `ghproxy.net` 的 GitHub 代理地址。
+2. 中国大陆网络优先 Gitee 公开镜像，再回退到 GitHub 官方 HTTPS 仓库。
+3. 非中国大陆或地区无法确认时优先 GitHub 官方仓库，并保留 Gitee 作为回退。
 
-Release 检查优先请求 GitHub Releases API；可通过 `SPARKARC_GITHUB_RELEASE_API` 指向兼容镜像。遇到 API 限流或不可达时，会回退到 GitHub 标准 `/releases/latest` 重定向页，并依次尝试上述镜像。成功使用镜像时，返回给用户的下载页也会使用同一镜像前缀。
+源码克隆与更新不再使用公共 GitHub 代理，避免大体积 pack 传输卡死。Gitee 镜像地址由根目录 `sparkarc.json` 统一声明，Launcher、Python 网络探测和 PowerShell 启动链路共同读取。
+
+Release 检查优先请求 GitHub Releases API；可通过 `SPARKARC_GITHUB_RELEASE_API` 指向兼容镜像。遇到 API 限流或不可达时，会回退到 GitHub 标准 `/releases/latest` 重定向页，并尝试配置中的轻量代理候选。成功使用代理时，返回给用户的下载页也会使用同一前缀。这是 Launcher 壳更新的例外，不参与源码 Git 克隆与更新。
 
 Release 成功结果会在本机缓存 6 小时，避免每次启动都消耗 GitHub API 配额。它只用于低频 Launcher 壳更新提示，不是业务源码更新清单。
 

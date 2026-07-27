@@ -1,7 +1,7 @@
 <template>
   <div
     class="login-wrap"
-    :class="{ 'is-dark': isDark }"
+    :class="{ 'is-dark': isDark, 'is-desktop-shell': isTauriDesktop }"
     @mousemove="onMouseMove"
     @mouseleave="onLeave"
   >
@@ -284,6 +284,7 @@ import { getApiBaseUrl, normalizeApiBaseUrl, setUserId, isAuthError, isNetworkEr
 import { useLoginBackground } from '@/hooks/useLoginBackground';
 import { useLoginFx } from '@/hooks/useLoginFx';
 import { useThemeStore } from '@/components/stores/themeStore';
+import { isTauriDesktop } from '@/composables/usePlatform';
 import { buildLauncherReturnUrl, readLauncherOriginFromUrl } from '@/utils/launcherHandoff';
 import { schedulePostLoginResourcePreload } from '@/utils/postLoginPreload';
 import { SPARKARC_GITHUB_URL } from '@/config';

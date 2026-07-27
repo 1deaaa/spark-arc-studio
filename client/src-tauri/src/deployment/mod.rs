@@ -22,7 +22,7 @@ use std::{
     io::Write,
     net::{IpAddr, Ipv4Addr, Ipv6Addr, SocketAddr, TcpStream},
     path::{Path, PathBuf},
-    sync::{Mutex, OnceLock},
+    sync::{mpsc, Mutex, OnceLock},
     thread,
     time::{Duration, Instant},
 };
@@ -45,10 +45,11 @@ const MANAGED_SCHEMA_VERSION: u32 = 1;
 const MANAGED_NODE_VERSION: &str = "24.16.0";
 const LAUNCHER_RELEASE_CACHE_TTL_SECONDS: i64 = 6 * 60 * 60;
 const MANAGED_SERVICE_PORT: u16 = 6688;
-const REGION_CACHE_TTL: Duration = Duration::from_secs(5);
+const REGION_CACHE_TTL: Duration = Duration::from_secs(30 * 60);
+const REGION_UNKNOWN_CACHE_TTL: Duration = Duration::from_secs(30);
+const REGION_LOOKUP_TIMEOUT: Duration = Duration::from_secs(3);
 const GIT_SERVER_CONNECT_TIMEOUT_MILLISECONDS: i32 = 12_000;
 const GIT_SERVER_IO_TIMEOUT_MILLISECONDS: i32 = 20_000;
-const GIT_SOURCE_PROBE_TIMEOUT: Duration = Duration::from_secs(5);
 
 /// 在任何线程与 Git 操作开始前，为 Launcher 的 Libgit2 远端访问设置超时护栏。
 ///
@@ -933,7 +934,7 @@ impl DeploymentManager {
 
     fn clone_main(&self, destination: &Path) -> Result<Repository, String> {
         let mut errors = Vec::new();
-        for source in prioritized_git_remote_candidates() {
+        for source in git_remote_candidates() {
             self.append_log(format!("尝试从 {source} 获取 main..."));
             let mut fetch_options = FetchOptions::new();
             fetch_options.download_tags(AutotagOption::None);
@@ -959,7 +960,7 @@ impl DeploymentManager {
         let refspec = format!("+refs/heads/main:{reference_name}");
         let mut errors = Vec::new();
 
-        for source in prioritized_git_remote_candidates() {
+        for source in git_remote_candidates() {
             self.append_log(format!("检查 main 源: {source}"));
             let mut fetch_options = FetchOptions::new();
             fetch_options.download_tags(AutotagOption::None);
@@ -1317,9 +1318,21 @@ fn repository_head_commit(repository: &Repository) -> Result<String, String> {
 }
 
 fn is_project_repository(url: &str) -> bool {
-    url.to_ascii_lowercase()
-        .replace(".git", "")
-        .contains(&project_config::repository_urls().slug.to_ascii_lowercase())
+    let normalized = url
+        .trim()
+        .trim_end_matches('/')
+        .trim_end_matches(".git")
+        .to_ascii_lowercase();
+    let repository = project_config::repository_urls();
+    std::iter::once(repository.clone)
+        .chain(repository.mainland_clones)
+        .map(|candidate| {
+            candidate
+                .trim_end_matches('/')
+                .trim_end_matches(".git")
+                .to_ascii_lowercase()
+        })
+        .any(|candidate| normalized == candidate || normalized.ends_with(&format!("/{candidate}")))
 }
 
 static REGION_CACHE: OnceLock<Mutex<Option<(Instant, Option<bool>)>>> = OnceLock::new();
@@ -1352,42 +1365,74 @@ fn mainland_from_direct_geoip_votes(votes: impl IntoIterator<Item = String>) -> 
 /// 仅把出口地区作为候选排序提示；实际 Git/下载仍会逐项回退。
 fn lookup_mainland_china() -> Option<bool> {
     let cache = REGION_CACHE.get_or_init(|| Mutex::new(None));
-    if let Ok(guard) = cache.lock() {
-        if let Some((checked_at, value)) = *guard {
-            if checked_at.elapsed() < REGION_CACHE_TTL {
-                return value;
-            }
+    let Ok(mut guard) = cache.lock() else {
+        return lookup_mainland_china_uncached();
+    };
+    if let Some((checked_at, value)) = *guard {
+        let ttl = if value.is_some() {
+            REGION_CACHE_TTL
+        } else {
+            REGION_UNKNOWN_CACHE_TTL
+        };
+        if checked_at.elapsed() < ttl {
+            return value;
         }
     }
 
-    let result = (|| {
-        let client = Client::builder()
-            .no_proxy()
-            .timeout(Duration::from_secs(3))
-            .user_agent("SparkArc-Launcher/1.0")
-            .build()
-            .ok()?;
-        let mut votes = Vec::new();
-        for provider in project_config::geoip_providers() {
-            let Ok(response) = client.get(provider).send() else {
-                continue;
-            };
-            let Ok(response) = response.error_for_status() else {
-                continue;
-            };
-            let Ok(payload) = response.json::<serde_json::Value>() else {
-                continue;
-            };
-            if let Some(country_code) = country_code_from_payload(&payload) {
-                votes.push(country_code);
-            }
-        }
-        mainland_from_direct_geoip_votes(votes)
-    })();
-    if let Ok(mut guard) = cache.lock() {
-        *guard = Some((Instant::now(), result));
-    }
+    let result = lookup_mainland_china_uncached();
+    *guard = Some((Instant::now(), result));
     result
+}
+
+fn lookup_mainland_china_uncached() -> Option<bool> {
+    let client = Client::builder()
+        .no_proxy()
+        .timeout(REGION_LOOKUP_TIMEOUT)
+        .user_agent("SparkArc-Launcher/1.0")
+        .build()
+        .ok()?;
+    let providers = project_config::geoip_providers();
+    let provider_count = providers.len();
+    if provider_count == 0 {
+        return None;
+    }
+
+    let (sender, receiver) = mpsc::channel();
+    for provider in providers {
+        let sender = sender.clone();
+        let client = client.clone();
+        thread::spawn(move || {
+            let country_code = client
+                .get(provider)
+                .send()
+                .ok()
+                .and_then(|response| response.error_for_status().ok())
+                .and_then(|response| response.json::<serde_json::Value>().ok())
+                .and_then(|payload| country_code_from_payload(&payload));
+            let _ = sender.send(country_code);
+        });
+    }
+    drop(sender);
+
+    let deadline = Instant::now() + REGION_LOOKUP_TIMEOUT;
+    let mut votes = Vec::new();
+    for _ in 0..provider_count {
+        let remaining = deadline.saturating_duration_since(Instant::now());
+        if remaining.is_zero() {
+            break;
+        }
+        match receiver.recv_timeout(remaining) {
+            Ok(Some(country_code)) => {
+                votes.push(country_code);
+                if let Some(result) = mainland_from_direct_geoip_votes(votes.iter().cloned()) {
+                    return Some(result);
+                }
+            }
+            Ok(None) => {}
+            Err(_) => break,
+        }
+    }
+    mainland_from_direct_geoip_votes(votes)
 }
 
 fn github_proxy_prefixes(region: Option<bool>) -> Vec<String> {
@@ -1421,42 +1466,24 @@ fn git_remote_candidates() -> Vec<String> {
             candidates.push(override_url.to_string());
         }
     }
-    candidates.extend(github_url_candidates(
-        project_config::repository_urls().clone,
-        lookup_mainland_china(),
-    ));
+    candidates.extend(repository_clone_candidates(lookup_mainland_china()));
     deduplicate_urls(candidates)
 }
 
-fn prioritize_git_sources<F>(sources: Vec<String>, mut is_reachable: F) -> Vec<String>
-where
-    F: FnMut(&str) -> bool,
-{
-    let mut reachable = Vec::new();
-    let mut unreachable = Vec::new();
-    for source in sources {
-        if is_reachable(&source) {
-            reachable.push(source);
-        } else {
-            unreachable.push(source);
+fn repository_clone_candidates(region: Option<bool>) -> Vec<String> {
+    let repository = project_config::repository_urls();
+    let mut candidates = Vec::new();
+    match region {
+        Some(true) => {
+            candidates.extend(repository.mainland_clones);
+            candidates.push(repository.clone);
+        }
+        Some(false) | None => {
+            candidates.push(repository.clone);
+            candidates.extend(repository.mainland_clones);
         }
     }
-    reachable.extend(unreachable);
-    reachable
-}
-
-/// 预检只影响候选顺序；任何预检失败源仍会保留，避免把 HEAD 不友好的服务误删。
-fn prioritized_git_remote_candidates() -> Vec<String> {
-    let candidates = git_remote_candidates();
-    let Ok(client) = Client::builder()
-        .connect_timeout(Duration::from_secs(4))
-        .timeout(GIT_SOURCE_PROBE_TIMEOUT)
-        .user_agent("SparkArc-Launcher/1.0")
-        .build()
-    else {
-        return candidates;
-    };
-    prioritize_git_sources(candidates, |source| client.head(source).send().is_ok())
+    deduplicate_urls(candidates)
 }
 
 fn github_release_api_candidates() -> Vec<String> {
@@ -1998,10 +2025,9 @@ mod tests {
             .next()
             .unwrap();
         let proxy_page = format!("{proxy_prefix}{}", repository.release_page);
-        let direct_release = format!(
-            "https://github.com/{}/releases/tag/sparkarc-v0.5.0",
-            repository.slug
-        );
+        let direct_release = repository
+            .release_page
+            .replace("/releases/latest", "/releases/tag/sparkarc-v0.5.0");
         let proxied_release = release_url_for_source(&proxy_page, &direct_release);
 
         assert_eq!(proxied_release, format!("{proxy_prefix}{direct_release}"));
@@ -2066,13 +2092,14 @@ mod tests {
     }
 
     #[test]
-    fn repository_identity_accepts_direct_and_proxy_urls() {
+    fn repository_identity_accepts_official_mirror_and_legacy_proxy_urls() {
         let repository = project_config::repository_urls();
         let proxy_prefix = project_config::all_network_candidates("gh_proxy")
             .into_iter()
             .next()
             .unwrap();
         assert!(is_project_repository(&repository.clone));
+        assert!(is_project_repository(&repository.mainland_clones[0]));
         assert!(is_project_repository(&format!(
             "{proxy_prefix}{}",
             repository.clone
@@ -2100,7 +2127,7 @@ mod tests {
     }
 
     #[test]
-    fn foreign_or_unknown_region_keeps_github_proxy_fallback() {
+    fn foreign_or_unknown_region_keeps_release_proxy_fallback() {
         let official = project_config::repository_urls().clone;
         for region in [Some(false), None] {
             let candidates = github_url_candidates(official.clone(), region);
@@ -2114,20 +2141,25 @@ mod tests {
     }
 
     #[test]
-    fn git_preflight_prioritizes_reachable_sources_without_dropping_fallbacks() {
-        let sources = vec![
-            "https://slow.example.invalid/repository.git".to_string(),
-            "https://ready.example.invalid/repository.git".to_string(),
-            "https://head-blocked.example.invalid/repository.git".to_string(),
-        ];
+    fn mainland_git_sources_prefer_gitee_without_public_proxies() {
+        let repository = project_config::repository_urls();
+        let candidates = repository_clone_candidates(Some(true));
 
-        let ordered = prioritize_git_sources(sources.clone(), |source| {
-            source.contains("ready.example.invalid")
-        });
+        assert_eq!(candidates.first(), repository.mainland_clones.first());
+        assert_eq!(candidates.last(), Some(&repository.clone));
+        assert!(candidates
+            .iter()
+            .all(|candidate| !candidate.contains("ghproxy") && !candidate.contains("gh-proxy")));
+    }
 
-        assert_eq!(ordered[0], sources[1]);
-        assert_eq!(ordered[1], sources[0]);
-        assert_eq!(ordered[2], sources[2]);
+    #[test]
+    fn foreign_or_unknown_git_sources_prefer_github_with_gitee_fallback() {
+        let repository = project_config::repository_urls();
+        for region in [Some(false), None] {
+            let candidates = repository_clone_candidates(region);
+            assert_eq!(candidates.first(), Some(&repository.clone));
+            assert_eq!(&candidates[1..], repository.mainland_clones.as_slice());
+        }
     }
 
     #[test]

@@ -48,6 +48,7 @@ def _validate_config(raw: Any) -> dict[str, Any]:
     slug = _require_string(repository.get("slug"), "repository.slug")
     if len(slug.split("/")) != 2:
         raise RuntimeError("sparkarc.json 的 repository.slug 必须是 owner/repository 格式。")
+    _require_url_list(repository.get("mainlandCloneUrls"), "repository.mainlandCloneUrls")
 
     network = raw.get("network")
     if not isinstance(network, dict):
@@ -81,7 +82,7 @@ def load_sparkarc_config() -> dict[str, Any]:
     return _validate_config(raw)
 
 
-def repository_urls() -> dict[str, str]:
+def repository_urls() -> dict[str, Any]:
     """从唯一仓库标识派生公开仓库、克隆与 Release 地址。"""
     slug = str(load_sparkarc_config()["repository"]["slug"])
     web = f"https://github.com/{slug}"
@@ -89,6 +90,7 @@ def repository_urls() -> dict[str, str]:
         "slug": slug,
         "web": web,
         "clone": f"{web}.git",
+        "mainland_clones": list(load_sparkarc_config()["repository"]["mainlandCloneUrls"]),
         "release_api": f"https://api.github.com/repos/{slug}/releases/latest",
         "release_page": f"{web}/releases/latest",
     }

@@ -1313,8 +1313,8 @@ input[type="password"] {
   z-index: 1000;
 }
 
-:global(.platform-desktop-shell) .login-lang-select {
-  top: calc(48px + var(--sat, env(safe-area-inset-top, 0px)));
+.login-wrap.is-desktop-shell .login-lang-select {
+  top: calc(var(--spark-desktop-titlebar-height) + 12px + var(--sat, env(safe-area-inset-top, 0px)));
 }
 
 .lang-switch-btn {

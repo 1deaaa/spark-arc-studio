@@ -58,7 +58,7 @@ describe('Windows 桌面端 Tauri 配置', () => {
     expect(hooks).toContain('DeleteRegValue HKCU');
   });
 
-  it('业务窗口保留关闭入口，关闭后返回 Launcher', () => {
+  it('连接后在当前窗口导航，关闭按钮会关闭当前客户端', () => {
     const lib = readFileSync(libPath, 'utf8');
     const launcher = readFileSync(launcherPath, 'utf8');
     const windowControls = readFileSync(windowControlsPath, 'utf8');
@@ -69,13 +69,10 @@ describe('Windows 桌面端 Tauri 配置', () => {
       permissions: string[];
     };
 
-    expect(lib).toContain('async fn open_remote_app');
-    expect(lib).toContain('"workspace"');
-    expect(lib).toContain('.decorations(false)');
-    expect(lib).toContain('PageLoadEvent::Finished');
-    expect(lib).toContain('app_on_workspace_close.get_webview_window("main")');
-    expect(lib).not.toContain('app_on_close.exit(0)');
-    expect(launcher).toContain("markWorkspaceWindow(target)");
+    expect(lib).not.toContain('async fn open_remote_app');
+    expect(lib).not.toContain('WebviewWindowBuilder');
+    expect(launcher).toContain('window.location.replace(target)');
+    expect(launcher).not.toContain('markWorkspaceWindow');
     expect(windowControls).toContain('class="win-btn win-btn--close"');
     expect(mainCapability.permissions).toContain('core:window:allow-close');
     expect(remoteCapability.permissions).toContain('core:window:allow-close');

@@ -38,7 +38,7 @@ function capability(identifier, description, options) {
 const generated = new Map([
   [
     join(projectRoot, 'client', 'src', 'generated', 'sparkarcConfig.ts'),
-    `// 此文件由 scripts/sync-sparkarc-config.mjs 从 sparkarc.json 生成，请勿手动编辑。\nexport const SPARKARC_GITHUB_URL = ${JSON.stringify(repository.web)};\nexport const SPARKARC_GIT_CLONE_URL = ${JSON.stringify(repository.clone)};\n`,
+    `// 此文件由 scripts/sync-sparkarc-config.mjs 从 sparkarc.json 生成，请勿手动编辑。\nexport const SPARKARC_GITHUB_URL = ${JSON.stringify(repository.web)};\nexport const SPARKARC_GIT_CLONE_URL = ${JSON.stringify(repository.clone)};\nexport const SPARKARC_MAINLAND_GIT_CLONE_URLS = ${JSON.stringify(repository.mainlandClones)};\n`,
   ],
   [
     join(projectRoot, 'client', 'src-tauri', 'capabilities', 'main.json'),
