@@ -2,7 +2,7 @@ import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { createPinia, setActivePinia } from 'pinia';
 import { useChatStore } from '../chatStore';
 import { useDirectorAutoWriteStore } from '../directorAutoWriteStore';
-import { compactChatContext, getChatTaskStatus } from '@/services/chatService';
+import { compactChatContext, getChatHistory, getChatTaskStatus } from '@/services/chatService';
 import bus from '@/eventBus';
 
 vi.mock('@/components/stores/projectStore', () => ({
@@ -13,6 +13,7 @@ vi.mock('@/services/chatService', async () => {
   return {
     ...actual,
     compactChatContext: vi.fn(),
+    getChatHistory: vi.fn(),
     getChatTaskStatus: vi.fn(),
   };
 });
@@ -70,6 +71,58 @@ describe('chatStore NDJSON 消费契约', () => {
     expect(store.primarySession.id).toBe(directorSession.id);
     expect(store.history).toEqual([{ role: 'assistant', content: '导演仍在输出' }]);
     expect(store.sending).toBe(true);
+  });
+
+  it('切换项目后旧项目流只更新其绑定会话，返回时仍可继续查看', async () => {
+    const store = useChatStore();
+    store.switchProject('huang');
+    const huangSession = store.primarySession;
+    huangSession.streamEpoch = 1;
+
+    let streamController: ReadableStreamDefaultController<Uint8Array> | null = null;
+    const reader = new ReadableStream<Uint8Array>({
+      start(controller) {
+        streamController = controller;
+      },
+    }).getReader();
+    const assistantMsg: any = {
+      clientId: 'assistant-huang',
+      role: 'assistant',
+      content: '',
+      reasoning: '',
+      tool_traces: [],
+      segments: [],
+      timestamp: 1,
+    };
+    const consumePromise = store._consumeStream(huangSession, assistantMsg, false, reader, huangSession.id, {
+      projectName: 'huang',
+      agentId: 'agent_director',
+      contextKey: 'global',
+      streamEpoch: 1,
+    });
+
+    store.switchProject('123');
+    const project123Session = store.primarySession;
+    project123Session.history = [{ role: 'user', content: '123 项目的消息' }];
+    expect(project123Session.id).not.toBe(huangSession.id);
+
+    const encoder = new TextEncoder();
+    streamController!.enqueue(encoder.encode(`${JSON.stringify({ event: 'assistant_delta', seq: 1, text: 'huang 项目的回复' })}\n`));
+    streamController!.enqueue(encoder.encode(`${JSON.stringify({ event: 'task_done', seq: 2, status: 'completed' })}\n`));
+    streamController!.close();
+    await consumePromise;
+
+    expect(store.history).toEqual([{ role: 'user', content: '123 项目的消息' }]);
+    expect(huangSession.history.at(-1)?.content).toBe('huang 项目的回复');
+
+    store.switchProject('huang');
+    expect(store.primarySession.id).toBe(huangSession.id);
+    expect(store.history.at(-1)?.content).toBe('huang 项目的回复');
+
+    vi.mocked(getChatHistory).mockResolvedValueOnce([{ role: 'assistant', content: 'huang 已落盘' }] as any);
+    store.switchProject('123');
+    await store.refreshSessionHistory(huangSession.id);
+    expect(getChatHistory).toHaveBeenLastCalledWith('huang', 'agent_director', 'global', 80);
   });
 
   it('消费 task_snapshot / delta / tool 事件并维护 segments 与 tool_traces', async () => {

@@ -372,8 +372,10 @@ export function useAIPlatformManager(options: { syncAiStoreSilently?: () => void
                 }
             }
 
-            // 若用户填写了 API Key，同时保存密钥
-            if (editingApiKey.value) {
+            // 普通用户编辑系统平台时，留空表示清除个人覆盖并回退站长托管 Key。
+            // 管理员系统平台与用户自定义平台仍保持“留空不修改现有 Key”的语义。
+            const shouldClearUserOverride = editingPlatform.value.is_sys && !isAdmin.value;
+            if (editingApiKey.value || shouldClearUserOverride) {
                 const isAdminSysPlatform = isAdmin.value && editingPlatform.value.is_sys;
                 const keyUrl = isAdminSysPlatform
                     ? '/api/ai/admin/sys-platform/api-key'
@@ -382,7 +384,7 @@ export function useAIPlatformManager(options: { syncAiStoreSilently?: () => void
                     method: 'POST',
                     body: JSON.stringify({
                         platform_id: platformId,
-                        api_key: editingApiKey.value
+                        api_key: editingApiKey.value || null
                     }),
                     headers: { 'Content-Type': 'application/json' }
                 });

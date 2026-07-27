@@ -1358,13 +1358,14 @@ watch(
 
 watch(
   () => projectStore.currentProject,
-  async () => {
+  async (projectName) => {
     // 项目切换时重置到全局并刷新（若展开）
     chat.setContextKey('global');
     if (chat.expanded) ensureVisibleSessionReady();
 
     // 检查是否有后台聊天任务在跑，如果有则自动展开聊天窗口
     const hasRunning = await chat.checkBackgroundTasks();
+    if (projectStore.currentProject !== projectName) return;
     if (hasRunning && !chat.expanded) {
       chat.setExpanded(true);
     }

@@ -79,6 +79,8 @@ type ChatTaskAuthorityState = 'running' | 'terminal' | 'missing' | 'unknown';
 type ChatSession = {
   id: number;
   kind: ChatSessionKind;
+  /** 会话创建时绑定的项目。运行中切换项目不能改变这个值。 */
+  projectName: string;
   agentId: string;
   contextKey: string;
   expanded: boolean;
@@ -126,12 +128,14 @@ type ChatStoreState = {
   sessions: Record<number, ChatSession>;
   _nextId: number;
   _contextProvider: (() => string | { text?: unknown; meta?: unknown } | null | undefined) | null;
+  /** 当前界面展示的项目，用于选择对应的主会话。 */
+  activeProjectName: string;
   primaryAgentId: string;
   primaryContextKey: string;
   primaryExpanded: boolean;
   primarySessionBindings: Record<string, number>;
-  /** checkBackgroundTasks 并发锁，防止 onMounted + watch 同时触发 */
-  _bgCheckInProgress: boolean;
+  /** 按项目隔离后台任务检查，避免快速切换项目时互相跳过。 */
+  _bgChecksInProgress: Record<string, boolean>;
 };
 
 type PanelToolTaskEntry = {
@@ -151,17 +155,18 @@ type ToolLoadingStatsTask = {
  */
 const PRIMARY_SESSION_ID = 0;
 
-function _getPrimaryScopeKey(agentId = 'agent_director', contextKey = 'global') {
-  return `${agentId || 'agent_director'}::${(contextKey || 'global').toString()}`;
+function _getPrimaryScopeKey(projectName = '', agentId = 'agent_director', contextKey = 'global') {
+  return `${projectName || ''}::${agentId || 'agent_director'}::${(contextKey || 'global').toString()}`;
 }
 
 /**
  * 创建一个空会话对象
  */
-function _createSession(id: number, agentId = 'agent_director', kind: ChatSessionKind = id === PRIMARY_SESSION_ID ? 'primary' : 'extra'): ChatSession {
+function _createSession(id: number, agentId = 'agent_director', kind: ChatSessionKind = id === PRIMARY_SESSION_ID ? 'primary' : 'extra', projectName = ''): ChatSession {
   return {
     id,
     kind,
+    projectName,
     agentId,
     contextKey: 'global',
     expanded: kind === 'extra',
@@ -313,19 +318,20 @@ export const useChatStore = defineStore('chat', {
     _nextId: 1,
     /** 全局上下文提供器 */
     _contextProvider: null,
+    activeProjectName: '',
     primaryAgentId: 'agent_director',
     primaryContextKey: 'global',
     primaryExpanded: false,
     primarySessionBindings: {
-      [_getPrimaryScopeKey('agent_director', 'global')]: PRIMARY_SESSION_ID,
+      [_getPrimaryScopeKey('', 'agent_director', 'global')]: PRIMARY_SESSION_ID,
     },
-    _bgCheckInProgress: false,
+    _bgChecksInProgress: {},
   }),
 
   getters: {
     /** 主会话（悬浮窗口 / 桌面全屏使用） */
     primarySession: (state: ChatStoreState) => {
-      const sessionId = state.primarySessionBindings[_getPrimaryScopeKey(state.primaryAgentId, state.primaryContextKey)];
+      const sessionId = state.primarySessionBindings[_getPrimaryScopeKey(state.activeProjectName, state.primaryAgentId, state.primaryContextKey)];
       return state.sessions[sessionId] || state.sessions[PRIMARY_SESSION_ID];
     },
 
@@ -334,75 +340,78 @@ export const useChatStore = defineStore('chat', {
     contextKey: (state: ChatStoreState) => state.primaryContextKey || 'global',
     expanded: (state: ChatStoreState) => state.primaryExpanded || false,
     history: (state: ChatStoreState) => {
-      const sessionId = state.primarySessionBindings[_getPrimaryScopeKey(state.primaryAgentId, state.primaryContextKey)];
+      const sessionId = state.primarySessionBindings[_getPrimaryScopeKey(state.activeProjectName, state.primaryAgentId, state.primaryContextKey)];
       return state.sessions[sessionId]?.history || [];
     },
     loading: (state: ChatStoreState) => {
-      const sessionId = state.primarySessionBindings[_getPrimaryScopeKey(state.primaryAgentId, state.primaryContextKey)];
+      const sessionId = state.primarySessionBindings[_getPrimaryScopeKey(state.activeProjectName, state.primaryAgentId, state.primaryContextKey)];
       return state.sessions[sessionId]?.loading || false;
     },
     sending: (state: ChatStoreState) => {
-      const sessionId = state.primarySessionBindings[_getPrimaryScopeKey(state.primaryAgentId, state.primaryContextKey)];
+      const sessionId = state.primarySessionBindings[_getPrimaryScopeKey(state.activeProjectName, state.primaryAgentId, state.primaryContextKey)];
       return state.sessions[sessionId]?.sending || false;
     },
     toolCalling: (state: ChatStoreState) => {
-      const sessionId = state.primarySessionBindings[_getPrimaryScopeKey(state.primaryAgentId, state.primaryContextKey)];
+      const sessionId = state.primarySessionBindings[_getPrimaryScopeKey(state.activeProjectName, state.primaryAgentId, state.primaryContextKey)];
       return state.sessions[sessionId]?.toolCalling || false;
     },
     toolName: (state: ChatStoreState) => {
-      const sessionId = state.primarySessionBindings[_getPrimaryScopeKey(state.primaryAgentId, state.primaryContextKey)];
+      const sessionId = state.primarySessionBindings[_getPrimaryScopeKey(state.activeProjectName, state.primaryAgentId, state.primaryContextKey)];
       return state.sessions[sessionId]?.toolName || '';
     },
     toolProgressText: (state: ChatStoreState) => {
-      const sessionId = state.primarySessionBindings[_getPrimaryScopeKey(state.primaryAgentId, state.primaryContextKey)];
+      const sessionId = state.primarySessionBindings[_getPrimaryScopeKey(state.activeProjectName, state.primaryAgentId, state.primaryContextKey)];
       return state.sessions[sessionId]?.toolProgressText || '';
     },
     lastError: (state: ChatStoreState) => {
-      const sessionId = state.primarySessionBindings[_getPrimaryScopeKey(state.primaryAgentId, state.primaryContextKey)];
+      const sessionId = state.primarySessionBindings[_getPrimaryScopeKey(state.activeProjectName, state.primaryAgentId, state.primaryContextKey)];
       return state.sessions[sessionId]?.lastError || '';
     },
     retryAttempt: (state: ChatStoreState) => {
-      const sessionId = state.primarySessionBindings[_getPrimaryScopeKey(state.primaryAgentId, state.primaryContextKey)];
+      const sessionId = state.primarySessionBindings[_getPrimaryScopeKey(state.activeProjectName, state.primaryAgentId, state.primaryContextKey)];
       return state.sessions[sessionId]?.retryAttempt ?? null;
     },
     retryMode: (state: ChatStoreState) => {
-      const sessionId = state.primarySessionBindings[_getPrimaryScopeKey(state.primaryAgentId, state.primaryContextKey)];
+      const sessionId = state.primarySessionBindings[_getPrimaryScopeKey(state.activeProjectName, state.primaryAgentId, state.primaryContextKey)];
       return state.sessions[sessionId]?.retryMode ?? null;
     },
     retryMaxRetries: (state: ChatStoreState) => {
-      const sessionId = state.primarySessionBindings[_getPrimaryScopeKey(state.primaryAgentId, state.primaryContextKey)];
+      const sessionId = state.primarySessionBindings[_getPrimaryScopeKey(state.activeProjectName, state.primaryAgentId, state.primaryContextKey)];
       return state.sessions[sessionId]?.retryMaxRetries || 3;
     },
     retryErrorSummary: (state: ChatStoreState) => {
-      const sessionId = state.primarySessionBindings[_getPrimaryScopeKey(state.primaryAgentId, state.primaryContextKey)];
+      const sessionId = state.primarySessionBindings[_getPrimaryScopeKey(state.activeProjectName, state.primaryAgentId, state.primaryContextKey)];
       return state.sessions[sessionId]?.retryErrorSummary || '';
     },
     contextTokenCount: (state: ChatStoreState) => {
-      const sessionId = state.primarySessionBindings[_getPrimaryScopeKey(state.primaryAgentId, state.primaryContextKey)];
+      const sessionId = state.primarySessionBindings[_getPrimaryScopeKey(state.activeProjectName, state.primaryAgentId, state.primaryContextKey)];
       return state.sessions[sessionId]?.contextTokenCount ?? null;
     },
     contextTokenUsage: (state: ChatStoreState) => {
-      const sessionId = state.primarySessionBindings[_getPrimaryScopeKey(state.primaryAgentId, state.primaryContextKey)];
+      const sessionId = state.primarySessionBindings[_getPrimaryScopeKey(state.activeProjectName, state.primaryAgentId, state.primaryContextKey)];
       return state.sessions[sessionId]?.contextTokenUsage ?? null;
     },
     contextWindowStats: (state: ChatStoreState) => {
-      const sessionId = state.primarySessionBindings[_getPrimaryScopeKey(state.primaryAgentId, state.primaryContextKey)];
+      const sessionId = state.primarySessionBindings[_getPrimaryScopeKey(state.activeProjectName, state.primaryAgentId, state.primaryContextKey)];
       return state.sessions[sessionId]?.contextWindowStats ?? null;
     },
 
     // ---------- 多窗口 getter ----------
     /** 所有额外会话（不含主会话） */
-    sessionList: (state: ChatStoreState) => Object.values(state.sessions).filter((s) => s.kind === 'extra'),
+    sessionList: (state: ChatStoreState) => Object.values(state.sessions).filter(
+      (s) => s.kind === 'extra' && s.projectName === state.activeProjectName,
+    ),
     /** 已被占用的 agent ID 集合 */
     occupiedAgentIds: (state: ChatStoreState) => new Set([
       state.primaryAgentId || 'agent_director',
       ...Object.values(state.sessions)
-        .filter((s) => s.kind === 'extra')
+        .filter((s) => s.kind === 'extra' && s.projectName === state.activeProjectName)
         .map((s) => s.agentId),
     ]),
     /** 所有仍在生成或等待后台任务终态的 Agent，用于聊天入口展示跨会话运行状态。 */
     runningAgentIds: (state: ChatStoreState) => new Set(
       Object.values(state.sessions)
+        .filter((session) => session.projectName === state.activeProjectName)
         .filter((session) => session.sending || session.backgroundTaskStatus === 'running')
         .map((session) => session.agentId)
         .filter(Boolean),
@@ -443,8 +452,7 @@ export const useChatStore = defineStore('chat', {
       _clearRetryState(session);
 
       if (wasRunning && agentIdSnapshot) {
-        const projectStore = useProjectStore();
-        const projectName = projectStore.currentProject;
+        const projectName = session.projectName;
         if (projectName) {
           // fire-and-forget：失败也不阻塞，后端最终会通过 60s cleanup 自然清理
           cancelChatTask(projectName, agentIdSnapshot, contextKeySnapshot || 'global').catch(() => {});
@@ -560,16 +568,28 @@ export const useChatStore = defineStore('chat', {
       return this.sessions[sessionId] || null;
     },
 
-    _getPrimarySessionId(agentId?: string | null, contextKey?: string | null) {
+    _resolveSessionProjectName(session: ChatSession): string {
+      const boundProjectName = String(session.projectName || '').trim();
+      if (boundProjectName) return boundProjectName;
+      const projectName = String(this.activeProjectName || useProjectStore().currentProject || '').trim();
+      if (projectName) {
+        session.projectName = projectName;
+        this.activeProjectName = projectName;
+      }
+      return projectName;
+    },
+
+    _getPrimarySessionId(agentId?: string | null, contextKey?: string | null, projectName?: string | null) {
       const normalizedAgentId = (agentId ?? this.primaryAgentId) || 'agent_director';
       const normalizedContextKey = ((contextKey ?? this.primaryContextKey) || 'global').toString();
-      const scopeKey = _getPrimaryScopeKey(normalizedAgentId, normalizedContextKey);
+      const normalizedProjectName = String(projectName ?? this.activeProjectName ?? '').trim();
+      const scopeKey = _getPrimaryScopeKey(normalizedProjectName, normalizedAgentId, normalizedContextKey);
       const existingId = this.primarySessionBindings?.[scopeKey];
       if (existingId != null && this.sessions[existingId]) {
         return existingId;
       }
       const sessionId = this._nextId++;
-      const session = _createSession(sessionId, normalizedAgentId, 'primary');
+      const session = _createSession(sessionId, normalizedAgentId, 'primary', normalizedProjectName);
       session.contextKey = normalizedContextKey;
       this.sessions[sessionId] = session;
       this.primarySessionBindings = {
@@ -579,8 +599,8 @@ export const useChatStore = defineStore('chat', {
       return sessionId;
     },
 
-    _getPrimarySession(agentId?: string | null, contextKey?: string | null): ChatSession | null {
-      const sessionId = this._getPrimarySessionId(agentId, contextKey);
+    _getPrimarySession(agentId?: string | null, contextKey?: string | null, projectName?: string | null): ChatSession | null {
+      const sessionId = this._getPrimarySessionId(agentId, contextKey, projectName);
       return this.sessions[sessionId] || null;
     },
 
@@ -653,7 +673,9 @@ export const useChatStore = defineStore('chat', {
     /** 检查 agent 是否已被占用 */
     isAgentOccupied(agentId) {
       return this.currentAgentId === agentId
-        || Object.values(this.sessions as Record<number, AnyRecord>).some(s => s.kind === 'extra' && s.agentId === agentId);
+        || Object.values(this.sessions as Record<number, AnyRecord>).some(
+          s => s.kind === 'extra' && s.projectName === this.activeProjectName && s.agentId === agentId,
+        );
     },
 
     /** 获取未被占用的 agent 列表 */
@@ -661,7 +683,7 @@ export const useChatStore = defineStore('chat', {
       const occupied = new Set([
         this.currentAgentId,
         ...Object.values(this.sessions as Record<number, AnyRecord>)
-          .filter(s => s.kind === 'extra' && s.id !== excludeSessionId)
+          .filter(s => s.kind === 'extra' && s.projectName === this.activeProjectName && s.id !== excludeSessionId)
           .map(s => s.agentId),
       ]);
       return allAgents.filter(a => !occupied.has(a.value || a.key));
@@ -677,7 +699,7 @@ export const useChatStore = defineStore('chat', {
         throw new Error(`Agent "${agentId}" 已在另一个窗口中使用`);
       }
       const id = this._nextId++;
-      this.sessions[id] = _createSession(id, agentId, 'extra');
+      this.sessions[id] = _createSession(id, agentId, 'extra', this.activeProjectName);
       return id;
     },
 
@@ -689,34 +711,28 @@ export const useChatStore = defineStore('chat', {
       delete this.sessions[sessionId];
     },
 
-    /**
-     * 切换项目时重置所有会话的历史缓存。
-     * 关闭所有额外窗口，清空主会话及所有 primary 会话的 history/lastError，
-     * 使下次打开时重新从新项目拉取历史。
-     */
+    /** 切换可见项目；其他项目的会话和运行中流继续在各自会话内维护。 */
+    switchProject(projectName: string | null | undefined) {
+      this.activeProjectName = String(projectName || '').trim();
+      this._getPrimarySession(this.primaryAgentId, this.primaryContextKey, this.activeProjectName);
+    },
+
+    /** 登出时才真正释放全部聊天会话。 */
     resetAllSessions() {
-      // 关闭所有 extra 会话
-      const extraIds = Object.keys(this.sessions as Record<number, AnyRecord>)
-        .map(Number)
-        .filter(id => (this.sessions as Record<number, AnyRecord>)[id]?.kind === 'extra');
-      for (const id of extraIds) {
-        this._invalidateSessionStream(id);
-        delete (this.sessions as Record<number, AnyRecord>)[id];
-      }
-      // 清空所有 primary 会话的历史
       for (const id of Object.keys(this.sessions as Record<number, AnyRecord>).map(Number)) {
-        const s = (this.sessions as Record<number, AnyRecord>)[id];
-        if (s) {
-          s.history = [];
-          s.lastError = '';
-          s.loading = false;
-          s.importedContext = null;
-          s.contextTokenCount = null;
-          s.contextTokenUsage = null;
-          s.contextWindowStats = null;
-          s.historyRequestSeq = (s.historyRequestSeq || 0) + 1;
-        }
+        this._invalidateSessionStream(id);
       }
+      this.sessions = {
+        [PRIMARY_SESSION_ID]: _createSession(PRIMARY_SESSION_ID, 'agent_director', 'primary'),
+      };
+      this._nextId = 1;
+      this.activeProjectName = '';
+      this.primaryAgentId = 'agent_director';
+      this.primaryContextKey = 'global';
+      this.primarySessionBindings = {
+        [_getPrimaryScopeKey('', 'agent_director', 'global')]: PRIMARY_SESSION_ID,
+      };
+      this._bgChecksInProgress = {};
     },
 
     /** 切换会话的 agent（强制互斥） */
@@ -725,7 +741,7 @@ export const useChatStore = defineStore('chat', {
       if (!session) return false;
 
       const occupiedBy = Object.values(this.sessions as Record<number, AnyRecord>).find(
-        s => s.kind === 'extra' && s.id !== sessionId && s.agentId === agentId
+        s => s.kind === 'extra' && s.id !== sessionId && s.projectName === session.projectName && s.agentId === agentId
       );
       if (occupiedBy || this.currentAgentId === agentId) {
         bus.emit('toast', { type: 'warning', message: '该 Agent 已在另一个窗口中使用' });
@@ -792,8 +808,7 @@ export const useChatStore = defineStore('chat', {
 
       // 如果有后台任务在跑，通知后端取消
       if (session.sending || session.backgroundTaskStatus === 'running') {
-        const projectStore = useProjectStore();
-        const projectName = projectStore.currentProject;
+        const projectName = this._resolveSessionProjectName(session);
         if (projectName) {
           try {
             await cancelChatTask(projectName, session.agentId, session.contextKey);
@@ -824,8 +839,7 @@ export const useChatStore = defineStore('chat', {
       const requestSeq = (session.historyRequestSeq || 0) + 1;
       session.historyRequestSeq = requestSeq;
 
-      const projectStore = useProjectStore();
-      const projectName = projectStore.currentProject;
+      const projectName = this._resolveSessionProjectName(session);
       if (!projectName) return;
 
       if (!silent) {
@@ -834,7 +848,7 @@ export const useChatStore = defineStore('chat', {
       session.lastError = '';
       try {
         const rawHistory = await getChatHistory(projectName, agentIdAtStart, contextKeyAtStart, limit);
-        if (session.agentId !== agentIdAtStart || session.contextKey !== contextKeyAtStart || session.historyRequestSeq !== requestSeq) {
+        if (session.projectName !== projectName || session.agentId !== agentIdAtStart || session.contextKey !== contextKeyAtStart || session.historyRequestSeq !== requestSeq) {
           return;
         }
         // 历史刷新、后台恢复与本地 optimistic 消息统一走同一套 reconciliation 规则。
@@ -853,7 +867,7 @@ export const useChatStore = defineStore('chat', {
           }
         }
       } catch (e: unknown) {
-        if (session.agentId !== agentIdAtStart || session.contextKey !== contextKeyAtStart || session.historyRequestSeq !== requestSeq) {
+        if (session.projectName !== projectName || session.agentId !== agentIdAtStart || session.contextKey !== contextKeyAtStart || session.historyRequestSeq !== requestSeq) {
           return;
         }
         session.lastError = _getErrorMessage(e, '加载失败');
@@ -870,8 +884,7 @@ export const useChatStore = defineStore('chat', {
       if (!session) return;
       if (session.sending) return;
 
-      const projectStore = useProjectStore();
-      const projectName = projectStore.currentProject;
+      const projectName = this._resolveSessionProjectName(session);
       if (!projectName) throw new Error('未选择项目');
       const text = (message || '').trim();
       if (!text) return;
@@ -938,6 +951,7 @@ export const useChatStore = defineStore('chat', {
         // 统一流式处理
         streamState = {
           signal: abortController.signal,
+          projectName,
           agentId: agentIdAtStart,
           contextKey: contextKeyAtStart,
           streamEpoch,
@@ -995,7 +1009,7 @@ export const useChatStore = defineStore('chat', {
           const taskState: ChatTaskAuthorityState = streamState?.receivedTaskDone
             ? 'terminal'
             : canKeepRunning
-              ? await this._getChatTaskAuthorityState(agentIdAtStart, contextKeyAtStart)
+              ? await this._getChatTaskAuthorityState(agentIdAtStart, contextKeyAtStart, projectName)
               : 'terminal';
           this._applyChatTaskAuthorityState(session, taskState);
           this._finalizeSessionAbort(sessionId, abortController);
@@ -1018,20 +1032,20 @@ export const useChatStore = defineStore('chat', {
      * - completed/cancelled/error → 刷新历史获取结果，清除标记
      * 返回 true 表示有 running 任务（供前端自动展开聊天窗口）。
      */
-    _getOrCreateSessionForTask(agentId: string, contextKey = 'global'): ChatSession | null {
+    _getOrCreateSessionForTask(agentId: string, contextKey = 'global', projectName?: string): ChatSession | null {
       const normalizedAgentId = agentId || 'agent_director';
       const normalizedContextKey = (contextKey || 'global').toString();
+      const normalizedProjectName = String(projectName ?? this.activeProjectName ?? '').trim();
       const existing = (Object.values(this.sessions) as ChatSession[]).find(
-        session => session.agentId === normalizedAgentId && session.contextKey === normalizedContextKey,
+        session => session.projectName === normalizedProjectName && session.agentId === normalizedAgentId && session.contextKey === normalizedContextKey,
       );
       if (existing) return existing;
-      const sessionId = this._getPrimarySessionId(normalizedAgentId, normalizedContextKey);
+      const sessionId = this._getPrimarySessionId(normalizedAgentId, normalizedContextKey, normalizedProjectName);
       return this.sessions[sessionId] || null;
     },
 
     async _recoverChatStreamObserver(session: ChatSession, agentId: string, contextKey: string, afterSeq = 0, previousEpoch: number | null = null): Promise<boolean> {
-      const projectStore = useProjectStore();
-      const projectName = projectStore.currentProject;
+      const projectName = this._resolveSessionProjectName(session);
       if (!projectName) return false;
       if (previousEpoch != null && session.streamEpoch !== previousEpoch) return true;
 
@@ -1081,8 +1095,7 @@ export const useChatStore = defineStore('chat', {
       previousEpoch: number | null = null,
       options: AnyRecord = {},
     ): Promise<boolean> {
-      const projectStore = useProjectStore();
-      const projectName = projectStore.currentProject;
+      const projectName = this._resolveSessionProjectName(session);
       if (!projectName) return false;
 
       const sessionId = session.id;
@@ -1092,6 +1105,7 @@ export const useChatStore = defineStore('chat', {
       const shouldStop = () => (
         session.abortRequested
         || (previousEpoch != null && session.streamEpoch !== previousEpoch)
+        || session.projectName !== projectName
         || session.agentId !== agentId
         || session.contextKey !== normalizedContextKey
       );
@@ -1152,12 +1166,11 @@ export const useChatStore = defineStore('chat', {
       }
     },
 
-    async _getChatTaskAuthorityState(agentId: string, contextKey: string): Promise<ChatTaskAuthorityState> {
-      const projectStore = useProjectStore();
-      const projectName = projectStore.currentProject;
-      if (!projectName) return 'missing';
+    async _getChatTaskAuthorityState(agentId: string, contextKey: string, projectName?: string): Promise<ChatTaskAuthorityState> {
+      const targetProjectName = String(projectName || this.activeProjectName || useProjectStore().currentProject || '').trim();
+      if (!targetProjectName) return 'missing';
       try {
-        const status = await getChatTaskStatus(projectName, agentId, contextKey) as AnyRecord;
+        const status = await getChatTaskStatus(targetProjectName, agentId, contextKey) as AnyRecord;
         if (!status?.hasTask) return 'missing';
         if (status.status === 'running') return 'running';
         if (status.status === 'completed' || status.status === 'cancelled' || status.status === 'error') {
@@ -1176,25 +1189,25 @@ export const useChatStore = defineStore('chat', {
       return keepLocked;
     },
 
-    async _isChatTaskStillRunning(agentId: string, contextKey: string): Promise<boolean> {
-      return (await this._getChatTaskAuthorityState(agentId, contextKey)) === 'running';
+    async _isChatTaskStillRunning(agentId: string, contextKey: string, projectName?: string): Promise<boolean> {
+      return (await this._getChatTaskAuthorityState(agentId, contextKey, projectName)) === 'running';
     },
 
     async checkBackgroundTasks(): Promise<boolean> {
       const projectStore = useProjectStore();
-      const projectName = projectStore.currentProject;
+      const projectName = String(projectStore.currentProject || this.activeProjectName || '').trim();
       if (!projectName) return false;
 
-      // 并发守卫：防止 onMounted + watch(currentProject) 同时触发导致双重重连
-      if (this._bgCheckInProgress) return false;
-      this._bgCheckInProgress = true;
+      // 同一项目去重，不同项目允许并行检查与恢复。
+      if (this._bgChecksInProgress[projectName]) return false;
+      this._bgChecksInProgress = { ...this._bgChecksInProgress, [projectName]: true };
 
       try {
         const { tasks, count } = await getChatRecentTasks(projectName);
         if (count === 0) {
           // 没有未清理任务，清理残留状态
           for (const session of Object.values(this.sessions) as ChatSession[]) {
-            if (session.backgroundTaskStatus === 'running') {
+            if (session.projectName === projectName && session.backgroundTaskStatus === 'running') {
               session.backgroundTaskStatus = null;
               await this.refreshSessionHistory(session.id, 80, { silent: true, authoritative: true });
             }
@@ -1206,7 +1219,7 @@ export const useChatStore = defineStore('chat', {
         for (const task of tasks) {
           const agentId = task.agentId || '';
           const contextKey = task.contextKey || 'global';
-          const session = this._getOrCreateSessionForTask(agentId, contextKey);
+          const session = this._getOrCreateSessionForTask(agentId, contextKey, projectName);
           if (!session) continue;
 
           const status = task.status || null;
@@ -1217,7 +1230,7 @@ export const useChatStore = defineStore('chat', {
             applyPersistedTokenStats(session, task as AnyRecord);
             hasRunning = true;
 
-            if (!this.primaryExpanded || !this.primaryAgentId || this.primaryAgentId === 'agent_director') {
+            if (this.activeProjectName === projectName && (!this.primaryExpanded || !this.primaryAgentId || this.primaryAgentId === 'agent_director')) {
               this.primaryAgentId = agentId;
               this.primaryContextKey = contextKey;
             }
@@ -1242,7 +1255,9 @@ export const useChatStore = defineStore('chat', {
         console.warn('检查后台聊天任务失败', e);
         return false;
       } finally {
-        this._bgCheckInProgress = false;
+        const nextChecks = { ...this._bgChecksInProgress };
+        delete nextChecks[projectName];
+        this._bgChecksInProgress = nextChecks;
       }
     },
 
@@ -1252,8 +1267,7 @@ export const useChatStore = defineStore('chat', {
      * 如果返回 JSON（任务已结束）则刷新历史获取结果。
      */
     async _reconnectTaskStream(session: ChatSession, agentId: string, contextKey: string, afterSeq = 0, options: AnyRecord = {}) {
-      const projectStore = useProjectStore();
-      const projectName = projectStore.currentProject;
+      const projectName = this._resolveSessionProjectName(session);
       if (!projectName) return;
 
       const sessionId = session.id;
@@ -1318,6 +1332,7 @@ export const useChatStore = defineStore('chat', {
 
         streamState = {
           signal: abortController.signal,
+          projectName,
           agentId,
           contextKey,
           streamEpoch,
@@ -1403,7 +1418,7 @@ export const useChatStore = defineStore('chat', {
           const taskState: ChatTaskAuthorityState = streamState?.receivedTaskDone
             ? 'terminal'
             : canKeepRunning
-              ? await this._getChatTaskAuthorityState(agentId, contextKey)
+              ? await this._getChatTaskAuthorityState(agentId, contextKey, projectName)
               : 'terminal';
           const keepLocked = this._applyChatTaskAuthorityState(session, taskState);
           this._finalizeSessionAbort(sessionId, abortController);
@@ -1437,8 +1452,7 @@ export const useChatStore = defineStore('chat', {
       const session = this.sessions[sessionId];
       if (!session) return;
 
-      const projectStore = useProjectStore();
-      const projectName = projectStore.currentProject;
+      const projectName = this._resolveSessionProjectName(session);
       if (!projectName) return;
       await clearChatHistory(projectName, session.agentId, session.contextKey);
       session.history = [];
@@ -1469,8 +1483,7 @@ export const useChatStore = defineStore('chat', {
         return;
       }
 
-      const projectStore = useProjectStore();
-      const projectName = projectStore.currentProject;
+      const projectName = this._resolveSessionProjectName(session);
       if (!projectName) return;
 
       try {
@@ -1484,10 +1497,9 @@ export const useChatStore = defineStore('chat', {
     async compactSessionContext(sessionId, targetTokens = 8000) {
       const session = this.sessions[sessionId];
       if (!session || session.sending) return;
-      const projectStore = useProjectStore();
-      const projectName = projectStore.currentProject;
+      const projectName = this._resolveSessionProjectName(session);
       if (!projectName) return;
-      const loadingTarget = sessionId === PRIMARY_SESSION_ID ? 'chat-primary' : `chat-session-${sessionId}`;
+      const loadingTarget = session.kind === 'primary' ? 'chat-primary' : `chat-session-${sessionId}`;
       const task = createStreamingTask('chat', {
         target: loadingTarget,
         text: i18n.global.t('components.chatPanel.compactingContext'),
@@ -1569,8 +1581,7 @@ export const useChatStore = defineStore('chat', {
         return;
       }
 
-      const projectStore = useProjectStore();
-      const projectName = projectStore.currentProject;
+      const projectName = this._resolveSessionProjectName(session);
       if (!projectName) return;
 
       try {
@@ -1609,8 +1620,7 @@ export const useChatStore = defineStore('chat', {
         return this.sendSessionMessage(sessionId, normalizedContent, undefined, true, resolvedContext);
       }
 
-      const projectStore = useProjectStore();
-      const projectName = projectStore.currentProject;
+      const projectName = this._resolveSessionProjectName(session);
       if (!projectName) return;
 
       const agentIdAtStart = session.agentId;
@@ -1664,6 +1674,7 @@ export const useChatStore = defineStore('chat', {
         // 统一流式处理
         streamState = {
           signal: abortController.signal,
+          projectName,
           agentId: agentIdAtStart,
           contextKey: contextKeyAtStart,
           streamEpoch,
@@ -1711,7 +1722,7 @@ export const useChatStore = defineStore('chat', {
           const taskState: ChatTaskAuthorityState = streamState?.receivedTaskDone
             ? 'terminal'
             : canKeepRunning
-              ? await this._getChatTaskAuthorityState(agentIdAtStart, contextKeyAtStart)
+              ? await this._getChatTaskAuthorityState(agentIdAtStart, contextKeyAtStart, projectName)
               : 'terminal';
           this._applyChatTaskAuthorityState(session, taskState);
           this._finalizeSessionAbort(sessionId, abortController);
@@ -1743,11 +1754,18 @@ export const useChatStore = defineStore('chat', {
       let toolLoadingStats: unknown = null;
       const panelToolTasks = new Map<string, PanelToolTaskEntry>();
       const panelToolEventKeyMap = new Map();
-      const { signal = null, agentId = session.agentId, contextKey = session.contextKey, streamEpoch = session.streamEpoch } = streamState;
+      const {
+        signal = null,
+        projectName = session.projectName,
+        agentId = session.agentId,
+        contextKey = session.contextKey,
+        streamEpoch = session.streamEpoch,
+      } = streamState;
       streamState.receivedTaskDone = false;
       streamState.lastSeq = Number(streamState.lastSeq || 0) || 0;
       const isStreamCurrent = () => (
-        session.agentId === agentId
+        session.projectName === projectName
+        && session.agentId === agentId
         && session.contextKey === contextKey
         && session.streamEpoch === streamEpoch
       );
@@ -2385,12 +2403,11 @@ export const useChatStore = defineStore('chat', {
           }
         }
         if (eventType === 'director_auto_write_started') {
-          const currentProjectStore = useProjectStore();
-          const projectName = String(evt.project_name || currentProjectStore.currentProject || '').trim();
-          if (!projectName) return;
+          const targetProjectName = String(evt.project_name || projectName || session.projectName || '').trim();
+          if (!targetProjectName) return;
 
           useDirectorAutoWriteStore().onDirectorStarted({
-            project_name:        projectName,
+            project_name:        targetProjectName,
             start_chapter_index: Number(evt.start_chapter_index ?? 0),
             start_scene_index:   Number(evt.start_scene_index ?? 0),
             mode:                String(evt.mode || 'chapter_by_chapter'),
@@ -2400,7 +2417,7 @@ export const useChatStore = defineStore('chat', {
             total_scenes:        Number(evt.total_scenes ?? 0),
           });
           // Store 已同步进入 running 后再通知 App 装载覆盖层，避免后台标签页中的异步竞态。
-          bus.emit('director-auto-write-started', { ...evt, project_name: projectName });
+          bus.emit('director-auto-write-started', { ...evt, project_name: targetProjectName });
         }
       };
 

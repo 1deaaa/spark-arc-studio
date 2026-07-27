@@ -384,9 +384,9 @@ class AdminMixin:
             return True
 
     def update_platform_config(
-        self, user_id: str, platform_id: int, api_key: str
+        self, user_id: str, platform_id: int, api_key: Optional[str]
     ):
-        """更新平台的 API Key"""
+        """更新平台的 API Key；系统平台传空值时清除用户个人覆盖。"""
         user_id = str(user_id)
         with self.Session() as session:
             plat = session.query(LLMPlatform).filter_by(id=platform_id).first()

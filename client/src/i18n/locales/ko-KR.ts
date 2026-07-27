@@ -800,7 +800,7 @@ const koKR = {
         modelIdentifier: '모델 코드',
         extraBody: 'JSON 추가 파라미터 (생각 한도 설정 등 특수 옵션 주입 시 사용)',
         enterApiKey: '사용할 API Key 입력',
-        managedKeyHint: '💡 입력하지 않고 비워두면, 운영자가 등록한 공용 대리 결제 추론 채널을 활용해 작동합니다.',
+        managedKeyHint: '비워 둔 채 저장하면 개인 API Key가 삭제되고 운영자가 제공하는 관리형 추론 서비스로 전환됩니다.',
         searchModel: '모델 검색',
         searchModelPlaceholder: '모델명 또는 키워드 필터링...',
         modelNamePlaceholder: '검색된 위 리스트에서 고르거나 직접 원격 모델 코드 입력',

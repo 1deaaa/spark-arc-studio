@@ -802,7 +802,7 @@ const jaJP = {
         modelIdentifier: 'モデル識別子',
         extraBody: 'Extra Body（プロバイダ固有パラメータ）',
         enterApiKey: 'API Key を入力',
-        managedKeyHint: '空欄の場合は管理者托管推論の利用を試みます。',
+        managedKeyHint: '空欄のまま保存すると個人 API Key が削除され、管理者提供の推論サービスに戻ります。',
         searchModel: 'モデル検索',
         searchModelPlaceholder: 'キーワードでモデル一覧を絞り込み...',
         modelNamePlaceholder: '上の一覧から選択、またはモデル ID を直接入力',

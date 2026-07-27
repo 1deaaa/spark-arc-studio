@@ -183,9 +183,9 @@ export const useProjectStore = defineStore('project', {
         localStorage.removeItem(getLastProjectKey());
       }
 
-      // 项目切换时清空聊天历史缓存，避免显示旧项目的记录
+      // 聊天会话按项目隔离；切换时只改变可见会话，其他项目可继续后台生成。
       const chatStore = useChatStore();
-      chatStore.resetAllSessions();
+      chatStore.switchProject(safeProjectName);
 
       // 清空剧本编辑器，避免残留旧项目的场景数据
       const sceneStore = useSceneStore();

@@ -800,7 +800,7 @@ const zhCN = {
         modelIdentifier: '模型标识',
         extraBody: 'Extra Body (控制思考等模型特有参数，模型提供商文档会有)',
         enterApiKey: '输入 API Key',
-        managedKeyHint: '💡 留空将尝试使用站长提供的托管推理服务。请确保站长已开启该功能。',
+        managedKeyHint: '留空并保存将清除您的个人 API Key，改用站长提供的托管推理服务。请确保站长已开启该功能。',
         searchModel: '搜索模型',
         searchModelPlaceholder: '输入关键词过滤模型列表...',
         modelNamePlaceholder: '点击上方列表选择，或直接输入模型ID',

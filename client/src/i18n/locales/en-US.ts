@@ -802,7 +802,7 @@ const enUS = {
         modelIdentifier: 'Model Identifier',
         extraBody: 'Extra Body (provider-specific parameters)',
         enterApiKey: 'Enter API key',
-        managedKeyHint: 'Leaving this blank will try managed inference from admin.',
+        managedKeyHint: 'Leave blank and save to remove your personal API key and use admin-managed inference.',
         searchModel: 'Search Models',
         searchModelPlaceholder: 'Filter model list by keyword...',
         modelNamePlaceholder: 'Choose from above list or enter model id manually',

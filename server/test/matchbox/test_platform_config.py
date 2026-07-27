@@ -197,6 +197,56 @@ print(f"admin_selection_missing={bool(admin_selection['current'].get('missing_ke
     assert "shared_status=managed_ok" in output
 
 
+def test_matchbox_clearing_user_key_override_falls_back_to_hosted_key(tmp_path: Path) -> None:
+    code = r"""
+from core.request_context import set_current_context
+from llm.agen_matchbox.manager import AIManager
+from llm.agen_matchbox.models import Base, LLMSysPlatformKey
+
+manager = AIManager()
+Base.metadata.create_all(manager.engine)
+manager.llm_auto_key = True
+platform = manager.admin_add_sys_platform(
+    "个人密钥回退测试平台",
+    "https://api.key-fallback.test/v1",
+    "sk-hosted",
+)
+
+set_current_context("user-1", None, False)
+manager.update_platform_config("user-1", platform.id, "sk-personal")
+with manager.Session() as session:
+    platform_obj = session.query(type(platform)).filter_by(id=platform.id).one()
+    personal_access = manager._get_effective_api_access(session, "user-1", platform_obj)
+    print(f"personal_source={personal_access['key_source']}")
+    print(f"personal_key={personal_access['api_key']}")
+
+manager.update_platform_config("user-1", platform.id, None)
+with manager.Session() as session:
+    platform_obj = session.query(type(platform)).filter_by(id=platform.id).one()
+    credential = session.query(LLMSysPlatformKey).filter_by(
+        user_id="user-1",
+        platform_id=platform.id,
+    ).one()
+    fallback_access = manager._get_effective_api_access(session, "user-1", platform_obj)
+    fallback_view = manager._collect_platform_views(session, "user-1")[0]
+    print(f"stored_override={credential.api_key}")
+    print(f"fallback_source={fallback_access['key_source']}")
+    print(f"fallback_key={fallback_access['api_key']}")
+    print(f"user_key_saved={fallback_view['user_key_saved']}")
+    print(f"effective_status={fallback_view['api_key_status']}")
+"""
+
+    output = _run_probe(code, tmp_path)
+
+    assert "personal_source=user_override" in output
+    assert "personal_key=sk-personal" in output
+    assert "stored_override=None" in output
+    assert "fallback_source=system_hosted" in output
+    assert "fallback_key=sk-hosted" in output
+    assert "user_key_saved=False" in output
+    assert "effective_status=managed_ok" in output
+
+
 def test_matchbox_model_modalities_drive_model_views(tmp_path: Path) -> None:
     code = r"""
 from llm.agen_matchbox.manager import AIManager
