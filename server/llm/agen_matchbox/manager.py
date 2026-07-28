@@ -253,6 +253,12 @@ class AIManagerBase:
                 "temperature": temperature,
                 "max_context_tokens": max_context_tokens,
                 "max_output_tokens": max_output_tokens,
+                "has_max_context_tokens": (
+                    isinstance(model_config, dict) and "max_context_tokens" in model_config
+                ),
+                "has_max_output_tokens": (
+                    isinstance(model_config, dict) and "max_output_tokens" in model_config
+                ),
                 "sort_order": model_idx,
             })
         return specs
@@ -350,16 +356,19 @@ class AIManagerBase:
         return matched_pairs, matched_db_ids
 
     @staticmethod
-    def _apply_seed_model_update(model: LLModels, spec: Dict[str, Any], *, sync_order: bool) -> None:
+    def _apply_seed_model_update(model: LLModels, spec: Dict[str, Any], *, reset_mode: bool) -> None:
         """把 YAML 模型规格写回已有数据库模型。"""
         model.display_name = spec["display_name"]
         model.extra_body = spec["extra_body_json"]
         model.image_generation_adapter = spec.get("image_generation_adapter")
         model.temperature = spec["temperature"]
-        model.max_context_tokens = spec["max_context_tokens"]
-        model.max_output_tokens = spec["max_output_tokens"]
+        # 增量启动时，YAML 缺省值不能覆盖数据库中的管理员配置。
+        if reset_mode or spec.get("has_max_context_tokens"):
+            model.max_context_tokens = spec["max_context_tokens"]
+        if reset_mode or spec.get("has_max_output_tokens"):
+            model.max_output_tokens = spec["max_output_tokens"]
         set_model_modalities(model, spec["input_modalities"], spec["output_modalities"])
-        if sync_order:
+        if reset_mode:
             model.sort_order = spec["sort_order"]
 
     @staticmethod
@@ -404,7 +413,7 @@ class AIManagerBase:
                         f"[{log_prefix}] Platform {platform_name} model display name changed: "
                         f"{matched_model.display_name} -> {spec['display_name']}"
                     )
-                self._apply_seed_model_update(matched_model, spec, sync_order=reset_mode)
+                self._apply_seed_model_update(matched_model, spec, reset_mode=reset_mode)
                 continue
 
             sort_order = spec["sort_order"] if reset_mode else max_sort + 1
@@ -889,47 +898,47 @@ class AIManagerBase:
                     if self._is_model_disabled(model):
                         continue
 
-                    has_default_limits = (
-                        int(model.max_context_tokens or DEFAULT_MAX_CONTEXT_TOKENS) == DEFAULT_MAX_CONTEXT_TOKENS
-                        and int(model.max_output_tokens or DEFAULT_MAX_OUTPUT_TOKENS) == DEFAULT_MAX_OUTPUT_TOKENS
-                    )
-
                     modalities = get_model_modalities(model)
                     has_default_modalities = (
                         modalities["input_modalities"] == list(DEFAULT_MODEL_INPUT_MODALITIES)
                         and modalities["output_modalities"] == list(DEFAULT_MODEL_OUTPUT_MODALITIES)
                     )
-                    if not model.extra_body and has_default_modalities and model.temperature is None and has_default_limits:
-                        # 简单形式：DisplayName -> ModelID 字符串
-                        plat_config["models"][model.display_name] = model.model_name
-                    else:
-                        entry: Dict[str, Any] = {"model_name": model.model_name}
-                        if not has_default_modalities:
-                            entry.update(modalities)
-                        image_generation_adapter = normalize_image_generation_adapter(
-                            getattr(model, "image_generation_adapter", None)
-                        )
-                        if MODALITY_IMAGE in modalities["output_modalities"] and image_generation_adapter:
-                            entry["image_generation_adapter"] = image_generation_adapter
-                        if model.extra_body:
-                            try:
-                                cleaned_extra_body = strip_internal_image_generation_fields(json.loads(model.extra_body))
-                                if cleaned_extra_body:
-                                    entry["extra_body"] = cleaned_extra_body
-                            except Exception:
-                                pass
-                        if model.temperature is not None:
-                            entry["temperature"] = model.temperature
-                        if not has_default_limits:
-                            entry["max_context_tokens"] = int(model.max_context_tokens or DEFAULT_MAX_CONTEXT_TOKENS)
-                            entry["max_output_tokens"] = int(model.max_output_tokens or DEFAULT_MAX_OUTPUT_TOKENS)
-                        if model.sys_credit_input_price_per_million is not None:
-                            entry["sys_credit_input_price_per_million"] = model.sys_credit_input_price_per_million
-                        if model.sys_credit_cached_input_price_per_million is not None:
-                            entry["sys_credit_cached_input_price_per_million"] = model.sys_credit_cached_input_price_per_million
-                        if model.sys_credit_output_price_per_million is not None:
-                            entry["sys_credit_output_price_per_million"] = model.sys_credit_output_price_per_million
-                        plat_config["models"][model.display_name] = entry
+                    entry: Dict[str, Any] = {
+                        "model_name": model.model_name,
+                        "max_context_tokens": int(
+                            DEFAULT_MAX_CONTEXT_TOKENS
+                            if model.max_context_tokens is None
+                            else model.max_context_tokens
+                        ),
+                        "max_output_tokens": int(
+                            DEFAULT_MAX_OUTPUT_TOKENS
+                            if model.max_output_tokens is None
+                            else model.max_output_tokens
+                        ),
+                    }
+                    if not has_default_modalities:
+                        entry.update(modalities)
+                    image_generation_adapter = normalize_image_generation_adapter(
+                        getattr(model, "image_generation_adapter", None)
+                    )
+                    if MODALITY_IMAGE in modalities["output_modalities"] and image_generation_adapter:
+                        entry["image_generation_adapter"] = image_generation_adapter
+                    if model.extra_body:
+                        try:
+                            cleaned_extra_body = strip_internal_image_generation_fields(json.loads(model.extra_body))
+                            if cleaned_extra_body:
+                                entry["extra_body"] = cleaned_extra_body
+                        except Exception:
+                            pass
+                    if model.temperature is not None:
+                        entry["temperature"] = model.temperature
+                    if model.sys_credit_input_price_per_million is not None:
+                        entry["sys_credit_input_price_per_million"] = model.sys_credit_input_price_per_million
+                    if model.sys_credit_cached_input_price_per_million is not None:
+                        entry["sys_credit_cached_input_price_per_million"] = model.sys_credit_cached_input_price_per_million
+                    if model.sys_credit_output_price_per_million is not None:
+                        entry["sys_credit_output_price_per_million"] = model.sys_credit_output_price_per_million
+                    plat_config["models"][model.display_name] = entry
 
                 export_data[plat.name] = plat_config
 

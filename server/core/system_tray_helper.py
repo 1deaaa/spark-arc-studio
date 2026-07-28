@@ -159,7 +159,7 @@ def main() -> int:
 
     menu = pystray.Menu(
         pystray.MenuItem("Open SparkArc in browser", _open_ui, default=True),
-        pystray.MenuItem("Exit Spark Server", _force_exit),
+        pystray.MenuItem("Exit SparkArc Server", _force_exit),
     )
     icon = pystray.Icon("sparkarc-server-helper", tray_image, args.title, menu)
 

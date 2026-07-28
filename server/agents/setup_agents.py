@@ -120,7 +120,10 @@ class MuseAgent(SparkBaseAgent, SparkAgentExecutor):
                            genres: list = None, tones: list = None, worldviews: list = None, length_hint: str = None,
                            story_tags: str = ""):
         """将灵感碎片扩展为创意种子。raw_input 为空时 AI 自由创作。"""
-        effective_input = (raw_input or "").strip() or "请自由发挥，创作一个充满画面感和情感张力的原创灵感种子。"
+        effective_input = (raw_input or "").strip() or (
+            "请从空白开始创作一个原创灵感种子。"
+            "先自主确定最适合的题材、形式与创作目标,再让关键选择彼此一致并可供下游继续发展。"
+        )
 
         style_hint = "5.  **风格倾向**：不限。"
         if style:
