@@ -232,7 +232,7 @@ flowchart TB
 6. Launcher 会检查 `main` 是否有新提交；发现更新时由用户选择“更新并启动”，不会静默切换运行中的代码。用户数据、运行时缓存和前端产物会保留。
 7. Launcher 壳本身直接检查 GitHub Release。API 受限时会回退到 GitHub 的标准 Release 跳转页，并自动尝试可用镜像；首期只打开对应下载页，不另行维护自定义更新清单。
 
-Launcher 不读取手动源码目录，也不探测安装包同级目录。直接运行源码中的 `start.bat` / `start.sh` 只启动当前源码，不会改变 Launcher 的受管目录。
+Launcher 不读取手动源码目录，也不探测安装包同级目录。直接运行源码中的 `start.bat` / `start.sh` 只启动当前源码，不会改变 Launcher 的 APP 数据目录。
 
 也可以先克隆项目，再直接运行根目录脚本：
 

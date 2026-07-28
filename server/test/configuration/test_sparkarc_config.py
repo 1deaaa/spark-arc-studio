@@ -3,8 +3,12 @@
 from __future__ import annotations
 
 import json
+import os
 import subprocess
+import sys
 from pathlib import Path
+
+import pytest
 
 from core import network_probe
 from core.sparkarc_config import (
@@ -16,6 +20,10 @@ from core.sparkarc_config import (
 
 
 PROJECT_ROOT = Path(__file__).resolve().parents[3]
+WINDOWS_POWERSHELL_SCRIPTS = (
+    PROJECT_ROOT / "server" / "pyloader.win.ps1",
+    PROJECT_ROOT / "scripts" / "network_probe.ps1",
+)
 
 
 def test_repository_urls_are_derived_from_root_manifest() -> None:
@@ -149,6 +157,60 @@ def test_windows_pyloader_does_not_hardcode_ustc_verification_address() -> None:
     assert 'System.Net.Cookie("addr", "122.' not in script
     assert "System.Security.Cryptography.SHA256]::Create" in script
     assert "$FinalReqHash = Get-RequirementsHash" in script
+
+
+def test_windows_powershell_startup_scripts_are_ascii() -> None:
+    for script_path in WINDOWS_POWERSHELL_SCRIPTS:
+        script_bytes = script_path.read_bytes()
+        assert script_bytes.isascii(), f"PowerShell 5.1 startup script must be ASCII: {script_path}"
+
+
+@pytest.mark.skipif(sys.platform != "win32", reason="Windows PowerShell is only available on Windows")
+def test_windows_powershell_51_parses_startup_scripts() -> None:
+    powershell = (
+        Path(os.environ.get("WINDIR", r"C:\Windows"))
+        / "System32"
+        / "WindowsPowerShell"
+        / "v1.0"
+        / "powershell.exe"
+    )
+    if not powershell.is_file():
+        pytest.skip("Windows PowerShell executable was not found")
+
+    parser_command = (
+        "$tokens = $null; $errors = $null; "
+        "if ($PSVersionTable.PSVersion.Major -ne 5) { exit 2 }; "
+        "[System.Management.Automation.Language.Parser]::ParseFile("
+        "$env:SPARKARC_PS_PARSE_TARGET, [ref]$tokens, [ref]$errors) > $null; "
+        "if ($errors.Count -gt 0) { $errors | ForEach-Object { "
+        "[Console]::Error.WriteLine($_.ToString()) }; exit 1 }"
+    )
+    for script_path in WINDOWS_POWERSHELL_SCRIPTS:
+        completed = subprocess.run(
+            [
+                str(powershell),
+                "-NoProfile",
+                "-NonInteractive",
+                "-Command",
+                parser_command,
+            ],
+            capture_output=True,
+            text=True,
+            check=False,
+            env={**os.environ, "SPARKARC_PS_PARSE_TARGET": str(script_path)},
+        )
+        assert completed.returncode == 0, completed.stderr or completed.stdout
+
+
+def test_launcher_calls_managed_checkout_the_app_data_directory() -> None:
+    deployment = (PROJECT_ROOT / "client" / "src-tauri" / "src" / "deployment" / "mod.rs").read_text(
+        encoding="utf-8"
+    )
+
+    assert "无法将已校验的源码切换到受管目录" not in deployment
+    assert "受管目录包含未声明的本地修改" not in deployment
+    assert "无法将已校验的源码切换到 APP 数据目录" in deployment
+    assert "APP 数据目录包含未声明的本地修改" in deployment
 
 
 def test_launcher_only_uses_managed_root_and_source_startup_cannot_override_it() -> None:

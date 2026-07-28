@@ -29,7 +29,7 @@ Launcher 首次拉取源码后，在根目录写入 `.sparkarc-managed.json`：
 
 只有带有该标记、且远端仓库身份匹配的目录允许自动更新。用户手动 clone 的 `dev`、其他分支或任意本地改造目录不会被 Launcher 覆盖。
 
-旧版 Launcher 已创建的 `~/.sparkarc/sparkarc-server` 会在确认 `origin` 指向官方仓库后迁移为受管目录；无法确认身份时保持只启动、不接管。
+旧版 Launcher 已创建的 `~/.sparkarc/sparkarc-server` 会在确认 `origin` 指向官方仓库后迁移到 APP 数据目录；无法确认身份时保持只启动、不接管。
 
 ## 源码更新
 

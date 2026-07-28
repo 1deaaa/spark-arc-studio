@@ -853,7 +853,7 @@ async function checkServerOnLauncherStartup() {
     ? await initializeLocalUpdateState()
     : null;
 
-  // 受管目录已被删除时，不沿用 WebView 中残留的本机端口配置。
+  // APP 数据目录已被删除时，不沿用 WebView 中残留的本机端口配置。
   if (
     isTauriDesktop.value &&
     !localBackendEntryExists.value &&

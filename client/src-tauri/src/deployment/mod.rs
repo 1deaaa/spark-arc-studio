@@ -378,7 +378,7 @@ impl DeploymentManager {
         // Windows 不允许移动仍被 Libgit2 仓库句柄占用的 .git 目录。
         drop(repository);
         fs::rename(&staging_dir, &self.target_dir)
-            .map_err(|err| format!("无法将已校验的源码切换到受管目录: {err}"))?;
+            .map_err(|err| format!("无法将已校验的源码切换到 APP 数据目录: {err}"))?;
 
         self.save_status(|status| {
             status.managed = true;
@@ -733,7 +733,7 @@ impl DeploymentManager {
         self.release_check_failure_or_stale_cache(current_version, checked_at, errors, cached)
     }
 
-    /// 由 Launcher 启动受管 main 时写入进程记录。记录只属于受管目录，绝不登记
+    /// 由 Launcher 启动受管 main 时写入进程记录。记录只属于 APP 数据目录，绝不登记
     /// 用户手动部署的工作树，避免更新功能误杀开发者自己的服务。
     pub fn record_managed_service_process(&self, pid: u32) -> Result<(), String> {
         let project_root = self
@@ -1592,7 +1592,7 @@ fn collect_preserved_changes(
         let relative_path = PathBuf::from(path);
         if !is_preserved_relative_path(&relative_path) {
             return Err(format!(
-                "受管目录包含未声明的本地修改: {path}。为避免覆盖用户改动，Launcher 拒绝更新。"
+                "APP 数据目录包含未声明的本地修改: {path}。为避免覆盖用户改动，Launcher 拒绝更新。"
             ));
         }
 
