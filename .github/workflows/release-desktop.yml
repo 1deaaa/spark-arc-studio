@@ -143,10 +143,10 @@ jobs:
           prerelease: ${{ inputs.prerelease }}
           args: ${{ matrix.args }}
 
-  sync-gitee-tag:
-    name: Sync release tag to Gitee
+  sync-gitee-release:
+    name: Sync GitHub Release to Gitee
     needs: publish-tauri
-    uses: ./.github/workflows/sync-gitee-release-tag.yml
+    uses: ./.github/workflows/sync-gitee-release.yml
     with:
       version: ${{ inputs.version || '' }}
     secrets:

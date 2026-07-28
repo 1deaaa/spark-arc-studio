@@ -1,0 +1,268 @@
+name: Sync GitHub Release to Gitee
+
+on:
+  release:
+    types:
+      - published
+  workflow_call:
+    inputs:
+      version:
+        description: '可选发布版本；为空时读取 tauri.conf.json'
+        required: false
+        default: ''
+        type: string
+    secrets:
+      GITEE_TOKEN:
+        required: true
+
+permissions:
+  contents: read
+
+concurrency:
+  group: sync-gitee-release-${{ github.event.release.tag_name || inputs.version || github.ref_name }}
+  cancel-in-progress: false
+
+jobs:
+  sync-release:
+    name: Sync release to Gitee
+    runs-on: ubuntu-22.04
+    timeout-minutes: 45
+    env:
+      GITEE_API_BASE: https://gitee.com/api/v5
+      GITEE_REPOSITORY: aideaaa/spark-arc-studio
+      GITEE_USERNAME: aideaaa
+
+    steps:
+      - name: Checkout complete history
+        uses: actions/checkout@v5
+        with:
+          fetch-depth: 0
+
+      - name: Resolve and validate release tag
+        id: release
+        shell: bash
+        env:
+          EVENT_RELEASE_TAG: ${{ github.event.release.tag_name }}
+          RELEASE_VERSION: ${{ inputs.version }}
+        run: |
+          if [[ -n "$EVENT_RELEASE_TAG" ]]; then
+            TAG="$EVENT_RELEASE_TAG"
+          elif [[ "$GITHUB_REF_TYPE" == "tag" ]]; then
+            TAG="$GITHUB_REF_NAME"
+          elif [[ -n "$RELEASE_VERSION" ]]; then
+            VERSION="${RELEASE_VERSION#sparkarc-v}"
+            VERSION="${VERSION#v}"
+            TAG="sparkarc-v${VERSION}"
+          else
+            VERSION=$(node -p "require('./client/src-tauri/tauri.conf.json').version")
+            TAG="sparkarc-v${VERSION}"
+          fi
+
+          if [[ ! "$TAG" =~ ^sparkarc-v[0-9]+\.[0-9]+\.[0-9]+([+-][0-9A-Za-z.-]+)?$ ]]; then
+            echo "无效的发布标记：$TAG" >&2
+            exit 1
+          fi
+
+          echo "tag=$TAG" >> "$GITHUB_OUTPUT"
+
+      - name: Read GitHub Release and fetch its tag
+        id: github_release
+        shell: bash
+        env:
+          GH_TOKEN: ${{ github.token }}
+          RELEASE_TAG: ${{ steps.release.outputs.tag }}
+        run: |
+          RELEASE_JSON="$RUNNER_TEMP/github-release.json"
+          gh release view "$RELEASE_TAG" \
+            --repo "$GITHUB_REPOSITORY" \
+            --json tagName,name,body,isDraft,isPrerelease,assets \
+            > "$RELEASE_JSON"
+
+          ACTUAL_TAG=$(jq -r '.tagName' "$RELEASE_JSON")
+          if [[ "$ACTUAL_TAG" != "$RELEASE_TAG" ]]; then
+            echo "GitHub Release 标记不匹配：期望 $RELEASE_TAG，实际 $ACTUAL_TAG" >&2
+            exit 1
+          fi
+
+          ASSET_COUNT=$(jq '.assets | length' "$RELEASE_JSON")
+          if (( ASSET_COUNT == 0 )); then
+            echo "GitHub Release 尚无构建产物：$RELEASE_TAG" >&2
+            exit 1
+          fi
+
+          git fetch --force origin "refs/tags/${RELEASE_TAG}:refs/tags/${RELEASE_TAG}"
+          git rev-parse --verify "refs/tags/${RELEASE_TAG}^{commit}"
+
+          echo "json=$RELEASE_JSON" >> "$GITHUB_OUTPUT"
+          echo "draft=$(jq -r '.isDraft' "$RELEASE_JSON")" >> "$GITHUB_OUTPUT"
+
+      - name: Push release tag to Gitee
+        shell: bash
+        env:
+          GITEE_TOKEN: ${{ secrets.GITEE_TOKEN }}
+          RELEASE_TAG: ${{ steps.release.outputs.tag }}
+        run: |
+          if [[ -z "$GITEE_TOKEN" ]]; then
+            echo "缺少 GITEE_TOKEN 仓库密钥" >&2
+            exit 1
+          fi
+
+          ASKPASS="$RUNNER_TEMP/gitee-askpass.sh"
+          cat > "$ASKPASS" <<'EOF'
+          #!/usr/bin/env bash
+          case "$1" in
+            *Username*) printf '%s\n' "$GITEE_USERNAME" ;;
+            *Password*) printf '%s\n' "$GITEE_TOKEN" ;;
+            *) exit 1 ;;
+          esac
+          EOF
+          chmod 700 "$ASKPASS"
+
+          GIT_ASKPASS="$ASKPASS" GIT_TERMINAL_PROMPT=0 \
+            git push "https://gitee.com/${GITEE_REPOSITORY}.git" \
+            "refs/tags/${RELEASE_TAG}:refs/tags/${RELEASE_TAG}"
+
+      - name: Create or update Gitee Release
+        id: gitee_release
+        if: steps.github_release.outputs.draft != 'true'
+        shell: bash
+        env:
+          GITEE_TOKEN: ${{ secrets.GITEE_TOKEN }}
+          GITHUB_RELEASE_JSON: ${{ steps.github_release.outputs.json }}
+          RELEASE_TAG: ${{ steps.release.outputs.tag }}
+        run: |
+          API_URL="${GITEE_API_BASE}/repos/${GITEE_REPOSITORY}/releases"
+          TARGET_COMMIT=$(git rev-parse "refs/tags/${RELEASE_TAG}^{commit}")
+          PAYLOAD="$RUNNER_TEMP/gitee-release-payload.json"
+
+          jq \
+            '{
+              tag_name: .tagName,
+              name: .name,
+              body: .body,
+              prerelease: .isPrerelease
+            }' \
+            "$GITHUB_RELEASE_JSON" > "$PAYLOAD"
+
+          EXISTING=$(curl --silent --show-error --fail-with-body \
+            --retry 3 --retry-all-errors \
+            --header "Authorization: token ${GITEE_TOKEN}" \
+            "${API_URL}/tags/${RELEASE_TAG}")
+          RELEASE_ID=$(jq -r '.id // empty' <<< "$EXISTING")
+
+          if [[ -n "$RELEASE_ID" ]]; then
+            RESPONSE=$(curl --silent --show-error --fail-with-body \
+              --retry 3 --retry-all-errors \
+              --request PATCH \
+              --header "Authorization: token ${GITEE_TOKEN}" \
+              --header 'Content-Type: application/json' \
+              --data-binary "@${PAYLOAD}" \
+              "${API_URL}/${RELEASE_ID}")
+          else
+            CREATE_PAYLOAD="$RUNNER_TEMP/gitee-release-create-payload.json"
+            jq \
+              --arg target_commitish "$TARGET_COMMIT" \
+              '. + {target_commitish: $target_commitish}' \
+              "$PAYLOAD" > "$CREATE_PAYLOAD"
+            RESPONSE=$(curl --silent --show-error --fail-with-body \
+              --retry 3 --retry-all-errors \
+              --request POST \
+              --header "Authorization: token ${GITEE_TOKEN}" \
+              --header 'Content-Type: application/json' \
+              --data-binary "@${CREATE_PAYLOAD}" \
+              "$API_URL")
+            RELEASE_ID=$(jq -r '.id // empty' <<< "$RESPONSE")
+          fi
+
+          ACTUAL_TAG=$(jq -r '.tag_name // empty' <<< "$RESPONSE")
+          if [[ -z "$RELEASE_ID" || "$ACTUAL_TAG" != "$RELEASE_TAG" ]]; then
+            echo "Gitee Release 创建或更新结果无效" >&2
+            exit 1
+          fi
+
+          echo "id=$RELEASE_ID" >> "$GITHUB_OUTPUT"
+
+      - name: Mirror GitHub Release assets to Gitee
+        if: steps.github_release.outputs.draft != 'true'
+        shell: bash
+        env:
+          GH_TOKEN: ${{ github.token }}
+          GITEE_TOKEN: ${{ secrets.GITEE_TOKEN }}
+          GITEE_RELEASE_ID: ${{ steps.gitee_release.outputs.id }}
+          GITHUB_RELEASE_JSON: ${{ steps.github_release.outputs.json }}
+          RELEASE_TAG: ${{ steps.release.outputs.tag }}
+        run: |
+          API_URL="${GITEE_API_BASE}/repos/${GITEE_REPOSITORY}/releases/${GITEE_RELEASE_ID}/attach_files"
+          ASSET_DIR="$RUNNER_TEMP/github-release-assets"
+          mkdir -p "$ASSET_DIR"
+
+          gh release download "$RELEASE_TAG" \
+            --repo "$GITHUB_REPOSITORY" \
+            --dir "$ASSET_DIR"
+
+          EXISTING_ASSETS="$RUNNER_TEMP/gitee-release-assets.json"
+          curl --silent --show-error --fail-with-body \
+            --retry 3 --retry-all-errors \
+            --header "Authorization: token ${GITEE_TOKEN}" \
+            "${API_URL}?page=1&per_page=100" \
+            > "$EXISTING_ASSETS"
+
+          while IFS= read -r -d '' ASSET; do
+            NAME=$(basename "$ASSET")
+            SIZE=$(stat --format='%s' "$ASSET")
+            EXISTING_ID=$(jq -r --arg name "$NAME" \
+              '.[] | select(.name == $name) | .id' "$EXISTING_ASSETS" | head -n 1)
+            EXISTING_SIZE=$(jq -r --arg name "$NAME" \
+              '.[] | select(.name == $name) | .size' "$EXISTING_ASSETS" | head -n 1)
+
+            if [[ -n "$EXISTING_ID" && "$EXISTING_SIZE" == "$SIZE" ]]; then
+              echo "Gitee 已存在相同附件，跳过：$NAME"
+              continue
+            fi
+
+            if [[ -n "$EXISTING_ID" ]]; then
+              curl --silent --show-error --fail-with-body \
+                --retry 3 --retry-all-errors \
+                --request DELETE \
+                --header "Authorization: token ${GITEE_TOKEN}" \
+                "${API_URL}/${EXISTING_ID}" \
+                > /dev/null
+            fi
+
+            RESPONSE=$(curl --silent --show-error --fail-with-body \
+              --retry 3 --retry-all-errors \
+              --request POST \
+              --header "Authorization: token ${GITEE_TOKEN}" \
+              --form "file=@${ASSET}" \
+              "$API_URL")
+
+            UPLOADED_NAME=$(jq -r '.name // empty' <<< "$RESPONSE")
+            UPLOADED_SIZE=$(jq -r '.size // empty' <<< "$RESPONSE")
+            if [[ "$UPLOADED_NAME" != "$NAME" || "$UPLOADED_SIZE" != "$SIZE" ]]; then
+              echo "Gitee 附件上传结果不匹配：$NAME" >&2
+              exit 1
+            fi
+          done < <(find "$ASSET_DIR" -maxdepth 1 -type f -print0)
+
+          FINAL_ASSETS="$RUNNER_TEMP/gitee-release-assets-final.json"
+          curl --silent --show-error --fail-with-body \
+            --retry 3 --retry-all-errors \
+            --header "Authorization: token ${GITEE_TOKEN}" \
+            "${API_URL}?page=1&per_page=100" \
+            > "$FINAL_ASSETS"
+
+          MISSING_COUNT=$(jq --null-input \
+            --slurpfile github "$GITHUB_RELEASE_JSON" \
+            --slurpfile gitee "$FINAL_ASSETS" \
+            '[
+              $github[0].assets[] as $expected
+              | select(
+                  [$gitee[0][]
+                    | select(.name == $expected.name and .size == $expected.size)]
+                  | length == 0
+                )
+            ] | length')
+          if (( MISSING_COUNT != 0 )); then
+            echo "Gitee Release 仍缺少 ${MISSING_COUNT} 个 GitHub 构建产物" >&2
+            exit 1
+          fi
