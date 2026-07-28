@@ -1,15 +1,22 @@
 from __future__ import annotations
 
 import asyncio
+import contextvars
 import threading
 import time
 
 from agents.routes.chat import (
     _merge_context_window_stats_with_usage,
     _observe_chat_task_events,
+    _run_chat_background_context,
     _run_chat_stream_with_retry,
 )
 from agents.routes.chat_task import ChatTaskEntry
+from core.request_context import (
+    current_scriptwriter_prewrite_receipt,
+    get_scriptwriter_prewrite_receipt,
+    set_scriptwriter_prewrite_receipt,
+)
 
 
 def make_entry() -> ChatTaskEntry:
@@ -24,6 +31,34 @@ def make_entry() -> ChatTaskEntry:
         started_at=time.time(),
         assistant_message_id=42,
     )
+
+
+def test_chat_background_context_shares_prewrite_receipt_with_tool_subcontexts() -> None:
+    outer_state = {"receipt": {"receipt_id": "outer"}}
+    outer_token = current_scriptwriter_prewrite_receipt.set(outer_state)
+
+    def callback() -> None:
+        tool_context = contextvars.copy_context()
+        tool_context.run(set_scriptwriter_prewrite_receipt, {"receipt_id": "prewrite-ready"})
+
+        assert get_scriptwriter_prewrite_receipt() == {"receipt_id": "prewrite-ready"}
+
+    try:
+        _run_chat_background_context(
+            user_id="u",
+            project_name="p",
+            is_admin=False,
+            locale="zh-CN",
+            llm_usage_context="task:test",
+            chat_agent_id="agent_director",
+            chat_context_key="global",
+            callback=callback,
+        )
+
+        assert current_scriptwriter_prewrite_receipt.get() is outer_state
+        assert get_scriptwriter_prewrite_receipt() == {"receipt_id": "outer"}
+    finally:
+        current_scriptwriter_prewrite_receipt.reset(outer_token)
 
 
 def test_chat_task_entry_replays_seq_and_builds_snapshot_segments() -> None:
