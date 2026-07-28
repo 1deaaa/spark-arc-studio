@@ -38,6 +38,7 @@ const MANAGED_MARKER_FILE: &str = ".sparkarc-managed.json";
 const DEPLOYMENT_STATE_FILE: &str = "deployment.json";
 const DEPLOYMENT_LOG_FILE: &str = "deploy.log";
 const LAUNCHER_RELEASE_CACHE_FILE: &str = "launcher-release.json";
+const LAUNCHER_RELEASE_CACHE_SCHEMA_VERSION: u32 = 2;
 const MANAGED_SERVICE_PROCESS_FILE: &str = "managed-service-process.json";
 const STAGING_DIR_NAME: &str = ".staging";
 const MANAGED_INSTALL_DIR_NAME: &str = "sparkarc-server";
@@ -148,6 +149,7 @@ pub struct LauncherReleaseStatus {
 #[derive(Debug, Clone, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
 struct LauncherReleaseCache {
+    schema_version: u32,
     checked_at: String,
     current_version: String,
     latest_version: Option<String>,
@@ -178,6 +180,32 @@ enum ManagedProcessState {
 struct GithubRelease {
     tag_name: String,
     html_url: String,
+    draft: bool,
+    prerelease: bool,
+}
+
+#[derive(Debug, Deserialize)]
+struct GiteeRelease {
+    tag_name: String,
+    prerelease: bool,
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+enum ReleaseProvider {
+    Github,
+    Gitee,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq)]
+struct ReleaseApiCandidate {
+    provider: ReleaseProvider,
+    endpoint: String,
+}
+
+#[derive(Debug, PartialEq, Eq)]
+struct NormalizedRelease {
+    tag_name: String,
+    release_url: String,
     draft: bool,
     prerelease: bool,
 }
@@ -592,8 +620,8 @@ impl DeploymentManager {
         Ok(status)
     }
 
-    /// 直接读取 GitHub Release。API 受限或网络不稳定时，回退到 GitHub 标准
-    /// `/releases/latest` 重定向；两者均不依赖项目仓库内的自定义更新清单。
+    /// 按出口地区读取 Gitee 或 GitHub Release。API 均不可用时，回退到 GitHub
+    /// `/releases/latest` 重定向；整条链路不依赖项目仓库内的自定义更新清单。
     pub fn check_launcher_release(&self, current_version: &str) -> LauncherReleaseStatus {
         let cached = self.read_launcher_release_cache(current_version);
         if let Some(status) = cached
@@ -621,9 +649,10 @@ impl DeploymentManager {
         };
 
         let mut errors = Vec::new();
-        for endpoint in github_release_api_candidates() {
+        for candidate in release_api_candidates(lookup_mainland_china()) {
+            let endpoint = &candidate.endpoint;
             let response = match client
-                .get(&endpoint)
+                .get(endpoint)
                 .header("Accept", "application/vnd.github+json")
                 .send()
             {
@@ -637,7 +666,7 @@ impl DeploymentManager {
                 errors.push(format!("{endpoint}: HTTP {}", response.status()));
                 continue;
             }
-            let release = match response.json::<GithubRelease>() {
+            let release = match parse_release_response(response, &candidate) {
                 Ok(release) => release,
                 Err(err) => {
                     errors.push(format!("{endpoint}: Release 响应解析失败: {err}"));
@@ -659,9 +688,9 @@ impl DeploymentManager {
                 current_version: current_version.to_string(),
                 latest_version,
                 update_available,
-                release_url: Some(release_url_for_source(&endpoint, &release.html_url)),
+                release_url: Some(release.release_url),
                 last_error: None,
-                source: Some(endpoint),
+                source: Some(endpoint.clone()),
             };
             self.write_launcher_release_cache(&status);
             return status;
@@ -858,7 +887,9 @@ impl DeploymentManager {
     fn read_launcher_release_cache(&self, current_version: &str) -> Option<LauncherReleaseStatus> {
         let raw = fs::read_to_string(&self.launcher_release_cache_path).ok()?;
         let cache = serde_json::from_str::<LauncherReleaseCache>(&raw).ok()?;
-        if cache.current_version != current_version {
+        if cache.schema_version != LAUNCHER_RELEASE_CACHE_SCHEMA_VERSION
+            || cache.current_version != current_version
+        {
             return None;
         }
         Some(LauncherReleaseStatus {
@@ -884,6 +915,7 @@ impl DeploymentManager {
 
     fn write_launcher_release_cache(&self, status: &LauncherReleaseStatus) {
         let cache = LauncherReleaseCache {
+            schema_version: LAUNCHER_RELEASE_CACHE_SCHEMA_VERSION,
             checked_at: status.checked_at.clone(),
             current_version: status.current_version.clone(),
             latest_version: status.latest_version.clone(),
@@ -1496,19 +1528,54 @@ fn repository_clone_candidates(region: Option<bool>) -> Vec<String> {
     deduplicate_urls(candidates)
 }
 
-fn github_release_api_candidates() -> Vec<String> {
+fn release_api_candidates(region: Option<bool>) -> Vec<ReleaseApiCandidate> {
+    let override_url = std::env::var("SPARKARC_GITHUB_RELEASE_API").ok();
+    release_api_candidates_for_region(region, override_url.as_deref())
+}
+
+fn release_api_candidates_for_region(
+    region: Option<bool>,
+    github_override: Option<&str>,
+) -> Vec<ReleaseApiCandidate> {
     let mut candidates = Vec::new();
-    if let Ok(override_url) = std::env::var("SPARKARC_GITHUB_RELEASE_API") {
-        let override_url = override_url.trim();
-        if !override_url.is_empty() {
-            candidates.push(override_url.to_string());
+    if let Some(override_url) = github_override.map(str::trim).filter(|url| !url.is_empty()) {
+        candidates.push(ReleaseApiCandidate {
+            provider: ReleaseProvider::Github,
+            endpoint: override_url.to_string(),
+        });
+    }
+    let repository = project_config::repository_urls();
+    let github = github_url_candidates(repository.release_api, region)
+        .into_iter()
+        .map(|endpoint| ReleaseApiCandidate {
+            provider: ReleaseProvider::Github,
+            endpoint,
+        })
+        .collect::<Vec<_>>();
+    let gitee = ReleaseApiCandidate {
+        provider: ReleaseProvider::Gitee,
+        endpoint: repository.mainland_release.release_api,
+    };
+    match region {
+        Some(true) => {
+            candidates.push(gitee);
+            candidates.extend(github);
+        }
+        Some(false) | None => {
+            candidates.extend(github);
+            candidates.push(gitee);
         }
     }
-    candidates.extend(github_url_candidates(
-        project_config::repository_urls().release_api,
-        lookup_mainland_china(),
-    ));
-    deduplicate_urls(candidates)
+    let mut unique = Vec::new();
+    for candidate in candidates {
+        if !unique
+            .iter()
+            .any(|item: &ReleaseApiCandidate| item.endpoint == candidate.endpoint)
+        {
+            unique.push(candidate);
+        }
+    }
+    unique
 }
 
 fn github_release_page_candidates() -> Vec<String> {
@@ -1536,6 +1603,39 @@ fn normalize_release_version(value: &str) -> Option<String> {
     Version::parse(normalized)
         .ok()
         .map(|version| version.to_string())
+}
+
+fn parse_release_response(
+    response: reqwest::blocking::Response,
+    candidate: &ReleaseApiCandidate,
+) -> Result<NormalizedRelease, reqwest::Error> {
+    match candidate.provider {
+        ReleaseProvider::Github => {
+            response
+                .json::<GithubRelease>()
+                .map(|release| NormalizedRelease {
+                    tag_name: release.tag_name,
+                    release_url: release_url_for_source(&candidate.endpoint, &release.html_url),
+                    draft: release.draft,
+                    prerelease: release.prerelease,
+                })
+        }
+        ReleaseProvider::Gitee => response.json::<GiteeRelease>().map(|release| {
+            normalize_gitee_release(release, &project_config::repository_urls().mainland_release)
+        }),
+    }
+}
+
+fn normalize_gitee_release(
+    release: GiteeRelease,
+    repository: &project_config::ReleaseRepositoryUrls,
+) -> NormalizedRelease {
+    NormalizedRelease {
+        release_url: format!("{}/releases/tag/{}", repository.web, release.tag_name),
+        tag_name: release.tag_name,
+        draft: false,
+        prerelease: release.prerelease,
+    }
 }
 
 fn release_url_for_source(source: &str, release_url: &str) -> String {
@@ -2028,6 +2128,60 @@ mod tests {
     }
 
     #[test]
+    fn mainland_release_candidates_prefer_gitee() {
+        let repository = project_config::repository_urls();
+        let candidates = release_api_candidates_for_region(Some(true), None);
+
+        assert_eq!(
+            candidates.first(),
+            Some(&ReleaseApiCandidate {
+                provider: ReleaseProvider::Gitee,
+                endpoint: repository.mainland_release.release_api,
+            })
+        );
+        assert!(candidates
+            .iter()
+            .skip(1)
+            .all(|candidate| candidate.provider == ReleaseProvider::Github));
+    }
+
+    #[test]
+    fn foreign_or_unknown_release_candidates_keep_gitee_as_final_fallback() {
+        for region in [Some(false), None] {
+            let repository = project_config::repository_urls();
+            let candidates = release_api_candidates_for_region(region, None);
+
+            assert_eq!(
+                candidates.first().map(|item| item.endpoint.as_str()),
+                Some(repository.release_api.as_str())
+            );
+            assert_eq!(
+                candidates.last(),
+                Some(&ReleaseApiCandidate {
+                    provider: ReleaseProvider::Gitee,
+                    endpoint: repository.mainland_release.release_api,
+                })
+            );
+        }
+    }
+
+    #[test]
+    fn gitee_release_response_is_normalized_without_github_only_fields() {
+        let payload = r#"{"tag_name":"sparkarc-v0.6.1","prerelease":false}"#;
+        let release: GiteeRelease = serde_json::from_str(payload).unwrap();
+        let normalized =
+            normalize_gitee_release(release, &project_config::repository_urls().mainland_release);
+
+        assert_eq!(normalized.tag_name, "sparkarc-v0.6.1");
+        assert!(!normalized.draft);
+        assert!(!normalized.prerelease);
+        assert_eq!(
+            normalized.release_url,
+            "https://gitee.com/aideaaa/spark-arc-studio/releases/tag/sparkarc-v0.6.1"
+        );
+    }
+
+    #[test]
     fn release_redirect_keeps_the_successful_proxy_source() {
         let repository = project_config::repository_urls();
         let proxy_prefix = project_config::all_network_candidates("gh_proxy")
@@ -2067,6 +2221,20 @@ mod tests {
         assert!(!DeploymentManager::is_launcher_release_cache_fresh(
             &expired
         ));
+    }
+
+    #[test]
+    fn launcher_release_cache_rejects_the_legacy_schema() {
+        let legacy = r#"{
+            "checkedAt":"2026-01-01T00:00:00Z",
+            "currentVersion":"0.6.0",
+            "latestVersion":"0.6.1",
+            "updateAvailable":true,
+            "releaseUrl":"https://example.invalid/release",
+            "source":"legacy"
+        }"#;
+
+        assert!(serde_json::from_str::<LauncherReleaseCache>(legacy).is_err());
     }
 
     #[test]

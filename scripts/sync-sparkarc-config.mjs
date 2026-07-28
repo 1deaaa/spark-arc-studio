@@ -16,7 +16,7 @@ const config = readSparkArcConfig();
 const repository = repositoryUrls(config);
 
 function launcherAllowList({ includeProxies }) {
-  const urls = [repository.web];
+  const urls = [repository.web, repository.mainlandRelease.web];
   if (includeProxies) {
     for (const prefix of allNetworkCandidates('gh_proxy', config)) {
       urls.push(`${prefix.replace(/\/+$/, '')}/${repository.web}`);

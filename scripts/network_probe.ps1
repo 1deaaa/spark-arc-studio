@@ -57,7 +57,7 @@ function Get-SparkArcConfig {
     catch {
         throw "Failed to parse ${SparkArcConfigPath}: $($_.Exception.Message)"
     }
-    if ($config.schemaVersion -ne 1 -or $config.repository.provider -ne "github" -or -not $config.repository.slug -or @($config.repository.mainlandCloneUrls).Count -lt 1 -or @($config.network.geoIpProviders).Count -lt 2) {
+    if ($config.schemaVersion -ne 1 -or $config.repository.provider -ne "github" -or -not $config.repository.slug -or $config.repository.mainlandRelease.provider -ne "gitee" -or -not $config.repository.mainlandRelease.slug -or @($config.repository.mainlandCloneUrls).Count -lt 1 -or @($config.network.geoIpProviders).Count -lt 2) {
         throw "sparkarc.json does not contain a valid repository identity and mainland clone source."
     }
     return $config

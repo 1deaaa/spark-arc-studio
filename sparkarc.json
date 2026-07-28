@@ -4,6 +4,10 @@
   "repository": {
     "provider": "github",
     "slug": "1deaaa/spark-arc-studio",
+    "mainlandRelease": {
+      "provider": "gitee",
+      "slug": "aideaaa/spark-arc-studio"
+    },
     "mainlandCloneUrls": [
       "https://gitee.com/aideaaa/spark-arc-studio.git"
     ]

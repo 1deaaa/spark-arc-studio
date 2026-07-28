@@ -22,7 +22,15 @@ struct ProjectConfig {
 struct RepositoryConfig {
     provider: String,
     slug: String,
+    mainland_release: ReleaseRepositoryConfig,
     mainland_clone_urls: Vec<String>,
+}
+
+#[derive(Debug, Deserialize)]
+#[serde(rename_all = "camelCase")]
+struct ReleaseRepositoryConfig {
+    provider: String,
+    slug: String,
 }
 
 #[derive(Debug, Deserialize)]
@@ -45,6 +53,13 @@ pub struct RepositoryUrls {
     pub mainland_clones: Vec<String>,
     pub release_api: String,
     pub release_page: String,
+    pub mainland_release: ReleaseRepositoryUrls,
+}
+
+#[derive(Debug, Clone)]
+pub struct ReleaseRepositoryUrls {
+    pub web: String,
+    pub release_api: String,
 }
 
 static PROJECT_CONFIG: OnceLock<ProjectConfig> = OnceLock::new();
@@ -68,6 +83,14 @@ fn config() -> &'static ProjectConfig {
         assert!(
             config.repository.slug.split('/').count() == 2,
             "sparkarc.json repository.slug 必须是 owner/repository 格式"
+        );
+        assert_eq!(
+            config.repository.mainland_release.provider, "gitee",
+            "sparkarc.json repository.mainlandRelease.provider 必须为 gitee"
+        );
+        assert!(
+            config.repository.mainland_release.slug.split('/').count() == 2,
+            "sparkarc.json repository.mainlandRelease.slug 必须是 owner/repository 格式"
         );
         assert!(
             !config.repository.mainland_clone_urls.is_empty(),
@@ -99,11 +122,19 @@ fn config() -> &'static ProjectConfig {
 pub fn repository_urls() -> RepositoryUrls {
     let slug = config().repository.slug.clone();
     let web = format!("https://github.com/{slug}");
+    let mainland_release_slug = config().repository.mainland_release.slug.clone();
+    let mainland_release_web = format!("https://gitee.com/{mainland_release_slug}");
     RepositoryUrls {
         clone: format!("{web}.git"),
         mainland_clones: config().repository.mainland_clone_urls.clone(),
         release_api: format!("https://api.github.com/repos/{slug}/releases/latest"),
         release_page: format!("{web}/releases/latest"),
+        mainland_release: ReleaseRepositoryUrls {
+            web: mainland_release_web.clone(),
+            release_api: format!(
+                "https://gitee.com/api/v5/repos/{mainland_release_slug}/releases/latest"
+            ),
+        },
     }
 }
 
@@ -163,6 +194,15 @@ mod tests {
                 "https://api.github.com/repos/{}/releases/latest",
                 config().repository.slug
             )
+        );
+        assert_eq!(config().repository.mainland_release.provider, "gitee");
+        assert_eq!(
+            urls.mainland_release.web,
+            "https://gitee.com/aideaaa/spark-arc-studio"
+        );
+        assert_eq!(
+            urls.mainland_release.release_api,
+            "https://gitee.com/api/v5/repos/aideaaa/spark-arc-studio/releases/latest"
         );
     }
 

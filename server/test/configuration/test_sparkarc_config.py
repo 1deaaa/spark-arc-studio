@@ -36,6 +36,14 @@ def test_repository_urls_are_derived_from_root_manifest() -> None:
     assert urls["mainland_clones"] == config["repository"]["mainlandCloneUrls"]
     assert urls["release_api"] == f"https://api.github.com/repos/{urls['slug']}/releases/latest"
     assert urls["release_page"] == f"{urls['web']}/releases/latest"
+    mainland_release = urls["mainland_release"]
+    assert mainland_release["provider"] == "gitee"
+    assert mainland_release["slug"] == config["repository"]["mainlandRelease"]["slug"]
+    assert mainland_release["web"] == f"https://gitee.com/{mainland_release['slug']}"
+    assert mainland_release["release_api"] == (
+        f"https://gitee.com/api/v5/repos/{mainland_release['slug']}/releases/latest"
+    )
+    assert mainland_release["release_page"] == f"{mainland_release['web']}/releases/latest"
 
 
 def test_mainland_clone_candidates_use_gitee_before_official_without_proxies(monkeypatch) -> None:

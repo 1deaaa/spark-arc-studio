@@ -10,12 +10,24 @@
     "repository": {
       "type": "object",
       "additionalProperties": false,
-      "required": ["provider", "slug", "mainlandCloneUrls"],
+      "required": ["provider", "slug", "mainlandRelease", "mainlandCloneUrls"],
       "properties": {
         "provider": { "const": "github" },
         "slug": {
           "type": "string",
           "pattern": "^[A-Za-z0-9_.-]+/[A-Za-z0-9_.-]+$"
+        },
+        "mainlandRelease": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["provider", "slug"],
+          "properties": {
+            "provider": { "const": "gitee" },
+            "slug": {
+              "type": "string",
+              "pattern": "^[A-Za-z0-9_.-]+/[A-Za-z0-9_.-]+$"
+            }
+          }
         },
         "mainlandCloneUrls": {
           "type": "array",

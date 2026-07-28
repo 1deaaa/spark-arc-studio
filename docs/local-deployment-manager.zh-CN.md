@@ -52,9 +52,9 @@ Git 源按顺序尝试：
 
 源码克隆与更新不再使用公共 GitHub 代理，避免大体积 pack 传输卡死。Gitee 镜像地址由根目录 `sparkarc.json` 统一声明，Launcher、Python 网络探测和 PowerShell 启动链路共同读取。
 
-Release 检查优先请求 GitHub Releases API；可通过 `SPARKARC_GITHUB_RELEASE_API` 指向兼容镜像。遇到 API 限流或不可达时，会回退到 GitHub 标准 `/releases/latest` 重定向页，并尝试配置中的轻量代理候选。成功使用代理时，返回给用户的下载页也会使用同一前缀。这是 Launcher 壳更新的例外，不参与源码 Git 克隆与更新。
+Release 检查同样按出口地区选择来源：中国大陆优先请求 `sparkarc.json` 声明的 Gitee Release API，再回退到 GitHub 代理和官方 API；非中国大陆或地区未知时优先 GitHub 官方 API，再尝试代理与 Gitee。`SPARKARC_GITHUB_RELEASE_API` 仍可覆盖并优先尝试兼容的 GitHub API。所有 API 均不可用时，会回退到 GitHub 标准 `/releases/latest` 重定向页；成功使用代理时，返回给用户的下载页也会使用同一前缀。
 
-Release 成功结果会在本机缓存 6 小时，避免每次启动都消耗 GitHub API 配额。它只用于低频 Launcher 壳更新提示，不是业务源码更新清单。
+Release 成功结果会在本机缓存 6 小时，避免每次启动都重复消耗平台 API 配额。它只用于低频 Launcher 壳更新提示，不是业务源码更新清单；探测策略升级时旧缓存会自动失效。
 
 ## 受管 Node
 
