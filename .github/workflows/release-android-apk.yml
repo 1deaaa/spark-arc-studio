@@ -1,19 +1,16 @@
 name: Publish Android APK
 
 on:
-  push:
-    tags:
-      - 'sparkarc-v*'
-  workflow_dispatch:
+  workflow_call:
     inputs:
       draft:
         description: Create the GitHub Release as a draft first
-        required: true
+        required: false
         default: true
         type: boolean
       prerelease:
         description: Mark this release as a pre-release
-        required: true
+        required: false
         default: false
         type: boolean
       version:
@@ -21,6 +18,13 @@ on:
         required: false
         default: ''
         type: string
+    secrets:
+      ANDROID_KEYSTORE_BASE64:
+        required: true
+      ANDROID_KEY_PASSWORD:
+        required: true
+      ANDROID_KEY_ALIAS:
+        required: true
 
 permissions:
   contents: write
@@ -305,12 +309,3 @@ jobs:
             echo "Uploading $renamed (from $apk)"
             gh release upload "$TAG" "$renamed" --repo "$GITHUB_REPOSITORY" --clobber
           done
-
-  sync-gitee-release:
-    name: Sync GitHub Release to Gitee
-    needs: publish-android-apk
-    uses: ./.github/workflows/sync-gitee-release.yml
-    with:
-      version: ${{ inputs.version || '' }}
-    secrets:
-      GITEE_TOKEN: ${{ secrets.GITEE_TOKEN }}

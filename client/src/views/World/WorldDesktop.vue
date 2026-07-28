@@ -44,7 +44,13 @@
           <div class="inspire-split-bottom" :class="{ 'collapsed': isHistoryCollapsed }">
             <div class="history-header">
               <h3 class="world-panel-title">
-                <n-icon :component="Clock" /> {{ t('views.world.common.history') }}
+                <n-icon :component="Clock" />
+                {{ projectStore.currentProject
+                  ? t('views.world.history.projectInspiration')
+                  : t('views.world.history.inspirationDrafts') }}
+                <span v-if="projectStore.currentProject" class="history-project-name">
+                  {{ projectStore.currentProject }}
+                </span>
                 <n-badge v-if="unreadCount > 0" :value="unreadCount" :max="99" class="unread-badge" />
               </h3>
               <div class="history-actions">
@@ -184,8 +190,10 @@ import HistoryPanel from '../../components/dlg-editor/HistoryPanel.vue';
 import GlobalLoading from '../../components/share/GlobalLoading.vue';
 import InspireTagSelector from '../../components/lorebook/InspireTagSelector.vue';
 import { useWorldLogic } from '../../composables/useWorldLogic';
+import { useProjectStore } from '../../components/stores/projectStore';
 
 const { t } = useI18n();
+const projectStore = useProjectStore();
 
 function handleGenerateFromMuseClick() {
   void handleGenerateFromMuse();
@@ -420,6 +428,17 @@ const {
   flex: 1;
   overflow-y: auto;
   min-height: 0;
+}
+
+.history-project-name {
+  min-width: 0;
+  max-width: 88px;
+  overflow: hidden;
+  color: var(--spark-text-muted);
+  font-size: var(--spark-fs-3xs);
+  font-weight: 500;
+  text-overflow: ellipsis;
+  white-space: nowrap;
 }
 
 .result-layout {

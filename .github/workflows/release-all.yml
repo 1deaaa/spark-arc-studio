@@ -1,0 +1,62 @@
+name: Publish Release
+
+on:
+  push:
+    tags:
+      - 'sparkarc-v*'
+  workflow_dispatch:
+    inputs:
+      draft:
+        description: Create the GitHub Release as a draft first
+        required: true
+        default: true
+        type: boolean
+      prerelease:
+        description: Mark this release as a pre-release
+        required: true
+        default: false
+        type: boolean
+      version:
+        description: 'Version to release (e.g. 0.2.0). Leave empty to use current version in tauri.conf.json'
+        required: false
+        default: ''
+        type: string
+
+permissions:
+  contents: write
+
+concurrency:
+  group: release-all-${{ inputs.version || github.ref_name }}
+  cancel-in-progress: false
+
+jobs:
+  publish-desktop:
+    name: Publish desktop builds
+    uses: ./.github/workflows/release-desktop.yml
+    with:
+      version: ${{ inputs.version || '' }}
+      draft: ${{ inputs.draft || false }}
+      prerelease: ${{ inputs.prerelease || false }}
+
+  publish-android:
+    name: Publish Android build
+    uses: ./.github/workflows/release-android-apk.yml
+    with:
+      version: ${{ inputs.version || '' }}
+      draft: ${{ inputs.draft || false }}
+      prerelease: ${{ inputs.prerelease || false }}
+    secrets:
+      ANDROID_KEYSTORE_BASE64: ${{ secrets.ANDROID_KEYSTORE_BASE64 }}
+      ANDROID_KEY_PASSWORD: ${{ secrets.ANDROID_KEY_PASSWORD }}
+      ANDROID_KEY_ALIAS: ${{ secrets.ANDROID_KEY_ALIAS }}
+
+  sync-gitee-release:
+    name: Sync complete release to Gitee
+    needs:
+      - publish-desktop
+      - publish-android
+    uses: ./.github/workflows/sync-gitee-release.yml
+    with:
+      version: ${{ inputs.version || '' }}
+    secrets:
+      GITEE_TOKEN: ${{ secrets.GITEE_TOKEN }}

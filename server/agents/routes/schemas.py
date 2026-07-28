@@ -181,9 +181,11 @@ class InspirationBindRequest(BaseModel):
     """灵感与项目绑定/解绑的请求体。
 
     project_name 必填：哪怕灵感库是用户级别的，绑定关系仍以项目名为粒度。
-    exclusive 为 True 时执行排他绑定：绑定新灵感的同时解绑该项目下的旧灵感。
+    当前所有绑定请求都会将该灵感设为项目当前灵感。
+    activate / exclusive 仅保留用于兼容不同版本的客户端请求体。
     """
     projectName: str
+    activate: bool = False
     exclusive: bool = False
 
 

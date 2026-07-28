@@ -5,7 +5,12 @@ from typing import Literal
 from langchain.tools import tool
 from pydantic import BaseModel, Field
 
-from core.request_context import current_inspiration_id, current_project_name, current_user_id
+from core.request_context import (
+    current_inspiration_id,
+    current_project_name,
+    current_user_id,
+    get_current_project_name,
+)
 
 
 class CaptureInspirationInput(BaseModel):
@@ -108,8 +113,9 @@ def capture_inspiration(
 
 @tool(args_schema=RewriteInspirationInput)
 def rewrite_inspiration(overwrite_content: str) -> str:
-    """覆盖当前灵感条目或创建新的灵感条目。"""
+    """覆盖当前灵感条目或创建新条目；有项目上下文时自动设为项目当前灵感。"""
     from mcp_server.spark_inspiration.logic import (
+        activate_inspiration_for_project,
         current_user_id as mcp_uid_var,
         save_inspiration,
         update_inspiration,
@@ -129,7 +135,13 @@ def rewrite_inspiration(overwrite_content: str) -> str:
         success = update_inspiration(str(user_id), str(inspiration_id), {"content": content})
         if not success:
             return "重写灵感失败：目标灵感不存在或更新失败。"
-        return "已成功重写当前灵感条目。"
+        project_name = get_current_project_name()
+        if project_name:
+            activation = activate_inspiration_for_project(str(user_id), str(inspiration_id), project_name)
+            if not activation.get("success"):
+                return "已重写灵感内容，但设为当前项目灵感失败。"
+            return f"已成功重写灵感，并设为项目「{project_name}」的当前灵感。"
+        return "已成功重写当前灵感条目；当前没有项目上下文，保留原绑定状态。"
 
     source = MuseAgent.generate_source_title(content)
     token = mcp_uid_var.set(str(user_id))
@@ -138,7 +150,14 @@ def rewrite_inspiration(overwrite_content: str) -> str:
     finally:
         mcp_uid_var.reset(token)
     if isinstance(result, dict) and result.get("success"):
-        return f"已自动创建新灵感条目（source: {source}，ID: {result['id']}）。"
+        new_id = str(result["id"])
+        project_name = get_current_project_name()
+        if project_name:
+            activation = activate_inspiration_for_project(str(user_id), new_id, project_name)
+            if not activation.get("success"):
+                return f"已创建新灵感条目（ID: {new_id}），但设为当前项目灵感失败。"
+            return f"已创建新灵感条目（source: {source}，ID: {new_id}），并设为项目「{project_name}」的当前灵感。"
+        return f"已自动创建新灵感草稿（source: {source}，ID: {new_id}）。"
     return f"创建灵感条目失败：{result}"
 
 
@@ -289,12 +308,12 @@ def read_inspiration(inspiration_id: str) -> str:
 
 @tool(args_schema=BindInspirationInput)
 def bind_inspiration_to_current_project(inspiration_id: str) -> str:
-    """把指定灵感条目绑定到当前激活的项目。
+    """把指定灵感条目设为当前项目灵感。
     
     常用场景：用户说"把那个灵感加到这个项目"——你可以先用 list_inspirations(scope='drafts')
     找到候选 id，再调用本工具完成绑定。绑定后该灵感会在下一轮对话中自动进入项目上下文。
     """
-    from mcp_server.spark_inspiration.logic import bind_inspiration_to_project as _bind
+    from mcp_server.spark_inspiration.logic import activate_inspiration_for_project
 
     user_id = current_user_id.get()
     if not user_id:
@@ -306,7 +325,7 @@ def bind_inspiration_to_current_project(inspiration_id: str) -> str:
     if not target_id:
         return "绑定灵感失败：inspiration_id 为空。"
 
-    success = _bind(str(user_id), target_id, str(project_name))
-    if success:
-        return f"已将灵感 [{target_id}] 绑定到项目「{project_name}」。下一轮对话中它会自动出现在项目上下文里。"
+    result = activate_inspiration_for_project(str(user_id), target_id, str(project_name))
+    if result.get("success"):
+        return f"已将灵感 [{target_id}] 设为项目「{project_name}」的当前灵感。下一轮对话中它会自动出现在项目上下文里。"
     return f"绑定灵感失败：未找到 id={target_id} 的灵感，或操作未生效。"
