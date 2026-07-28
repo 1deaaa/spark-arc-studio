@@ -1635,6 +1635,15 @@ watch(autoEnterNextTime, (nextValue) => {
 
 /* --- 覆盖面板 --- */
 .launcher-overlay {
+  --launcher-overlay-text: #172033;
+  --launcher-overlay-text-muted: #475569;
+  --launcher-overlay-placeholder: #64748b;
+  --launcher-overlay-card-bg: rgba(248, 250, 252, 0.86);
+  --launcher-overlay-field-bg: rgba(255, 255, 255, 0.78);
+  --launcher-overlay-field-bg-focus: rgba(255, 255, 255, 0.94);
+  --launcher-overlay-log-bg: rgba(248, 250, 252, 0.92);
+  --launcher-overlay-border: rgba(71, 85, 105, 0.24);
+
   position: fixed;
   inset: 0;
   z-index: 20;
@@ -1649,13 +1658,24 @@ watch(autoEnterNextTime, (nextValue) => {
   -webkit-backdrop-filter: blur(10px) saturate(125%);
 }
 
+.is-dark .launcher-overlay {
+  --launcher-overlay-text: rgba(248, 250, 252, 0.94);
+  --launcher-overlay-text-muted: rgba(226, 232, 240, 0.76);
+  --launcher-overlay-placeholder: rgba(203, 213, 225, 0.58);
+  --launcher-overlay-card-bg: rgba(15, 23, 42, 0.66);
+  --launcher-overlay-field-bg: rgba(15, 23, 42, 0.58);
+  --launcher-overlay-field-bg-focus: rgba(15, 23, 42, 0.76);
+  --launcher-overlay-log-bg: rgba(8, 15, 29, 0.72);
+  --launcher-overlay-border: rgba(226, 232, 240, 0.20);
+}
+
 .launcher-overlay__card {
   position: relative;
   width: min(100%, 400px);
   margin: 0 20px;
   border-radius: 20px;
-  background: rgba(255, 255, 255, 0.10);
-  border: 0.5px solid rgba(255, 255, 255, 0.25);
+  background: var(--launcher-overlay-card-bg);
+  border: 1px solid var(--launcher-overlay-border);
   box-shadow:
     0 8px 32px rgba(0, 0, 0, 0.12),
     inset 0 0.5px 0 rgba(255, 255, 255, 0.30);
@@ -1715,13 +1735,13 @@ watch(autoEnterNextTime, (nextValue) => {
   align-items: center;
   justify-content: space-between;
   padding: 16px 20px;
-  border-bottom: 1px solid rgba(255, 255, 255, 0.20);
+  border-bottom: 1px solid var(--launcher-overlay-border);
 }
 
 .launcher-overlay__title {
   font-size: var(--spark-fs-md);
   font-weight: 600;
-  color: var(--spark-text);
+  color: var(--launcher-overlay-text);
 }
 
 .launcher-overlay__close {
@@ -1733,7 +1753,7 @@ watch(autoEnterNextTime, (nextValue) => {
   border: none;
   border-radius: 8px;
   background: transparent;
-  color: color-mix(in srgb, var(--spark-text), transparent 20%);
+  color: var(--launcher-overlay-text-muted);
   font-size: 20px;
   line-height: 1;
   cursor: pointer;
@@ -1742,7 +1762,7 @@ watch(autoEnterNextTime, (nextValue) => {
 
 .launcher-overlay__close:hover {
   background: color-mix(in srgb, var(--spark-border), transparent 60%);
-  color: var(--spark-text);
+  color: var(--launcher-overlay-text);
 }
 
 .launcher-overlay__body {
@@ -1766,9 +1786,9 @@ watch(autoEnterNextTime, (nextValue) => {
   height: 42px;
   padding: 0 14px;
   border-radius: 12px;
-  border: 1px solid color-mix(in srgb, var(--spark-border), transparent 40%);
-  background: rgba(255, 255, 255, 0.16);
-  color: var(--spark-text);
+  border: 1px solid var(--launcher-overlay-border);
+  background: var(--launcher-overlay-field-bg);
+  color: var(--launcher-overlay-text);
   font-family: var(--spark-mono);
   font-size: 13px;
   outline: none;
@@ -1777,11 +1797,11 @@ watch(autoEnterNextTime, (nextValue) => {
 
 .launcher-overlay__input:focus {
   border-color: color-mix(in srgb, var(--spark-primary), transparent 40%);
-  background: rgba(255, 255, 255, 0.24);
+  background: var(--launcher-overlay-field-bg-focus);
 }
 
 .launcher-overlay__input::placeholder {
-  color: color-mix(in srgb, var(--spark-text), transparent 55%);
+  color: var(--launcher-overlay-placeholder);
 }
 
 .launcher-overlay__btn {
@@ -1825,7 +1845,7 @@ watch(autoEnterNextTime, (nextValue) => {
   align-items: center;
   gap: 10px;
   font-size: 13px;
-  color: color-mix(in srgb, var(--spark-text), transparent 30%);
+  color: var(--launcher-overlay-text-muted);
   cursor: pointer;
   user-select: none;
 }
@@ -1905,12 +1925,12 @@ watch(autoEnterNextTime, (nextValue) => {
   gap: 10px;
   font-size: 14px;
   font-weight: 600;
-  color: var(--spark-text);
+  color: var(--launcher-overlay-text);
 }
 
 .launcher-deploy-help {
   margin: 0;
-  color: color-mix(in srgb, var(--spark-text), transparent 24%);
+  color: var(--launcher-overlay-text-muted);
   font-size: 13px;
   line-height: 1.65;
 }
@@ -1921,9 +1941,9 @@ watch(autoEnterNextTime, (nextValue) => {
   overflow: auto;
   padding: 12px;
   border-radius: 12px;
-  border: 1px solid color-mix(in srgb, var(--spark-border), transparent 45%);
-  background: color-mix(in srgb, var(--spark-bg), transparent 18%);
-  color: color-mix(in srgb, var(--spark-text), transparent 15%);
+  border: 1px solid var(--launcher-overlay-border);
+  background: var(--launcher-overlay-log-bg);
+  color: var(--launcher-overlay-text);
   font-family: var(--spark-mono);
   font-size: 11px;
   line-height: 1.55;
@@ -2190,7 +2210,7 @@ watch(autoEnterNextTime, (nextValue) => {
   margin: 0;
   font-size: 13px;
   line-height: 1.7;
-  color: color-mix(in srgb, var(--spark-text), transparent 18%);
+  color: var(--launcher-overlay-text-muted);
   white-space: pre-line;
 }
 
@@ -2222,13 +2242,13 @@ watch(autoEnterNextTime, (nextValue) => {
 }
 
 .launcher-disclaimer__btn--secondary {
-  background: color-mix(in srgb, var(--spark-panel-bg), transparent 40%);
-  color: color-mix(in srgb, var(--spark-text), transparent 20%);
-  border: 1px solid color-mix(in srgb, var(--spark-border), transparent 60%);
+  background: var(--launcher-overlay-field-bg);
+  color: var(--launcher-overlay-text);
+  border: 1px solid var(--launcher-overlay-border);
 }
 
 .launcher-disclaimer__btn--secondary:hover {
-  background: color-mix(in srgb, var(--spark-panel-bg), transparent 20%);
+  background: var(--launcher-overlay-field-bg-focus);
 }
 
 .launcher-disclaimer__btn:active {

@@ -42,7 +42,7 @@ export function resolveLocalDeploymentPresentation(
   };
 }
 
-/** 仅自动拉起已经部署的受管后端；显式服务器跳转始终优先。 */
+/** 仅自动拉起 APP 数据目录中已经完成部署的本地后端；显式服务器跳转始终优先。 */
 export function shouldAutoStartLocalBackend(input: LocalBackendAutoStartInput): boolean {
   return input.isTauriDesktop
     && input.localBackendReady

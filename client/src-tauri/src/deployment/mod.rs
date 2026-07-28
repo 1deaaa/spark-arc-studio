@@ -203,7 +203,7 @@ struct NodeDistribution {
     archive_sha256: &'static str,
 }
 
-/// 所有平台共享的受管部署器。
+/// 所有平台共享的 APP 数据目录部署器。
 #[derive(Debug, Clone)]
 pub struct DeploymentManager {
     user_dir: PathBuf,
@@ -330,7 +330,7 @@ impl DeploymentManager {
         Ok(None)
     }
 
-    /// 首次部署时克隆 main；已有受管工作树不会被隐式更新。
+    /// 首次部署时克隆 main；APP 数据目录中的已有工作树不会被隐式更新。
     pub fn ensure_managed_checkout(&self) -> Result<PathBuf, String> {
         if let Some(project_root) = self.managed_project_root()? {
             return Ok(project_root);
@@ -348,7 +348,7 @@ impl DeploymentManager {
             status.last_error = None;
             status.project_root = Some(self.target_dir.to_string_lossy().to_string());
         })?;
-        self.append_log("开始创建 Launcher 受管的 main 工作树...");
+        self.append_log("开始在 APP 数据目录中创建 main 工作树...");
 
         let staging_root = self.user_dir.join(STAGING_DIR_NAME);
         fs::create_dir_all(&staging_root).map_err(|err| err.to_string())?;
@@ -394,7 +394,7 @@ impl DeploymentManager {
         Ok(self.target_dir.clone())
     }
 
-    /// 为 Launcher 受管工作树准备私有 Node。该运行时不写入系统 PATH，也不调用
+    /// 为 APP 数据目录中的工作树准备 Launcher 内置 Node.js。该运行时不写入系统 PATH，也不调用
     /// winget、brew、apt 等包管理器。
     pub fn ensure_node_runtime(&self) -> Result<PathBuf, String> {
         let distribution = NodeDistribution::for_current_platform()?;
@@ -411,7 +411,7 @@ impl DeploymentManager {
 
         self.ensure_user_dir()?;
         self.append_log(format!(
-            "正在准备受管 Node.js v{} ({})...",
+            "正在准备 Launcher 内置 Node.js v{} ({})...",
             MANAGED_NODE_VERSION, distribution.platform
         ));
         let staging_root = self.user_dir.join(STAGING_DIR_NAME).join("node");
@@ -435,23 +435,26 @@ impl DeploymentManager {
 
             if install_dir.exists() {
                 fs::remove_dir_all(&install_dir)
-                    .map_err(|err| format!("无法清理损坏的受管 Node 运行时: {err}"))?;
+                    .map_err(|err| format!("无法清理损坏的 Launcher 内置 Node.js: {err}"))?;
             }
             let parent = install_dir
                 .parent()
-                .ok_or_else(|| "受管 Node 目录无父路径。".to_string())?;
+                .ok_or_else(|| "Launcher 内置 Node.js 目录无父路径。".to_string())?;
             fs::create_dir_all(parent).map_err(|err| err.to_string())?;
             fs::rename(&extracted_root, &install_dir)
-                .map_err(|err| format!("无法切换受管 Node 运行时: {err}"))?;
+                .map_err(|err| format!("无法切换 Launcher 内置 Node.js: {err}"))?;
             Ok(())
         })();
 
         let _ = fs::remove_dir_all(&staging_dir);
         if let Err(err) = result {
-            self.append_log(format!("受管 Node.js 准备失败: {err}"));
+            self.append_log(format!("Launcher 内置 Node.js 准备失败: {err}"));
             return Err(err);
         }
-        self.append_log(format!("受管 Node.js v{} 已就绪。", MANAGED_NODE_VERSION));
+        self.append_log(format!(
+            "Launcher 内置 Node.js v{} 已就绪。",
+            MANAGED_NODE_VERSION
+        ));
         Ok(node_bin_dir(&install_dir))
     }
 
@@ -459,9 +462,9 @@ impl DeploymentManager {
     pub fn check_main_update(&self) -> Result<DeploymentStatus, String> {
         let project_root = self
             .managed_project_root()?
-            .ok_or_else(|| "尚未发现 Launcher 受管的本地服务。".to_string())?;
-        let repository =
-            Repository::open(&project_root).map_err(|err| format!("无法打开受管仓库: {err}"))?;
+            .ok_or_else(|| "APP 数据目录中尚未发现 Launcher 本地服务。".to_string())?;
+        let repository = Repository::open(&project_root)
+            .map_err(|err| format!("无法打开 APP 数据目录中的源码仓库: {err}"))?;
         let current = repository_head_commit(&repository)?;
 
         self.save_status(|status| {
@@ -513,9 +516,9 @@ impl DeploymentManager {
     pub fn apply_main_update(&self) -> Result<DeploymentStatus, String> {
         let project_root = self
             .managed_project_root()?
-            .ok_or_else(|| "尚未发现 Launcher 受管的本地服务。".to_string())?;
-        let repository =
-            Repository::open(&project_root).map_err(|err| format!("无法打开受管仓库: {err}"))?;
+            .ok_or_else(|| "APP 数据目录中尚未发现 Launcher 本地服务。".to_string())?;
+        let repository = Repository::open(&project_root)
+            .map_err(|err| format!("无法打开 APP 数据目录中的源码仓库: {err}"))?;
         let current = repository_head_commit(&repository)?;
 
         self.save_status(|status| {
@@ -733,12 +736,12 @@ impl DeploymentManager {
         self.release_check_failure_or_stale_cache(current_version, checked_at, errors, cached)
     }
 
-    /// 由 Launcher 启动受管 main 时写入进程记录。记录只属于 APP 数据目录，绝不登记
+    /// 由 Launcher 启动 APP 数据目录中的 main 时写入进程记录。记录只属于 APP 数据目录，绝不登记
     /// 用户手动部署的工作树，避免更新功能误杀开发者自己的服务。
     pub fn record_managed_service_process(&self, pid: u32) -> Result<(), String> {
         let project_root = self
             .managed_project_root()?
-            .ok_or_else(|| "无法为未受管工作树登记服务进程。".to_string())?;
+            .ok_or_else(|| "无法为非 APP 数据目录工作树登记服务进程。".to_string())?;
         self.ensure_user_dir()?;
         let record = ManagedServiceProcess {
             schema_version: MANAGED_SCHEMA_VERSION,
@@ -748,16 +751,16 @@ impl DeploymentManager {
             started_at: now_string(),
         };
         write_json_atomically(&self.managed_service_process_path, &record)?;
-        self.append_log(format!("已登记受管后端进程: {pid}"));
+        self.append_log(format!("已登记 Launcher 本地后端进程: {pid}"));
         Ok(())
     }
 
-    /// 只停止本 Launcher 曾为受管 main 工作树登记的进程。进程记录不存在而 6688
+    /// 只停止本 Launcher 曾为 APP 数据目录 main 工作树登记的进程。进程记录不存在而 6688
     /// 端口仍被占用时，保守拒绝操作，避免影响其他本地服务。
     pub fn stop_managed_service(&self) -> Result<(), String> {
         let project_root = self
             .managed_project_root()?
-            .ok_or_else(|| "尚未发现 Launcher 受管的本地服务。".to_string())?;
+            .ok_or_else(|| "APP 数据目录中尚未发现 Launcher 本地服务。".to_string())?;
         let Some(record) = self.read_managed_service_process()? else {
             if managed_service_port_is_open() {
                 return Err(
@@ -770,35 +773,35 @@ impl DeploymentManager {
         if record.schema_version != MANAGED_SCHEMA_VERSION
             || Path::new(&record.project_root) != project_root
         {
-            return Err("受管服务进程记录与当前工作树不匹配，已拒绝停止。".to_string());
+            return Err("Launcher 本地服务进程记录与当前工作树不匹配，已拒绝停止。".to_string());
         }
 
         match managed_process_state(&record) {
             ManagedProcessState::Missing => {
                 if !managed_service_port_is_open() {
                     let _ = fs::remove_file(&self.managed_service_process_path);
-                    self.append_log("受管服务进程记录已过期，已清理。");
+                    self.append_log("Launcher 本地服务进程记录已过期，已清理。");
                     return Ok(());
                 }
                 return Err(
-                    "受管服务进程记录中的 PID 已不存在，但 6688 端口仍被占用。为避免误停止其他服务，请先手动停止后再更新。"
+                    "Launcher 本地服务进程记录中的 PID 已不存在，但 6688 端口仍被占用。为避免误停止其他服务，请先手动停止后再更新。"
                         .to_string(),
                 );
             }
             ManagedProcessState::Mismatched => {
                 return Err(
-                    "受管服务进程记录与当前 PID 的启动时间或命令行不匹配，已拒绝停止。请先手动确认该进程。"
+                    "Launcher 本地服务进程记录与当前 PID 的启动时间或命令行不匹配，已拒绝停止。请先手动确认该进程。"
                         .to_string(),
                 );
             }
             ManagedProcessState::MatchesRecord => {}
         }
 
-        self.append_log(format!("正在停止受管后端进程: {}", record.pid));
+        self.append_log(format!("正在停止 Launcher 本地后端进程: {}", record.pid));
         if let Err(err) = terminate_process(record.pid) {
             if !managed_service_port_is_open() {
                 let _ = fs::remove_file(&self.managed_service_process_path);
-                self.append_log("受管服务进程记录已过期，已清理。");
+                self.append_log("Launcher 本地服务进程记录已过期，已清理。");
                 return Ok(());
             }
             return Err(err);
@@ -806,23 +809,23 @@ impl DeploymentManager {
         for _ in 0..40 {
             if !managed_service_port_is_open() {
                 let _ = fs::remove_file(&self.managed_service_process_path);
-                self.append_log("受管后端已停止。");
+                self.append_log("Launcher 本地后端已停止。");
                 return Ok(());
             }
             thread::sleep(Duration::from_millis(250));
         }
         Err(
-            "停止受管后端超时，6688 端口仍被占用。为避免更新中切换运行代码，已取消更新。"
+            "停止 Launcher 本地后端超时，6688 端口仍被占用。为避免更新中切换运行代码，已取消更新。"
                 .to_string(),
         )
     }
 
-    /// 用于更新前的最后一道保护。端口、受管进程记录或 PID 身份任一存在不确定性
+    /// 用于更新前的最后一道保护。端口、本地进程记录或 PID 身份任一存在不确定性
     /// 时，均拒绝切换代码，避免 Launcher 重启后在运行中的服务上覆盖文件。
     pub fn ensure_managed_service_stopped(&self) -> Result<(), String> {
         let project_root = self
             .managed_project_root()?
-            .ok_or_else(|| "尚未发现 Launcher 受管的本地服务。".to_string())?;
+            .ok_or_else(|| "APP 数据目录中尚未发现 Launcher 本地服务。".to_string())?;
         if managed_service_port_is_open() {
             return Err("检测到 6688 端口仍有本地服务，请先通过 Launcher 停止服务。".to_string());
         }
@@ -832,19 +835,21 @@ impl DeploymentManager {
         if record.schema_version != MANAGED_SCHEMA_VERSION
             || Path::new(&record.project_root) != project_root
         {
-            return Err("受管服务进程记录与当前工作树不匹配，已拒绝应用更新。".to_string());
+            return Err(
+                "Launcher 本地服务进程记录与当前工作树不匹配，已拒绝应用更新。".to_string(),
+            );
         }
         match managed_process_state(&record) {
             ManagedProcessState::Missing => {
                 let _ = fs::remove_file(&self.managed_service_process_path);
-                self.append_log("受管服务进程记录已过期，已清理。");
+                self.append_log("Launcher 本地服务进程记录已过期，已清理。");
                 Ok(())
             }
             ManagedProcessState::MatchesRecord => {
-                Err("检测到 Launcher 受管后端进程仍在运行，请先停止服务后再应用更新。".to_string())
+                Err("检测到 Launcher 本地后端进程仍在运行，请先停止服务后再应用更新。".to_string())
             }
             ManagedProcessState::Mismatched => Err(
-                "受管服务进程记录与当前 PID 身份不匹配，已拒绝应用更新。请先手动确认该进程。"
+                "Launcher 本地服务进程记录与当前 PID 身份不匹配，已拒绝应用更新。请先手动确认该进程。"
                     .to_string(),
             ),
         }
@@ -922,10 +927,10 @@ impl DeploymentManager {
             return Ok(None);
         }
         let raw = fs::read_to_string(&self.managed_service_process_path)
-            .map_err(|err| format!("无法读取受管服务进程记录: {err}"))?;
+            .map_err(|err| format!("无法读取 Launcher 本地服务进程记录: {err}"))?;
         serde_json::from_str(&raw)
             .map(Some)
-            .map_err(|err| format!("受管服务进程记录格式无效: {err}"))
+            .map_err(|err| format!("Launcher 本地服务进程记录格式无效: {err}"))
     }
 
     fn ensure_user_dir(&self) -> Result<(), String> {
@@ -1135,7 +1140,7 @@ fn download_verified_node_archive(
     for base in node_distribution_bases() {
         let version_root = format!("{base}/v{MANAGED_NODE_VERSION}");
         let archive_url = format!("{version_root}/{}", distribution.archive_name);
-        manager.append_log(format!("尝试下载受管 Node: {archive_url}"));
+        manager.append_log(format!("尝试下载 Launcher 内置 Node.js: {archive_url}"));
 
         let bytes = match client
             .get(&archive_url)
@@ -1161,11 +1166,16 @@ fn download_verified_node_archive(
         }
         fs::write(destination, &bytes)
             .map_err(|err| format!("无法写入 Node 下载文件 {:?}: {err}", destination))?;
-        manager.append_log(format!("受管 Node 下载和校验完成: {archive_url}"));
+        manager.append_log(format!(
+            "Launcher 内置 Node.js 下载和校验完成: {archive_url}"
+        ));
         return Ok(());
     }
 
-    Err(format!("无法下载受管 Node.js：{}", errors.join("；")))
+    Err(format!(
+        "无法下载 Launcher 内置 Node.js：{}",
+        errors.join("；")
+    ))
 }
 
 fn extract_node_archive(
@@ -1285,7 +1295,7 @@ fn terminate_process(pid: u32) -> Result<(), String> {
         return Ok(());
     }
     let detail = String::from_utf8_lossy(&output.stderr).trim().to_string();
-    Err(format!("无法停止受管后端进程 {pid}: {detail}"))
+    Err(format!("无法停止 Launcher 本地后端进程 {pid}: {detail}"))
 }
 
 #[cfg(unix)]
@@ -1295,14 +1305,14 @@ fn terminate_process(pid: u32) -> Result<(), String> {
         return Ok(());
     }
     Err(format!(
-        "无法停止受管后端进程 {pid}: {}",
+        "无法停止 Launcher 本地后端进程 {pid}: {}",
         std::io::Error::last_os_error()
     ))
 }
 
 #[cfg(all(not(windows), not(unix)))]
 fn terminate_process(_pid: u32) -> Result<(), String> {
-    Err("当前平台不支持停止受管后端进程。".to_string())
+    Err("当前平台不支持停止 Launcher 本地后端进程。".to_string())
 }
 
 fn now_string() -> String {
@@ -1582,7 +1592,7 @@ fn collect_preserved_changes(
         .include_ignored(false);
     let statuses = repository
         .statuses(Some(&mut options))
-        .map_err(|err| format!("无法检查受管工作树状态: {err}"))?;
+        .map_err(|err| format!("无法检查 APP 数据目录工作树状态: {err}"))?;
     let mut preserved = Vec::new();
 
     for entry in statuses.iter() {
@@ -2214,7 +2224,7 @@ mod tests {
 
     #[cfg(windows)]
     #[test]
-    #[ignore = "真实网络验证：下载 Launcher 受管源码、Node、Python 依赖并启动完整服务"]
+    #[ignore = "真实网络验证：向 APP 数据目录下载源码、Node、Python 依赖并启动完整服务"]
     fn windows_launcher_first_run_works_without_proxy_or_system_node_or_git() {
         let _lock = WINDOWS_E2E_ENV_LOCK
             .get_or_init(|| Mutex::new(()))
@@ -2265,20 +2275,20 @@ mod tests {
         });
 
         let marker = fs::read_to_string(project_root.join(MANAGED_MARKER_FILE))
-            .expect("受管工作树缺少 ownership 标记");
+            .expect("APP 数据目录工作树缺少 ownership 标记");
         assert!(
             marker.contains(&project_config::repository_urls().clone),
-            "受管工作树没有记录官方项目仓库"
+            "APP 数据目录工作树没有记录官方项目仓库"
         );
         let node_executable = node_bin.join("node.exe");
         let node_version = std::process::Command::new(&node_executable)
             .arg("--version")
             .output()
-            .expect("无法启动受管 Node")
+            .expect("无法启动 Launcher 内置 Node.js")
             .stdout;
         assert!(
             String::from_utf8_lossy(&node_version).contains(MANAGED_NODE_VERSION),
-            "受管 Node 版本不符合预期"
+            "Launcher 内置 Node.js 版本不符合预期"
         );
 
         run_windows_e2e_start_script(&project_root, &node_bin, &root).unwrap_or_else(|error| {
@@ -2308,14 +2318,14 @@ mod tests {
             .expect("必须通过 SPARKARC_E2E_SOURCE_ROOT 指定干净源码快照");
         let node_bin = env::var_os("SPARKARC_E2E_NODE_BIN")
             .map(PathBuf::from)
-            .expect("必须通过 SPARKARC_E2E_NODE_BIN 指定受管 Node 目录");
+            .expect("必须通过 SPARKARC_E2E_NODE_BIN 指定 Launcher 内置 Node.js 目录");
         assert!(
             project_root.join("start.bat").is_file(),
             "源码快照缺少 start.bat"
         );
         assert!(
             node_bin.join("node.exe").is_file(),
-            "受管 Node 目录缺少 node.exe"
+            "Launcher 内置 Node.js 目录缺少 node.exe"
         );
 
         let root = windows_e2e_root();

@@ -100,7 +100,7 @@ fn managed_backend_is_ready(project_root: Option<&Path>, is_windows: bool) -> bo
     })
 }
 
-/// 命令：检查受管本地后端是否已完成最小可运行部署。
+/// 命令：检查 APP 数据目录中的本地后端是否已完成最小可运行部署。
 #[tauri::command]
 fn check_local_backend_ready() -> Result<bool, String> {
     if is_mobile_runtime() {
@@ -139,6 +139,9 @@ fn read_deployment_log(lines: Option<usize>) -> Result<String, String> {
 
 /// 全局部署子进程句柄，用于避免重复启动。
 static DEPLOYMENT_CHILD: Mutex<Option<std::process::Child>> = Mutex::new(None);
+
+#[cfg(windows)]
+const CREATE_NO_WINDOW: u32 = 0x08000000;
 
 fn is_mobile_runtime() -> bool {
     cfg!(mobile)
@@ -193,9 +196,9 @@ async fn start_local_deployment(_app: AppHandle) -> Result<(), String> {
     let node_bin_dir =
         tauri::async_runtime::spawn_blocking(move || node_manager.ensure_node_runtime())
             .await
-            .map_err(|err| format!("受管 Node 准备任务异常结束: {err}"))??;
+            .map_err(|err| format!("Launcher 内置 Node.js 准备任务异常结束: {err}"))??;
     append_log(&format!(
-        "受管 main 工作树已就绪，尝试启动: {:?}",
+        "APP 数据目录中的 main 源码已就绪，尝试启动: {:?}",
         project_root
     ));
     start_backend(
@@ -208,7 +211,7 @@ async fn start_local_deployment(_app: AppHandle) -> Result<(), String> {
     .await
 }
 
-/// 返回受管 main 工作树的持久状态，不会执行网络请求。
+/// 返回 APP 数据目录中 main 工作树的持久状态，不会执行网络请求。
 #[tauri::command]
 fn get_deployment_status() -> Result<DeploymentStatus, String> {
     if is_mobile_runtime() {
@@ -245,7 +248,7 @@ async fn apply_local_update() -> Result<DeploymentStatus, String> {
         .map_err(|err| format!("应用更新任务异常结束: {err}"))?
 }
 
-/// 显式停止 Launcher 自己启动并登记的受管后端，为更新切换留出无进程占用的窗口。
+/// 显式停止 Launcher 自己启动并登记的本地后端，为更新切换留出无进程占用的窗口。
 #[tauri::command]
 async fn stop_managed_local_backend() -> Result<(), String> {
     if is_mobile_runtime() {
@@ -308,7 +311,10 @@ where
         // CMD 不遵循 C 运行时的引号转义；原样传入可保留路径中的空格和 `&`。
         command.args(["/D", "/S", "/C"]);
         #[cfg(windows)]
-        command.raw_arg(format!(r#"call "{}""#, script_path.to_string_lossy()));
+        {
+            command.raw_arg(format!(r#"call "{}""#, script_path.to_string_lossy()));
+            command.creation_flags(CREATE_NO_WINDOW);
+        }
         #[cfg(not(windows))]
         command.arg(format!(r#"call "{}""#, script_path.to_string_lossy()));
         command
@@ -334,7 +340,9 @@ where
         if let Err(err) = manager.record_managed_service_process(child.id()) {
             let _ = child.kill();
             let _ = child.wait();
-            return Err(format!("无法登记受管后端进程，已终止本次启动: {err}"));
+            return Err(format!(
+                "无法登记 Launcher 本地后端进程，已终止本次启动: {err}"
+            ));
         }
     }
 
@@ -352,8 +360,8 @@ fn prepend_command_path(command: &mut Command, directory: &Path) -> Result<(), S
     if let Some(existing) = std::env::var_os("PATH") {
         paths.extend(std::env::split_paths(&existing));
     }
-    let joined =
-        std::env::join_paths(paths).map_err(|err| format!("无法为受管 Node 设置 PATH: {err}"))?;
+    let joined = std::env::join_paths(paths)
+        .map_err(|err| format!("无法为 Launcher 内置 Node.js 设置 PATH: {err}"))?;
     command.env("PATH", joined);
     Ok(())
 }

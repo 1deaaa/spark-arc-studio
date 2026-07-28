@@ -76,7 +76,7 @@ describe('Launcher 本机后端地址识别', () => {
     'http://localhost:6688',
     'http://127.0.0.1:7788',
     'http://[::1]:6688',
-  ])('识别受管本机地址 %s', (value) => {
+  ])('识别 Launcher 本机地址 %s', (value) => {
     expect(isLauncherLocalBackendUrl(value, [6688, 7788])).toBe(true);
   });
 
@@ -84,7 +84,7 @@ describe('Launcher 本机后端地址识别', () => {
     'https://arc.1dea.top',
     'http://192.168.1.20:6688',
     'http://localhost:9000',
-  ])('保留远程或非受管端口地址 %s', (value) => {
+  ])('保留远程或非 Launcher 端口地址 %s', (value) => {
     expect(isLauncherLocalBackendUrl(value, [6688, 7788])).toBe(false);
   });
 });

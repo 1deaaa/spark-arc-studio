@@ -38,7 +38,7 @@ if not exist "%CLIENT_BUILD_SCRIPT%" (
 
 where node >nul 2>&1
 if errorlevel 1 (
-    echo [ERROR] Node.js was not found. Use Launcher managed deployment or install Node.js 20+.
+    echo [ERROR] Node.js was not found. Use Launcher local deployment or install Node.js 20+.
     pause
     exit /b 1
 )
