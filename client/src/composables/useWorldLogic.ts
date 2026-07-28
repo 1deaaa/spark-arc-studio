@@ -9,6 +9,7 @@ import { createStreamingTask, consumeTextReader, createAbortableEventSource, isA
 import { extractLoglineFromInspiration, shouldRestoreInspirationWorkbenchCache } from '@/utils/inspiration';
 import { i18n } from '@/i18n';
 import { buildCreativeCacheKey, loadCreativeCache, saveCreativeCache } from '@/utils/creativeLocalCache';
+import type { InspirationBindChangedPayload } from '@/services/aiContracts';
 
 // 简单的 debounce 函数
 function debounce<T extends (...args: any[]) => any>(func: T, wait: number): (...args: Parameters<T>) => void {
@@ -143,6 +144,14 @@ export function useWorldLogic() {
         selectedLength.value = safe.selectedLength;
     }
 
+    function clearCurrentInspirationEditor() {
+        museInput.value = '';
+        museResult.value = '';
+        currentInspirationId.value = null;
+        projectStore.currentInspirationId = null;
+        projectStore.currentInspiration = '';
+    }
+
     watch(museResult, (val) => { projectStore.currentInspiration = val; });
 
     watch(
@@ -249,10 +258,7 @@ export function useWorldLogic() {
                 }
             } else {
                 // 仅清空灵感编辑字段，保留已经加载的项目主题参数。
-                museInput.value = '';
-                museResult.value = '';
-                currentInspirationId.value = null;
-                projectStore.currentInspirationId = null;
+                clearCurrentInspirationEditor();
             }
             saveCreativeCache(cacheKey, getWorldSnapshot());
         } else {
@@ -411,6 +417,35 @@ export function useWorldLogic() {
         }
         // 注意：选择历史灵感时不自动绑定到项目
         // 用户可能只是想查看，绑定应该在明确采纳时进行
+        saveCreativeCache(buildWorldCacheKey(), getWorldSnapshot());
+    }
+
+    function handleInspirationBindChanged(payload: InspirationBindChangedPayload) {
+        if (!payload?.projectName || payload.projectName !== projectStore.currentProject) return;
+
+        if (payload.boundId) {
+            if (payload.entry) {
+                handleMuseHistorySelect(payload.entry);
+                projectStore.applyBoundInspiration(payload.entry);
+                return;
+            }
+            if (currentInspirationId.value === payload.boundId) {
+                projectStore.applyBoundInspiration({
+                    id: payload.boundId,
+                    source: museInput.value,
+                    content: museResult.value,
+                });
+                saveCreativeCache(buildWorldCacheKey(), getWorldSnapshot());
+                return;
+            }
+            void projectStore.refreshCurrentProjectInspiration(payload.projectName);
+            return;
+        }
+
+        const previousBoundId = projectStore.boundInspirationId;
+        if (previousBoundId && !(payload.unboundIds || []).includes(previousBoundId)) return;
+        projectStore.applyBoundInspiration(null);
+        clearCurrentInspirationEditor();
         saveCreativeCache(buildWorldCacheKey(), getWorldSnapshot());
     }
 
@@ -668,6 +703,21 @@ export function useWorldLogic() {
 
     async function refreshCurrentInspiration() {
         try {
+            if (projectStore.currentProject) {
+                const projectName = projectStore.currentProject;
+                const bound = await projectStore.refreshCurrentProjectInspiration(projectName);
+                if (projectStore.currentProject !== projectName) return;
+                if (bound) {
+                    handleMuseHistorySelect(bound);
+                    projectStore.applyBoundInspiration(bound);
+                } else {
+                    clearCurrentInspirationEditor();
+                    saveCreativeCache(buildWorldCacheKey(), getWorldSnapshot());
+                }
+                museHistoryRef.value?.refresh?.();
+                return;
+            }
+
             const { inspirations } = await getInspirations() as InspirationsResponse;
             const items = Array.isArray(inspirations) ? inspirations : [];
             const target = currentInspirationId.value
@@ -814,10 +864,12 @@ export function useWorldLogic() {
 
     onBeforeUnmount(() => {
         bus.off('muse-refresh', refreshCurrentInspiration);
+        bus.off('inspiration-bind-changed', handleInspirationBindChanged);
     });
 
     onMounted(() => {
         bus.on('muse-refresh', refreshCurrentInspiration);
+        bus.on('inspiration-bind-changed', handleInspirationBindChanged);
     });
 
     return {

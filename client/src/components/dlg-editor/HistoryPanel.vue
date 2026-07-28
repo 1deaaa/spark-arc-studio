@@ -149,7 +149,12 @@ import {
 } from '../../services/api';
 import { useProjectStore } from '../stores/projectStore';
 import bus from '../../eventBus';
-import type { InspirationEntry, InspirationScope, OutlineHistoryEntry } from '../../services/aiContracts';
+import type {
+  InspirationBindChangedPayload,
+  InspirationEntry,
+  InspirationScope,
+  OutlineHistoryEntry,
+} from '../../services/aiContracts';
 
 type HistoryItem = InspirationEntry | OutlineHistoryEntry;
 type FilterScope = InspirationScope;
@@ -436,6 +441,7 @@ async function toggleBind(item: HistoryItem) {
         boundId: inspiration.id,
         unboundIds,
         projectName,
+        entry: inspiration,
       });
     }
     // 在"当前项目"或"草稿"过滤下，绑定状态变化后需要检查可见性
@@ -523,7 +529,7 @@ onBeforeUnmount(() => {
 // 处理外部触发的绑定状态变化（如 useWorldLogic 中的自动绑定）
 function handleExternalBindChange(payload: unknown) {
   if (props.type !== 'muse') return;
-  const data = payload as { boundId?: string | null; unboundIds?: string[]; projectName?: string };
+  const data = payload as InspirationBindChangedPayload;
   if (!data?.projectName) return;
   
   const projectName = data.projectName;

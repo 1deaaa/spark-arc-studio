@@ -1,4 +1,5 @@
 import mitt from 'mitt';
+import type { InspirationBindChangedPayload } from '@/services/aiContracts';
 
 // 统一应用内事件：
 // 'scene-selected' | 'ai-append-text'
@@ -27,6 +28,7 @@ export type GlobalLoadingPayload = {
 type AppEventMap = {
 	'cancel-loading': CancelLoadingPayload;
 	'global-loading': GlobalLoadingPayload;
+	'inspiration-bind-changed': InspirationBindChangedPayload;
 	[key: string]: unknown;
 };
 
