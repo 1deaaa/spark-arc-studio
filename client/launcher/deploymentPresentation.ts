@@ -1,7 +1,7 @@
 export interface LocalDeploymentPresentationInput {
   isTauriDesktop: boolean;
   serverStatusOk: boolean;
-  localBackendEntryExists: boolean;
+  localBackendReady: boolean;
 }
 
 export interface LocalDeploymentPresentation {
@@ -11,7 +11,7 @@ export interface LocalDeploymentPresentation {
 
 export interface LocalBackendAutoStartInput {
   isTauriDesktop: boolean;
-  localBackendEntryExists: boolean;
+  localBackendReady: boolean;
   localBackendReachable: boolean;
   hasExplicitServerOverride: boolean;
 }
@@ -35,17 +35,17 @@ export function resolveLocalDeploymentPresentation(
 ): LocalDeploymentPresentation {
   const showDeploymentAction = input.isTauriDesktop
     && !input.serverStatusOk
-    && !input.localBackendEntryExists;
+    && !input.localBackendReady;
   return {
     showDeploymentAction,
-    showUpdateAction: input.isTauriDesktop && input.localBackendEntryExists,
+    showUpdateAction: input.isTauriDesktop && input.localBackendReady,
   };
 }
 
 /** 仅自动拉起已经部署的受管后端；显式服务器跳转始终优先。 */
 export function shouldAutoStartLocalBackend(input: LocalBackendAutoStartInput): boolean {
   return input.isTauriDesktop
-    && input.localBackendEntryExists
+    && input.localBackendReady
     && !input.localBackendReachable
     && !input.hasExplicitServerOverride;
 }

@@ -264,7 +264,7 @@
                   <span>{{ t('launcher.autoEnterLabel') }}</span>
                 </label>
                 <button
-                  v-if="isTauriDesktop && localBackendEntryExists"
+                  v-if="isTauriDesktop && localBackendReady"
                   type="button"
                   class="launcher-overlay__text-action"
                   :disabled="serverChecking || localBackendDeploying"
@@ -499,7 +499,7 @@ const remoteOpenError = ref('');
 const showDisclaimer = ref(false);
 const showMobileGuide = ref(false);
 const showDeploymentPanel = ref(false);
-const localBackendEntryExists = ref(false);
+const localBackendReady = ref(false);
 const localBackendDeploying = ref(false);
 const deploymentReady = ref(false);
 const deploymentError = ref('');
@@ -529,7 +529,7 @@ const deploymentStatusText = computed(() => {
 const localDeploymentPresentation = computed(() => resolveLocalDeploymentPresentation({
   isTauriDesktop: isTauriDesktop.value,
   serverStatusOk: serverStatusOk.value,
-  localBackendEntryExists: localBackendEntryExists.value,
+  localBackendReady: localBackendReady.value,
 }));
 
 const localUpdateAvailable = computed(() => deploymentStatus.value?.updateAvailable === true);
@@ -655,10 +655,10 @@ function persistAckPreference() {
   }
 }
 
-async function detectLocalBackendEntry(): Promise<boolean> {
+async function detectLocalBackendReady(): Promise<boolean> {
   if (!isTauriDesktop.value) return false;
   try {
-    return await invoke<boolean>('check_local_backend_entry');
+    return await invoke<boolean>('check_local_backend_ready');
   } catch {
     return false;
   }
@@ -787,7 +787,7 @@ async function startLocalDeployment(applyUpdateOrEvent: boolean | Event = false)
     }
 
     deploymentReady.value = true;
-    localBackendEntryExists.value = true;
+    localBackendReady.value = true;
     void refreshDeploymentStatus();
     setApiBaseUrl(localDetected);
     serverInput.value = localDetected;
@@ -847,16 +847,16 @@ async function checkServerOnLauncherStartup() {
     clearLauncherResume();
   }
 
-  // 提前探测本地后端目录，供免责声明决策使用
-  localBackendEntryExists.value = await detectLocalBackendEntry();
+  // 只有后端与前端都完成基本部署时，才允许启动阶段自动拉起本地服务。
+  localBackendReady.value = await detectLocalBackendReady();
   const initialDeploymentStatus = isTauriDesktop.value
     ? await initializeLocalUpdateState()
     : null;
 
-  // APP 数据目录已被删除时，不沿用 WebView 中残留的本机端口配置。
+  // APP 数据目录尚未完成基本部署时，不沿用 WebView 中残留的本机端口配置。
   if (
     isTauriDesktop.value &&
-    !localBackendEntryExists.value &&
+    !localBackendReady.value &&
     !startupHints?.serverBase &&
     isLauncherLocalBackendUrl(normalizeApiBaseUrl(getApiBaseUrl()), LAUNCHER_LOCAL_PORTS)
   ) {
@@ -866,11 +866,11 @@ async function checkServerOnLauncherStartup() {
   if (startupHints?.serverBase) {
     setApiBaseUrl(startupHints.serverBase);
     serverInput.value = startupHints.serverBase;
-  } else if (localBackendEntryExists.value) {
+  } else if (localBackendReady.value) {
     let localDetected = await detectLocalhandshake();
     if (shouldAutoStartLocalBackend({
       isTauriDesktop: isTauriDesktop.value,
-      localBackendEntryExists: localBackendEntryExists.value,
+      localBackendReady: localBackendReady.value,
       localBackendReachable: !!localDetected,
       hasExplicitServerOverride: !!startupHints?.serverBase,
     })) {
@@ -893,7 +893,7 @@ async function checkServerOnLauncherStartup() {
     // 首次使用默认远端且没有本地后端时，弹免责声明
     if (
       configured === APP_DEFAULT_SERVER &&
-      !localBackendEntryExists.value &&
+      !localBackendReady.value &&
       !readAckPreference()
     ) {
       showDisclaimer.value = true;
@@ -908,7 +908,7 @@ async function checkServerOnLauncherStartup() {
   serverStatusOk.value = true;
   if (
     configured === APP_DEFAULT_SERVER &&
-    !localBackendEntryExists.value &&
+    !localBackendReady.value &&
     !readAckPreference()
   ) {
     showDisclaimer.value = true;

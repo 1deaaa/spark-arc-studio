@@ -10,18 +10,18 @@ describe('Launcher 本地部署入口', () => {
     expect(resolveLocalDeploymentPresentation({
       isTauriDesktop: true,
       serverStatusOk: false,
-      localBackendEntryExists: false,
+      localBackendReady: false,
     })).toEqual({
       showDeploymentAction: true,
       showUpdateAction: false,
     });
   });
 
-  it('已有 Python 入口且服务不可达时隐藏部署入口并保留更新入口', () => {
+  it('本地后端完整部署且服务不可达时隐藏部署入口并保留更新入口', () => {
     expect(resolveLocalDeploymentPresentation({
       isTauriDesktop: true,
       serverStatusOk: false,
-      localBackendEntryExists: true,
+      localBackendReady: true,
     })).toEqual({
       showDeploymentAction: false,
       showUpdateAction: true,
@@ -32,7 +32,7 @@ describe('Launcher 本地部署入口', () => {
     expect(resolveLocalDeploymentPresentation({
       isTauriDesktop: true,
       serverStatusOk: true,
-      localBackendEntryExists: false,
+      localBackendReady: false,
     }).showDeploymentAction).toBe(false);
   });
 
@@ -40,30 +40,30 @@ describe('Launcher 本地部署入口', () => {
     expect(resolveLocalDeploymentPresentation({
       isTauriDesktop: false,
       serverStatusOk: false,
-      localBackendEntryExists: false,
+      localBackendReady: false,
     }).showDeploymentAction).toBe(false);
   });
 });
 
 describe('Launcher 本地后端自动启动', () => {
-  it('桌面端已有 Python 入口但端口未响应时自动启动', () => {
+  it('桌面端本地后端完整部署但端口未响应时自动启动', () => {
     expect(shouldAutoStartLocalBackend({
       isTauriDesktop: true,
-      localBackendEntryExists: true,
+      localBackendReady: true,
       localBackendReachable: false,
       hasExplicitServerOverride: false,
     })).toBe(true);
   });
 
   it.each([
-    { localBackendEntryExists: false },
+    { localBackendReady: false },
     { localBackendReachable: true },
     { hasExplicitServerOverride: true },
     { isTauriDesktop: false },
   ])('不会在条件不满足时自动启动：%o', (override) => {
     expect(shouldAutoStartLocalBackend({
       isTauriDesktop: true,
-      localBackendEntryExists: true,
+      localBackendReady: true,
       localBackendReachable: false,
       hasExplicitServerOverride: false,
       ...override,

@@ -79,6 +79,28 @@
             }
         },
         {
+            "name": "📦 发布 Windows（本地）",
+            "type": "node-terminal",
+            "request": "launch",
+            "command": "npm run tauri:release:windows",
+            "cwd": "${workspaceFolder}/client",
+            "presentation": {
+                "group": "发布",
+                "order": 1
+            }
+        },
+        {
+            "name": "📱 发布 Android（本地）",
+            "type": "node-terminal",
+            "request": "launch",
+            "command": "npm run tauri:release:android",
+            "cwd": "${workspaceFolder}/client",
+            "presentation": {
+                "group": "发布",
+                "order": 2
+            }
+        },
+        {
             "name": "✅ 本地快速 Checks（非 Docker）",
             "type": "node-terminal",
             "request": "launch",

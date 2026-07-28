@@ -69,19 +69,50 @@ fn deploy_log_path() -> Result<PathBuf, String> {
     Ok(sparkarc_user_dir()?.join("deploy.log"))
 }
 
-fn managed_backend_entry_exists(project_root: Option<&Path>) -> bool {
-    project_root.is_some_and(|root| root.join("server").join("app.py").is_file())
+fn managed_backend_is_ready(project_root: Option<&Path>, is_windows: bool) -> bool {
+    project_root.is_some_and(|root| {
+        let server_root = root.join("server");
+        let python_root = server_root.join(".runtime").join("python");
+        let start_script = if is_windows {
+            root.join("start.bat")
+        } else {
+            root.join("start.sh")
+        };
+        let python_executable = if is_windows {
+            python_root.join("python.exe")
+        } else {
+            python_root.join("bin").join("python3")
+        };
+
+        server_root.join("app.py").is_file()
+            && start_script.is_file()
+            && python_executable.is_file()
+            && python_root.join(".deploy_complete").is_file()
+            && root
+                .join("client")
+                .join("dist")
+                .join("index.html")
+                .is_file()
+            && root
+                .join("client")
+                .join(".frontend_build_complete")
+                .is_file()
+    })
 }
 
-/// 命令：检查受管本地后端是否存在 Python 入口。
+/// 命令：检查受管本地后端是否已完成最小可运行部署。
 #[tauri::command]
-fn check_local_backend_entry() -> Result<bool, String> {
+fn check_local_backend_ready() -> Result<bool, String> {
     if is_mobile_runtime() {
         return Ok(false);
     }
 
     let project_root = DeploymentManager::new()?.managed_project_root()?;
-    Ok(managed_backend_entry_exists(project_root.as_deref()))
+    let is_windows = matches!(tauri_plugin_os::type_(), tauri_plugin_os::OsType::Windows);
+    Ok(managed_backend_is_ready(
+        project_root.as_deref(),
+        is_windows,
+    ))
 }
 
 /// 命令：读取部署日志的最后 N 行。
@@ -337,7 +368,7 @@ pub fn run() {
         .invoke_handler(tauri::generate_handler![
             get_launcher_theme_state,
             set_launcher_theme_state,
-            check_local_backend_entry,
+            check_local_backend_ready,
             read_deployment_log,
             start_local_deployment,
             get_deployment_status,
@@ -359,23 +390,85 @@ pub fn run() {
 
 #[cfg(test)]
 mod launcher_window_tests {
-    use super::managed_backend_entry_exists;
+    use super::managed_backend_is_ready;
     use std::fs;
+    use std::path::{Path, PathBuf};
+
+    fn test_root(label: &str) -> PathBuf {
+        PathBuf::from(env!("CARGO_MANIFEST_DIR"))
+            .join("..")
+            .join("..")
+            .join(".tmp")
+            .join("tests")
+            .join("launcher_backend_ready")
+            .join(format!(
+                "{}-{}-{}",
+                label,
+                std::process::id(),
+                chrono::Utc::now().timestamp_nanos_opt().unwrap_or_default()
+            ))
+    }
+
+    fn write_file(path: &Path) {
+        fs::create_dir_all(path.parent().expect("测试文件必须有父目录")).expect("应能创建测试目录");
+        fs::write(path, b"test").expect("应能创建测试文件");
+    }
 
     #[test]
-    fn managed_backend_requires_python_entry() {
-        let root = std::env::temp_dir().join(format!(
-            "sparkarc-launcher-entry-test-{}-{}",
-            std::process::id(),
-            chrono::Utc::now().timestamp_nanos_opt().unwrap_or_default()
-        ));
-        fs::create_dir_all(root.join("server")).expect("应能创建临时服务目录");
+    fn managed_backend_requires_complete_windows_deployment() {
+        let root = test_root("windows");
 
-        assert!(!managed_backend_entry_exists(Some(&root)));
-        fs::write(root.join("server").join("app.py"), b"# test").expect("应能创建临时 Python 入口");
-        assert!(managed_backend_entry_exists(Some(&root)));
-        assert!(!managed_backend_entry_exists(None));
+        write_file(&root.join("server").join("app.py"));
+        write_file(&root.join("start.bat"));
+        assert!(!managed_backend_is_ready(Some(&root), true));
 
+        write_file(
+            &root
+                .join("server")
+                .join(".runtime")
+                .join("python")
+                .join("python.exe"),
+        );
+        write_file(
+            &root
+                .join("server")
+                .join(".runtime")
+                .join("python")
+                .join(".deploy_complete"),
+        );
+        assert!(!managed_backend_is_ready(Some(&root), true));
+
+        write_file(&root.join("client").join("dist").join("index.html"));
+        write_file(&root.join("client").join(".frontend_build_complete"));
+        assert!(managed_backend_is_ready(Some(&root), true));
+        assert!(!managed_backend_is_ready(None, true));
+
+        fs::remove_dir_all(root).expect("应能清理临时服务目录");
+    }
+
+    #[test]
+    fn managed_backend_checks_unix_runtime_layout() {
+        let root = test_root("unix");
+        for path in [
+            root.join("server").join("app.py"),
+            root.join("start.sh"),
+            root.join("server")
+                .join(".runtime")
+                .join("python")
+                .join("bin")
+                .join("python3"),
+            root.join("server")
+                .join(".runtime")
+                .join("python")
+                .join(".deploy_complete"),
+            root.join("client").join("dist").join("index.html"),
+            root.join("client").join(".frontend_build_complete"),
+        ] {
+            write_file(&path);
+        }
+
+        assert!(managed_backend_is_ready(Some(&root), false));
+        assert!(!managed_backend_is_ready(Some(&root), true));
         fs::remove_dir_all(root).expect("应能清理临时服务目录");
     }
 }
