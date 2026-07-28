@@ -48,6 +48,7 @@
           <template #icon><n-icon :component="Play" /></template>
         </n-button>
         <n-button
+          class="mobile-settings-trigger"
           quaternary
           circle
           size="small"

@@ -20,6 +20,8 @@ export default {
         startCta: '进入工作台',
       },
       workspace: {
+        aiSetupTitle: '开始创作前，先把 AI 接通',
+        aiSetupDesc: '平台就像连接 AI 服务商的“插座”，API Key 就像只属于你的“通行证”。先弄懂下面两类平台，遇到额度或连接问题时就知道该去哪里处理。',
         workflowTitle: '先认识完整创作流程',
         workflowDesc: 'SparkArc 把复杂创作拆成一条可反复迭代的工作流。你不必一次做完，也可以随时让 AI 导演协调专家推进下一步。',
         activityBarTitle: '创作导航栏',
@@ -59,18 +61,25 @@ export default {
         production: '在正文工作台完成小说或互动剧本的逐场写作',
         finish: '用蓝图检查结构，通过预览与发布交付作品',
       },
+      aiSetup: {
+        systemPlatform: '“系统平台”是站长为所有用户预先接好的公共渠道，默认使用站长托管的 API Key 与额度。',
+        adminBoundary: '只有管理员能修改系统平台的地址和模型。本地部署时，第一个注册用户自动成为管理员，并可在管理中心授予其他用户管理员权限。',
+        personalOverride: '最重要：若系统平台提示额度不足或不可用，点该平台右侧的编辑按钮，填入你自己的 API Key 并保存。个人 Key 会优先使用，且只对你的账号生效。',
+        customPlatform: '“自定义平台”是你自己的私人渠道，地址、密钥和模型都由你维护。若站长开启锁定模式，你不能新建自定义平台，但仍可用个人 Key 覆盖系统平台。',
+        modelUsage: '平台接通后，到“模型用途”选择各项功能使用的模型。平台负责接通服务，模型用途决定实际调用谁。',
+      },
     },
     pages: {
       chat: {
-        teamTitle: '选择合适的 AI 专家', teamDesc: '顶部可切换导演与各领域专家，并查看任务进度和上下文用量。复杂需求优先交给导演统一调度。',
-        historyTitle: '协作过程完整保留', historyDesc: '正文回复、思考过程与工具调用按时间顺序展示；刷新后也能恢复正在执行的任务。',
+        teamTitle: '按住左上角，选择 AI 专家', teamDesc: '按住左上角的专家按钮打开轮盘，拖向需要的专家即可切换。如果不知道该找谁，直接吩咐导演，他会协调合适的专家。',
+        historyTitle: '任务会在后台继续', historyDesc: '发送任务后无需停留在当前页面，可以去处理自己的事情。回复、思考与工具进度会完整保留，回来或刷新后仍可继续查看。',
         inputTitle: '把目标和素材交给团队', inputDesc: '在这里描述目标，也可导入文件。尽量说明要修改的项目、范围和期望结果。',
       },
       world: {
         seedTitle: '从灵感种子开始', seedDesc: '输入最初的想法，并从历史灵感中继续发展；标签用于约束题材、氛围、视角和篇幅。',
         workshopTitle: '在创意工坊筛选方向', workshopDesc: 'AI 扩展结果可继续编辑、固定到当前项目，或作为生成世界设定的起点。',
         lorebookTitle: '沉淀世界与角色真相', lorebookDesc: '角色、地点、物品和规则都在设定集中统一维护，后续生成会读取这些事实。',
-        toolsTitle: '用专项工具补全设定', toolsDesc: '项目文风、角色与世界生成器用于补齐缺口，不必在一个提示词里完成所有工作。',
+        toolsTitle: '视觉小说生图（早期测试）', toolsDesc: '这里用于配置角色立绘、背景与统一视觉参考。功能尚处于早期测试阶段，当前可能不稳定，请勿依赖它保存关键成果。',
       },
       synopsis: {
         contextTitle: '先写故事命题', contextDesc: 'Logline 说明主角、目标、阻力与赌注；创作指导补充你希望保留或避免的方向。',
@@ -103,8 +112,8 @@ export default {
         projectsTitle: '检查项目与账户状态', projectsDesc: '这里汇总项目、配额和账户信息；管理员还会看到系统级管理数据。',
       },
       settings: {
-        modelsTitle: '设置任务与模型映射', modelsDesc: '为不同用途选择模型，并配置语义检索能力。模型选择会直接影响质量、速度与成本。',
-        platformsTitle: '连接 AI 平台', platformsDesc: '在这里管理平台、密钥和计费方式，连接状态异常时优先检查这一列。',
+        modelsTitle: '为每种用途选择模型', modelsDesc: '平台接通后，在这里决定聊天、写作和其他功能实际调用哪个模型；不确定时先沿用系统默认项。',
+        platformsTitle: '认识系统平台与自定义平台', platformsDesc: '带“系统”标签的是站长配置的公共渠道；带“自定义”标签的是你的私人渠道。额度不足时，先编辑系统平台并填入自己的 API Key。',
         preferencesTitle: '调整工作台偏好', preferencesDesc: '公告、外观、语言和管理配置集中在此；完整新手引导也可从这里重看。',
       },
     },

@@ -210,9 +210,12 @@ watch(() => engine.targetRect.value, async (rect) => {
   position: fixed;
   z-index: 10002;
   box-sizing: border-box;
+  display: flex;
+  flex-direction: column;
   width: min(360px, calc(100vw - 24px));
   min-width: 200px;
   max-width: 360px;
+  max-height: calc(100dvh - 24px);
   background: var(--spark-panel-bg, var(--n-color-modal, #1e1e1e));
   border: 1px solid var(--spark-border);
   border-radius: 12px;
@@ -278,7 +281,10 @@ watch(() => engine.targetRect.value, async (rect) => {
 }
 
 .tooltip-body {
+  min-height: 0;
+  overflow-y: auto;
   margin-bottom: 16px;
+  padding-right: 2px;
 }
 
 .tooltip-title {
