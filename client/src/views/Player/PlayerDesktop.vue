@@ -188,6 +188,7 @@ import PlayerAmbient from './PlayerAmbient.vue';
 import ZhOnlyTag from '@/components/player/shared/ZhOnlyTag.vue';
 import BookNavButton from '@/components/player/shared/BookNavButton.vue';
 import type { NavItem } from '@/components/player/shared/SceneNavPanel.vue';
+import { addVisitedIndex, filterItemsByVisited, normalizeVisitedIndexes } from '@/utils/playerProgress';
 import { ensureAppFontReadyForText, warmupAppFontInBackground } from '@/utils/fontWarmup';
 import { SPARKARC_GITHUB_URL } from '@/config';
 
@@ -198,6 +199,7 @@ type PlayerDataResponse = {
   characters?: Record<string, string>;
   registry?: Record<string, unknown>;
   presentation?: PresentationPayload;
+  show_full_directory?: boolean;
 };
 
 type StoryChoice = {
@@ -233,6 +235,7 @@ type ScriptProgressState = {
   sceneIndex: number;
   dialogueIndex: number;
   updatedAt: number;
+  visitedSceneIndexes: number[];
 };
 
 function normalizeQueryValue(value: unknown): string | null {
@@ -261,7 +264,10 @@ function parseScriptProgress(raw: string | null): ScriptProgressState | null {
     const sceneIndex = Number.isFinite(parsed.sceneIndex) ? Number(parsed.sceneIndex) : 0;
     const dialogueIndex = Number.isFinite(parsed.dialogueIndex) ? Number(parsed.dialogueIndex) : 0;
     const updatedAt = Number.isFinite(parsed.updatedAt) ? Number(parsed.updatedAt) : Date.now();
-    return { sceneIndex, dialogueIndex, updatedAt };
+    const visitedSceneIndexes = Array.isArray(parsed.visitedSceneIndexes)
+      ? parsed.visitedSceneIndexes.filter((value): value is number => Number.isFinite(value))
+      : Array.from({ length: Math.max(0, Math.trunc(sceneIndex)) + 1 }, (_, index) => index);
+    return { sceneIndex, dialogueIndex, updatedAt, visitedSceneIndexes };
   } catch {
     return null;
   }
@@ -322,6 +328,7 @@ const activeSprite = ref<{ url: string; name: string; position: string } | null>
 const contentFormat = ref('script');
 const novelContent = ref('');
 const titleText = ref(t('views.player.desktop.publicContent'));
+const showFullDirectory = ref(true);
 
 // Game State
 const currentSceneIndex = ref(0);
@@ -335,6 +342,7 @@ const showThought = ref(false);
 const titleTimerId = ref<number | null>(null);
 const typingTimerId = ref<number | null>(null);
 const typingJobId = ref(0);
+const visitedSceneIndexes = ref<number[]>([]);
 
 // Computed
 const currentScene = computed(() => {
@@ -343,18 +351,24 @@ const currentScene = computed(() => {
 });
 
 /* --- BookNavButton 场景导航数据 --- */
-const sceneNavItems = computed<NavItem[]>(() =>
+const allSceneNavItems = computed<NavItem[]>(() =>
   storyData.value.map((s, idx) => ({
     id: `scene-${idx}`,
     title: s.scene_name || t('views.player.desktop.untitledScene', { index: idx + 1 }),
   }))
 );
+const sceneNavItems = computed<NavItem[]>(() => filterItemsByVisited(
+  allSceneNavItems.value,
+  visitedSceneIndexes.value,
+  showFullDirectory.value,
+));
 
 const sceneNavCurrentId = computed(() => `scene-${currentSceneIndex.value}`);
 
 function handleSceneNavSelect(item: NavItem) {
   const idx = Number(String(item.id).replace('scene-', ''));
   if (Number.isFinite(idx) && idx >= 0 && idx < storyData.value.length) {
+    markSceneVisited(idx);
     currentSceneIndex.value = idx;
     currentDialogueIndex.value = 0;
     dialogueStack.value = [];
@@ -623,12 +637,26 @@ function clampScriptProgress(progress: ScriptProgressState): ScriptProgressState
     sceneIndex,
     dialogueIndex,
     updatedAt: progress.updatedAt || Date.now(),
+    visitedSceneIndexes: normalizeVisitedIndexes(
+      progress.visitedSceneIndexes,
+      sceneIndex,
+      storyData.value.length,
+    ),
   };
+}
+
+function markSceneVisited(sceneIndex: number) {
+  visitedSceneIndexes.value = addVisitedIndex(
+    visitedSceneIndexes.value,
+    sceneIndex,
+    storyData.value.length,
+  );
 }
 
 function resolveInitialScriptProgress(): ScriptProgressState {
   const querySceneIndex = toOneBasedIndex(normalizeQueryValue(route.query.scene));
   const queryDialogueIndex = toOneBasedIndex(normalizeQueryValue(route.query.dia));
+  const storedProgress = readScriptProgressFromStorage();
 
   const queryProgress: ScriptProgressState | null =
     querySceneIndex !== null || queryDialogueIndex !== null
@@ -636,11 +664,16 @@ function resolveInitialScriptProgress(): ScriptProgressState {
           sceneIndex: querySceneIndex ?? 0,
           dialogueIndex: queryDialogueIndex ?? 0,
           updatedAt: Date.now(),
+          visitedSceneIndexes: storedProgress?.visitedSceneIndexes || [],
         }
       : null;
 
-  const storedProgress = readScriptProgressFromStorage();
-  const base = queryProgress || storedProgress || { sceneIndex: 0, dialogueIndex: 0, updatedAt: Date.now() };
+  const base = queryProgress || storedProgress || {
+    sceneIndex: 0,
+    dialogueIndex: 0,
+    updatedAt: Date.now(),
+    visitedSceneIndexes: [],
+  };
   return clampScriptProgress(base);
 }
 
@@ -677,6 +710,7 @@ function persistScriptProgress() {
     sceneIndex: currentSceneIndex.value,
     dialogueIndex: currentDialogueIndex.value,
     updatedAt: Date.now(),
+    visitedSceneIndexes: visitedSceneIndexes.value,
   });
   writeScriptProgressToStorage(progress);
   syncScriptProgressToQuery(progress);
@@ -700,6 +734,7 @@ async function loadGame() {
     }
     const data = await res.json() as PlayerDataResponse;
     contentFormat.value = data.format || 'script';
+    showFullDirectory.value = data.show_full_directory !== false;
     const presentation = data.presentation || {};
     presentationManifest.value = presentation.manifest || null;
     presentationAssetBaseUrl.value = String(
@@ -730,10 +765,12 @@ async function loadGame() {
 function startGame(initialProgress: ScriptProgressState | null = null) {
   const progress = initialProgress
     ? clampScriptProgress(initialProgress)
-    : { sceneIndex: 0, dialogueIndex: 0, updatedAt: Date.now() };
+    : { sceneIndex: 0, dialogueIndex: 0, updatedAt: Date.now(), visitedSceneIndexes: [] };
 
   currentSceneIndex.value = progress.sceneIndex;
   currentDialogueIndex.value = progress.dialogueIndex;
+  visitedSceneIndexes.value = progress.visitedSceneIndexes;
+  markSceneVisited(progress.sceneIndex);
   dialogueStack.value = [];
   invalidateTypingJob();
   displayedText.value = '';
@@ -877,6 +914,7 @@ function handleChoice(opt: StoryChoice) {
 function nextScene() {
   if (currentSceneIndex.value < storyData.value.length - 1) {
     currentSceneIndex.value++;
+    markSceneVisited(currentSceneIndex.value);
     currentDialogueIndex.value = 0;
     dialogueStack.value = [];
     resetPresentationBackground();
@@ -893,6 +931,7 @@ function jumpToScene(sceneName: string) {
   const idx = storyData.value.findIndex(s => s.scene_name === sceneName);
   if (idx !== -1) {
     currentSceneIndex.value = idx;
+    markSceneVisited(idx);
     currentDialogueIndex.value = 0;
     dialogueStack.value = [];
     resetPresentationBackground();

@@ -41,6 +41,7 @@ vi.mock('@/components/share/AgentAvatar.vue', () => ({
 
 afterEach(() => {
   vi.restoreAllMocks();
+  vi.unstubAllGlobals();
   vi.useRealTimers();
 });
 
@@ -326,6 +327,75 @@ describe('ChatMessageList 深度思考块展开性能契约', () => {
     await wrapper.setProps({ history: makeHistory('第一段\n第二段\n第三段\n第四段') });
 
     expect(queuedFrames).toHaveLength(1);
+  });
+
+  it('Markdown 延迟写入 DOM 后会再次安排贴底，保持最新思考行可见', async () => {
+    vi.useFakeTimers();
+    const queuedFrames: FrameRequestCallback[] = [];
+    vi.spyOn(window, 'requestAnimationFrame').mockImplementation((callback: FrameRequestCallback) => {
+      queuedFrames.push(callback);
+      return queuedFrames.length;
+    });
+
+    let mutationCallback: MutationCallback = () => undefined;
+    const observe = vi.fn();
+    const disconnect = vi.fn();
+    vi.stubGlobal('MutationObserver', class {
+      constructor(callback: MutationCallback) {
+        mutationCallback = callback;
+      }
+      observe = observe;
+      disconnect = disconnect;
+    });
+
+    vi.spyOn(HTMLElement.prototype, 'scrollHeight', 'get').mockImplementation(function getMockScrollHeight(this: HTMLElement) {
+      return this.classList?.contains('reasoning-content') ? 240 : 0;
+    });
+
+    const wrapper = mount(ChatMessageList, {
+      props: {
+        history: [{
+          id: 'assistant-delayed-markdown',
+          role: 'assistant',
+          content: '',
+          segments: [{ type: 'reasoning', text: '流式推理', source_agent: 'agent_director' }],
+        }],
+        sending: true,
+      },
+      global: {
+        plugins: [i18n],
+        stubs: {
+          NButton: true,
+          NTooltip: true,
+          NPopover: defineComponent({ template: '<span><slot name="trigger" /><slot /></span>' }),
+          NInput: true,
+          SparkAlert: true,
+          ContextCompactionSegment: true,
+          ToolTraceSegment: true,
+        },
+      },
+    });
+
+    await nextTick();
+    expect(observe).toHaveBeenCalled();
+
+    while (queuedFrames.length) {
+      queuedFrames.shift()?.(performance.now());
+      await Promise.resolve();
+      await nextTick();
+    }
+
+    const content = wrapper.find('.reasoning-content').element as HTMLElement;
+    content.scrollTop = 0;
+    mutationCallback([], {} as MutationObserver);
+    await nextTick();
+    expect(queuedFrames).toHaveLength(1);
+
+    queuedFrames.shift()?.(performance.now());
+    expect(content.scrollTop).toBe(240);
+
+    wrapper.unmount();
+    expect(disconnect).toHaveBeenCalled();
   });
 
   it('流式思考窗口随内容撑高到五行后保持稳定', async () => {

@@ -31,6 +31,7 @@ import json
 import os
 import queue
 import re
+import threading
 import time
 import uuid
 from typing import Dict, Any, Optional, List
@@ -79,6 +80,50 @@ def is_stop_event_set(stop_event: Any = None) -> bool:
         return bool(is_set())
     except Exception:
         return False
+
+
+class ModelStreamRetryExhaustedError(RuntimeError):
+    """当前模型轮次已完成内部续跑尝试，不允许再从用户消息重放整项任务。"""
+
+
+@dataclasses.dataclass(frozen=True)
+class ModelTurnRetryNotice:
+    """通知调用方丢弃当前失败轮次的临时聚合状态。"""
+
+    attempt: int
+    max_attempts: int
+    error: str
+
+
+def stream_model_turn_with_retry(
+    llm: Any,
+    messages: List[Any],
+    *,
+    stop_event: Any = None,
+    max_attempts: int = 3,
+    retry_delay: float = 1.0,
+):
+    """只重试当前尚未完成的模型轮次，保留调用方已经提交的消息与工具结果。"""
+    last_error: Exception | None = None
+    for attempt in range(1, max_attempts + 1):
+        try:
+            yield from llm.stream(messages)
+            return
+        except Exception as exc:
+            if is_stop_event_set(stop_event):
+                return
+            last_error = exc
+            if attempt >= max_attempts:
+                break
+            yield ModelTurnRetryNotice(attempt=attempt, max_attempts=max_attempts, error=str(exc))
+            if retry_delay > 0:
+                waiter = getattr(stop_event, "wait", None)
+                if callable(waiter):
+                    if waiter(retry_delay):
+                        return
+                else:
+                    threading.Event().wait(retry_delay)
+    raise ModelStreamRetryExhaustedError(str(last_error or "模型流异常中断")) from last_error
 
 
 from llm.agen_matchbox.reasoning_compat import (
@@ -1433,7 +1478,26 @@ class SparkBaseAgent:
                 tool_chunk_buffers: Dict[int, Dict[str, Any]] = {}
                 stream_reasoning_adapter = MessageEventStreamReasoningAdapter()
 
-                for chunk in stream_llm.stream(messages):
+                for chunk in stream_model_turn_with_retry(
+                    stream_llm,
+                    messages,
+                    stop_event=stop_event,
+                ):
+                    if isinstance(chunk, ModelTurnRetryNotice):
+                        aggregated_chunk = None
+                        started_tools = set()
+                        tool_intent_keys = {}
+                        tool_chunk_buffers = {}
+                        stream_reasoning_adapter = MessageEventStreamReasoningAdapter()
+                        yield {
+                            "event": "retry_attempt",
+                            "attempt": chunk.attempt,
+                            "max_retries": chunk.max_attempts,
+                            "error_summary": chunk.error,
+                            "retry_scope": "model_turn",
+                            "source_agent": self.agent_id,
+                        }
+                        continue
                     if is_stop_event_set(stop_event):
                         return
 
@@ -1655,7 +1719,11 @@ class SparkBaseAgent:
             if isinstance(e, NonRetryableChatError):
                 yield e.to_event()
                 return
-            yield {"event": "error", "data": format_ai_error(e)}
+            yield {
+                "event": "error",
+                "data": format_ai_error(e),
+                "retryable": not isinstance(e, ModelStreamRetryExhaustedError),
+            }
 
 
 class CommunicationContext:

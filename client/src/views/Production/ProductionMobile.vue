@@ -2,55 +2,44 @@
   <div class="production-mobile">
     <GlobalLoading scope="production" />
 
-    <!-- 场景详情视图 -->
-    <template v-if="viewMode === 'detail' && (currentScene || isNovelMode)">
-      <div class="detail-header">
-        <n-button quaternary circle size="small" @click="viewMode = 'list'">
-          <template #icon><n-icon :component="ArrowLeft" /></template>
-        </n-button>
-        <span class="detail-title">{{ isNovelMode ? (fileStore.selectedFile?.name || t('views.production.mobile.selectStoryFile')) : (currentScene?.scene || t('views.production.mobile.sceneDefaultName', { index: 1 })) }}</span>
-        <n-button v-if="!isNovelMode" quaternary circle size="small" @click="showSceneMetaDrawer = true">
-          <template #icon><n-icon :component="SquarePen" /></template>
-        </n-button>
-      </div>
-
-      <!-- 剧情阅读区 -->
-      <div class="detail-content">
-        <DialogueTree v-if="workspaceMode === 'script'" />
-        <NovelReader v-else :content="typeof sceneStore.scriptData === 'string' ? sceneStore.scriptData : ''" />
-      </div>
-
-      <!-- 底部创作工具栏（仅剧本模式） -->
-      <div v-if="!isNovelMode" class="detail-bottom-actions">
-        <n-button quaternary @click="showNodeEditor = true" :disabled="!sceneStore.selectionType">
-          <template #icon><n-icon :component="Pencil" /></template>
-          {{ t('views.production.mobile.editNode') }}
-        </n-button>
-        <n-button quaternary @click="showRuntimeTestDrawer = true" :disabled="!currentScene">
-          <template #icon><n-icon :component="RadioTower" /></template>
-          {{ t('views.production.mobile.triggerTest') }}
-        </n-button>
-        <n-button type="primary" @click="showAiDrawer = true" :disabled="!currentScene">
-          <template #icon><n-icon :component="Sparkles" /></template>
-          {{ t('views.production.mobile.sceneGeneration') }}
-        </n-button>
-      </div>
-
-    </template>
-
-    <!-- 场景列表视图 -->
-    <template v-else>
-      <n-spin :show="loading" class="production-list-state">
-        <header class="workbench-context-bar">
-          <div class="file-selector-row">
-            <n-select
-              v-model:value="selectedFilePath"
-              :options="groupedStoryOptions"
-              :placeholder="t('views.production.mobile.selectStoryFile')"
-              size="small"
-              clearable
-              @update:value="handleFileChange"
-            />
+    <n-spin :show="loading" class="production-editor-state">
+      <header class="workbench-context-bar">
+        <div class="file-selector-row">
+          <n-select
+            v-model:value="selectedFilePath"
+            :options="groupedStoryOptions"
+            :placeholder="t('views.production.mobile.selectStoryFile')"
+            size="small"
+            clearable
+            @update:value="handleFileChange"
+          />
+          <div class="file-actions">
+            <n-button
+              v-if="!isNovelMode"
+              quaternary
+              circle
+              :disabled="!currentScene"
+              :aria-label="t('views.production.mobile.sceneInfo')"
+              @click="showSceneMetaDrawer = true"
+            >
+              <template #icon><n-icon :component="SquarePen" /></template>
+            </n-button>
+            <n-dropdown
+              trigger="click"
+              :options="createOptions"
+              :disabled="!projectId || creatingFile"
+              @select="handleCreate"
+            >
+              <n-button
+                quaternary
+                circle
+                :loading="creatingFile"
+                :disabled="!projectId"
+                :aria-label="t('views.production.mobile.create')"
+              >
+                <template #icon><n-icon :component="Plus" /></template>
+              </n-button>
+            </n-dropdown>
             <n-dropdown
               v-if="isNovelMode"
               trigger="click"
@@ -69,70 +58,34 @@
               </n-button>
             </n-dropdown>
           </div>
-          <div class="workbench-status-line">
-            <span>
-              <n-icon :component="Layers3" size="14" />
-              {{ t('views.production.mobile.sceneQueueCount', { count: isNovelMode ? (selectedFilePath ? 1 : 0) : scenes.length }) }}
-            </span>
-            <span :class="{ 'is-warning': !outlineReady }">
-              <n-icon :component="outlineReady ? CircleCheck : CircleAlert" size="14" />
-              {{ outlineReady ? t('views.production.mobile.outlineReady') : t('views.production.mobile.outlineMissing') }}
-            </span>
-          </div>
-        </header>
-
-        <div v-if="scenes.length > 0" class="scene-list-heading">
-          <strong>{{ t('views.production.mobile.sceneQueue') }}</strong>
-          <span>{{ scenes.length }}</span>
         </div>
+      </header>
 
-        <!-- 场景队列 -->
-        <div v-if="scenes.length > 0" class="scene-list">
-          <button
-            v-for="{ scene: s, summary, index: idx } in sceneCards"
-            :key="String(s.clientId ?? idx)"
-            type="button"
-            class="scene-card"
-            :class="{ 'is-active': currentScene?.clientId === s.clientId }"
-            @click="enterSceneDetail(s)"
-          >
-            <span class="scene-card-index">{{ idx + 1 }}</span>
-            <span class="scene-card-body">
-              <span class="scene-card-header">
-                <span class="scene-card-name">{{ s.scene || t('views.production.mobile.sceneDefaultName', { index: idx + 1 }) }}</span>
-                <SparkTag :type="contentKindTagType(summary.kind)" size="small">{{ contentKindLabel(summary.kind) }}</SparkTag>
-              </span>
-              <span class="scene-card-intro">
-                {{ s.intro || s.guide || t('views.production.mobile.noSceneSummary') }}
-              </span>
-              <span class="scene-card-meta-line">
-                <span>{{ s.dia?.length || 0 }} {{ t('views.production.mobile.dialogueCount') }}</span>
-                <span v-if="runtimeMetaLine(summary)">{{ runtimeMetaLine(summary) }}</span>
-              </span>
-            </span>
-            <n-icon :component="ChevronRight" size="17" class="scene-card-chevron" />
-          </button>
-        </div>
+      <div v-if="selectedFilePath" class="detail-content">
+        <DialogueTree v-if="workspaceMode === 'script'" />
+        <NovelReader v-else :content="typeof sceneStore.scriptData === 'string' ? sceneStore.scriptData : ''" />
+      </div>
 
-        <!-- 空状态 -->
-        <div v-else-if="!loading" class="empty-state">
-          <n-icon :component="Clapperboard" size="40" class="empty-icon" />
-          <p class="empty-text">{{ isNovelMode ? t('views.production.mobile.fileSceneHintNovel') : t('views.production.mobile.fileSceneHintScript') }}</p>
-        </div>
+      <div v-else-if="!loading" class="empty-state">
+        <n-icon :component="isNovelMode ? BookOpen : Clapperboard" size="40" class="empty-icon" />
+        <p class="empty-text">{{ t('views.production.mobile.selectOrCreateFile') }}</p>
+      </div>
 
-        <footer class="workbench-bottom-actions">
-          <n-button secondary @click="createScene" :disabled="!selectedFilePath">
-            <template #icon><n-icon :component="isNovelMode ? BookOpen : Plus" /></template>
-            {{ isNovelMode ? t('views.production.mobile.openNovelEditor') : t('views.production.mobile.createSceneScript') }}
-          </n-button>
-          <n-button type="primary" :disabled="!selectedFilePath || !outlineReady" @click="openAutoWrite">
-            <template #icon><n-icon :component="Sparkles" /></template>
-            {{ t('views.production.mobile.autoGeneration') }}
-          </n-button>
-        </footer>
-
-      </n-spin>
-    </template>
+      <div v-if="!isNovelMode && selectedFilePath" class="detail-bottom-actions">
+        <n-button quaternary @click="showNodeEditor = true" :disabled="!sceneStore.selectionType">
+          <template #icon><n-icon :component="Pencil" /></template>
+          {{ t('views.production.mobile.editNode') }}
+        </n-button>
+        <n-button quaternary @click="showRuntimeTestDrawer = true" :disabled="!currentScene">
+          <template #icon><n-icon :component="RadioTower" /></template>
+          {{ t('views.production.mobile.triggerTest') }}
+        </n-button>
+        <n-button type="primary" @click="showAiDrawer = true" :disabled="!currentScene">
+          <template #icon><n-icon :component="Sparkles" /></template>
+          {{ t('views.production.mobile.sceneGeneration') }}
+        </n-button>
+      </div>
+    </n-spin>
 
     <!-- 场景信息编辑抽屉 -->
     <n-drawer v-model:show="showSceneMetaDrawer" placement="bottom" height="80%">
@@ -267,11 +220,9 @@
 import { ref, computed, h, onMounted, onUnmounted, inject, watch, type Ref } from 'vue';
 import { NIcon, NSpin, NButton, NInput, NInputNumber, NSelect, NDrawer, NDrawerContent, NTabs, NTabPane, NSwitch, NDropdown, useMessage, type DropdownOption } from 'naive-ui';
 import { useI18n } from 'vue-i18n';
-import { ArrowLeft, BookOpen, ChevronRight, CircleAlert, CircleCheck, Clapperboard, Clipboard, Layers3, Pencil, Plus, RadioTower, Send, Sparkles, SquarePen } from '@lucide/vue';
-import { useSceneStore, type SceneWithClientId } from '../../components/stores/sceneStore';
+import { BookOpen, Clapperboard, Clipboard, FilePlus2, FolderPlus, Pencil, Plus, RadioTower, Send, Sparkles, SquarePen } from '@lucide/vue';
+import { useSceneStore } from '../../components/stores/sceneStore';
 import { useFileStore } from '../../components/stores/fileStore';
-import { getOutline } from '../../services/api';
-import type { OutlineData } from '../../services/aiContracts';
 import GlobalLoading from '../../components/share/GlobalLoading.vue';
 import AiPanel from '../../components/dlg-editor/AiPanel.vue';
 import DialogueTree from '../../components/dlg-editor/DialogueTree.vue';
@@ -282,7 +233,7 @@ import MobileTextArea from '../../components/editors/mobile/MobileTextArea.vue';
 import ConditionsEditor from '../../components/dlg-editor/ConditionsEditor.vue';
 import EffectsEditor from '../../components/dlg-editor/EffectsEditor.vue';
 import { useStoryFileOptions } from '../../composables/useStoryFileOptions';
-import { getSceneRuntimeSummary, type SceneContentKind, type SceneRuntimeSummary } from '../../utils/sceneContentRuntime';
+import { getSceneRuntimeSummary, type SceneContentKind } from '../../utils/sceneContentRuntime';
 import {
   NOVEL_SUBMISSION_PLATFORMS,
   downloadNovelSubmissionExport,
@@ -305,25 +256,39 @@ const fileStore = useFileStore();
 const projectId = inject<Ref<string | null>>('projectId', ref<string | null>(null));
 
 const loading = ref(false);
-const outlineData = ref<OutlineData | null>(null);
 const showSceneMetaDrawer = ref(false);
 const showRuntimeTestDrawer = ref(false);
 const showAiDrawer = ref(false);
 const showNodeEditor = ref(false);
 const selectedFilePath = ref('');
-const viewMode = ref<'list' | 'detail'>('list');
 const showRuntimeFields = false;
 
-const scenes = computed<SceneWithClientId[]>(() => Array.isArray(sceneStore.scriptData) ? sceneStore.scriptData : []);
-const sceneCards = computed(() => scenes.value.map((scene, index) => ({
-  scene,
-  index,
-  summary: getSceneRuntimeSummary(scene),
-})));
 const currentScene = computed(() => sceneStore.currentScene);
 const workspaceMode = computed(() => sceneStore.workspaceMode || 'script');
 const isNovelMode = computed(() => workspaceMode.value === 'novel');
+const creatingFile = ref(false);
 const exportingSubmission = ref(false);
+const createOptions = computed<DropdownOption[]>(() => {
+  if (isNovelMode.value) {
+    return [{
+      key: 'chapter',
+      label: t('views.production.mobile.createChapter'),
+      icon: () => h(NIcon, null, { default: () => h(FilePlus2) }),
+    }];
+  }
+  return [
+    {
+      key: 'scene',
+      label: t('views.production.mobile.createScene'),
+      icon: () => h(NIcon, null, { default: () => h(FilePlus2) }),
+    },
+    {
+      key: 'chapter',
+      label: t('views.production.mobile.createChapter'),
+      icon: () => h(NIcon, null, { default: () => h(FolderPlus) }),
+    },
+  ];
+});
 const submissionExportOptions = computed<DropdownOption[]>(() => (
   NOVEL_SUBMISSION_PLATFORMS.map(platform => ({
     key: platform,
@@ -352,7 +317,6 @@ const storyOptions = computed<SelectOption[]>(() => flatStoryOptions.value);
 
 const groupedStoryOptions = computed(() => groupedOptions.value);
 
-const outlineReady = computed(() => !!outlineData.value?.nodes?.length);
 const currentRuntimeSummary = computed(() => getSceneRuntimeSummary(currentScene.value));
 
 const runtimeTestHint = computed(() => {
@@ -388,15 +352,6 @@ function contentKindTagType(kind: SceneContentKind): SparkTagType {
   return 'danger';
 }
 
-function runtimeMetaLine(summary: SceneRuntimeSummary) {
-  const parts: string[] = [];
-  if (summary.triggerEvent) parts.push(t('views.production.mobile.runtimeCardEvent', { value: summary.triggerEvent }));
-  else if (summary.buttonText) parts.push(t('views.production.mobile.runtimeCardButton', { value: summary.buttonText }));
-  if (summary.priority > 0) parts.push(t('views.production.mobile.runtimeCardPriority', { value: summary.priority }));
-  if (summary.conditionCount > 0) parts.push(t('views.production.mobile.runtimeCardConditions', { count: summary.conditionCount }));
-  return parts.join(' · ');
-}
-
 async function copyRuntimeTriggerEvent() {
   const value = currentRuntimeSummary.value.triggerEvent;
   if (!value) return;
@@ -430,15 +385,6 @@ async function handleSubmissionExport(key: string | number) {
   }
 }
 
-async function loadOutline() {
-  if (!projectId.value) return;
-  try {
-    outlineData.value = await getOutline(projectId.value);
-  } catch {
-    outlineData.value = null;
-  }
-}
-
 async function loadFiles() {
   if (!projectId.value) return;
   loading.value = true;
@@ -453,30 +399,40 @@ async function handleFileChange(val: string | null) {
   if (!val || !projectId.value) return;
   await fileStore.setCurrentFile(projectId.value, val);
   selectedFilePath.value = val;
-  // 小说模式选中文件后直接进入编辑器
-  if (isNovelMode.value) {
-    viewMode.value = 'detail';
-  }
 }
 
-function enterSceneDetail(s: SceneWithClientId) {
-  sceneStore.selectScene(s);
-  hydrateSceneForm();
-  viewMode.value = 'detail';
+function currentParentDir() {
+  const path = selectedFilePath.value || fileStore.selectedFile?.path || '';
+  const parts = String(path).split('/');
+  parts.pop();
+  return parts.join('/');
 }
 
-async function createScene() {
-  if (!selectedFilePath.value) return;
-  // 小说模式是连续正文，不支持新建场景节点；直接进入编辑器
-  if (isNovelMode.value) {
-    viewMode.value = 'detail';
-    return;
-  }
-  const opts = { title: t('views.production.mobile.createSceneScript'), message: t('components.fileExplorer.promptMessageStoryNovel') };
-  const scene = await sceneStore.createNewScene(opts);
-  if (scene) {
-    hydrateSceneForm();
-    viewMode.value = 'detail';
+async function handleCreate(key: string | number) {
+  if (!projectId.value || creatingFile.value) return;
+  creatingFile.value = true;
+  try {
+    const isChapterFolder = key === 'chapter' && !isNovelMode.value;
+    const type = isChapterFolder ? 'folder' : 'story';
+    const parentDir = isChapterFolder ? '' : currentParentDir();
+    const title = isChapterFolder
+      ? t('views.production.mobile.createChapter')
+      : isNovelMode.value
+        ? t('views.production.mobile.createChapter')
+        : t('views.production.mobile.createScene');
+    const promptMessage = isChapterFolder
+      ? t('views.production.mobile.createChapterPrompt')
+      : isNovelMode.value
+        ? t('components.fileExplorer.promptMessageStoryNovel')
+        : t('views.production.mobile.createScenePrompt');
+    const createdPath = await fileStore.createFile(type, parentDir, { title, message: promptMessage });
+    if (createdPath && type === 'story') {
+      await fileStore.setCurrentFile(projectId.value, createdPath);
+      selectedFilePath.value = createdPath;
+      hydrateSceneForm();
+    }
+  } finally {
+    creatingFile.value = false;
   }
 }
 
@@ -525,19 +481,11 @@ function syncSceneMeta() {
   });
 }
 
-function openAutoWrite() {
-  bus.emit('open-auto-write-setup');
-}
-
 onMounted(async () => {
+  bus.emit('mobile-flow-immersive', true);
   await loadFiles();
-  await loadOutline();
   if (fileStore.selectedFile?.path) {
     selectedFilePath.value = fileStore.selectedFile.path;
-    // 小说模式下自动进入编辑器
-    if (isNovelMode.value) {
-      viewMode.value = 'detail';
-    }
   } else if (storyOptions.value[0]?.value) {
     selectedFilePath.value = storyOptions.value[0].value;
     await handleFileChange(selectedFilePath.value);
@@ -546,15 +494,10 @@ onMounted(async () => {
 
 watch(projectId, async () => {
   await loadFiles();
-  await loadOutline();
 });
 
 watch(() => fileStore.selectedFile?.path, (val) => {
   if (val) selectedFilePath.value = val;
-  // 小说模式下切换文件后自动进入编辑器
-  if (val && isNovelMode.value) {
-    viewMode.value = 'detail';
-  }
 });
 
 watch(currentScene, () => {
@@ -568,11 +511,6 @@ watch(
   },
   { deep: true },
 );
-
-// 进入场景详情（沉浸阅读）时通知外层隐藏右侧步骤导航，避免下滑误触跳走工作流
-watch(viewMode, (mode) => {
-  bus.emit('mobile-flow-immersive', mode === 'detail');
-});
 
 onUnmounted(() => {
   // 组件卸载时务必复位，防止离开创作页后导航仍处于隐藏态
@@ -590,18 +528,18 @@ onUnmounted(() => {
   overflow: hidden;
 }
 
-.production-list-state {
+.production-editor-state {
   flex: 1;
   min-height: 0;
 }
 
-.production-list-state :deep(.n-spin-container),
-.production-list-state :deep(.n-spin-content) {
+.production-editor-state :deep(.n-spin-container),
+.production-editor-state :deep(.n-spin-content) {
   height: 100%;
   min-height: 0;
 }
 
-.production-list-state :deep(.n-spin-content) {
+.production-editor-state :deep(.n-spin-content) {
   display: flex;
   flex-direction: column;
 }
@@ -610,8 +548,7 @@ onUnmounted(() => {
   flex: 0 0 auto;
   display: flex;
   flex-direction: column;
-  gap: 7px;
-  padding: 2px 2px 9px;
+  padding: 2px 2px 8px;
   border-bottom: 1px solid var(--spark-border);
 }
 
@@ -622,162 +559,10 @@ onUnmounted(() => {
   gap: 6px;
 }
 
-.workbench-status-line {
+.file-actions {
   display: flex;
   align-items: center;
-  justify-content: space-between;
-  gap: 8px;
-  color: var(--spark-text-muted);
-  font-size: var(--spark-fs-xs);
-}
-
-.workbench-status-line span {
-  min-width: 0;
-  display: inline-flex;
-  align-items: center;
-  gap: 5px;
-}
-
-.workbench-status-line .is-warning {
-  color: var(--spark-warning);
-}
-
-.scene-list-heading {
-  flex: 0 0 auto;
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  padding: 9px 4px 5px;
-  color: var(--spark-text-secondary);
-  font-size: var(--spark-fs-sm);
-}
-
-.scene-list-heading span {
-  color: var(--spark-text-muted);
-  font-size: var(--spark-fs-xs);
-}
-
-/* 场景队列 */
-.scene-list {
-  flex: 1;
-  min-height: 0;
-  overflow-y: auto;
-  overscroll-behavior: contain;
-  padding-bottom: 6px;
-}
-
-.scene-card {
-  width: 100%;
-  min-height: 76px;
-  display: grid;
-  grid-template-columns: 30px minmax(0, 1fr) auto;
-  align-items: center;
-  gap: 10px;
-  padding: 9px 5px;
-  background: transparent;
-  border: 0;
-  border-bottom: 1px solid color-mix(in srgb, var(--spark-border) 72%, transparent);
-  color: inherit;
-  text-align: left;
-  font: inherit;
-  cursor: pointer;
-  -webkit-tap-highlight-color: transparent;
-}
-
-.scene-card:active {
-  background: color-mix(in srgb, var(--spark-primary) 7%, transparent);
-}
-
-.scene-card.is-active {
-  background: color-mix(in srgb, var(--spark-primary) 6%, transparent);
-}
-
-.scene-card-index {
-  width: 28px;
-  height: 28px;
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
-  border-radius: 6px;
-  background: var(--spark-primary-dim);
-  color: var(--spark-primary);
-  font-size: var(--spark-fs-xs);
-  font-weight: 700;
-}
-
-.scene-card-body {
-  min-width: 0;
-  display: flex;
-  flex-direction: column;
-  gap: 3px;
-}
-
-.scene-card-header {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  gap: 6px;
-}
-
-.scene-card-name {
-  min-width: 0;
-  flex: 1;
-  font-size: var(--spark-fs-base);
-  font-weight: 650;
-  color: var(--spark-text);
-  white-space: nowrap;
-  overflow: hidden;
-  text-overflow: ellipsis;
-}
-
-.scene-card-intro {
-  display: block;
-  overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
-  font-size: var(--spark-fs-xs);
-  color: var(--spark-text-secondary);
-}
-
-.scene-card-meta-line {
-  display: flex;
-  align-items: center;
-  gap: 8px;
-  min-width: 0;
-  font-size: var(--spark-fs-xs);
-  color: var(--spark-text-muted);
-}
-
-.scene-card-meta-line span {
-  min-width: 0;
-  overflow: hidden;
-  white-space: nowrap;
-  text-overflow: ellipsis;
-}
-
-.scene-card-chevron {
-  color: var(--spark-text-muted);
-}
-
-.workbench-bottom-actions {
-  flex: 0 0 auto;
-  display: grid;
-  grid-template-columns: repeat(2, minmax(0, 1fr));
-  gap: 8px;
-  padding: 9px 0 calc(var(--sab, 0px) + 2px);
-  border-top: 1px solid var(--spark-border);
-  background: var(--spark-bg);
-}
-
-.workbench-bottom-actions :deep(.n-button) {
-  min-width: 0;
-}
-
-.workbench-bottom-actions :deep(.n-button__content) {
-  min-width: 0;
-  overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
+  gap: 2px;
 }
 
 /* 空状态 */
@@ -803,31 +588,12 @@ onUnmounted(() => {
   margin: 0;
 }
 
-/* 场景详情视图 */
-.detail-header {
-  display: flex;
-  align-items: center;
-  gap: 8px;
-  padding: 8px 0;
-  margin-bottom: 8px;
-  border-bottom: 1px solid var(--spark-border);
-}
-
-.detail-title {
-  flex: 1;
-  font-size: var(--spark-fs-lg);
-  font-weight: 600;
-  color: var(--spark-text);
-  white-space: nowrap;
-  overflow: hidden;
-  text-overflow: ellipsis;
-}
-
 .detail-content {
   flex: 1;
   min-height: 0;
   overflow-y: auto;
   -webkit-overflow-scrolling: touch;
+  margin-top: 8px;
   border: 1px solid var(--spark-border);
   border-radius: 6px;
   background: var(--spark-panel-bg);

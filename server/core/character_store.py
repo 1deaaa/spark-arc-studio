@@ -135,6 +135,36 @@ def replace_regular_characters(user_id: str, project_name: str, characters: list
     return len(characters)
 
 
+def upsert_regular_characters(user_id: str, project_name: str, characters: list[tuple[str, str]]) -> tuple[int, int]:
+    """按角色名原子更新一批普通角色，并为新角色分配稳定 ID。"""
+    with _STORE_LOCK:
+        records = read_character_records(user_id, project_name)
+        name_to_id = {
+            str(record.get("name") or "").strip(): character_id
+            for character_id, record in records.items()
+            if int(character_id) >= 0
+        }
+        next_id = next_character_id(records)
+        created = 0
+        updated = 0
+        for name, content in characters:
+            normalized_name = str(name).strip()
+            character_id = name_to_id.get(normalized_name)
+            if character_id is None:
+                character_id = str(next_id)
+                next_id += 1
+                name_to_id[normalized_name] = character_id
+                created += 1
+            else:
+                updated += 1
+            records[character_id] = {
+                "name": normalized_name,
+                "content": str(content or "").strip(),
+            }
+        write_character_records(user_id, project_name, records)
+        return created, updated
+
+
 def reset_regular_characters(user_id: str, project_name: str) -> None:
     write_character_records(user_id, project_name, _system_records())
 

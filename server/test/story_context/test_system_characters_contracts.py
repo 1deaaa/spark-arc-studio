@@ -101,6 +101,28 @@ def test_character_crud_keeps_a_single_physical_file(monkeypatch, tmp_path: Path
     assert os.listdir(chr_dir) == ["characters.json"]
 
 
+def test_character_batch_upsert_keeps_previous_batches_and_updates_by_name(monkeypatch, tmp_path: Path) -> None:
+    monkeypatch.setattr("core.utils.USERDATA_ROOT", str(tmp_path))
+
+    from core.character_store import (
+        read_character_records,
+        replace_regular_characters,
+        upsert_regular_characters,
+    )
+
+    replace_regular_characters("8", "batch-demo", [("沈棠", "旧档案"), ("林烬", "调查员")])
+    created, updated = upsert_regular_characters(
+        "8",
+        "batch-demo",
+        [("沈棠", "新档案"), ("周遥", "记者")],
+    )
+
+    records = read_character_records("8", "batch-demo")
+    regular = {record["name"]: record["content"] for cid, record in records.items() if int(cid) >= 0}
+    assert (created, updated) == (1, 1)
+    assert regular == {"沈棠": "新档案", "林烬": "调查员", "周遥": "记者"}
+
+
 def test_semantic_collection_expands_character_records(monkeypatch, tmp_path: Path) -> None:
     monkeypatch.setattr("core.utils.USERDATA_ROOT", str(tmp_path))
 

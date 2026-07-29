@@ -21,9 +21,12 @@ from agents.communication import (
     HANDOFF_CONFIRMATION_NOT_REQUIRED,
     HANDOFF_DELIVERY_DIRECT_TO_USER,
     HANDOFF_DELIVERY_RETURN_TO_DIRECTOR,
+    ModelStreamRetryExhaustedError,
+    ModelTurnRetryNotice,
     build_tool_stream_event,
     get_global_context,
     is_stop_event_set,
+    stream_model_turn_with_retry,
     normalize_handoff_payload,
     normalize_tool_name,
     set_tool_event_sink,
@@ -457,7 +460,29 @@ def director_node(state: DirectorState) -> Dict[str, Any]:
     
     adapter = MessageEventStreamReasoningAdapter()
     
-    for chunk in stream_llm.stream(messages_with_system):
+    for chunk in stream_model_turn_with_retry(
+        stream_llm,
+        messages_with_system,
+        stop_event=stop_event,
+    ):
+        if isinstance(chunk, ModelTurnRetryNotice):
+            aggregated_chunk = None
+            tool_chunk_buffers = {}
+            started_tools = set()
+            tool_intent_keys = {}
+            adapter = MessageEventStreamReasoningAdapter()
+            evt = {
+                "event": "retry_attempt",
+                "attempt": chunk.attempt,
+                "max_retries": chunk.max_attempts,
+                "error_summary": chunk.error,
+                "retry_scope": "model_turn",
+                "source_agent": "agent_director",
+            }
+            if writer:
+                writer(evt)
+            stream_events.append(evt)
+            continue
         if is_stop_event_set(stop_event):
             return {
                 "messages": [],
@@ -898,6 +923,9 @@ def sub_agent_node(state: DirectorState) -> Dict[str, Any]:
                 if event_type == "assistant_delta":
                     if not (suppress_scriptwriter_draft and not scriptwriter_saved):
                         buf.append(delta.get("text", ""))
+                elif event_type == "error" and delta.get("retryable") is False:
+                    error_text = str(delta.get("message") or delta.get("data") or "子 Agent 模型流异常中断")
+                    raise ModelStreamRetryExhaustedError(error_text)
             elif isinstance(delta, str):
                 if not suppress_scriptwriter_draft or scriptwriter_saved:
                     if writer: writer({"event": "assistant_delta", "text": delta,
@@ -1171,4 +1199,8 @@ def run_director_stream(
         import traceback
         traceback.print_exc()
         from agents.routes.schemas import format_ai_error
-        yield {"event": "error", "data": format_ai_error(e)}
+        yield {
+            "event": "error",
+            "data": format_ai_error(e),
+            "retryable": not isinstance(e, ModelStreamRetryExhaustedError),
+        }

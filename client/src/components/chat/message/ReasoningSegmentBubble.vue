@@ -56,7 +56,7 @@
 </template>
 
 <script setup lang="ts">
-import { computed, nextTick, onBeforeUnmount, ref, watch } from 'vue';
+import { computed, nextTick, onBeforeUnmount, onMounted, ref, watch } from 'vue';
 import { useI18n } from 'vue-i18n';
 import AgentAvatar from '@/components/share/AgentAvatar.vue';
 import MarkdownRenderer from '@/components/share/MarkdownRenderer.vue';
@@ -98,6 +98,8 @@ const layoutVersion = ref(0);
 let animationTimer = 0;
 let streamingLayoutRaf = 0;
 let streamingLayoutQueued = false;
+let contentMutationObserver: MutationObserver | null = null;
+let contentResizeObserver: ResizeObserver | null = null;
 
 const avatarAriaLabel = computed(() => `${props.agentName} (${t('components.chatMessageList.thinking')})`);
 const panelStyle = computed(() => ({
@@ -327,6 +329,29 @@ function scheduleStreamingLayout() {
   });
 }
 
+function observeStreamingContent() {
+  const content = contentRef.value;
+  if (!content) return;
+
+  if (typeof MutationObserver !== 'undefined') {
+    contentMutationObserver = new MutationObserver(() => {
+      if (props.streaming) scheduleStreamingLayout();
+    });
+    contentMutationObserver.observe(content, {
+      childList: true,
+      characterData: true,
+      subtree: true,
+    });
+  }
+
+  if (typeof ResizeObserver !== 'undefined') {
+    contentResizeObserver = new ResizeObserver(() => {
+      if (props.streaming) scheduleStreamingLayout();
+    });
+    contentResizeObserver.observe(content);
+  }
+}
+
 function openPanel(streaming = props.streaming) {
   clearAnimationTimer();
   const version = bumpLayoutVersion();
@@ -405,9 +430,17 @@ watch(() => props.text, () => {
   scheduleStreamingLayout();
 });
 
+onMounted(() => {
+  observeStreamingContent();
+});
+
 onBeforeUnmount(() => {
   clearAnimationTimer();
   cancelStreamingLayout();
+  contentMutationObserver?.disconnect();
+  contentMutationObserver = null;
+  contentResizeObserver?.disconnect();
+  contentResizeObserver = null;
 });
 </script>
 

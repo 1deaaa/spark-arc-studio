@@ -76,6 +76,7 @@ export function useChatActions(adapter: ChatActionsAdapter, options: UseChatActi
     let programmaticScrollUntil = 0;
     let userScrollIntentUntil = 0;
     let currentResponseInterrupted = false;
+    let scrollBindingActive = false;
     let scrollListeners: Array<{ el: HTMLElement; handler: () => void }> = [];
     let intentListeners: Array<{ el: HTMLElement; type: 'wheel' | 'touchstart' | 'pointerdown'; handler: (event: Event) => void }> = [];
     const lastKnownScrollTop = new WeakMap<HTMLElement, number>();
@@ -112,12 +113,15 @@ export function useChatActions(adapter: ChatActionsAdapter, options: UseChatActi
 
     /** 为滚动容器绑定 scroll 事件，检测用户上滚 */
     function bindScrollListeners() {
+        if (!scrollBindingActive) return;
         // 先清理旧监听
         removeScrollListeners();
         const refs = [listRef, mobileListRef];
+        const boundElements = new Set<HTMLElement>();
         for (const sourceRef of refs) {
             const el = resolveEl(sourceRef) as HTMLElement | undefined;
-            if (!el) continue;
+            if (!el || boundElements.has(el)) continue;
+            boundElements.add(el);
             lastKnownScrollTop.set(el, el.scrollTop);
             const handler = () => {
                 const previousScrollTop = lastKnownScrollTop.get(el) ?? el.scrollTop;
@@ -179,8 +183,16 @@ export function useChatActions(adapter: ChatActionsAdapter, options: UseChatActi
 
     // 延迟绑定：等 listRef 对应的 DOM 挂载后再绑定
     onMounted(() => {
+        scrollBindingActive = true;
         nextTick(() => bindScrollListeners());
     });
+
+    // 浮窗和移动抽屉会延迟挂载消息列表；流可能早于列表出现，必须在真实 DOM 就绪后补绑。
+    watch(
+        () => [resolveEl(listRef), resolveEl(mobileListRef)],
+        () => nextTick(() => bindScrollListeners()),
+        { flush: 'post' },
+    );
 
     const lastMessageIsAssistant = computed(() => {
         const history = adapter.getHistory?.() || [];
@@ -373,6 +385,7 @@ export function useChatActions(adapter: ChatActionsAdapter, options: UseChatActi
     }
 
     onUnmounted(() => {
+        scrollBindingActive = false;
         if (thinkingTimer) {
             clearInterval(thinkingTimer);
         }

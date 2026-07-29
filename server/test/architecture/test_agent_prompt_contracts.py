@@ -55,6 +55,20 @@ def test_core_agent_prompts_use_base_for_shared_material(prompt_name: str) -> No
     assert prompts["base"]
 
 
+def test_director_distinguishes_unattended_and_interactive_scriptwriting() -> None:
+    prompt = load_prompt("director")["chat_system"]
+    for token in ("无人值守", "全部剩余章节", "某一章", "delegate_task", "意图不清楚"):
+        assert token in prompt
+
+
+def test_scriptwriter_scene_titles_are_reader_facing_in_both_modes() -> None:
+    prompts = load_prompt("scriptwriter")
+    combined = "\n".join(str(prompts.get(key) or "") for key in ("pipeline_system", "chat_system", "tool_rules"))
+    for token in ("面向读者", "1-2 标题", "剧本模式与小说模式"):
+        assert token in combined
+    assert "禁止使用「场景 1-2」" in combined
+
+
 @pytest.mark.parametrize(("agent_id", "agent_cls"), AGENTS_WITH_PERSIST_TOOLS)
 def test_persisting_agents_bind_generation_specs_to_write_tools(agent_id: str, agent_cls: type) -> None:
     method = getattr(agent_cls, "_get_tool_prompt_references", None)

@@ -16,7 +16,8 @@ class RewriteWorldviewInput(BaseModel):
 
 
 class RewriteAllCharactersInput(BaseModel):
-    overwrite_content: str = Field(description='完整的角色覆盖文本。推荐 XML: <character><name>角色名</name><content>角色设定</content></character>；也支持 JSON: {"characters":[{"name":"角色名","content":"角色设定"}]}；或兼容旧的纯文本格式：角色名+空行+角色内容，多个角色用 --- 分隔')
+    overwrite_content: str = Field(description='一批完整的角色设定文本。推荐 XML: <character><name>角色名</name><content>角色设定</content></character>；也支持 JSON: {"characters":[{"name":"角色名","content":"角色设定"}]}；或兼容旧的纯文本格式：角色名+空行+角色内容，多个角色用 --- 分隔。角色较多时应分批调用：通常每批最多约 5 个角色，首批使用默认 append=false，后续批次传 append=true 继续调用本工具，即可追加新角色或按名称更新已有角色。5 个只是防止超长调用截断的软建议，必须根据每个角色的实际设定长度调整，绝不能为了凑批次或满足数量而压缩、删减角色设定，角色质量与完整度优先')
+    append: bool = Field(default=False, description="分批写入开关。首批传 false（默认）以覆盖旧的普通角色集合；第二批及后续批次必须传 true，此时按角色名更新已有角色并追加新角色，不会删除本批未包含的角色")
 
 
 class UpdateCharacterInput(BaseModel):
@@ -53,8 +54,8 @@ def rewrite_worldview(overwrite_content: str) -> str:
 
 
 @tool(args_schema=RewriteAllCharactersInput)
-def rewrite_all_characters(overwrite_content: str) -> str:
-    """覆盖全部角色设定。"""
+def rewrite_all_characters(overwrite_content: str, append: bool = False) -> str:
+    """分批写入角色设定；按名称更新已有角色，并追加新角色。"""
     from agents.agent_lorebook import WorldviewAgent
 
     user_id, project_name = ToolExecutionContext.get_context()
@@ -65,6 +66,7 @@ def rewrite_all_characters(overwrite_content: str) -> str:
         user_id=user_id,
         project_name=project_name,
         overwrite_content=overwrite_content,
+        append=append,
     )
 
 

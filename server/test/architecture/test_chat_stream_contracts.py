@@ -5,6 +5,14 @@ import contextvars
 import threading
 import time
 
+from langchain_core.messages import HumanMessage, ToolMessage
+
+from agents.communication import (
+    ModelStreamRetryExhaustedError,
+    ModelTurnRetryNotice,
+    stream_model_turn_with_retry,
+)
+
 from agents.routes.chat import (
     _merge_context_window_stats_with_usage,
     _observe_chat_task_events,
@@ -173,6 +181,50 @@ def test_chat_stream_retry_suppresses_intermediate_error_events(monkeypatch) -> 
     ]
     assert not any(event.get("event") == "error" for event in entry.event_log)
     assert entry.build_snapshot()["content"] == "最终成功"
+
+
+def test_model_turn_retry_preserves_completed_tool_history() -> None:
+    messages = [
+        HumanMessage(content="生成全部角色"),
+        ToolMessage(content="前五个角色已写入", tool_call_id="call-1", name="rewrite_all_characters"),
+    ]
+
+    class FlakyLlm:
+        def __init__(self):
+            self.calls = []
+
+        def stream(self, current_messages):
+            self.calls.append(current_messages)
+            if len(self.calls) == 1:
+                raise RuntimeError("上游流截断")
+            yield "从第六个角色继续"
+
+    llm = FlakyLlm()
+    chunks = list(stream_model_turn_with_retry(
+        llm,
+        messages,
+        retry_delay=0,
+    ))
+
+    assert isinstance(chunks[0], ModelTurnRetryNotice)
+    assert (chunks[0].attempt, chunks[0].max_attempts, chunks[0].error) == (1, 3, "上游流截断")
+    assert chunks[1:] == ["从第六个角色继续"]
+    assert llm.calls == [messages, messages]
+    assert llm.calls[1][1].content == "前五个角色已写入"
+
+
+def test_model_turn_retry_exhaustion_blocks_whole_task_replay() -> None:
+    class BrokenLlm:
+        def stream(self, _messages):
+            raise RuntimeError("持续截断")
+            yield
+
+    try:
+        list(stream_model_turn_with_retry(BrokenLlm(), [], max_attempts=2, retry_delay=0))
+    except ModelStreamRetryExhaustedError as exc:
+        assert "持续截断" in str(exc)
+    else:
+        raise AssertionError("应在当前轮次续跑耗尽后终止")
 
 
 def test_context_window_stats_merges_agent_cache_usage() -> None:

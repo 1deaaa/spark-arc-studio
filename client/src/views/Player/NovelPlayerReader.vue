@@ -57,8 +57,8 @@
             <div class="drawer-section">
               <label class="drawer-label">{{ t('views.player.novelReader.chapter') }}</label>
               <select v-model.number="activeChapterIndex" class="drawer-select">
-                <option v-for="(chapter, idx) in chapters" :key="`drawer-ch-${idx}`" :value="idx">
-                  {{ chapterLabel(chapter, idx) }}
+                <option v-for="idx in visibleChapterIndexes" :key="`drawer-ch-${idx}`" :value="idx">
+                  {{ chapterLabel(chapters[idx], idx) }}
                 </option>
               </select>
             </div>
@@ -130,6 +130,7 @@ import BookNavButton from '@/components/player/shared/BookNavButton.vue';
 import { NIcon, NTooltip } from 'naive-ui';
 import { ChevronLeft, ChevronRight, Settings, X } from '@lucide/vue';
 import type { NavItem } from '@/components/player/shared/SceneNavPanel.vue';
+import { addVisitedIndex, filterItemsByVisited, normalizeVisitedIndexes } from '@/utils/playerProgress';
 import { fetchWithAuth } from '@/services/apiClient';
 import { useMobile } from '@/composables/useMobile';
 import { SPARKARC_GITHUB_URL } from '@/config';
@@ -150,6 +151,7 @@ function cleanTitle(raw: string | undefined | null, fallback: string): string {
 type NovelDataResponse = {
   format?: string;
   content?: string;
+  show_full_directory?: boolean;
 };
 
 type NovelChapter = {
@@ -163,6 +165,7 @@ type NovelProgressState = {
   mode: 'page' | 'scroll';
   fontSize: number;
   scrollRatio: number;
+  visitedChapterIndexes: number[];
 };
 
 const MIN_FONT_SIZE = 15;
@@ -245,12 +248,16 @@ function parseProgressState(raw: string | null): NovelProgressState | null {
     const mode = parsed.mode === 'scroll' ? 'scroll' : 'page';
     const fontSize = Number.isFinite(parsed.fontSize) ? Number(parsed.fontSize) : DEFAULT_FONT_SIZE;
     const scrollRatio = Number.isFinite(parsed.scrollRatio) ? Number(parsed.scrollRatio) : 0;
+    const visitedChapterIndexes = Array.isArray(parsed.visitedChapterIndexes)
+      ? parsed.visitedChapterIndexes.filter((value): value is number => Number.isFinite(value))
+      : Array.from({ length: Math.max(0, Math.trunc(chapterIndex)) + 1 }, (_, index) => index);
     return {
       chapterIndex,
       page,
       mode,
       fontSize,
       scrollRatio: Math.min(1, Math.max(0, scrollRatio)),
+      visitedChapterIndexes,
     };
   } catch {
     return null;
@@ -273,6 +280,8 @@ const activeChapterIndex = ref(0);
 const scrollProgressRatio = ref(0);
 const applyingProgress = ref(false);
 const scrollContainer = ref<HTMLElement | null>(null);
+const showFullDirectory = ref(true);
+const visitedChapterIndexes = ref<number[]>([]);
 
 /* --- 章节切换非阻塞通知 --- */
 const CHAPTER_NOTIFY_DURATION = 3200;
@@ -466,20 +475,39 @@ const paragraphs = computed(() => {
 });
 
 /* --- BookNavButton 导航数据 --- */
-const chapterNavItems = computed<NavItem[]>(() =>
+const allChapterNavItems = computed<NavItem[]>(() =>
   chapters.value.map((ch, idx) => ({
     id: `chapter-${idx}`,
     title: ch.title,
   }))
 );
+const chapterNavItems = computed<NavItem[]>(() => filterItemsByVisited(
+  allChapterNavItems.value,
+  visitedChapterIndexes.value,
+  showFullDirectory.value,
+));
+const visibleChapterIndexes = computed(() => {
+  if (showFullDirectory.value) return chapters.value.map((_, index) => index);
+  const visited = new Set(visitedChapterIndexes.value);
+  return chapters.value.map((_, index) => index).filter(index => visited.has(index));
+});
 
 const chapterNavCurrentId = computed(() => `chapter-${activeChapterIndex.value}`);
 
 function handleChapterNavSelect(item: NavItem) {
   const idx = Number(String(item.id).replace('chapter-', ''));
   if (Number.isFinite(idx) && idx >= 0 && idx < chapters.value.length) {
+    markChapterVisited(idx);
     activeChapterIndex.value = idx;
   }
+}
+
+function markChapterVisited(chapterIndex: number) {
+  visitedChapterIndexes.value = addVisitedIndex(
+    visitedChapterIndexes.value,
+    chapterIndex,
+    chapters.value.length,
+  );
 }
 
 const targetCharsPerPage = computed(() => {
@@ -592,6 +620,7 @@ function buildCurrentProgress(): NovelProgressState {
     mode: readingMode.value,
     fontSize: fontSize.value,
     scrollRatio: scrollProgressRatio.value,
+    visitedChapterIndexes: visitedChapterIndexes.value,
   };
 }
 
@@ -679,6 +708,12 @@ async function restoreProgressAfterLoad() {
   const nextRatio = fromQuery.scrollRatio ?? fromStorage?.scrollRatio ?? 0;
 
   activeChapterIndex.value = clampInt(chapterIndex, 0, Math.max(chapters.value.length - 1, 0));
+  visitedChapterIndexes.value = normalizeVisitedIndexes(
+    fromStorage?.visitedChapterIndexes,
+    activeChapterIndex.value,
+    chapters.value.length,
+  );
+  markChapterVisited(activeChapterIndex.value);
   readingMode.value = nextMode;
   fontSize.value = clampInt(nextFontSize, MIN_FONT_SIZE, MAX_FONT_SIZE);
 
@@ -774,6 +809,8 @@ async function loadNovel() {
       throw new Error(t('views.player.novelReader.notNovelLink'));
     }
 
+    showFullDirectory.value = data.show_full_directory !== false;
+
     meta.value = {
       title: cleanTitle(info.title, info.project_name || t('views.player.novelReader.untitledNovel')),
       description: info.description || '',
@@ -796,6 +833,7 @@ watch([paragraphs, targetCharsPerPage], () => {
 
 watch(activeChapterIndex, async () => {
   if (applyingProgress.value) return;
+  markChapterVisited(activeChapterIndex.value);
   currentPage.value = 0;
   scrollProgressRatio.value = 0;
   await nextTick();
