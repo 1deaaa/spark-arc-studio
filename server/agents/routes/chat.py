@@ -139,13 +139,19 @@ def _run_chat_background_context(
     callback: Any,
 ) -> Any:
     """在聊天后台线程中恢复请求级上下文。"""
-    from core.request_context import current_user_id, current_user_is_admin, current_project_name
+    from core.request_context import (
+        current_project_name,
+        current_scriptwriter_prewrite_receipt,
+        current_user_id,
+        current_user_is_admin,
+    )
 
     current_user_id.set(str(user_id))
     # 后台线程不能只恢复 user_id：管理员是否可使用系统托管 Key
     # 取决于这个标记。漏掉它会让站长在关闭共享后被误判为普通用户。
     current_user_is_admin.set(bool(is_admin))
     current_project_name.set(project_name)
+    prewrite_receipt_token = current_scriptwriter_prewrite_receipt.set({})
     locale_token = set_current_locale(locale)
     usage_token = current_llm_usage_context.set(llm_usage_context)
     chat_tokens = set_current_chat_session(chat_agent_id, chat_context_key)
@@ -155,6 +161,7 @@ def _run_chat_background_context(
         reset_current_chat_session(chat_tokens)
         current_llm_usage_context.reset(usage_token)
         reset_current_locale(locale_token)
+        current_scriptwriter_prewrite_receipt.reset(prewrite_receipt_token)
 
 
 def _as_stream_event(delta) -> dict:

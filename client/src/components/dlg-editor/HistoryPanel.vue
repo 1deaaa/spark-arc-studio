@@ -12,7 +12,12 @@
     </div>
 
     <!-- 灵感过滤器：三档（全部 / 当前项目 / 草稿），桌面端与移动端均可见 -->
-    <div v-if="type === 'muse'" class="history-filter" role="tablist" aria-label="灵感过滤">
+    <div
+      v-if="type === 'muse'"
+      class="history-filter"
+      role="tablist"
+      :aria-label="t('views.world.history.filterAriaLabel')"
+    >
       <button
         v-for="option in scopeOptions"
         :key="option.value"
@@ -82,7 +87,7 @@
                 type="primary"
                 @click.stop="handleRestore(item)"
               >
-                恢复
+                {{ t('views.world.history.restore') }}
               </n-button>
               <!-- 绑定/解绑按钮：仅在有当前项目上下文时可见 -->
               <n-tooltip
@@ -102,7 +107,9 @@
                     <n-icon :component="isBoundToCurrent(item) ? PinOff : Pin" />
                   </n-button>
                 </template>
-                {{ isBoundToCurrent(item) ? `从「${currentProject}」解绑` : `绑定到「${currentProject}」` }}
+                {{ isBoundToCurrent(item)
+                  ? t('views.world.history.unbindTooltip', { project: currentProject })
+                  : t('views.world.history.bindTooltip', { project: currentProject }) }}
               </n-tooltip>
               <n-button
                 size="tiny"
@@ -134,6 +141,7 @@
 import { ref, onMounted, onBeforeUnmount, computed, watch } from 'vue';
 import { NButton, NIcon, NEmpty, NSpin, NEllipsis, NTag, NBadge, NTooltip, useMessage } from 'naive-ui';
 import { Clock, FileEdit, Layers, Link2, Pin, PinOff, RefreshCw, Trash } from '@lucide/vue';
+import { useI18n } from 'vue-i18n';
 import {
   getInspirations, deleteInspiration, markInspirationRead,
   bindInspiration, unbindInspiration,
@@ -141,7 +149,12 @@ import {
 } from '../../services/api';
 import { useProjectStore } from '../stores/projectStore';
 import bus from '../../eventBus';
-import type { InspirationEntry, InspirationScope, OutlineHistoryEntry } from '../../services/aiContracts';
+import type {
+  InspirationBindChangedPayload,
+  InspirationEntry,
+  InspirationScope,
+  OutlineHistoryEntry,
+} from '../../services/aiContracts';
 
 type HistoryItem = InspirationEntry | OutlineHistoryEntry;
 type FilterScope = InspirationScope;
@@ -162,16 +175,24 @@ const emit = defineEmits(['select', 'restore', 'unread-change']);
 
 const projectStore = useProjectStore();
 const message = useMessage();
+const { t } = useI18n();
 
 const loading = ref(false);
 const history = ref<HistoryItem[]>([]);
 const unreadCount = ref(0);
-// 当前过滤范围。默认 'all' 保持原行为；用户可手动切到当前项目或草稿。
-const currentScope = ref<FilterScope>('all');
+// 筛选范围由项目状态统一托管，响应式切换重挂载组件时仍能保留用户选择。
+const currentScope = computed<FilterScope>({
+  get: () => projectStore.inspirationHistoryScope,
+  set: (scope) => {
+    projectStore.inspirationHistoryScope = scope;
+  },
+});
 // 正在进行绑定/解绑操作的灵感 id，用于在按钮上显示 loading
 const bindingId = ref<string | null>(null);
 
-const title = computed(() => props.type === 'muse' ? '灵感历史' : '大纲历史');
+const title = computed(() => props.type === 'muse'
+  ? t('views.world.common.history')
+  : t('views.structure.mobile.history'));
 
 const currentProject = computed(() => projectStore.currentProject || '');
 
@@ -180,41 +201,45 @@ const scopeOptions = computed(() => {
   const projectName = currentProject.value;
   return [
     {
-      value: 'all' as FilterScope,
-      label: '全部',
-      icon: Layers,
-      count: undefined as number | undefined,
-      disabled: false,
-      tooltip: '查看你的所有灵感',
-    },
-    {
       value: 'project' as FilterScope,
-      label: projectName ? '当前项目' : '当前项目（未选择）',
+      label: projectName
+        ? t('views.world.history.currentProject')
+        : t('views.world.history.currentProjectUnavailable'),
       icon: Pin,
       count: undefined as number | undefined,
       disabled: !projectName,
-      tooltip: projectName ? `仅看已绑定到「${projectName}」的灵感` : '先选择一个项目才能过滤',
+      tooltip: projectName
+        ? t('views.world.history.currentProjectTooltip', { project: projectName })
+        : t('views.world.history.selectProjectTooltip'),
     },
     {
       value: 'drafts' as FilterScope,
-      label: '草稿',
+      label: t('views.world.history.drafts'),
       icon: FileEdit,
       count: undefined as number | undefined,
       disabled: false,
-      tooltip: '未绑定到任何项目的随手记',
+      tooltip: t('views.world.history.draftsTooltip'),
+    },
+    {
+      value: 'all' as FilterScope,
+      label: t('views.world.history.all'),
+      icon: Layers,
+      count: undefined as number | undefined,
+      disabled: false,
+      tooltip: t('views.world.history.allTooltip'),
     },
   ];
 });
 
 const emptyDescription = computed(() => {
-  if (props.type !== 'muse') return '暂无历史记录';
+  if (props.type !== 'muse') return t('views.world.history.emptyOutline');
   if (currentScope.value === 'project') {
     return currentProject.value
-      ? `「${currentProject.value}」还没有绑定任何灵感`
-      : '请先选择一个项目';
+      ? t('views.world.history.emptyProject', { project: currentProject.value })
+      : t('views.world.history.selectProject');
   }
-  if (currentScope.value === 'drafts') return '暂无未绑定项目的草稿';
-  return '还没有任何灵感';
+  if (currentScope.value === 'drafts') return t('views.world.history.emptyDrafts');
+  return t('views.world.history.emptyAll');
 });
 
 // 加载历史
@@ -230,8 +255,8 @@ async function refresh(silent: boolean = false) {
       // - drafts：仅返回草稿
       const scope = currentScope.value;
       const project = projectStore.currentProject || null;
-      // 当前项目过滤但却没有项目上下文时，静默回退到全部
-      const effectiveScope: FilterScope = scope === 'project' && !project ? 'all' : scope;
+      // 当前项目过滤但却没有项目上下文时，防御性回退到草稿。
+      const effectiveScope: FilterScope = scope === 'project' && !project ? 'drafts' : scope;
       if (effectiveScope !== scope) {
         currentScope.value = effectiveScope;
       }
@@ -249,8 +274,8 @@ async function refresh(silent: boolean = false) {
     history.value = data;
   } catch (e: unknown) {
     console.error(`[HistoryPanel] Failed to load ${props.type} history:`, e);
-    const errorMessage = e instanceof Error ? e.message : String(e || '未知错误');
-    message.error('加载历史失败: ' + errorMessage);
+    const errorMessage = e instanceof Error ? e.message : String(e || t('common.unknownError'));
+    message.error(t('views.world.history.loadFailed', { error: errorMessage }));
   } finally {
     if (!silent) loading.value = false;
   }
@@ -272,8 +297,8 @@ function formatTime(isoString) {
   
   // 1小时内显示相对时间
   if (diff < 3600000) {
-    if (diff < 60000) return '刚刚';
-    return Math.floor(diff / 60000) + '分钟前';
+    if (diff < 60000) return t('views.world.history.justNow');
+    return t('views.world.history.minutesAgo', { count: Math.floor(diff / 60000) });
   }
   
   // 超过1小时显示日时分
@@ -294,18 +319,18 @@ function formatTime(isoString) {
 function getItemTitle(item) {
   if (props.type === 'muse') {
     // 新格式使用 source 的前30个字符作为标题
-    return item.source?.slice(0, 30) || '灵感';
+    return item.source?.slice(0, 30) || t('views.world.history.untitled');
   }
-  return '大纲';
+  return t('views.world.history.outline');
 }
 
 // 获取预览内容
 function getItemPreview(item) {
   if (props.type === 'muse') {
     // 新格式: content 是扩展后的内容
-    return item.content?.slice(0, 100) || '(尚未生成扩展内容)';
+    return item.content?.slice(0, 100) || t('views.world.history.pendingExpansion');
   }
-  return item.outline?.summary || `${item.nodeCount || 0} 个节点`;
+  return item.outline?.summary || t('views.world.history.nodeCount', { count: item.nodeCount || 0 });
 }
 
 // 检查是否有任何标签
@@ -342,25 +367,30 @@ function getProjectLinkBadge(item: HistoryItem) {
     return {
       variant: 'draft' as const,
       icon: FileEdit,
-      label: '草稿',
-      tooltip: '这条灵感还没有绑定到任何项目',
+      label: t('views.world.history.draftBadge'),
+      tooltip: t('views.world.history.draftBadgeTooltip'),
     };
   }
   if (projectStore.currentProject && list.includes(projectStore.currentProject)) {
     return {
       variant: 'bound' as const,
       icon: Pin,
-      label: '当前项目',
+      label: t('views.world.history.currentProjectBadge'),
       tooltip: list.length === 1
-        ? `已绑定到「${list[0]}」`
-        : `已绑定到 ${list.length} 个项目：${list.join('、')}`,
+        ? t('views.world.history.currentProjectBadgeTooltip', { project: list[0] })
+        : t('views.world.history.multipleProjectsBadgeTooltip', {
+            count: list.length,
+            projects: list.join('、'),
+          }),
     };
   }
   return {
     variant: 'other' as const,
     icon: Link2,
-    label: list.length === 1 ? list[0] : `${list.length} 个项目`,
-    tooltip: `已绑定到：${list.join('、')}`,
+    label: list.length === 1
+      ? list[0]
+      : t('views.world.history.otherProjectsBadge', { count: list.length }),
+    tooltip: t('views.world.history.otherProjectsBadgeTooltip', { projects: list.join('、') }),
   };
 }
 
@@ -376,7 +406,7 @@ async function toggleBind(item: HistoryItem) {
       inspiration.project_links = (inspiration.project_links || []).filter(
         (name: string) => name !== projectName
       );
-      message.success(`已从「${projectName}」解绑`);
+      message.success(t('views.world.history.unbound', { project: projectName }));
       // 通知其他组件绑定状态变化
       bus.emit('inspiration-bind-changed', {
         boundId: null,
@@ -384,8 +414,8 @@ async function toggleBind(item: HistoryItem) {
         projectName,
       });
     } else {
-      // 排他绑定：绑定新灵感时自动解绑该项目下的旧灵感
-      const result = await bindInspiration(inspiration.id, projectName, true);
+      // 设为项目当前灵感，同时移除该项目对旧灵感的引用。
+      const result = await bindInspiration(inspiration.id, projectName);
       const unboundIds = (result as any)?.unbound_ids || [];
       
       // 局部更新：更新当前条目的 project_links
@@ -405,12 +435,13 @@ async function toggleBind(item: HistoryItem) {
         }
       }
       
-      message.success(`已绑定到「${projectName}」`);
+      message.success(t('views.world.history.bound', { project: projectName }));
       // 通知其他组件绑定状态变化
       bus.emit('inspiration-bind-changed', {
         boundId: inspiration.id,
         unboundIds,
         projectName,
+        entry: inspiration,
       });
     }
     // 在"当前项目"或"草稿"过滤下，绑定状态变化后需要检查可见性
@@ -421,8 +452,10 @@ async function toggleBind(item: HistoryItem) {
       await refresh(true);
     }
   } catch (e: unknown) {
-    const errorMessage = e instanceof Error ? e.message : String(e || '未知错误');
-    message.error((isBoundToCurrent(inspiration) ? '解绑' : '绑定') + '失败: ' + errorMessage);
+    const errorMessage = e instanceof Error ? e.message : String(e || t('common.unknownError'));
+    message.error(isBoundToCurrent(inspiration)
+      ? t('views.world.history.unbindFailed', { error: errorMessage })
+      : t('views.world.history.bindFailed', { error: errorMessage }));
   } finally {
     bindingId.value = null;
   }
@@ -451,10 +484,10 @@ async function handleRestore(item) {
   try {
     const outline = await restoreOutlineFromHistory(projectStore.currentProject, item.id);
     emit('restore', outline);
-    message.success('大纲已恢复');
+    message.success(t('views.world.history.outlineRestored'));
   } catch (e: unknown) {
-    const errorMessage = e instanceof Error ? e.message : String(e || '未知错误');
-    message.error('恢复失败: ' + errorMessage);
+    const errorMessage = e instanceof Error ? e.message : String(e || t('common.unknownError'));
+    message.error(t('views.world.history.restoreFailed', { error: errorMessage }));
   }
 }
 
@@ -472,10 +505,10 @@ async function handleDelete(item) {
       await deleteOutlineHistory(projectStore.currentProject, item.id);
     }
     history.value = history.value.filter(h => h.id !== item.id);
-    message.success('已删除');
+    message.success(t('views.world.history.deleted'));
   } catch (e: unknown) {
-    const errorMessage = e instanceof Error ? e.message : String(e || '未知错误');
-    message.error('删除失败: ' + errorMessage);
+    const errorMessage = e instanceof Error ? e.message : String(e || t('common.unknownError'));
+    message.error(t('views.world.history.deleteFailed', { error: errorMessage }));
   }
 }
 
@@ -496,7 +529,7 @@ onBeforeUnmount(() => {
 // 处理外部触发的绑定状态变化（如 useWorldLogic 中的自动绑定）
 function handleExternalBindChange(payload: unknown) {
   if (props.type !== 'muse') return;
-  const data = payload as { boundId?: string | null; unboundIds?: string[]; projectName?: string };
+  const data = payload as InspirationBindChangedPayload;
   if (!data?.projectName) return;
   
   const projectName = data.projectName;
@@ -530,11 +563,8 @@ function handleExternalBindChange(payload: unknown) {
   }
 }
 
-// 监听项目切换：如果当前以"当前项目"过滤但项目被清空，需要回退到全部
-watch(() => projectStore.currentProject, (next) => {
-  if (!next && currentScope.value === 'project') {
-    currentScope.value = 'all';
-  }
+// 项目切换时筛选范围由 projectStore 统一重置；这里只负责刷新数据。
+watch(() => projectStore.currentProject, () => {
   refresh();
 });
 

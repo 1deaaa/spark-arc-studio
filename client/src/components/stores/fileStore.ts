@@ -172,7 +172,7 @@ export const useFileStore = defineStore('file', {
         }
       }
     },
-    async createFile(type: 'folder' | 'story', parentDir = '', opts: Record<string, unknown> = {}) {
+    async createFile(type: 'folder' | 'story', parentDir = '', opts: Record<string, unknown> = {}): Promise<string | null> {
       const projectStore = useProjectStore();
       const sceneStore = useSceneStore();
       // prompt 弹窗始终居中显示，不使用鼠标坐标定位（坐标仅 confirm 类弹窗使用）
@@ -202,10 +202,14 @@ export const useFileStore = defineStore('file', {
           const target = parentDir ? `${parentDir.replace(/\/+$/,'').replace(/^\/+/, '')}/${normalizedName}` : normalizedName;
           await createFileOrFolder(projectStore.currentProject, type, target);
           await this.loadFileTree(projectStore.currentProject, this.activeFormatFilter);
+          return type === 'story' && this.activeFormatFilter === 'arc'
+            ? target.replace(/\.arc$/i, '')
+            : target;
         } catch (error: unknown) {
           bus.emit('toast', { type: 'error', message: `创建失败: ${getErrorMessage(error)}` });
         }
       }
+      return null;
     },
     async deleteSelectedFile(opts: Record<string, unknown> = {}) {
       if (!this.selectedFile) {

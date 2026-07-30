@@ -3,7 +3,7 @@ import { defineStore } from 'pinia';
 import { fetchProjects, createProject, deleteProject, renameProject, refreshSemanticSearchProject, getInspirations, getProjectWorkspaceMode as fetchProjectWorkspaceMode } from '@/services/api';
 import { getUserId } from '@/services/apiClient';
 import { i18n } from '@/i18n';
-import type { InspirationEntry } from '@/services/aiContracts';
+import type { InspirationEntry, InspirationScope } from '@/services/aiContracts';
 import { useFileStore } from './fileStore';
 import { useCharacterStore } from './characterStore';
 import { useChatStore } from './chatStore';
@@ -75,6 +75,7 @@ type ProjectStoreState = {
   boundInspiration: string;
   boundInspirationSource: string;
   boundInspirationId: string | null;
+  inspirationHistoryScope: InspirationScope;
   pendingSynopsisAdoption: PendingSynopsisAdoption | null;
   pendingStructureAdoption: PendingStructureAdoption | null;
 };
@@ -89,6 +90,7 @@ export const useProjectStore = defineStore('project', {
     boundInspiration: '',
     boundInspirationSource: '',
     boundInspirationId: null,
+    inspirationHistoryScope: 'drafts',
     pendingSynopsisAdoption: null,
     pendingStructureAdoption: null,
   }),
@@ -175,6 +177,7 @@ export const useProjectStore = defineStore('project', {
       if (this._currentProject === safeProjectName) return;
 
       this._currentProject = safeProjectName;
+      this.inspirationHistoryScope = safeProjectName ? 'project' : 'drafts';
 
       // 缓存最后切换的项目，下次访问时自动恢复
       if (safeProjectName) {
@@ -356,6 +359,7 @@ export const useProjectStore = defineStore('project', {
       this.boundInspiration = '';
       this.boundInspirationSource = '';
       this.boundInspirationId = null;
+      this.inspirationHistoryScope = 'drafts';
       this.pendingSynopsisAdoption = null;
       this.pendingStructureAdoption = null;
       localStorage.removeItem(getLastProjectKey());

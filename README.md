@@ -226,11 +226,13 @@ flowchart TB
 
 1. 打开桌面客户端。
 2. 如果本机没有后端，launcher 会提示你“启动本地后端”。
-3. 点击后会自动从 `main` 下载受管源码到 `~/.sparkarc/sparkarc-server`，并在 `~/.sparkarc/service.json` 注册位置。
+3. 点击后会自动从 `main` 下载受管源码到 `~/.sparkarc/sparkarc-server`；Launcher 只启动这个带受管标记的固定目录。
 4. 首次运行会自动准备受管 Node.js、便携版 Python（约 40MB）并安装依赖；不会修改系统 PATH，也不要求安装 VS Code、Git 或 Node.js。
 5. 后端就绪后，launcher 会自动连接 `http://localhost:6688` 并进入工作台。它只更新自己创建且带有受管标记的 `main` 工作树，不会覆盖你的 `dev`、手动 clone 或本地改造目录。
 6. Launcher 会检查 `main` 是否有新提交；发现更新时由用户选择“更新并启动”，不会静默切换运行中的代码。用户数据、运行时缓存和前端产物会保留。
 7. Launcher 壳本身直接检查 GitHub Release。API 受限时会回退到 GitHub 的标准 Release 跳转页，并自动尝试可用镜像；首期只打开对应下载页，不另行维护自定义更新清单。
+
+Launcher 不读取手动源码目录，也不探测安装包同级目录。直接运行源码中的 `start.bat` / `start.sh` 只启动当前源码，不会改变 Launcher 的 APP 数据目录。
 
 也可以先克隆项目，再直接运行根目录脚本：
 

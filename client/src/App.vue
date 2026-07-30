@@ -155,6 +155,8 @@ import AnnouncementModal from './components/share/AnnouncementModal.vue';
 import { fetchWithAuth, getSessionToken, isAuthError } from './services/apiClient';
 import { useThemeStore } from './components/stores/themeStore';
 import { useLocaleStore } from './components/stores/localeStore';
+import { useDirectorAutoWriteStore } from './components/stores/directorAutoWriteStore';
+import { useProjectStore } from './components/stores/projectStore';
 import { useNaiveTheme } from './styles/themeConfig';
 import { captureLauncherThemeSnapshot, persistLauncherThemeSnapshot } from './utils/launcherThemeSync';
 import { ensureFullAppFontCss, markAppFontWarmCacheHint } from './utils/fontAssets';
@@ -169,6 +171,8 @@ import { BookOpen, Clapperboard } from '@lucide/vue';
 const themeStore = useThemeStore();
 const { theme, themeOverrides } = useNaiveTheme(themeStore);
 const localeStore = useLocaleStore();
+const directorAutoWriteStore = useDirectorAutoWriteStore();
+const projectStore = useProjectStore();
 const { t } = useI18n();
 useSeoMeta();
 const DirectorAutoWriteOverlayComponent = shallowRef<Component | null>(null);
@@ -186,6 +190,20 @@ async function loadDirectorOverlayModule() {
   }
   return directorOverlayModulePromise;
 }
+
+async function syncCurrentAutoWriteState() {
+  const projectName = String(projectStore.currentProject || '').trim();
+  if (!projectName || (!isLocalTauriShell.value && !getSessionToken())) return;
+  await directorAutoWriteStore.refreshSnapshot(projectName);
+}
+
+watch(
+  () => directorAutoWriteStore.isRunningForCurrentProject,
+  (isRunning) => {
+    if (isRunning) void loadDirectorOverlayModule();
+  },
+  { immediate: true },
+);
 
 async function loadOnboardingModule() {
   if (!onboardingModulePromise) {
@@ -315,6 +333,15 @@ onMounted(() => {
   };
   bus.on('director-auto-write-started', onDirectorAutoWriteStarted);
 
+  const onWindowFocus = () => {
+    void syncCurrentAutoWriteState();
+  };
+  const onVisibilityChange = () => {
+    if (document.visibilityState === 'visible') void syncCurrentAutoWriteState();
+  };
+  window.addEventListener('focus', onWindowFocus);
+  document.addEventListener('visibilitychange', onVisibilityChange);
+
   // 初始检查 (如果已登录)
   runPostLoginGuards();
   
@@ -323,6 +350,8 @@ onMounted(() => {
     bus.off('login-success', runPostLoginGuards);
     bus.off('auth-session-expired', onSessionExpired);
     bus.off('director-auto-write-started', onDirectorAutoWriteStarted);
+    window.removeEventListener('focus', onWindowFocus);
+    document.removeEventListener('visibilitychange', onVisibilityChange);
   });
 });
 
@@ -373,6 +402,7 @@ async function runPostLoginGuards() {
   stopOnboarding();
   if (isLocalTauriShell.value) {
     await loadDirectorOverlayModule();
+    await syncCurrentAutoWriteState();
     return;
   }
   // 未登录时不应触发任何登录后逻辑（包括 onboarding）
@@ -386,6 +416,7 @@ async function runPostLoginGuards() {
     return;
   }
   await loadDirectorOverlayModule();
+  await syncCurrentAutoWriteState();
   await checkSystemConfig();
   await loadOnboardingModule();
   primeAppFontCacheInBackground();
@@ -424,6 +455,7 @@ async function handleTosAccepted() {
   showTosModal.value = false;
   await checkSystemConfig();
   await loadDirectorOverlayModule();
+  await syncCurrentAutoWriteState();
   await loadOnboardingModule();
   primeAppFontCacheInBackground();
   // TOS 接受后检查完成，通知子组件可以安全触发 onboarding

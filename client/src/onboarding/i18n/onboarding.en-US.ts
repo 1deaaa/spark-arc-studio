@@ -20,6 +20,8 @@ export default {
         startCta: 'Enter Workspace',
       },
       workspace: {
+        aiSetupTitle: 'Connect AI before you start creating',
+        aiSetupDesc: 'A platform connects SparkArc to an AI provider, while an API key is your private access pass. Learn the two platform types first so you know what to do when credits or connections fail.',
         workflowTitle: 'Start with the creative workflow',
         workflowDesc: 'SparkArc turns a complex production into an iterative path. You can revisit any stage or ask the AI Director to coordinate the next step.',
         activityBarTitle: 'Creative Navigation',
@@ -59,18 +61,25 @@ export default {
         production: 'Draft each scene as a novel or interactive script',
         finish: 'Validate the structure in Blueprint, then preview and publish',
       },
+      aiSetup: {
+        systemPlatform: 'A “system platform” is a shared connection prepared by the site owner. By default, it uses the owner-hosted API key and credits.',
+        adminBoundary: 'Only admins can change a system platform\'s endpoint and models. On a local deployment, the first registered user becomes an admin and can grant admin access to others in Admin Center.',
+        personalOverride: 'Most important: if a system platform runs out of credits or stops working, use its edit button, enter your own API key, and save. Your key takes priority and applies only to your account.',
+        customPlatform: 'A “custom platform” is your private connection; you manage its endpoint, key, and models. In locked mode you cannot create one, but you can still override a system platform with your own key.',
+        modelUsage: 'After connecting a platform, use “Model Usage” to choose a model for each feature. The platform provides access; model usage decides which model is called.',
+      },
     },
     pages: {
       chat: {
-        teamTitle: 'Choose the right AI specialist', teamDesc: 'Switch between the Director and specialists, and monitor task progress and context usage. Give complex work to the Director for coordination.',
-        historyTitle: 'Keep the full collaboration trail', historyDesc: 'Replies, reasoning, and tool calls stay in chronological order, including running tasks restored after refresh.',
+        teamTitle: 'Hold the top-left button to choose an expert', teamDesc: 'Hold the expert button in the top-left to open the wheel, then drag toward the expert you need. If you are unsure, tell the Director and it will coordinate the right specialists.',
+        historyTitle: 'Tasks keep running in the background', historyDesc: 'You do not need to stay on this page after sending a task. Continue with other work; replies, reasoning, and tool progress remain available when you return or refresh.',
         inputTitle: 'Give the team a clear goal', inputDesc: 'Describe the outcome and attach source files. Name the project, scope, and expected result whenever possible.',
       },
       world: {
         seedTitle: 'Start from an idea seed', seedDesc: 'Enter the initial idea or continue from history. Tags constrain genre, mood, point of view, and length.',
         workshopTitle: 'Select a direction in the workshop', workshopDesc: 'Edit the expanded idea, pin it to the project, or use it as the basis for world generation.',
         lorebookTitle: 'Record world and character truth', lorebookDesc: 'Maintain characters, places, items, and rules here so later generation can use consistent facts.',
-        toolsTitle: 'Fill gaps with focused tools', toolsDesc: 'Style, character, and world tools cover specific gaps without forcing everything into one prompt.',
+        toolsTitle: 'Visual novel image generation (early test)', toolsDesc: 'Configure character sprites, backgrounds, and shared visual references here. This feature is still experimental and may be unstable; do not rely on it for critical assets.',
       },
       synopsis: {
         contextTitle: 'Define the story proposition', contextDesc: 'The logline captures protagonist, goal, obstacle, and stakes. Guidance records what to preserve or avoid.',
@@ -103,8 +112,8 @@ export default {
         projectsTitle: 'Check project and account state', projectsDesc: 'Review project, quota, and account information. Administrators also see system data.',
       },
       settings: {
-        modelsTitle: 'Map tasks to models', modelsDesc: 'Choose models for each use and configure semantic search. This affects quality, speed, and cost.',
-        platformsTitle: 'Connect AI platforms', platformsDesc: 'Manage providers, keys, and billing. Check this column first when a connection fails.',
+        modelsTitle: 'Choose a model for each purpose', modelsDesc: 'After connecting a platform, choose which model chat, writing, and other features call. Keep the system defaults when unsure.',
+        platformsTitle: 'System and custom platforms', platformsDesc: '“System” entries are shared connections configured by the site owner; “Custom” entries are private to you. If credits run out, edit the system platform and enter your own API key.',
         preferencesTitle: 'Tune workspace preferences', preferencesDesc: 'Announcements, appearance, language, and administration live here, along with the full onboarding replay.',
       },
     },

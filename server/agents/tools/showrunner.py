@@ -19,7 +19,7 @@ class RewriteBeatSheetInput(BaseModel):
 
 
 class RewriteOutlineInput(BaseModel):
-    overwrite_content: str = Field(description="完整大纲覆盖文本。优先使用 Outline Markup（@title/@summary/##/###）。必须只包含最终可保存的大纲正文，不得混入解释、确认话术、提示词、代码围栏或系统指令")
+    overwrite_content: str = Field(description="首批或完整大纲覆盖文本。优先使用 Outline Markup（@title/@summary/##/###）。大纲较长时建议每批约 10 个场景，以保证每个场景的规划质量并降低超长工具调用截断风险；首批调用本工具，剩余场景调用 patch_outline(search_text=\"\", replace_text=后续正文) 追加。10 个只是软建议，应按单场信息密度灵活调整，绝不能为满足数量而压缩场景内容或降低质量。必须只包含最终可保存的大纲正文，不得混入解释、确认话术、提示词、代码围栏或系统指令")
 
 
 class PatchSynopsisInput(BaseModel):
@@ -33,8 +33,8 @@ class PatchBeatSheetInput(BaseModel):
 
 
 class PatchOutlineInput(BaseModel):
-    search_text: str = Field(description="需要被替换的原文片段（必须精确匹配原文中的连续文字，建议提取完整的1~3句话）。传入空字符串可将 replace_text 追加到文件末尾")
-    replace_text: str = Field(description="修改后的新文本片段")
+    search_text: str = Field(description="需要被替换的原文片段（必须精确匹配原文中的连续文字，建议提取完整的1~3句话）。传入空字符串会将 replace_text 追加到大纲末尾；长大纲首批 rewrite_outline 后，后续批次应使用此追加能力")
+    replace_text: str = Field(description="修改或追加的新大纲正文。分批追加时保持每个场景信息完整，不能为缩短调用而牺牲质量")
 
 
 @tool(args_schema=RewriteSynopsisInput)

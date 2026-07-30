@@ -17,7 +17,10 @@ from story.public_share_review import (
     ensure_public_share_allowed,
 )
 from story.importer import import_project_stories_to_db
-from story.routes_version import _decode_version_description
+from story.routes_version import (
+    _decode_version_description,
+    _decode_version_show_full_directory,
+)
 from story.presentation_manifest import (
     PresentationAssetError,
     copy_presentation_snapshot,
@@ -371,6 +374,7 @@ async def get_version_share_info(share_id: str, request: Request):
             'author': version.user.username if getattr(version, 'user', None) else 'unknown',
             'project_name': version.project_name,
             'content_format': content_format,
+            'show_full_directory': _decode_version_show_full_directory(version.description),
         }
     finally:
         session.close()
@@ -400,6 +404,7 @@ async def get_version_share_data(share_id: str, request: Request):
 
         snapshot_path = version.snapshot_path
         _, content_format = _decode_version_description(version.description)
+        show_full_directory = _decode_version_show_full_directory(version.description)
     finally:
         session.close()
 
@@ -410,6 +415,7 @@ async def get_version_share_data(share_id: str, request: Request):
             return {
                 'format': 'novel',
                 'content': content,
+                'show_full_directory': show_full_directory,
             }
         except Exception as exc:
             return JSONResponse(status_code=500, content={'error': f'读取小说快照失败: {exc}'})
@@ -442,6 +448,7 @@ async def get_version_share_data(share_id: str, request: Request):
             'stories': story_list,
             'characters': char_map,
             'registry': registry,
+            'show_full_directory': show_full_directory,
             'presentation': _presentation_payload(
                 snapshot_path,
                 f'/api/play/v/{share_id}/presentation/assets',

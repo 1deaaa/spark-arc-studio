@@ -3,48 +3,28 @@ DeepSeek:
   models:
     deepseek-v4-flash-max:
       model_name: deepseek-v4-flash
+      max_context_tokens: 500000
+      max_output_tokens: 128000
       extra_body:
-        reasoning_effort: high
-      sys_credit_input_price_per_million: 1.0
-      sys_credit_output_price_per_million: 2.0
+        reasoning_effort: max
+    deepseek-v4-pro-max:
+      model_name: deepseek-v4-pro
+      max_context_tokens: 500000
+      max_output_tokens: 128000
+      extra_body:
+        reasoning_effort: max
   recharge_url: https://platform.deepseek.com/top_up
-Mimo Token Plan:
-  base_url: https://token-plan-cn.xiaomimimo.com/v1
-  models:
-    mimo-v2.5-pro: mimo-v2.5-pro
-    mimo-v2.5: mimo-v2.5
 Siliconflow:
   base_url: https://api.siliconflow.cn/v1
   models:
     Qwen/Qwen3-Embedding-0.6B:
       model_name: Qwen/Qwen3-Embedding-0.6B
-      extra_body:
-        dimensions: 1024
-        encoding_format: float
       max_context_tokens: 32768
       max_output_tokens: 64000
       input_modalities:
-        - text
+      - text
       output_modalities:
-        - embedding
-Alibaba Dashscope:
-  base_url: https://dashscope.aliyuncs.com/compatible-mode/v1
-  models:
-    通义向量-v4:
-      model_name: text-embedding-v4
-      input_modalities:
-        - text
-      output_modalities:
-        - embedding
-    deepseek-v4-flash-max:
-      model_name: deepseek-v4-flash
+      - embedding
       extra_body:
-        reasoning_effort: max
-    qwen3.5-plus-thinking:
-      model_name: qwen3.5-plus
-      extra_body:
-        enable_thinking: true
-    qwen3.5-plus:
-      model_name: qwen3.5-plus
-      extra_body:
-        enable_thinking: false
+        dimensions: 1024
+        encoding_format: float

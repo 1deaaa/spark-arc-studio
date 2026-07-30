@@ -32,6 +32,7 @@ def _get_shares_dir() -> str:
 
 
 FORMAT_MARKER_RE = re.compile(r'^\[\[format:(script|novel)\]\]\n?', re.IGNORECASE)
+DIRECTORY_MARKER_RE = re.compile(r'^\[\[directory:(full|progressive)\]\]\n?', re.IGNORECASE)
 PREVIEW_VERSION_PREFIX = '__preview__'
 
 
@@ -39,18 +40,35 @@ def _normalize_content_format(value: Optional[str]) -> str:
     return 'novel' if str(value or '').strip().lower() == 'novel' else 'script'
 
 
-def _encode_version_description(description: Optional[str], content_format: str) -> str:
+def _encode_version_description(
+    description: Optional[str],
+    content_format: str,
+    show_full_directory: bool = True,
+) -> str:
     desc = str(description or '')
-    stripped = FORMAT_MARKER_RE.sub('', desc).strip()
-    return f"[[format:{_normalize_content_format(content_format)}]]\n{stripped}".strip()
+    stripped = FORMAT_MARKER_RE.sub('', desc)
+    stripped = DIRECTORY_MARKER_RE.sub('', stripped).strip()
+    directory_mode = 'full' if show_full_directory else 'progressive'
+    return (
+        f"[[format:{_normalize_content_format(content_format)}]]\n"
+        f"[[directory:{directory_mode}]]\n"
+        f"{stripped}"
+    ).strip()
 
 
 def _decode_version_description(description: Optional[str]) -> tuple[str, str]:
     raw = str(description or '')
     match = FORMAT_MARKER_RE.match(raw)
     content_format = _normalize_content_format(match.group(1) if match else 'script')
-    clean_description = FORMAT_MARKER_RE.sub('', raw, count=1).strip()
+    clean_description = FORMAT_MARKER_RE.sub('', raw, count=1)
+    clean_description = DIRECTORY_MARKER_RE.sub('', clean_description, count=1).strip()
     return clean_description, content_format
+
+
+def _decode_version_show_full_directory(description: Optional[str]) -> bool:
+    raw = FORMAT_MARKER_RE.sub('', str(description or ''), count=1)
+    match = DIRECTORY_MARKER_RE.match(raw)
+    return not match or match.group(1).lower() == 'full'
 
 
 def _is_preview_version(version_name: Optional[str]) -> bool:
@@ -103,11 +121,13 @@ class VersionCreate(BaseModel):
     versionName: str
     description: Optional[str] = ""
     contentFormat: Optional[str] = 'script'
+    showFullDirectory: bool = True
 
 class VersionUpdate(BaseModel):
     versionName: Optional[str] = None
     description: Optional[str] = None
     is_shared: Optional[bool] = None
+    showFullDirectory: Optional[bool] = None
 
 
 class VersionPreviewCreate(BaseModel):
@@ -132,6 +152,7 @@ async def list_versions(project_name: str, user: dict = Depends(get_current_user
                 'version_name': item.version_name,
                 'description': _decode_version_description(item.description)[0],
                 'content_format': _decode_version_description(item.description)[1],
+                'show_full_directory': _decode_version_show_full_directory(item.description),
                 'created_at': item.created_at.isoformat(),
                 'is_shared': item.is_shared,
                 'share_id': item.share_id
@@ -162,7 +183,11 @@ async def create_version(project_name: str, data: VersionCreate, user: dict = De
                 user_id=int(user_id),
                 project_name=project_name,
                 version_name=data.versionName,
-                description=_encode_version_description(data.description, content_format),
+                description=_encode_version_description(
+                    data.description,
+                    content_format,
+                    data.showFullDirectory,
+                ),
                 snapshot_path=snapshot_path,
                 is_shared=False
             )
@@ -233,7 +258,19 @@ async def update_version(version_id: str, data: VersionUpdate, user: dict = Depe
             version.version_name = data.versionName
         if data.description is not None:
             _, current_format = _decode_version_description(version.description)
-            version.description = _encode_version_description(data.description, current_format)
+            show_full_directory = _decode_version_show_full_directory(version.description)
+            version.description = _encode_version_description(
+                data.description,
+                current_format,
+                show_full_directory,
+            )
+        if data.showFullDirectory is not None:
+            current_description, current_format = _decode_version_description(version.description)
+            version.description = _encode_version_description(
+                current_description,
+                current_format,
+                data.showFullDirectory,
+            )
         if data.is_shared is not None:
             if data.is_shared and get_disable_public_share():
                 return JSONResponse(status_code=403, content={'error': '管理员已禁用公开分享'})

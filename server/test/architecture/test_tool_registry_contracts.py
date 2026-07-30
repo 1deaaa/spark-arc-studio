@@ -52,6 +52,20 @@ def test_core_agent_tool_boundaries() -> None:
     assert tool_names("agent_style") == set()
 
 
+def test_long_write_tools_expose_batching_and_append_guidance() -> None:
+    character_schema = TOOLS_BY_NAME["rewrite_all_characters"].args_schema.model_fields
+    assert "最多约 5 个角色" in character_schema["overwrite_content"].description
+    assert "append" in character_schema
+    assert "第二批及后续批次必须传 true" in character_schema["append"].description
+
+    outline_schema = TOOLS_BY_NAME["rewrite_outline"].args_schema.model_fields
+    assert "每批约 10 个场景" in outline_schema["overwrite_content"].description
+    assert "patch_outline" in outline_schema["overwrite_content"].description
+
+    patch_schema = TOOLS_BY_NAME["patch_outline"].args_schema.model_fields
+    assert "追加到大纲末尾" in patch_schema["search_text"].description
+
+
 def test_get_tools_for_agent_is_defined_for_every_core_agent() -> None:
     for agent_id in CORE_AGENT_IDS:
         tools = get_tools_for_agent(agent_id)

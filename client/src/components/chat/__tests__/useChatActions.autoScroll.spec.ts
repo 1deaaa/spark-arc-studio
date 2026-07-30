@@ -53,6 +53,30 @@ function mountHarness() {
   return mount(Harness);
 }
 
+function mountDelayedListHarness() {
+  const Harness = defineComponent({
+    template: '<div v-if="listVisible" ref="listEl" />',
+    setup(_, { expose }) {
+      const listEl = ref<HTMLElement | null>(null);
+      const listVisible = ref(false);
+      const sending = ref(true);
+      const actions = useChatActions({
+        getSending: () => sending.value,
+        getHistory: () => [],
+        send: async () => undefined,
+        clear: async () => undefined,
+        editMessage: async () => undefined,
+        deleteMessage: async () => undefined,
+      }, { listRef: listEl });
+
+      expose({ actions, listEl, listVisible, sending });
+      return { listEl, listVisible };
+    },
+  });
+
+  return mount(Harness);
+}
+
 describe('useChatActions 聊天自动滚动开关', () => {
   afterEach(() => {
     vi.restoreAllMocks();
@@ -165,6 +189,36 @@ describe('useChatActions 聊天自动滚动开关', () => {
     expect(el.scrollTop).toBe(640);
 
     // 用户手动回到底部后，本轮应重新跟随新增长的正文。
+    setScrollMetrics(el, { scrollTop: 880, scrollHeight: 1200, clientHeight: 320 });
+    el.dispatchEvent(new Event('scroll'));
+    setScrollMetrics(el, { scrollTop: 880, scrollHeight: 1400, clientHeight: 320 });
+    exposed.actions.scrollToBottom();
+    await nextTick();
+    expect(el.scrollTop).toBe(1400);
+  });
+
+  it('流式回复开始后才挂载的消息列表仍能识别用户上滚和重新触底', async () => {
+    vi.spyOn(performance, 'now').mockReturnValue(1000);
+
+    const wrapper = mountDelayedListHarness();
+    await nextTick();
+    const exposed = wrapper.vm as any;
+
+    exposed.listVisible = true;
+    await nextTick();
+    await nextTick();
+
+    const el = exposed.listEl as HTMLElement;
+    setScrollMetrics(el, { scrollTop: 680, scrollHeight: 1000, clientHeight: 320 });
+    el.dispatchEvent(new WheelEvent('wheel', { deltaY: -40 }));
+    setScrollMetrics(el, { scrollTop: 520, scrollHeight: 1000, clientHeight: 320 });
+    el.dispatchEvent(new Event('scroll'));
+
+    setScrollMetrics(el, { scrollTop: 520, scrollHeight: 1200, clientHeight: 320 });
+    exposed.actions.scrollToBottom(true);
+    await nextTick();
+    expect(el.scrollTop).toBe(520);
+
     setScrollMetrics(el, { scrollTop: 880, scrollHeight: 1200, clientHeight: 320 });
     el.dispatchEvent(new Event('scroll'));
     setScrollMetrics(el, { scrollTop: 880, scrollHeight: 1400, clientHeight: 320 });

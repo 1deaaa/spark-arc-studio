@@ -105,4 +105,25 @@ describe('directorAutoWriteStore SSE 恢复契约', () => {
     expect(snapshot.currentSceneTitle).toBe('1-3 决断');
     expect(snapshot.streamingChars).toBe(0);
   });
+
+  it('未收到聊天旁路事件时也能从服务端 running 状态恢复任务', async () => {
+    vi.mocked(fetchWithAuth).mockResolvedValue(new Response(JSON.stringify({
+      status: 'running',
+      mode: 'continuous_write',
+      exportFormat: 'novel',
+      currentChapterIndex: 1,
+      currentSceneIndex: 2,
+      totalChapters: 5,
+      totalScenes: 20,
+      acknowledged: false,
+    }), { status: 200 }));
+    vi.stubGlobal('fetch', vi.fn().mockResolvedValue(sseResponse([])));
+
+    const store = useDirectorAutoWriteStore();
+    await store.refreshSnapshot('后台项目');
+
+    expect(store.tasks['后台项目']?.snapshot.status).toBe('running');
+    expect(store.tasks['后台项目']?.snapshot.currentSceneIndex).toBe(2);
+    expect(store.activeProjects).toContain('后台项目');
+  });
 });

@@ -36,6 +36,14 @@ export function validateSparkArcConfig(config) {
   if (!/^[A-Za-z0-9_.-]+\/[A-Za-z0-9_.-]+$/.test(slug)) {
     throw new Error('sparkarc.json 的 repository.slug 必须是 owner/repository 格式。');
   }
+  if (config.repository?.mainlandRelease?.provider !== 'gitee') {
+    throw new Error('sparkarc.json 当前仅支持 repository.mainlandRelease.provider = "gitee"。');
+  }
+  const mainlandReleaseSlug = requireString(config.repository.mainlandRelease.slug, 'repository.mainlandRelease.slug');
+  if (!/^[A-Za-z0-9_.-]+\/[A-Za-z0-9_.-]+$/.test(mainlandReleaseSlug)) {
+    throw new Error('sparkarc.json 的 repository.mainlandRelease.slug 必须是 owner/repository 格式。');
+  }
+  requireUrlList(config.repository?.mainlandCloneUrls, 'repository.mainlandCloneUrls');
   if (!config.network || typeof config.network !== 'object') {
     throw new Error('sparkarc.json 缺少 network 配置。');
   }
@@ -71,12 +79,22 @@ export function readSparkArcConfig() {
 export function repositoryUrls(config = readSparkArcConfig()) {
   const slug = config.repository.slug;
   const web = `https://github.com/${slug}`;
+  const mainlandReleaseSlug = config.repository.mainlandRelease.slug;
+  const mainlandReleaseWeb = `https://gitee.com/${mainlandReleaseSlug}`;
   return {
     slug,
     web,
     clone: `${web}.git`,
+    mainlandClones: [...config.repository.mainlandCloneUrls],
     releaseApi: `https://api.github.com/repos/${slug}/releases/latest`,
     releasePage: `${web}/releases/latest`,
+    mainlandRelease: {
+      provider: config.repository.mainlandRelease.provider,
+      slug: mainlandReleaseSlug,
+      web: mainlandReleaseWeb,
+      releaseApi: `https://gitee.com/api/v5/repos/${mainlandReleaseSlug}/releases/latest`,
+      releasePage: `${mainlandReleaseWeb}/releases/latest`,
+    },
   };
 }
 

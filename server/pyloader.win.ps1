@@ -14,13 +14,13 @@
 #   Step 4: pip install -r requirements.txt if exists (standard packages)
 #   Then write .deploy_complete marker. Does NOT launch the app.
 #
-# Minimum: Windows 10 1507 (PowerShell 5.0, .NET 4.6)
-# Usage: Called from project-level BAT, or: pwsh -File pyloader.ps1
+# Minimum: Windows 10 1507 (Windows PowerShell 5.0, .NET 4.6)
+# Usage: Called from project-level BAT, or run with powershell.exe/pwsh.exe -File.
 
 $ErrorActionPreference = "Stop"
 
 # ===== PYTHON VERSION CONFIG =====
-# 目标：稳定获取任意可用的 Python 3.x.x，而不是锁死某个小版本或发布标签。
+# Resolve any available Python 3.x.x release instead of pinning a patch/build tag.
 $PythonMajorMinor = "3.13"
 # ============================================================
 
@@ -34,7 +34,7 @@ $PythonExe     = Join-Path $EnvDir "python.exe"
 $InitScript    = Join-Path $BasePath "init_env.py"
 $ReqFile       = Join-Path $BasePath "requirements.txt"
 
-# 允许调用方通过环境变量覆盖镜像；正常使用无需设置，脚本会自动探测网络区域。
+# Callers may override mirrors via environment variables. Normal use needs no overrides.
 $PipMirror         = if ($env:PYLOADER_PIP_MIRROR) { $env:PYLOADER_PIP_MIRROR } else { $null }
 $PythonMirrorBase  = if ($env:PYLOADER_PYTHON_MIRROR_BASE) { $env:PYLOADER_PYTHON_MIRROR_BASE } else { $null }
 $MirrorLatestUrl   = $null
@@ -252,7 +252,7 @@ function Resolve-PythonArchive {
     $script:ArchiveName = "cpython-$ResolvedPythonVersion+$ResolvedReleaseTag-x86_64-pc-windows-msvc-install_only.tar.gz"
     $script:ArchiveLocal = Join-Path $RuntimeRoot $ArchiveName
 
-    # PythonMirrorBase 已根据网络区域自动选择：国内用 USTC 镜像，海外用 GitHub 官方
+    # PythonMirrorBase is selected for the detected network region.
     $mirrorUrl = "$PythonMirrorBase$($best.Href)"
 
     return [pscustomobject]@{
@@ -276,25 +276,27 @@ function Download-ResolvedArchive {
         $mirrorHost = ([uri]$ResolvedInfo.MirrorUrl).Host
         $session = New-Object Microsoft.PowerShell.Commands.WebRequestSession
 
-        # USTC 大文件镜像会先返回 JavaScript 校验页，Cookie 值必须来自本次请求的实际出口 IP。
-        if ($mirrorHost -eq "mirrors.ustc.edu.cn") {
-            $verification = Invoke-WebRequest -Uri $ResolvedInfo.MirrorUrl -WebSession $session -UseBasicParsing
+        Invoke-WebRequest -Uri $ResolvedInfo.MirrorUrl -WebSession $session -OutFile $ArchiveLocal -UseBasicParsing
+
+        # USTC sometimes returns a small JavaScript challenge instead of the archive.
+        if ($mirrorHost -eq "mirrors.ustc.edu.cn" -and (Get-Item $ArchiveLocal).Length -lt 1MB) {
+            $verificationContent = Get-Content -Path $ArchiveLocal -Raw -ErrorAction Stop
             $cookieMatch = [regex]::Match(
-                [string]$verification.Content,
+                [string]$verificationContent,
                 'document\.cookie\s*=\s*"addr=([^;"]+)'
             )
-            if (-not $cookieMatch.Success) {
-                throw "USTC mirror verification page did not provide an address cookie"
+            if ($cookieMatch.Success) {
+                $verificationAddress = $cookieMatch.Groups[1].Value
+                [System.Net.IPAddress]$parsedAddress = $null
+                if (-not [System.Net.IPAddress]::TryParse($verificationAddress, [ref]$parsedAddress)) {
+                    throw "USTC mirror returned an invalid verification address"
+                }
+                $session.Cookies.Add((New-Object System.Net.Cookie("addr", $verificationAddress, "/", $mirrorHost)))
+                Remove-Item $ArchiveLocal -Force
+                Invoke-WebRequest -Uri $ResolvedInfo.MirrorUrl -WebSession $session -OutFile $ArchiveLocal -UseBasicParsing
             }
-            $verificationAddress = $cookieMatch.Groups[1].Value
-            [System.Net.IPAddress]$parsedAddress = $null
-            if (-not [System.Net.IPAddress]::TryParse($verificationAddress, [ref]$parsedAddress)) {
-                throw "USTC mirror returned an invalid verification address"
-            }
-            $session.Cookies.Add((New-Object System.Net.Cookie("addr", $verificationAddress, "/", $mirrorHost)))
         }
 
-        Invoke-WebRequest -Uri $ResolvedInfo.MirrorUrl -WebSession $session -OutFile $ArchiveLocal -UseBasicParsing
         if ((Get-Item $ArchiveLocal).Length -lt 1MB) {
             throw "Downloaded file too small, likely an error page"
         }
@@ -418,7 +420,7 @@ namespace SparkArc {
 "@
 }
 
-# ---- 网络探测与镜像选择 ----
+# ---- Network detection and mirror selection ----
 Resolve-Mirrors
 
 # ---- Skip python deployment if already fully deployed ----

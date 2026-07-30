@@ -51,11 +51,15 @@
       </div>
     
     <!-- 历史记录快捷入口 -->
-      <div class="history-hint" @click="showHistory = true">
-      <n-icon :component="Clock" size="16" />
-        <span>{{ t('views.world.mobile.viewHistory') }}</span>
-      <n-icon :component="ChevronRight" size="16" />
-      </div>
+      <button type="button" class="history-hint" @click="showHistory = true">
+        <n-icon :component="Clock" size="16" />
+        <span class="history-hint-copy">
+          <strong>{{ historyEntryTitle }}</strong>
+          <span>{{ historyEntrySummary }}</span>
+        </span>
+        <n-badge v-if="unreadCount > 0" :value="unreadCount" :max="99" />
+        <n-icon :component="ChevronRight" size="16" />
+      </button>
     
     <!-- 灵感主题参数 -->
       <div class="flow-section tags-section">
@@ -105,7 +109,8 @@
           ref="museHistoryRef" 
           type="muse" 
           :show-header="false" 
-          @select="handleMuseHistorySelect" 
+          @select="handleMobileHistorySelect"
+          @unread-change="handleUnreadChange"
         />
       </n-drawer-content>
       </n-drawer>
@@ -114,8 +119,8 @@
 </template>
 
 <script setup lang="ts">
-import { ref } from 'vue';
-import { NButton, NIcon, NDrawer, NDrawerContent } from 'naive-ui';
+import { computed, ref } from 'vue';
+import { NBadge, NButton, NIcon, NDrawer, NDrawerContent } from 'naive-ui';
 import { useI18n } from 'vue-i18n';
 import { ArrowRight, ChevronRight, Clock, Pin, Sparkles, Zap } from '@lucide/vue';
 import HistoryPanel from '../../components/dlg-editor/HistoryPanel.vue';
@@ -124,8 +129,10 @@ import InspireTagSelector from '../../components/lorebook/InspireTagSelector.vue
 import MobileTextArea from '../../components/editors/mobile/MobileTextArea.vue';
 import { useWorldLogic } from '../../composables/useWorldLogic';
 import { scrollToFlowStep } from '../../utils/mobileFlow';
+import { useProjectStore } from '../../components/stores/projectStore';
 
 const { t } = useI18n();
+const projectStore = useProjectStore();
 const showHistory = ref(false);
 
 const {
@@ -135,6 +142,8 @@ const {
   museHistoryRef,
   isGenerating,
   isCurrentInspirationBound,
+  unreadCount,
+  handleUnreadChange,
   selectedGenres,
   selectedTones,
   selectedWorldviews,
@@ -145,6 +154,20 @@ const {
   handleGenerateFromMuse,
   handlePinInspiration,
 } = useWorldLogic();
+
+const historyEntryTitle = computed(() => projectStore.currentProject
+  ? t('views.world.history.projectInspiration')
+  : t('views.world.history.inspirationDrafts'));
+
+const historyEntrySummary = computed(() => {
+  if (!projectStore.currentProject) return t('views.world.history.draftsSummary');
+  return projectStore.boundInspirationSource || t('views.world.history.noActiveInspiration');
+});
+
+function handleMobileHistorySelect(item: Parameters<typeof handleMuseHistorySelect>[0]) {
+  handleMuseHistorySelect(item);
+  showHistory.value = false;
+}
 
 function handleGenerateSettingsAndScroll() {
   void handleGenerateFromMuse({
@@ -222,14 +245,39 @@ function handleGenerateSettingsAndScroll() {
   color: var(--spark-text-muted);
   cursor: pointer;
   transition: all 0.2s;
+  width: 100%;
+  font-family: inherit;
+  text-align: left;
 }
 
 .history-hint:active {
   background: rgba(var(--spark-primary-rgb), 0.05);
 }
 
-.history-hint span {
+.history-hint-copy {
   flex: 1;
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+
+.history-hint-copy strong,
+.history-hint-copy span {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.history-hint-copy strong {
+  color: var(--spark-text);
+  font-size: var(--spark-fs-sm);
+  font-weight: 600;
+}
+
+.history-hint-copy span {
+  color: var(--spark-text-muted);
+  font-size: var(--spark-fs-xs);
 }
 
 :deep(.n-input-wrapper),

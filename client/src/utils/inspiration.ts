@@ -1,3 +1,12 @@
+export function shouldRestoreInspirationWorkbenchCache(
+  cachedInspirationId: string | null | undefined,
+  boundInspirationId: string | null | undefined,
+): boolean {
+  const cachedId = String(cachedInspirationId || '').trim();
+  const boundId = String(boundInspirationId || '').trim();
+  return Boolean(cachedId && boundId && cachedId === boundId);
+}
+
 export function extractLoglineFromInspiration(text: string): string {
   const raw = String(text || '');
   if (!raw.trim()) return '';

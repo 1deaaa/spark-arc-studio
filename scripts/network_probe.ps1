@@ -1,22 +1,22 @@
-# network_probe.ps1 - 通用网络环境探测与镜像选择组件
+# network_probe.ps1 - Shared network region detection and mirror selection.
 #
-# 设计目标：
-#   1. 镜像候选与仓库身份统一读取根目录 sparkarc.json，可被 pyloader.ps1、start.bat 或其他 PowerShell 脚本复用。
-#   2. 公益 IP 归属地 API，无 API Key、无明显频率限制。
-#   3. 探测结果缓存到临时文件，避免每次调用都查 IP（缓存 5 分钟）。
-#   4. 按国家/地区给出推荐镜像，并提供 URL 可达性探测函数。
+# Design goals:
+#   1. Read mirror candidates and repository identity from sparkarc.json.
+#   2. Use public GeoIP endpoints that do not require an API key.
+#   3. Cache region detection for five minutes.
+#   4. Select mirrors by region and provide endpoint reachability checks.
 #
-# 用法：
-#   # 直接执行并输出 JSON
-#   pwsh -File scripts/network_probe.ps1
+# Usage:
+#   # Run directly and print JSON.
+#   powershell.exe -File scripts/network_probe.ps1
 #
-#   # 点源导入后调用函数
+#   # Dot-source and call functions.
 #   . "scripts/network_probe.ps1"
 #   $region = Get-NetworkRegion
 #   $mirror = Get-RecommendedMirror -Type "pypi"
 #   if (Test-EndpointReachable $mirror) { ... }
 #
-# 返回对象示例：
+# Example result:
 #   {
 #     "countryCode": "CN",
 #     "countryName": "China",
@@ -36,30 +36,29 @@ param(
 
 $ErrorActionPreference = "Stop"
 
-# ===== 配置区 =====
+# ===== CONFIGURATION =====
 Add-Type -AssemblyName System.Net.Http -ErrorAction Stop
 
 $CacheSchemaVersion = 2
 $CacheTtlSeconds = 300
 $ProbeTimeoutSec = 3
 
-# 公益 IP 归属地 API（按优先级排列）
-# freeipapi.com：完全免费、无需 Key、返回 countryCode/countryName，额度较宽松。
+# Public GeoIP endpoints are listed in priority order in sparkarc.json.
 $ProjectRoot = Split-Path -Parent $PSScriptRoot
 $SparkArcConfigPath = Join-Path $ProjectRoot "sparkarc.json"
 
 function Get-SparkArcConfig {
     if (-not (Test-Path $SparkArcConfigPath)) {
-        throw "未找到跨语言项目常量文件: $SparkArcConfigPath"
+        throw "Cross-language project configuration was not found: $SparkArcConfigPath"
     }
     try {
         $config = Get-Content -Path $SparkArcConfigPath -Raw | ConvertFrom-Json -ErrorAction Stop
     }
     catch {
-        throw "无法解析 ${SparkArcConfigPath}: $($_.Exception.Message)"
+        throw "Failed to parse ${SparkArcConfigPath}: $($_.Exception.Message)"
     }
-    if ($config.schemaVersion -ne 1 -or $config.repository.provider -ne "github" -or -not $config.repository.slug -or @($config.network.geoIpProviders).Count -lt 2) {
-        throw "sparkarc.json 缺少有效的 GitHub 仓库身份。"
+    if ($config.schemaVersion -ne 1 -or $config.repository.provider -ne "github" -or -not $config.repository.slug -or $config.repository.mainlandRelease.provider -ne "gitee" -or -not $config.repository.mainlandRelease.slug -or @($config.repository.mainlandCloneUrls).Count -lt 1 -or @($config.network.geoIpProviders).Count -lt 2) {
+        throw "sparkarc.json does not contain a valid repository identity and mainland clone source."
     }
     return $config
 }
@@ -67,7 +66,7 @@ function Get-SparkArcConfig {
 $SparkArcConfig = Get-SparkArcConfig
 $GeoIpProviders = @($SparkArcConfig.network.geoIpProviders | ForEach-Object { [string]$_ })
 
-# 镜像表：按区域归类，key 越小优先级越高（同一区域内）
+# Build a region-aware mirror table from the shared configuration.
 $MirrorTable = @{}
 foreach ($property in $SparkArcConfig.network.resources.PSObject.Properties) {
     $route = $property.Value
@@ -77,7 +76,7 @@ foreach ($property in $SparkArcConfig.network.resources.PSObject.Properties) {
     }
 }
 
-# ===== 路径与缓存 =====
+# ===== PATHS AND CACHE =====
 function Get-NetworkProbeCacheDir {
     $base = $env:TEMP
     if (-not $base) { $base = [System.IO.Path]::GetTempPath() }
@@ -114,7 +113,7 @@ function Write-NetworkProbeCache {
     $clone | ConvertTo-Json -Depth 4 | Set-Content -Path (Get-NetworkProbeCacheFile) -Encoding UTF8
 }
 
-# ===== 网络探测 =====
+# ===== NETWORK DETECTION =====
 function Test-EndpointReachable {
     param(
         [Parameter(Mandatory = $true)]
@@ -152,7 +151,7 @@ function Test-EndpointReachable {
             $request.Dispose()
         }
 
-        # 仅在服务端明确拒绝 HEAD 时回退 GET，仍只读取响应头。
+        # Fall back to GET only when the server explicitly rejects HEAD.
         if ($shouldRetryWithGet) {
             $response = $client.GetAsync(
                 $Url,
@@ -180,7 +179,7 @@ function Test-EndpointReachable {
 function Invoke-DirectJsonRequest {
     <#
     .SYNOPSIS
-        绕过 HTTP(S)_PROXY 请求 JSON，避免本地代理出口污染属地判断。
+        Request JSON without HTTP(S)_PROXY so a local proxy cannot alter region detection.
     #>
     param([Parameter(Mandatory = $true)][string]$Url)
 
@@ -206,14 +205,14 @@ function Invoke-DirectJsonRequest {
 function Invoke-GeoIpLookup {
     <#
     .SYNOPSIS
-        用至少两个无代理 GeoIP 源的一致结果确认出口国家。
+        Confirm the public network region using consistent results from GeoIP sources.
     #>
     $votes = @()
     foreach ($provider in $GeoIpProviders) {
         $data = Invoke-DirectJsonRequest -Url $provider
         if (-not $data) { continue }
 
-        # 不同 API 的字段名略有差异，做兼容。
+        # Normalize the field names returned by different providers.
         $countryCode = if ($data.countryCode) { $data.countryCode } elseif ($data.country_code) { $data.country_code } elseif ($data.country) { $data.country } else { "" }
         $countryName = if ($data.countryName) { $data.countryName } elseif ($data.country_name) { $data.country_name } elseif ($data.country) { $data.country } else { "" }
         $countryCode = ($countryCode -as [string]).Trim().ToUpper()
@@ -243,9 +242,9 @@ function Invoke-GeoIpLookup {
 function Get-NetworkRegion {
     <#
     .SYNOPSIS
-        获取当前网络出口的 IP 归属国家代码。
+        Get the country code associated with the current public network address.
     .OUTPUTS
-        pscustomobject，包含 CountryCode、CountryName、IsMainlandChina。
+        A pscustomobject with CountryCode, CountryName, and IsMainlandChina.
     #>
     $cached = Read-NetworkProbeCache
     if ($cached -and $cached.countryCode) {
@@ -278,7 +277,7 @@ function Get-NetworkRegion {
         Confidence        = $geo.Confidence
     }
 
-    # 写缓存（只写稳定字段）
+    # Cache stable fields only.
     Write-NetworkProbeCache -Payload ([pscustomobject]@{
         countryCode     = $result.CountryCode
         countryName     = $result.CountryName
@@ -292,19 +291,18 @@ function Get-NetworkRegion {
 function Get-GitCloneCandidates {
     <#
     .SYNOPSIS
-        从 sparkarc.json 派生官方仓库克隆地址；所有网络都保留代理候选作为失败回退。
+        Build repository clone candidates from sparkarc.json.
     #>
     param([bool]$Probe = $true)
 
     $repositoryUrl = "https://github.com/$($SparkArcConfig.repository.slug).git"
     $region = Get-NetworkRegion
-    $proxyCandidates = (Get-RecommendedMirror -Type "gh_proxy" -Probe $Probe).Candidates
-    $proxiedCandidates = @($proxyCandidates | ForEach-Object { "$(($_ -as [string]).TrimEnd('/'))/$repositoryUrl" })
+    $mainlandCandidates = @($SparkArcConfig.repository.mainlandCloneUrls)
     $candidates = if ($region.IsMainlandChina) {
-        $proxiedCandidates + @($repositoryUrl)
+        $mainlandCandidates + @($repositoryUrl)
     }
     else {
-        @($repositoryUrl) + $proxiedCandidates
+        @($repositoryUrl) + $mainlandCandidates
     }
     $ordered = @($candidates | Select-Object -Unique)
     return [pscustomobject]@{
@@ -317,11 +315,11 @@ function Get-GitCloneCandidates {
 function Get-RecommendedMirror {
     <#
     .SYNOPSIS
-        根据网络归属地返回某类下载资源的推荐镜像 URL。
+        Return recommended mirror URLs for a resource type and network region.
     .PARAMETER Type
-        资源类型：由 sparkarc.json 的 network.resources 声明。
+        Resource type declared by network.resources in sparkarc.json.
     .PARAMETER Probe
-        是否探测可达性并按可达性排序（默认 true）。
+        Probe reachability and sort reachable candidates first. Defaults to true.
     #>
     param(
         [Parameter(Mandatory = $true)]
@@ -370,7 +368,7 @@ function Get-RecommendedMirror {
 function Invoke-NetworkProbe {
     <#
     .SYNOPSIS
-        一次性探测网络环境并返回完整结果对象。
+        Detect the network environment and return the complete result.
     #>
     $region = Get-NetworkRegion
     $mirrors = @{}
@@ -389,7 +387,7 @@ function Invoke-NetworkProbe {
     }
 }
 
-# ===== 直接执行时输出 =====
+# ===== DIRECT EXECUTION OUTPUT =====
 if ($MyInvocation.InvocationName -ne '.') {
     switch ($Output) {
         "pypi"            { (Get-RecommendedMirror -Type "pypi").Primary }
@@ -399,7 +397,7 @@ if ($MyInvocation.InvocationName -ne '.') {
         "python_standalone" {
             $url = (Get-RecommendedMirror -Type "python_standalone").Primary
             if (-not $url) {
-                Write-Error "当前网络环境下没有可用的 python-build-standalone 镜像索引页。" -ErrorAction Stop
+                Write-Error "No python-build-standalone mirror index is configured for this network." -ErrorAction Stop
             }
             $url
         }

@@ -119,6 +119,13 @@ export type AiEmbeddingItem = {
   temperature?: number | null;
 };
 
+export type InspirationBindChangedPayload = {
+  boundId?: string | null;
+  unboundIds?: string[];
+  projectName: string;
+  entry?: InspirationEntry;
+};
+
 export type AiPlatform = {
   platform_id: ApiId;
   name: string;

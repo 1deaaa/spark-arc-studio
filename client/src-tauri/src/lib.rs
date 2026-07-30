@@ -56,72 +56,6 @@ fn set_launcher_theme_state(app: AppHandle, state: LauncherThemeState) -> Result
     fs::write(path, raw).map_err(|err| err.to_string())
 }
 
-fn parse_remote_app_url(target_url: &str) -> Result<tauri::Url, String> {
-    let target = target_url
-        .parse::<tauri::Url>()
-        .map_err(|err| format!("业务地址无效: {err}"))?;
-    if !matches!(target.scheme(), "http" | "https") {
-        return Err("业务地址仅支持 HTTP 或 HTTPS。".to_string());
-    }
-    Ok(target)
-}
-
-/// 在独立原生窗口中打开业务前端，避免远端页面覆盖 Launcher 恢复入口。
-#[cfg(not(mobile))]
-#[tauri::command]
-async fn open_remote_app(app: AppHandle, target_url: String) -> Result<(), String> {
-    let target = parse_remote_app_url(&target_url)?;
-
-    if let Some(existing) = app.get_webview_window("workspace") {
-        existing.navigate(target).map_err(|err| err.to_string())?;
-        existing.show().map_err(|err| err.to_string())?;
-        existing.set_focus().map_err(|err| err.to_string())?;
-        if let Some(launcher) = app.get_webview_window("main") {
-            launcher.hide().map_err(|err| err.to_string())?;
-        }
-        return Ok(());
-    }
-
-    let launcher = app.get_webview_window("main");
-    let workspace =
-        tauri::WebviewWindowBuilder::new(&app, "workspace", tauri::WebviewUrl::External(target))
-            .title("SparkArc Studio")
-            .inner_size(1600.0, 900.0)
-            .min_inner_size(1024.0, 640.0)
-            .resizable(true)
-            .decorations(false)
-            .visible(false)
-            .center()
-            .on_page_load(move |window, payload| {
-                if matches!(payload.event(), tauri::webview::PageLoadEvent::Finished) {
-                    let _ = window.show();
-                    let _ = window.set_focus();
-                    if let Some(launcher) = launcher.as_ref() {
-                        let _ = launcher.hide();
-                    }
-                }
-            })
-            .build()
-            .map_err(|err| format!("无法创建业务窗口: {err}"))?;
-
-    let app_on_workspace_close = app.clone();
-    workspace.on_window_event(move |event| {
-        if matches!(event, tauri::WindowEvent::CloseRequested { .. }) {
-            if let Some(launcher) = app_on_workspace_close.get_webview_window("main") {
-                let _ = launcher.show();
-                let _ = launcher.set_focus();
-            }
-        }
-    });
-    Ok(())
-}
-
-#[cfg(mobile)]
-#[tauri::command]
-async fn open_remote_app(_app: AppHandle, _target_url: String) -> Result<(), String> {
-    Err("移动端不支持创建独立业务窗口。".to_string())
-}
-
 // ===== 本地部署相关命令 =====
 
 /// 用户主目录下的 SparkArc 状态目录。
@@ -130,125 +64,55 @@ fn sparkarc_user_dir() -> Result<PathBuf, String> {
     Ok(home.join(".sparkarc"))
 }
 
-/// 服务安装记录文件路径：~/.sparkarc/service.json
-fn service_record_path() -> Result<PathBuf, String> {
-    Ok(sparkarc_user_dir()?.join("service.json"))
-}
-
-/// 由 Launcher 写入的服务记录与后端 `service_registry` 保持同一格式。
-fn write_service_record(project_root: &Path) -> Result<(), String> {
-    let user_dir = sparkarc_user_dir()?;
-    fs::create_dir_all(&user_dir).map_err(|err| err.to_string())?;
-    let record = serde_json::json!({
-        "projectRoot": project_root,
-        "installedAt": chrono::Utc::now().to_rfc3339(),
-        "platform": std::env::consts::OS,
-        "machine": std::env::consts::ARCH,
-    });
-    let path = service_record_path()?;
-    let temporary = path.with_extension("tmp");
-    let content = serde_json::to_vec_pretty(&record).map_err(|err| err.to_string())?;
-    fs::write(&temporary, content).map_err(|err| err.to_string())?;
-    if let Err(first_error) = fs::rename(&temporary, &path) {
-        if path.exists() {
-            fs::remove_file(&path).map_err(|err| err.to_string())?;
-            fs::rename(&temporary, &path).map_err(|err| err.to_string())?;
-        } else {
-            return Err(first_error.to_string());
-        }
-    }
-    Ok(())
-}
-
 /// 部署日志文件路径：~/.sparkarc/deploy.log
 fn deploy_log_path() -> Result<PathBuf, String> {
     Ok(sparkarc_user_dir()?.join("deploy.log"))
 }
 
-/// 读取服务安装记录。
-fn read_service_record() -> Result<Option<serde_json::Value>, String> {
-    let path = service_record_path()?;
-    if !path.is_file() {
-        return Ok(None);
-    }
-    let raw = fs::read_to_string(path).map_err(|err| err.to_string())?;
-    serde_json::from_str(&raw)
-        .map(Some)
-        .map_err(|err| err.to_string())
+fn managed_backend_is_ready(project_root: Option<&Path>, is_windows: bool) -> bool {
+    project_root.is_some_and(|root| {
+        let server_root = root.join("server");
+        let python_root = server_root.join(".runtime").join("python");
+        let start_script = if is_windows {
+            root.join("start.bat")
+        } else {
+            root.join("start.sh")
+        };
+        let python_executable = if is_windows {
+            python_root.join("python.exe")
+        } else {
+            python_root.join("bin").join("python3")
+        };
+
+        server_root.join("app.py").is_file()
+            && start_script.is_file()
+            && python_executable.is_file()
+            && python_root.join(".deploy_complete").is_file()
+            && root
+                .join("client")
+                .join("dist")
+                .join("index.html")
+                .is_file()
+            && root
+                .join("client")
+                .join(".frontend_build_complete")
+                .is_file()
+    })
 }
 
-/// 校验记录的 projectRoot 是否仍然有效。
-fn is_record_valid(record: &serde_json::Value) -> bool {
-    let Some(root_str) = record.get("projectRoot").and_then(|v| v.as_str()) else {
-        return false;
-    };
-    let root = Path::new(root_str);
-    if !root.is_dir() {
-        return false;
-    }
-    (root.join("server").join("app.py")).is_file()
-        || root.join("start.bat").is_file()
-        || root.join("start.sh").is_file()
-}
-
-/// 返回服务记录中有效的项目根目录。
-fn valid_record_project_root() -> Result<Option<PathBuf>, String> {
-    let Some(record) = read_service_record()? else {
-        return Ok(None);
-    };
-    if !is_record_valid(&record) {
-        return Ok(None);
-    }
-    let Some(root_str) = record.get("projectRoot").and_then(|v| v.as_str()) else {
-        return Ok(None);
-    };
-    Ok(Some(PathBuf::from(root_str)))
-}
-
-/// 获取当前可执行文件所在目录。
-fn launcher_dir() -> Result<PathBuf, String> {
-    let exe = std::env::current_exe().map_err(|err| err.to_string())?;
-    exe.parent()
-        .map(|p| p.to_path_buf())
-        .ok_or_else(|| "无法获取启动器所在目录".to_string())
-}
-
-/// 探测 launcher 同级目录下是否已有 SparkArc 项目。
-fn find_sibling_backend() -> Option<PathBuf> {
-    let launcher_dir = launcher_dir().ok()?;
-    for name in ["sparkarc", "sparkarc-server", "server"] {
-        let candidate = launcher_dir.join(name);
-        if candidate.is_dir()
-            && ((candidate.join("server").join("app.py")).is_file()
-                || candidate.join("start.bat").is_file()
-                || candidate.join("start.sh").is_file())
-        {
-            return Some(candidate);
-        }
-    }
-    None
-}
-
-/// 命令：检查本地后端目录是否存在且有效。
+/// 命令：检查 APP 数据目录中的本地后端是否已完成最小可运行部署。
 #[tauri::command]
-fn check_local_backend_dir() -> Result<bool, String> {
+fn check_local_backend_ready() -> Result<bool, String> {
     if is_mobile_runtime() {
         return Ok(false);
     }
 
-    let manager = DeploymentManager::new()?;
-    if manager.managed_project_root()?.is_some() {
-        return Ok(true);
-    }
-
-    // 优先读取用户目录记录
-    if let Some(record) = read_service_record()? {
-        if is_record_valid(&record) {
-            return Ok(true);
-        }
-    }
-    // 回退到探测 launcher 同级目录
-    Ok(find_sibling_backend().is_some())
+    let project_root = DeploymentManager::new()?.managed_project_root()?;
+    let is_windows = matches!(tauri_plugin_os::type_(), tauri_plugin_os::OsType::Windows);
+    Ok(managed_backend_is_ready(
+        project_root.as_deref(),
+        is_windows,
+    ))
 }
 
 /// 命令：读取部署日志的最后 N 行。
@@ -276,6 +140,9 @@ fn read_deployment_log(lines: Option<usize>) -> Result<String, String> {
 /// 全局部署子进程句柄，用于避免重复启动。
 static DEPLOYMENT_CHILD: Mutex<Option<std::process::Child>> = Mutex::new(None);
 
+#[cfg(windows)]
+const CREATE_NO_WINDOW: u32 = 0x08000000;
+
 fn is_mobile_runtime() -> bool {
     cfg!(mobile)
         || matches!(
@@ -300,8 +167,7 @@ fn deployment_child_is_running() -> Result<bool, String> {
 
 /// 命令：启动本地服务。
 ///
-/// 手动登记的工作树只会被启动；没有手动目录时，才会使用 Launcher 自己
-/// 管理的 `main` 工作树。这样开发者的 dev 分支和用户手工修改不会被覆盖。
+/// Launcher 始终启动用户目录下自己管理的 `main` 工作树，不读取手动源码目录。
 #[tauri::command]
 async fn start_local_deployment(_app: AppHandle) -> Result<(), String> {
     if is_mobile_runtime() {
@@ -321,41 +187,6 @@ async fn start_local_deployment(_app: AppHandle) -> Result<(), String> {
 
     append_log("开始本地部署...");
 
-    if let Some(project_root) = valid_record_project_root()? {
-        append_log(&format!(
-            "检测到已注册的后端目录，尝试启动: {:?}",
-            project_root
-        ));
-        let is_managed = manager
-            .managed_project_root()?
-            .as_deref()
-            .is_some_and(|root| root == project_root.as_path());
-        if is_managed {
-            let node_manager = manager.clone();
-            let node_bin_dir =
-                tauri::async_runtime::spawn_blocking(move || node_manager.ensure_node_runtime())
-                    .await
-                    .map_err(|err| format!("受管 Node 准备任务异常结束: {err}"))??;
-            return start_backend(
-                &project_root,
-                is_windows,
-                Some(&node_bin_dir),
-                true,
-                &append_log,
-            )
-            .await;
-        }
-        return start_backend(&project_root, is_windows, None, false, &append_log).await;
-    }
-
-    if let Some(project_root) = find_sibling_backend() {
-        append_log(&format!(
-            "检测到启动器同级后端目录，尝试启动: {:?}",
-            project_root
-        ));
-        return start_backend(&project_root, is_windows, None, false, &append_log).await;
-    }
-
     let install_manager = manager.clone();
     let project_root =
         tauri::async_runtime::spawn_blocking(move || install_manager.ensure_managed_checkout())
@@ -365,10 +196,9 @@ async fn start_local_deployment(_app: AppHandle) -> Result<(), String> {
     let node_bin_dir =
         tauri::async_runtime::spawn_blocking(move || node_manager.ensure_node_runtime())
             .await
-            .map_err(|err| format!("受管 Node 准备任务异常结束: {err}"))??;
-    write_service_record(&project_root)?;
+            .map_err(|err| format!("Launcher 内置 Node.js 准备任务异常结束: {err}"))??;
     append_log(&format!(
-        "受管 main 工作树已就绪，尝试启动: {:?}",
+        "APP 数据目录中的 main 源码已就绪，尝试启动: {:?}",
         project_root
     ));
     start_backend(
@@ -381,7 +211,7 @@ async fn start_local_deployment(_app: AppHandle) -> Result<(), String> {
     .await
 }
 
-/// 返回受管 main 工作树的持久状态，不会执行网络请求。
+/// 返回 APP 数据目录中 main 工作树的持久状态，不会执行网络请求。
 #[tauri::command]
 fn get_deployment_status() -> Result<DeploymentStatus, String> {
     if is_mobile_runtime() {
@@ -418,7 +248,7 @@ async fn apply_local_update() -> Result<DeploymentStatus, String> {
         .map_err(|err| format!("应用更新任务异常结束: {err}"))?
 }
 
-/// 显式停止 Launcher 自己启动并登记的受管后端，为更新切换留出无进程占用的窗口。
+/// 显式停止 Launcher 自己启动并登记的本地后端，为更新切换留出无进程占用的窗口。
 #[tauri::command]
 async fn stop_managed_local_backend() -> Result<(), String> {
     if is_mobile_runtime() {
@@ -481,7 +311,10 @@ where
         // CMD 不遵循 C 运行时的引号转义；原样传入可保留路径中的空格和 `&`。
         command.args(["/D", "/S", "/C"]);
         #[cfg(windows)]
-        command.raw_arg(format!(r#"call "{}""#, script_path.to_string_lossy()));
+        {
+            command.raw_arg(format!(r#"call "{}""#, script_path.to_string_lossy()));
+            command.creation_flags(CREATE_NO_WINDOW);
+        }
         #[cfg(not(windows))]
         command.arg(format!(r#"call "{}""#, script_path.to_string_lossy()));
         command
@@ -507,7 +340,9 @@ where
         if let Err(err) = manager.record_managed_service_process(child.id()) {
             let _ = child.kill();
             let _ = child.wait();
-            return Err(format!("无法登记受管后端进程，已终止本次启动: {err}"));
+            return Err(format!(
+                "无法登记 Launcher 本地后端进程，已终止本次启动: {err}"
+            ));
         }
     }
 
@@ -525,8 +360,8 @@ fn prepend_command_path(command: &mut Command, directory: &Path) -> Result<(), S
     if let Some(existing) = std::env::var_os("PATH") {
         paths.extend(std::env::split_paths(&existing));
     }
-    let joined =
-        std::env::join_paths(paths).map_err(|err| format!("无法为受管 Node 设置 PATH: {err}"))?;
+    let joined = std::env::join_paths(paths)
+        .map_err(|err| format!("无法为 Launcher 内置 Node.js 设置 PATH: {err}"))?;
     command.env("PATH", joined);
     Ok(())
 }
@@ -541,8 +376,7 @@ pub fn run() {
         .invoke_handler(tauri::generate_handler![
             get_launcher_theme_state,
             set_launcher_theme_state,
-            open_remote_app,
-            check_local_backend_dir,
+            check_local_backend_ready,
             read_deployment_log,
             start_local_deployment,
             get_deployment_status,
@@ -564,13 +398,85 @@ pub fn run() {
 
 #[cfg(test)]
 mod launcher_window_tests {
-    use super::parse_remote_app_url;
+    use super::managed_backend_is_ready;
+    use std::fs;
+    use std::path::{Path, PathBuf};
+
+    fn test_root(label: &str) -> PathBuf {
+        PathBuf::from(env!("CARGO_MANIFEST_DIR"))
+            .join("..")
+            .join("..")
+            .join(".tmp")
+            .join("tests")
+            .join("launcher_backend_ready")
+            .join(format!(
+                "{}-{}-{}",
+                label,
+                std::process::id(),
+                chrono::Utc::now().timestamp_nanos_opt().unwrap_or_default()
+            ))
+    }
+
+    fn write_file(path: &Path) {
+        fs::create_dir_all(path.parent().expect("测试文件必须有父目录")).expect("应能创建测试目录");
+        fs::write(path, b"test").expect("应能创建测试文件");
+    }
 
     #[test]
-    fn remote_app_url_only_accepts_http_transports() {
-        assert!(parse_remote_app_url("https://example.com/login?from=launcher").is_ok());
-        assert!(parse_remote_app_url("http://127.0.0.1:6688").is_ok());
-        assert!(parse_remote_app_url("file:///C:/Windows/System32/calc.exe").is_err());
-        assert!(parse_remote_app_url("javascript:alert(1)").is_err());
+    fn managed_backend_requires_complete_windows_deployment() {
+        let root = test_root("windows");
+
+        write_file(&root.join("server").join("app.py"));
+        write_file(&root.join("start.bat"));
+        assert!(!managed_backend_is_ready(Some(&root), true));
+
+        write_file(
+            &root
+                .join("server")
+                .join(".runtime")
+                .join("python")
+                .join("python.exe"),
+        );
+        write_file(
+            &root
+                .join("server")
+                .join(".runtime")
+                .join("python")
+                .join(".deploy_complete"),
+        );
+        assert!(!managed_backend_is_ready(Some(&root), true));
+
+        write_file(&root.join("client").join("dist").join("index.html"));
+        write_file(&root.join("client").join(".frontend_build_complete"));
+        assert!(managed_backend_is_ready(Some(&root), true));
+        assert!(!managed_backend_is_ready(None, true));
+
+        fs::remove_dir_all(root).expect("应能清理临时服务目录");
+    }
+
+    #[test]
+    fn managed_backend_checks_unix_runtime_layout() {
+        let root = test_root("unix");
+        for path in [
+            root.join("server").join("app.py"),
+            root.join("start.sh"),
+            root.join("server")
+                .join(".runtime")
+                .join("python")
+                .join("bin")
+                .join("python3"),
+            root.join("server")
+                .join(".runtime")
+                .join("python")
+                .join(".deploy_complete"),
+            root.join("client").join("dist").join("index.html"),
+            root.join("client").join(".frontend_build_complete"),
+        ] {
+            write_file(&path);
+        }
+
+        assert!(managed_backend_is_ready(Some(&root), false));
+        assert!(!managed_backend_is_ready(Some(&root), true));
+        fs::remove_dir_all(root).expect("应能清理临时服务目录");
     }
 }

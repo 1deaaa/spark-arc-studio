@@ -17,7 +17,7 @@
         "lengthHint": []   # 篇幅建议：短篇、中篇、长篇
     },
     "status": "unread",    # unread / read （未读仅对 origin=mcp 生效）
-    "project_links": []    # 已绑定到的项目名列表，[] 表示草稿；多对多软关联
+    "project_links": []    # 已绑定到的项目名列表，[] 表示草稿；一条灵感可供多个项目采用
 }
 
 隔离原则：
@@ -333,11 +333,11 @@ def get_unread_count(user_id: str) -> int:
     )
 
 
-# ========== 项目绑定（多对多软关联） ==========
+# ========== 项目当前灵感关联 ==========
 # 设计原则：
 # 1. 草稿优先：写入侧不自动绑定，避免随手记的灵感静默归档到当前项目；
 # 2. 用户主动：仅在用户/AI 显式调用 bind 时建立关联；
-# 3. 多对多：一条灵感可绑定到多个项目，例如系列前作/续作复用同一角色种子；
+# 3. 基数约束：一条灵感可被多个项目采用，但每个项目只保留一条当前灵感；
 # 4. 删除自我修复：项目删除/重命名时同步清理 / 替换 project_links 中的引用，
 #    避免出现“鬼绑定”——指向已不存在的项目的灵感。
 
@@ -391,7 +391,10 @@ def _rewrite_inspiration_file(
 
 
 def bind_inspiration_to_project(user_id: str, entry_id: str, project_name: str) -> bool:
-    """将灵感条目绑定到指定项目（多对多关系，重复绑定幂等）。"""
+    """低级兼容函数：向灵感追加项目引用。
+
+    业务入口必须使用 activate_inspiration_for_project，以维持一个项目一条当前灵感。
+    """
     project_name = (project_name or "").strip()
     if not entry_id or not project_name:
         return False
@@ -417,13 +420,13 @@ def bind_inspiration_to_project(user_id: str, entry_id: str, project_name: str) 
     return found["value"] and changed >= 0
 
 
-def bind_inspiration_exclusive(user_id: str, entry_id: str, project_name: str) -> Dict[str, Any]:
-    """排他绑定：将灵感绑定到项目，同时解绑该项目下所有其他灵感。
+def activate_inspiration_for_project(user_id: str, entry_id: str, project_name: str) -> Dict[str, Any]:
+    """将灵感设为项目当前灵感，同时移除该项目对其他灵感的引用。
 
     语义约束：
-    - 一条灵感可以绑定到多个项目（多对多）
-    - 一个项目同一时刻只能有一个"活跃灵感"（排他）
-    - 排他绑定 = 先解绑旧灵感 + 再绑定新灵感，原子操作
+    - 一条灵感可以绑定到多个项目
+    - 一个项目同一时刻只能有一个当前灵感
+    - 激活只调整当前项目的归属，不会移除目标灵感已绑定的其他项目
 
     Returns:
         {"success": bool, "unbound_ids": [...]}  unbound_ids 是被解绑的旧灵感 ID 列表
@@ -437,12 +440,14 @@ def bind_inspiration_exclusive(user_id: str, entry_id: str, project_name: str) -
         return {"success": False, "unbound_ids": []}
 
     unbound_ids: List[str] = []
+    found = {"value": False}
 
-    def _exclusive_bind(entry: Dict[str, Any]) -> bool:
+    def _activate(entry: Dict[str, Any]) -> bool:
         links = list(entry.get("project_links") or [])
         eid = entry.get("id", "")
 
         if eid == entry_id:
+            found["value"] = True
             # 目标灵感：确保 project_name 在 links 中
             if project_name in links:
                 return False  # 已绑定，无需写回
@@ -457,8 +462,13 @@ def bind_inspiration_exclusive(user_id: str, entry_id: str, project_name: str) -
             unbound_ids.append(eid)
             return True
 
-    changed = _rewrite_inspiration_file(inspiration_file, _exclusive_bind)
-    return {"success": changed >= 0, "unbound_ids": unbound_ids}
+    changed = _rewrite_inspiration_file(inspiration_file, _activate)
+    return {"success": found["value"] and changed >= 0, "unbound_ids": unbound_ids}
+
+
+def bind_inspiration_exclusive(user_id: str, entry_id: str, project_name: str) -> Dict[str, Any]:
+    """兼容旧调用名；新代码统一使用 activate_inspiration_for_project。"""
+    return activate_inspiration_for_project(user_id, entry_id, project_name)
 
 
 def unbind_inspiration_from_project(user_id: str, entry_id: str, project_name: str) -> bool:

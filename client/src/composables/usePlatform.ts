@@ -3,7 +3,6 @@
  * 检测当前运行环境是 Tauri 桌面端、移动端还是普通浏览器
  */
 import { computed, ref } from 'vue';
-import { hasWorkspaceWindowMarker } from '@/utils/workspaceWindow';
 
 function detectTauriContainer(): boolean {
   if (typeof window === 'undefined') return false;
@@ -57,9 +56,6 @@ export const isLocalTauriShell = ref(detectLocalTauriShellOrigin());
 /** 是否桌面端 Tauri（排除 Android/iOS webview） */
 export const isTauriDesktop = ref(isTauri.value && !['android', 'ios'].includes(detectPlatformFromUserAgent()));
 
-/** 当前页面是否运行在 Launcher 创建的独立业务窗口中。 */
-export const isWorkspaceWindow = ref(isTauri.value && hasWorkspaceWindowMarker());
-
 /** 当前操作系统类型 */
 export const osPlatform = ref(detectPlatformFromUserAgent());
 
@@ -70,7 +66,6 @@ export const isTauriMobile = computed(() => isTauri.value && !isTauriDesktop.val
 async function detectPlatform() {
   isTauri.value = detectTauriContainer();
   isLocalTauriShell.value = detectLocalTauriShellOrigin();
-  isWorkspaceWindow.value = isTauri.value && hasWorkspaceWindowMarker();
   if (!isTauri.value) return;
 
   try {
@@ -97,4 +92,4 @@ if (typeof window !== 'undefined') {
   }, { once: true });
 }
 
-export default { isTauri, isLocalTauriShell, isTauriDesktop, isTauriMobile, osPlatform, isWorkspaceWindow };
+export default { isTauri, isLocalTauriShell, isTauriDesktop, isTauriMobile, osPlatform };

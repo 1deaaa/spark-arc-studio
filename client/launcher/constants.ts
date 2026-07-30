@@ -11,11 +11,5 @@ export const LAUNCHER_DEFAULT_REMOTE_SERVER = 'https://arc.1dea.top';
 /** 本地后端默认探测端口 */
 export const LAUNCHER_LOCAL_PORTS = [6688, 7788] as const;
 
-/** 本地后端目录候选名（从 launcher 可执行文件位置向上查找） */
-export const LAUNCHER_LOCAL_BACKEND_DIR_NAMES = ['server', 'sparkarc-server'] as const;
-
-/** 用户目录状态文件名（Tauri fs 插件使用） */
-export const LAUNCHER_SERVICE_RECORD_FILE = '.sparkarc/service.json';
-
 /** localStorage key：用户是否已确认过默认远端免责声明 */
 export const LAUNCHER_DEFAULT_REMOTE_ACK_KEY = 'spark_launcher_default_remote_acknowledged';

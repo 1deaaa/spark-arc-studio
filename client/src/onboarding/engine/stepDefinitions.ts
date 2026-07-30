@@ -22,6 +22,28 @@ function switchViewBeforeEnter(view: string): () => Promise<void> {
   };
 }
 
+/** 打开移动端设置抽屉，供引导定位 AI 配置区。 */
+async function openMobileSettingsBeforeEnter(): Promise<void> {
+  const trigger = document.querySelector<HTMLButtonElement>('.mobile-settings-trigger');
+  const drawer = document.querySelector('.mobile-settings-drawer');
+  const isDrawerVisible = Boolean(drawer && drawer.getClientRects().length > 0);
+  if (!isDrawerVisible) trigger?.click();
+  await new Promise(r => setTimeout(r, 350));
+}
+
+/** 离开 AI 配置引导后关闭移动端设置抽屉。 */
+async function closeMobileSettingsBeforeEnter(): Promise<void> {
+  const drawer = document.querySelector('.mobile-settings-drawer');
+  if (!drawer || drawer.getClientRects().length === 0) return;
+  const closeButton = document.querySelector<HTMLButtonElement>('.mobile-settings-drawer .n-base-close');
+  if (closeButton) {
+    closeButton.click();
+  } else {
+    document.dispatchEvent(new KeyboardEvent('keydown', { key: 'Escape', bubbles: true }));
+  }
+  await new Promise(r => setTimeout(r, 300));
+}
+
 // ==================== 桌面端步骤定义 ====================
 
 const desktopWorkspaceBaseSteps: OnboardingStep[] = [
@@ -272,7 +294,14 @@ const desktopDashboardSteps = [
 
 const desktopSettingsSteps = [
   pageStep('settings-models', '.settings-columns .settings-col--left', 'right', 'settings', 'models', switchViewBeforeEnter('settings')),
-  pageStep('settings-platforms', '.settings-columns .settings-col--middle', 'right', 'settings', 'platforms'),
+  {
+    ...pageStep('settings-platforms', '.settings-columns .settings-col--middle', 'right', 'settings', 'platforms'),
+    detailKeys: [
+      'onboarding.desktop.aiSetup.systemPlatform',
+      'onboarding.desktop.aiSetup.personalOverride',
+      'onboarding.desktop.aiSetup.customPlatform',
+    ],
+  },
   pageStep('settings-preferences', '.settings-columns .settings-col--right', 'left', 'settings', 'preferences'),
 ];
 
@@ -297,6 +326,30 @@ const workspaceClosingSteps = desktopWorkspaceBaseSteps.filter(step =>
 );
 
 export const desktopWorkspaceSteps: OnboardingStep[] = [
+  {
+    id: 'dw-ai-setup-overview',
+    target: 'body',
+    placement: 'center',
+    titleKey: 'onboarding.desktop.workspace.aiSetupTitle',
+    descKey: 'onboarding.desktop.workspace.aiSetupDesc',
+    detailKeys: [
+      'onboarding.desktop.aiSetup.systemPlatform',
+      'onboarding.desktop.aiSetup.adminBoundary',
+      'onboarding.desktop.aiSetup.personalOverride',
+      'onboarding.desktop.aiSetup.customPlatform',
+      'onboarding.desktop.aiSetup.modelUsage',
+    ],
+    spotlight: false,
+  },
+  {
+    ...desktopSettingsSteps[1],
+    id: 'dw-ai-platforms',
+    beforeEnter: switchViewBeforeEnter('settings'),
+  },
+  {
+    ...desktopSettingsSteps[0],
+    id: 'dw-ai-model-usage',
+  },
   {
     id: 'dw-workflow-overview',
     target: 'body',
@@ -354,6 +407,48 @@ function scrollMobileStep(stepNum: number): () => Promise<void> {
  */
 export const mobileWorkspaceSteps: OnboardingStep[] = [
   {
+    id: 'mw-ai-setup-overview',
+    target: 'body',
+    placement: 'center',
+    titleKey: 'onboarding.desktop.workspace.aiSetupTitle',
+    descKey: 'onboarding.desktop.workspace.aiSetupDesc',
+    detailKeys: [
+      'onboarding.desktop.aiSetup.systemPlatform',
+      'onboarding.desktop.aiSetup.adminBoundary',
+      'onboarding.desktop.aiSetup.personalOverride',
+      'onboarding.desktop.aiSetup.customPlatform',
+      'onboarding.desktop.aiSetup.modelUsage',
+    ],
+    spotlight: false,
+  },
+  {
+    id: 'mw-ai-platforms',
+    target: '.mobile-settings-drawer .ai-manager',
+    placement: 'bottom',
+    titleKey: 'onboarding.pages.settings.platformsTitle',
+    descKey: 'onboarding.pages.settings.platformsDesc',
+    detailKeys: [
+      'onboarding.desktop.aiSetup.personalOverride',
+      'onboarding.desktop.aiSetup.customPlatform',
+    ],
+    spotlight: true,
+    spotlightPadding: 6,
+    scrollIntoView: true,
+    beforeEnter: openMobileSettingsBeforeEnter,
+  },
+  {
+    id: 'mw-ai-model-usage',
+    target: '.mobile-settings-drawer .model-usage-manager',
+    placement: 'top',
+    titleKey: 'onboarding.pages.settings.modelsTitle',
+    descKey: 'onboarding.pages.settings.modelsDesc',
+    detailKeys: ['onboarding.desktop.aiSetup.modelUsage'],
+    spotlight: true,
+    spotlightPadding: 6,
+    scrollIntoView: true,
+    beforeEnter: openMobileSettingsBeforeEnter,
+  },
+  {
     id: 'mw-workflow-overview',
     target: 'body',
     placement: 'center',
@@ -368,6 +463,7 @@ export const mobileWorkspaceSteps: OnboardingStep[] = [
       'onboarding.desktop.workflow.finish',
     ],
     spotlight: false,
+    beforeEnter: closeMobileSettingsBeforeEnter,
   },
   // ── 顶部导航栏 ──
   // 1. 顶部操作栏

@@ -22,7 +22,7 @@ use std::{
     io::Write,
     net::{IpAddr, Ipv4Addr, Ipv6Addr, SocketAddr, TcpStream},
     path::{Path, PathBuf},
-    sync::{Mutex, OnceLock},
+    sync::{mpsc, Mutex, OnceLock},
     thread,
     time::{Duration, Instant},
 };
@@ -38,6 +38,7 @@ const MANAGED_MARKER_FILE: &str = ".sparkarc-managed.json";
 const DEPLOYMENT_STATE_FILE: &str = "deployment.json";
 const DEPLOYMENT_LOG_FILE: &str = "deploy.log";
 const LAUNCHER_RELEASE_CACHE_FILE: &str = "launcher-release.json";
+const LAUNCHER_RELEASE_CACHE_SCHEMA_VERSION: u32 = 2;
 const MANAGED_SERVICE_PROCESS_FILE: &str = "managed-service-process.json";
 const STAGING_DIR_NAME: &str = ".staging";
 const MANAGED_INSTALL_DIR_NAME: &str = "sparkarc-server";
@@ -45,10 +46,11 @@ const MANAGED_SCHEMA_VERSION: u32 = 1;
 const MANAGED_NODE_VERSION: &str = "24.16.0";
 const LAUNCHER_RELEASE_CACHE_TTL_SECONDS: i64 = 6 * 60 * 60;
 const MANAGED_SERVICE_PORT: u16 = 6688;
-const REGION_CACHE_TTL: Duration = Duration::from_secs(5);
+const REGION_CACHE_TTL: Duration = Duration::from_secs(30 * 60);
+const REGION_UNKNOWN_CACHE_TTL: Duration = Duration::from_secs(30);
+const REGION_LOOKUP_TIMEOUT: Duration = Duration::from_secs(3);
 const GIT_SERVER_CONNECT_TIMEOUT_MILLISECONDS: i32 = 12_000;
 const GIT_SERVER_IO_TIMEOUT_MILLISECONDS: i32 = 20_000;
-const GIT_SOURCE_PROBE_TIMEOUT: Duration = Duration::from_secs(5);
 
 /// 在任何线程与 Git 操作开始前，为 Launcher 的 Libgit2 远端访问设置超时护栏。
 ///
@@ -147,6 +149,7 @@ pub struct LauncherReleaseStatus {
 #[derive(Debug, Clone, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
 struct LauncherReleaseCache {
+    schema_version: u32,
     checked_at: String,
     current_version: String,
     latest_version: Option<String>,
@@ -181,6 +184,32 @@ struct GithubRelease {
     prerelease: bool,
 }
 
+#[derive(Debug, Deserialize)]
+struct GiteeRelease {
+    tag_name: String,
+    prerelease: bool,
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+enum ReleaseProvider {
+    Github,
+    Gitee,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq)]
+struct ReleaseApiCandidate {
+    provider: ReleaseProvider,
+    endpoint: String,
+}
+
+#[derive(Debug, PartialEq, Eq)]
+struct NormalizedRelease {
+    tag_name: String,
+    release_url: String,
+    draft: bool,
+    prerelease: bool,
+}
+
 #[derive(Debug, Clone)]
 struct PreservedFile {
     relative_path: PathBuf,
@@ -202,7 +231,7 @@ struct NodeDistribution {
     archive_sha256: &'static str,
 }
 
-/// 所有平台共享的受管部署器。
+/// 所有平台共享的 APP 数据目录部署器。
 #[derive(Debug, Clone)]
 pub struct DeploymentManager {
     user_dir: PathBuf,
@@ -329,7 +358,7 @@ impl DeploymentManager {
         Ok(None)
     }
 
-    /// 首次部署时克隆 main；已有受管工作树不会被隐式更新。
+    /// 首次部署时克隆 main；APP 数据目录中的已有工作树不会被隐式更新。
     pub fn ensure_managed_checkout(&self) -> Result<PathBuf, String> {
         if let Some(project_root) = self.managed_project_root()? {
             return Ok(project_root);
@@ -347,7 +376,7 @@ impl DeploymentManager {
             status.last_error = None;
             status.project_root = Some(self.target_dir.to_string_lossy().to_string());
         })?;
-        self.append_log("开始创建 Launcher 受管的 main 工作树...");
+        self.append_log("开始在 APP 数据目录中创建 main 工作树...");
 
         let staging_root = self.user_dir.join(STAGING_DIR_NAME);
         fs::create_dir_all(&staging_root).map_err(|err| err.to_string())?;
@@ -377,7 +406,7 @@ impl DeploymentManager {
         // Windows 不允许移动仍被 Libgit2 仓库句柄占用的 .git 目录。
         drop(repository);
         fs::rename(&staging_dir, &self.target_dir)
-            .map_err(|err| format!("无法将已校验的源码切换到受管目录: {err}"))?;
+            .map_err(|err| format!("无法将已校验的源码切换到 APP 数据目录: {err}"))?;
 
         self.save_status(|status| {
             status.managed = true;
@@ -393,7 +422,7 @@ impl DeploymentManager {
         Ok(self.target_dir.clone())
     }
 
-    /// 为 Launcher 受管工作树准备私有 Node。该运行时不写入系统 PATH，也不调用
+    /// 为 APP 数据目录中的工作树准备 Launcher 内置 Node.js。该运行时不写入系统 PATH，也不调用
     /// winget、brew、apt 等包管理器。
     pub fn ensure_node_runtime(&self) -> Result<PathBuf, String> {
         let distribution = NodeDistribution::for_current_platform()?;
@@ -410,7 +439,7 @@ impl DeploymentManager {
 
         self.ensure_user_dir()?;
         self.append_log(format!(
-            "正在准备受管 Node.js v{} ({})...",
+            "正在准备 Launcher 内置 Node.js v{} ({})...",
             MANAGED_NODE_VERSION, distribution.platform
         ));
         let staging_root = self.user_dir.join(STAGING_DIR_NAME).join("node");
@@ -434,23 +463,26 @@ impl DeploymentManager {
 
             if install_dir.exists() {
                 fs::remove_dir_all(&install_dir)
-                    .map_err(|err| format!("无法清理损坏的受管 Node 运行时: {err}"))?;
+                    .map_err(|err| format!("无法清理损坏的 Launcher 内置 Node.js: {err}"))?;
             }
             let parent = install_dir
                 .parent()
-                .ok_or_else(|| "受管 Node 目录无父路径。".to_string())?;
+                .ok_or_else(|| "Launcher 内置 Node.js 目录无父路径。".to_string())?;
             fs::create_dir_all(parent).map_err(|err| err.to_string())?;
             fs::rename(&extracted_root, &install_dir)
-                .map_err(|err| format!("无法切换受管 Node 运行时: {err}"))?;
+                .map_err(|err| format!("无法切换 Launcher 内置 Node.js: {err}"))?;
             Ok(())
         })();
 
         let _ = fs::remove_dir_all(&staging_dir);
         if let Err(err) = result {
-            self.append_log(format!("受管 Node.js 准备失败: {err}"));
+            self.append_log(format!("Launcher 内置 Node.js 准备失败: {err}"));
             return Err(err);
         }
-        self.append_log(format!("受管 Node.js v{} 已就绪。", MANAGED_NODE_VERSION));
+        self.append_log(format!(
+            "Launcher 内置 Node.js v{} 已就绪。",
+            MANAGED_NODE_VERSION
+        ));
         Ok(node_bin_dir(&install_dir))
     }
 
@@ -458,9 +490,9 @@ impl DeploymentManager {
     pub fn check_main_update(&self) -> Result<DeploymentStatus, String> {
         let project_root = self
             .managed_project_root()?
-            .ok_or_else(|| "尚未发现 Launcher 受管的本地服务。".to_string())?;
-        let repository =
-            Repository::open(&project_root).map_err(|err| format!("无法打开受管仓库: {err}"))?;
+            .ok_or_else(|| "APP 数据目录中尚未发现 Launcher 本地服务。".to_string())?;
+        let repository = Repository::open(&project_root)
+            .map_err(|err| format!("无法打开 APP 数据目录中的源码仓库: {err}"))?;
         let current = repository_head_commit(&repository)?;
 
         self.save_status(|status| {
@@ -512,9 +544,9 @@ impl DeploymentManager {
     pub fn apply_main_update(&self) -> Result<DeploymentStatus, String> {
         let project_root = self
             .managed_project_root()?
-            .ok_or_else(|| "尚未发现 Launcher 受管的本地服务。".to_string())?;
-        let repository =
-            Repository::open(&project_root).map_err(|err| format!("无法打开受管仓库: {err}"))?;
+            .ok_or_else(|| "APP 数据目录中尚未发现 Launcher 本地服务。".to_string())?;
+        let repository = Repository::open(&project_root)
+            .map_err(|err| format!("无法打开 APP 数据目录中的源码仓库: {err}"))?;
         let current = repository_head_commit(&repository)?;
 
         self.save_status(|status| {
@@ -588,8 +620,8 @@ impl DeploymentManager {
         Ok(status)
     }
 
-    /// 直接读取 GitHub Release。API 受限或网络不稳定时，回退到 GitHub 标准
-    /// `/releases/latest` 重定向；两者均不依赖项目仓库内的自定义更新清单。
+    /// 按出口地区读取 Gitee 或 GitHub Release。API 均不可用时，回退到 GitHub
+    /// `/releases/latest` 重定向；整条链路不依赖项目仓库内的自定义更新清单。
     pub fn check_launcher_release(&self, current_version: &str) -> LauncherReleaseStatus {
         let cached = self.read_launcher_release_cache(current_version);
         if let Some(status) = cached
@@ -617,9 +649,10 @@ impl DeploymentManager {
         };
 
         let mut errors = Vec::new();
-        for endpoint in github_release_api_candidates() {
+        for candidate in release_api_candidates(lookup_mainland_china()) {
+            let endpoint = &candidate.endpoint;
             let response = match client
-                .get(&endpoint)
+                .get(endpoint)
                 .header("Accept", "application/vnd.github+json")
                 .send()
             {
@@ -633,7 +666,7 @@ impl DeploymentManager {
                 errors.push(format!("{endpoint}: HTTP {}", response.status()));
                 continue;
             }
-            let release = match response.json::<GithubRelease>() {
+            let release = match parse_release_response(response, &candidate) {
                 Ok(release) => release,
                 Err(err) => {
                     errors.push(format!("{endpoint}: Release 响应解析失败: {err}"));
@@ -655,9 +688,9 @@ impl DeploymentManager {
                 current_version: current_version.to_string(),
                 latest_version,
                 update_available,
-                release_url: Some(release_url_for_source(&endpoint, &release.html_url)),
+                release_url: Some(release.release_url),
                 last_error: None,
-                source: Some(endpoint),
+                source: Some(endpoint.clone()),
             };
             self.write_launcher_release_cache(&status);
             return status;
@@ -732,12 +765,12 @@ impl DeploymentManager {
         self.release_check_failure_or_stale_cache(current_version, checked_at, errors, cached)
     }
 
-    /// 由 Launcher 启动受管 main 时写入进程记录。记录只属于受管目录，绝不登记
+    /// 由 Launcher 启动 APP 数据目录中的 main 时写入进程记录。记录只属于 APP 数据目录，绝不登记
     /// 用户手动部署的工作树，避免更新功能误杀开发者自己的服务。
     pub fn record_managed_service_process(&self, pid: u32) -> Result<(), String> {
         let project_root = self
             .managed_project_root()?
-            .ok_or_else(|| "无法为未受管工作树登记服务进程。".to_string())?;
+            .ok_or_else(|| "无法为非 APP 数据目录工作树登记服务进程。".to_string())?;
         self.ensure_user_dir()?;
         let record = ManagedServiceProcess {
             schema_version: MANAGED_SCHEMA_VERSION,
@@ -747,16 +780,16 @@ impl DeploymentManager {
             started_at: now_string(),
         };
         write_json_atomically(&self.managed_service_process_path, &record)?;
-        self.append_log(format!("已登记受管后端进程: {pid}"));
+        self.append_log(format!("已登记 Launcher 本地后端进程: {pid}"));
         Ok(())
     }
 
-    /// 只停止本 Launcher 曾为受管 main 工作树登记的进程。进程记录不存在而 6688
+    /// 只停止本 Launcher 曾为 APP 数据目录 main 工作树登记的进程。进程记录不存在而 6688
     /// 端口仍被占用时，保守拒绝操作，避免影响其他本地服务。
     pub fn stop_managed_service(&self) -> Result<(), String> {
         let project_root = self
             .managed_project_root()?
-            .ok_or_else(|| "尚未发现 Launcher 受管的本地服务。".to_string())?;
+            .ok_or_else(|| "APP 数据目录中尚未发现 Launcher 本地服务。".to_string())?;
         let Some(record) = self.read_managed_service_process()? else {
             if managed_service_port_is_open() {
                 return Err(
@@ -769,35 +802,35 @@ impl DeploymentManager {
         if record.schema_version != MANAGED_SCHEMA_VERSION
             || Path::new(&record.project_root) != project_root
         {
-            return Err("受管服务进程记录与当前工作树不匹配，已拒绝停止。".to_string());
+            return Err("Launcher 本地服务进程记录与当前工作树不匹配，已拒绝停止。".to_string());
         }
 
         match managed_process_state(&record) {
             ManagedProcessState::Missing => {
                 if !managed_service_port_is_open() {
                     let _ = fs::remove_file(&self.managed_service_process_path);
-                    self.append_log("受管服务进程记录已过期，已清理。");
+                    self.append_log("Launcher 本地服务进程记录已过期，已清理。");
                     return Ok(());
                 }
                 return Err(
-                    "受管服务进程记录中的 PID 已不存在，但 6688 端口仍被占用。为避免误停止其他服务，请先手动停止后再更新。"
+                    "Launcher 本地服务进程记录中的 PID 已不存在，但 6688 端口仍被占用。为避免误停止其他服务，请先手动停止后再更新。"
                         .to_string(),
                 );
             }
             ManagedProcessState::Mismatched => {
                 return Err(
-                    "受管服务进程记录与当前 PID 的启动时间或命令行不匹配，已拒绝停止。请先手动确认该进程。"
+                    "Launcher 本地服务进程记录与当前 PID 的启动时间或命令行不匹配，已拒绝停止。请先手动确认该进程。"
                         .to_string(),
                 );
             }
             ManagedProcessState::MatchesRecord => {}
         }
 
-        self.append_log(format!("正在停止受管后端进程: {}", record.pid));
+        self.append_log(format!("正在停止 Launcher 本地后端进程: {}", record.pid));
         if let Err(err) = terminate_process(record.pid) {
             if !managed_service_port_is_open() {
                 let _ = fs::remove_file(&self.managed_service_process_path);
-                self.append_log("受管服务进程记录已过期，已清理。");
+                self.append_log("Launcher 本地服务进程记录已过期，已清理。");
                 return Ok(());
             }
             return Err(err);
@@ -805,23 +838,23 @@ impl DeploymentManager {
         for _ in 0..40 {
             if !managed_service_port_is_open() {
                 let _ = fs::remove_file(&self.managed_service_process_path);
-                self.append_log("受管后端已停止。");
+                self.append_log("Launcher 本地后端已停止。");
                 return Ok(());
             }
             thread::sleep(Duration::from_millis(250));
         }
         Err(
-            "停止受管后端超时，6688 端口仍被占用。为避免更新中切换运行代码，已取消更新。"
+            "停止 Launcher 本地后端超时，6688 端口仍被占用。为避免更新中切换运行代码，已取消更新。"
                 .to_string(),
         )
     }
 
-    /// 用于更新前的最后一道保护。端口、受管进程记录或 PID 身份任一存在不确定性
+    /// 用于更新前的最后一道保护。端口、本地进程记录或 PID 身份任一存在不确定性
     /// 时，均拒绝切换代码，避免 Launcher 重启后在运行中的服务上覆盖文件。
     pub fn ensure_managed_service_stopped(&self) -> Result<(), String> {
         let project_root = self
             .managed_project_root()?
-            .ok_or_else(|| "尚未发现 Launcher 受管的本地服务。".to_string())?;
+            .ok_or_else(|| "APP 数据目录中尚未发现 Launcher 本地服务。".to_string())?;
         if managed_service_port_is_open() {
             return Err("检测到 6688 端口仍有本地服务，请先通过 Launcher 停止服务。".to_string());
         }
@@ -831,19 +864,21 @@ impl DeploymentManager {
         if record.schema_version != MANAGED_SCHEMA_VERSION
             || Path::new(&record.project_root) != project_root
         {
-            return Err("受管服务进程记录与当前工作树不匹配，已拒绝应用更新。".to_string());
+            return Err(
+                "Launcher 本地服务进程记录与当前工作树不匹配，已拒绝应用更新。".to_string(),
+            );
         }
         match managed_process_state(&record) {
             ManagedProcessState::Missing => {
                 let _ = fs::remove_file(&self.managed_service_process_path);
-                self.append_log("受管服务进程记录已过期，已清理。");
+                self.append_log("Launcher 本地服务进程记录已过期，已清理。");
                 Ok(())
             }
             ManagedProcessState::MatchesRecord => {
-                Err("检测到 Launcher 受管后端进程仍在运行，请先停止服务后再应用更新。".to_string())
+                Err("检测到 Launcher 本地后端进程仍在运行，请先停止服务后再应用更新。".to_string())
             }
             ManagedProcessState::Mismatched => Err(
-                "受管服务进程记录与当前 PID 身份不匹配，已拒绝应用更新。请先手动确认该进程。"
+                "Launcher 本地服务进程记录与当前 PID 身份不匹配，已拒绝应用更新。请先手动确认该进程。"
                     .to_string(),
             ),
         }
@@ -852,7 +887,9 @@ impl DeploymentManager {
     fn read_launcher_release_cache(&self, current_version: &str) -> Option<LauncherReleaseStatus> {
         let raw = fs::read_to_string(&self.launcher_release_cache_path).ok()?;
         let cache = serde_json::from_str::<LauncherReleaseCache>(&raw).ok()?;
-        if cache.current_version != current_version {
+        if cache.schema_version != LAUNCHER_RELEASE_CACHE_SCHEMA_VERSION
+            || cache.current_version != current_version
+        {
             return None;
         }
         Some(LauncherReleaseStatus {
@@ -878,6 +915,7 @@ impl DeploymentManager {
 
     fn write_launcher_release_cache(&self, status: &LauncherReleaseStatus) {
         let cache = LauncherReleaseCache {
+            schema_version: LAUNCHER_RELEASE_CACHE_SCHEMA_VERSION,
             checked_at: status.checked_at.clone(),
             current_version: status.current_version.clone(),
             latest_version: status.latest_version.clone(),
@@ -921,10 +959,10 @@ impl DeploymentManager {
             return Ok(None);
         }
         let raw = fs::read_to_string(&self.managed_service_process_path)
-            .map_err(|err| format!("无法读取受管服务进程记录: {err}"))?;
+            .map_err(|err| format!("无法读取 Launcher 本地服务进程记录: {err}"))?;
         serde_json::from_str(&raw)
             .map(Some)
-            .map_err(|err| format!("受管服务进程记录格式无效: {err}"))
+            .map_err(|err| format!("Launcher 本地服务进程记录格式无效: {err}"))
     }
 
     fn ensure_user_dir(&self) -> Result<(), String> {
@@ -933,7 +971,7 @@ impl DeploymentManager {
 
     fn clone_main(&self, destination: &Path) -> Result<Repository, String> {
         let mut errors = Vec::new();
-        for source in prioritized_git_remote_candidates() {
+        for source in git_remote_candidates() {
             self.append_log(format!("尝试从 {source} 获取 main..."));
             let mut fetch_options = FetchOptions::new();
             fetch_options.download_tags(AutotagOption::None);
@@ -959,7 +997,7 @@ impl DeploymentManager {
         let refspec = format!("+refs/heads/main:{reference_name}");
         let mut errors = Vec::new();
 
-        for source in prioritized_git_remote_candidates() {
+        for source in git_remote_candidates() {
             self.append_log(format!("检查 main 源: {source}"));
             let mut fetch_options = FetchOptions::new();
             fetch_options.download_tags(AutotagOption::None);
@@ -1134,7 +1172,7 @@ fn download_verified_node_archive(
     for base in node_distribution_bases() {
         let version_root = format!("{base}/v{MANAGED_NODE_VERSION}");
         let archive_url = format!("{version_root}/{}", distribution.archive_name);
-        manager.append_log(format!("尝试下载受管 Node: {archive_url}"));
+        manager.append_log(format!("尝试下载 Launcher 内置 Node.js: {archive_url}"));
 
         let bytes = match client
             .get(&archive_url)
@@ -1160,11 +1198,16 @@ fn download_verified_node_archive(
         }
         fs::write(destination, &bytes)
             .map_err(|err| format!("无法写入 Node 下载文件 {:?}: {err}", destination))?;
-        manager.append_log(format!("受管 Node 下载和校验完成: {archive_url}"));
+        manager.append_log(format!(
+            "Launcher 内置 Node.js 下载和校验完成: {archive_url}"
+        ));
         return Ok(());
     }
 
-    Err(format!("无法下载受管 Node.js：{}", errors.join("；")))
+    Err(format!(
+        "无法下载 Launcher 内置 Node.js：{}",
+        errors.join("；")
+    ))
 }
 
 fn extract_node_archive(
@@ -1284,7 +1327,7 @@ fn terminate_process(pid: u32) -> Result<(), String> {
         return Ok(());
     }
     let detail = String::from_utf8_lossy(&output.stderr).trim().to_string();
-    Err(format!("无法停止受管后端进程 {pid}: {detail}"))
+    Err(format!("无法停止 Launcher 本地后端进程 {pid}: {detail}"))
 }
 
 #[cfg(unix)]
@@ -1294,14 +1337,14 @@ fn terminate_process(pid: u32) -> Result<(), String> {
         return Ok(());
     }
     Err(format!(
-        "无法停止受管后端进程 {pid}: {}",
+        "无法停止 Launcher 本地后端进程 {pid}: {}",
         std::io::Error::last_os_error()
     ))
 }
 
 #[cfg(all(not(windows), not(unix)))]
 fn terminate_process(_pid: u32) -> Result<(), String> {
-    Err("当前平台不支持停止受管后端进程。".to_string())
+    Err("当前平台不支持停止 Launcher 本地后端进程。".to_string())
 }
 
 fn now_string() -> String {
@@ -1317,9 +1360,21 @@ fn repository_head_commit(repository: &Repository) -> Result<String, String> {
 }
 
 fn is_project_repository(url: &str) -> bool {
-    url.to_ascii_lowercase()
-        .replace(".git", "")
-        .contains(&project_config::repository_urls().slug.to_ascii_lowercase())
+    let normalized = url
+        .trim()
+        .trim_end_matches('/')
+        .trim_end_matches(".git")
+        .to_ascii_lowercase();
+    let repository = project_config::repository_urls();
+    std::iter::once(repository.clone)
+        .chain(repository.mainland_clones)
+        .map(|candidate| {
+            candidate
+                .trim_end_matches('/')
+                .trim_end_matches(".git")
+                .to_ascii_lowercase()
+        })
+        .any(|candidate| normalized == candidate || normalized.ends_with(&format!("/{candidate}")))
 }
 
 static REGION_CACHE: OnceLock<Mutex<Option<(Instant, Option<bool>)>>> = OnceLock::new();
@@ -1352,42 +1407,74 @@ fn mainland_from_direct_geoip_votes(votes: impl IntoIterator<Item = String>) -> 
 /// 仅把出口地区作为候选排序提示；实际 Git/下载仍会逐项回退。
 fn lookup_mainland_china() -> Option<bool> {
     let cache = REGION_CACHE.get_or_init(|| Mutex::new(None));
-    if let Ok(guard) = cache.lock() {
-        if let Some((checked_at, value)) = *guard {
-            if checked_at.elapsed() < REGION_CACHE_TTL {
-                return value;
-            }
+    let Ok(mut guard) = cache.lock() else {
+        return lookup_mainland_china_uncached();
+    };
+    if let Some((checked_at, value)) = *guard {
+        let ttl = if value.is_some() {
+            REGION_CACHE_TTL
+        } else {
+            REGION_UNKNOWN_CACHE_TTL
+        };
+        if checked_at.elapsed() < ttl {
+            return value;
         }
     }
 
-    let result = (|| {
-        let client = Client::builder()
-            .no_proxy()
-            .timeout(Duration::from_secs(3))
-            .user_agent("SparkArc-Launcher/1.0")
-            .build()
-            .ok()?;
-        let mut votes = Vec::new();
-        for provider in project_config::geoip_providers() {
-            let Ok(response) = client.get(provider).send() else {
-                continue;
-            };
-            let Ok(response) = response.error_for_status() else {
-                continue;
-            };
-            let Ok(payload) = response.json::<serde_json::Value>() else {
-                continue;
-            };
-            if let Some(country_code) = country_code_from_payload(&payload) {
-                votes.push(country_code);
-            }
-        }
-        mainland_from_direct_geoip_votes(votes)
-    })();
-    if let Ok(mut guard) = cache.lock() {
-        *guard = Some((Instant::now(), result));
-    }
+    let result = lookup_mainland_china_uncached();
+    *guard = Some((Instant::now(), result));
     result
+}
+
+fn lookup_mainland_china_uncached() -> Option<bool> {
+    let client = Client::builder()
+        .no_proxy()
+        .timeout(REGION_LOOKUP_TIMEOUT)
+        .user_agent("SparkArc-Launcher/1.0")
+        .build()
+        .ok()?;
+    let providers = project_config::geoip_providers();
+    let provider_count = providers.len();
+    if provider_count == 0 {
+        return None;
+    }
+
+    let (sender, receiver) = mpsc::channel();
+    for provider in providers {
+        let sender = sender.clone();
+        let client = client.clone();
+        thread::spawn(move || {
+            let country_code = client
+                .get(provider)
+                .send()
+                .ok()
+                .and_then(|response| response.error_for_status().ok())
+                .and_then(|response| response.json::<serde_json::Value>().ok())
+                .and_then(|payload| country_code_from_payload(&payload));
+            let _ = sender.send(country_code);
+        });
+    }
+    drop(sender);
+
+    let deadline = Instant::now() + REGION_LOOKUP_TIMEOUT;
+    let mut votes = Vec::new();
+    for _ in 0..provider_count {
+        let remaining = deadline.saturating_duration_since(Instant::now());
+        if remaining.is_zero() {
+            break;
+        }
+        match receiver.recv_timeout(remaining) {
+            Ok(Some(country_code)) => {
+                votes.push(country_code);
+                if let Some(result) = mainland_from_direct_geoip_votes(votes.iter().cloned()) {
+                    return Some(result);
+                }
+            }
+            Ok(None) => {}
+            Err(_) => break,
+        }
+    }
+    mainland_from_direct_geoip_votes(votes)
 }
 
 fn github_proxy_prefixes(region: Option<bool>) -> Vec<String> {
@@ -1421,57 +1508,74 @@ fn git_remote_candidates() -> Vec<String> {
             candidates.push(override_url.to_string());
         }
     }
-    candidates.extend(github_url_candidates(
-        project_config::repository_urls().clone,
-        lookup_mainland_china(),
-    ));
+    candidates.extend(repository_clone_candidates(lookup_mainland_china()));
     deduplicate_urls(candidates)
 }
 
-fn prioritize_git_sources<F>(sources: Vec<String>, mut is_reachable: F) -> Vec<String>
-where
-    F: FnMut(&str) -> bool,
-{
-    let mut reachable = Vec::new();
-    let mut unreachable = Vec::new();
-    for source in sources {
-        if is_reachable(&source) {
-            reachable.push(source);
-        } else {
-            unreachable.push(source);
-        }
-    }
-    reachable.extend(unreachable);
-    reachable
-}
-
-/// 预检只影响候选顺序；任何预检失败源仍会保留，避免把 HEAD 不友好的服务误删。
-fn prioritized_git_remote_candidates() -> Vec<String> {
-    let candidates = git_remote_candidates();
-    let Ok(client) = Client::builder()
-        .connect_timeout(Duration::from_secs(4))
-        .timeout(GIT_SOURCE_PROBE_TIMEOUT)
-        .user_agent("SparkArc-Launcher/1.0")
-        .build()
-    else {
-        return candidates;
-    };
-    prioritize_git_sources(candidates, |source| client.head(source).send().is_ok())
-}
-
-fn github_release_api_candidates() -> Vec<String> {
+fn repository_clone_candidates(region: Option<bool>) -> Vec<String> {
+    let repository = project_config::repository_urls();
     let mut candidates = Vec::new();
-    if let Ok(override_url) = std::env::var("SPARKARC_GITHUB_RELEASE_API") {
-        let override_url = override_url.trim();
-        if !override_url.is_empty() {
-            candidates.push(override_url.to_string());
+    match region {
+        Some(true) => {
+            candidates.extend(repository.mainland_clones);
+            candidates.push(repository.clone);
+        }
+        Some(false) | None => {
+            candidates.push(repository.clone);
+            candidates.extend(repository.mainland_clones);
         }
     }
-    candidates.extend(github_url_candidates(
-        project_config::repository_urls().release_api,
-        lookup_mainland_china(),
-    ));
     deduplicate_urls(candidates)
+}
+
+fn release_api_candidates(region: Option<bool>) -> Vec<ReleaseApiCandidate> {
+    let override_url = std::env::var("SPARKARC_GITHUB_RELEASE_API").ok();
+    release_api_candidates_for_region(region, override_url.as_deref())
+}
+
+fn release_api_candidates_for_region(
+    region: Option<bool>,
+    github_override: Option<&str>,
+) -> Vec<ReleaseApiCandidate> {
+    let mut candidates = Vec::new();
+    if let Some(override_url) = github_override.map(str::trim).filter(|url| !url.is_empty()) {
+        candidates.push(ReleaseApiCandidate {
+            provider: ReleaseProvider::Github,
+            endpoint: override_url.to_string(),
+        });
+    }
+    let repository = project_config::repository_urls();
+    let github = github_url_candidates(repository.release_api, region)
+        .into_iter()
+        .map(|endpoint| ReleaseApiCandidate {
+            provider: ReleaseProvider::Github,
+            endpoint,
+        })
+        .collect::<Vec<_>>();
+    let gitee = ReleaseApiCandidate {
+        provider: ReleaseProvider::Gitee,
+        endpoint: repository.mainland_release.release_api,
+    };
+    match region {
+        Some(true) => {
+            candidates.push(gitee);
+            candidates.extend(github);
+        }
+        Some(false) | None => {
+            candidates.extend(github);
+            candidates.push(gitee);
+        }
+    }
+    let mut unique = Vec::new();
+    for candidate in candidates {
+        if !unique
+            .iter()
+            .any(|item: &ReleaseApiCandidate| item.endpoint == candidate.endpoint)
+        {
+            unique.push(candidate);
+        }
+    }
+    unique
 }
 
 fn github_release_page_candidates() -> Vec<String> {
@@ -1499,6 +1603,39 @@ fn normalize_release_version(value: &str) -> Option<String> {
     Version::parse(normalized)
         .ok()
         .map(|version| version.to_string())
+}
+
+fn parse_release_response(
+    response: reqwest::blocking::Response,
+    candidate: &ReleaseApiCandidate,
+) -> Result<NormalizedRelease, reqwest::Error> {
+    match candidate.provider {
+        ReleaseProvider::Github => {
+            response
+                .json::<GithubRelease>()
+                .map(|release| NormalizedRelease {
+                    tag_name: release.tag_name,
+                    release_url: release_url_for_source(&candidate.endpoint, &release.html_url),
+                    draft: release.draft,
+                    prerelease: release.prerelease,
+                })
+        }
+        ReleaseProvider::Gitee => response.json::<GiteeRelease>().map(|release| {
+            normalize_gitee_release(release, &project_config::repository_urls().mainland_release)
+        }),
+    }
+}
+
+fn normalize_gitee_release(
+    release: GiteeRelease,
+    repository: &project_config::ReleaseRepositoryUrls,
+) -> NormalizedRelease {
+    NormalizedRelease {
+        release_url: format!("{}/releases/tag/{}", repository.web, release.tag_name),
+        tag_name: release.tag_name,
+        draft: false,
+        prerelease: release.prerelease,
+    }
 }
 
 fn release_url_for_source(source: &str, release_url: &str) -> String {
@@ -1555,7 +1692,7 @@ fn collect_preserved_changes(
         .include_ignored(false);
     let statuses = repository
         .statuses(Some(&mut options))
-        .map_err(|err| format!("无法检查受管工作树状态: {err}"))?;
+        .map_err(|err| format!("无法检查 APP 数据目录工作树状态: {err}"))?;
     let mut preserved = Vec::new();
 
     for entry in statuses.iter() {
@@ -1565,7 +1702,7 @@ fn collect_preserved_changes(
         let relative_path = PathBuf::from(path);
         if !is_preserved_relative_path(&relative_path) {
             return Err(format!(
-                "受管目录包含未声明的本地修改: {path}。为避免覆盖用户改动，Launcher 拒绝更新。"
+                "APP 数据目录包含未声明的本地修改: {path}。为避免覆盖用户改动，Launcher 拒绝更新。"
             ));
         }
 
@@ -1991,6 +2128,60 @@ mod tests {
     }
 
     #[test]
+    fn mainland_release_candidates_prefer_gitee() {
+        let repository = project_config::repository_urls();
+        let candidates = release_api_candidates_for_region(Some(true), None);
+
+        assert_eq!(
+            candidates.first(),
+            Some(&ReleaseApiCandidate {
+                provider: ReleaseProvider::Gitee,
+                endpoint: repository.mainland_release.release_api,
+            })
+        );
+        assert!(candidates
+            .iter()
+            .skip(1)
+            .all(|candidate| candidate.provider == ReleaseProvider::Github));
+    }
+
+    #[test]
+    fn foreign_or_unknown_release_candidates_keep_gitee_as_final_fallback() {
+        for region in [Some(false), None] {
+            let repository = project_config::repository_urls();
+            let candidates = release_api_candidates_for_region(region, None);
+
+            assert_eq!(
+                candidates.first().map(|item| item.endpoint.as_str()),
+                Some(repository.release_api.as_str())
+            );
+            assert_eq!(
+                candidates.last(),
+                Some(&ReleaseApiCandidate {
+                    provider: ReleaseProvider::Gitee,
+                    endpoint: repository.mainland_release.release_api,
+                })
+            );
+        }
+    }
+
+    #[test]
+    fn gitee_release_response_is_normalized_without_github_only_fields() {
+        let payload = r#"{"tag_name":"sparkarc-v0.6.1","prerelease":false}"#;
+        let release: GiteeRelease = serde_json::from_str(payload).unwrap();
+        let normalized =
+            normalize_gitee_release(release, &project_config::repository_urls().mainland_release);
+
+        assert_eq!(normalized.tag_name, "sparkarc-v0.6.1");
+        assert!(!normalized.draft);
+        assert!(!normalized.prerelease);
+        assert_eq!(
+            normalized.release_url,
+            "https://gitee.com/aideaaa/spark-arc-studio/releases/tag/sparkarc-v0.6.1"
+        );
+    }
+
+    #[test]
     fn release_redirect_keeps_the_successful_proxy_source() {
         let repository = project_config::repository_urls();
         let proxy_prefix = project_config::all_network_candidates("gh_proxy")
@@ -1998,10 +2189,9 @@ mod tests {
             .next()
             .unwrap();
         let proxy_page = format!("{proxy_prefix}{}", repository.release_page);
-        let direct_release = format!(
-            "https://github.com/{}/releases/tag/sparkarc-v0.5.0",
-            repository.slug
-        );
+        let direct_release = repository
+            .release_page
+            .replace("/releases/latest", "/releases/tag/sparkarc-v0.5.0");
         let proxied_release = release_url_for_source(&proxy_page, &direct_release);
 
         assert_eq!(proxied_release, format!("{proxy_prefix}{direct_release}"));
@@ -2031,6 +2221,20 @@ mod tests {
         assert!(!DeploymentManager::is_launcher_release_cache_fresh(
             &expired
         ));
+    }
+
+    #[test]
+    fn launcher_release_cache_rejects_the_legacy_schema() {
+        let legacy = r#"{
+            "checkedAt":"2026-01-01T00:00:00Z",
+            "currentVersion":"0.6.0",
+            "latestVersion":"0.6.1",
+            "updateAvailable":true,
+            "releaseUrl":"https://example.invalid/release",
+            "source":"legacy"
+        }"#;
+
+        assert!(serde_json::from_str::<LauncherReleaseCache>(legacy).is_err());
     }
 
     #[test]
@@ -2066,13 +2270,14 @@ mod tests {
     }
 
     #[test]
-    fn repository_identity_accepts_direct_and_proxy_urls() {
+    fn repository_identity_accepts_official_mirror_and_legacy_proxy_urls() {
         let repository = project_config::repository_urls();
         let proxy_prefix = project_config::all_network_candidates("gh_proxy")
             .into_iter()
             .next()
             .unwrap();
         assert!(is_project_repository(&repository.clone));
+        assert!(is_project_repository(&repository.mainland_clones[0]));
         assert!(is_project_repository(&format!(
             "{proxy_prefix}{}",
             repository.clone
@@ -2100,7 +2305,7 @@ mod tests {
     }
 
     #[test]
-    fn foreign_or_unknown_region_keeps_github_proxy_fallback() {
+    fn foreign_or_unknown_region_keeps_release_proxy_fallback() {
         let official = project_config::repository_urls().clone;
         for region in [Some(false), None] {
             let candidates = github_url_candidates(official.clone(), region);
@@ -2114,20 +2319,25 @@ mod tests {
     }
 
     #[test]
-    fn git_preflight_prioritizes_reachable_sources_without_dropping_fallbacks() {
-        let sources = vec![
-            "https://slow.example.invalid/repository.git".to_string(),
-            "https://ready.example.invalid/repository.git".to_string(),
-            "https://head-blocked.example.invalid/repository.git".to_string(),
-        ];
+    fn mainland_git_sources_prefer_gitee_without_public_proxies() {
+        let repository = project_config::repository_urls();
+        let candidates = repository_clone_candidates(Some(true));
 
-        let ordered = prioritize_git_sources(sources.clone(), |source| {
-            source.contains("ready.example.invalid")
-        });
+        assert_eq!(candidates.first(), repository.mainland_clones.first());
+        assert_eq!(candidates.last(), Some(&repository.clone));
+        assert!(candidates
+            .iter()
+            .all(|candidate| !candidate.contains("ghproxy") && !candidate.contains("gh-proxy")));
+    }
 
-        assert_eq!(ordered[0], sources[1]);
-        assert_eq!(ordered[1], sources[0]);
-        assert_eq!(ordered[2], sources[2]);
+    #[test]
+    fn foreign_or_unknown_git_sources_prefer_github_with_gitee_fallback() {
+        let repository = project_config::repository_urls();
+        for region in [Some(false), None] {
+            let candidates = repository_clone_candidates(region);
+            assert_eq!(candidates.first(), Some(&repository.clone));
+            assert_eq!(&candidates[1..], repository.mainland_clones.as_slice());
+        }
     }
 
     #[test]
@@ -2182,7 +2392,7 @@ mod tests {
 
     #[cfg(windows)]
     #[test]
-    #[ignore = "真实网络验证：下载 Launcher 受管源码、Node、Python 依赖并启动完整服务"]
+    #[ignore = "真实网络验证：向 APP 数据目录下载源码、Node、Python 依赖并启动完整服务"]
     fn windows_launcher_first_run_works_without_proxy_or_system_node_or_git() {
         let _lock = WINDOWS_E2E_ENV_LOCK
             .get_or_init(|| Mutex::new(()))
@@ -2233,20 +2443,20 @@ mod tests {
         });
 
         let marker = fs::read_to_string(project_root.join(MANAGED_MARKER_FILE))
-            .expect("受管工作树缺少 ownership 标记");
+            .expect("APP 数据目录工作树缺少 ownership 标记");
         assert!(
             marker.contains(&project_config::repository_urls().clone),
-            "受管工作树没有记录官方项目仓库"
+            "APP 数据目录工作树没有记录官方项目仓库"
         );
         let node_executable = node_bin.join("node.exe");
         let node_version = std::process::Command::new(&node_executable)
             .arg("--version")
             .output()
-            .expect("无法启动受管 Node")
+            .expect("无法启动 Launcher 内置 Node.js")
             .stdout;
         assert!(
             String::from_utf8_lossy(&node_version).contains(MANAGED_NODE_VERSION),
-            "受管 Node 版本不符合预期"
+            "Launcher 内置 Node.js 版本不符合预期"
         );
 
         run_windows_e2e_start_script(&project_root, &node_bin, &root).unwrap_or_else(|error| {
@@ -2276,14 +2486,14 @@ mod tests {
             .expect("必须通过 SPARKARC_E2E_SOURCE_ROOT 指定干净源码快照");
         let node_bin = env::var_os("SPARKARC_E2E_NODE_BIN")
             .map(PathBuf::from)
-            .expect("必须通过 SPARKARC_E2E_NODE_BIN 指定受管 Node 目录");
+            .expect("必须通过 SPARKARC_E2E_NODE_BIN 指定 Launcher 内置 Node.js 目录");
         assert!(
             project_root.join("start.bat").is_file(),
             "源码快照缺少 start.bat"
         );
         assert!(
             node_bin.join("node.exe").is_file(),
-            "受管 Node 目录缺少 node.exe"
+            "Launcher 内置 Node.js 目录缺少 node.exe"
         );
 
         let root = windows_e2e_root();

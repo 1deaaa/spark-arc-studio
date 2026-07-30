@@ -7,7 +7,10 @@ import pytest
 from agents.routes import semantic_search_routes as routes
 from agents.vector_index import local_embedding
 from agents.vector_index import service as vector_service
-from agents.vector_index.embedding_contract import QWEN3_EMBEDDING_DIMENSIONS
+from agents.vector_index.embedding_contract import (
+    QWEN3_EMBEDDING_DIMENSIONS,
+    embedding_extra_body,
+)
 
 
 class _FakeLocalEmbeddings:
@@ -16,6 +19,43 @@ class _FakeLocalEmbeddings:
 
     def embed_query(self, text: str) -> list[float]:
         return [0.01] * QWEN3_EMBEDDING_DIMENSIONS
+
+
+class _FakeCloudEmbeddings:
+    model = "Qwen/Qwen3-Embedding-0.6B"
+
+    def embed_query(self, text: str) -> list[float]:
+        return [0.01] * QWEN3_EMBEDDING_DIMENSIONS
+
+
+class _EmptyQuery:
+    def filter_by(self, **kwargs):
+        return self
+
+    def first(self):
+        return None
+
+
+class _EmptySession:
+    def __enter__(self):
+        return self
+
+    def __exit__(self, exc_type, exc, tb):
+        return False
+
+    def query(self, *args, **kwargs):
+        return _EmptyQuery()
+
+
+class _CloudMatchbox:
+    Session = _EmptySession
+
+    def __init__(self) -> None:
+        self.calls: list[tuple[str, dict]] = []
+
+    def get_user_embedding(self, user_id: str, **kwargs):
+        self.calls.append((user_id, kwargs))
+        return _FakeCloudEmbeddings()
 
 
 def test_enable_semantic_search_uses_local_runtime_without_cloud_key(monkeypatch) -> None:
@@ -68,6 +108,21 @@ def test_local_runtime_not_ready_does_not_fall_back_to_cloud(monkeypatch) -> Non
     assert cloud_calls["count"] == 0
 
 
+def test_disabled_local_runtime_tests_matchbox_default_embedding(monkeypatch) -> None:
+    cloud_matchbox = _CloudMatchbox()
+
+    monkeypatch.setattr(routes, "get_local_embedding_enabled", lambda: False)
+    monkeypatch.setattr("llm.agen_matchbox.matchbox", lambda: cloud_matchbox)
+
+    result = asyncio.run(routes._test_active_embedding_runtime("u-cloud"))
+
+    assert result["success"] is True
+    assert result["model_name"] == "Qwen/Qwen3-Embedding-0.6B"
+    assert cloud_matchbox.calls == [
+        ("u-cloud", {"extra_body": embedding_extra_body()}),
+    ]
+
+
 def test_vector_service_does_not_use_cloud_when_local_runtime_is_selected(
     monkeypatch,
     tmp_path,
@@ -89,6 +144,25 @@ def test_vector_service_does_not_use_cloud_when_local_runtime_is_selected(
         service._get_embeddings()
 
     assert cloud_calls["count"] == 0
+
+
+def test_vector_service_uses_matchbox_default_when_local_runtime_is_disabled(
+    monkeypatch,
+    tmp_path,
+) -> None:
+    cloud_matchbox = _CloudMatchbox()
+
+    monkeypatch.setattr(vector_service, "get_project_path", lambda *args: str(tmp_path))
+    monkeypatch.setattr("core.system_settings.get_local_embedding_enabled", lambda: False)
+    monkeypatch.setattr(vector_service, "matchbox", lambda: cloud_matchbox)
+
+    service = vector_service.VectorIndexService("u-cloud", "在线项目")
+    embeddings = service._get_embeddings()
+
+    assert embeddings.model == "Qwen/Qwen3-Embedding-0.6B"
+    assert cloud_matchbox.calls == [
+        ("u-cloud", {"extra_body": embedding_extra_body()}),
+    ]
 
 
 def test_vector_index_hashes_include_arc_after_large_root_file(monkeypatch, tmp_path) -> None:

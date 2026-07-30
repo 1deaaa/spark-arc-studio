@@ -21,8 +21,7 @@ from mcp_server.spark_inspiration.logic import (
     INSPIRATION_SCOPE_ALL,
     INSPIRATION_SCOPE_PROJECT,
     VALID_INSPIRATION_SCOPES,
-    bind_inspiration_to_project,
-    bind_inspiration_exclusive,
+    activate_inspiration_for_project,
     save_inspiration,
     get_all_inspirations,
     update_inspiration,
@@ -187,7 +186,7 @@ async def delete_inspiration_entry(entry_id: str, user: dict = Depends(get_curre
 
 
 # ==================== 灵感 ↔ 项目 软关联 ====================
-# bind/unbind 与 project_links 字段共同支撑“按项目隔离 AI 上下文”的设计。
+# 激活/解绑与 project_links 字段共同支撑“按项目隔离 AI 上下文”的设计。
 # 详见 mcp_server/spark_inspiration/logic.py 顶部注释。
 
 
@@ -199,30 +198,21 @@ async def bind_inspiration_entry(
 ):
     """将灵感条目绑定到指定项目。
 
-    exclusive=True 时执行排他绑定：绑定新灵感的同时自动解绑该项目下的旧灵感，
-    保证一个项目同一时刻只有一个"活跃灵感"。
+    所有绑定请求都表示将该灵感设为项目当前灵感，同时自动移除项目对旧灵感的引用。
+    activate / exclusive 仅作为旧客户端兼容字段接收，不再改变这一语义。
     """
     user_id = str(user['user_id'])
     project_name = normalize_project_name(data.projectName) if data.projectName else None
     if not project_name:
         return JSONResponse(status_code=400, content={'success': False, 'error': '缺少有效的 projectName'})
 
-    if data.exclusive:
-        result = bind_inspiration_exclusive(user_id, entry_id, project_name)
-        if result['success']:
-            return {'success': True, 'project': project_name, 'unbound_ids': result.get('unbound_ids', [])}
-        return JSONResponse(
-            status_code=404,
-            content={'success': False, 'error': '灵感不存在或绑定失败'},
-        )
-    else:
-        success = bind_inspiration_to_project(user_id, entry_id, project_name)
-        if success:
-            return {'success': True, 'project': project_name}
-        return JSONResponse(
-            status_code=404,
-            content={'success': False, 'error': '灵感不存在或绑定失败'},
-        )
+    result = activate_inspiration_for_project(user_id, entry_id, project_name)
+    if result['success']:
+        return {'success': True, 'project': project_name, 'unbound_ids': result.get('unbound_ids', [])}
+    return JSONResponse(
+        status_code=404,
+        content={'success': False, 'error': '灵感不存在或绑定失败'},
+    )
 
 
 @muse_router.post('/api/inspirations/{entry_id}/unbind')

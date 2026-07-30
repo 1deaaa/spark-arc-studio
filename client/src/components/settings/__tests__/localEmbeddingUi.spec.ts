@@ -1,10 +1,14 @@
 import { describe, expect, it } from 'vitest';
 
 import type { LocalEmbeddingStatus } from '../../../services/api';
-import { isLocalEmbeddingStartupActive, isLocalEmbeddingSwitchOn } from '../localEmbeddingUi';
+import {
+  getLocalEmbeddingErrorSummary,
+  isLocalEmbeddingStartupActive,
+  isLocalEmbeddingSwitchOn,
+} from '../localEmbeddingUi';
 
 describe('本地嵌入运行态判断', () => {
-  it('启动阶段会被识别为进行中且开关应保持开启', () => {
+  it('启动阶段只负责运行态判断，开关服从后端启用值', () => {
     const status: LocalEmbeddingStatus = {
       configured: false,
       running: false,
@@ -19,10 +23,10 @@ describe('本地嵌入运行态判断', () => {
     };
 
     expect(isLocalEmbeddingStartupActive(status)).toBe(true);
-    expect(isLocalEmbeddingSwitchOn(status)).toBe(true);
+    expect(isLocalEmbeddingSwitchOn(true)).toBe(true);
   });
 
-  it('仅保留配置开关但服务未启动时，开关应保持关闭', () => {
+  it('服务未启动但后端仍选择本地嵌入时，开关应保持开启', () => {
     const status: LocalEmbeddingStatus = {
       configured: true,
       running: false,
@@ -37,10 +41,10 @@ describe('本地嵌入运行态判断', () => {
     };
 
     expect(isLocalEmbeddingStartupActive(status)).toBe(false);
-    expect(isLocalEmbeddingSwitchOn(status)).toBe(false);
+    expect(isLocalEmbeddingSwitchOn(true)).toBe(true);
   });
 
-  it('服务真实可用时，开关应保持开启', () => {
+  it('服务仍在运行但后端已关闭本地嵌入时，开关应保持关闭', () => {
     const status: LocalEmbeddingStatus = {
       configured: true,
       running: false,
@@ -55,6 +59,30 @@ describe('本地嵌入运行态判断', () => {
     };
 
     expect(isLocalEmbeddingStartupActive(status)).toBe(false);
-    expect(isLocalEmbeddingSwitchOn(status)).toBe(true);
+    expect(isLocalEmbeddingSwitchOn(false)).toBe(false);
+  });
+
+  it('后端选择状态未知时，不应推断为已开启', () => {
+    expect(isLocalEmbeddingSwitchOn(null)).toBe(false);
+  });
+
+  it('启动失败时只返回用户摘要，不向界面暴露进程日志', () => {
+    const status: LocalEmbeddingStatus = {
+      configured: true,
+      running: false,
+      alive: false,
+      startup: {
+        phase: 'error',
+        message: '本地嵌入服务启动失败',
+        progress: 100,
+        error: 'llama-server 已退出，退出码 0\n最近日志：\n大量底层日志',
+      },
+    };
+
+    const summary = getLocalEmbeddingErrorSummary(status, '本地嵌入启动失败');
+
+    expect(summary).toBe('本地嵌入启动失败');
+    expect(summary).not.toContain('llama-server');
+    expect(summary).not.toContain('最近日志');
   });
 });

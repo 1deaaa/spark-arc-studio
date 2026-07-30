@@ -23,6 +23,9 @@
       "allow": [
         {
           "url": "https://github.com/1deaaa/spark-arc-studio*"
+        },
+        {
+          "url": "https://gitee.com/aideaaa/spark-arc-studio*"
         }
       ]
     }

@@ -7,7 +7,7 @@
  * npm 配置，也不依赖 PowerShell、cmd 或任何系统包管理器。
  */
 import { createHash } from 'node:crypto';
-import { access, mkdir, readFile, readdir, stat, writeFile } from 'node:fs/promises';
+import { access, mkdir, readFile, readdir, rm, stat, writeFile } from 'node:fs/promises';
 import { dirname, join } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { spawnSync } from 'node:child_process';
@@ -194,6 +194,8 @@ async function main() {
     console.log('[frontend] 前端产物与依赖锁一致，无需重新构建。');
     return;
   }
+
+  await rm(markerPath, { force: true });
 
   const registry = await selectRegistry();
   const env = { ...process.env, NPM_CONFIG_REGISTRY: registry };

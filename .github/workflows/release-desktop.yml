@@ -1,19 +1,16 @@
 name: Publish Desktop Release
 
 on:
-  push:
-    tags:
-      - 'sparkarc-v*'
-  workflow_dispatch:
+  workflow_call:
     inputs:
       draft:
         description: Create the GitHub Release as a draft first
-        required: true
+        required: false
         default: true
         type: boolean
       prerelease:
         description: Mark this release as a pre-release
-        required: true
+        required: false
         default: false
         type: boolean
       version:

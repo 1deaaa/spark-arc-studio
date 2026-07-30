@@ -16,10 +16,13 @@
 from typing import Optional, List
 from fastapi import APIRouter, Depends, HTTPException, Query
 from fastapi.responses import JSONResponse
-from pydantic import BaseModel
+from pydantic import BaseModel, Field
+from sqlalchemy import select
 
 from .auth import get_current_user, require_admin
+from .models import User, UserInfoSession
 from llm.agen_matchbox import matchbox
+from llm.agen_matchbox.credit_grant_services import CreditGrantCampaignNotFoundError
 from llm.agen_matchbox.redeem_code_services import (
     RedeemCodeNotFoundError,
     RedeemCodeAlreadyUsedError,
@@ -38,6 +41,13 @@ class CreateRedeemCodeRequest(BaseModel):
     code: Optional[str] = None  # 自定义兑换码，为空则随机生成
     remark: Optional[str] = None
     count: int = 1  # 批量创建数量
+    max_redemptions: Optional[int] = Field(None, ge=1)
+
+
+class CreateCreditGrantRequest(BaseModel):
+    credit_amount: float = Field(gt=0)
+    grant_scope: str
+    remark: Optional[str] = None
 
 
 class BatchRevokeRequest(BaseModel):
@@ -111,8 +121,64 @@ async def create_redeem_code(
             created_by=str(admin_user['user_id']),
             remark=data.remark,
             count=data.count,
+            max_redemptions=data.max_redemptions,
         )
         return {"success": True, "data": result}
+    except ValueError as e:
+        raise HTTPException(status_code=400, detail=str(e))
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+@redeem_router.get('/admin/grants')
+async def list_credit_grant_campaigns(
+    limit: int = Query(100, ge=1, le=500),
+    admin_user: dict = Depends(require_admin),
+):
+    """查询额度发放活动（管理员）。"""
+    try:
+        result = matchbox().list_credit_grant_campaigns(limit=limit)
+        return {"success": True, "data": result}
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+@redeem_router.post('/admin/grants')
+async def create_credit_grant_campaign(
+    data: CreateCreditGrantRequest,
+    admin_user: dict = Depends(require_admin),
+):
+    """立即向现有用户发放额度，或创建未来注册自动发放活动。"""
+    try:
+        user_ids = None
+        if data.grant_scope == "current_users":
+            with UserInfoSession() as session:
+                user_ids = [str(user_id) for user_id in session.execute(select(User.id)).scalars().all()]
+        result = matchbox().create_credit_grant_campaign(
+            credit_amount=data.credit_amount,
+            grant_scope=data.grant_scope,
+            created_by=str(admin_user['user_id']),
+            remark=data.remark,
+            user_ids=user_ids,
+        )
+        return {"success": True, "data": result}
+    except ValueError as e:
+        raise HTTPException(status_code=400, detail=str(e))
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+@redeem_router.post('/admin/grants/{campaign_id}/revoke')
+async def revoke_credit_grant_campaign(
+    campaign_id: int,
+    admin_user: dict = Depends(require_admin),
+):
+    """停止新用户自动发放活动，已发额度不回收。"""
+    try:
+        result = matchbox().revoke_credit_grant_campaign(campaign_id)
+        return {"success": True, "data": result}
+    except CreditGrantCampaignNotFoundError as e:
+        raise HTTPException(status_code=404, detail=str(e))
     except ValueError as e:
         raise HTTPException(status_code=400, detail=str(e))
     except Exception as e:

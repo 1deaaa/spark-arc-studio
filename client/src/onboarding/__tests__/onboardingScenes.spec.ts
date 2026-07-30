@@ -25,16 +25,34 @@ describe('onboarding 场景契约', () => {
     expect(desktopPageScenes.flatMap(scene => scene.steps).every(step => step.spotlight !== false)).toBe(true);
   });
 
-  it('完整引导先解释创作流程，再进入页面聚焦', () => {
-    expect(desktopWorkspaceSteps[0].id).toBe('dw-workflow-overview');
-    expect(desktopWorkspaceSteps[0].detailKeys).toHaveLength(6);
+  it('完整引导先解释 AI 平台与模型，再进入创作流程', () => {
+    expect(desktopWorkspaceSteps.slice(0, 4).map(step => step.id)).toEqual([
+      'dw-ai-setup-overview',
+      'dw-ai-platforms',
+      'dw-ai-model-usage',
+      'dw-workflow-overview',
+    ]);
+    expect(desktopWorkspaceSteps[0].detailKeys).toHaveLength(5);
+    expect(desktopWorkspaceSteps[3].detailKeys).toHaveLength(6);
     expect(desktopWorkspaceSteps.some(step => step.id === 'world-seed')).toBe(true);
     expect(desktopWorkspaceSteps.some(step => step.id === 'production-editor')).toBe(true);
   });
 
-  it('移动端也从完整流程说明开始', () => {
-    expect(mobileWorkspaceSteps[0].id).toBe('mw-workflow-overview');
-    expect(mobileWorkspaceSteps[0].detailKeys).toHaveLength(6);
+  it('移动端也先完成 AI 平台与模型引导', () => {
+    expect(mobileWorkspaceSteps.slice(0, 4).map(step => step.id)).toEqual([
+      'mw-ai-setup-overview',
+      'mw-ai-platforms',
+      'mw-ai-model-usage',
+      'mw-workflow-overview',
+    ]);
+    expect(mobileWorkspaceSteps[0].detailKeys).toHaveLength(5);
+    expect(mobileWorkspaceSteps[3].detailKeys).toHaveLength(6);
+  });
+
+  it('设置页平台教程解释个人密钥覆盖路径', () => {
+    const settingsScene = desktopPageScenes.find(scene => scene.id === 'page-settings');
+    const platformStep = settingsScene?.steps.find(step => step.id === 'settings-platforms');
+    expect(platformStep?.detailKeys).toContain('onboarding.desktop.aiSetup.personalOverride');
   });
 
   it('移动端标题按钮的每个场景只包含当前页面教程', () => {

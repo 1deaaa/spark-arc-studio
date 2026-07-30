@@ -30,15 +30,6 @@ if not exist "%MARKER%" (
     exit /b 1
 )
 
-REM 通过环境变量传递路径，避免用户目录包含单引号时破坏 Python 代码字符串。
-set "SPARKARC_SERVICE_PROJECT_ROOT=%~dp0"
-"%PYTHON_EXE%" -X utf8 -c "import os, sys; root = os.environ['SPARKARC_SERVICE_PROJECT_ROOT']; sys.path.insert(0, os.path.join(root, 'server')); from core.service_registry import record_service_install; record_service_install(root)"
-if errorlevel 1 (
-    echo [ERROR] Failed to register the local SparkArc service.
-    pause
-    exit /b 1
-)
-
 if not exist "%CLIENT_BUILD_SCRIPT%" (
     echo [ERROR] Frontend build script not found: %CLIENT_BUILD_SCRIPT%
     pause
@@ -47,7 +38,7 @@ if not exist "%CLIENT_BUILD_SCRIPT%" (
 
 where node >nul 2>&1
 if errorlevel 1 (
-    echo [ERROR] Node.js was not found. Use Launcher managed deployment or install Node.js 20+.
+    echo [ERROR] Node.js was not found. Use Launcher local deployment or install Node.js 20+.
     pause
     exit /b 1
 )

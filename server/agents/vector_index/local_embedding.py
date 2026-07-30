@@ -638,6 +638,10 @@ def start_local_embedding_service() -> dict[str, Any]:
                 time.sleep(0.5)
         status = get_local_embedding_status()
         if not status.get("alive"):
+            with _process_lock:
+                startup_superseded = started_process is not None and _process is not started_process
+            if startup_superseded:
+                return status
             _set_startup_state(
                 "error",
                 "本地嵌入服务启动失败",
@@ -663,4 +667,5 @@ def stop_local_embedding_service() -> dict[str, Any]:
             process.wait(timeout=5)
         except subprocess.TimeoutExpired:
             process.kill()
+    _set_startup_state("idle", "本地嵌入服务已停止", progress=0, error="")
     return get_local_embedding_status()

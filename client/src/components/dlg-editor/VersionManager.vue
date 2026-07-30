@@ -74,7 +74,7 @@
           </template>
 
           <div class="version-content">
-            <div class="version-desc">{{ ver.description || t('components.versionManager.noDescription') }}</div>
+            <div v-if="ver.description" class="version-desc">{{ ver.description }}</div>
             <n-alert
               v-if="globalShareDisabled && ver.is_shared"
               type="warning"
@@ -161,6 +161,19 @@
         <n-form-item :label="t('components.versionManager.descriptionOptional')">
           <n-input v-model:value="formModel.description" type="textarea" :placeholder="t('components.versionManager.descriptionPlaceholder')" />
         </n-form-item>
+        <n-form-item :label="t('components.versionManager.directoryVisibility')">
+          <div class="directory-setting">
+            <div class="directory-setting__copy">
+              <span class="directory-setting__label">{{ t('components.versionManager.showFullDirectory') }}</span>
+              <n-text depth="3" class="directory-setting__hint">
+                {{ formModel.showFullDirectory
+                  ? t('components.versionManager.fullDirectoryHint')
+                  : t('components.versionManager.progressiveDirectoryHint') }}
+              </n-text>
+            </div>
+            <n-switch v-model:value="formModel.showFullDirectory" />
+          </div>
+        </n-form-item>
       </n-form>
       <template #footer>
         <n-space justify="end">
@@ -202,6 +215,7 @@ type VersionListItem = {
   share_id?: string | null;
   share_url?: string | null;
   share_url_public?: string | null;
+  show_full_directory?: boolean;
 };
 
 type ShareReviewPayload = {
@@ -223,6 +237,7 @@ type VersionFormModel = {
   projectName: string | null;
   versionName: string;
   description: string;
+  showFullDirectory: boolean;
 };
 
 const props = defineProps({
@@ -254,6 +269,7 @@ const formModel = ref<VersionFormModel>({
   projectName: null,
   versionName: '',
   description: '',
+  showFullDirectory: true,
 });
 
 const contentFormat = computed(() => props.contentFormat === 'novel' ? 'novel' : 'script');
@@ -420,6 +436,7 @@ function openCreateModal() {
     projectName: props.projectId || filterProject.value || null,
     versionName: generateDefaultTitle(),
     description: '',
+    showFullDirectory: true,
   };
   showModal.value = true;
 }
@@ -437,6 +454,7 @@ function editVersion(ver: VersionListItem) {
     projectName: ver.project_name,
     versionName: ver.version_name,
     description: ver.description || '',
+    showFullDirectory: ver.show_full_directory !== false,
   };
   showModal.value = true;
 }
@@ -473,7 +491,8 @@ async function submitForm() {
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
           versionName: formModel.value.versionName,
-          description: formModel.value.description
+          description: formModel.value.description,
+          showFullDirectory: formModel.value.showFullDirectory,
         })
       });
       if (res.ok) {
@@ -496,7 +515,8 @@ async function submitForm() {
         body: JSON.stringify({
           versionName: formModel.value.versionName,
           description: formModel.value.description,
-          contentFormat: resolvedContentFormat
+          contentFormat: resolvedContentFormat,
+          showFullDirectory: formModel.value.showFullDirectory,
         })
       });
       if (res.ok) {
@@ -760,6 +780,30 @@ onBeforeUnmount(() => {
   flex: 0 0 auto;
 }
 
+.directory-setting {
+  width: 100%;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 16px;
+}
+
+.directory-setting__copy {
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+
+.directory-setting__label {
+  font-weight: 600;
+}
+
+.directory-setting__hint {
+  font-size: 0.82rem;
+  line-height: 1.35;
+}
+
 /* === 筛选 / 公告条 === */
 .filter-bar {
   margin-bottom: 4px;
@@ -783,6 +827,10 @@ onBeforeUnmount(() => {
 
 .version-item :deep(.n-card-header) {
   padding-bottom: 6px;
+}
+
+.version-item :deep(.n-card__content) {
+  padding-top: 6px;
 }
 
 .version-card-header {
@@ -922,15 +970,25 @@ onBeforeUnmount(() => {
 
 /* === 移动端响应式：≤720px === */
 @media (max-width: 720px) {
+  .version-manager {
+    gap: 8px;
+  }
+
   .vm-toolbar {
-    flex-direction: column;
-    align-items: stretch;
-    gap: 10px;
+    align-items: center;
+    gap: 8px;
+    margin-bottom: 0;
   }
 
   .vm-create-btn {
-    width: 100%;
-    justify-content: center;
+    width: auto;
+    min-height: 34px;
+    padding-inline: 12px;
+  }
+
+  .subtitle {
+    margin-top: 2px;
+    font-size: 0.78em;
   }
 
   .filter-bar__select {
@@ -938,25 +996,41 @@ onBeforeUnmount(() => {
   }
 
   .version-card-header {
-    flex-direction: column;
-    align-items: stretch;
-    gap: 6px;
+    align-items: center;
+    gap: 4px 8px;
   }
 
   .version-card-header__main {
-    width: 100%;
+    flex: 1 1 150px;
   }
 
   .version-card-header__meta {
-    width: 100%;
-    justify-content: space-between;
-    gap: 8px;
+    flex: 1 1 auto;
+    justify-content: flex-end;
+    gap: 6px 10px;
+  }
+
+  .version-item :deep(.n-card-header),
+  .version-item :deep(.n-card__content) {
+    padding: 10px 12px;
+  }
+
+  .version-item :deep(.n-card-header) {
+    padding-bottom: 4px;
+  }
+
+  .version-item :deep(.n-card__content) {
+    padding-top: 4px;
+  }
+
+  .version-content {
+    gap: 6px;
   }
 
   .version-actions__primary {
     display: grid;
     grid-template-columns: repeat(3, minmax(0, 1fr));
-    gap: 6px;
+    gap: 5px;
   }
 
   .version-actions__primary .vm-action-btn {
@@ -965,18 +1039,31 @@ onBeforeUnmount(() => {
   }
 
   .version-actions__secondary {
-    gap: 6px;
+    gap: 2px;
+    padding-top: 0;
+  }
+
+  .version-actions__secondary :deep(.n-button) {
+    padding-inline: 7px;
   }
 }
 
-/* === 极窄屏：≤420px，主操作改 1+2 布局，让“试玩”独占首行 === */
+/* === 极窄屏：仍保持主操作同排，避免单个按钮占据整行 === */
 @media (max-width: 420px) {
-  .version-actions__primary {
-    grid-template-columns: repeat(2, minmax(0, 1fr));
+  .vm-toolbar__info .subtitle {
+    display: none;
   }
 
-  .version-actions__primary .vm-action-btn--play {
-    grid-column: 1 / -1;
+  .version-date {
+    font-size: 0.76em;
+  }
+
+  .version-actions__primary :deep(.n-button__content) {
+    font-size: 0.82rem;
+  }
+
+  .version-actions__primary :deep(.n-button) {
+    padding-inline: 6px;
   }
 }
 </style>

@@ -493,8 +493,12 @@ class RedeemCode(Base):
     code = Column(String(64), nullable=False, unique=True, index=True)
     # 可兑换的点数额度
     credit_amount = Column(Float, nullable=False)
-    # 兑换码类型：single = 一次性（用完即废）；per_user = 每用户可用一次（全服福利）
+    # 兑换码类型：single = 一次性；limited = 指定总次数；per_user = 每用户一次且不限总人数
     code_type = Column(String(32), nullable=False, default="single", index=True)
+    # 最大兑换次数；NULL 表示不限总次数。每个用户仍只能兑换一次。
+    max_redemptions = Column(Integer, nullable=True)
+    # 已成功占用的兑换次数，用于并发场景下原子控制总次数。
+    redemption_count = Column(Integer, nullable=False, default=0, server_default=text("0"))
     # 状态：active / revoked / exhausted
     status = Column(String(32), nullable=False, default="active", index=True)
     # 创建者（管理员 user_id）
@@ -512,6 +516,9 @@ class RedeemCode(Base):
 class RedeemCodeUsage(Base):
     """兑换码使用记录"""
     __tablename__ = "redeem_code_usages"
+    __table_args__ = (
+        UniqueConstraint("redeem_code_id", "user_id", name="uq_redeem_code_usage_code_user"),
+    )
 
     id = Column(Integer, primary_key=True)
     # 关联兑换码
@@ -529,3 +536,40 @@ class RedeemCodeUsage(Base):
     balance_after = Column(Float, nullable=False)
     # 时间戳
     used_at = Column(DateTime, default=func.now(), index=True)
+
+
+class CreditGrantCampaign(Base):
+    """管理员额度发放活动。"""
+    __tablename__ = "credit_grant_campaigns"
+
+    id = Column(Integer, primary_key=True)
+    credit_amount = Column(Float, nullable=False)
+    # current_users = 创建时立即向现有用户发放；future_users = 自动向之后注册的用户发放
+    grant_scope = Column(String(32), nullable=False, index=True)
+    status = Column(String(32), nullable=False, default="active", index=True)
+    created_by = Column(String(255), nullable=True, index=True)
+    remark = Column(String(255), nullable=True)
+    created_at = Column(DateTime, default=func.now(), index=True)
+    revoked_at = Column(DateTime, nullable=True)
+
+    recipients = relationship("CreditGrantRecipient", backref="campaign", cascade="all, delete-orphan")
+
+
+class CreditGrantRecipient(Base):
+    """额度发放活动的用户领取记录，用于审计和幂等保护。"""
+    __tablename__ = "credit_grant_recipients"
+    __table_args__ = (
+        UniqueConstraint("campaign_id", "user_id", name="uq_credit_grant_recipient_campaign_user"),
+    )
+
+    id = Column(Integer, primary_key=True)
+    campaign_id = Column(
+        Integer,
+        ForeignKey("credit_grant_campaigns.id", ondelete="CASCADE"),
+        nullable=False,
+        index=True,
+    )
+    user_id = Column(String(255), nullable=False, index=True)
+    delta_credit = Column(Float, nullable=False)
+    balance_after = Column(Float, nullable=False)
+    granted_at = Column(DateTime, default=func.now(), index=True)

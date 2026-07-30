@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import json
 import asyncio
+import contextvars
 from pathlib import Path
 
 from langchain_core.messages import AIMessage
@@ -11,6 +12,7 @@ from agents.scriptwriter_prewrite import (
     ScriptwriterPreWriteRequest,
     run_autonomous_scriptwriter_prewrite,
 )
+from agents.routes.chat import _run_chat_background_context
 from core.request_context import (
     clear_scriptwriter_prewrite_receipt,
     current_agent_id,
@@ -169,6 +171,63 @@ def test_full_script_write_requires_and_consumes_matching_receipt(monkeypatch, t
         current_agent_id.reset(agent_token)
         current_project_name.reset(project_token)
         current_user_id.reset(user_token)
+
+
+def test_chat_background_preserves_receipt_across_separate_tool_contexts(monkeypatch, tmp_path) -> None:
+    from agents.tools.scriptwriter import create_or_rewrite_script, prepare_script_creation
+
+    monkeypatch.setattr("core.utils.USERDATA_ROOT", str(tmp_path))
+    monkeypatch.setattr("agents.scriptwriter_prewrite._build_prewrite_brief", lambda _request: "确定性任务包")
+    monkeypatch.setattr("agents.story_memory.enqueue_scene_memory_write", lambda **_kwargs: None)
+
+    saved_result = ""
+
+    def callback() -> None:
+        nonlocal saved_result
+        agent_token = current_agent_id.set("agent_scriptwriter")
+        set_current_export_format("novel")
+        try:
+            prepare_context = contextvars.copy_context()
+            prepare_payload = json.loads(prepare_context.run(
+                prepare_script_creation.invoke,
+                {
+                    "task_description": "完整创作第一场",
+                    "chapter_name": "一 · 开端",
+                    "scene_name": "1-1 初遇",
+                },
+            ))
+            assert prepare_payload["status"] == "ready"
+
+            write_context = contextvars.copy_context()
+            saved_result = write_context.run(
+                create_or_rewrite_script.invoke,
+                {
+                    "overwrite_content": "雨落在旧站台上。",
+                    "chapter_name": "一 · 开端",
+                    "work_name": "1-1 初遇",
+                },
+            )
+        finally:
+            set_current_export_format(None)
+            current_agent_id.reset(agent_token)
+
+    _run_chat_background_context(
+        user_id="u-chat",
+        project_name="p-chat",
+        is_admin=False,
+        locale="zh-CN",
+        llm_usage_context="task:prewrite-regression",
+        chat_agent_id="agent_director",
+        chat_context_key="global",
+        callback=callback,
+    )
+
+    assert "已保存" in saved_result
+    from core.utils import get_project_stories_path
+
+    saved_relative_path = saved_result.split("：", 1)[1]
+    saved_path = Path(get_project_stories_path("u-chat", "p-chat")) / saved_relative_path
+    assert saved_path.read_text(encoding="utf-8") == "雨落在旧站台上。"
 
 
 def test_auto_write_emits_prewrite_before_writing_scene(monkeypatch, tmp_path: Path) -> None:

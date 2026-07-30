@@ -11,7 +11,7 @@ from agents.agent_utils import load_prompt, build_length_hint_str, SparkAgentExe
 from agents.prompt_layout import build_prompt_messages
 
 from core.request_context import current_user_id, get_current_project_name, resolve_project_name
-from core.character_store import replace_regular_characters
+from core.character_store import replace_regular_characters, upsert_regular_characters
 from core.utils import (
     get_project_worldview_path,
     ensure_project_worldview_and_character_settings,
@@ -112,7 +112,12 @@ class WorldviewAgent(SparkBaseAgent, SparkAgentExecutor):
             )
             if not isinstance(content, str) or not content.strip():
                 return None
-            return self._write_characters_overwrite(user_id, project_name, content)
+            return self._write_characters_overwrite(
+                user_id,
+                project_name,
+                content,
+                append=bool(kwargs.get("append")),
+            )
 
         return None
 
@@ -310,12 +315,20 @@ class WorldviewAgent(SparkBaseAgent, SparkAgentExecutor):
         return [single] if single else []
 
     def _write_characters_overwrite(
-        self, user_id: str, project_name: str, overwrite_content: str
+        self,
+        user_id: str,
+        project_name: str,
+        overwrite_content: str,
+        *,
+        append: bool = False,
     ) -> str:
         parsed_characters = self._parse_characters_overwrite_text(overwrite_content)
         if not parsed_characters:
             return "角色覆盖失败：overwrite_content 格式不正确。请使用 JSON characters 列表、XML <character><name>角色名</name><content>角色设定</content></character>，或“角色名 + 空行 + 角色内容”并用 --- 分隔多个角色。"
 
+        if append:
+            created, updated = upsert_regular_characters(user_id, project_name, parsed_characters)
+            return f"已增量写入本批角色设定：新增 {created} 个，更新 {updated} 个；其他已有角色保持不变。"
         created = replace_regular_characters(user_id, project_name, parsed_characters)
         return f"已使用工具参数中的完整文本覆盖角色设定，共写入 {created} 个角色。"
 

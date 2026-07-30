@@ -439,7 +439,7 @@ export async function listRedeemCodes(params?: { status?: string; code_type?: st
 /**
  * 创建兑换码（管理员，支持批量）
  */
-export async function createRedeemCode(payload: { credit_amount: number; code_type: string; code?: string; remark?: string; count?: number }) {
+export async function createRedeemCode(payload: { credit_amount: number; code_type: string; code?: string; remark?: string; count?: number; max_redemptions?: number }) {
   const response = await fetchWithAuth('/api/redeem/admin/codes', {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
@@ -448,6 +448,48 @@ export async function createRedeemCode(payload: { credit_amount: number; code_ty
   const result = await response.json();
   if (!response.ok || result.success === false) {
     throw new Error(extractErrorMessage(result, '创建兑换码失败'));
+  }
+  return result.data;
+}
+
+/**
+ * 查询管理员额度发放活动
+ */
+export async function listCreditGrantCampaigns() {
+  const response = await fetchWithAuth('/api/redeem/admin/grants');
+  const result = await response.json();
+  if (!response.ok || result.success === false) {
+    throw new Error(extractErrorMessage(result, '获取额度发放活动失败'));
+  }
+  return result.data;
+}
+
+/**
+ * 立即向全服发放额度，或创建新用户自动发放活动
+ */
+export async function createCreditGrantCampaign(payload: { credit_amount: number; grant_scope: 'current_users' | 'future_users'; remark?: string }) {
+  const response = await fetchWithAuth('/api/redeem/admin/grants', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify(payload),
+  });
+  const result = await response.json();
+  if (!response.ok || result.success === false) {
+    throw new Error(extractErrorMessage(result, '创建额度发放活动失败'));
+  }
+  return result.data;
+}
+
+/**
+ * 停止新用户自动发放活动
+ */
+export async function revokeCreditGrantCampaign(campaignId: number) {
+  const response = await fetchWithAuth(`/api/redeem/admin/grants/${campaignId}/revoke`, {
+    method: 'POST',
+  });
+  const result = await response.json();
+  if (!response.ok || result.success === false) {
+    throw new Error(extractErrorMessage(result, '停止额度发放活动失败'));
   }
   return result.data;
 }
