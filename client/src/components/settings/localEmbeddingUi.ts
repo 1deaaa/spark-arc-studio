@@ -14,12 +14,13 @@ export function isLocalEmbeddingStartupActive(status: LocalEmbeddingStatus | nul
   return typeof phase === 'string' && ACTIVE_STARTUP_PHASES.has(phase);
 }
 
-export function isLocalEmbeddingSwitchOn(status: LocalEmbeddingStatus | null | undefined): boolean {
-  if (!status) {
-    return false;
-  }
-  if (status.alive || status.running) {
-    return true;
-  }
-  return isLocalEmbeddingStartupActive(status);
+export function isLocalEmbeddingSwitchOn(enabled: boolean | null | undefined): boolean {
+  return enabled === true;
+}
+
+export function getLocalEmbeddingErrorSummary(
+  status: LocalEmbeddingStatus | null | undefined,
+  fallback: string,
+): string | null {
+  return status?.startup?.phase === 'error' ? fallback : null;
 }

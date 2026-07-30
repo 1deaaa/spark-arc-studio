@@ -8,7 +8,8 @@
 
 兑换码类型：
 - single: 一次性兑换码，用一次即失效
-- per_user: 每用户可用一次，全服福利型
+- limited: 指定全服总使用次数，每个用户最多使用一次
+- per_user: 不限制全服总使用次数，每个用户最多使用一次
 
 兑换码字符集：大小写字母+数字，去掉大写I/O、小写l/o（共58字符）
 """
@@ -20,7 +21,8 @@ import string
 from datetime import datetime
 from typing import Optional, Dict, Any, List
 
-from sqlalchemy import func
+from sqlalchemy import func, or_, update
+from sqlalchemy.exc import IntegrityError
 
 from .models import RedeemCode, RedeemCodeUsage, UserCreditAccount, UserCreditLedger
 
@@ -65,23 +67,32 @@ class RedeemCodeServicesMixin:
         created_by: Optional[str] = None,
         remark: Optional[str] = None,
         count: int = 1,
+        max_redemptions: Optional[int] = None,
     ) -> List[Dict[str, Any]]:
         """批量创建兑换码。
 
         Args:
             credit_amount: 可兑换的点数额度
-            code_type: single / per_user
+            code_type: single / limited / per_user
             code: 自定义兑换码，为空则随机生成
             created_by: 创建者 user_id
             remark: 备注
             count: 批量创建数量（自定义 code 时只能为 1）
         """
-        if code_type not in ("single", "per_user"):
-            raise ValueError("code_type 仅支持 'single' 或 'per_user'")
+        if code_type not in ("single", "limited", "per_user"):
+            raise ValueError("code_type 仅支持 'single'、'limited' 或 'per_user'")
         if credit_amount <= 0:
             raise ValueError("credit_amount 必须大于 0")
         if code and count > 1:
             raise ValueError("自定义兑换码时 count 只能为 1")
+        if code_type == "single":
+            max_redemptions = 1
+        elif code_type == "limited":
+            if max_redemptions is None or int(max_redemptions) < 1:
+                raise ValueError("limited 类型的 max_redemptions 必须大于 0")
+            max_redemptions = int(max_redemptions)
+        else:
+            max_redemptions = None
 
         results: List[Dict[str, Any]] = []
         with self.Session() as session:
@@ -107,6 +118,8 @@ class RedeemCodeServicesMixin:
                     status="active",
                     created_by=str(created_by) if created_by else None,
                     remark=remark,
+                    max_redemptions=max_redemptions,
+                    redemption_count=0,
                 )
                 session.add(rc)
                 session.flush()
@@ -140,7 +153,7 @@ class RedeemCodeServicesMixin:
                 # 附带使用记录摘要
                 usage_count = session.query(func.count(RedeemCodeUsage.id)).filter_by(redeem_code_id=rc.id).scalar() or 0
                 item["usage_count"] = usage_count
-                # single 类型：如果已被使用，标记使用者
+                item["redemption_count"] = max(int(item["redemption_count"]), int(usage_count))
                 if rc.code_type == "single" and usage_count > 0:
                     usage = session.query(RedeemCodeUsage).filter_by(redeem_code_id=rc.id).first()
                     if usage:
@@ -174,6 +187,8 @@ class RedeemCodeServicesMixin:
                 }
                 for u in usages
             ]
+            item["usage_count"] = len(usages)
+            item["redemption_count"] = max(int(item["redemption_count"]), len(usages))
             return item
 
     def revoke_redeem_code(self, code_id: int, operator_user_id: Optional[str] = None) -> Dict[str, Any]:
@@ -223,11 +238,11 @@ class RedeemCodeServicesMixin:
         逻辑：
         1. 查找兑换码
         2. 校验状态（active）
-        3. single 类型：检查是否已被使用
-        4. per_user 类型：检查该用户是否已兑换
+        3. 检查该用户是否已兑换
+        4. 原子占用一次总使用次数
         5. 充值点数到用户账户
         6. 记录使用记录
-        7. single 类型：标记为 exhausted
+        7. 达到总次数上限时标记为 exhausted
         """
         with self.Session() as session:
             rc = session.query(RedeemCode).filter_by(code=code.strip()).first()
@@ -238,23 +253,41 @@ class RedeemCodeServicesMixin:
             if rc.status == "exhausted":
                 raise RedeemCodeAlreadyUsedError("兑换码已被使用")
 
-            # per_user 类型：检查该用户是否已兑换
-            if rc.code_type == "per_user":
-                existing = session.query(RedeemCodeUsage).filter_by(
-                    redeem_code_id=rc.id,
-                    user_id=str(user_id),
-                ).first()
-                if existing:
-                    raise RedeemCodeAlreadyRedeemedByUserError("您已兑换过此兑换码")
+            # 旧库 single 兑换码没有 max_redemptions 字段值，语义必须继续保持一次性。
+            if rc.code_type == "single" and rc.max_redemptions is None:
+                rc.max_redemptions = 1
+                session.flush()
 
-            # single 类型：检查是否已被使用
-            if rc.code_type == "single":
-                existing = session.query(RedeemCodeUsage).filter_by(redeem_code_id=rc.id).first()
-                if existing:
-                    # 理论上 status 应该已经是 exhausted，但做防御
-                    rc.status = "exhausted"
-                    session.commit()
-                    raise RedeemCodeAlreadyUsedError("兑换码已被使用")
+            existing = session.query(RedeemCodeUsage.id).filter_by(
+                redeem_code_id=rc.id,
+                user_id=str(user_id),
+            ).first()
+            if existing:
+                raise RedeemCodeAlreadyRedeemedByUserError("您已兑换过此兑换码")
+
+            # 兼容历史数据：新计数字段首次使用前与既有使用记录对齐。
+            historical_count = session.query(func.count(RedeemCodeUsage.id)).filter_by(
+                redeem_code_id=rc.id,
+            ).scalar() or 0
+            if int(rc.redemption_count or 0) < historical_count:
+                rc.redemption_count = historical_count
+                session.flush()
+
+            reserve = session.execute(
+                update(RedeemCode)
+                .where(
+                    RedeemCode.id == rc.id,
+                    RedeemCode.status == "active",
+                    or_(
+                        RedeemCode.max_redemptions.is_(None),
+                        RedeemCode.redemption_count < RedeemCode.max_redemptions,
+                    ),
+                )
+                .values(redemption_count=RedeemCode.redemption_count + 1)
+            )
+            if reserve.rowcount != 1:
+                raise RedeemCodeAlreadyUsedError("兑换码使用次数已耗尽")
+            session.refresh(rc)
 
             # 充值点数
             delta = float(rc.credit_amount)
@@ -290,11 +323,14 @@ class RedeemCodeServicesMixin:
             )
             session.add(usage)
 
-            # single 类型：标记为 exhausted
-            if rc.code_type == "single":
+            if rc.max_redemptions is not None and rc.redemption_count >= rc.max_redemptions:
                 rc.status = "exhausted"
 
-            session.commit()
+            try:
+                session.commit()
+            except IntegrityError as exc:
+                session.rollback()
+                raise RedeemCodeAlreadyRedeemedByUserError("您已兑换过此兑换码") from exc
 
             return {
                 "success": True,
@@ -306,11 +342,18 @@ class RedeemCodeServicesMixin:
     # ==================== 序列化 ====================
 
     def _serialize_redeem_code(self, rc: RedeemCode) -> Dict[str, Any]:
+        effective_max_redemptions = 1 if rc.code_type == "single" and rc.max_redemptions is None else rc.max_redemptions
         return {
             "id": rc.id,
             "code": rc.code,
             "credit_amount": float(rc.credit_amount or 0),
             "code_type": rc.code_type,
+            "max_redemptions": effective_max_redemptions,
+            "redemption_count": int(rc.redemption_count or 0),
+            "remaining_redemptions": (
+                max(int(effective_max_redemptions) - int(rc.redemption_count or 0), 0)
+                if effective_max_redemptions is not None else None
+            ),
             "status": rc.status,
             "created_by": rc.created_by,
             "remark": rc.remark,

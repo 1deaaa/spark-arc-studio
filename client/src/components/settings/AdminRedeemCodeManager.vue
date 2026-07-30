@@ -1,13 +1,32 @@
 <template>
   <n-card :title="t('components.redeemCode.title')" size="small" class="redeem-manager-card">
     <template #header-extra>
-      <n-button type="primary" size="small" @click="showCreateModal = true">
-        <template #icon><n-icon><Plus /></n-icon></template>
-        {{ t('components.redeemCode.create') }}
-      </n-button>
+      <n-space>
+        <n-button size="small" @click="showGrantModal = true">
+          <template #icon><n-icon><Gift /></n-icon></template>
+          {{ t('components.redeemCode.grantCredits') }}
+        </n-button>
+        <n-button type="primary" size="small" @click="showCreateModal = true">
+          <template #icon><n-icon><Plus /></n-icon></template>
+          {{ t('components.redeemCode.create') }}
+        </n-button>
+      </n-space>
     </template>
 
     <p class="redeem-desc">{{ t('components.redeemCode.description') }}</p>
+
+    <div v-if="activeFutureGrants.length" class="active-grants">
+      <span class="active-grants-label">{{ t('components.redeemCode.activeFutureGrants') }}</span>
+      <div v-for="campaign in activeFutureGrants" :key="campaign.id" class="active-grant-item">
+        <span>{{ t('components.redeemCode.futureGrantSummary', { amount: campaign.credit_amount, count: campaign.recipient_count }) }}</span>
+        <n-popconfirm @positive-click="handleRevokeGrant(campaign.id)">
+          <template #trigger>
+            <n-button text type="error" size="tiny">{{ t('components.redeemCode.stopGrant') }}</n-button>
+          </template>
+          {{ t('components.redeemCode.stopGrantConfirm') }}
+        </n-popconfirm>
+      </div>
+    </div>
 
     <!-- 筛选栏 -->
     <div class="filter-bar">
@@ -42,7 +61,7 @@
         :pagination="pagination"
         size="small"
         :max-height="400"
-        :scroll-x="640"
+        :scroll-x="820"
         :row-key="(row) => row.id"
       />
     </n-spin>
@@ -64,9 +83,16 @@
           <n-radio-group v-model:value="createForm.code_type">
             <n-space>
               <n-radio value="single">{{ t('components.redeemCode.typeSingle') }}</n-radio>
+              <n-radio value="limited">{{ t('components.redeemCode.typeLimited') }}</n-radio>
               <n-radio value="per_user">{{ t('components.redeemCode.typePerUser') }}</n-radio>
             </n-space>
           </n-radio-group>
+        </n-form-item>
+        <n-form-item
+          v-if="createForm.code_type === 'limited'"
+          :label="t('components.redeemCode.maxRedemptions')"
+        >
+          <n-input-number v-model:value="createForm.max_redemptions" :min="1" :max="1000000" style="width: 100%" />
         </n-form-item>
         <n-form-item :label="t('components.redeemCode.customCode')">
           <n-input
@@ -95,6 +121,48 @@
       </template>
     </n-modal>
 
+    <n-modal v-model:show="showGrantModal" preset="card"
+      :title="t('components.redeemCode.grantTitle')"
+      style="width: 520px; max-width: calc(100vw - 48px);"
+      :bordered="false"
+      role="dialog"
+      aria-modal="true"
+    >
+      <n-form :model="grantForm" label-placement="top">
+        <n-form-item :label="t('components.redeemCode.creditAmount')">
+          <n-input-number v-model:value="grantForm.credit_amount" :min="1" style="width: 100%" />
+        </n-form-item>
+        <n-form-item :label="t('components.redeemCode.grantScope')">
+          <n-radio-group v-model:value="grantForm.grant_scope">
+            <n-space vertical>
+              <n-radio value="current_users">{{ t('components.redeemCode.grantCurrentUsers') }}</n-radio>
+              <n-radio value="future_users">{{ t('components.redeemCode.grantFutureUsers') }}</n-radio>
+            </n-space>
+          </n-radio-group>
+        </n-form-item>
+        <n-form-item :label="t('components.redeemCode.remark')">
+          <n-input v-model:value="grantForm.remark" :placeholder="t('components.redeemCode.grantRemarkPlaceholder')" clearable />
+        </n-form-item>
+      </n-form>
+      <template #footer>
+        <div style="display: flex; justify-content: flex-end; gap: 12px;">
+          <n-button @click="showGrantModal = false">{{ t('views.common.cancel') }}</n-button>
+          <n-popconfirm
+            v-if="grantForm.grant_scope === 'current_users'"
+            @positive-click="handleCreateGrant"
+          >
+            <template #trigger>
+              <n-button type="primary" :loading="granting">{{ t('components.redeemCode.grantNow') }}</n-button>
+            </template>
+            {{ t('components.redeemCode.grantNowConfirm', { amount: grantForm.credit_amount }) }}
+          </n-popconfirm>
+          <n-button v-else type="primary" :loading="granting" @click="handleCreateGrant">
+            {{ t('components.redeemCode.enableGrant') }}
+          </n-button>
+        </div>
+      </template>
+    </n-modal>
+
     <!-- 兑换码详情弹窗 -->
     <n-modal v-model:show="showDetailModal" preset="card"
       :title="t('components.redeemCode.detailTitle')"
@@ -113,7 +181,10 @@
             {{ detailData.credit_amount }}<SparkIcon />
           </n-descriptions-item>
           <n-descriptions-item :label="t('components.redeemCode.codeType')">
-            {{ detailData.code_type === 'single' ? t('components.redeemCode.typeSingle') : t('components.redeemCode.typePerUser') }}
+            {{ codeTypeLabel(detailData.code_type) }}
+          </n-descriptions-item>
+          <n-descriptions-item :label="t('components.redeemCode.redemptionProgress')">
+            {{ redemptionProgress(detailData) }}
           </n-descriptions-item>
           <n-descriptions-item :label="t('components.redeemCode.status')">
             <SparkTag :type="statusTagType(detailData.status)" size="small">
@@ -168,7 +239,7 @@ import {
   NDescriptions, NDescriptionsItem,
   NDivider, NEmpty,
 } from 'naive-ui';
-import { Ban, Copy, Eye, Plus, RefreshCw, Trash } from '@lucide/vue';
+import { Ban, Copy, Eye, Gift, Plus, RefreshCw, Trash } from '@lucide/vue';
 import SparkTag from '../share/SparkTag.vue';
 import SparkIcon from '@/components/share/CreditIcon.vue';
 import { useMobile } from '@/composables/useMobile';
@@ -178,6 +249,9 @@ import {
   getRedeemCodeDetail,
   revokeRedeemCode,
   deleteRedeemCode,
+  listCreditGrantCampaigns,
+  createCreditGrantCampaign,
+  revokeCreditGrantCampaign,
 } from '../../services/adminService';
 
 const { t } = useI18n();
@@ -186,6 +260,7 @@ const { isMobile } = useMobile();
 
 const loading = ref(false);
 const creating = ref(false);
+const granting = ref(false);
 const codes = ref<any[]>([]);
 const total = ref(0);
 
@@ -194,7 +269,9 @@ const filterType = ref<string | null>(null);
 
 const showCreateModal = ref(false);
 const showDetailModal = ref(false);
+const showGrantModal = ref(false);
 const detailData = ref<any>(null);
+const grantCampaigns = ref<any[]>([]);
 
 const createForm = ref({
   credit_amount: 1000,
@@ -202,7 +279,18 @@ const createForm = ref({
   code: '',
   remark: '',
   count: 1,
+  max_redemptions: 10,
 });
+
+const grantForm = ref({
+  credit_amount: 1000,
+  grant_scope: 'current_users' as 'current_users' | 'future_users',
+  remark: '',
+});
+
+const activeFutureGrants = computed(() =>
+  grantCampaigns.value.filter((campaign) => campaign.grant_scope === 'future_users' && campaign.status === 'active'),
+);
 
 const pagination = computed(() => ({
   page: 1,
@@ -218,8 +306,22 @@ const statusOptions = computed(() => [
 
 const typeOptions = computed(() => [
   { label: t('components.redeemCode.typeSingle'), value: 'single' },
+  { label: t('components.redeemCode.typeLimited'), value: 'limited' },
   { label: t('components.redeemCode.typePerUser'), value: 'per_user' },
 ]);
+
+function codeTypeLabel(codeType: string) {
+  if (codeType === 'single') return t('components.redeemCode.typeSingle');
+  if (codeType === 'limited') return t('components.redeemCode.typeLimited');
+  return t('components.redeemCode.typePerUser');
+}
+
+function redemptionProgress(row: any) {
+  const used = Number(row.usage_count ?? row.redemption_count ?? 0);
+  return row.max_redemptions == null
+    ? t('components.redeemCode.unlimitedProgress', { used })
+    : `${used}/${row.max_redemptions}`;
+}
 
 function statusLabel(status: string) {
   const map: Record<string, string> = {
@@ -278,9 +380,7 @@ const columns = computed(() => [
     key: 'code_type',
     width: 100,
     render: (row: any) =>
-      h(SparkTag, { type: row.code_type === 'single' ? 'warning' : 'primary', size: 'tiny' }, () =>
-        row.code_type === 'single' ? t('components.redeemCode.typeSingle') : t('components.redeemCode.typePerUser'),
-      ),
+      h(SparkTag, { type: row.code_type === 'per_user' ? 'primary' : 'warning', size: 'tiny' }, () => codeTypeLabel(row.code_type)),
   },
   {
     title: t('components.redeemCode.status'),
@@ -291,8 +391,9 @@ const columns = computed(() => [
   },
   {
     title: t('components.redeemCode.usageCount'),
-    key: 'usage_count',
-    width: 80,
+    key: 'redemption_count',
+    width: 100,
+    render: (row: any) => redemptionProgress(row),
   },
   {
     title: t('components.redeemCode.createdAt'),
@@ -303,7 +404,7 @@ const columns = computed(() => [
   {
     title: t('components.redeemCode.actions'),
     key: 'actions',
-    width: 120,
+    width: 180,
     render: (row: any) =>
       h('div', { style: 'display: flex; gap: 4px;' }, [
         h(NButton, {
@@ -317,6 +418,7 @@ const columns = computed(() => [
           ? h(NPopconfirm, { onPositiveClick: () => handleRevoke(row.id) }, {
               trigger: () => h(NButton, { quaternary: true, size: 'tiny', type: 'warning' }, {
                 icon: () => h(NIcon, null, () => h(Ban)),
+                default: () => t('components.redeemCode.revoke'),
               }),
               default: () => t('components.redeemCode.revokeConfirm'),
             })
@@ -332,7 +434,7 @@ const columns = computed(() => [
 ]);
 
 const usageColumns = computed(() => [
-  { title: 'User ID', key: 'user_id', width: 120 },
+  { title: t('components.redeemCode.userId'), key: 'user_id', width: 120 },
   { title: t('components.redeemCode.creditAmount'), key: 'delta_credit', width: 100 },
   { title: t('components.redeemCode.balanceAfter'), key: 'balance_after', width: 100 },
   { title: t('components.redeemCode.usedAt'), key: 'used_at', width: 160, render: (row: any) => formatDate(row.used_at) },
@@ -371,17 +473,59 @@ async function handleCreate() {
     if (createForm.value.remark?.trim()) {
       payload.remark = createForm.value.remark.trim();
     }
+    if (createForm.value.code_type === 'limited') {
+      payload.max_redemptions = createForm.value.max_redemptions;
+    }
     const result = await createRedeemCode(payload);
     const count = Array.isArray(result) ? result.length : 1;
     message.success(t('components.redeemCode.created', { count }));
     showCreateModal.value = false;
     // 重置表单
-    createForm.value = { credit_amount: 1000, code_type: 'single', code: '', remark: '', count: 1 };
+    createForm.value = { credit_amount: 1000, code_type: 'single', code: '', remark: '', count: 1, max_redemptions: 10 };
     loadCodes();
   } catch (e: any) {
     message.error(e.message || t('components.redeemCode.createFailed'));
   } finally {
     creating.value = false;
+  }
+}
+
+async function loadGrantCampaigns() {
+  try {
+    grantCampaigns.value = await listCreditGrantCampaigns();
+  } catch (e: any) {
+    message.error(e.message || t('components.redeemCode.grantLoadFailed'));
+  }
+}
+
+async function handleCreateGrant() {
+  granting.value = true;
+  try {
+    const payload = {
+      credit_amount: grantForm.value.credit_amount,
+      grant_scope: grantForm.value.grant_scope,
+      remark: grantForm.value.remark.trim() || undefined,
+    };
+    const result = await createCreditGrantCampaign(payload);
+    const messageKey = payload.grant_scope === 'current_users' ? 'grantCurrentSuccess' : 'grantFutureSuccess';
+    message.success(t(`components.redeemCode.${messageKey}`, { count: result.granted_count || 0, amount: result.credit_amount }));
+    showGrantModal.value = false;
+    grantForm.value = { credit_amount: 1000, grant_scope: 'current_users', remark: '' };
+    await loadGrantCampaigns();
+  } catch (e: any) {
+    message.error(e.message || t('components.redeemCode.grantFailed'));
+  } finally {
+    granting.value = false;
+  }
+}
+
+async function handleRevokeGrant(campaignId: number) {
+  try {
+    await revokeCreditGrantCampaign(campaignId);
+    message.success(t('components.redeemCode.grantStopped'));
+    await loadGrantCampaigns();
+  } catch (e: any) {
+    message.error(e.message || t('components.redeemCode.stopGrantFailed'));
   }
 }
 
@@ -417,6 +561,7 @@ async function handleDelete(codeId: number) {
 
 onMounted(() => {
   loadCodes();
+  loadGrantCampaigns();
 });
 </script>
 
@@ -438,6 +583,28 @@ onMounted(() => {
   align-items: center;
   margin-bottom: 12px;
   flex-wrap: wrap;
+}
+
+.active-grants {
+  margin-bottom: 12px;
+  padding: 10px 12px;
+  border: 1px solid var(--spark-border);
+  border-radius: 6px;
+  background: var(--spark-bg-soft);
+  font-size: var(--spark-fs-sm);
+}
+
+.active-grants-label {
+  display: block;
+  margin-bottom: 6px;
+  color: var(--spark-text-muted);
+}
+
+.active-grant-item {
+  display: flex;
+  justify-content: space-between;
+  gap: 12px;
+  align-items: center;
 }
 
 .filter-select {

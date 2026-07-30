@@ -158,3 +158,78 @@ def test_start_local_embedding_reports_llama_server_log_tail(monkeypatch, tmp_pa
     assert status["startup"]["phase"] == "error"
     assert "退出码 42" in status["startup"]["error"]
     assert "unsupported pooling type" in status["startup"]["error"]
+
+
+def test_stopped_startup_process_does_not_overwrite_idle_state(monkeypatch) -> None:
+    class FakeProcess:
+        pid = 12345
+        returncode = 0
+
+        def poll(self):
+            return 0
+
+    process = FakeProcess()
+
+    def fake_status():
+        local_embedding._process = None
+        local_embedding._set_startup_state(
+            "idle",
+            "本地嵌入服务已停止",
+            progress=0,
+            error="",
+        )
+        return {
+            "configured": True,
+            "running": False,
+            "alive": False,
+            "startup": local_embedding._get_startup_state(),
+        }
+
+    monkeypatch.setattr(local_embedding, "_process", None)
+    monkeypatch.setattr(local_embedding, "is_local_embedding_alive", lambda *args, **kwargs: False)
+    monkeypatch.setattr(local_embedding, "build_local_embedding_command", lambda: ["llama-server", "--embedding"])
+    monkeypatch.setattr(subprocess, "Popen", lambda *args, **kwargs: process)
+    monkeypatch.setattr(local_embedding, "get_local_embedding_status", fake_status)
+
+    status = local_embedding.start_local_embedding_service()
+
+    assert status["startup"]["phase"] == "idle"
+    assert status["startup"]["error"] == ""
+
+
+def test_stop_local_embedding_clears_previous_startup_error(monkeypatch) -> None:
+    class FakeRunningProcess:
+        pid = 12345
+
+        def __init__(self) -> None:
+            self.returncode = None
+
+        def poll(self):
+            return self.returncode
+
+        def terminate(self):
+            self.returncode = 0
+
+        def wait(self, timeout=None):
+            return self.returncode
+
+    process = FakeRunningProcess()
+    monkeypatch.setattr(local_embedding, "_process", process)
+    monkeypatch.setattr(local_embedding, "get_local_embedding_status", lambda: {
+        "configured": True,
+        "running": False,
+        "alive": False,
+        "startup": local_embedding._get_startup_state(),
+    })
+    local_embedding._set_startup_state(
+        "error",
+        "本地嵌入服务启动失败",
+        progress=100,
+        error="llama-server 已退出，退出码 0",
+    )
+
+    status = local_embedding.stop_local_embedding_service()
+
+    assert status["startup"]["phase"] == "idle"
+    assert status["startup"]["progress"] == 0
+    assert status["startup"]["error"] == ""

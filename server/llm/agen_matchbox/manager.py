@@ -65,6 +65,7 @@ from .admin import AdminMixin
 from .user_services import UserServicesMixin
 from .builder import LLMBuilderMixin
 from .credit_services import CreditServicesMixin
+from .credit_grant_services import CreditGrantServicesMixin
 from .quota_services import QuotaServicesMixin
 from .usage_services import UsageServicesMixin
 from .redeem_code_services import RedeemCodeServicesMixin
@@ -1512,6 +1513,7 @@ class AIManager(
     UserServicesMixin,
     LLMBuilderMixin,
     CreditServicesMixin,
+    CreditGrantServicesMixin,
     QuotaServicesMixin,
     UsageServicesMixin,
     RedeemCodeServicesMixin,

@@ -1,0 +1,164 @@
+"""兑换码次数控制与管理员额度发放回归测试。"""
+
+from concurrent.futures import ThreadPoolExecutor
+from threading import Barrier
+
+import pytest
+from sqlalchemy import create_engine
+from sqlalchemy.orm import sessionmaker
+
+from llm.agen_matchbox.credit_grant_services import CreditGrantServicesMixin
+from llm.agen_matchbox.credit_services import CreditServicesMixin
+from llm.agen_matchbox.models import (
+    Base,
+    CreditGrantRecipient,
+    RedeemCode,
+    UserCreditAccount,
+    UserCreditLedger,
+)
+from llm.agen_matchbox.redeem_code_services import (
+    RedeemCodeAlreadyRedeemedByUserError,
+    RedeemCodeAlreadyUsedError,
+    RedeemCodeServicesMixin,
+)
+
+
+class _Services(CreditServicesMixin, CreditGrantServicesMixin, RedeemCodeServicesMixin):
+    def __init__(self, database_url: str):
+        self.engine = create_engine(database_url)
+        Base.metadata.create_all(self.engine)
+        self.Session = sessionmaker(bind=self.engine, expire_on_commit=False)
+
+
+@pytest.fixture()
+def services(tmp_path):
+    return _Services(f"sqlite:///{(tmp_path / 'credits.db').as_posix()}")
+
+
+def test_limited_redeem_code_enforces_total_and_per_user_limits(services):
+    created = services.create_redeem_code(
+        credit_amount=25,
+        code_type="limited",
+        code="LIMITED-2",
+        max_redemptions=2,
+    )[0]
+    assert created["max_redemptions"] == 2
+
+    first = services.redeem_code("user-1", "LIMITED-2")
+    assert first["new_balance"] == 25
+
+    with pytest.raises(RedeemCodeAlreadyRedeemedByUserError):
+        services.redeem_code("user-1", "LIMITED-2")
+
+    second = services.redeem_code("user-2", "LIMITED-2")
+    assert second["new_balance"] == 25
+
+    with pytest.raises(RedeemCodeAlreadyUsedError):
+        services.redeem_code("user-3", "LIMITED-2")
+
+    with services.Session() as session:
+        code = session.query(RedeemCode).filter_by(id=created["id"]).one()
+        assert code.redemption_count == 2
+        assert code.status == "exhausted"
+        ledgers = session.query(UserCreditLedger).filter_by(reason_type="redeem_code").all()
+        assert len(ledgers) == 2
+
+
+def test_concurrent_same_user_redemption_only_grants_once(services):
+    services.create_redeem_code(
+        credit_amount=10,
+        code_type="per_user",
+        code="CONCURRENT",
+    )
+    barrier = Barrier(2)
+
+    def redeem_once():
+        barrier.wait()
+        try:
+            services.redeem_code("same-user", "CONCURRENT")
+            return "granted"
+        except RedeemCodeAlreadyRedeemedByUserError:
+            return "duplicate"
+
+    with ThreadPoolExecutor(max_workers=2) as executor:
+        results = list(executor.map(lambda _: redeem_once(), range(2)))
+
+    assert sorted(results) == ["duplicate", "granted"]
+    with services.Session() as session:
+        account = session.query(UserCreditAccount).filter_by(user_id="same-user").one()
+        assert account.credit_balance == 10
+        assert session.query(UserCreditLedger).filter_by(user_id="same-user").count() == 1
+
+
+def test_legacy_single_code_without_new_limit_remains_one_time(services):
+    with services.Session() as session:
+        session.add(RedeemCode(
+            code="LEGACY-SINGLE",
+            credit_amount=15,
+            code_type="single",
+            status="active",
+            max_redemptions=None,
+            redemption_count=0,
+        ))
+        session.commit()
+
+    services.redeem_code("legacy-user", "LEGACY-SINGLE")
+    with pytest.raises(RedeemCodeAlreadyUsedError):
+        services.redeem_code("another-user", "LEGACY-SINGLE")
+
+    detail = services.list_redeem_codes()["items"][0]
+    assert detail["max_redemptions"] == 1
+    assert detail["redemption_count"] == 1
+
+
+def test_current_user_grant_updates_every_account_and_ledger(services):
+    campaign = services.create_credit_grant_campaign(
+        credit_amount=80,
+        grant_scope="current_users",
+        created_by="admin-1",
+        remark="全服福利",
+        user_ids=["1", "2", "2"],
+    )
+
+    assert campaign["status"] == "completed"
+    assert campaign["granted_count"] == 2
+    with services.Session() as session:
+        accounts = session.query(UserCreditAccount).order_by(UserCreditAccount.user_id).all()
+        assert [(account.user_id, account.credit_balance) for account in accounts] == [("1", 80), ("2", 80)]
+        ledgers = session.query(UserCreditLedger).filter_by(reason_type="credit_grant").all()
+        assert len(ledgers) == 2
+        assert all(ledger.operator_user_id == "admin-1" for ledger in ledgers)
+
+
+def test_future_user_grant_is_idempotent_and_can_be_stopped(services):
+    campaign = services.create_credit_grant_campaign(
+        credit_amount=60,
+        grant_scope="future_users",
+        created_by="admin-1",
+        remark="注册赠送",
+    )
+
+    assert services.grant_future_signup_credits("new-user") == [
+        {"campaign_id": campaign["id"], "credit_amount": 60.0}
+    ]
+    assert services.grant_future_signup_credits("new-user") == []
+
+    services.revoke_credit_grant_campaign(campaign["id"])
+    assert services.grant_future_signup_credits("later-user") == []
+
+    with services.Session() as session:
+        account = session.query(UserCreditAccount).filter_by(user_id="new-user").one()
+        assert account.credit_balance == 60
+        assert session.query(CreditGrantRecipient).count() == 1
+        assert session.query(UserCreditLedger).filter_by(user_id="new-user", reason_type="credit_grant").count() == 1
+
+
+def test_all_redeem_admin_routes_require_admin():
+    from core.auth import require_admin
+    from core.routes_redeem import redeem_router
+
+    admin_routes = [route for route in redeem_router.routes if "/admin/" in route.path]
+    assert admin_routes
+    for route in admin_routes:
+        dependency_calls = {dependency.call for dependency in route.dependant.dependencies}
+        assert require_admin in dependency_calls, route.path

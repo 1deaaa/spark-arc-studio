@@ -412,6 +412,18 @@ async def require_admin(request: Request, current_user: dict = Depends(get_curre
 auth_router = APIRouter()
 
 
+def _grant_future_signup_credits(user_id: str) -> None:
+    """补发所有生效中的新用户额度活动；失败时由后续登录重试。"""
+    try:
+        from llm.agen_matchbox import matchbox
+
+        manager = matchbox(required=False)
+        if manager is not None:
+            manager.grant_future_signup_credits(str(user_id))
+    except Exception as exc:  # pragma: no cover - 外部数据库异常由登录补偿
+        print(f"Failed to grant signup credits for user {user_id}: {exc}")
+
+
 def _get_client_ip(request: Request) -> Optional[str]:
     for header_name in ("CF-Connecting-IP", "X-Forwarded-For", "X-Real-IP"):
         value = request.headers.get(header_name)
@@ -466,6 +478,7 @@ async def register(data: AuthRequest, request: Request):
         return JSONResponse(status_code=400, content={"success": False, "message": res})
         
     user_id = res
+    _grant_future_signup_credits(str(user_id))
     try:
         initialize_default_project(str(user_id), DEFAULT_PROJECT_NAME)
     except Exception as e:  # pragma: no cover
@@ -491,6 +504,8 @@ async def login(data: AuthRequest, response: Response):
     token = user_db.create_session(res)
     if not token:
         return JSONResponse(status_code=500, content={"success": False, "message": "创建会话失败"})
+
+    _grant_future_signup_credits(str(res))
         
     if remember:
         response.set_cookie(key='session_token', value=token, max_age=30*24*60*60, httponly=True, secure=False)
