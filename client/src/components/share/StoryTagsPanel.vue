@@ -33,6 +33,7 @@
         />
         <SceneLengthControl
           v-model="selectedSceneLength"
+          v-model:target-chars="selectedSceneTargetChars"
           :workspace-mode="workspaceMode"
         />
       </div>
@@ -74,6 +75,7 @@
               />
               <SceneLengthControl
                 v-model="selectedSceneLength"
+                v-model:target-chars="selectedSceneTargetChars"
                 :workspace-mode="workspaceMode"
               />
             </div>
@@ -115,6 +117,7 @@ const selectedWorldviews = ref<string[]>([]);
 const selectedPov = ref<string | undefined>(undefined);
 const selectedLength = ref<string | undefined>(undefined);
 const selectedSceneLength = ref<'concise' | 'standard' | 'expanded'>('standard');
+const selectedSceneTargetChars = ref<number | null>(null);
 const workspaceMode = ref<'script' | 'novel'>('script');
 
 // 移动端弹出菜单的显示状态（脱离按钮锚点的居中弹出）
@@ -144,6 +147,9 @@ async function loadFromBackend() {
         selectedSceneLength.value = ['concise', 'expanded'].includes(data.tags.scene_length_hint)
           ? data.tags.scene_length_hint
           : 'standard';
+        selectedSceneTargetChars.value = Number.isInteger(data.tags.scene_target_chars)
+          ? data.tags.scene_target_chars
+          : null;
       }
     }
   } catch (e) {
@@ -165,6 +171,7 @@ async function saveStoryTagsToBackend() {
         pov: selectedPov.value || null,
         lengthHint: selectedLength.value || null,
         sceneLengthHint: selectedSceneLength.value,
+        sceneTargetChars: selectedSceneTargetChars.value,
       }),
     });
   } catch (e) {
@@ -183,7 +190,7 @@ function scheduleBackendSave() {
 
 // ── 监听值变化，自动异步保存到后端 ──
 watch(
-  [selectedGenres, selectedTones, selectedWorldviews, selectedPov, selectedLength, selectedSceneLength],
+  [selectedGenres, selectedTones, selectedWorldviews, selectedPov, selectedLength, selectedSceneLength, selectedSceneTargetChars],
   () => { scheduleBackendSave(); },
   { deep: true },
 );

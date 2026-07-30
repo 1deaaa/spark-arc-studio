@@ -1244,6 +1244,11 @@ const koKR = {
         concise: '간결',
         standard: '표준',
         expanded: '충실',
+        targetLabel: '목표',
+        targetPlaceholder: '자동',
+        targetUnit: '자',
+        targetHint: '목표 약 {count}자 (소프트 목표)',
+        targetNote: '씬 완성도에 따른 조정 여부는 모델이 판단합니다',
         rhythmNote: '씬의 리듬에 따라 목표에서 약 ±30% 조정할 수 있습니다',
         ranges: {
           script: {

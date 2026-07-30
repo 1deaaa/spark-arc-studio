@@ -1249,6 +1249,11 @@ const enUS = {
         concise: 'Concise',
         standard: 'Standard',
         expanded: 'Rich',
+        targetLabel: 'Target',
+        targetPlaceholder: 'Auto',
+        targetUnit: 'chars',
+        targetHint: 'Target: about {count} chars (soft target)',
+        targetNote: 'The model decides whether to adjust based on scene completeness',
         rhythmNote: 'May vary by about ±30% to match the scene rhythm',
         ranges: {
           script: {

@@ -1247,6 +1247,11 @@ const zhCN = {
         concise: '精简',
         standard: '标准',
         expanded: '充实',
+        targetLabel: '目标',
+        targetPlaceholder: '自动',
+        targetUnit: '字',
+        targetHint: '目标约 {count} 字（软目标）',
+        targetNote: '由模型结合场景完整性自行判断是否调整',
         rhythmNote: '可按场景节奏在目标附近约 ±30% 浮动',
         ranges: {
           script: {

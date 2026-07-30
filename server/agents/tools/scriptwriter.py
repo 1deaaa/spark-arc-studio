@@ -15,6 +15,7 @@ class CreateOrRewriteScriptInput(BaseModel):
     overwrite_content: str = Field(description="完整的剧本/小说正文。若目标场景文件尚不存在，系统将自动创建；若已存在则覆盖。必须只包含最终可保存的正文，不得混入解释、确认话术或元话语。")
     chapter_name: str | None = Field(default=None, description="目标章节名称（即文件夹名称），格式为「中文数字 · 标题」（如「一 · 开端」「二 · 相遇」）。【CRITICAL】剧本将保存到该章节目录下。写剧本/小说前，必须先调用 create_chapter 确保该章节目录存在，并在此传入一致的章节名。严禁在不指定章节的情况下调用此工具往根目录写入孤儿场景文件。")
     work_name: str | None = Field(default=None, description="场景文件的显示名称（不含扩展名），格式为「章节号-场景号 场景名」（如「1-1 初遇」「2-3 决战」）。若不提供，系统将自动根据内容或上下文命名。")
+    target_chars: int | None = Field(default=None, ge=100, le=100000, description="本轮用户或导演明确要求的目标正文字符数。仅作为软目标和落盘回执的统计基准；未传时使用项目默认目标。")
 
 
 class PrepareScriptCreationInput(BaseModel):
@@ -161,8 +162,11 @@ def create_or_rewrite_script(
     overwrite_content: str,
     chapter_name: str | None = None,
     work_name: str | None = None,
+    target_chars: int | None = None,
 ) -> str:
     """创建或覆盖剧本文件。"""
+    import json
+
     from core.utils import get_project_stories_path
     from story.file_naming import (
         build_story_filename,
@@ -188,6 +192,7 @@ def create_or_rewrite_script(
             "请先调用 prepare_script_creation，并使用完全一致的 chapter_name 与 scene_name。"
         )
     content = (overwrite_content or "").strip()
+    submitted_content = content
     if effective_format != "novel":
         from core.project_settings import (
             get_visual_illustration_settings,
@@ -271,7 +276,31 @@ def create_or_rewrite_script(
 
     format_label = "小说" if effective_format == "novel" else "剧本"
     action_label = "已覆盖" if existed else "已保存"
-    return f"{format_label}{action_label}：{rel}"
+    from core.project_settings import get_project_story_tags
+    from story.text_metrics import count_story_body_chars
+
+    written_chars = count_story_body_chars(content, effective_format)
+    project_target_chars = get_project_story_tags(user_id, project_name).get("scene_target_chars")
+    effective_target_chars = target_chars if isinstance(target_chars, int) else project_target_chars
+    deviation = written_chars - effective_target_chars if isinstance(effective_target_chars, int) else None
+    return json.dumps(
+        {
+            "status": "saved",
+            "message": f"{format_label}{action_label}：{rel}",
+            "format": effective_format,
+            "path": rel,
+            "written_chars": written_chars,
+            "target_chars": effective_target_chars,
+            "target_source": "current_task" if isinstance(target_chars, int) else "project" if isinstance(project_target_chars, int) else None,
+            "deviation_chars": deviation,
+            "length_policy": (
+                "具体字数仅为软目标。请根据场景完整性自行判断是否需要调整，"
+                "不要因少量偏差整场重写，也不要为凑字数注水。"
+            ),
+            "content_changed_by_sanitizer": content != submitted_content,
+        },
+        ensure_ascii=False,
+    )
 
 
 @tool(args_schema=CreateChapterInput)

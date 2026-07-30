@@ -139,6 +139,7 @@ def test_full_script_write_requires_and_consumes_matching_receipt(monkeypatch, t
         "overwrite_content": "雨落在旧站台上。",
         "chapter_name": "一 · 开端",
         "work_name": "1-1 初遇",
+        "target_chars": 800,
     }
     try:
         rejected = create_or_rewrite_script.invoke(args)
@@ -162,7 +163,14 @@ def test_full_script_write_requires_and_consumes_matching_receipt(monkeypatch, t
             "scene_name": "1-1 初遇",
         })
         saved = create_or_rewrite_script.invoke(args)
-        assert "已保存" in saved
+        saved_payload = json.loads(saved)
+        assert saved_payload["status"] == "saved"
+        assert "已保存" in saved_payload["message"]
+        assert saved_payload["written_chars"] == len("雨落在旧站台上")
+        assert saved_payload["target_chars"] == 800
+        assert saved_payload["target_source"] == "current_task"
+        assert saved_payload["deviation_chars"] == len("雨落在旧站台上") - 800
+        assert "自行判断" in saved_payload["length_policy"]
         assert get_scriptwriter_prewrite_receipt() is None
     finally:
         clear_scriptwriter_prewrite_receipt()
@@ -222,10 +230,11 @@ def test_chat_background_preserves_receipt_across_separate_tool_contexts(monkeyp
         callback=callback,
     )
 
-    assert "已保存" in saved_result
+    saved_payload = json.loads(saved_result)
+    assert "已保存" in saved_payload["message"]
     from core.utils import get_project_stories_path
 
-    saved_relative_path = saved_result.split("：", 1)[1]
+    saved_relative_path = saved_payload["path"]
     saved_path = Path(get_project_stories_path("u-chat", "p-chat")) / saved_relative_path
     assert saved_path.read_text(encoding="utf-8") == "雨落在旧站台上。"
 
