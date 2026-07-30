@@ -68,7 +68,7 @@ pipeline_system: |
   ### 执行规则：
   1. **必须先执行 PreWrite，再调用工具落盘**：
      - 每次新写或完整重写场景前，先调用 `prepare_script_creation`，明确目标章节与场景并取得本次创作任务包。
-     - PreWrite 后如关键事实仍有缺口，可继续调用 StoryMemory、GraphRAG 或原始设定/章节读取工具补查；信息足够时不要为形式重复查询。
+     - PreWrite 会由系统确定性预装与当前场景相关的 StoryMemory；如关键原文证据仍有缺口，再调用 StoryMemory、GraphRAG 或原始设定/章节读取工具补查。不要重复查询任务包中已经出现的记忆。
      - 随后调用 `create_chapter` 确保章节存在，再调用 `create_or_rewrite_script` 将剧本内容写入文件。
      - **章节命名规范**：`chapter_name` 格式为「中文数字 · 标题」（如「一 · 开端」「二 · 相遇」「十 · 终章」）。若导演未明确指定章节号，根据大纲中的章节顺序自动推算。
      - **场景命名规范**：`work_name` 必须面向读者，以场景的核心事件、悬念、意象或情绪转折拟定具体且有吸引力的标题，格式为「章节号-场景号 合适的标题」（如「1-1 雨夜来客」「1-2 消失的证词」）。禁止使用「场景 1-2」「场景1-2」「1-2 场景」或仅有序号的占位命名，直接写成「1-2 标题」。剧本模式与小说模式均遵守此规则。
@@ -120,7 +120,7 @@ chat_system: |
 tool_rules: |
   ### Scriptwriter 工具补充规则
   - 每次新写或完整重写场景时，调用顺序必须是 `prepare_script_creation` → 必要的只读补查 → `create_chapter` → `create_or_rewrite_script`。PreWrite 的 `chapter_name` / `scene_name` 必须与最终落盘的 `chapter_name` / `work_name` 完全一致。
-  - PreWrite 只负责调研规划，不生成正文、不写文件。涉及人物关系时先查 StoryMemory；涉及更大范围事实时再查 GraphRAG；需要原始细节时读取设定或章节。已有信息充分时可以不做额外查询。
+  - PreWrite 只负责调研规划，不生成正文、不写文件。系统会先确定性预装当前场景相关的 StoryMemory；仍缺人物关系或最近状态证据时再查 StoryMemory，涉及更大范围事实时再查 GraphRAG，需要原始细节时读取设定或章节。已有信息充分时不得重复查询。
   - `patch_script` 是对已存在正文的局部修改，不要求重新执行 PreWrite。完整重写仍必须重新执行 PreWrite，因此导演或用户对结果不满意时可以重新规划并重做，不受上一次凭证影响。
   - 当用户明确要求**今后的场景整体**更精简、保持标准或写得更充实时，调用 `update_project_story_tags(scene_length_hint="concise|standard|expanded")` 持久化项目默认值。若只是要求修改当前一场，不要擅自改变项目默认值。
   - 每次新写完整场景时，遵守项目 story tags 中的单场篇幅软目标；该目标允许随场景功能和节奏浮动，不得机械凑数或硬截断。
@@ -129,7 +129,7 @@ tool_rules: |
   - 调用 `create_or_rewrite_script` 时，`overwrite_content` 必须是最终可保存的正文，不得混入解释、确认话术或"下面开始改写"等元话语。
   - 剧本/小说格式由项目 story tags 的创作模式统一决定；调用 `create_or_rewrite_script` 时不要传格式参数，只需让正文符合当前创作模式对应的规范。
   - 当任务涉及续写、改写、补写、呼应前文、人物关系核对或设定一致性核对，且你担心与现有项目事实冲突时，优先调用 `graph_rag_tool`。
-  - 写作前如涉及人物关系、最近出场、开放线索、秘密知情边界或上一场状态，先调用 `story_memory_tool(action="query")` 或 `story_memory_tool(action="scene_task_pack")` 核对实时故事事实；它读取的是每次场景保存后自动吸收的轻量状态，通常比 GraphRAG 更新更及时。
+  - 写作前如涉及人物关系、最近出场、开放线索、秘密知情边界或上一场状态，先核对 PreWrite 已预装的 StoryMemory 场景事实包；只有任务包缺少所需证据时，才调用 `story_memory_tool(action="query")` 或 `story_memory_tool(action="scene_task_pack")` 补查。它读取的是每次场景保存后的轻量状态，通常比 GraphRAG 更新更及时。
   - `story_memory_tool` 只提供已保存正文整理出的事实、证据和待核对项，不提供剧情方案。不要把它的开放线索记录当成必须回收的创作指令；具体表达与取舍由你根据大纲、角色档案和用户意图决定。
   - `graph_rag_tool` 现在只读：仅支持 `action="status"` 与 `action="query"`。构建与重建已收归用户侧 UI，**严禁尝试调用 build/refresh/reset 或自行触发刷新**。
   - 在正式调用 `create_or_rewrite_script` 之前，如任务依赖既有人物关系、地点归属、组织关系、关键事件前情，优先调用 `story_memory_tool` 获取实时状态；若仍涉及更大范围的项目事实，再调用 `graph_rag_tool(action="query", response_mode="writing_guardrails")` 获取必须保持的事实约束，并把这些约束落实进正文，而不是原样抄进 `overwrite_content`。

@@ -388,7 +388,7 @@ def test_reabsorbing_same_scene_replaces_old_story_memory_contributions(monkeypa
     assert state["events"][0]["summary"] == "沈棠独自收起旧钥匙。"
 
 
-def test_scriptwriter_memory_write_call_sites_are_async() -> None:
+def test_scriptwriter_memory_write_call_sites_use_unified_memory_pipeline() -> None:
     from agents.routes import auto_write, production
     from agents.tools import scriptwriter
 
@@ -396,8 +396,7 @@ def test_scriptwriter_memory_write_call_sites_are_async() -> None:
     production_source = inspect.getsource(production._record_story_memory_from_story_file)
     tool_source = inspect.getsource(scriptwriter.create_or_rewrite_script.func)
 
-    assert "上一场完整正文（自动写作硬上下文" in auto_write_source
-    assert "previous_scene_context" in auto_write_source
+    assert "previous_scene_context" not in auto_write_source
     assert "enqueue_scene_memory_write" in auto_write_source
     assert "record_scene_write(" not in auto_write_source
 
@@ -697,3 +696,152 @@ def test_auto_write_review_records_quality_memory(monkeypatch, tmp_path: Path) -
     assert aw_state["lastReviewDecision"] == "REVISE"
     assert aw_state["lastReviewGrade"] == "B"
     assert aw_state["lastReviewTicketCount"] == 1
+
+
+def test_story_memory_prefers_recent_relevant_scenes_after_twelve_writes(monkeypatch, tmp_path: Path) -> None:
+    monkeypatch.setattr("core.utils.USERDATA_ROOT", str(tmp_path))
+    project_path = tmp_path / "uid_41" / "projects" / "demo"
+    project_path.mkdir(parents=True)
+
+    facade = StoryMemoryFacade("41", "demo")
+    for scene_index in range(12):
+        facade.record_scene_write(
+            scene_text=f"# 1-{scene_index + 1} 场景\n[旁白]\n共同线索推进到第 {scene_index + 1} 步。",
+            chapter_index=0,
+            scene_index=scene_index,
+            scene_title=f"1-{scene_index + 1} 场景",
+            scene_characters=["林烬"],
+            use_llm_extractor=False,
+        )
+
+    result = facade.query_text("共同线索", max_items=4)
+    related_scenes = result.split("[相关场景]", 1)[1]
+
+    assert related_scenes.index("1-12 场景") < related_scenes.index("1-11 场景")
+    assert "1-1 场景" not in related_scenes
+
+
+def test_scene_task_pack_excludes_future_memory_when_rewriting_earlier_scene(monkeypatch, tmp_path: Path) -> None:
+    monkeypatch.setattr("core.utils.USERDATA_ROOT", str(tmp_path))
+    project_path = tmp_path / "uid_42" / "projects" / "demo"
+    project_path.mkdir(parents=True)
+
+    facade = StoryMemoryFacade("42", "demo")
+    for scene_index in range(12):
+        facade.record_scene_write(
+            scene_text=f"# 1-{scene_index + 1} 场景\n[旁白]\n林烬记录第 {scene_index + 1} 次钟声。",
+            chapter_index=0,
+            scene_index=scene_index,
+            scene_title=f"1-{scene_index + 1} 场景",
+            scene_characters=["林烬"],
+            use_llm_extractor=False,
+        )
+
+    payload = facade.compose_scene_task_pack(
+        chapter_index=0,
+        scene_index=5,
+        scene_title="1-6 场景",
+        scene_description="重写第六场。",
+        scene_characters=["林烬"],
+    )
+
+    assert [item["scene_title"] for item in payload["pack"]["recent_scenes"]] == [
+        "1-4 场景",
+        "1-5 场景",
+    ]
+    assert "第 12 次钟声" not in payload["text"]
+    assert "1-12 场景" not in payload["text"]
+
+
+def test_enqueued_scene_memory_is_visible_before_async_enrichment(monkeypatch, tmp_path: Path) -> None:
+    monkeypatch.setattr("core.utils.USERDATA_ROOT", str(tmp_path))
+    project_path = tmp_path / "uid_43" / "projects" / "demo"
+    project_path.mkdir(parents=True)
+    submitted: list[dict] = []
+
+    def fake_submit(_label, _fn, _user_id, _project_name, payload, _job_label):
+        submitted.append(payload)
+        return None
+
+    monkeypatch.setattr("agents.story_memory.jobs._submit", fake_submit)
+
+    from agents.story_memory.jobs import enqueue_scene_memory_write
+
+    enqueue_scene_memory_write(
+        user_id="43",
+        project_name="demo",
+        scene_text="# 1-1 初遇\n[旁白]\n林烬在钟楼醒来。",
+        chapter_index=0,
+        scene_index=0,
+        scene_title="1-1 初遇",
+        scene_characters=["林烬"],
+    )
+
+    state = StoryMemoryFacade("43", "demo").load_state()
+    assert state["scenes"][0]["scene_title"] == "1-1 初遇"
+    assert state["scenes"][0]["state_delta_source"] == "heuristic"
+    assert submitted[0]["use_llm_extractor"] is True
+    assert submitted[0]["require_current_source_hash"] is True
+
+
+def test_slow_enrichment_does_not_block_new_snapshot_or_overwrite_it(monkeypatch, tmp_path: Path) -> None:
+    monkeypatch.setattr("core.utils.USERDATA_ROOT", str(tmp_path))
+    project_path = tmp_path / "uid_45" / "projects" / "demo"
+    project_path.mkdir(parents=True)
+    facade = StoryMemoryFacade("45", "demo")
+    facade.record_scene_write(
+        scene_text="# 1-1 初遇\n[旁白]\n旧版本。",
+        chapter_index=0,
+        scene_index=0,
+        scene_title="1-1 初遇",
+        use_llm_extractor=False,
+    )
+
+    enrichment_started = threading.Event()
+    release_enrichment = threading.Event()
+
+    def slow_enrichment(self, **_payload):
+        enrichment_started.set()
+        assert release_enrichment.wait(timeout=3)
+        return {
+            "source": "llm",
+            "summary": "旧版本的迟到抽取。",
+            "events": [],
+            "character_updates": [],
+            "relationship_changes": [],
+            "foreshadows": [],
+            "fact_claims": [],
+            "conflict_risks": [],
+        }
+
+    monkeypatch.setattr(StoryMemoryFacade, "prepare_scene_enrichment", slow_enrichment)
+    from agents.story_memory.jobs import _record_scene_write_job
+
+    payload = {
+        "scene_text": "# 1-1 初遇\n[旁白]\n旧版本。",
+        "chapter_index": 0,
+        "scene_index": 0,
+        "scene_title": "1-1 初遇",
+        "use_llm_extractor": True,
+        "require_current_source_hash": True,
+    }
+    worker = threading.Thread(
+        target=_record_scene_write_job,
+        args=("45", "demo", payload, "测试抽取"),
+    )
+    worker.start()
+    assert enrichment_started.wait(timeout=1)
+
+    facade.record_scene_write(
+        scene_text="# 1-1 初遇\n[旁白]\n新版本。",
+        chapter_index=0,
+        scene_index=0,
+        scene_title="1-1 初遇",
+        use_llm_extractor=False,
+    )
+    release_enrichment.set()
+    worker.join(timeout=3)
+
+    state = facade.load_state()
+    assert state["scenes"][0]["summary"] == "1-1 初遇 新版本。"
+    assert state["scenes"][0]["state_delta_source"] == "heuristic"

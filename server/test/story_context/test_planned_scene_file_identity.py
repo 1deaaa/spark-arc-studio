@@ -157,6 +157,44 @@ def test_scene_context_groups_nested_scene_files_by_chapter_identity(monkeypatch
     assert "不应进入前文" not in context
 
 
+def test_scene_context_keeps_only_recent_chapter_tails_and_current_scenes(monkeypatch, tmp_path: Path) -> None:
+    from agents.routes.context_builder import build_scene_context
+    from story.file_naming import build_scene_story_filename
+
+    monkeypatch.setattr("core.utils.USERDATA_ROOT", str(tmp_path))
+    stories_path = tmp_path / "uid_44" / "projects" / "demo" / "stories"
+    for chapter_number in range(1, 13):
+        chapter_dir = stories_path / f"第{chapter_number}章"
+        chapter_dir.mkdir(parents=True)
+        scene_total = 5 if chapter_number == 12 else 1
+        for scene_number in range(1, scene_total + 1):
+            filename = build_scene_story_filename(
+                chapter_number,
+                scene_number,
+                f"第{chapter_number}章第{scene_number}场",
+            )
+            (chapter_dir / filename).write_text(
+                f"# 第{chapter_number}章第{scene_number}场\n[旁白]\n正文-{chapter_number}-{scene_number}。",
+                encoding="utf-8",
+            )
+
+    context = build_scene_context(
+        "44",
+        "demo",
+        11,
+        current_scene_index=5,
+    )
+
+    assert "正文-10-1" in context
+    assert "正文-11-1" in context
+    assert "正文-9-1" not in context
+    assert "正文-12-3" in context
+    assert "正文-12-4" in context
+    assert "正文-12-5" in context
+    assert "正文-12-1" not in context
+    assert "正文-12-2" not in context
+
+
 def test_patch_script_updates_nested_arc(monkeypatch, tmp_path: Path) -> None:
     from agents.tools.scriptwriter import patch_script
     from core.request_context import current_project_name, current_user_id

@@ -122,7 +122,7 @@ def prepare_interactive_scriptwriter_prewrite(
         receipt_id=receipt_id,
         brief=brief,
         research_context="",
-        planning_note="已完成目标场景、场景契约与实时故事状态核对；如任务包仍有缺口，应继续调用只读工具补查后再落盘。",
+        planning_note="系统已确定性预装目标场景契约与相关 StoryMemory；仅当具体原文证据仍缺失时，再调用只读工具补查后落盘。",
         tools_used=(),
     )
 
@@ -167,7 +167,7 @@ def run_autonomous_scriptwriter_prewrite(
     system_prompt = prepend_prompt_language_policy(
         """你是 Scriptwriter 的 PreWrite 调研规划器。你的职责仅限正式创作前的事实核对与创作规划，不得生成正文、不得调用写入工具。
 
-先阅读系统提供的场景任务包。只有在任务包仍缺少关键事实时才调用只读工具：
+先阅读系统确定性检索并提供的场景任务包，不要重复查询已经出现的 StoryMemory 条目。只有在任务包仍缺少关键原文证据时才调用只读工具：
 - 人物关系、最近状态、秘密知情边界、开放线索：story_memory_tool。
 - 跨文件关系与更大范围事实约束：graph_rag_tool。
 - 必须核对原始措辞或历史场景细节：章节、场景、世界观、角色、梗概、节拍表读取工具。

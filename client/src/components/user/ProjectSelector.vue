@@ -19,21 +19,7 @@
       </template>
     </n-select>
     <n-space :size="6">
-      <n-tooltip trigger="hover">
-        <template #trigger>
-          <n-button
-            circle
-            @click="projectStore.createProject"
-            size="small"
-          >
-            <template #icon>
-              <n-icon :component="CirclePlus" />
-            </template>
-          </n-button>
-        </template>
-        {{ t('components.projectSelector.newProject') }}
-      </n-tooltip>
-      <StoryTagsPanel />
+      <StoryTagsPanel emphasized />
       <n-tooltip trigger="hover">
         <template #trigger>
           <n-button
@@ -70,9 +56,8 @@
 <script setup lang="ts">
 import { onMounted, computed, h } from 'vue';
 import { useI18n } from 'vue-i18n';
-import { useRouter } from 'vue-router';
 import { NSpace, NText, NSelect, NButton, NIcon, NTooltip, useDialog, type SelectOption } from 'naive-ui';
-import { BookOpen, CirclePlus, Clapperboard, SquarePen, Trash } from '@lucide/vue';
+import { BookOpen, Clapperboard, SquarePen, Trash } from '@lucide/vue';
 import { useProjectStore } from '../stores/projectStore';
 import { useFileStore } from '../stores/fileStore';
 import bus from '@/eventBus';
@@ -85,8 +70,6 @@ const dialog = useDialog();
 
 const projectStore = useProjectStore();
 const fileStore = useFileStore();
-const router = useRouter();
-
 const projectOptions = computed(() =>
   projectStore.projects.map(p => ({
     label: p,

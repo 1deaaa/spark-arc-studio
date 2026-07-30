@@ -206,7 +206,7 @@ const koKR = {
       backHome: '홈으로',
       undo: '실행 취소 (Ctrl+Z)',
       redo: '다시 실행 (Ctrl+Y)',
-      fileActionTitle: '가져오기/내보내기',
+      fileActionTitle: '파일 및 프로젝트 가져오기/내보내기',
       file: '파일',
       publishTitle: '버전 배포 및 히스토리 관리',
       publish: '배포',

@@ -208,7 +208,7 @@ const jaJP = {
       backHome: 'ホームへ戻る',
       undo: '元に戻す (Ctrl+Z)',
       redo: 'やり直す (Ctrl+Y)',
-      fileActionTitle: 'インポート/エクスポート',
+      fileActionTitle: 'ファイルとプロジェクトのインポート/エクスポート',
       file: 'ファイル',
       publishTitle: 'バージョン公開と履歴管理',
       publish: '公開',

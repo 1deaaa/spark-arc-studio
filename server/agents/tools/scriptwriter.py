@@ -258,6 +258,8 @@ def create_or_rewrite_script(
         project_name=project_name,
         label="Scriptwriter 工具落盘",
         scene_text=content,
+        chapter_index=(chapter_num - 1) if chapter_num is not None else None,
+        scene_index=(scene_num - 1) if scene_num is not None else None,
         chapter_title=chapter_name or "",
         scene_title=display,
         source_path=rel,

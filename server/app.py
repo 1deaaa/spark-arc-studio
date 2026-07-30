@@ -16,6 +16,7 @@ os.environ.setdefault("PYTHONWARNINGS", "ignore::DeprecationWarning")
 os.environ.setdefault("HF_HUB_VERBOSITY", "error")
 
 from core.runtime_cache import configure_runtime_cache_environment
+from core.server_runtime import build_local_server_urls, resolve_server_binding
 
 configure_runtime_cache_environment()
 
@@ -92,8 +93,8 @@ logging.getLogger("docket.worker").setLevel(logging.WARNING)
 logging.getLogger("mcp.server.streamable_http_manager").setLevel(logging.WARNING)
 logging.getLogger("httpx").setLevel(logging.WARNING)
 
-SERVER_HOST = "0.0.0.0"
-SERVER_PORT = 6688
+SERVER_HOST, SERVER_PORT = resolve_server_binding()
+SERVER_URL, SERVER_HEALTH_URL = build_local_server_urls(SERVER_HOST, SERVER_PORT)
 
 
 def _run_startup_migrations() -> None:
@@ -354,7 +355,11 @@ async def lifespan(app: FastAPI):
 
             server_root = os.path.dirname(os.path.abspath(__file__))
             asyncio.create_task(
-                launch_tray_helper_after_health_check(server_root=server_root)
+                launch_tray_helper_after_health_check(
+                    server_root=server_root,
+                    server_url=SERVER_URL,
+                    health_url=SERVER_HEALTH_URL,
+                )
             )
         except Exception as e:
             print(f"⚠️ System tray assistant launch failed (non-fatal): {e}", flush=True)
