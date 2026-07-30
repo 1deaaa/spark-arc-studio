@@ -18,6 +18,8 @@ function manualChunks(id: string): string | undefined {
   return undefined;
 }
 
+const apiTarget = process.env.SPARKARC_DEV_SERVER_URL || 'http://localhost:6688';
+
 export default defineConfig({
   base: './',
   plugins: [vue()],
@@ -27,7 +29,7 @@ export default defineConfig({
     allowedHosts: true,
     proxy: {
       '/api': {
-        target: 'http://localhost:6688',
+        target: apiTarget,
         changeOrigin: true,
       },
     },

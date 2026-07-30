@@ -17,6 +17,8 @@ STATE_DIR_NAME = ".story_memory"
 STATE_FILENAME = "narrative_state.json"
 MAX_RECENT_SCENES = 8
 MAX_RECENT_EVIDENCE = 5
+SCENE_TASK_PACK_RECENT_SCENES = 2
+SCENE_TASK_PACK_MAX_CHARACTERS = 8
 
 
 def _utc_now_iso() -> str:
@@ -138,6 +140,37 @@ def _scene_id(
     return f"scene-{digest}"
 
 
+def _scene_position(item: Dict[str, Any]) -> Optional[tuple[int, int]]:
+    """尽力恢复场景的逻辑位置，避免把未来场景注入较早场景。"""
+    chapter_index = _safe_int(item.get("chapter_index"))
+    scene_index = _safe_int(item.get("scene_index"))
+    if chapter_index is not None and scene_index is not None:
+        return chapter_index, scene_index
+
+    source = str(item.get("source_path") or "")
+    metadata_match = re.search(r"chap=(\d+)\.scene=(\d+)", source, flags=re.IGNORECASE)
+    if metadata_match:
+        return int(metadata_match.group(1)) - 1, int(metadata_match.group(2)) - 1
+
+    title = str(item.get("scene_title") or "")
+    title_match = re.search(r"(?<!\d)(\d+)\s*[-－—]\s*(\d+)(?!\d)", title)
+    if title_match:
+        return int(title_match.group(1)) - 1, int(title_match.group(2)) - 1
+    return None
+
+
+def _scene_sort_key(item: Dict[str, Any]) -> tuple[Any, ...]:
+    position = _scene_position(item)
+    if position is not None:
+        return 0, position[0], position[1], str(item.get("scene_id") or "")
+    return (
+        1,
+        str(item.get("updated_at") or ""),
+        str(item.get("source_path") or ""),
+        str(item.get("scene_id") or ""),
+    )
+
+
 def _relationship_key(a: str, b: str) -> str:
     left, right = sorted([a, b])
     return f"{left}|{right}"
@@ -214,8 +247,7 @@ class StoryMemoryFacade:
         save_json_file_atomic(self.state_path, normalized)
         return normalized
 
-    @synchronized_json_state
-    def record_scene_write(
+    def _prepare_scene_write(
         self,
         *,
         scene_text: str,
@@ -229,9 +261,8 @@ class StoryMemoryFacade:
         export_format: str = "arc",
         chr_map: Optional[dict] = None,
         scene_characters: Any = None,
-        use_llm_extractor: Optional[bool] = None,
-    ) -> Dict[str, Any]:
-        """在场景保存成功后固定尝试吸收一次轻量叙事状态。"""
+    ) -> tuple[str, str, list[str], Dict[str, Any]]:
+        """构造场景卡与抽取输入；此步骤不读写状态文件。"""
         plain_text = _plain_story_text(scene_text)
         scene_id = _scene_id(
             chapter_index=chapter_index,
@@ -249,7 +280,7 @@ class StoryMemoryFacade:
             ),
         )
         characters = _merge_unique(explicit_characters, scanned_characters)
-
+        source_hash = _hash_text(scene_text or "")
         scene_card = {
             "scene_id": scene_id,
             "chapter_index": _safe_int(chapter_index),
@@ -261,12 +292,77 @@ class StoryMemoryFacade:
             "summary": _compact_text(plain_text or scene_description or guidance, 520),
             "characters": characters,
             "source_path": source_path.replace("\\", "/") if source_path else "",
-            "source_hash": _hash_text(scene_text or ""),
+            "source_hash": source_hash,
             "export_format": export_format or "arc",
             "updated_at": _utc_now_iso(),
         }
+        return scene_id, source_hash, characters, scene_card
 
-        delta = self.extract_state_delta(
+    def prepare_scene_enrichment(self, **payload: Any) -> Dict[str, Any]:
+        """在状态锁外完成耗时的 LLM 抽取，提交阶段只做快速合并。"""
+        clean_payload = dict(payload)
+        clean_payload.pop("use_llm_extractor", None)
+        clean_payload.pop("require_current_source_hash", None)
+        clean_payload.pop("precomputed_delta", None)
+        _scene_id_value, _source_hash, characters, scene_card = self._prepare_scene_write(**clean_payload)
+        return self.extract_state_delta(
+            scene_text=str(clean_payload.get("scene_text") or ""),
+            scene_card=scene_card,
+            characters=characters,
+            chr_map=clean_payload.get("chr_map"),
+            use_llm=True,
+        )
+
+    @synchronized_json_state
+    def record_scene_write(
+        self,
+        *,
+        scene_text: str,
+        chapter_index: Any = None,
+        scene_index: Any = None,
+        chapter_title: str = "",
+        scene_title: str = "",
+        scene_description: str = "",
+        guidance: str = "",
+        source_path: str = "",
+        export_format: str = "arc",
+        chr_map: Optional[dict] = None,
+        scene_characters: Any = None,
+        use_llm_extractor: Optional[bool] = None,
+        require_current_source_hash: bool = False,
+        precomputed_delta: Optional[Dict[str, Any]] = None,
+    ) -> Dict[str, Any]:
+        """在场景保存成功后固定尝试吸收一次轻量叙事状态。"""
+        scene_id, source_hash, characters, scene_card = self._prepare_scene_write(
+            scene_text=scene_text,
+            chapter_index=chapter_index,
+            scene_index=scene_index,
+            chapter_title=chapter_title,
+            scene_title=scene_title,
+            scene_description=scene_description,
+            guidance=guidance,
+            source_path=source_path,
+            export_format=export_format,
+            chr_map=chr_map,
+            scene_characters=scene_characters,
+        )
+        if require_current_source_hash:
+            current = next(
+                (
+                    item
+                    for item in self.load_state().get("scenes") or []
+                    if item.get("scene_id") == scene_id
+                ),
+                None,
+            )
+            if current is not None and current.get("source_hash") != source_hash:
+                return {
+                    "scene": current,
+                    "characters": current.get("characters") or [],
+                    "thread": None,
+                    "delta": {"source": "stale_enrichment_skipped"},
+                }
+        delta = precomputed_delta or self.extract_state_delta(
             scene_text=scene_text,
             scene_card=scene_card,
             characters=characters,
@@ -284,14 +380,7 @@ class StoryMemoryFacade:
         self._remove_scene_contributions(state, scene_id)
         scenes = [item for item in state["scenes"] if item.get("scene_id") != scene_id]
         scenes.append(scene_card)
-        state["scenes"] = sorted(
-            scenes,
-            key=lambda item: (
-                item.get("chapter_index") if item.get("chapter_index") is not None else 999999,
-                item.get("scene_index") if item.get("scene_index") is not None else 999999,
-                item.get("scene_id") or "",
-            ),
-        )
+        state["scenes"] = sorted(scenes, key=_scene_sort_key)
 
         evidence = {
             "scene_id": scene_id,
@@ -1086,6 +1175,7 @@ class StoryMemoryFacade:
                 "\n".join([chapter_title, chapter_description, scene_title, scene_description, guidance]),
                 chr_map,
             ),
+            limit=SCENE_TASK_PACK_MAX_CHARACTERS,
         )
         state = self.load_state()
         scene_id = _scene_id(
@@ -1095,54 +1185,142 @@ class StoryMemoryFacade:
             scene_title=scene_title,
         )
 
-        character_cards = [
-            state["character_states"].get(name)
-            for name in active_characters
-            if state["character_states"].get(name)
-        ]
+        target_position = _scene_position({
+            "chapter_index": chapter_index,
+            "scene_index": scene_index,
+            "scene_title": scene_title,
+        })
+        ordered_scenes = sorted(
+            [item for item in state["scenes"] if isinstance(item, dict)],
+            key=_scene_sort_key,
+        )
+        historical_scenes = []
+        for item in ordered_scenes:
+            if item.get("scene_id") == scene_id:
+                continue
+            position = _scene_position(item)
+            if target_position is not None:
+                if position is None or position >= target_position:
+                    continue
+            historical_scenes.append(item)
+        eligible_scene_ids = {
+            str(item.get("scene_id"))
+            for item in historical_scenes
+            if item.get("scene_id")
+        }
+        scene_rank_by_id = {
+            str(item.get("scene_id")): index
+            for index, item in enumerate(historical_scenes)
+            if item.get("scene_id")
+        }
+
+        character_cards = []
+        for name in active_characters:
+            raw_card = state["character_states"].get(name)
+            if not isinstance(raw_card, dict):
+                continue
+            evidence = [
+                item for item in raw_card.get("recent_evidence") or []
+                if isinstance(item, dict) and item.get("scene_id") in eligible_scene_ids
+            ]
+            if target_position is not None and not evidence:
+                continue
+            card = dict(raw_card)
+            if evidence:
+                latest = max(
+                    evidence,
+                    key=lambda item: scene_rank_by_id.get(str(item.get("scene_id") or ""), -1),
+                )
+                card["last_seen_scene"] = latest.get("scene_id") or ""
+                card["last_seen_title"] = latest.get("scene_title") or ""
+                card["recent_evidence"] = evidence
+                if raw_card.get("last_seen_scene") not in eligible_scene_ids:
+                    card["current_status"] = "以最近可用场景证据为准"
+            character_cards.append(card)
+
         relationship_cards = []
         for a, b in combinations(active_characters[:6], 2):
             rel = state["relationships"].get(_relationship_key(a, b))
-            if rel:
-                relationship_cards.append(rel)
-
-        relevant_threads = []
-        for thread in state["threads"]:
-            if thread.get("status") not in {"open", "advanced"}:
+            if not isinstance(rel, dict):
                 continue
-            related = set(thread.get("related_characters") or [])
-            if not active_characters or related.intersection(active_characters):
-                relevant_threads.append(thread)
-            if len(relevant_threads) >= 5:
-                break
+            evidence = [
+                item for item in rel.get("recent_evidence") or []
+                if isinstance(item, dict) and item.get("scene_id") in eligible_scene_ids
+            ]
+            if target_position is not None and not evidence:
+                continue
+            card = dict(rel)
+            if evidence:
+                latest = max(
+                    evidence,
+                    key=lambda item: scene_rank_by_id.get(str(item.get("scene_id") or ""), -1),
+                )
+                card["last_scene"] = latest.get("scene_id") or ""
+                card["recent_evidence"] = evidence
+                if rel.get("last_scene") not in eligible_scene_ids:
+                    card["relation_hint"] = "截至该场已有互动，具体关系以最近证据为准"
+            relationship_cards.append(card)
 
-        recent_scenes = [
-            item for item in state["scenes"]
-            if item.get("scene_id") != scene_id
-        ][-max(0, int(max_recent_scenes or 0)) :]
+        open_threads = []
+        for thread in state["threads"]:
+            if not isinstance(thread, dict) or thread.get("status") not in {"open", "advanced"}:
+                continue
+            reference_scene = thread.get("last_touched_scene") or thread.get("introduced_scene")
+            if target_position is not None and reference_scene not in eligible_scene_ids:
+                continue
+            open_threads.append(thread)
+        relevant_threads = self._select_relevant_records(
+            open_threads,
+            active_characters=active_characters,
+            scene_text="\n".join([scene_title, scene_description, guidance]),
+            entity_keys=("related_characters",),
+            text_keys=("description", "evidence", "scene_title", "last_touched_title"),
+            limit=4,
+            scene_rank_by_id=scene_rank_by_id,
+            scene_id_keys=("last_touched_scene", "introduced_scene"),
+        )
+
+        recent_limit = min(
+            SCENE_TASK_PACK_RECENT_SCENES,
+            max(0, int(max_recent_scenes or 0)),
+        )
+        recent_scenes = historical_scenes[-recent_limit:] if recent_limit else []
+        def eligible_records(records: list[Dict[str, Any]]) -> list[Dict[str, Any]]:
+            return [
+                item for item in records
+                if isinstance(item, dict)
+                and (
+                    target_position is None
+                    or not item.get("scene_id")
+                    or item.get("scene_id") in eligible_scene_ids
+                )
+            ]
         relevant_events = self._select_relevant_records(
-            state.get("events") or [],
+            eligible_records(state.get("events") or []),
             active_characters=active_characters,
             scene_text="\n".join([scene_title, scene_description, guidance]),
             entity_keys=("participants",),
             text_keys=("summary", "evidence", "scene_title"),
-            limit=6,
+            limit=4,
+            scene_rank_by_id=scene_rank_by_id,
         )
         relevant_facts = self._select_relevant_records(
-            state.get("fact_claims") or [],
+            eligible_records(state.get("fact_claims") or []),
             active_characters=active_characters,
             scene_text="\n".join([scene_title, scene_description, guidance]),
             entity_keys=("entities",),
             text_keys=("claim", "evidence", "scene_title"),
-            limit=8,
+            limit=5,
+            scene_rank_by_id=scene_rank_by_id,
         )
         relevant_risks = self._select_relevant_records(
-            state.get("conflict_risks") or [],
+            eligible_records(state.get("conflict_risks") or []),
             active_characters=active_characters,
             scene_text="\n".join([scene_title, scene_description, guidance]),
             entity_keys=(),
             text_keys=("risk", "evidence", "scene_title"),
-            limit=5,
+            limit=3,
+            scene_rank_by_id=scene_rank_by_id,
         )
         relevant_quality_tickets = self._select_relevant_records(
             [
@@ -1153,7 +1331,8 @@ class StoryMemoryFacade:
             scene_text="\n".join([scene_title, scene_description, guidance]),
             entity_keys=(),
             text_keys=("target", "edit_goal", "rewrite_brief", "scene_name", "review_target", "source_path"),
-            limit=5,
+            limit=3,
+            scene_rank_by_id=scene_rank_by_id,
         )
 
         lines: list[str] = []
@@ -1275,27 +1454,55 @@ class StoryMemoryFacade:
         entity_keys: tuple[str, ...],
         text_keys: tuple[str, ...],
         limit: int,
+        scene_rank_by_id: Optional[Dict[str, int]] = None,
+        scene_id_keys: tuple[str, ...] = ("scene_id",),
     ) -> list[Dict[str, Any]]:
-        terms = set(active_characters)
-        terms.update(re.findall(r"[\u4e00-\u9fffA-Za-z0-9_]{2,16}", scene_text or ""))
-        scored: list[tuple[int, Dict[str, Any]]] = []
-        for record in records:
+        query_terms = _text_terms(scene_text)
+        normalized_characters = {
+            str(item).strip()
+            for item in active_characters
+            if str(item).strip()
+        }
+        ranks = scene_rank_by_id or {}
+        scored: list[tuple[float, int, str, int, Dict[str, Any]]] = []
+        for record_index, record in enumerate(records):
             if not isinstance(record, dict):
                 continue
-            score = 0
+            score = 0.0
             for key in entity_keys:
                 entities = record.get(key) or []
                 if isinstance(entities, str):
                     entities = [entities]
-                score += len({str(item).strip() for item in entities if str(item).strip()}.intersection(terms)) * 3
+                score += len({str(item).strip() for item in entities if str(item).strip()}.intersection(normalized_characters)) * 4
             haystack = "\n".join(str(record.get(key) or "") for key in text_keys)
-            score += sum(1 for term in terms if term and term in haystack)
+            score += sum(3 for name in normalized_characters if name and name in haystack)
+            haystack_terms = _text_terms(haystack)
+            if query_terms and haystack_terms:
+                overlap = len(query_terms.intersection(haystack_terms))
+                score += min(8.0, overlap / max(1, min(len(query_terms), len(haystack_terms))) * 8.0)
+
+            record_rank = -1
+            for key in scene_id_keys:
+                candidate_rank = ranks.get(str(record.get(key) or ""), -1)
+                record_rank = max(record_rank, candidate_rank)
             if score > 0:
-                scored.append((score, record))
-        scored.sort(key=lambda item: item[0], reverse=True)
+                scored.append((score, record_rank, str(record.get("updated_at") or ""), record_index, record))
+        scored.sort(key=lambda item: (item[0], item[1], item[2], item[3]), reverse=True)
         if scored:
-            return [record for _, record in scored[:limit]]
-        return records[-limit:] if records and not active_characters else []
+            return [item[-1] for item in scored[:limit]]
+        if records and not active_characters:
+            return sorted(
+                records,
+                key=lambda record: (
+                    max(
+                        (ranks.get(str(record.get(key) or ""), -1) for key in scene_id_keys),
+                        default=-1,
+                    ),
+                    str(record.get("updated_at") or ""),
+                ),
+                reverse=True,
+            )[:limit]
+        return []
 
     def format_status(self) -> str:
         state = self.load_state()
@@ -1331,19 +1538,24 @@ class StoryMemoryFacade:
             rel for key, rel in (state.get("relationships") or {}).items()
             if any(name in question for name in rel.get("characters") or [])
         ]
-        terms = [item for item in re.findall(r"[\u4e00-\u9fffA-Za-z0-9_]{2,16}", question) if item]
-        matched_scenes = []
-        for scene in state.get("scenes") or []:
-            haystack = "\n".join([
-                scene.get("scene_title") or "",
-                scene.get("description") or "",
-                scene.get("guidance") or "",
-                scene.get("summary") or "",
-            ])
-            if any(term in haystack for term in terms):
-                matched_scenes.append(scene)
-            if len(matched_scenes) >= max_items:
-                break
+        ordered_scenes = sorted(
+            [item for item in state.get("scenes") or [] if isinstance(item, dict)],
+            key=_scene_sort_key,
+        )
+        scene_rank_by_id = {
+            str(item.get("scene_id")): index
+            for index, item in enumerate(ordered_scenes)
+            if item.get("scene_id")
+        }
+        matched_scenes = self._select_relevant_records(
+            ordered_scenes,
+            active_characters=[name for name in state.get("character_states", {}) if name in question],
+            scene_text=question,
+            entity_keys=("characters",),
+            text_keys=("scene_title", "description", "guidance", "summary"),
+            limit=max_items,
+            scene_rank_by_id=scene_rank_by_id,
+        )
         matched_events = self._select_relevant_records(
             state.get("events") or [],
             active_characters=[name for name in state.get("character_states", {}) if name in question],
@@ -1351,6 +1563,7 @@ class StoryMemoryFacade:
             entity_keys=("participants",),
             text_keys=("summary", "evidence", "scene_title"),
             limit=max_items,
+            scene_rank_by_id=scene_rank_by_id,
         )
         matched_facts = self._select_relevant_records(
             state.get("fact_claims") or [],
@@ -1359,6 +1572,7 @@ class StoryMemoryFacade:
             entity_keys=("entities",),
             text_keys=("claim", "evidence", "scene_title"),
             limit=max_items,
+            scene_rank_by_id=scene_rank_by_id,
         )
         matched_risks = self._select_relevant_records(
             state.get("conflict_risks") or [],
@@ -1367,6 +1581,7 @@ class StoryMemoryFacade:
             entity_keys=(),
             text_keys=("risk", "evidence", "scene_title"),
             limit=max_items,
+            scene_rank_by_id=scene_rank_by_id,
         )
         matched_quality_tickets = self._select_relevant_records(
             [
@@ -1378,6 +1593,7 @@ class StoryMemoryFacade:
             entity_keys=(),
             text_keys=("target", "edit_goal", "rewrite_brief", "scene_name", "review_target", "source_path"),
             limit=max_items,
+            scene_rank_by_id=scene_rank_by_id,
         )
 
         lines = ["StoryMemory 查询结果", f"- 问题: {question}", ""]

@@ -73,7 +73,12 @@ def _record_scene_write_job(user_id: str, project_name: str, payload: dict[str, 
     try:
         from agents.story_memory import StoryMemoryFacade
 
-        StoryMemoryFacade(user_id, project_name).record_scene_write(**payload)
+        facade = StoryMemoryFacade(user_id, project_name)
+        delta = facade.prepare_scene_enrichment(**payload)
+        commit_payload = _copy_payload(payload)
+        commit_payload["use_llm_extractor"] = False
+        commit_payload["precomputed_delta"] = delta
+        facade.record_scene_write(**commit_payload)
     except Exception as exc:
         print(f"[StoryMemory] {label} 异步状态吸收失败（不影响主流程）：{exc}")
 
@@ -85,16 +90,34 @@ def enqueue_scene_memory_write(
     label: str = "场景",
     **payload: Any,
 ) -> Optional[Future]:
-    """提交一次后台场景状态吸收任务，调用方不等待结果。"""
+    """先写入确定性快照，再异步补充 LLM 结构化状态。"""
     scene_text = str(payload.get("scene_text") or "")
     if not user_id or not project_name or not scene_text.strip():
         return None
+
+    requested_llm = payload.get("use_llm_extractor")
+    snapshot_payload = _copy_payload(payload)
+    snapshot_payload["use_llm_extractor"] = False
+    snapshot_payload.pop("require_current_source_hash", None)
+    try:
+        from agents.story_memory import StoryMemoryFacade
+
+        StoryMemoryFacade(str(user_id), str(project_name)).record_scene_write(**snapshot_payload)
+    except Exception as exc:
+        print(f"[StoryMemory] {label} 确定性快照写入失败（继续尝试后台吸收）：{exc}")
+
+    if requested_llm is False:
+        return None
+
+    enrichment_payload = _copy_payload(payload)
+    enrichment_payload["use_llm_extractor"] = True
+    enrichment_payload["require_current_source_hash"] = True
     return _submit(
         label,
         _record_scene_write_job,
         str(user_id),
         str(project_name),
-        _copy_payload(payload),
+        enrichment_payload,
         label,
     )
 

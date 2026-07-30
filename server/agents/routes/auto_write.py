@@ -287,8 +287,6 @@ async def generate_script_stream(
 
     # Context accumulation (简单片段积累，三圈记忆策略会在 build_scene_context 里处理跨章前文)
     chapters_processed = 0
-    accumulated_context = ""
-    previous_scene_context = ""
 
     for i in range(start_chapter_index, len(chapter_nodes)):
         if request is not None and await request.is_disconnected():
@@ -423,13 +421,6 @@ async def generate_script_stream(
             # 将 story_tags_block 前置到 context_str，确保 POV 等关键参数在上下文最前面
             if story_tags_block:
                 context_str = story_tags_block + "\n\n" + context_str
-
-            if previous_scene_context.strip():
-                context_str = (
-                    context_str
-                    + "\n\n=== 上一场完整正文（自动写作硬上下文，优先保证连续性）===\n"
-                    + previous_scene_context.strip()
-                )
 
             # 场景元数据（从大纲 > 行解析）
             scene_meta_parts = []
@@ -695,10 +686,6 @@ async def generate_script_stream(
                     scene_arc_content.append("")
 
                 current_scene_full_text = "\n".join(scene_arc_content).strip()
-                # Update accumulation (full text to prevent context loss in long generation)
-                accumulated_context += f"\n\n{current_scene_full_text}\n"
-                previous_scene_context = current_scene_full_text
-
                 # Send completion with stats
                 update_state(
                     "running",

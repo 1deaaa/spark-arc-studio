@@ -16,12 +16,11 @@ StoryMemory / GraphRAG / 风格执行卡 / 工具规则；5 只在用户明确�
 【核心改进】
   - StoryMemory 场景事实包：在三圈记忆前注入当前场景相关的角色动态状态、
     关系记录、开放线索和最近场景摘要；该状态由场景保存后后台吸收生成。
-  - 全量世界观 / 全量角色：废弃"只传选中角色"的旧逻辑，所有入口必须
-    全量加载，因为大模型上下文窗口（128K+）完全容纳，且遗漏角色设定
-    是导致 OOC（角色崩坏）和"吃书"的根本原因。
+  - 世界观 / 角色真相源：统一从项目文件加载；正式写作阶段再由上下文预算
+    按模型窗口裁剪，避免把“窗口放得下”误当成“模型能稳定利用”。
   - 三圈记忆策略（Scene Context）：
-      ① 当前章全文    ← 最近戏剧连续性
-      ② 前序章章末尾声 ← 跨章情感锚点
+      ① 当前章最近场景全文 ← 最近戏剧连续性
+      ② 最近前序章章末尾声 ← 跨章情感锚点
       ③ 梗概+节拍表  ← 全局叙事线
   - 统一大纲注入：直接读取 大纲.txt 原文，
     让编剧始终知道全局故事蓝图。
@@ -36,12 +35,16 @@ import re
 from typing import Any, Dict, List, Optional, Tuple
 
 from core.character_store import read_character_records
+from core.project_settings import normalize_scene_length_hint
 from core.utils import (
     get_project_path,
     get_project_stories_path,
 )
-from core.project_settings import normalize_scene_length_hint
 from story.file_naming import list_story_files
+
+
+MAX_CURRENT_CHAPTER_FULL_SCENES = 3
+MAX_CROSS_CHAPTER_TAILS = 2
 
 
 # ─────────────────────── Story Tags 共享构建器 ───────────────────────
@@ -702,9 +705,9 @@ def build_scene_context(
     """
     三圈记忆策略：为写作当前场景组装前文上下文。
 
-    圈 1（Hard Context）：当前章节内，目标场景之前的所有已完成场景全文。
+    圈 1（Hard Context）：当前章节内，目标场景之前最近的已完成场景全文。
         如果 current_chapter_arc_text 已知则直接使用；否则从文件加载。
-    圈 2（Sliding Window）：前序各章节的【最后一个场景】的 .arc 全文。
+    圈 2（Sliding Window）：最近前序章节的【最后一个场景】全文。
     圈 3（Compressed）：由调用方通过 narrative_memory 注入，此函数不重复处理。
     """
     from story.arc_parser import parse_arc, serialize_to_arc
@@ -747,7 +750,8 @@ def build_scene_context(
 
     # ── 圈 2：前序章节末尾场景 ──────────────────────────────────────────
     tail_scenes: List[str] = []
-    for ci in range(current_chapter_index):
+    first_tail_chapter = max(0, current_chapter_index - MAX_CROSS_CHAPTER_TAILS)
+    for ci in range(first_tail_chapter, current_chapter_index):
         files = chapter_files.get(ci) or []
         if not files:
             continue
@@ -776,13 +780,23 @@ def build_scene_context(
 
     # ── 圈 1：当前章已完成场景 ─────────────────────────────────────────
     if current_chapter_arc_text and current_chapter_arc_text.strip():
-        # 调用方已传入当前章的完整 arc 文本（截至 target_scene 之前）
-        parts.append("=== 当前章节前文 ===")
-        parts.append(clean_arc(current_chapter_arc_text))
+        # 调用方可能传入当前章完整 ARC；只保留最近场景全文，旧场景交给 StoryMemory 摘要承载。
+        current_text = clean_arc(current_chapter_arc_text)
+        try:
+            parsed_current = parse_arc(current_text, chr_map=chr_map)
+            if len(parsed_current) > MAX_CURRENT_CHAPTER_FULL_SCENES:
+                current_text = clean_arc(
+                    serialize_to_arc(parsed_current[-MAX_CURRENT_CHAPTER_FULL_SCENES:], chr_map=chr_map)
+                )
+        except Exception:
+            pass
+        parts.append("=== 当前章节最近前文 ===")
+        parts.append(current_text)
     else:
         completed_files = chapter_files.get(current_chapter_index) or []
         if current_scene_index is not None:
             completed_files = completed_files[: max(0, current_scene_index)]
+        completed_files = completed_files[-MAX_CURRENT_CHAPTER_FULL_SCENES:]
         completed_parts: List[str] = []
         for story_file in completed_files:
             raw = _read_story_file_safe(story_file)
@@ -790,7 +804,7 @@ def build_scene_context(
                 continue
             completed_parts.append(raw if story_file.lower().endswith(".md") else clean_arc(raw))
         if completed_parts:
-            parts.append("=== 当前章节前文（已完成场景）===")
+            parts.append("=== 当前章节最近前文（已完成场景）===")
             parts.append("\n\n".join(completed_parts))
 
     return "\n".join(parts)
