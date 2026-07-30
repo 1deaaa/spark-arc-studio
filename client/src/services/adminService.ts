@@ -536,20 +536,6 @@ export async function batchRevokeRedeemCodes(codeIds: number[]) {
   return result.data;
 }
 
-/**
- * 删除兑换码（管理员）
- */
-export async function deleteRedeemCode(codeId: number) {
-  const response = await fetchWithAuth(`/api/redeem/admin/codes/${codeId}`, {
-    method: 'DELETE',
-  });
-  const result = await response.json();
-  if (!response.ok || result.success === false) {
-    throw new Error(extractErrorMessage(result, '删除兑换码失败'));
-  }
-  return result;
-}
-
 // ==================== 兑换码兑换（用户功能） ====================
 
 /**
