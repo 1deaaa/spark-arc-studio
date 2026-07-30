@@ -14,21 +14,22 @@
     <div class="header-center header-buttons">
       <div class="dock-bar" ref="dockBarRef"
         @mouseenter="onDockEnter" @mousemove="onDockMove" @mouseleave="onDockLeave">
-        <n-dropdown trigger="click" :options="projectOptions" @select="handleProjectAction">
-          <span class="tooltip-dropdown-trigger">
-            <n-tooltip trigger="hover">
-              <template #trigger>
-                <n-button class="header-action-btn" type="primary" strong>
-                  <template #icon>
-                    <n-icon :component="FolderOpen" />
-                  </template>
-                  {{ t('components.headerToolbar.project') }}
-                </n-button>
+        <n-tooltip trigger="hover">
+          <template #trigger>
+            <n-button
+              class="header-action-btn"
+              type="primary"
+              strong
+              @click="projectStore.createProject"
+            >
+              <template #icon>
+                <n-icon :component="FilePlus2" />
               </template>
-              {{ t('components.headerToolbar.projectActionTitle') }}
-            </n-tooltip>
-          </span>
-        </n-dropdown>
+              {{ t('components.projectSelector.newProject') }}
+            </n-button>
+          </template>
+          {{ t('components.projectSelector.newProject') }}
+        </n-tooltip>
 
         <n-tooltip trigger="hover">
           <template #trigger>
@@ -148,7 +149,7 @@
 import { onBeforeUnmount, onMounted, ref, computed, h } from 'vue';
 import { useI18n } from 'vue-i18n';
 import { NButton, NIcon, NText, NDropdown, NTooltip } from 'naive-ui';
-import { Archive, BrainCircuit, CloudDownload, CloudUpload, FolderOpen, Laptop, LogOut, Maximize2, Minimize2, Moon, PaintBucket, Play, Redo2, Share2, Sun, Languages, Undo2 } from '@lucide/vue';
+import { Archive, BrainCircuit, CloudDownload, CloudUpload, FilePlus2, FolderOpen, Laptop, LogOut, Maximize2, Minimize2, Moon, PaintBucket, Play, Redo2, Share2, Sun, Languages, Undo2 } from '@lucide/vue';
 import { useLocaleStore } from '@/components/stores/localeStore';
 import type { AppLocale } from '@/i18n/types';
 import bus from '@/eventBus';
@@ -233,25 +234,20 @@ const fileOptions = computed(() => [
     disabled: !currentFilePath.value,
     icon: () => h(NIcon, null, { default: () => h(BrainCircuit) }),
   },
+  { type: 'divider', key: 'project-actions-divider' },
+  { label: t('components.headerToolbar.exportProject'), key: 'export_project', icon: () => h(NIcon, null, { default: () => h(Archive) }) },
+  { label: t('components.headerToolbar.importProject'), key: 'import_project', icon: () => h(NIcon, null, { default: () => h(PaintBucket) }) },
 ]);
 
 function handleFileAction(key) {
   if (key === 'import') triggerFileImport();
   else if (key === 'export_arc') exportArc();
   else if (key === 'absorb_story_memory') absorbCurrentStoryMemory();
-}
-
-const projectOptions = computed(() => [
-  { label: t('components.headerToolbar.exportProject'), key: 'export_project', icon: () => h(NIcon, null, { default: () => h(Archive) }) },
-  { label: t('components.headerToolbar.importProject'), key: 'import_project', icon: () => h(NIcon, null, { default: () => h(PaintBucket) }) },
-]);
-
-const exportingSpark = ref(false);
-
-function handleProjectAction(key) {
-  if (key === 'export_project') exportProjectSpark();
+  else if (key === 'export_project') exportProjectSpark();
   else if (key === 'import_project') triggerSparkImport();
 }
+
+const exportingSpark = ref(false);
 
 async function exportProjectSpark() {
   if (!projectStore.currentProject) {
@@ -331,8 +327,6 @@ const currentThemeIcon = computed(() => {
 });
 
 const currentFilePath = computed(() => fileStore.selectedFile?.type === 'story' ? fileStore.selectedFile.path : null);
-
-function createNewScene() { sceneStore.createNewScene(); }
 
 async function handleFileSelected(file) {
   try {

@@ -12,7 +12,7 @@
     <template #trigger>
       <n-tooltip trigger="hover">
         <template #trigger>
-          <n-button quaternary circle :size="buttonSize">
+          <n-button quaternary circle :size="buttonSize" :type="emphasized ? 'error' : 'default'">
             <template #icon><n-icon :component="Tags" /></template>
           </n-button>
         </template>
@@ -45,6 +45,7 @@
       quaternary
       circle
       :size="buttonSize"
+      :type="emphasized ? 'error' : 'default'"
       :aria-label="t('components.storyTagsPanel.title')"
       :title="t('components.storyTagsPanel.title')"
       @click="show = !show"
@@ -101,6 +102,7 @@ const { isMobile } = useMobile();
 
 defineProps({
   buttonSize: { type: String as PropType<'tiny' | 'small' | 'medium' | 'large'>, default: 'small' },
+  emphasized: { type: Boolean, default: false },
 });
 
 const { t } = useI18n();

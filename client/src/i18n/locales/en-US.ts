@@ -208,7 +208,7 @@ const enUS = {
       backHome: 'Back to Home',
       undo: 'Undo (Ctrl+Z)',
       redo: 'Redo (Ctrl+Y)',
-      fileActionTitle: 'Import/Export',
+      fileActionTitle: 'Import/export files and projects',
       file: 'File',
       publishTitle: 'Publish versions and manage history',
       publish: 'Publish',

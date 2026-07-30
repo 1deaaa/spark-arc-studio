@@ -206,7 +206,7 @@ const zhCN = {
       backHome: '返回首页',
       undo: '撤销 (Ctrl+Z)',
       redo: '重做 (Ctrl+Y)',
-      fileActionTitle: '导入/导出',
+      fileActionTitle: '文件与项目导入/导出',
       file: '文件',
       publishTitle: '发布版本与管理历史记录',
       publish: '发布',
