@@ -21,7 +21,10 @@
         <span>{{ t('components.redeemCode.futureGrantSummary', { amount: campaign.credit_amount, count: campaign.recipient_count }) }}</span>
         <n-popconfirm @positive-click="handleRevokeGrant(campaign.id)">
           <template #trigger>
-            <n-button text type="error" size="tiny">{{ t('components.redeemCode.stopGrant') }}</n-button>
+            <n-button type="error" secondary size="small">
+              <template #icon><n-icon><Ban /></n-icon></template>
+              {{ t('components.redeemCode.stopGrant') }}
+            </n-button>
           </template>
           {{ t('components.redeemCode.stopGrantConfirm') }}
         </n-popconfirm>
@@ -215,11 +218,12 @@
 
       <template #footer>
         <div style="display: flex; justify-content: flex-end; gap: 12px;">
-          <n-button
-            v-if="detailData?.status === 'active'"
-            type="warning"
-            @click="handleRevoke(detailData.id)"
-          >{{ t('components.redeemCode.revoke') }}</n-button>
+          <n-popconfirm v-if="detailData" @positive-click="handleRevoke(detailData.id)">
+            <template #trigger>
+              <n-button type="warning">{{ t('components.redeemCode.revoke') }}</n-button>
+            </template>
+            {{ t('components.redeemCode.revokeConfirm') }}
+          </n-popconfirm>
           <n-button @click="showDetailModal = false">{{ t('views.common.cancel') }}</n-button>
         </div>
       </template>
@@ -239,7 +243,7 @@ import {
   NDescriptions, NDescriptionsItem,
   NDivider, NEmpty,
 } from 'naive-ui';
-import { Ban, Copy, Eye, Gift, Plus, RefreshCw, Trash } from '@lucide/vue';
+import { Ban, Copy, Eye, Gift, Plus, RefreshCw } from '@lucide/vue';
 import SparkTag from '../share/SparkTag.vue';
 import SparkIcon from '@/components/share/CreditIcon.vue';
 import { useMobile } from '@/composables/useMobile';
@@ -248,7 +252,6 @@ import {
   createRedeemCode,
   getRedeemCodeDetail,
   revokeRedeemCode,
-  deleteRedeemCode,
   listCreditGrantCampaigns,
   createCreditGrantCampaign,
   revokeCreditGrantCampaign,
@@ -414,20 +417,12 @@ const columns = computed(() => [
         }, {
           icon: () => h(NIcon, null, () => h(Eye)),
         }),
-        row.status === 'active'
-          ? h(NPopconfirm, { onPositiveClick: () => handleRevoke(row.id) }, {
-              trigger: () => h(NButton, { quaternary: true, size: 'tiny', type: 'warning' }, {
-                icon: () => h(NIcon, null, () => h(Ban)),
-                default: () => t('components.redeemCode.revoke'),
-              }),
-              default: () => t('components.redeemCode.revokeConfirm'),
-            })
-          : null,
-        h(NPopconfirm, { onPositiveClick: () => handleDelete(row.id) }, {
-          trigger: () => h(NButton, { quaternary: true, size: 'tiny', type: 'error' }, {
-            icon: () => h(NIcon, null, () => h(Trash)),
+        h(NPopconfirm, { onPositiveClick: () => handleRevoke(row.id) }, {
+          trigger: () => h(NButton, { quaternary: true, size: 'tiny', type: 'warning' }, {
+            icon: () => h(NIcon, null, () => h(Ban)),
+            default: () => t('components.redeemCode.revoke'),
           }),
-          default: () => t('components.redeemCode.deleteConfirm'),
+          default: () => t('components.redeemCode.revokeConfirm'),
         }),
       ].filter(Boolean)),
   },
@@ -546,16 +541,6 @@ async function handleRevoke(codeId: number) {
     loadCodes();
   } catch (e: any) {
     message.error(e.message || t('components.redeemCode.revokeFailed'));
-  }
-}
-
-async function handleDelete(codeId: number) {
-  try {
-    await deleteRedeemCode(codeId);
-    message.success(t('components.redeemCode.deleted'));
-    loadCodes();
-  } catch (e: any) {
-    message.error(e.message || t('components.redeemCode.deleteFailed'));
   }
 }
 

@@ -18,7 +18,7 @@ from __future__ import annotations
 
 import random
 import string
-from datetime import datetime
+from datetime import datetime, timezone
 from typing import Optional, Dict, Any, List
 
 from sqlalchemy import func, or_, update
@@ -192,30 +192,27 @@ class RedeemCodeServicesMixin:
             return item
 
     def revoke_redeem_code(self, code_id: int, operator_user_id: Optional[str] = None) -> Dict[str, Any]:
-        """废弃兑换码。"""
+        """作废并删除兑换码及其使用记录。"""
         with self.Session() as session:
             rc = session.query(RedeemCode).filter_by(id=code_id).first()
             if not rc:
                 raise RedeemCodeNotFoundError("兑换码不存在")
-            if rc.status == "revoked":
-                raise RedeemCodeRevokedError("兑换码已被废弃")
-            if rc.status == "exhausted":
-                raise ValueError("已耗尽的兑换码无法废弃")
-
             rc.status = "revoked"
-            rc.revoked_at = datetime.utcnow()
+            rc.revoked_at = datetime.now(timezone.utc).replace(tzinfo=None)
+            result = self._serialize_redeem_code(rc)
+            result["deleted"] = True
+            session.delete(rc)
             session.commit()
-            return self._serialize_redeem_code(rc)
+            return result
 
     def batch_revoke_redeem_codes(self, code_ids: List[int], operator_user_id: Optional[str] = None) -> int:
-        """批量废弃兑换码。返回成功废弃的数量。"""
+        """批量作废并删除兑换码。返回成功删除的数量。"""
         count = 0
         with self.Session() as session:
             for cid in code_ids:
                 rc = session.query(RedeemCode).filter_by(id=cid).first()
-                if rc and rc.status == "active":
-                    rc.status = "revoked"
-                    rc.revoked_at = datetime.utcnow()
+                if rc:
+                    session.delete(rc)
                     count += 1
             session.commit()
         return count

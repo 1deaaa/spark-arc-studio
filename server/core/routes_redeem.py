@@ -205,7 +205,7 @@ async def revoke_redeem_code(
     code_id: int,
     admin_user: dict = Depends(require_admin),
 ):
-    """废弃兑换码（管理员）。"""
+    """作废并删除兑换码（管理员）。"""
     try:
         result = matchbox().revoke_redeem_code(
             code_id,

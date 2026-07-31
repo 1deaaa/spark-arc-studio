@@ -13,6 +13,7 @@ from llm.agen_matchbox.models import (
     Base,
     CreditGrantRecipient,
     RedeemCode,
+    RedeemCodeUsage,
     UserCreditAccount,
     UserCreditLedger,
 )
@@ -109,6 +110,23 @@ def test_legacy_single_code_without_new_limit_remains_one_time(services):
     detail = services.list_redeem_codes()["items"][0]
     assert detail["max_redemptions"] == 1
     assert detail["redemption_count"] == 1
+
+
+def test_revoke_deletes_code_and_usages_but_keeps_credit_ledger(services):
+    created = services.create_redeem_code(
+        credit_amount=20,
+        code_type="per_user",
+        code="REVOKE-ME",
+    )[0]
+    services.redeem_code("user-1", "REVOKE-ME")
+
+    result = services.revoke_redeem_code(created["id"], operator_user_id="admin-1")
+    assert result["deleted"] is True
+
+    with services.Session() as session:
+        assert session.query(RedeemCode).filter_by(id=created["id"]).first() is None
+        assert session.query(RedeemCodeUsage).filter_by(redeem_code_id=created["id"]).count() == 0
+        assert session.query(UserCreditLedger).filter_by(user_id="user-1", reason_type="redeem_code").count() == 1
 
 
 def test_current_user_grant_updates_every_account_and_ledger(services):
