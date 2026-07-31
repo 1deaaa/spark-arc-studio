@@ -40,7 +40,7 @@ describe('Windows 桌面端 Tauri 配置', () => {
     expect(config.plugins?.fs).toBeUndefined();
   });
 
-  it('Windows 发布产物必须走带快捷方式和自启动钩子的 NSIS 安装流程', () => {
+  it('Windows 发布产物必须走带桌面快捷方式且不注册自启动的 NSIS 安装流程', () => {
     const config = JSON.parse(readFileSync(configPath, 'utf8')) as TauriConfig;
     const hooksPath = resolve(process.cwd(), 'src-tauri/windows/installer-hooks.nsh');
     const hooks = readFileSync(hooksPath, 'utf8');
@@ -53,9 +53,10 @@ describe('Windows 桌面端 Tauri 配置', () => {
     expect(config.bundle?.windows?.nsis).not.toHaveProperty('languages');
     expect(config.bundle?.windows?.nsis).not.toHaveProperty('startMenuFolder');
     expect(hooks).toContain('CreateOrUpdateDesktopShortcut');
-    expect(hooks).toContain('CurrentVersion\\Run');
     expect(hooks).toContain('NSIS_HOOK_PREUNINSTALL');
-    expect(hooks).toContain('DeleteRegValue HKCU');
+    expect(hooks).not.toContain('CurrentVersion\\Run');
+    expect(hooks).not.toContain('WriteRegStr HKCU');
+    expect(hooks).not.toContain('DeleteRegValue HKCU');
   });
 
   it('连接后在当前窗口导航，关闭按钮会关闭当前客户端', () => {
