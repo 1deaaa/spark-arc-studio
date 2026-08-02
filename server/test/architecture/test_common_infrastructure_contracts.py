@@ -10,6 +10,7 @@ import pytest
 from agents.tools.common import _apply_patch
 from core.file_ingest.chunking import TokenTextSplitter
 from core.migration_specs import get_db_path, get_db_spec, get_version_dir, iter_db_names, sqlite_url
+from story.text_metrics import count_story_body_chars
 
 
 def test_apply_patch_exact_append_whitespace_and_json_validation(tmp_path: Path) -> None:
@@ -48,6 +49,20 @@ def test_apply_patch_exact_append_whitespace_and_json_validation(tmp_path: Path)
     )
     assert rejected.startswith("局部修改失败")
     assert loose.read_text(encoding="utf-8") == before_validation
+
+
+def test_story_body_char_count_excludes_format_and_conception() -> None:
+    arc = """# 1-1 初遇
+<conception>这里不计入正文</conception>
+[旁白]
+雨落旧站台。
+[林夏]
+你来了。
+"""
+    assert count_story_body_chars(arc, "arc") == len("雨落旧站台你来了")
+
+    novel = "# 标题\n<conception>隐藏构思</conception>雨落在旧站台。"
+    assert count_story_body_chars(novel, "novel") == len("标题雨落在旧站台")
 
 
 def test_token_text_splitter_keeps_stable_chunk_metadata(monkeypatch) -> None:

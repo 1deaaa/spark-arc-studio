@@ -1246,6 +1246,11 @@ const jaJP = {
         concise: '簡潔',
         standard: '標準',
         expanded: '充実',
+        targetLabel: '目標',
+        targetPlaceholder: '自動',
+        targetUnit: '文字',
+        targetHint: '目標 約 {count} 文字（ソフト目標）',
+        targetNote: 'シーンの完成度に応じた調整はモデルが判断します',
         rhythmNote: 'シーンのリズムに応じて目標の約 ±30% まで調整できます',
         ranges: {
           script: {

@@ -9,7 +9,7 @@ from pydantic import AliasChoices, BaseModel, ConfigDict, Field, field_validator
 
 from agents.auto_write_service import load_auto_write_status, start_auto_write_background
 from core.utils import get_project_path
-from core.project_settings import get_project_story_tags, get_workspace_mode, set_project_story_tags
+from core.project_settings import STORY_TAG_VALUE_UNSET, get_project_story_tags, get_workspace_mode, set_project_story_tags
 
 from .common import ToolExecutionContext
 
@@ -108,6 +108,8 @@ class UpdateProjectStoryTagsInput(BaseModel):
     pov: str | None = Field(default=None, validation_alias=AliasChoices("pov", "point_of_view", "pointOfView"), description="人称视角，单选字符串，如 '第一人称'、'第三人称全知'。")
     length_hint: str | None = Field(default=None, validation_alias=AliasChoices("length_hint", "lengthHint", "length"), description="篇幅，单选字符串，如 '短篇'、'中篇'、'长篇'。")
     scene_length_hint: str | None = Field(default=None, validation_alias=AliasChoices("scene_length_hint", "sceneLengthHint", "scene_length"), description="单场篇幅软目标：concise=精简、standard=标准、expanded=充实。用户要求今后的场景整体变短或变长时使用。")
+    scene_target_chars: int | None = Field(default=None, ge=100, le=100000, validation_alias=AliasChoices("scene_target_chars", "sceneTargetChars", "target_chars"), description="单场目标正文字符数，作为软目标；具体值存在时优先于三档区间。")
+    clear_scene_target_chars: bool = Field(default=False, validation_alias=AliasChoices("clear_scene_target_chars", "clearSceneTargetChars"), description="是否清除项目级具体字数目标，恢复仅按三档控制。")
     active_inspiration_id: str | None = Field(default=None, validation_alias=AliasChoices("active_inspiration_id", "activeInspirationId"), description="当前生效的灵感 ID，可选字符串，用于追溯来源。")
 
     @model_validator(mode="before")
@@ -415,6 +417,12 @@ def read_project_story_tags() -> str:
     scene_length_labels = {"concise": "精简", "standard": "标准", "expanded": "充实"}
     scene_length_hint = tags.get("scene_length_hint", "standard")
     lines.append(f"单场篇幅：{scene_length_labels.get(scene_length_hint, '标准')}（软目标）")
+    scene_target_chars = tags.get("scene_target_chars")
+    lines.append(
+        f"单场目标字数：约 {scene_target_chars} 个可见正文字符（软目标，优先于档位区间）"
+        if scene_target_chars
+        else "单场目标字数：自动（使用档位区间）"
+    )
     
     return "\n".join(lines)
 
@@ -429,6 +437,8 @@ def update_project_story_tags(
     pov: str | None = None,
     length_hint: str | None = None,
     scene_length_hint: str | None = None,
+    scene_target_chars: int | None = None,
+    clear_scene_target_chars: bool = False,
     active_inspiration_id: str | None = None,
 ) -> str:
     """更新当前项目的故事主题参数（部分更新，仅覆盖传入的字段）。
@@ -449,6 +459,10 @@ def update_project_story_tags(
             pov=pov,
             length_hint=length_hint,
             scene_length_hint=scene_length_hint,
+            scene_target_chars=(
+                None if clear_scene_target_chars
+                else scene_target_chars if scene_target_chars is not None else STORY_TAG_VALUE_UNSET
+            ),
             active_inspiration_id=active_inspiration_id,
         )
     except Exception as e:
@@ -476,6 +490,10 @@ def update_project_story_tags(
         scene_length_labels = {"concise": "精简", "standard": "标准", "expanded": "充实"}
         normalized_scene_length = tags.get("scene_length_hint", "standard")
         updated_fields.append(f"单场篇幅={scene_length_labels.get(normalized_scene_length, '标准')}")
+    if clear_scene_target_chars:
+        updated_fields.append("单场目标字数=自动")
+    elif scene_target_chars is not None:
+        updated_fields.append(f"单场目标字数≈{tags.get('scene_target_chars')}字")
     if active_inspiration_id is not None:
         updated_fields.append(f"灵感ID={active_inspiration_id}")
     

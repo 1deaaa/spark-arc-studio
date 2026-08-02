@@ -87,12 +87,23 @@ def build_story_tags_hint(story_tags: dict) -> str:
             "expanded": ("充实", "约 35-55 个有效叙事单元"),
         }
     scene_label, scene_target = scene_targets[scene_length_hint]
-    parts.append(
-        f"【单场篇幅软目标】{scene_label}档，{scene_target}。"
-        "剧本中的有效叙事单元包括对白、动作、旁白和明确转折，不只计算对白句。"
-        "可按过场、高潮、纯动作等实际节奏在目标附近约 ±30% 浮动；"
-        "不得为凑数量注水，也不得在必要的动作或情绪转折中途硬截断。"
-    )
+    scene_target_chars = story_tags.get("scene_target_chars")
+    if isinstance(scene_target_chars, int) and scene_target_chars > 0:
+        parts.append(
+            f"【单场篇幅软目标】目标约 {scene_target_chars} 个可见正文字符。"
+            f"{scene_label}档仅用于表达内容密度与节奏倾向，不再提供竞争性的字数区间。"
+            "具体字数不是硬性验收条件；优先保证场景任务、情绪转折和叙事完整性，"
+            "由你根据成稿质量自行判断是否需要补写或压缩，严禁为凑字数注水或机械截断。"
+            "若本轮用户或导演明确给出不同的目标字数，以本轮要求为准。"
+        )
+    else:
+        parts.append(
+            f"【单场篇幅软目标】{scene_label}档，{scene_target}。"
+            "剧本中的有效叙事单元包括对白、动作、旁白和明确转折，不只计算对白句。"
+            "可按过场、高潮、纯动作等实际节奏在目标附近约 ±30% 浮动；"
+            "不得为凑数量注水，也不得在必要的动作或情绪转折中途硬截断。"
+            "若本轮用户或导演明确给出具体目标字数，以本轮要求为准。"
+        )
 
     pov = story_tags.get("pov")
     if pov:

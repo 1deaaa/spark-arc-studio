@@ -70,6 +70,7 @@ def test_initialize_default_project_creates_complete_script_reference(tmp_path, 
     assert tags["pov"] == "第三人称"
     assert tags["length_hint"] == "中篇"
     assert tags["scene_length_hint"] == "expanded"
+    assert tags["scene_target_chars"] is None
 
 
 def test_default_project_template_contains_no_placeholder_copy():

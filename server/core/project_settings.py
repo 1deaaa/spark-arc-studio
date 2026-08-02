@@ -25,6 +25,7 @@ from core.utils import get_project_path, get_user_projects_root
 
 _SETTINGS_DIR = ".sparkarc"
 _SETTINGS_FILENAME = "settings.json"
+STORY_TAG_VALUE_UNSET = object()
 
 _DEFAULT_SETTINGS: Dict[str, Any] = {
     "semantic_search_enabled": False,
@@ -46,6 +47,7 @@ _DEFAULT_SETTINGS: Dict[str, Any] = {
         "pov": None,             # 人称视角（单选，如"第一人称"）
         "length_hint": None,     # 篇幅（单选，如"中篇"）
         "scene_length_hint": "standard",  # 单场篇幅软目标（concise / standard / expanded）
+        "scene_target_chars": None,  # 单场目标正文字符数；None 表示仅使用档位
     },
     # 当前生效的灵感 ID（可选，用于追溯项目参数的来源灵感）
     "active_inspiration_id": None,
@@ -95,6 +97,25 @@ def normalize_scene_length_hint(value: Any) -> str:
     """把界面或模型传入的单场篇幅表达规范为稳定枚举。"""
     key = str(value or "standard").strip().lower()
     return _SCENE_LENGTH_HINT_ALIASES.get(key, "standard")
+
+
+SCENE_TARGET_CHARS_MIN = 100
+SCENE_TARGET_CHARS_MAX = 100000
+
+
+def normalize_scene_target_chars(value: Any) -> Optional[int]:
+    """规范化单场目标正文字符数；空值表示关闭具体字数目标。"""
+    if value is None or str(value).strip() == "":
+        return None
+    try:
+        normalized = int(value)
+    except (TypeError, ValueError):
+        return None
+    if normalized < SCENE_TARGET_CHARS_MIN:
+        return SCENE_TARGET_CHARS_MIN
+    if normalized > SCENE_TARGET_CHARS_MAX:
+        return SCENE_TARGET_CHARS_MAX
+    return normalized
 
 # 与 routes_import.py 的 chunk_tokens 校验保持一致，避免极端值。
 ATTACHMENT_CHUNK_TOKENS_MIN = 1000
@@ -220,6 +241,9 @@ def _normalize(raw: Dict[str, Any] | None) -> Dict[str, Any]:
                 "length_hint": raw_tags.get("length_hint", default_tags["length_hint"]),
                 "scene_length_hint": normalize_scene_length_hint(
                     raw_tags.get("scene_length_hint", default_tags["scene_length_hint"])
+                ),
+                "scene_target_chars": normalize_scene_target_chars(
+                    raw_tags.get("scene_target_chars", default_tags["scene_target_chars"])
                 ),
             }
         # 规范化 active_inspiration_id
@@ -495,6 +519,7 @@ def get_project_story_tags(user_id: str, project_name: str) -> Dict[str, Any]:
         "pov": str | None,
         "length_hint": str | None,
         "scene_length_hint": "concise" | "standard" | "expanded",
+        "scene_target_chars": int | None,
     }
     """
     settings = get_project_settings(user_id, project_name)
@@ -527,6 +552,7 @@ def set_project_story_tags(
     pov: Optional[str] = None,
     length_hint: Optional[str] = None,
     scene_length_hint: Optional[str] = None,
+    scene_target_chars: Any = STORY_TAG_VALUE_UNSET,
     workspace_mode: Optional[str] = None,
     active_inspiration_id: Optional[str] = None,
 ) -> Dict[str, Any]:
@@ -542,6 +568,7 @@ def set_project_story_tags(
         pov: 人称视角（单选，如"第一人称"）
         length_hint: 篇幅（单选，如"中篇"）
         scene_length_hint: 单场篇幅软目标（concise / standard / expanded）
+        scene_target_chars: 单场目标正文字符数；传入 None 可清除具体目标
         workspace_mode: 创作模式只读兼容参数；创建项目后会被忽略
         active_inspiration_id: 当前生效的灵感 ID（可选）
     
@@ -568,6 +595,8 @@ def set_project_story_tags(
             current_tags["length_hint"] = length_hint
         if scene_length_hint is not None:
             current_tags["scene_length_hint"] = normalize_scene_length_hint(scene_length_hint)
+        if scene_target_chars is not STORY_TAG_VALUE_UNSET:
+            current_tags["scene_target_chars"] = normalize_scene_target_chars(scene_target_chars)
         settings["story_tags"] = current_tags
         
         # 更新 active_inspiration_id（如果传入）

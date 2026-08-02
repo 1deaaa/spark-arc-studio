@@ -6,14 +6,14 @@ Tags API - 标签目录与用户自定义标签
 
 from fastapi import APIRouter, Depends
 from fastapi.responses import JSONResponse
-from pydantic import BaseModel
+from pydantic import BaseModel, Field
 from typing import Optional, List
 import os
 import json
 
 from core.auth import get_current_user
 from core.utils import USERDATA_ROOT
-from core.project_settings import get_project_story_tags, set_project_story_tags
+from core.project_settings import STORY_TAG_VALUE_UNSET, get_project_story_tags, set_project_story_tags
 
 
 tags_router = APIRouter()
@@ -153,6 +153,7 @@ class ProjectStoryTagsRequest(BaseModel):
     pov: Optional[str] = None
     lengthHint: Optional[str] = None
     sceneLengthHint: Optional[str] = None
+    sceneTargetChars: Optional[int] = Field(default=None, ge=100, le=100000)
     activeInspirationId: Optional[str] = None
 
 
@@ -202,6 +203,11 @@ async def set_project_story_tags_api(
             pov=data.pov,
             length_hint=data.lengthHint,
             scene_length_hint=data.sceneLengthHint,
+            scene_target_chars=(
+                data.sceneTargetChars
+                if "sceneTargetChars" in data.model_fields_set
+                else STORY_TAG_VALUE_UNSET
+            ),
             active_inspiration_id=data.activeInspirationId
         )
         return {
