@@ -8,11 +8,30 @@ from pathlib import Path
 
 _HOME_ENV_NAME = "AGENT_MATCHBOX_HOME"
 _PACKAGE_DIR = Path(__file__).resolve().parent
+_default_mgr_home: Path = _PACKAGE_DIR
 
 
 def get_package_dir() -> Path:
     """返回 matchbox 包的物理目录。"""
     return _PACKAGE_DIR
+
+
+def set_default_mgr_home(path: str | os.PathLike[str] | None) -> Path:
+    """设置宿主代码使用的默认运行目录。
+
+    环境变量 ``AGENT_MATCHBOX_HOME`` 的优先级仍高于该默认值。传入 ``None``
+    可恢复为 Matchbox 组件根目录。宿主应在初始化 Matchbox 前调用本函数。
+    """
+    global _default_mgr_home
+
+    if path is None:
+        _default_mgr_home = _PACKAGE_DIR
+    else:
+        home = Path(path).expanduser()
+        if not home.is_absolute():
+            home = Path.cwd() / home
+        _default_mgr_home = home.resolve()
+    return _default_mgr_home
 
 
 def get_mgr_home() -> Path:
@@ -22,16 +41,17 @@ def get_mgr_home() -> Path:
     1. 环境变量 AGENT_MATCHBOX_HOME
         - 绝对路径：直接使用
         - 相对路径：相对于当前工作目录解析
-    2. 回退到 matchbox 包目录
+    2. 宿主通过 set_default_mgr_home 设置的默认目录
+    3. Matchbox 组件根目录
     """
     raw = (os.environ.get(_HOME_ENV_NAME) or "").strip()
-    if not raw:
-        return _PACKAGE_DIR
+    if raw:
+        home = Path(raw).expanduser()
+        if not home.is_absolute():
+            home = Path.cwd() / home
+        return home.resolve()
 
-    home = Path(raw).expanduser()
-    if not home.is_absolute():
-        home = Path.cwd() / home
-    return home.resolve()
+    return _default_mgr_home
 
 
 def ensure_mgr_home_exists() -> Path:

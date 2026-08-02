@@ -9,20 +9,19 @@ from dotenv import dotenv_values, set_key
 
 from .paths import get_env_file_path
 
-# .env 文件唯一读取路径（agen_matchbox 目录）
-_ENV_PATH: Path = get_env_file_path()
 _ENV_INIT_BANNER = (
     "#绝对禁止将此文件上传至仓库 必须确保ignore里有\n"
     "#禁止直接修改 要通过/api/admin/config/llm-key接口修改LLM_KEY\n\n"
 )
 _ENV_CACHE: Optional[Dict[str, Optional[str]]] = None
+_ENV_CACHE_PATH: Optional[Path] = None
 _ENV_CACHE_MTIME_NS: Optional[int] = None
 _ENV_CACHE_SIZE: Optional[int] = None
 
 
 def _refresh_env_cache(force: bool = False) -> Dict[str, Optional[str]]:
     """读取并缓存 agen_matchbox/.env，只有文件变化时才重新解析。"""
-    global _ENV_CACHE, _ENV_CACHE_MTIME_NS, _ENV_CACHE_SIZE
+    global _ENV_CACHE, _ENV_CACHE_PATH, _ENV_CACHE_MTIME_NS, _ENV_CACHE_SIZE
 
     env_path = _ensure_env_file()
     stat = env_path.stat()
@@ -32,6 +31,7 @@ def _refresh_env_cache(force: bool = False) -> Dict[str, Optional[str]]:
     if (
         not force
         and _ENV_CACHE is not None
+        and _ENV_CACHE_PATH == env_path
         and _ENV_CACHE_MTIME_NS == mtime_ns
         and _ENV_CACHE_SIZE == size
     ):
@@ -39,6 +39,7 @@ def _refresh_env_cache(force: bool = False) -> Dict[str, Optional[str]]:
 
     data = dict(dotenv_values(env_path))
     _ENV_CACHE = data
+    _ENV_CACHE_PATH = env_path
     _ENV_CACHE_MTIME_NS = mtime_ns
     _ENV_CACHE_SIZE = size
     return data
@@ -46,19 +47,20 @@ def _refresh_env_cache(force: bool = False) -> Dict[str, Optional[str]]:
 
 def _ensure_env_file() -> Path:
     """确保 agen_matchbox/.env 文件存在并返回其路径。"""
-    _ENV_PATH.parent.mkdir(parents=True, exist_ok=True)
-    if _ENV_PATH.exists() and _ENV_PATH.is_dir():
-        raise IsADirectoryError(f".env 路径异常（是目录而非文件）: {_ENV_PATH}")
-    if not _ENV_PATH.exists():
-        _ENV_PATH.write_text(_ENV_INIT_BANNER, encoding="utf-8")
-    elif _ENV_PATH.stat().st_size == 0:
-        _ENV_PATH.write_text(_ENV_INIT_BANNER, encoding="utf-8")
-    return _ENV_PATH
+    env_path = get_env_file_path()
+    env_path.parent.mkdir(parents=True, exist_ok=True)
+    if env_path.exists() and env_path.is_dir():
+        raise IsADirectoryError(f".env 路径异常（是目录而非文件）: {env_path}")
+    if not env_path.exists():
+        env_path.write_text(_ENV_INIT_BANNER, encoding="utf-8")
+    elif env_path.stat().st_size == 0:
+        env_path.write_text(_ENV_INIT_BANNER, encoding="utf-8")
+    return env_path
 
 
 def get_env_path() -> Path:
     """返回 .env 文件路径"""
-    return _ENV_PATH
+    return get_env_file_path()
 
 
 def load_env() -> None:

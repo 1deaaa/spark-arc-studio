@@ -2,7 +2,7 @@
 
 ## 1. Scope
 
-This guide applies to the `server/llm/agen_matchbox` subproject. The goal is to keep multi-user routing, quota enforcement, key security, and agent compatibility stable across changes.
+This guide applies to the standalone `agen-matchbox` package. The goal is to keep multi-user routing, quota enforcement, key security, and agent compatibility stable across changes.
 
 ## 2. Core Principles
 
@@ -26,8 +26,8 @@ Pre-imports `.gateway` and `.tracked_model` in a background thread so that the f
 
 ### Skip conditions
 
-- `SPARKARC_SKIP_LLM_MANAGER=1` disables the manager entirely (returns `None`).
-- When `sys.argv` contains `alembic` or `gen_migration.py`, the manager is auto-skipped to avoid migration deadlocks.
+- `AGENT_MATCHBOX_DISABLED=1` disables the manager entirely (returns `None`).
+- Migration runners should set `AGENT_MATCHBOX_DISABLED=1` before importing Matchbox. Host adapters may preserve legacy command detection, but the generic component does not inspect host-specific command names.
 
 ## 4. Recommended Change Patterns
 

@@ -16,9 +16,22 @@ if __package__ in (None, ""):
     __package__ = _PACKAGE_DIR.name
 
 
+_host_schema_initializer = None
+try:
+    from llm.matchbox_adapter import (
+        configure_sparkarc_matchbox_environment,
+        prepare_sparkarc_matchbox_gui,
+    )
+except ImportError:
+    pass
+else:
+    configure_sparkarc_matchbox_environment()
+    _host_schema_initializer = prepare_sparkarc_matchbox_gui
+
+
 from .gui.main_window import LLMConfigGUI, main
 
 __all__ = ["LLMConfigGUI", "main"]
 
 if __name__ == "__main__":
-    main()
+    main(schema_initializer=_host_schema_initializer)

@@ -186,21 +186,6 @@ class LLMSysPlatformKey(Base):
     platform = relationship("LLMPlatform", backref="sys_keys")
 
 
-class SearchProviderUserConfig(Base):
-    """用户对系统搜索提供商的 URL 与密钥覆盖。"""
-
-    __tablename__ = "search_provider_user_configs"
-    __table_args__ = (
-        UniqueConstraint("user_id", "provider", name="uq_search_provider_user_provider"),
-    )
-
-    id = Column(Integer, primary_key=True)
-    user_id = Column(String(255), nullable=False, index=True)
-    provider = Column(String(32), nullable=False, index=True)
-    url = Column(String(1024), nullable=False)
-    api_key = Column(String(1024), nullable=True)
-
-
 class LLModels(Base):
     """LLM 模型配置"""
     __tablename__ = "llm_platform_models"

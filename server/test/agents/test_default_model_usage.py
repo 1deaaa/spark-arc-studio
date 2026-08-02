@@ -102,10 +102,21 @@ def _build_manager(monkeypatch, binding=None):
 
 def test_director_without_binding_uses_reasoning_usage(monkeypatch) -> None:
     manager, selected_usage = _build_manager(monkeypatch)
+    manager._default_usage_key_resolver = lambda agent_name: (
+        "reason" if agent_name == "agent_director" else "main"
+    )
 
     manager.get_user_llm("user-1", agent_name="agent_director")
 
     assert selected_usage["key"] == "reason"
+
+
+def test_matchbox_without_host_resolver_uses_generic_main_usage(monkeypatch) -> None:
+    manager, selected_usage = _build_manager(monkeypatch)
+
+    manager.get_user_llm("user-1", agent_name="agent_director")
+
+    assert selected_usage["key"] == "main"
 
 
 def test_other_agent_without_binding_keeps_main_usage(monkeypatch) -> None:

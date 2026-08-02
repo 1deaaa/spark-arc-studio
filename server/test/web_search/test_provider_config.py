@@ -280,11 +280,19 @@ def test_user_search_override_is_encrypted_and_bypasses_disabled_system_service(
 ) -> None:
     import llm.agen_matchbox as matchbox_package
     from llm.agen_matchbox import create_matchbox
-    from llm.agen_matchbox.models import Base, SearchProviderUserConfig
+    from llm.agen_matchbox.integrations import MatchboxIntegrations
+    from llm.agen_matchbox.models import Base
+    from core.search_provider_models import SearchProviderUserConfig
+    from core.search_provider_settings import matchbox_secret_rotation_handler
     from llm.agen_matchbox.security import SecurityManager
 
     monkeypatch.setenv("AGENT_MATCHBOX_HOME", str(tmp_path))
-    manager = create_matchbox(str(tmp_path / "llm_config.db"))
+    manager = create_matchbox(
+        str(tmp_path / "llm_config.db"),
+        integrations=MatchboxIntegrations(
+            secret_rotation_handler=matchbox_secret_rotation_handler,
+        ),
+    )
     Base.metadata.create_all(manager.engine)
     manager.llm_auto_key = False
     monkeypatch.setattr(matchbox_package, "_manager_instance", manager)
@@ -310,8 +318,20 @@ def test_user_search_override_is_encrypted_and_bypasses_disabled_system_service(
             user_id="user-1",
             provider="tavily",
         ).one()
-        assert stored.api_key.startswith("ENC:")
-        assert "aideamcp1024" not in stored.api_key
+    assert stored.api_key.startswith("ENC:")
+    assert "aideamcp1024" not in stored.api_key
+
+    summary = manager.rotate_master_key(
+        new_key="search-test-master-key-rotated",
+        old_key="search-test-master-key",
+        persist=False,
+    )
+    assert summary["rotated_with_old_key"] == 1
+    assert search_provider_settings.get_search_provider_runtime_config(
+        "tavily",
+        user_id="user-1",
+    ).api_key == "aideamcp1024"
+    SecurityManager.get_instance().set_key("search-test-master-key", persist=False)
 
     with pytest.raises(SearchProviderUnavailableError, match="设置 → 模型平台 → 联网搜索服务"):
         search_provider_settings.get_search_provider_runtime_config(

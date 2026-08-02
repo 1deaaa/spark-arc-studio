@@ -45,9 +45,6 @@ from .image_adapters import (
 )
 
 
-DIRECTOR_DEFAULT_USAGE_KEY = "reason"
-
-
 def _load_chat_runtime():
     """延迟加载 LLM 运行时重依赖，避免阻塞服务启动。"""
     from .gateway import ChatUniversal
@@ -59,10 +56,17 @@ def _load_chat_runtime():
 class LLMBuilderMixin:
     """LLM 客户端构建功能"""
 
-    @staticmethod
-    def _agent_default_usage_key(agent_name: Optional[str]) -> str:
-        """返回没有显式绑定时的 Agent 默认用途。"""
-        return DIRECTOR_DEFAULT_USAGE_KEY if agent_name == "agent_director" else DEFAULT_USAGE_KEY
+    def _agent_default_usage_key(self, agent_name: Optional[str]) -> str:
+        """返回没有显式绑定时的用途；宿主可注入自己的 Agent 解析规则。"""
+        resolver = getattr(self, "_default_usage_key_resolver", None)
+        if resolver is not None:
+            try:
+                resolved = str(resolver(agent_name) or "").strip().lower()
+            except Exception:
+                resolved = ""
+            if resolved:
+                return resolved
+        return DEFAULT_USAGE_KEY
 
     def _apply_sdk_request_compat(self, kwargs: Dict[str, Any]) -> Dict[str, Any]:
         """为 LangChain/OpenAI SDK 调用补充兼容参数。"""
@@ -237,7 +241,7 @@ class LLMBuilderMixin:
         1. agent_name: 业务首选。从数据库查询该 Agent 的绑定配置。
         2. platform_id & model_id: 直接指定特定的平台和模型 ID。
         3. usage_key: 明确指定用途槽位（如 'main', 'fast'）。
-        4. 默认值: Director 使用 'reason'，其他调用使用 'main'。
+         4. 默认值: 使用通用的 'main'，宿主可通过集成回调覆盖。
 
         用法示例:
             # 流式调用
@@ -359,6 +363,7 @@ class LLMBuilderMixin:
                 agent_name=agent_name,
                 quota_scope=quota_scope,
                 billing_enabled=self.billing_enabled,
+                usage_context_provider=getattr(self, "_usage_context_provider", None),
             )
  
             # 构建 LLM 客户端（ChatUniversal 子类保留了第三方模型的 reasoning_content）
@@ -652,6 +657,7 @@ class LLMBuilderMixin:
                 agent_name=agent_name,
                 quota_scope=quota_scope,
                 billing_enabled=self.billing_enabled,
+                usage_context_provider=getattr(self, "_usage_context_provider", None),
             )
  
             llm = ChatUniversal(

@@ -83,15 +83,15 @@ def build_sdk_compat_headers(
     """为 OpenAI 兼容网关构建请求头。"""
     headers = dict(existing_headers or {})
 
-    if not _env_flag_enabled("SPARKARC_OPENAI_COMPAT_OVERRIDE_UA", default=True):
+    if not _env_flag_enabled("AGENT_MATCHBOX_OPENAI_COMPAT_OVERRIDE_UA", default=True):
         return headers or None
 
     for key in headers.keys():
         if str(key).lower() == "user-agent":
             return headers or None
 
-    compat_ua = get_env_var("SPARKARC_OPENAI_COMPAT_USER_AGENT", "SparkArc/1.0")
-    compat_ua = (compat_ua or "SparkArc/1.0").strip() or "SparkArc/1.0"
+    compat_ua = get_env_var("AGENT_MATCHBOX_OPENAI_COMPAT_USER_AGENT", "Agent-Matchbox/1.0")
+    compat_ua = (compat_ua or "Agent-Matchbox/1.0").strip() or "Agent-Matchbox/1.0"
     headers["User-Agent"] = compat_ua
     return headers
 
@@ -109,7 +109,7 @@ def apply_sdk_request_compat(kwargs: Dict[str, Any], *, include_stream_usage: bo
     if compat_headers is not None:
         kwargs["default_headers"] = compat_headers
     if include_stream_usage:
-        stream_usage_mode = str(get_env_var("SPARKARC_OPENAI_COMPAT_STREAM_USAGE", "auto") or "auto").strip().lower()
+        stream_usage_mode = str(get_env_var("AGENT_MATCHBOX_OPENAI_COMPAT_STREAM_USAGE", "auto") or "auto").strip().lower()
         if stream_usage_mode in {"1", "true", "yes", "on", "auto"}:
             kwargs.setdefault("stream_usage", True)
     return kwargs

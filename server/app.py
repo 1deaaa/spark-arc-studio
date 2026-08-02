@@ -3,6 +3,10 @@ import json
 import warnings
 import logging
 
+from llm.matchbox_adapter import configure_sparkarc_matchbox_environment
+
+configure_sparkarc_matchbox_environment()
+
 # ═══════════════════════════════════════════════════════════════════════════
 # 第三方库警告 / 日志抑制（必须在所有第三方库导入之前）
 # ═══════════════════════════════════════════════════════════════════════════
@@ -332,9 +336,10 @@ async def lifespan(app: FastAPI):
         # 3. 这些重依赖会在 initialize_matchbox() 返回后立刻提交后台预热，也就是“启动同时异步预热”，
         #    而不是等首个用户请求到了才开始加载。
         try:
-            from llm.agen_matchbox import initialize_matchbox, warmup_matchbox_runtime
+            from llm.agen_matchbox import warmup_matchbox_runtime
+            from llm.matchbox_adapter import initialize_sparkarc_matchbox
             print("📦 Initializing Matchbox gateway...", flush=True)
-            initialize_matchbox(ensure_defaults=True)
+            initialize_sparkarc_matchbox(ensure_defaults=True)
             warmup_matchbox_runtime(blocking=False)
             print("⚙️ Matchbox runtime warm-up submitted in background", flush=True)
         except Exception as e:

@@ -11,10 +11,12 @@ import os
 import threading
 from dataclasses import dataclass
 from pathlib import Path
-from typing import Dict, Optional
+from typing import Callable, Dict, Optional
 from urllib.parse import parse_qsl, urlencode, urlsplit, urlunsplit
 
 from dotenv import dotenv_values, set_key, unset_key
+
+from .search_provider_models import SearchProviderUserConfig
 
 
 DEFAULT_EXA_MCP_URL = "https://mcp.exa.ai/mcp"
@@ -51,6 +53,34 @@ class SearchProviderConfigError(ValueError):
 
 class SearchProviderUnavailableError(RuntimeError):
     """当前用户没有可用的搜索提供商配置。"""
+
+
+def matchbox_secret_rotation_handler(
+    *,
+    session,
+    plan_secret_rewrite: Callable[..., dict],
+    new_key: str,
+    old_key: Optional[str],
+    allow_clear_unrecoverable: bool,
+    add_unresolved: Callable[[str], None],
+    add_rewrite: Callable[[Callable[[], None], dict], None],
+) -> None:
+    """把 SparkArc 搜索密钥接入 Matchbox 的通用主密钥轮换事务。"""
+    for search_config in session.query(SearchProviderUserConfig).all():
+        plan = plan_secret_rewrite(
+            raw_value=search_config.api_key,
+            new_key=new_key,
+            old_key=old_key,
+            allow_clear_unrecoverable=allow_clear_unrecoverable,
+        )
+        if plan["action"] == "unresolved":
+            add_unresolved(f"DB搜索用户Key:{search_config.user_id}:{search_config.provider}")
+            continue
+        if plan["action"] == "write":
+            add_rewrite(
+                lambda target=search_config, value=plan["value"]: setattr(target, "api_key", value),
+                plan,
+            )
 
 
 @dataclass(frozen=True)
@@ -159,7 +189,6 @@ def get_system_search_provider_runtime_config(provider: str) -> SearchProviderRu
 
 def _get_user_record(user_id: str, provider: str):
     from llm.agen_matchbox import matchbox
-    from llm.agen_matchbox.models import SearchProviderUserConfig
 
     manager = matchbox()
     with manager.Session() as session:
@@ -277,7 +306,6 @@ def update_search_provider_user_settings(
 ) -> Dict[str, object]:
     """保存用户覆盖；``api_key=None`` 保留现有密钥，空字符串切换为免密钥。"""
     from llm.agen_matchbox import matchbox
-    from llm.agen_matchbox.models import SearchProviderUserConfig
     from llm.agen_matchbox.security import SecurityManager
 
     normalized = _normalize_provider(provider)
@@ -312,7 +340,6 @@ def update_search_provider_user_settings(
 def reset_search_provider_user_settings(user_id: str, provider: str) -> Dict[str, object]:
     """删除用户覆盖，恢复系统默认或不可用状态。"""
     from llm.agen_matchbox import matchbox
-    from llm.agen_matchbox.models import SearchProviderUserConfig
 
     normalized = _normalize_provider(provider)
     manager = matchbox()
@@ -328,7 +355,6 @@ def reset_search_provider_user_settings(user_id: str, provider: str) -> Dict[str
 def delete_search_provider_user_settings(user_id: str) -> None:
     """账户删除后清理其搜索配置。"""
     from llm.agen_matchbox import matchbox
-    from llm.agen_matchbox.models import SearchProviderUserConfig
 
     manager = matchbox(required=False)
     if manager is None:

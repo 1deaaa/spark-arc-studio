@@ -115,6 +115,7 @@ class UsageTrackingCallback(BaseCallbackHandler):
         agent_name: Optional[str] = None,
         quota_scope: Optional[str] = None,
         billing_enabled: bool = False,
+        usage_context_provider=None,
     ):
         super().__init__()
         self.user_id = user_id
@@ -126,6 +127,7 @@ class UsageTrackingCallback(BaseCallbackHandler):
         self.quota_scope = quota_scope
         self.billing_enabled = bool(billing_enabled)
         self._session_maker = session_maker
+        self._usage_context_provider = usage_context_provider
 
         # 流式累积缓冲区（按 run_id 隔离，支持并发）
         self._stream_buffers: Dict[str, List[str]] = {}
@@ -261,11 +263,11 @@ class UsageTrackingCallback(BaseCallbackHandler):
         if self._session_maker is None:
             return
         usage_context = None
-        try:
-            from core.request_context import current_llm_usage_context
-            usage_context = current_llm_usage_context.get()
-        except Exception:
-            usage_context = None
+        if self._usage_context_provider is not None:
+            try:
+                usage_context = self._usage_context_provider()
+            except Exception:
+                usage_context = None
         total_tokens = prompt_tokens + completion_tokens
         with self._session_maker() as session:
             entry = UsageLogEntry(

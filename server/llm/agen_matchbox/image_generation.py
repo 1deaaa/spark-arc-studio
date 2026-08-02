@@ -38,8 +38,8 @@ class ImageReference:
 
 
 @dataclass
-class SparkImageRequest:
-    """SparkArc 内部统一生图请求。"""
+class ImageGenerationRequest:
+    """通用生图请求。"""
 
     prompt: str
     size: str = "1536x1024"
@@ -47,8 +47,8 @@ class SparkImageRequest:
 
 
 @dataclass
-class SparkImageResult:
-    """SparkArc 内部统一生图结果。"""
+class ImageGenerationResult:
+    """通用生图结果。"""
 
     image: bytes
     mime_type: str
@@ -58,6 +58,11 @@ class SparkImageResult:
     platform_id: Optional[int] = None
     revised_prompt: str = ""
     raw: dict[str, Any] = field(default_factory=dict)
+
+
+# 兼容旧版调用方；新代码应使用通用名称。
+SparkImageRequest = ImageGenerationRequest
+SparkImageResult = ImageGenerationResult
 
 
 def _clean_prompt(prompt: str) -> str:
@@ -102,7 +107,7 @@ def _select_adapter(config: dict[str, Any]) -> str:
 
     # 不按域名或模型名推断供应商：大量用户会使用中转站、反代、自托管网关。
     # 协议适配器必须由模型配置中的 image_generation_adapter 显式指定。
-    # extra_body 是用户透传给上游的参数，不再承载 SparkArc 内部协议控制字段。
+    # extra_body 是用户透传给上游的参数，不再承载网关内部协议控制字段。
     # 未配置时使用 OpenAI Images 兼容协议作为低惊讶默认值。
     return DEFAULT_IMAGE_GENERATION_ADAPTER
 

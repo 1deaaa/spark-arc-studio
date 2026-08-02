@@ -127,6 +127,7 @@ def load_metadata(db_name: str):
 
     if db_name == "llm":
         from llm.agen_matchbox.models import Base as LLMBase
+        from core.search_provider_models import SearchProviderUserConfig  # noqa: F401
 
         return LLMBase.metadata
 

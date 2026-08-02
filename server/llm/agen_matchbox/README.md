@@ -1,10 +1,10 @@
-# 火柴Agent网关——为Agent而生的全功能大模型网关
+# Agent Matchbox——面向 Agent 的通用大模型网关
 [简体中文](README.md) | [English](README.en.md)
 
 ![MatchGateway App](./app.png)
 ![MatchGateway App](./app.png)
 
-火柴Agent网关面向 Agent 开发而生，是一个功能强大且极其灵活的大模型路由与配额控制中心。**它轻量、无需部署，深度融入到 agent 开发管理中**。它面向当今最专业、最通用的 Agent 编排框架**LangChain/LangGraph**，但**可以非常轻松的迁移至AutoGen、CrewAI等其他同样强大的Agent框架**，仅需对你的Coding Assistant说一句话即可适配你的框架。
+Agent Matchbox 面向 Agent 开发而生，是一个可独立运行、可嵌入应用的大模型路由与配额控制中心。**它不要求宿主项目提供特定的 `core` 包，也不预设某个 Agent 或业务用途**。宿主可以通过集成回调注入自己的数据库工厂、请求上下文、默认用途和扩展密钥迁移逻辑。
 
 该项目的设计目标是支持从个人开发、调试到多用户生产环境的多种复杂场景，并提供了一个图形化界面来简化核心配置的管理。
 
@@ -59,6 +59,8 @@
 ```
 .
 ├── __init__.py            # 包入口，导出 initialize_matchbox / matchbox / create_matchbox
+├── database.py            # 独立数据库 Engine 工厂
+├── integrations.py        # 宿主集成回调契约
 ├── manager.py             # AIManager 核心类（组合所有 Mixin）
 ├── config.py              # 配置加载与全局常量 (USE_SYS_LLM_CONFIG, LLM_AUTO_KEY 等)
 ├── models.py              # SQLAlchemy 数据库模型
@@ -71,6 +73,7 @@
 ├── redeem_code_services.py # 兑换码管理 Mixin (RedeemCodeServicesMixin)
 ├── tracked_model.py       # LLMClient/LLMUsage/UsageTrackingCallback
 ├── estimate_tokens.py     # Token 用量估算工具
+├── hf_mirror.py           # Hugging Face 镜像发现、区域判断与可达性探测
 ├── utils.py               # 工具函数 (probe_platform_models, parse_extra_body 等)
 ├── matchbox_cfg.yaml       # 系统平台结构配置（仅用于初始化/导出，运行时以数据库为准）
 ├── matchbox_key.yaml       # 系统平台 API Key（应被 git 忽略，禁止提交）
@@ -85,7 +88,6 @@
 │   ├── probe.py           # 探测功能 Mixin
 │   ├── dpi.py             # 高分屏适配与窗口尺寸策略
 │   └── theme.py           # GUI 主题、配色与表格样式
-├── llm_config.db          # (自动生成) 默认 SQLite 数据库文件
 └── README.md              # 本文档
 ```
 
@@ -97,7 +99,7 @@
 
 ## 🛠️ 第一次配置流程 (新手必读)
 
-**注意：** 项目自带的配置文件 (`matchbox_cfg.yaml`) 适用于快速迁移或者分享自己模型配置的。API Key 单独存放在 `matchbox_key.yaml` 中（使用 `base_url` 作为唯一键，比显示名称更稳定），被 `.gitignore` 忽略，禁止提交到版本库。仓库分发的 `matchbox_key.yaml` 中的加密 Key 仅用于占位，通常无法在你的站点解密。
+**注意：** 包内提供的配置文件 (`matchbox_cfg.yaml`) 适用于快速迁移或者分享模型配置。API Key 单独存放在 `matchbox_key.yaml` 中（使用 `base_url` 作为唯一键，比显示名称更稳定），被 `.gitignore` 忽略，禁止提交到版本库。仓库分发的 `matchbox_key.yaml` 中的加密 Key 仅用于占位，通常无法在你的部署环境解密。
 
 首次使用时，你需要运行配置工具，填入你自己的 API Key。
 
@@ -106,7 +108,7 @@
     - **首次部署时若你看到“存在历史密钥无法解密”的提示，不必惊慌。** 这通常意味着 `matchbox_key.yaml` 中携带了仓库作者或其他环境生成的加密 Key，它们在你的机器上本来就不可用。此时你只需要设置自己的 `LLM_KEY`，并按提示选择清理这些不可恢复密钥即可。**清理不会删除平台与模型结构，只会清空这些不可用的托管 Key。**
 
 2. **启动配置工具**：
-    - 在终端进入 `server/llm/agen_matchbox` 目录，运行 `python matchbox_cfg_gui.py`。
+    - 安装下方列出的依赖后，在组件目录运行 `python matchbox_cfg_gui.py`。
     - 你会看到预置的平台（如 DeepSeek, OpenRouter），但它们的 Key 是无法使用的。
 
 3. **替换并激活平台**：
@@ -127,7 +129,7 @@
 
 ## ⚙️ 核心概念与运行模式
 
-理解本项目的运行模式至关重要，这直接影响到功能的表现和二次开发。
+理解网关的运行模式至关重要，这直接影响到功能的表现和二次开发。
 
 ### 标准设计（推荐）
 
@@ -144,12 +146,12 @@
 3. **生命周期约束**：
   - 启动时初始化 + 预热，关闭阶段调用 `reset_matchbo()`，避免导入即初始化的副作用。
 4. **运行目录治理**：
-  - 通过 `AGENT_MATCHBOX_HOME` 统一指定 DB/.env/YAML/state 的运行位置。
+  - 默认从 Matchbox 组件根目录读取 DB/.env/YAML/state。宿主可在初始化前调用 `set_default_mgr_home(path)` 设置自己的默认目录；部署环境仍可通过优先级更高的 `AGENT_MATCHBOX_HOME` 显式覆盖。
 
 ### 推荐链路（开发者实践）
 
 ```python
-from llm.agen_matchbox import initialize_matchbox, warmup_matchbox_runtime, matchbox
+from agen_matchbox import initialize_matchbox, warmup_matchbox_runtime, matchbox
 
 # 1) 轻启动：数据库引擎 + 默认配置同步（毫秒级）
 initialize_matchbox(ensure_defaults=True)
@@ -159,7 +161,7 @@ initialize_matchbox(ensure_defaults=True)
 warmup_matchbox_runtime(blocking=False)
 
 # 3) 在业务请求中按需获取（默认 required=True）
-client = matchbox().get_user_llm(user_id="user_123", usage_key="main", agent_name="agent_director")
+client = matchbox().get_user_llm(user_id="user_123", usage_key="main", agent_name="your_agent")
 
 # 4) 像普通 LLM 一样使用
 result = client.invoke("请给我一个赛博朋克世界观种子")
@@ -262,10 +264,12 @@ for chunk in client.stream("继续扩展成三幕结构"):
 
 ### 1. 安装依赖
 
-项目依赖 `langchain-openai`、`sqlalchemy`、`tiktoken`、`cryptography`、`pyyaml`、`requests`、`python-dotenv` 等库。可以通过 `pip` 安装：
+当前仓库按源码组件提供，不包含 `pyproject.toml`。请把 `agen_matchbox` 目录放入宿主项目的 Python 导入路径，并由宿主依赖文件统一声明版本。直接开发时可显式安装所需依赖：
 
 ```bash
 pip install langchain-core langchain-openai sqlalchemy tiktoken cryptography pyyaml requests python-dotenv
+# 按需：PostgreSQL / GUI / Alembic
+pip install "psycopg[binary]" customtkinter alembic
 ```
 
 ### 2. 通过 GUI 配置平台与模型
@@ -319,7 +323,7 @@ models:
       quality: high
 ```
 
-`image_generation_adapter` 是 SparkArc 内部协议选择的唯一真相源。它由用户明确选择，不根据 `base_url` 域名、模型名或 `extra_body` 猜测，也不会写入或转发到上游请求。`extra_body` 仍专门承载供应商参数；适配层只过滤 SparkArc 自己的内部控制键，其他参数会按对应协议尽力透传。生图模型未显式选择时使用 `openai_images` 默认值，不读取任何旧版嵌套 adapter。
+`image_generation_adapter` 是网关协议选择的唯一真相源。它由用户明确选择，不根据 `base_url` 域名、模型名或 `extra_body` 猜测，也不会写入或转发到上游请求。`extra_body` 仍专门承载供应商参数；适配层只过滤网关自己的内部控制键，其他参数会按对应协议尽力透传。生图模型未显式选择时使用 `openai_images` 默认值，不读取任何旧版嵌套 adapter。
 
 | 值 | 上游协议 | 配置中的 `model_name` | 参考图传递方式 |
 |---|---|---|---|
@@ -330,7 +334,7 @@ models:
 | `gemini_interactions` | Gemini Interactions | Gemini / Nano Banana 模型 | `input` 图片 part |
 | `xai_images` | xAI `/images/generations`、`/images/edits` | Grok Image 模型 | JSON data URL，编辑最多 3 张参考图 |
 
-默认值仍为 `openai_images`，因为它最接近当前图片 API 的公共最小集合。`openai_responses_image` 不是 GPT Image 直连协议：它会让 `model_name` 对应的主线模型调用生图工具，因此还会产生主线模型 token 成本。SparkArc 不会为了传参考图自动调用供应商 Files API；用户项目图片只在本地持久保存，调用时才按所选协议随请求发送。
+默认值仍为 `openai_images`，因为它最接近当前图片 API 的公共最小集合。`openai_responses_image` 不是 GPT Image 直连协议：它会让 `model_name` 对应的主线模型调用生图工具，因此还会产生主线模型 token 成本。网关不会为了传参考图自动调用供应商 Files API；宿主项目图片只在本地持久保存，调用时才按所选协议随请求发送。
 
 #### 2.2. 手动编辑 YAML（仅用于初始化/分发）
 
@@ -369,7 +373,7 @@ models:
 推荐写法是：导入 `initialize_matchbox`、`warmup_matchbox_runtime` 和 `matchbox`，并在应用启动阶段显式执行两阶段初始化（建议放到 lifespan / startup 钩子中）。
 
 ```python
-from llm.agen_matchbox import initialize_matchbox, warmup_matchbox_runtime, matchbox
+from agen_matchbox import initialize_matchbox, warmup_matchbox_runtime, matchbox
 
 # 建议在应用启动时执行（进程级，两阶段）
 # 阶段一：轻启动——数据库引擎、表结构、默认配置同步（不加载 langchain_openai）
@@ -479,7 +483,7 @@ POST   /api/ai/admin/reload-from-yaml       # 从配置文件强制重置数据�
       如果发生了泄露，且主密钥（`LLM_KEY`）和加密后的密钥文件同时暴露，真人或有针对性的 AI 确实能够破解它。但这已经极大地增加了攻击者的成本，能够完美规避绝大多数普通泄露被自动化机器人直接扫出明文的情况。
 
 3. **数据库文件**
-    - 默认会在同目录下生成 `llm_config.db`。这是一个 SQLite 文件，包含了所有用户数据和同步后的系统平台数据。请妥善保管。
+    - 默认会在 Matchbox 组件根目录生成 `llm_config.db`。宿主可在初始化前调用 `set_default_mgr_home(path)` 设置默认目录，或通过优先级更高的 `AGENT_MATCHBOX_HOME` 显式指定运行目录。该 SQLite 文件包含所有用户数据和同步后的系统平台数据，请妥善保管。
     - 如需使用 PostgreSQL，设置 `AGENT_MATCHBOX_DATABASE_URL=postgresql+psycopg://user:password@host:5432/dbname`。该变量属于 Agent Matchbox 组件本身，方便在不同项目中复用。
 
 4. **模型探测失败？**
@@ -503,7 +507,7 @@ POST   /api/ai/admin/reload-from-yaml       # 从配置文件强制重置数据�
 ### 自动记录
 
 ```python
-from llm.agen_matchbox import matchbox
+from agen_matchbox import matchbox
 
 # 获取客户端（默认可直接当作 LLM 用）
 client = matchbox().get_user_llm(user_id="user_123", agent_name="agent_muse")
@@ -581,7 +585,7 @@ usage = client.usage.get_usage_by_range(
 
 ```python
 from datetime import timedelta
-from llm.agen_matchbox import matchbox
+from agen_matchbox import matchbox
 
 mgr = matchbox()
 
@@ -654,7 +658,7 @@ print(f"已清理 {deleted} 条旧日志")
 除用量查询外，管理器还提供了用户配额策略的读写与状态汇总能力：
 
 ```python
-from llm.agen_matchbox import matchbox
+from agen_matchbox import matchbox
 
 # 获取当前用户的配额策略
 policy = matchbox().get_user_quota_policy(user_id="user_123")
@@ -748,7 +752,7 @@ CrewAI 仍然高度兼容 LangChain 对象，但它也提供了原生 `LLM` 类�
 
 如果你想做一个完全不依赖 LangChain 的通用后端，推荐使用 **LiteLLM** 作为中间件：
 
-1. **修改依赖**：在 `server/requirements.txt` 中用 `litellm` 替换 `langchain-openai`。
+1. **修改依赖**：在宿主项目的依赖文件中用 `litellm` 替换 `langchain-openai`。
 2. **重构适配层**：修改 [`tracked_model.py`](tracked_model.py) 中的 `LLMClient/UsageTrackingCallback`，使其改为直接包装 `litellm.completion` 方法（保留 `.usage` 查询能力）。
 3. **核心复用**：保留 [`manager.py`](manager.py) 和 [`usage_services.py`](usage_services.py)，它们负责的数据库和统计逻辑是 100% 通用的。
 

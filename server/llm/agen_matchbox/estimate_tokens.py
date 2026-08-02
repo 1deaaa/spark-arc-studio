@@ -12,7 +12,7 @@ from typing import Callable, Dict, List, Optional, Tuple, Union
 import tiktoken
 import tiktoken.load  # 必须显式导入，才能访问 tiktoken.load 模块
 
-from core.network_probe import get_hf_candidates
+from .hf_mirror import get_hf_candidates
 
 # 注：全局 warnings 过滤和 logging 抑制已统一在 app.py 顶部设置，
 # 确保在所有第三方库导入之前生效。此文件仅保留局部 catch_warnings。
@@ -187,12 +187,12 @@ def _wrap_gemini_local_counter(tok) -> Callable[[str], int]:
 
 
 # -----------------------------------------------------------------------------
-# 下载策略：由 core.network_probe 统一决定先官方还是先镜像
+# 下载策略：由 Matchbox 自有镜像探测模块排序候选地址。
 # -----------------------------------------------------------------------------
 def _build_hf_attempts() -> list[dict[str, str | None]]:
     """构造 tokenizer 下载尝试序列。
 
-    network_probe 已按网络归属地和可达性排序，这里直接复用其候选列表。
+    hf_mirror 已按配置、网络归属地和可达性排序，这里直接复用其候选列表。
     """
     if _LOCAL_ONLY:
         return [{"HF_ENDPOINT": None}]

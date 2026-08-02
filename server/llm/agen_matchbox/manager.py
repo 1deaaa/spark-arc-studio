@@ -27,8 +27,8 @@ from typing import Dict, Any, Optional, List
 from sqlalchemy.orm import sessionmaker, selectinload
 
 from .models import (
+    Base,
     LLMPlatform, LLModels, LLMSysPlatformKey,
-    SearchProviderUserConfig,
     UserModelUsage, AgentModelBinding, ModelUsageStats, UserEmbeddingSelection,
     DEFAULT_MAX_CONTEXT_TOKENS, DEFAULT_MAX_OUTPUT_TOKENS,
     DEFAULT_MODEL_INPUT_MODALITIES, DEFAULT_MODEL_OUTPUT_MODALITIES,
@@ -59,7 +59,8 @@ from .image_adapters import (
 from .paths import get_db_file_path, get_state_file_path, get_config_file_path, get_key_file_path, get_mgr_home
 from .security import SecurityManager
 from .utils import normalize_recharge_url
-from core.db_engine import create_configured_engine, normalize_database_url
+from .database import create_configured_engine, normalize_database_url
+from .integrations import MatchboxIntegrations
 
 from .admin import AdminMixin
 from .user_services import UserServicesMixin
@@ -95,14 +96,27 @@ class MasterKeyMigrationRequiredError(RuntimeError):
 class AIManagerBase:
     """AIManager 基础类：数据库连接和初始化"""
     
-    def __init__(self, db_name: str = "llm_config.db"):
+    def __init__(
+        self,
+        db_name: str = "llm_config.db",
+        *,
+        engine=None,
+        database_url: Optional[str] = None,
+        engine_factory=None,
+        integrations: Optional[MatchboxIntegrations] = None,
+    ):
         db_path = get_db_file_path(db_name)
         db_path.parent.mkdir(parents=True, exist_ok=True)
-        db_url = normalize_database_url(
-            env_key="AGENT_MATCHBOX_DATABASE_URL",
-            default_sqlite_path=db_path,
-        )
-        self.engine = create_configured_engine(db_url, future=True)
+        self._integrations = integrations or MatchboxIntegrations()
+        if engine is not None:
+            self.engine = engine
+        else:
+            db_url = database_url or normalize_database_url(
+                env_key="AGENT_MATCHBOX_DATABASE_URL",
+                default_sqlite_path=db_path,
+            )
+            factory = engine_factory or create_configured_engine
+            self.engine = factory(db_url, future=True)
         self.Session = sessionmaker(bind=self.engine, expire_on_commit=False)
         self._sys_platforms_cache = None 
         self._cache_lock = threading.Lock()
@@ -115,11 +129,19 @@ class AIManagerBase:
         self._default_model_id = None
         self._builtin_usage_map = {slot["key"]: slot for slot in BUILTIN_USAGE_SLOTS}
         self._default_usage_key = DEFAULT_USAGE_KEY
+        self._default_usage_key_resolver = self._integrations.default_usage_key_resolver
+        self._caller_context_provider = self._integrations.caller_context_provider
+        self._usage_context_provider = self._integrations.usage_context_provider
+        self._secret_rotation_handler = self._integrations.secret_rotation_handler
         
         state_file_path = get_state_file_path()
         state_file_path.parent.mkdir(parents=True, exist_ok=True)
         self.state_file = str(state_file_path)
         self._load_state()
+
+    def ensure_schema(self) -> None:
+        """在没有独立迁移系统的环境中创建 Matchbox 自有表。"""
+        Base.metadata.create_all(self.engine)
 
     def _load_state(self):
         """加载运行时状态"""
@@ -746,20 +768,18 @@ class AIManagerBase:
                 if plan["action"] == "write":
                     rewrite_jobs.append(("db_sys_key", cred, plan))
 
-            for search_config in session.query(SearchProviderUserConfig).all():
-                plan = self._plan_secret_rewrite(
-                    raw_value=search_config.api_key,
+            if self._secret_rotation_handler is not None:
+                self._secret_rotation_handler(
+                    session=session,
+                    plan_secret_rewrite=self._plan_secret_rewrite,
                     new_key=new_key,
                     old_key=old_key,
                     allow_clear_unrecoverable=allow_clear_unrecoverable,
+                    add_unresolved=unresolved_labels.append,
+                    add_rewrite=lambda apply_change, plan: rewrite_jobs.append(
+                        ("external", apply_change, plan)
+                    ),
                 )
-                if plan["action"] == "unresolved":
-                    unresolved_labels.append(
-                        f"DB搜索用户Key:{search_config.user_id}:{search_config.provider}"
-                    )
-                    continue
-                if plan["action"] == "write":
-                    rewrite_jobs.append(("db_search_user_key", search_config, plan))
 
             for base_url, key_entry in key_yaml_data.items():
                 if isinstance(key_entry, dict):
@@ -796,8 +816,8 @@ class AIManagerBase:
                     target.api_key = plan["value"]
                 elif job_type == "db_sys_key":
                     target.api_key = plan["value"]
-                elif job_type == "db_search_user_key":
-                    target.api_key = plan["value"]
+                elif job_type == "external":
+                    target()
                 elif job_type == "key_yaml":
                     base_url, key_data = target
                     key_entry = key_data.get(base_url)
@@ -1166,15 +1186,19 @@ class AIManagerBase:
             .first()
         )
 
-    @staticmethod
-    def _get_request_caller_context() -> tuple[Optional[str], bool]:
-        """读取 Web 请求注入的调用者身份；Matchbox 本身不反向依赖用户表。"""
+    def _get_request_caller_context(self) -> tuple[Optional[str], bool]:
+        """读取宿主注入的调用者身份；未注入时按匿名调用处理。"""
+        provider = self._caller_context_provider
+        if provider is None:
+            return None, False
         try:
-            from core.request_context import current_user_id, current_user_is_admin
+            caller_user_id, caller_is_admin = provider()
         except Exception:
             return None, False
-        caller_user_id = current_user_id.get()
-        return (str(caller_user_id) if caller_user_id is not None else None), bool(current_user_is_admin.get())
+        return (
+            str(caller_user_id) if caller_user_id is not None else None,
+            bool(caller_is_admin),
+        )
 
     def _is_system_hosted_key_owner_call(self, user_id: str) -> bool:
         """判断本次调用是否是站长本人使用自己的系统托管 Key。"""
@@ -1524,8 +1548,8 @@ class AIManager(
     集成 AdminMixin, UserServicesMixin, UsageServicesMixin, LLMBuilderMixin
     """
     
-    def __init__(self, db_name: str = "llm_config.db"):
-        super().__init__(db_name)
+    def __init__(self, db_name: str = "llm_config.db", **kwargs):
+        super().__init__(db_name, **kwargs)
         # ⚠️ 不要在这里调用 initialize_defaults()
         # 这会导致 Import 时建立 DB 连接，从而在启动迁移时造成 SQLite 死锁。
         # 请务必在 app.py 的 lifespan 中显式调用 initialize_matchbox(ensure_defaults=True)

@@ -27,7 +27,6 @@ from __future__ import annotations
 from importlib import import_module
 from concurrent.futures import Future, ThreadPoolExecutor
 import os
-import sys
 import threading
 from typing import Any, Optional, Tuple
 
@@ -60,6 +59,8 @@ _LAZY_EXPORTS: dict[str, Tuple[str, str]] = {
     "DEFAULT_PLATFORM_CONFIGS": (".config", "DEFAULT_PLATFORM_CONFIGS"),
     "LLM_AUTO_KEY": (".config", "LLM_AUTO_KEY"),
     "USE_SYS_LLM_CONFIG": (".config", "USE_SYS_LLM_CONFIG"),
+    "MatchboxIntegrations": (".integrations", "MatchboxIntegrations"),
+    "set_default_mgr_home": (".paths", "set_default_mgr_home"),
 }
 
 
@@ -69,24 +70,23 @@ def _load_symbol(module_name: str, symbol: str) -> Any:
 
 
 def _should_enable_manager() -> bool:
-    if os.environ.get("SPARKARC_SKIP_LLM_MANAGER") == "1":
+    if os.environ.get("AGENT_MATCHBOX_DISABLED") == "1":
         return False
-    for arg in sys.argv:
-        if "alembic" in arg or "gen_migration.py" in arg:
-            return False
     return True
 
 
-def create_matchbox(db_name: str = "llm_config.db"):
+def create_matchbox(db_name: str = "llm_config.db", **kwargs):
     """创建独立 AIManager 实例。"""
     ai_manager_cls = _load_symbol(".manager", "AIManager")
-    return ai_manager_cls(db_name=db_name)
+    return ai_manager_cls(db_name=db_name, **kwargs)
 
 
 def initialize_matchbox(
     db_name: str = "llm_config.db",
     ensure_defaults: bool = True,
     force: bool = False,
+    ensure_schema: bool = True,
+    **kwargs,
 ) -> Optional[Any]:
     """显式初始化全局 AIManager。
 
@@ -101,7 +101,9 @@ def initialize_matchbox(
         if _manager_instance is not None and not force:
             return _manager_instance
 
-        manager = create_matchbox(db_name=db_name)
+        manager = create_matchbox(db_name=db_name, **kwargs)
+        if ensure_schema:
+            manager.ensure_schema()
         if ensure_defaults:
             manager.initialize_defaults()
         _manager_instance = manager
@@ -170,7 +172,7 @@ def matchbox(*, required: bool = True) -> Optional[Any]:
     if not _should_enable_manager():
         if required:
             raise RuntimeError(
-                "LLM Manager 当前被禁用（迁移/脚本模式或 SPARKARC_SKIP_LLM_MANAGER=1）。"
+                "Matchbox 管理器当前被禁用（AGENT_MATCHBOX_DISABLED=1）。"
             )
         return None
 
@@ -224,5 +226,7 @@ __all__ = [
     'DEFAULT_PLATFORM_CONFIGS',
     'LLM_AUTO_KEY',
     'USE_SYS_LLM_CONFIG',
+    'MatchboxIntegrations',
+    'set_default_mgr_home',
 ]
 

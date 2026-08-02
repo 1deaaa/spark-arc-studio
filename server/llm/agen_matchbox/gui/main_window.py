@@ -5,6 +5,7 @@ import sys
 import tkinter as tk
 from pathlib import Path
 from tkinter import messagebox, ttk
+from typing import Callable, Optional
 import customtkinter as ctk
 
 if __package__ in (None, "", "gui"):
@@ -35,8 +36,14 @@ class LLMConfigGUI(
 ):
     """LLM 配置管理器主窗口。"""
 
-    def __init__(self, root: ctk.CTk):
+    def __init__(
+        self,
+        root: ctk.CTk,
+        *,
+        schema_initializer: Optional[Callable[[AIManager], None]] = None,
+    ):
         self.root = root
+        self._schema_initializer = schema_initializer
         self.ui_scale = configure_tk_scaling(self.root)
 
         self.current_config: dict = {}
@@ -93,9 +100,10 @@ class LLMConfigGUI(
                 self.root.after(0, self.root.destroy)
                 return
 
-            from core.auto_migrate import BASE_DIR as migration_base_dir, run_db_upgrade
-
-            run_db_upgrade("llm", migration_base_dir)
+            if self._schema_initializer is None:
+                self.ai_manager.ensure_schema()
+            else:
+                self._schema_initializer(self.ai_manager)
             self.ai_manager.initialize_defaults()
             self.load_config_from_db()
         except Exception as e:
@@ -895,11 +903,11 @@ class LLMConfigGUI(
             del self.probe_models_cache[k]
 
 
-def main():
+def main(*, schema_initializer: Optional[Callable[[AIManager], None]] = None):
     """主函数：启动 GUI。"""
     enable_high_dpi_awareness()
     root = ctk.CTk()
-    LLMConfigGUI(root)
+    LLMConfigGUI(root, schema_initializer=schema_initializer)
     root.mainloop()
 
 
