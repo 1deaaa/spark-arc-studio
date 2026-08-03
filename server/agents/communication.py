@@ -872,6 +872,67 @@ class SparkBaseAgent:
 
         return [deduped[key] for key in ordered_keys]
 
+    def _prepare_tool_specs_for_execution(self, tool_specs: List[Dict[str, Any]]) -> List[Dict[str, Any]]:
+        """为工具执行和下一轮消息历史建立同一份规范调用。"""
+        prepared: List[Dict[str, Any]] = []
+        used_call_ids: set[str] = set()
+
+        for index, spec in enumerate(tool_specs):
+            item = dict(spec)
+            tool_name = normalize_tool_name(str(
+                item.get("name") or self._extract_tool_name(item.get("raw")) or "unknown_tool"
+            ))
+            tool_args = item.get("args")
+            if not isinstance(tool_args, dict):
+                tool_args = self._extract_tool_args(item.get("raw"))
+            if not isinstance(tool_args, dict):
+                tool_args = {}
+
+            call_id = self._extract_tool_call_id(item.get("raw")).strip()
+            if not call_id or call_id in used_call_ids:
+                call_id = f"call_{uuid.uuid4().hex}"
+            used_call_ids.add(call_id)
+
+            item.update({
+                "raw": {
+                    "id": call_id,
+                    "name": tool_name,
+                    "args": tool_args,
+                    "type": "tool_call",
+                },
+                "name": tool_name,
+                "args": tool_args,
+                "call_id": call_id,
+                "index": item.get("index", index),
+            })
+            prepared.append(item)
+
+        return prepared
+
+    @staticmethod
+    def _build_tool_history_message(message: Any, tool_specs: List[Dict[str, Any]]) -> Any:
+        """重建协议合法的 assistant 工具消息，只声明实际进入执行链的调用。"""
+        from langchain_core.messages import AIMessage
+
+        additional_kwargs = dict(getattr(message, "additional_kwargs", None) or {})
+        additional_kwargs.pop("tool_calls", None)
+        additional_kwargs.pop("function_call", None)
+
+        message_kwargs: Dict[str, Any] = {
+            "content": getattr(message, "content", "") or "",
+            "additional_kwargs": additional_kwargs,
+            "tool_calls": [dict(spec["raw"]) for spec in tool_specs],
+        }
+        response_metadata = getattr(message, "response_metadata", None)
+        if isinstance(response_metadata, dict):
+            message_kwargs["response_metadata"] = dict(response_metadata)
+        for field_name in ("name", "id", "usage_metadata"):
+            field_value = getattr(message, field_name, None)
+            if field_value is not None:
+                message_kwargs[field_name] = field_value
+
+        return AIMessage(**message_kwargs)
+
     def _merge_tool_args_into_raw(
         self,
         raw: Any,
@@ -1355,7 +1416,9 @@ class SparkBaseAgent:
                     (response.content[:200] if isinstance(response.content, str) else str(response.content)[:200]),
                 )
 
-                tool_specs = self._extract_tool_call_specs_from_message(response)
+                tool_specs = self._prepare_tool_specs_for_execution(
+                    self._extract_tool_call_specs_from_message(response)
+                )
                 self._debug_tool_event(
                     "chat_invoke_tool_specs",
                     count=len(tool_specs),
@@ -1374,7 +1437,7 @@ class SparkBaseAgent:
                 # 执行工具并收集结果，准备下一轮
                 tool_results = []
                 for tool_spec in tool_specs:
-                    tool_call_id = self._extract_tool_call_id(tool_spec.get("raw")) or f"call_{len(tool_results)}"
+                    tool_call_id = tool_spec["call_id"]
                     tool_name = str(tool_spec.get("name") or self._extract_tool_name(tool_spec.get("raw")))
                     result = self._execute_tool_calls([tool_spec])
                     tool_results.append((tool_call_id, tool_name, result))
@@ -1383,7 +1446,7 @@ class SparkBaseAgent:
                 # 清洗 think 标签，避免下一轮 LLM 把推理内容当正文回显
                 if isinstance(response.content, str) and response.content:
                     response.content = extract_visible_text_from_plain_text(response.content)
-                messages.append(response)
+                messages.append(self._build_tool_history_message(response, tool_specs))
                 fresh_call_ids = {cid for cid, _, _ in tool_results}
                 for call_id, t_name, t_result in tool_results:
                     messages.append(_ToolMessage(content=t_result or "", tool_call_id=call_id, name=t_name))
@@ -1564,6 +1627,7 @@ class SparkBaseAgent:
                 if aggregated_chunk is not None:
                     tool_specs = self._extract_tool_call_specs_from_message(aggregated_chunk)
                 tool_specs = self._hydrate_tool_specs_from_chunk_buffers(tool_specs, tool_chunk_buffers)
+                tool_specs = self._prepare_tool_specs_for_execution(tool_specs)
 
                 self._debug_tool_event(
                     "chat_stream_tool_specs",
@@ -1589,7 +1653,7 @@ class SparkBaseAgent:
 
                         tool_name = normalize_tool_name(str(tool_spec.get("name") or self._extract_tool_name(tool_spec.get("raw"))))
                         spec_index = tool_spec.get("index")
-                        raw_call_id = self._extract_tool_call_id(tool_spec.get("raw"))
+                        raw_call_id = tool_spec["call_id"]
                         indexed_tool_call_key = self._tool_call_event_key(tool_name, tool_spec.get("raw"), spec_index, len(tool_results)) if spec_index is not None else ""
                         tool_call_key = (
                             (tool_intent_keys.get(raw_call_id) if raw_call_id else "")
@@ -1681,7 +1745,7 @@ class SparkBaseAgent:
                             except Exception:
                                 pass
 
-                        tool_call_id = self._extract_tool_call_id(tool_spec.get("raw")) or f"call_{len(tool_results)}"
+                        tool_call_id = tool_spec["call_id"]
                         tool_results.append((tool_call_id, tool_name, tool_result))
                 finally:
                     set_tool_event_sink(None)
@@ -1694,7 +1758,7 @@ class SparkBaseAgent:
                 if aggregated_chunk is not None:
                     if isinstance(aggregated_chunk.content, str) and aggregated_chunk.content:
                         aggregated_chunk.content = extract_visible_text_from_plain_text(aggregated_chunk.content)
-                    messages.append(aggregated_chunk)
+                    messages.append(self._build_tool_history_message(aggregated_chunk, tool_specs))
                 fresh_call_ids = {cid for cid, _, _ in tool_results}
                 for call_id, t_name, t_result in tool_results:
                     messages.append(_ToolMessage(content=t_result or "", tool_call_id=call_id, name=t_name))

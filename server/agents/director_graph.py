@@ -24,7 +24,9 @@ from agents.communication import (
     ModelStreamRetryExhaustedError,
     ModelTurnRetryNotice,
     build_tool_stream_event,
+    get_tool_result_failure_message,
     get_global_context,
+    is_tool_result_failure,
     is_stop_event_set,
     stream_model_turn_with_retry,
     normalize_handoff_payload,
@@ -574,6 +576,7 @@ def director_node(state: DirectorState) -> Dict[str, Any]:
         if isinstance(aggregated_chunk.content, str):
             aggregated_chunk.content = extract_visible_text_from_plain_text(aggregated_chunk.content)
     tool_specs = director._hydrate_tool_specs_from_chunk_buffers(tool_specs, tool_chunk_buffers)
+    tool_specs = director._prepare_tool_specs_for_execution(tool_specs)
     
     updates: Dict[str, Any] = {
         "messages": [aggregated_chunk] if aggregated_chunk else [],
@@ -599,7 +602,7 @@ def director_node(state: DirectorState) -> Dict[str, Any]:
 
                 tool_name = normalize_tool_name(spec.get("name", ""))
                 spec_index = spec.get("index")
-                raw_call_id = director._extract_tool_call_id(spec.get("raw"))
+                raw_call_id = spec["call_id"]
                 indexed_tool_call_key = director._tool_call_event_key(tool_name, spec.get("raw"), spec_index, len(tool_results)) if spec_index is not None else ""
                 call_id = (
                     raw_call_id
@@ -663,11 +666,9 @@ def director_node(state: DirectorState) -> Dict[str, Any]:
                     pending_delegate = normalize_handoff_payload(delegate_data, sender_id="agent_director")
                     pending_delegate["call_id"] = call_id
                     updates["messages"] = [
-                        _retain_only_pending_delegate_tool_call(
+                        director._build_tool_history_message(
                             aggregated_chunk,
-                            selected_spec=spec,
-                            call_id=call_id,
-                            tool_name=tool_name,
+                            [spec],
                         )
                     ] if aggregated_chunk else []
 
@@ -704,14 +705,14 @@ def director_node(state: DirectorState) -> Dict[str, Any]:
                     break  # 停止后续工具调用，交给子图处理
                 
                 _drain_tool_event_sink_to_writer(writer, event_sink, "agent_director", exclude_tools={tool_name})
-                _is_tool_failure = isinstance(tool_result, str) and "执行失败" in tool_result
+                _is_tool_failure = is_tool_result_failure(tool_name, tool_result)
                 if _is_tool_failure:
                     evt_done = build_tool_stream_event(
                         "tool_exec_failed",
                         tool_name,
                         source_agent="agent_director",
                         tool_call_key=tool_call_key,
-                        message="Model used an incorrect call format, attempting correction",
+                        message=get_tool_result_failure_message(tool_name, tool_result),
                     )
                 else:
                     _extra_done_director: dict = {}
@@ -758,11 +759,21 @@ def director_node(state: DirectorState) -> Dict[str, Any]:
             set_tool_event_sink(None)
             
         if not pending_delegate:
+            completed_call_ids = {cid for cid, _, _ in tool_results}
+            completed_specs = [
+                spec for spec in tool_specs
+                if spec.get("call_id") in completed_call_ids
+            ]
             tool_messages = [
                 ToolMessage(content=str(r), tool_call_id=cid, name=n)
                 for cid, n, r in tool_results
             ]
-            updates["messages"] = (updates["messages"] or []) + tool_messages
+            history_messages = []
+            if aggregated_chunk is not None and (completed_specs or getattr(aggregated_chunk, "content", None)):
+                history_messages.append(
+                    director._build_tool_history_message(aggregated_chunk, completed_specs)
+                )
+            updates["messages"] = history_messages + tool_messages
 
     updates["pending_delegate"] = pending_delegate
     return updates
