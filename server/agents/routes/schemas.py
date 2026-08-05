@@ -228,6 +228,7 @@ class BeatSheetSaveRequest(BaseModel):
 class CharacterSettingsCreate(BaseModel):
     projectName: Optional[str] = None
     name: str = "新角色"
+    content: Optional[str] = None
 
 
 class CharacterSettingsSave(BaseModel):

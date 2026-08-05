@@ -21,7 +21,7 @@
     </header>
     
     <!-- 四栏布局容器 -->
-    <main class="world-body">
+    <main class="world-body" :class="{ 'toolbox-open': toolboxOpen }">
       <!-- 左栏：灵感引擎 -->
       <aside class="world-panel world-panel-left">
         <div class="world-panel-content inspire-layout">
@@ -152,24 +152,45 @@
         <div class="world-panel-content">
           <div class="lorebook-section">
             <div class="world-panel-title-row">
-              <h3 class="world-panel-title">{{ t('views.world.desktop.worldAndCharacter') }}</h3>
+              <h3 class="world-panel-title">{{ t('views.world.desktop.worldview') }}</h3>
               <div class="title-row-actions">
                 <AiSettingsPanel :visible="true" :compact="true" agent-name="agent_lorebook" />
               </div>
             </div>
-            <LorebookEditor :visible="true" :embedded="true" />
+            <LorebookEditor :visible="true" :embedded="true" mode="worldview" />
           </div>
         </div>
       </section>
       
       <!-- 右栏：工具箱 -->
       <aside class="world-panel world-panel-right">
-        <div class="world-panel-content">
-          <h3 class="world-panel-title">{{ t('views.world.desktop.toolbox') }}</h3>
-          <ProjectStyleToolbox :embedded="true" />
-          <CharacterGeneratorPanel :visible="true" :embedded="true" />
-          <WorldGeneratorPanel :embedded="true" />
-        </div>
+        <n-tooltip placement="left" trigger="hover">
+          <template #trigger>
+            <button
+              type="button"
+              class="toolbox-rail"
+              :class="{ active: toolboxOpen }"
+              :aria-label="toolboxOpen ? t('views.world.desktop.collapseToolbox') : t('views.world.desktop.expandToolbox')"
+              @click="toolboxOpen = !toolboxOpen"
+            >
+              <n-icon :component="toolboxOpen ? PanelRightClose : PanelLeftOpen" />
+              <span>{{ t('views.world.desktop.toolbox') }}</span>
+            </button>
+          </template>
+          {{ toolboxOpen ? t('views.world.desktop.collapseToolbox') : t('views.world.desktop.expandToolbox') }}
+        </n-tooltip>
+        <Transition name="toolbox-content">
+          <div v-show="toolboxOpen" class="world-panel-content toolbox-content">
+            <div class="toolbox-title-row">
+              <h3 class="world-panel-title">{{ t('views.world.desktop.toolbox') }}</h3>
+              <n-button quaternary circle size="tiny" :aria-label="t('views.world.desktop.collapseToolbox')" @click="toolboxOpen = false">
+                <template #icon><n-icon :component="X" /></template>
+              </n-button>
+            </div>
+            <ProjectStyleToolbox :embedded="true" />
+            <WorldGeneratorPanel :embedded="true" />
+          </div>
+        </Transition>
       </aside>
     </main>
   </div>
@@ -177,11 +198,10 @@
 
 <script setup lang="ts">
 import { ref } from 'vue';
-import { NInput, NButton, NIcon, NEmpty, NBadge } from 'naive-ui';
+import { NInput, NButton, NIcon, NEmpty, NBadge, NTooltip } from 'naive-ui';
 import { useI18n } from 'vue-i18n';
-import { ArrowRight, ChevronDown, ChevronUp, Clock, Pin, RefreshCw, Sparkles, X, Zap } from '@lucide/vue';
+import { ArrowRight, ChevronDown, ChevronUp, Clock, PanelLeftOpen, PanelRightClose, Pin, RefreshCw, Sparkles, X, Zap } from '@lucide/vue';
 import LorebookEditor from '../../components/lorebook/LorebookEditor.vue';
-import CharacterGeneratorPanel from '../../components/lorebook/CharacterGeneratorPanel.vue';
 import AiSettingsPanel from '../../components/lorebook/AiSettingsPanel.vue';
 import WorldGeneratorPanel from '../../components/lorebook/WorldGeneratorPanel.vue';
 import ProjectStyleToolbox from '../../components/lorebook/ProjectStyleToolbox.vue';
@@ -194,6 +214,7 @@ import { useProjectStore } from '../../components/stores/projectStore';
 
 const { t } = useI18n();
 const projectStore = useProjectStore();
+const toolboxOpen = ref(false);
 
 function handleGenerateFromMuseClick() {
   void handleGenerateFromMuse();
@@ -239,10 +260,15 @@ const {
 .world-body {
   flex: 1;
   display: grid;
-  grid-template-columns: minmax(220px, 1fr) minmax(220px, 1fr) minmax(360px, 2fr) minmax(220px, 1fr);
+  grid-template-columns: minmax(190px, 0.78fr) minmax(200px, 0.86fr) minmax(440px, 2.36fr) 42px;
   min-height: 0;
   overflow: hidden;
   width: 100%;
+  transition: grid-template-columns 240ms cubic-bezier(0.4, 0, 0.2, 1);
+}
+
+.world-body.toolbox-open {
+  grid-template-columns: minmax(190px, 0.72fr) minmax(200px, 0.8fr) minmax(400px, 2.2fr) minmax(260px, 0.95fr);
 }
 
 .world-panel {
@@ -267,14 +293,68 @@ const {
 }
 
 .world-panel-right {
+  flex-direction: row;
   background: var(--spark-panel-bg);
   border-left: 1px solid var(--spark-border);
+  overflow: hidden;
 }
 
 .world-panel-right .world-panel-content {
   display: flex;
   flex-direction: column;
   gap: 10px;
+}
+
+.toolbox-rail {
+  width: 41px;
+  height: 100%;
+  flex: 0 0 41px;
+  display: flex;
+  align-items: center;
+  justify-content: flex-start;
+  flex-direction: column;
+  gap: 10px;
+  padding: 12px 0;
+  border: 0;
+  color: var(--spark-text-muted);
+  background: transparent;
+  cursor: pointer;
+  transition: color 160ms ease, background 160ms ease;
+}
+
+.toolbox-rail:hover,
+.toolbox-rail.active {
+  color: var(--spark-primary);
+  background: var(--spark-primary-container);
+}
+
+.toolbox-rail span {
+  writing-mode: vertical-rl;
+  font-size: var(--spark-fs-xs);
+  letter-spacing: 0;
+}
+
+.toolbox-content {
+  flex: 1;
+  min-width: 218px;
+}
+
+.toolbox-title-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+}
+
+.toolbox-content-enter-active,
+.toolbox-content-leave-active {
+  transition: opacity 180ms ease, transform 220ms ease;
+}
+
+.toolbox-content-enter-from,
+.toolbox-content-leave-to {
+  opacity: 0;
+  transform: translateX(18px);
 }
 
 .world-panel-content {
@@ -556,6 +636,11 @@ const {
   flex: 1;
   min-height: 0;
   height: 100%;
+}
+
+.lorebook-section :deep(.settings-editor-container.is-embedded) {
+  height: 100%;
+  overflow: hidden;
 }
 
 .unread-badge {

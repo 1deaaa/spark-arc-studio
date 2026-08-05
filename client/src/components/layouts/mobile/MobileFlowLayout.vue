@@ -80,35 +80,45 @@
         :subtitle="t('mobileFlow.cards.worldSubtitle')"
         :is-active="currentStep === 1"
       >
-        <LorebookMobile />
+        <LorebookMobile :world-only="true" />
+      </FlowCard>
+
+      <!-- Step 3: 角色设定 -->
+      <FlowCard
+        :step="3"
+        :title="t('mobileFlow.cards.charactersTitle')"
+        :subtitle="t('mobileFlow.cards.charactersSubtitle')"
+        :is-active="currentStep === 2"
+      >
+        <CharactersMobile />
       </FlowCard>
       
       <!-- Step 3: 故事梗概 -->
       <FlowCard 
-        :step="3" 
+        :step="4"
         :title="t('mobileFlow.cards.synopsisTitle')" 
         :subtitle="t('mobileFlow.cards.synopsisSubtitle')"
-        :is-active="currentStep === 2"
+        :is-active="currentStep === 3"
       >
         <SynopsisMobile />
       </FlowCard>
       
       <!-- Step 4: 大纲编排 -->
       <FlowCard 
-        :step="4" 
+        :step="5"
         :title="t('mobileFlow.cards.structureTitle')" 
         :subtitle="t('mobileFlow.cards.structureSubtitle')"
-        :is-active="currentStep === 3"
+        :is-active="currentStep === 4"
       >
         <StructureMobile />
       </FlowCard>
       
       <!-- Step 5: 剧本创作 -->
       <FlowCard 
-        :step="5" 
+        :step="6"
         :title="t('mobileFlow.cards.productionTitle')" 
         :subtitle="t('mobileFlow.cards.productionSubtitle')"
-        :is-active="currentStep === 4"
+        :is-active="currentStep === 5"
         :show-next-button="false"
       >
         <ProductionMobile />
@@ -116,10 +126,10 @@
 
       <!-- Step 6: 故事蓝图 -->
       <FlowCard 
-        :step="6" 
+        :step="7"
         :title="t('mobileFlow.cards.blueprintTitle')" 
         :subtitle="t('mobileFlow.cards.blueprintSubtitleNew')"
-        :is-active="currentStep === 5"
+        :is-active="currentStep === 6"
         :show-next-button="false"
       >
         <BlueprintIndex />
@@ -195,7 +205,8 @@ import GlobalChatFloat from '../../chat/GlobalChatFloat.vue';
 
 // 核心工作流视图
 import WorldMobile from '../../../views/World/WorldIndex.vue';
-import LorebookMobile from '../../../views/Lorebook/LorebookIndex.vue';
+import LorebookMobile from '../../../views/Lorebook/LorebookMobile.vue';
+import CharactersMobile from '../../../views/Characters/CharactersMobile.vue';
 import SynopsisMobile from '../../../views/Synopsis/SynopsisIndex.vue';
 import StructureMobile from '../../../views/Structure/StructureIndex.vue';
 import BlueprintIndex from '../../../views/Blueprint/BlueprintIndex.vue';
@@ -246,6 +257,7 @@ provide('projectId', computed(() => projectStore.currentProject));
 const flowSteps = computed(() => [
   { id: 'muse', label: t('mobileFlow.steps.muse') },
   { id: 'lorebook', label: t('mobileFlow.steps.world') },
+  { id: 'characters', label: t('mobileFlow.steps.characters') },
   { id: 'synopsis', label: t('mobileFlow.steps.synopsis') },
   { id: 'structure', label: t('mobileFlow.steps.structure') },
   { id: 'production', label: t('mobileFlow.steps.production') },
@@ -257,10 +269,10 @@ const currentStepLabel = computed(() => {
 });
 
 const currentTutorialSceneId = computed(() => (
-  mobilePageSceneIds[currentStep.value] || mobilePageSceneIds[0]
+  ['page-mobile-muse', 'page-mobile-world', 'page-mobile-world', 'page-mobile-synopsis', 'page-mobile-structure', 'page-mobile-production', 'page-mobile-blueprint'][currentStep.value] || mobilePageSceneIds[0]
 ));
 
-const stepViewMap: AppViewKey[] = ['world', 'lorebook', 'synopsis', 'structure', 'production', 'blueprint'];
+const stepViewMap: AppViewKey[] = ['world', 'lorebook', 'characters', 'synopsis', 'structure', 'production', 'blueprint'];
 watch(currentStep, (idx) => {
   const view = stepViewMap[idx] || 'world';
   if (viewStore.currentView !== view) {

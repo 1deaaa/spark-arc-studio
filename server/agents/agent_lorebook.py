@@ -112,11 +112,12 @@ class WorldviewAgent(SparkBaseAgent, SparkAgentExecutor):
             )
             if not isinstance(content, str) or not content.strip():
                 return None
+            append_value = kwargs.get("append")
             return self._write_characters_overwrite(
                 user_id,
                 project_name,
                 content,
-                append=bool(kwargs.get("append")),
+                append=True if append_value is None else bool(append_value),
             )
 
         return None
@@ -320,7 +321,7 @@ class WorldviewAgent(SparkBaseAgent, SparkAgentExecutor):
         project_name: str,
         overwrite_content: str,
         *,
-        append: bool = False,
+        append: bool = True,
     ) -> str:
         parsed_characters = self._parse_characters_overwrite_text(overwrite_content)
         if not parsed_characters:

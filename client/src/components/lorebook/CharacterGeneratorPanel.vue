@@ -1,7 +1,7 @@
 <template>
   <div class="right-panel-section" :class="{ 'is-embedded': embedded }" v-show="visible">
     <n-card 
-      title="修改角色设定" 
+      :title="t('views.characters.aiAdjustTitle')"
       :segmented="{ content: true }" 
       :bordered="false"
       size="small"
@@ -17,7 +17,7 @@
           <template #icon>
             <n-icon :component="Rocket" />
           </template>
-          调整
+          {{ t('views.characters.aiAdjustAction') }}
         </n-button>
       </template>
 
@@ -25,7 +25,7 @@
           <StudioSeamlessTextarea
             v-model:value="suggestion"
             :autosize="{ minRows: 12, maxRows: 24 }"
-            placeholder="在这里输入你的修改意见：角色名字应该更古风，角色A的设定应该更温柔，角色B应更克制并避免极端设定..."
+            :placeholder="t('views.characters.aiAdjustPlaceholder')"
             :show-count="true"
             :maxlength="800"
           />
@@ -37,6 +37,7 @@
 
 <script setup lang="ts">
 import { ref, watch } from 'vue';
+import { useI18n } from 'vue-i18n';
 import { NCard, NForm, NButton, NIcon } from 'naive-ui';
 import { Rocket } from '@lucide/vue';
 import StudioSeamlessTextarea from '@/components/editors/StudioSeamlessTextarea.vue';
@@ -62,6 +63,7 @@ defineProps({
   embedded: { type: Boolean, default: false }
 });
 const projectStore = useProjectStore();
+const { t } = useI18n();
 
 const suggestion = ref('');
 const generating = ref(false);
@@ -109,7 +111,7 @@ async function buildActiveContext(projectName: string): Promise<string> {
     charactersText = (characters || [])
       .filter(ch => ![-1, -2].includes(Number(ch.id)))
       .map(ch => {
-        const name = (ch.name || `角色 ${ch.id}`).trim();
+        const name = (ch.name || t('views.characters.characterFallback', { id: ch.id })).trim();
         const content = (ch.content || '').trim();
         return `- ${name}:\n${content}`;
       })
@@ -125,13 +127,13 @@ async function buildActiveContext(projectName: string): Promise<string> {
 async function handleAdjust() {
   const projectName = projectStore.currentProject;
   if (!projectName) {
-    bus.emit('toast', { type: 'error', message: '请选择项目' });
+    bus.emit('toast', { type: 'error', message: t('views.characters.selectProject') });
     return;
   }
 
   const suggestionText = (suggestion.value || '').trim();
   if (!suggestionText) {
-    bus.emit('toast', { type: 'warning', message: '请先输入修改意见' });
+    bus.emit('toast', { type: 'warning', message: t('views.characters.enterAiRequest') });
     return;
   }
 
@@ -141,18 +143,20 @@ async function handleAdjust() {
   const thinkParser = createThinkStreamParser();
   const task = createStreamingTask('world', {
     target: 'characters',
-    text: '正在分析角色修改要求...',
+    text: t('views.characters.aiAnalyzing'),
     canCancel: true,
     autoStart: false,
     onCancel: () => {
       generating.value = false;
-      bus.emit('toast', { type: 'info', message: '已取消角色调整' });
+      bus.emit('toast', { type: 'info', message: t('views.characters.aiCancelled') });
     },
   });
 
   const message = [
     '你正在执行【工具箱：修改角色设定】任务。',
     '请基于下方修改意见，自主判断并调用 update_character 或 rewrite_all_characters 工具完成落盘。',
+    '新增、补全或涉及多个角色时，必须调用 rewrite_all_characters 并传 append=true；修改单个已有角色时必须调用 update_character。',
+    '只有修改意见明确要求清空重做或整体替换全部角色时，才允许调用 rewrite_all_characters 并传 append=false。',
     '我已经明确确认执行，你不需要再次询问确认。',
     '请直接执行工具，不要仅输出建议。',
     '',
@@ -161,7 +165,7 @@ async function handleAdjust() {
   ].join('\n');
 
   try {
-    task.start('正在分析角色修改要求...');
+    task.start(t('views.characters.aiAnalyzing'));
     const activeContext = await buildActiveContext(projectName);
     const reader = await sendChatMessageStream(
       projectName,
@@ -185,7 +189,9 @@ async function handleAdjust() {
         }
         if (eventType === 'tool_intent_started' || eventType === 'tool_exec_started') {
           if (toolName === 'rewrite_all_characters' || toolName === 'update_character') {
-            task.start(toolName === 'update_character' ? '正在更新角色设定...' : '正在重写角色设定...');
+            task.start(toolName === 'update_character'
+              ? t('views.characters.aiUpdatingOne')
+              : t('views.characters.aiUpdatingBatch'));
           }
           return;
         }
@@ -208,16 +214,16 @@ async function handleAdjust() {
     if (executed) {
       bus.emit('lorebook-refresh-characters');
       bus.emit('lorebook-refresh');
-      bus.emit('toast', { type: 'success', message: '角色设定已更新' });
+      bus.emit('toast', { type: 'success', message: t('views.characters.aiUpdated') });
       suggestion.value = '';
       saveCreativeCache(buildSuggestionCacheKey(), '');
     } else {
-      bus.emit('toast', { type: 'warning', message: assistantText.trim() || '本次未执行角色修改工具，请调整描述后重试' });
+      bus.emit('toast', { type: 'warning', message: assistantText.trim() || t('views.characters.aiNoTool') });
     }
   } catch (e: unknown) {
     if (isAbortLikeError(e)) return;
-    const errorMessage = e instanceof Error ? e.message : '调整失败';
-    bus.emit('toast', { type: 'error', message: errorMessage || '调整失败' });
+    const errorMessage = e instanceof Error ? e.message : t('views.characters.aiFailed');
+    bus.emit('toast', { type: 'error', message: errorMessage || t('views.characters.aiFailed') });
   } finally {
     task.dispose();
     generating.value = false;

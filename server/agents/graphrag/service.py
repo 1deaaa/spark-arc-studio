@@ -766,6 +766,110 @@ class GraphRAGService:
             data = json.load(f)
         return data if isinstance(data, dict) else {}
 
+    @staticmethod
+    def _split_graph_attribute(value: Any, separator: str, limit: int) -> list[str]:
+        return [
+            item.strip()
+            for item in str(value or "").split(separator)
+            if item.strip()
+        ][:limit]
+
+    def get_character_subgraph(self) -> dict[str, Any]:
+        """读取以角色档案为节点真相源的 GraphRAG 角色子图。
+
+        GraphRAG 的原始图包含地点、组织、物品与概念等多种实体，但目前没有
+        持久化实体类型。这里复用构建期的角色主名/别名归一化索引，仅保留能
+        精确映射到角色档案的节点与角色间关系，避免前端自行猜测实体类型。
+        """
+        self._ensure_project_exists()
+        records = read_character_records(self.user_id, self.project_name)
+        regular_records = {
+            str(character_id): record
+            for character_id, record in records.items()
+            if int(character_id) >= 0
+        }
+        alias_map = self._load_character_alias_index()
+        character_id_by_name = {
+            self._normalize_entity_name(record.get("name", "")): character_id
+            for character_id, record in regular_records.items()
+            if self._normalize_entity_name(record.get("name", ""))
+        }
+
+        graph = self._load_graph()
+        graph_node_to_character_id: dict[Any, str] = {}
+        graph_name_by_character_id: dict[str, str] = {}
+        for graph_node in graph.nodes:
+            graph_name = str(graph_node or "").strip()
+            canonical_name = alias_map.get(
+                self._normalize_entity_name(graph_name), graph_name,
+            )
+            character_id = character_id_by_name.get(
+                self._normalize_entity_name(canonical_name),
+            )
+            if character_id is None:
+                continue
+            graph_node_to_character_id[graph_node] = character_id
+            graph_name_by_character_id.setdefault(character_id, graph_name)
+
+        merged_edges: dict[tuple[str, str], dict[str, Any]] = {}
+        for source_node, target_node, edge_data in graph.edges(data=True):
+            source_id = graph_node_to_character_id.get(source_node)
+            target_id = graph_node_to_character_id.get(target_node)
+            if source_id is None or target_id is None or source_id == target_id:
+                continue
+            pair = tuple(sorted((source_id, target_id), key=int))
+            current = merged_edges.get(pair)
+            relation = str(edge_data.get("relation", "") or "").strip()
+            sources = self._split_graph_attribute(edge_data.get("sources"), " | ", 8)
+            samples = self._split_graph_attribute(edge_data.get("evidence_samples"), " || ", 4)
+            evidence_count = max(1, int(edge_data.get("evidence_count", 1) or 1))
+            if current is None:
+                merged_edges[pair] = {
+                    "id": f"{pair[0]}:{pair[1]}",
+                    "source": pair[0],
+                    "target": pair[1],
+                    "relation": relation,
+                    "evidence_count": evidence_count,
+                    "sources": sources,
+                    "evidence_samples": samples,
+                }
+                continue
+            current["relation"] = self._merge_relation(current["relation"], relation)
+            current["evidence_count"] += evidence_count
+            current["sources"] = list(dict.fromkeys([*current["sources"], *sources]))[:8]
+            current["evidence_samples"] = list(
+                dict.fromkeys([*current["evidence_samples"], *samples])
+            )[:4]
+
+        degree_by_character_id = {character_id: 0 for character_id in regular_records}
+        for edge in merged_edges.values():
+            degree_by_character_id[edge["source"]] += 1
+            degree_by_character_id[edge["target"]] += 1
+
+        nodes = [
+            {
+                "id": character_id,
+                "label": str(record.get("name", "") or "").strip(),
+                "entity_type": "character",
+                "graph_name": graph_name_by_character_id.get(character_id, ""),
+                "in_graph": character_id in graph_name_by_character_id,
+                "degree": degree_by_character_id[character_id],
+            }
+            for character_id, record in sorted(
+                regular_records.items(), key=lambda item: int(item[0]),
+            )
+        ]
+        metadata = self._load_metadata()
+        return {
+            "nodes": nodes,
+            "edges": list(merged_edges.values()),
+            "metadata": {
+                "built_at": str(metadata.get("built_at", "") or ""),
+                "nodes": int(metadata.get("nodes", 0) or 0),
+                "edges": int(metadata.get("edges", 0) or 0),
+            },
+        }
+
     def get_status(self, check_freshness: bool = True) -> dict[str, Any]:
         artifacts = self._artifacts
         metadata = self._load_metadata()

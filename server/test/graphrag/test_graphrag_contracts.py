@@ -4,9 +4,69 @@ import json
 import hashlib
 from pathlib import Path
 
+import networkx as nx
+
 from agents.graphrag.service import GRAPHRAG_CHUNKING_STRATEGY_VERSION, GraphRAGService
 from story.project_files import collect_project_files, load_outline_data
 from story.semantic_chunker.chunker import SemanticChunker
+
+
+def test_character_graph_route_is_registered_as_read_only_get() -> None:
+    from agents.routes.graphrag_routes import graphrag_router
+
+    route = next(
+        item for item in graphrag_router.routes
+        if getattr(item, "path", "") == "/api/graphrag/character-graph"
+    )
+    assert route.methods == {"GET"}
+
+
+def test_character_subgraph_reuses_character_ids_aliases_and_graph_evidence(
+    monkeypatch,
+) -> None:
+    graph = nx.Graph()
+    graph.add_edge(
+        "阿棠",
+        "林烬",
+        relation="盟友",
+        sources="角色/沈棠 :: 角色档案 | stories/第一章.arc :: 第一场",
+        evidence_samples="并肩调查旧案 || 林烬替沈棠隐瞒行踪",
+        evidence_count=2,
+    )
+    graph.add_edge("林烬", "旧钥匙", relation="持有", evidence_count=1)
+    records = {
+        "-1": {"name": "旁白", "content": ""},
+        "1": {"name": "沈棠", "content": "别名：阿棠\n阵营：档案局"},
+        "2": {"name": "林烬", "content": "身份：调查员"},
+        "3": {"name": "周望", "content": "身份：记者"},
+    }
+    service = GraphRAGService("12", "demo")
+    monkeypatch.setattr(service, "_ensure_project_exists", lambda: None)
+    monkeypatch.setattr(service, "_load_graph", lambda: graph)
+    monkeypatch.setattr(service, "_load_metadata", lambda: {"built_at": "2026-08-05T00:00:00Z", "nodes": 4, "edges": 2})
+    monkeypatch.setattr("agents.graphrag.service.read_character_records", lambda *_: records)
+    monkeypatch.setattr(
+        service,
+        "_load_character_alias_index",
+        lambda: {"沈棠": "沈棠", "阿棠": "沈棠", "林烬": "林烬", "周望": "周望"},
+    )
+
+    payload = service.get_character_subgraph()
+
+    assert [node["id"] for node in payload["nodes"]] == ["1", "2", "3"]
+    assert payload["nodes"][0]["graph_name"] == "阿棠"
+    assert payload["nodes"][2]["in_graph"] is False
+    assert payload["edges"] == [
+        {
+            "id": "1:2",
+            "source": "1",
+            "target": "2",
+            "relation": "盟友",
+            "evidence_count": 2,
+            "sources": ["角色/沈棠 :: 角色档案", "stories/第一章.arc :: 第一场"],
+            "evidence_samples": ["并肩调查旧案", "林烬替沈棠隐瞒行踪"],
+        }
+    ]
 
 
 def test_project_file_collector_reads_nested_story_files(monkeypatch, tmp_path: Path) -> None:

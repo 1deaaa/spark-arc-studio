@@ -88,12 +88,14 @@ def has_matching_prewrite_receipt(
 
     expected_chapter = _normalize_target(chapter_name or "")
     actual_chapter = _normalize_target(str(receipt.get("chapter_name") or ""))
-    if expected_chapter and expected_chapter != actual_chapter:
-        return False
-
     expected_scene = _normalize_target(scene_name or "")
     actual_scene = _normalize_target(str(receipt.get("scene_name") or ""))
-    if expected_scene and expected_scene != actual_scene:
+    invalid_targets = {"", "null", "none", "undefined", "nil"}
+    if expected_chapter in invalid_targets or actual_chapter in invalid_targets:
+        return False
+    if expected_scene in invalid_targets or actual_scene in invalid_targets:
+        return False
+    if expected_chapter != actual_chapter or expected_scene != actual_scene:
         return False
     return True
 

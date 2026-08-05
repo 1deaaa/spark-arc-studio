@@ -125,6 +125,17 @@ def test_lorebook_requires_web_verification_for_external_canon() -> None:
     assert "停止依赖该事实的创作或落盘" in runtime_prompt
 
 
+def test_lorebook_character_writes_are_incremental_by_default() -> None:
+    prompts = load_prompt("lorebook")
+    pipeline = prompts["pipeline_system"]
+    tool_rules = prompts["tool_rules"]
+
+    assert "patch_worldview(search_text=\"\", replace_text=新角色内容)" not in pipeline
+    assert "rewrite_all_characters(overwrite_content=新角色内容, append=true)" in pipeline
+    for token in ("新增角色", "update_character", "清空重做", "append=false"):
+        assert token in tool_rules
+
+
 def test_director_and_lorebook_share_external_research_handoff_contract() -> None:
     director_prompts = load_prompt("director")
     director_rules = director_prompts["tool_rules"]

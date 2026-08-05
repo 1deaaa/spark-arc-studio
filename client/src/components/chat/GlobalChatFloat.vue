@@ -947,6 +947,7 @@ function changeExtraAgent(sessionId, agentId) {
 
 const viewAgentMap = {
   world: ['agent_muse', 'agent_lorebook'],
+  characters: ['agent_lorebook'],
   synopsis: ['agent_showrunner'],
   structure: ['agent_showrunner'],
   style: ['agent_style'],

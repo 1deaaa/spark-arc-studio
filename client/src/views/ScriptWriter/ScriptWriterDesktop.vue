@@ -129,6 +129,7 @@ import OnboardingHelpButton from '../../onboarding/components/OnboardingHelpButt
 
 // 这里的 View 引用改为新的分发器路径
 import WorldView from '../World/WorldIndex.vue';
+import CharactersView from '../Characters/CharactersIndex.vue';
 import SynopsisView from '../Synopsis/SynopsisIndex.vue';
 import StructureView from '../Structure/StructureIndex.vue';
 import StyleView from '../Style/StyleIndex.vue';
@@ -228,6 +229,7 @@ async function handleSubmissionExport(key: string | number) {
 const activeComponent = computed(() => {
   switch (viewStore.currentView) {
     case 'world': return WorldView;
+    case 'characters': return CharactersView;
     case 'synopsis': return SynopsisView;
     case 'structure': return StructureView;
     case 'style': return StyleView;

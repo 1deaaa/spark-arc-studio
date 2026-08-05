@@ -3,7 +3,7 @@ from __future__ import annotations
 import os
 
 from langchain.tools import tool
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, Field, field_validator
 
 from core.utils import get_project_path
 from agents.project_content import load_worldview
@@ -11,19 +11,43 @@ from agents.project_content import load_worldview
 from .common import ToolExecutionContext, _apply_patch
 
 
+_INVALID_STORY_TARGET_NAMES = {"null", "none", "undefined", "nil"}
+
+
+def _validate_story_target_name(value: object, *, field_name: str) -> str:
+    if value is None:
+        raise ValueError(f"{field_name} 必须传入真实字符串，不能为 null。")
+    if not isinstance(value, str):
+        raise ValueError(f"{field_name} 必须传入真实字符串。")
+    normalized = value.strip()
+    if not normalized or normalized.casefold() in _INVALID_STORY_TARGET_NAMES:
+        raise ValueError(f"{field_name} 必须传入真实名称，不能使用空值或 null 占位符。")
+    return normalized
+
+
 class CreateOrRewriteScriptInput(BaseModel):
     overwrite_content: str = Field(description="完整的剧本/小说正文。若目标场景文件尚不存在，系统将自动创建；若已存在则覆盖。必须只包含最终可保存的正文，不得混入解释、确认话术或元话语。")
-    chapter_name: str | None = Field(default=None, description="目标章节名称（即文件夹名称），格式为「中文数字 · 标题」（如「一 · 开端」「二 · 相遇」）。【CRITICAL】剧本将保存到该章节目录下。写剧本/小说前，必须先调用 create_chapter 确保该章节目录存在，并在此传入一致的章节名。严禁在不指定章节的情况下调用此工具往根目录写入孤儿场景文件。")
-    work_name: str | None = Field(default=None, description="场景文件的显示名称（不含扩展名），格式为「章节号-场景号 场景名」（如「1-1 初遇」「2-3 决战」）。若不提供，系统将自动根据内容或上下文命名。")
+    chapter_name: str = Field(min_length=1, description="目标章节名称（即文件夹名称），格式为「中文数字 · 标题」（如「一 · 开端」「二 · 相遇」）。【CRITICAL】剧本将保存到该章节目录下。写剧本/小说前，必须先调用 create_chapter 确保该章节目录存在，并在此传入一致的章节名。严禁传入 null、字符串 null 或省略此字段。")
+    work_name: str = Field(min_length=1, description="场景文件的显示名称（不含扩展名），格式为「章节号-场景号 场景名」（如「1-1 初遇」「2-3 决战」）。必须与 PreWrite 的 scene_name 完全一致，严禁传入 null、字符串 null 或省略此字段。")
     target_chars: int | None = Field(default=None, ge=100, le=100000, description="本轮用户或导演明确要求的目标正文字符数。仅作为软目标和落盘回执的统计基准；未传时使用项目默认目标。")
+
+    @field_validator("chapter_name", "work_name", mode="before")
+    @classmethod
+    def validate_target_names(cls, value: object, info) -> str:
+        return _validate_story_target_name(value, field_name=info.field_name)
 
 
 class PrepareScriptCreationInput(BaseModel):
     task_description: str = Field(description="本次完整场景创作任务，包含目标、冲突、衔接要求与用户意图。")
-    chapter_name: str = Field(description="目标章节名称，必须与随后 create_chapter 和 create_or_rewrite_script 使用的 chapter_name 完全一致。")
-    scene_name: str = Field(description="目标场景名称，必须与随后 create_or_rewrite_script 使用的 work_name 完全一致。")
+    chapter_name: str = Field(min_length=1, description="目标章节名称，必须与随后 create_chapter 和 create_or_rewrite_script 使用的 chapter_name 完全一致。严禁传入 null、字符串 null 或其他占位符。")
+    scene_name: str = Field(min_length=1, description="目标场景名称，必须与随后 create_or_rewrite_script 使用的 work_name 完全一致。严禁传入 null、字符串 null 或其他占位符。")
     scene_guidance: str = Field(default="", description="大纲中对当前场景的具体指导、关键事件或落点。")
     scene_characters: list[str] = Field(default_factory=list, description="预计在本场出现或必须核对的角色名。")
+
+    @field_validator("chapter_name", "scene_name", mode="before")
+    @classmethod
+    def validate_target_names(cls, value: object, info) -> str:
+        return _validate_story_target_name(value, field_name=info.field_name)
 
 
 class CreateChapterInput(BaseModel):

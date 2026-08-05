@@ -4,6 +4,7 @@ import { ref } from 'vue';
 export type AppViewKey =
   | 'muse'
   | 'world'
+  | 'characters'
   | 'lorebook'
   | 'synopsis'
   | 'structure'

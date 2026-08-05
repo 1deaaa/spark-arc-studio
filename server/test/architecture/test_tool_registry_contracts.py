@@ -56,7 +56,9 @@ def test_long_write_tools_expose_batching_and_append_guidance() -> None:
     character_schema = TOOLS_BY_NAME["rewrite_all_characters"].args_schema.model_fields
     assert "最多约 5 个角色" in character_schema["overwrite_content"].description
     assert "append" in character_schema
-    assert "第二批及后续批次必须传 true" in character_schema["append"].description
+    assert character_schema["append"].default is True
+    assert "整体替换" in character_schema["append"].description
+    assert "显式传 false" in character_schema["append"].description
 
     outline_schema = TOOLS_BY_NAME["rewrite_outline"].args_schema.model_fields
     assert "每批约 10 个场景" in outline_schema["overwrite_content"].description
@@ -113,3 +115,12 @@ def test_web_search_degraded_result_is_not_reported_as_success() -> None:
         "web_search",
         "联网搜索失败（exa）：鉴权失败。",
     )
+
+
+def test_scriptwriter_domain_failures_are_not_reported_as_success() -> None:
+    prewrite_failure = "PreWrite 失败：chapter_name 与 scene_name 均不能为空。"
+    write_failure = "创建/重写剧本失败：当前完整场景尚未完成匹配的 PreWrite。"
+
+    assert is_tool_result_failure("prepare_script_creation", prewrite_failure) is True
+    assert is_tool_result_failure("create_or_rewrite_script", write_failure) is True
+    assert get_tool_result_failure_message("prepare_script_creation", prewrite_failure) == prewrite_failure

@@ -24,7 +24,7 @@
       </div>
     
     <!-- 角色列表 -->
-      <div class="flow-section">
+      <div v-if="!worldOnly" class="flow-section">
       <div class="section-header">
         <n-icon :component="Users" size="18" />
         <span>{{ t('views.lorebook.mobile.characterSettings') }}</span>
@@ -72,7 +72,7 @@
       </div>
       
       <div class="action-buttons-row">
-        <n-button type="primary" secondary class="action-btn" @click="showCharGen = true">
+        <n-button v-if="!worldOnly" type="primary" secondary class="action-btn" @click="showCharGen = true">
           <template #icon><n-icon :component="UserPlus" /></template>
           {{ t('views.lorebook.mobile.aiCharacterGeneration') }}
         </n-button>
@@ -84,14 +84,14 @@
       </div>
     
     <!-- 完整编辑器抽屉（仅通过快捷工具访问） -->
-      <n-drawer v-model:show="showEditor" placement="bottom" height="90%">
+      <n-drawer v-if="!worldOnly" v-model:show="showEditor" placement="bottom" height="90%">
       <n-drawer-content :title="t('views.lorebook.mobile.settingManagement')" closable>
         <LorebookEditor :visible="true" :embedded="true" @close="showEditor = false" />
       </n-drawer-content>
       </n-drawer>
 
     <!-- 单一角色编辑器抽屉（点击卡片访问） -->
-      <n-drawer v-model:show="showSingleCharDrawer" placement="bottom" height="85%" class="mobile-char-drawer">
+      <n-drawer v-if="!worldOnly" v-model:show="showSingleCharDrawer" placement="bottom" height="85%" class="mobile-char-drawer">
       <n-drawer-content :title="editingChar.name || t('views.lorebook.mobile.newCharacter')" closable>
         <div class="char-editor-form" v-if="editingChar">
            <div class="form-item">
@@ -125,7 +125,7 @@
       </n-drawer>
     
     <!-- 角色生成器抽屉 -->
-      <n-drawer v-model:show="showCharGen" placement="bottom" height="80%">
+      <n-drawer v-if="!worldOnly" v-model:show="showCharGen" placement="bottom" height="80%">
       <n-drawer-content :title="t('views.lorebook.mobile.aiCharacterGeneration')" closable>
         <CharacterGeneratorPanel :visible="true" :embedded="true" />
       </n-drawer-content>
@@ -162,6 +162,8 @@ import { scrollToFlowStep } from '../../utils/mobileFlow';
 import { extractLoglineFromInspiration } from '../../utils/inspiration';
 import { buildCreativeCacheKey, isCreativeCacheEqual, loadCreativeCache, saveCreativeCache } from '@/utils/creativeLocalCache';
 import { createAutoSaveScheduler } from '@/utils/autoSaveScheduler';
+
+const { worldOnly = false } = defineProps<{ worldOnly?: boolean }>();
 
 const { t } = useI18n();
 const message = useMessage();

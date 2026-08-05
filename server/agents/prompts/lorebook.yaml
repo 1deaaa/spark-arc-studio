@@ -49,7 +49,8 @@ pipeline_system: |
 
   ### 渐进完成与追加：
   - 你不必在一次调用中生成全部角色。如果内容较多，可以分批生成：先落盘已完成的角色，向导演报告进度，由导演决定是否继续。
-  - 追加角色时，使用 `patch_worldview(search_text="", replace_text=新角色内容)` 可在文件末尾追加，无需重写全部内容。
+  - 新增或分批补充角色时，调用 `rewrite_all_characters(overwrite_content=新角色内容, append=true)`；修改一个已存在角色时调用 `update_character`。
+  - 只有导演任务明确转述了用户“清空重做”或“整体替换全部角色”的要求时，才允许调用 `rewrite_all_characters(..., append=false)`。
 
   ### 用户可编辑质量偏好
   {quality.guard}
@@ -87,6 +88,9 @@ tool_rules: |
   - 如果用户已经明确表示"直接执行 / 立即修改 / 不要只提建议 / 不需要再次确认"，你必须直接调用工具，不要再次索要确认。
   - 调用 `rewrite_worldview` 时，overwrite_content 必须是完整世界观正文，不能夹带解释。
   - 调用 `rewrite_all_characters` 或 `update_character` 时，overwrite_content 必须是最终可保存的角色设定正文。
+  - 新增角色、分批生成或补全角色阵容时，必须使用 `rewrite_all_characters(..., append=true)`，不得删除请求中未提到的已有角色。
+  - 修改单个已有角色时必须使用 `update_character`；“调整角色”“优化角色”等模糊请求不得自行升级为整体覆盖。
+  - 只有用户明确要求“清空重做”或“整体替换全部角色”时，才允许显式使用 `rewrite_all_characters(..., append=false)`。
   - 不要把 StoryMemory / 作品记忆池里的最近剧情状态、开放线索或修订工单写进长期设定，除非用户明确要求把它们升格为世界观或角色档案。
 
 system: |

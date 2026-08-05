@@ -280,7 +280,14 @@ export async function fetchCharacters(projectName: string, includeContent = fals
   if (includeSystem) url += '&includeSystem=true';
 
   const response = await fetchWithAuth(url);
-  if (!response.ok) return [];
+  if (!response.ok) {
+    let message = '获取角色列表失败';
+    try {
+      const error = await response.json() as { error?: string; message?: string; detail?: string };
+      message = error.error || error.message || error.detail || message;
+    } catch {}
+    throw new Error(message);
+  }
 
   const result = await response.json() as StoryCharacter[] | StoryCharacterDetail[];
   // 后端直接返回数组
@@ -290,11 +297,13 @@ export async function fetchCharacters(projectName: string, includeContent = fals
 /**
  * 创建新角色
  */
-export async function createCharacter(projectName: string, name: string): Promise<StoryMutationResult> {
+export async function createCharacter(projectName: string, name: string, content?: string): Promise<StoryMutationResult> {
+  const body: { projectName: string; name: string; content?: string } = { projectName, name };
+  if (content !== undefined) body.content = content;
   const response = await fetchWithAuth('/api/characters', {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({ projectName, name }),
+    body: JSON.stringify(body),
   });
   const result = await response.json() as StoryMutationResult;
   if (!response.ok || result.success === false) {

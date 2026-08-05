@@ -5,8 +5,10 @@ import asyncio
 import contextvars
 from pathlib import Path
 
+import pytest
 from langchain_core.messages import AIMessage
 from langchain_core.tools import tool
+from pydantic import ValidationError
 
 from agents.scriptwriter_prewrite import (
     ScriptwriterPreWriteRequest,
@@ -122,6 +124,60 @@ def test_prepare_tool_issues_matching_receipt(monkeypatch) -> None:
         current_agent_id.reset(agent_token)
         current_project_name.reset(project_token)
         current_user_id.reset(user_token)
+
+
+def test_scriptwriter_tools_reject_null_and_placeholder_target_names() -> None:
+    from agents.tools.scriptwriter import (
+        CreateOrRewriteScriptInput,
+        PrepareScriptCreationInput,
+    )
+
+    invalid_values = (None, "", "   ", "null", "NULL", "undefined", "None")
+    for invalid in invalid_values:
+        with pytest.raises(ValidationError):
+            PrepareScriptCreationInput.model_validate({
+                "task_description": "写第一场",
+                "chapter_name": invalid,
+                "scene_name": "1-1 初遇",
+            })
+        with pytest.raises(ValidationError):
+            CreateOrRewriteScriptInput.model_validate({
+                "overwrite_content": "正文",
+                "chapter_name": "一 · 开端",
+                "work_name": invalid,
+            })
+
+    with pytest.raises(ValidationError):
+        CreateOrRewriteScriptInput.model_validate({"overwrite_content": "正文"})
+
+
+def test_prewrite_receipt_never_matches_missing_or_placeholder_targets() -> None:
+    from agents.scriptwriter_prewrite import has_matching_prewrite_receipt
+
+    receipt_token = current_scriptwriter_prewrite_receipt.set({})
+    try:
+        set_scriptwriter_prewrite_receipt({
+            "receipt_id": "receipt-invalid",
+            "user_id": "u-invalid",
+            "project_name": "p-invalid",
+            "chapter_name": "null",
+            "scene_name": "null",
+        })
+        assert has_matching_prewrite_receipt(
+            user_id="u-invalid",
+            project_name="p-invalid",
+            chapter_name=None,
+            scene_name=None,
+        ) is False
+        assert has_matching_prewrite_receipt(
+            user_id="u-invalid",
+            project_name="p-invalid",
+            chapter_name="null",
+            scene_name="null",
+        ) is False
+    finally:
+        clear_scriptwriter_prewrite_receipt()
+        current_scriptwriter_prewrite_receipt.reset(receipt_token)
 
 
 def test_full_script_write_requires_and_consumes_matching_receipt(monkeypatch, tmp_path) -> None:

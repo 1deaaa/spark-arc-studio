@@ -174,7 +174,7 @@ async def create_character(
         project_name,
         new_id,
         name=name,
-        content=f'# {name}\n\n在这里描述你的角色...',
+        content=data.content if data.content is not None else f'# {name}\n\n在这里描述你的角色...',
     )
     
     return {'success': True, 'id': new_id, 'name': name}

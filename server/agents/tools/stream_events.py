@@ -27,6 +27,14 @@ def is_tool_result_failure(tool_name: str, result: Any) -> bool:
     normalized = normalize_tool_name(tool_name)
     if "执行失败" in result:
         return True
+    stripped = result.strip()
+    domain_failure_prefixes = {
+        "prepare_script_creation": ("PreWrite 失败",),
+        "create_or_rewrite_script": ("创建/重写剧本失败",),
+        "create_chapter": ("创建章节失败",),
+    }
+    if stripped.startswith(domain_failure_prefixes.get(normalized, ())):
+        return True
     if normalized == "web_search":
         return result.startswith((
             "联网搜索当前不可用",
@@ -44,6 +52,8 @@ def get_tool_result_failure_message(tool_name: str, result: Any) -> str:
         if text.startswith(("联网搜索当前不可用", "联网搜索暂时不可用")):
             return "联网搜索上游暂不可用，AI 将基于失败状态继续回应"
         return "联网搜索未能完成，AI 将基于失败状态继续回应"
+    if text.strip().startswith(("PreWrite 失败", "创建/重写剧本失败", "创建章节失败")):
+        return text.strip().splitlines()[0][:200]
     return "模型使用了错误的调用格式，正在尝试修正"
 
 

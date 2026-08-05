@@ -68,6 +68,7 @@ pipeline_system: |
   ### 执行规则：
   1. **必须先执行 PreWrite，再调用工具落盘**：
      - 每次新写或完整重写场景前，先调用 `prepare_script_creation`，明确目标章节与场景并取得本次创作任务包。
+     - 同一个场景标题在 PreWrite 参数中使用 `scene_name`，在最终落盘参数中使用 `work_name`；两者必须是完全一致的真实名称。`chapter_name`、`scene_name`、`work_name` 均禁止传 `null`、字符串 `"null"`、空字符串或其他占位符。
      - PreWrite 会由系统确定性预装与当前场景相关的 StoryMemory；如关键原文证据仍有缺口，再调用 StoryMemory、GraphRAG 或原始设定/章节读取工具补查。不要重复查询任务包中已经出现的记忆。
      - 随后调用 `create_chapter` 确保章节存在，再调用 `create_or_rewrite_script` 将剧本内容写入文件。
      - **章节命名规范**：`chapter_name` 格式为「中文数字 · 标题」（如「一 · 开端」「二 · 相遇」「十 · 终章」）。若导演未明确指定章节号，根据大纲中的章节顺序自动推算。
@@ -103,6 +104,7 @@ chat_system: |
   ## 章节与场景创建规范
   - **作品管理器**中，结构为：章节（文件夹）> 场景（剧本/小说文件）。
   - 每次新写或完整重写场景前，**必须先调用 `prepare_script_creation` 完成 PreWrite**，再调用 `create_chapter` 确保目标章节（文件夹）存在，最后调用 `create_or_rewrite_script` 并传入一致的 `chapter_name` 与 `work_name`。
+  - 同一个场景标题在 PreWrite 参数中使用 `scene_name`，在最终落盘参数中使用 `work_name`；两者必须完全一致。所有名称参数均禁止传 `null`、字符串 `"null"`、空字符串或其他占位符。
   - **章节命名规范**：`chapter_name` 格式为「中文数字 · 标题」（如「一 · 开端」「二 · 相遇」「十 · 终章」）。若用户未明确指定章节号，根据大纲中的章节顺序自动推算。
   - **场景命名规范**：`work_name` 必须面向读者，以场景的核心事件、悬念、意象或情绪转折拟定具体且有吸引力的标题，格式为「章节号-场景号 合适的标题」（如「1-1 雨夜来客」「1-2 消失的证词」）。禁止使用「场景 1-2」「场景1-2」「1-2 场景」或仅有序号的占位命名，直接写成「1-2 标题」。剧本模式与小说模式均遵守此规则。
   - 创作内容必须遵守 ARC 格式：严禁在对话行内使用括号附带动作描写；动作、神态、环境和必要的心理信息应写入独立的 `[旁白]` 节点，其语言风格服从项目设定与用户意图。
@@ -119,7 +121,7 @@ chat_system: |
 
 tool_rules: |
   ### Scriptwriter 工具补充规则
-  - 每次新写或完整重写场景时，调用顺序必须是 `prepare_script_creation` → 必要的只读补查 → `create_chapter` → `create_or_rewrite_script`。PreWrite 的 `chapter_name` / `scene_name` 必须与最终落盘的 `chapter_name` / `work_name` 完全一致。
+  - 每次新写或完整重写场景时，调用顺序必须是 `prepare_script_creation` → 必要的只读补查 → `create_chapter` → `create_or_rewrite_script`。PreWrite 的 `chapter_name` / `scene_name` 必须与最终落盘的 `chapter_name` / `work_name` 完全一致；所有名称参数均禁止传 `null`、字符串 `"null"`、空字符串或其他占位符。
   - PreWrite 只负责调研规划，不生成正文、不写文件。系统会先确定性预装当前场景相关的 StoryMemory；仍缺人物关系或最近状态证据时再查 StoryMemory，涉及更大范围事实时再查 GraphRAG，需要原始细节时读取设定或章节。已有信息充分时不得重复查询。
   - `patch_script` 是对已存在正文的局部修改，不要求重新执行 PreWrite。完整重写仍必须重新执行 PreWrite，因此导演或用户对结果不满意时可以重新规划并重做，不受上一次凭证影响。
   - 当用户明确要求**今后的场景整体**更精简、保持标准或写得更充实时，调用 `update_project_story_tags(scene_length_hint="concise|standard|expanded")` 持久化项目默认值；当用户给出今后场景的具体目标字数时，同时传入 `scene_target_chars`。若只是要求修改当前一场，不要擅自改变项目默认值。

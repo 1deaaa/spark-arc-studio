@@ -1,8 +1,12 @@
 <template>
-  <div id="settings-editor-container" class="settings-editor-container" :class="{ 'is-embedded': embedded }">
+  <div
+    id="settings-editor-container"
+    class="settings-editor-container"
+    :class="{ 'is-embedded': embedded, 'is-character-mode': isCharacterAtlas }"
+  >
     <div class="lorebook-content">
       <!-- 世界观设定 -->
-      <div class="lorebook-card-wrap worldview-wrap">
+      <div v-if="showWorldview" class="lorebook-card-wrap worldview-wrap" :class="{ 'is-full-height': mode === 'worldview' }">
         <GlobalLoading scope="world" target="worldview" variant="card" />
         <n-card 
           :segmented="{ content: true }"
@@ -21,7 +25,21 @@
       </div>
 
       <!-- 角色设定 -->
-      <div class="lorebook-card-wrap character-wrap">
+      <CharacterAtlas
+        v-if="isCharacterAtlas"
+        ref="characterAtlasRef"
+        :characters="characters"
+        :graph="characterGraph"
+        :graph-loading="characterGraphLoading"
+        :is-script-mode="isScriptMode"
+        @create="createAtlasCharacter"
+        @save="saveAtlasCharacter"
+        @delete="deleteCharacter"
+        @sprite="openCharacterSpriteModal"
+        @refresh-graph="refreshCharacterGraph"
+      />
+
+      <div v-else-if="showCharacters" class="lorebook-card-wrap character-wrap">
         <GlobalLoading scope="world" target="characters" variant="card" />
         <n-card 
           :segmented="{ content: true }"
@@ -204,12 +222,13 @@
 </template>
 
 <script setup lang="ts">
-import { ref, onMounted, onBeforeUnmount, computed, onActivated, watch } from 'vue';
+import { ref, onMounted, onBeforeUnmount, computed, nextTick, onActivated, watch } from 'vue';
 import { useI18n } from 'vue-i18n';
 import { useRoute } from 'vue-router';
 import { NCard, NInput, NButton, NIcon, NSpace, NPopconfirm, NModal, NSelect, NText, NTag, NTooltip } from 'naive-ui';
 import { ImagePlus, Plus, Scissors, Sparkles, SquarePen, Trash, Upload } from '@lucide/vue';
 import StudioSeamlessTextarea from '../editors/StudioSeamlessTextarea.vue';
+import CharacterAtlas from './CharacterAtlas.vue';
 import bus from '../../eventBus';
 import GlobalLoading from '../share/GlobalLoading.vue';
 import { useProjectStore } from '../stores/projectStore';
@@ -231,6 +250,12 @@ import { supportsImageInput } from '@/services/modelModalities';
 import { matteSprite } from '@/utils/spriteMatting';
 import { AUTO_SAVE_DEBOUNCE_TIME } from '../../config';
 import { buildCreativeCacheKey, isCreativeCacheEqual, loadCreativeCache, saveCreativeCache } from '@/utils/creativeLocalCache';
+import {
+  fetchGraphRAGCharacterGraph,
+  enableGraphRAG,
+  refreshGraphRAGProject,
+  type GraphRAGCharacterGraph,
+} from '@/services/graphragService';
 
 const projectStore = useProjectStore();
 const fileStore = useFileStore();
@@ -238,17 +263,30 @@ const characterStore = useCharacterStore();
 const sceneStore = useSceneStore();
 const route = useRoute();
 
-defineProps({
+const props = defineProps({
   embedded: {
     type: Boolean,
     default: false
+  },
+  mode: {
+    type: String,
+    default: 'both',
+    validator: (value: string) => ['both', 'worldview', 'characters'].includes(value)
   }
 });
 
 const worldview = ref('');
 const { t } = useI18n();
 
-const characters = ref([]); // [{id, name, content}]
+const mode = computed(() => props.mode);
+const showWorldview = computed(() => mode.value !== 'characters');
+const showCharacters = computed(() => mode.value !== 'worldview');
+const isCharacterAtlas = computed(() => mode.value === 'characters');
+const characters = ref<any[]>([]); // [{id, name, content}]
+const characterGraph = ref<GraphRAGCharacterGraph | null>(null);
+const characterAtlasRef = ref<{ revealCharacter: (id: number | string, openProfile?: boolean) => void } | null>(null);
+const characterGraphLoading = ref(false);
+let characterGraphPollTimer: ReturnType<typeof setTimeout> | null = null;
 const characterSpriteModalVisible = ref(false);
 const activeSpriteCharacter = ref<any | null>(null);
 const characterSpritePrompt = ref('');
@@ -399,10 +437,71 @@ async function loadCharacters() {
     if (!isCreativeCacheEqual(characters.value, remoteCharacters)) {
       characters.value = userCharactersOnly(remoteCharacters);
     }
-  } catch {
-    characters.value = [];
-  }
+  } catch {}
   saveLorebookSnapshot();
+}
+
+function stopCharacterGraphPolling() {
+  if (characterGraphPollTimer) {
+    clearTimeout(characterGraphPollTimer);
+    characterGraphPollTimer = null;
+  }
+}
+
+async function loadCharacterGraph(options: { poll?: boolean } = {}) {
+  stopCharacterGraphPolling();
+  const projectName = projectStore.currentProject;
+  if (!projectName || !showCharacters.value) {
+    characterGraph.value = null;
+    return;
+  }
+  characterGraphLoading.value = true;
+  try {
+    const result = await fetchGraphRAGCharacterGraph(projectName);
+    if (projectStore.currentProject !== projectName) return;
+    characterGraph.value = result;
+    const status = result.buildState.status.toLowerCase();
+    if (options.poll !== false && ['queued', 'building', 'cancelling'].includes(status)) {
+      characterGraphPollTimer = setTimeout(() => loadCharacterGraph({ poll: true }), 2200);
+    }
+  } catch {
+    characterGraph.value = null;
+  } finally {
+    characterGraphLoading.value = false;
+  }
+}
+
+async function refreshCharacterGraph() {
+  const projectName = projectStore.currentProject;
+  if (!projectName) return;
+  try {
+    if (characterGraph.value?.enabled) {
+      await refreshGraphRAGProject(projectName);
+    } else {
+      await enableGraphRAG(projectName);
+    }
+  } catch {
+    bus.emit('toast', { type: 'error', message: t('views.characters.graphSyncFailed') });
+  }
+  await loadCharacterGraph();
+}
+
+function markCharacterGraphStale() {
+  const graph = characterGraph.value;
+  if (!graph?.enabled) return;
+  const activeStatuses = new Set(['queued', 'building', 'cancelling']);
+  const status = graph.buildState.status.toLowerCase();
+  characterGraph.value = {
+    ...graph,
+    needsRebuild: true,
+    buildState: activeStatuses.has(status)
+      ? graph.buildState
+      : {
+          ...graph.buildState,
+          status: graph.graphReady ? 'stale' : 'not_built',
+          stage: 'idle',
+        },
+  };
 }
 
 function imageModelKey(model: PresentationImageModel) {
@@ -623,10 +722,74 @@ async function handleAddCharacter() {
   } catch {}
 }
 
+async function createAtlasCharacter(
+  payload: { name: string; content: string },
+  complete: (success: boolean) => void,
+) {
+  const name = payload.name.trim();
+  if (!name || !projectStore.currentProject) {
+    complete(false);
+    return;
+  }
+  const projectName = projectStore.currentProject;
+  let result: Awaited<ReturnType<typeof createCharacter>>;
+  try {
+    result = await createCharacter(projectName, name, payload.content);
+  } catch (error: unknown) {
+    complete(false);
+    bus.emit('toast', {
+      type: 'error',
+      message: presentationErrorMessage(error, t('views.characters.createFailed')),
+    });
+    return;
+  }
+
+  const createdId = result.id;
+  if (createdId === undefined) {
+    complete(false);
+    bus.emit('toast', { type: 'error', message: t('views.characters.createFailed') });
+    return;
+  }
+  const createdCharacter = { id: createdId, name, desc: '', content: payload.content };
+  const existingIndex = characters.value.findIndex(character => String(character.id) === String(createdId));
+  characters.value = existingIndex >= 0
+    ? characters.value.map((character, index) => index === existingIndex ? createdCharacter : character)
+    : [...characters.value, createdCharacter];
+  markCharacterGraphStale();
+  saveLorebookSnapshot();
+  await nextTick();
+  characterAtlasRef.value?.revealCharacter(createdId, false);
+  complete(true);
+  window.dispatchEvent(new CustomEvent('saved'));
+  bus.emit('toast', { type: 'success', message: t('views.characters.created') });
+  void characterStore.reload(projectName).catch(() => undefined);
+}
+
+async function saveAtlasCharacter(payload: { character: any; name: string; content: string }) {
+  const projectName = projectStore.currentProject;
+  if (!projectName) return;
+  const oldName = String(payload.character.name || '').trim();
+  try {
+    if (payload.name !== oldName) {
+      await renameCharacterApi(projectName, payload.character.id, payload.name);
+      sceneStore.renameSpeaker(oldName, payload.name);
+    }
+    await saveCharacterApi(projectName, payload.character.id, payload.content || '');
+    await loadCharacters();
+    markCharacterGraphStale();
+    await characterStore.reload(projectName);
+    window.dispatchEvent(new CustomEvent('saved'));
+    bus.emit('toast', { type: 'success', message: t('views.characters.saved') });
+  } catch {
+    bus.emit('toast', { type: 'error', message: t('views.characters.saveFailed') });
+  }
+}
+
 // 保存角色
 async function saveCharacter(ch) {
   try {
     await saveCharacterApi(projectStore.currentProject, ch.id, ch.content || '');
+    markCharacterGraphStale();
     saveLorebookSnapshot();
     window.dispatchEvent(new CustomEvent('saved'));
   } catch {}
@@ -649,6 +812,7 @@ async function renameCharacter(ch) {
     await renameCharacterApi(projectStore.currentProject, ch.id, normalizedNewName);
     sceneStore.renameSpeaker(oldName, normalizedNewName);
     await loadCharacters();
+    markCharacterGraphStale();
     await characterStore.reload(projectStore.currentProject);
     window.dispatchEvent(new CustomEvent('saved'));
   } catch {}
@@ -660,6 +824,7 @@ async function deleteCharacter(ch) {
   try {
     await deleteCharacterApi(projectStore.currentProject, ch.id);
     await loadCharacters();
+    markCharacterGraphStale();
     await characterStore.reload(projectStore.currentProject);
     window.dispatchEvent(new CustomEvent('saved'));
     bus.emit('toast', { type: 'success', message: t('components.lorebookEditor.characterDeleted') });
@@ -684,10 +849,11 @@ function onCharacterInput(ch) {
 // 当显示或项目变化时加载数据
 onMounted(() => {
   hydrateLorebookFromCache();
-  loadWorldview();
-  loadCharacters();
-  loadPresentationManifest();
-  loadPresentationImageModels();
+  if (showWorldview.value) loadWorldview();
+  if (showCharacters.value) loadCharacters();
+  if (showCharacters.value) loadCharacterGraph();
+  if (showCharacters.value) loadPresentationManifest();
+  if (showCharacters.value) loadPresentationImageModels();
   bus.on('lorebook-refresh', onLorebookRefresh);
   bus.on('character-streamed', onStreamedCharacter);
   bus.on('characters-cleared', onCharactersCleared);
@@ -702,13 +868,15 @@ onMounted(() => {
 watch(() => projectStore.currentProject, (nextProject, prevProject) => {
   if (nextProject === prevProject) return;
   hydrateLorebookFromCache();
-  loadWorldview();
-  loadCharacters();
-  loadPresentationManifest();
-  loadPresentationImageModels();
+  if (showWorldview.value) loadWorldview();
+  if (showCharacters.value) loadCharacters();
+  if (showCharacters.value) loadCharacterGraph();
+  if (showCharacters.value) loadPresentationManifest();
+  if (showCharacters.value) loadPresentationImageModels();
 });
 
 onBeforeUnmount(() => {
+  stopCharacterGraphPolling();
   bus.off('lorebook-refresh', onLorebookRefresh);
   bus.off('character-streamed', onStreamedCharacter);
   bus.off('characters-cleared', onCharactersCleared);
@@ -722,24 +890,28 @@ onBeforeUnmount(() => {
 
 onActivated(() => {
   // Silently refresh data when view is reactivated
-  loadWorldview();
-  loadCharacters();
-  loadPresentationManifest();
-  loadPresentationImageModels();
+  if (showWorldview.value) loadWorldview();
+  if (showCharacters.value) loadCharacters();
+  if (showCharacters.value) loadCharacterGraph();
+  if (showCharacters.value) loadPresentationManifest();
+  if (showCharacters.value) loadPresentationImageModels();
 });
 
 function onLorebookRefresh() {
   loadWorldview();
   loadCharacters();
+  markCharacterGraphStale();
   loadPresentationManifest();
 }
 
 function onLorebookRefreshWorldview() {
   loadWorldview();
+  markCharacterGraphStale();
 }
 
 function onLorebookRefreshCharacters() {
   loadCharacters();
+  markCharacterGraphStale();
 }
 
 function onPresentationManifestUpdated() {
@@ -855,6 +1027,8 @@ function applyStreamBuffer(charId) {
   
   // 清空缓冲区
   bufferData.buffer = '';
+  markCharacterGraphStale();
+  saveLorebookSnapshot();
 }
 
 // 流式新增：接收 CharacterGeneratorPanel 发出的事件
@@ -933,7 +1107,8 @@ function onStreamedCharacter(payload) {
       };
       characters.value.push(newChar);
     }
-    
+    markCharacterGraphStale();
+    saveLorebookSnapshot();
   } catch (err) {
     // 静默处理错误
   }
@@ -959,6 +1134,11 @@ function onStreamedCharacter(payload) {
   gap: 12px;
   width: 100%;
   height: 100%;
+}
+
+.lorebook-content > :deep(.character-atlas) {
+  flex: 1;
+  min-height: 0;
 }
 
 .lorebook-card {
@@ -996,6 +1176,11 @@ function onStreamedCharacter(payload) {
 .worldview-wrap {
   height: 45%;
   flex-shrink: 0;
+}
+
+.worldview-wrap.is-full-height {
+  height: 100%;
+  flex: 1 1 auto;
 }
 
 .worldview-card {
@@ -1121,6 +1306,12 @@ function onStreamedCharacter(payload) {
   height: auto;
   overflow: visible;
   padding: 0;
+}
+
+.settings-editor-container.is-embedded.is-character-mode {
+  height: 100%;
+  min-height: 0;
+  overflow: hidden;
 }
 
 .settings-editor-container.is-embedded .lorebook-content {

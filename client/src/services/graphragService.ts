@@ -66,6 +66,36 @@ export interface GraphRAGResetResponse extends GraphRAGToggleResponse {
   removed: boolean;
 }
 
+export interface GraphRAGCharacterNode {
+  id: string;
+  label: string;
+  entityType: 'character';
+  graphName: string;
+  inGraph: boolean;
+  degree: number;
+}
+
+export interface GraphRAGCharacterEdge {
+  id: string;
+  source: string;
+  target: string;
+  relation: string;
+  evidenceCount: number;
+  sources: string[];
+  evidenceSamples: string[];
+}
+
+export interface GraphRAGCharacterGraph {
+  projectName: string;
+  enabled: boolean;
+  graphReady: boolean;
+  needsRebuild: boolean;
+  buildState: GraphRAGBuildState;
+  metadata: GraphRAGProjectMetadata;
+  nodes: GraphRAGCharacterNode[];
+  edges: GraphRAGCharacterEdge[];
+}
+
 type RawGraphRAGProjectStatus = {
   projectName?: string;
   project_name?: string;
@@ -95,6 +125,42 @@ type RawGraphRAGToggleResponse = RawGraphRAGProjectStatus & {
   success?: boolean;
   triggered?: boolean;
   removed?: boolean;
+};
+
+type RawGraphRAGCharacterGraph = {
+  projectName?: string;
+  project_name?: string;
+  enabled?: boolean;
+  graphReady?: boolean;
+  graph_ready?: boolean;
+  needsRebuild?: boolean;
+  needs_rebuild?: boolean;
+  buildState?: Partial<GraphRAGBuildState>;
+  build_state?: Partial<GraphRAGBuildState>;
+  metadata?: Partial<GraphRAGProjectMetadata>;
+  nodes?: Array<{
+    id?: string | number;
+    label?: string;
+    entity_type?: string;
+    entityType?: string;
+    graph_name?: string;
+    graphName?: string;
+    in_graph?: boolean;
+    inGraph?: boolean;
+    degree?: number;
+  }>;
+  edges?: Array<{
+    id?: string;
+    source?: string | number;
+    target?: string | number;
+    relation?: string;
+    evidence_count?: number;
+    evidenceCount?: number;
+    sources?: string[];
+    evidence_samples?: string[];
+    evidenceSamples?: string[];
+  }>;
+  detail?: string;
 };
 
 const emptyBuildState = (): GraphRAGBuildState => ({
@@ -166,6 +232,42 @@ function normalizeProjectStatus(project: RawGraphRAGProjectStatus): GraphRAGProj
   };
 }
 
+function normalizeCharacterGraph(result: RawGraphRAGCharacterGraph): GraphRAGCharacterGraph {
+  return {
+    projectName: result.projectName ?? result.project_name ?? '',
+    enabled: Boolean(result.enabled),
+    graphReady: Boolean(result.graphReady ?? result.graph_ready),
+    needsRebuild: Boolean(result.needsRebuild ?? result.needs_rebuild),
+    buildState: normalizeBuildState(result.buildState ?? result.build_state),
+    metadata: normalizeMetadata(result.metadata),
+    nodes: Array.isArray(result.nodes)
+      ? result.nodes
+        .filter(node => String(node.entityType ?? node.entity_type ?? 'character') === 'character')
+        .map(node => ({
+          id: String(node.id ?? ''),
+          label: String(node.label ?? ''),
+          entityType: 'character' as const,
+          graphName: String(node.graphName ?? node.graph_name ?? ''),
+          inGraph: Boolean(node.inGraph ?? node.in_graph),
+          degree: Number(node.degree ?? 0),
+        }))
+      : [],
+    edges: Array.isArray(result.edges)
+      ? result.edges.map(edge => ({
+          id: String(edge.id ?? `${edge.source ?? ''}:${edge.target ?? ''}`),
+          source: String(edge.source ?? ''),
+          target: String(edge.target ?? ''),
+          relation: String(edge.relation ?? ''),
+          evidenceCount: Number(edge.evidenceCount ?? edge.evidence_count ?? 0),
+          sources: Array.isArray(edge.sources) ? edge.sources.map(String) : [],
+          evidenceSamples: Array.isArray(edge.evidenceSamples ?? edge.evidence_samples)
+            ? (edge.evidenceSamples ?? edge.evidence_samples ?? []).map(String)
+            : [],
+        }))
+      : [],
+  };
+}
+
 export async function fetchGraphRAGStatus(): Promise<GraphRAGStatusResponse> {
   const response = await fetchWithAuth('/api/graphrag/status');
   const result = await response.json() as RawGraphRAGStatusResponse;
@@ -181,6 +283,13 @@ export async function fetchGraphRAGSingleStatus(projectName: string): Promise<Gr
   const result = await response.json() as RawGraphRAGSingleStatusResponse;
   if (!response.ok) throw new Error(result.detail || '获取知识图谱状态失败');
   return normalizeProjectStatus(result);
+}
+
+export async function fetchGraphRAGCharacterGraph(projectName: string): Promise<GraphRAGCharacterGraph> {
+  const response = await fetchWithAuth(`/api/graphrag/character-graph?projectName=${encodeURIComponent(projectName)}`);
+  const result = await response.json() as RawGraphRAGCharacterGraph;
+  if (!response.ok) throw new Error(result.detail || '获取角色关系图失败');
+  return normalizeCharacterGraph(result);
 }
 
 export async function enableGraphRAG(projectName: string): Promise<GraphRAGToggleResponse> {

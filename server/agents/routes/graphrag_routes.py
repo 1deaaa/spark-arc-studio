@@ -199,6 +199,29 @@ async def _trigger_project_graphrag_refresh(user_id: str, project_name: str) -> 
     )
 
 
+def _resolve_character_graph_sync(user_id: str, project_name: str, enabled: bool) -> dict:
+    """读取角色页需要的最小 GraphRAG 子图与状态。"""
+    from agents.graphrag import GraphRAGService
+
+    service = GraphRAGService(user_id=user_id, project_name=project_name)
+    service._ensure_project_exists()
+    status = service.get_status(check_freshness=enabled)
+    graph_ready = bool(status.get("graph_ready", False))
+    payload = {"nodes": [], "edges": []}
+    if graph_ready:
+        payload = service.get_character_subgraph()
+    return {
+        "projectName": project_name,
+        "enabled": enabled,
+        "graph_ready": graph_ready,
+        "needs_rebuild": bool(status.get("needs_rebuild", False)),
+        "build_state": status.get("build_state", _empty_build_state()),
+        "metadata": _summarize_metadata(status.get("metadata", {})),
+        "nodes": payload.get("nodes", []),
+        "edges": payload.get("edges", []),
+    }
+
+
 # ==================== 请求模型 ====================
 
 class ProjectNameRequest(BaseModel):
@@ -262,6 +285,29 @@ async def get_graphrag_status(
         "projects": project_items,
         "default_enabled": get_default_graphrag_enabled(user_id),
     }
+
+
+@graphrag_router.get('/character-graph')
+async def get_graphrag_character_graph(
+    projectName: str = "",
+    user: dict = Depends(get_current_user),
+):
+    """获取当前项目中能精确映射到角色档案的 GraphRAG 子图。"""
+    project_name = projectName.strip()
+    if not project_name:
+        raise HTTPException(status_code=400, detail="缺少项目名称")
+
+    user_id = str(user['user_id'])
+    settings = get_project_settings(user_id, project_name)
+    enabled = bool(settings.get("graphrag_enabled", False))
+    try:
+        return await run_in_threadpool(
+            _resolve_character_graph_sync, user_id, project_name, enabled,
+        )
+    except FileNotFoundError:
+        raise HTTPException(status_code=404, detail="项目或知识图谱不存在")
+    except Exception as exc:
+        raise HTTPException(status_code=500, detail=str(exc))
 
 
 @graphrag_router.post('/enable')

@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import asyncio
 import contextvars
+import json
 import threading
 import time
 
@@ -10,6 +11,7 @@ from langchain_core.messages import HumanMessage, ToolMessage
 from agents.communication import (
     ModelStreamRetryExhaustedError,
     ModelTurnRetryNotice,
+    SparkBaseAgent,
     stream_model_turn_with_retry,
 )
 
@@ -67,6 +69,39 @@ def test_chat_background_context_shares_prewrite_receipt_with_tool_subcontexts()
         assert get_scriptwriter_prewrite_receipt() == {"receipt_id": "outer"}
     finally:
         current_scriptwriter_prewrite_receipt.reset(outer_token)
+
+
+def test_tool_args_hydration_replaces_streamed_null_placeholders() -> None:
+    agent = object.__new__(SparkBaseAgent)
+    agent.agent_id = "agent_scriptwriter"
+    specs = [{
+        "name": "prepare_script_creation",
+        "args": {
+            "task_description": "落盘两个场景",
+            "chapter_name": None,
+            "scene_name": None,
+        },
+        "index": 0,
+        "raw": {"id": "call-prewrite", "name": "prepare_script_creation"},
+    }]
+    expected_args = {
+        "task_description": "落盘两个场景",
+        "chapter_name": "十三 · 择途",
+        "scene_name": "13-1 曲径",
+    }
+    chunk_buffers = {
+        0: {
+            "index": 0,
+            "id": "call-prewrite",
+            "name": "prepare_script_creation",
+            "args_parts": [json.dumps(expected_args, ensure_ascii=False)],
+            "raw": [],
+        },
+    }
+
+    hydrated = agent._hydrate_tool_specs_from_chunk_buffers(specs, chunk_buffers)
+
+    assert hydrated[0]["args"] == expected_args
 
 
 def test_chat_task_entry_replays_seq_and_builds_snapshot_segments() -> None:

@@ -71,7 +71,7 @@
 import { ref, computed, markRaw, watch } from 'vue';
 import { NIcon, NTooltip } from 'naive-ui';
 import { useI18n } from 'vue-i18n';
-import { Activity, Code, Gauge, Library, Lightbulb, List, Map as MapIcon, MessagesSquare, Settings, SquarePen } from '@lucide/vue';
+import { Activity, Code, Gauge, Library, Lightbulb, List, Map as MapIcon, MessagesSquare, Settings, SquarePen, UsersRound } from '@lucide/vue';
 import { useViewStore, type AppViewKey } from '../../stores/viewStore';
 
 type ActivityItem = {
@@ -93,6 +93,7 @@ function buildDefaultItems(): ActivityItem[] {
   return [
     { id: 'chat', view: 'chat', title: t('activityBar.chat'), icon: markRaw(MessagesSquare) },
     { id: 'world', view: 'world', title: t('activityBar.world'), icon: markRaw(Lightbulb) },
+    { id: 'characters', view: 'characters', title: t('activityBar.characters'), icon: markRaw(UsersRound) },
     { id: 'synopsis', view: 'synopsis', title: t('activityBar.synopsis'), icon: markRaw(Activity) },
     { id: 'structure', view: 'structure', title: t('activityBar.structure'), icon: markRaw(List) },
     { id: 'production', view: 'production', title: t('activityBar.production'), icon: markRaw(SquarePen) },

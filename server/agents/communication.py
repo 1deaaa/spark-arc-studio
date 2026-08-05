@@ -831,7 +831,7 @@ class SparkBaseAgent:
     @staticmethod
     def _tool_spec_has_args(spec: Dict[str, Any]) -> bool:
         args = spec.get("args")
-        return isinstance(args, dict) and bool(args)
+        return isinstance(args, dict) and any(value is not None for value in args.values())
 
     def _extract_tool_call_id(self, tool_call: Any) -> str:
         tool_call_dict = self._tool_call_as_dict(tool_call)
@@ -1089,7 +1089,9 @@ class SparkBaseAgent:
         merged: List[Dict[str, Any]] = []
         for index, spec in enumerate(specs):
             current = dict(spec)
-            if self._tool_spec_has_args(current):
+            current_args = current.get("args") if isinstance(current.get("args"), dict) else {}
+            needs_hydration = not current_args or any(value is None for value in current_args.values())
+            if not needs_hydration:
                 merged.append(current)
                 continue
 
@@ -1110,7 +1112,10 @@ class SparkBaseAgent:
                 )
 
             if fallback is not None:
-                current["args"] = fallback.get("args") or {}
+                fallback_args = fallback.get("args") if isinstance(fallback.get("args"), dict) else {}
+                merged_args = dict(fallback_args)
+                merged_args.update({key: value for key, value in current_args.items() if value is not None})
+                current["args"] = merged_args
                 if current.get("index") is None:
                     current["index"] = fallback.get("index")
                 fallback_raw = fallback.get("raw") or {}
