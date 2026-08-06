@@ -8,26 +8,18 @@
       <!-- 世界观设定 -->
       <div v-if="showWorldview" class="lorebook-card-wrap worldview-wrap" :class="{ 'is-full-height': mode === 'worldview' }">
         <GlobalLoading scope="world" target="worldview" variant="card" />
-        <n-card 
-          :segmented="{ content: true }"
-          :bordered="false"
-          size="small"
-          class="lorebook-card worldview-card"
-        >
-          <n-input
-            v-model:value="worldview"
-            @input="onWorldviewInput"
-            type="textarea"
-            class="full-width-input worldview-input"
-            :placeholder="t('components.lorebookEditor.worldviewPlaceholder')"
-          />
-        </n-card>
+        <WorldviewMarkdownEditor
+          v-model="worldview"
+          :save-status="worldviewSaveStatus"
+          @input="onWorldviewInput"
+        />
       </div>
 
       <!-- 角色设定 -->
       <CharacterAtlas
         v-if="isCharacterAtlas"
         ref="characterAtlasRef"
+        :project-name="projectStore.currentProject || undefined"
         :characters="characters"
         :graph="characterGraph"
         :manual-relations="manualRelations"
@@ -233,6 +225,7 @@ import { NCard, NInput, NButton, NIcon, NSpace, NPopconfirm, NModal, NSelect, NT
 import { ImagePlus, Plus, Scissors, Sparkles, SquarePen, Trash, Upload } from '@lucide/vue';
 import StudioSeamlessTextarea from '../editors/StudioSeamlessTextarea.vue';
 import CharacterAtlas from './CharacterAtlas.vue';
+import WorldviewMarkdownEditor from './WorldviewMarkdownEditor.vue';
 import bus from '../../eventBus';
 import GlobalLoading from '../share/GlobalLoading.vue';
 import { useProjectStore } from '../stores/projectStore';
@@ -280,6 +273,7 @@ const props = defineProps({
 });
 
 const worldview = ref('');
+const worldviewSaveStatus = ref<'idle' | 'dirty' | 'saving' | 'saved' | 'error'>('idle');
 const { t } = useI18n();
 
 const mode = computed(() => props.mode);
@@ -400,11 +394,15 @@ async function loadWorldview() {
       if (!isCreativeCacheEqual(worldview.value, remoteWorldview)) {
         worldview.value = remoteWorldview;
       }
+      worldviewSaveStatus.value = 'saved';
     } else if (res.status === 404) {
       worldview.value = '';
+      worldviewSaveStatus.value = 'idle';
     }
     saveLorebookSnapshot();
-  } catch {}
+  } catch {
+    worldviewSaveStatus.value = 'error';
+  }
 }
 
 // 保存世界观
@@ -412,19 +410,26 @@ async function saveWorldview() {
   const projectId = projectStore.currentProject;
   const fileId = '世界观.txt';
   if (!projectId || !fileId) return;
+  const contentToSave = worldview.value;
+  worldviewSaveStatus.value = 'saving';
   try {
     const res = await fetchWithAuth('/api/lorebooks', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ projectName: projectId, fileName: fileId, content: worldview.value })
+      body: JSON.stringify({ projectName: projectId, fileName: fileId, content: contentToSave })
     });
+    if (!res.ok) throw new Error(`HTTP ${res.status}`);
     await res.json();
     saveLorebookSnapshot();
-  } catch {}
+    worldviewSaveStatus.value = worldview.value === contentToSave ? 'saved' : 'dirty';
+  } catch {
+    worldviewSaveStatus.value = 'error';
+  }
 }
 
 let worldviewTimer: ReturnType<typeof setTimeout> | null = null;
 function onWorldviewInput() {
+  worldviewSaveStatus.value = 'dirty';
   saveLorebookSnapshot();
   if (worldviewTimer) {
     clearTimeout(worldviewTimer);
@@ -938,6 +943,9 @@ watch(() => projectStore.currentProject, (nextProject, prevProject) => {
 
 onBeforeUnmount(() => {
   stopCharacterGraphPolling();
+  if (worldviewTimer) clearTimeout(worldviewTimer);
+  timers.forEach(timer => clearTimeout(timer));
+  timers.clear();
   bus.off('lorebook-refresh', onLorebookRefresh);
   bus.off('character-streamed', onStreamedCharacter);
   bus.off('characters-cleared', onCharactersCleared);
@@ -966,6 +974,7 @@ function onLorebookRefresh() {
 }
 
 function onLorebookRefreshWorldview() {
+  if (worldviewTimer) clearTimeout(worldviewTimer);
   loadWorldview();
   markCharacterGraphStale();
 }
@@ -980,6 +989,8 @@ function onPresentationManifestUpdated() {
 }
 
 function onWorldviewStreamStart() {
+  if (worldviewTimer) clearTimeout(worldviewTimer);
+  worldviewSaveStatus.value = 'saving';
   worldview.value = '';
 }
 
@@ -1237,6 +1248,7 @@ function onStreamedCharacter(payload) {
 .worldview-wrap {
   height: 45%;
   flex-shrink: 0;
+  border-radius: 6px;
 }
 
 .worldview-wrap.is-full-height {
@@ -1244,30 +1256,8 @@ function onStreamedCharacter(payload) {
   flex: 1 1 auto;
 }
 
-.worldview-card {
+.worldview-wrap :deep(.worldview-workbench) {
   height: 100%;
-  display: flex;
-  flex-direction: column;
-}
-
-.worldview-card :deep(.n-card-content) {
-  flex: 1;
-  display: flex;
-  flex-direction: column;
-  min-height: 0;
-}
-
-.worldview-input {
-  flex: 1;
-  min-height: 0;
-}
-
-.worldview-input :deep(.n-input),
-.worldview-input :deep(.n-input-wrapper),
-.worldview-input :deep(.n-input__textarea),
-.worldview-input :deep(.n-input__textarea-el) {
-  height: 100% !important;
-  min-height: 100% !important;
 }
 
 .character-wrap {

@@ -34,6 +34,7 @@ import os
 import re
 from typing import Any, Dict, List, Optional, Tuple
 
+from core.character_relations import read_character_relations
 from core.character_store import read_character_records
 from core.project_settings import normalize_scene_length_hint
 from core.utils import (
@@ -153,6 +154,7 @@ def load_character_bundle(user_id: str, project_name: str) -> Dict[str, Any]:
       - characters: [{id, name, desc, content}]
       - chr_map: {int(id): name}
       - roles_text: prompt 注入用全量角色文本
+      - relations_text: 作者确认的角色关系文本
       - summary_text: 简要列表文本
       - detailed_summary_text: 详细摘要文本
     """
@@ -163,6 +165,22 @@ def load_character_bundle(user_id: str, project_name: str) -> Dict[str, Any]:
     role_blocks: List[str] = []
     summary_lines: List[str] = ["### 角色列表"]
     detailed_lines: List[str] = ["### 已有角色设定"]
+    relation_lines_by_character: Dict[str, List[str]] = {}
+    all_relation_lines: List[str] = []
+
+    for item in read_character_relations(user_id, project_name):
+        source_id = str(item.get("source") or "")
+        target_id = str(item.get("target") or "")
+        source_name = str(records.get(source_id, {}).get("name") or "").strip()
+        target_name = str(records.get(target_id, {}).get("name") or "").strip()
+        relation = str(item.get("relation") or "").strip()
+        if not source_name or not target_name or not relation:
+            continue
+        note = f"；备注：{item['note']}" if item.get("note") else ""
+        line = f"- {source_name} → {target_name}：{relation}{note}"
+        all_relation_lines.append(line)
+        relation_lines_by_character.setdefault(source_id, []).append(line)
+        relation_lines_by_character.setdefault(target_id, []).append(line)
 
     for cid_str, record in records.items():
         cid = int(cid_str)
@@ -183,9 +201,11 @@ def load_character_bundle(user_id: str, project_name: str) -> Dict[str, Any]:
             }
         )
 
-        role_blocks.append(
-            f"--- 角色: {display_name} ---\n{content or '(暂无详细设定)'}"
-        )
+        role_block = f"--- 角色: {display_name} ---\n{content or '(暂无详细设定)'}"
+        character_relation_lines = relation_lines_by_character.get(cid_str) or []
+        if character_relation_lines:
+            role_block += "\n【作者确认关系】\n" + "\n".join(character_relation_lines)
+        role_blocks.append(role_block)
 
         summary_entry = f"- {display_name}"
         if desc:
@@ -194,6 +214,9 @@ def load_character_bundle(user_id: str, project_name: str) -> Dict[str, Any]:
 
         detailed_lines.append(f"\n#### {display_name}")
         detailed_lines.append(content if content else "(尚无详细设定)")
+        if character_relation_lines:
+            detailed_lines.append("【作者确认关系】")
+            detailed_lines.extend(character_relation_lines)
 
     summary_text = "\n".join(summary_lines) if len(summary_lines) > 1 else ""
     detailed_summary_text = "\n".join(detailed_lines) if len(detailed_lines) > 1 else ""
@@ -201,6 +224,7 @@ def load_character_bundle(user_id: str, project_name: str) -> Dict[str, Any]:
         "characters": characters,
         "chr_map": chr_map,
         "roles_text": "\n\n".join(role_blocks),
+        "relations_text": "\n".join(all_relation_lines),
         "summary_text": summary_text,
         "detailed_summary_text": detailed_summary_text,
     }
@@ -282,6 +306,7 @@ def load_project_context_bundle(user_id: str, project_name: str) -> Dict[str, An
         "characters": character_bundle.get("characters", []),
         "characters_summary": character_bundle.get("summary_text", ""),
         "characters_detailed_summary": character_bundle.get("detailed_summary_text", ""),
+        "relations_text": character_bundle.get("relations_text", ""),
         "synopsis_data": synopsis_data,
         "beats_data": beats_data,
         "outline_data": outline_data,

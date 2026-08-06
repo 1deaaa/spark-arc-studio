@@ -12,7 +12,7 @@ from .common import ToolExecutionContext, _apply_patch
 
 
 class RewriteWorldviewInput(BaseModel):
-    overwrite_content: str = Field(description="完整的世界观覆盖文本。调用后将直接写入并覆盖世界观文件")
+    overwrite_content: str = Field(description="完整的世界观 Markdown 覆盖文本。首行使用 # 标题，按实际内容使用 ## 模块、### 子体系，并保留字段行 - 字段名：内容；调用后将直接覆盖世界观文件")
 
 
 class RewriteAllCharactersInput(BaseModel):
@@ -26,13 +26,13 @@ class UpdateCharacterInput(BaseModel):
 
 
 class PatchWorldviewInput(BaseModel):
-    search_text: str = Field(description="需要被替换的原文片段（必须精确匹配原文中的连续文字，建议提取完整的1~3句话，不要太短以免误替换）。传入空字符串可将 replace_text 追加到文件末尾")
-    replace_text: str = Field(description="修改后的新文本片段")
+    search_text: str = Field(description="需要被替换的世界观 Markdown 原文片段（必须精确匹配连续文字，优先包含所属 ## 模块标题或完整字段行；不要用过短片段）。传入空字符串可将 replace_text 追加到文件末尾")
+    replace_text: str = Field(description="修改后的 Markdown 片段：保留原模块层级，新增模块使用 ##，子体系使用 ###，字段使用 - 字段名：内容；不要覆盖未涉及的其他模块")
 
 
 @tool(args_schema=RewriteWorldviewInput)
 def rewrite_worldview(overwrite_content: str) -> str:
-    """覆盖世界观全文。"""
+    """覆盖世界观全文，正文必须遵循世界观 Markdown 结构协议。"""
     import logging
 
     from agents.agent_lorebook import WorldviewAgent
@@ -97,7 +97,7 @@ def update_character(character_name: str, overwrite_content: str) -> str:
 
 @tool(args_schema=PatchWorldviewInput)
 def patch_worldview(search_text: str, replace_text: str) -> str:
-    """局部修改世界观文本。search_text 传空字符串可将 replace_text 追加到文件末尾。"""
+    """按精确片段局部修改世界观 Markdown，保留未涉及的模块。"""
     user_id, project_name = ToolExecutionContext.get_context()
     worldview_path = os.path.join(get_project_path(user_id, project_name), "世界观.txt")
     return _apply_patch(worldview_path, search_text, replace_text, file_label="世界观.txt")

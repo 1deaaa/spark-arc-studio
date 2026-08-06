@@ -26,7 +26,8 @@ _WORLDVIEW_RETRY_INSTRUCTION = """
 - 只输出可直接保存的 Markdown 纯文本设定文档；
 - 禁止输出 HTML、CSS、JavaScript、Vue、React 或其他前端代码；
 - 禁止使用任何 Markdown 代码围栏；
-- 第一行直接使用 Markdown 标题开始正文。
+- 第一行使用 Markdown 一级标题开始正文；
+- 使用二级标题划分世界观模块，字段使用 `- 字段名：内容`，不要输出无模块标题的整篇散文。
 """
 
 
@@ -127,6 +128,9 @@ class WorldviewAgent(SparkBaseAgent, SparkAgentExecutor):
             "rewrite_worldview": [
                 {"prompt_key": "rewrite_worldview", "field": "system"}
             ],
+            "patch_worldview": [
+                {"prompt_key": "patch_worldview", "field": "system"}
+            ],
             "rewrite_all_characters": [
                 {"prompt_key": "generate_characters", "field": "system"}
             ],
@@ -138,6 +142,10 @@ class WorldviewAgent(SparkBaseAgent, SparkAgentExecutor):
                 "worldview": "（由当前项目与上下文提供）",
                 "guidance": "（由用户当前修改要求决定）",
                 "style_profile": "（未提供）",
+            },
+            "patch_worldview": {
+                "search_text": "（由工具参数提供）",
+                "replace_text": "（由工具参数提供）",
             },
             "generate_characters": {
                 "story_tags": "（由项目创作参数提供；若锁定第一人称，必须生成或保留叙述者主角档案）",
@@ -364,6 +372,7 @@ def get_character_info(character_name: str) -> str:
         load_character_content,
         lookup_character_id_by_name,
     )
+    from core.character_relations import read_character_relation_lines
 
     user_id = current_user_id.get()
     project_name = get_current_project_name()
@@ -375,7 +384,11 @@ def get_character_info(character_name: str) -> str:
         if not char_id:
             return f"未找到名为 '{character_name}' 的角色。"
 
-        return load_character_content(user_id, project_name, char_id)
+        content = load_character_content(user_id, project_name, char_id)
+        relation_lines = read_character_relation_lines(user_id, project_name, char_id)
+        if relation_lines:
+            content = f"{content}\n\n【作者确认关系】\n{chr(10).join(relation_lines)}"
+        return content
     except Exception as exc:  # pragma: no cover - 调试日志
         print(f"Failed to fetch character '{character_name}': {exc}")
         return f"Failed to fetch character '{character_name}' 信息时发生错误。"

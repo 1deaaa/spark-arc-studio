@@ -54,6 +54,29 @@ def read_character_relations(user_id: str, project_name: str) -> list[dict[str, 
     return _normalize(load_json_file(_path(user_id, project_name), list))
 
 
+def read_character_relation_lines(
+    user_id: str,
+    project_name: str,
+    character_id: str | int,
+) -> list[str]:
+    """返回指定角色的作者确认关系文本，供角色卡上下文直接注入。"""
+    target_id = str(character_id)
+    records = read_character_records(user_id, project_name)
+    lines: list[str] = []
+    for item in read_character_relations(user_id, project_name):
+        source_id = str(item.get("source") or "")
+        target_id_item = str(item.get("target") or "")
+        if target_id not in {source_id, target_id_item}:
+            continue
+        source_name = str(records.get(source_id, {}).get("name") or "").strip()
+        target_name = str(records.get(target_id_item, {}).get("name") or "").strip()
+        if not source_name or not target_name:
+            continue
+        note = f"；备注：{item['note']}" if item.get("note") else ""
+        lines.append(f"- {source_name} → {target_name}：{item['relation']}{note}")
+    return lines
+
+
 def _validate_character_pair(user_id: str, project_name: str, source: str, target: str) -> None:
     records = read_character_records(user_id, project_name)
     if source not in records or target not in records:

@@ -42,7 +42,7 @@ import { NCard, NForm, NButton, NIcon } from 'naive-ui';
 import { Rocket } from '@lucide/vue';
 import StudioSeamlessTextarea from '@/components/editors/StudioSeamlessTextarea.vue';
 import { fetchWithAuth } from '@/services/api';
-import { fetchCharacters } from '@/services/storyService';
+import { fetchCharacterRelations, fetchCharacters } from '@/services/storyService';
 import { sendChatMessageStream } from '@/services/chatService';
 import { useProjectStore } from '@/components/stores/projectStore';
 import bus from '@/eventBus';
@@ -97,6 +97,7 @@ function normalizeToolName(rawToolName: unknown = '') {
 async function buildActiveContext(projectName: string): Promise<string> {
   let worldview = '';
   let charactersText = '';
+  let relationsText = '';
 
   try {
     const res = await fetchWithAuth(`/api/worldview/${encodeURIComponent(projectName)}`);
@@ -108,6 +109,7 @@ async function buildActiveContext(projectName: string): Promise<string> {
 
   try {
     const characters = await fetchCharacters(projectName, true) as StoryCharacterDetail[];
+    const nameById = new Map((characters || []).map(character => [String(character.id), String(character.name || '').trim()]));
     charactersText = (characters || [])
       .filter(ch => ![-1, -2].includes(Number(ch.id)))
       .map(ch => {
@@ -116,11 +118,24 @@ async function buildActiveContext(projectName: string): Promise<string> {
         return `- ${name}:\n${content}`;
       })
       .join('\n\n');
+
+    const relations = await fetchCharacterRelations(projectName);
+    relationsText = relations
+      .map(relation => {
+        const source = nameById.get(String(relation.source));
+        const target = nameById.get(String(relation.target));
+        if (!source || !target) return '';
+        const note = relation.note ? `；备注：${relation.note}` : '';
+        return `- ${source} → ${target}：${relation.relation}${note}`;
+      })
+      .filter(Boolean)
+      .join('\n');
   } catch {}
 
   return [
     worldview ? `【当前世界观】\n${worldview}` : '',
     charactersText ? `【当前角色设定】\n${charactersText}` : '',
+    relationsText ? `【作者确认的角色关系】\n${relationsText}` : '',
   ].filter(Boolean).join('\n\n');
 }
 

@@ -106,17 +106,29 @@
         <n-button quaternary size="tiny" @click="cancelRelationMode">{{ t('common.cancel') }}</n-button>
       </div>
       <div v-if="characters.length" class="atlas-canvas" :style="canvasTransformStyle">
-        <svg class="relation-layer" :width="layout.width" :height="layout.height" aria-hidden="true">
+        <svg class="relation-layer" :width="layout.width" :height="layout.height">
           <g
             v-for="edge in layout.edges"
             :key="edge.key"
             class="relation-edge"
-            :class="{ dimmed: isEdgeDimmed(edge), active: isEdgeActive(edge), fallback: edge.source === 'profile', manual: edge.source === 'manual', graphrag: edge.source === 'graphrag' }"
-            @pointerdown.stop="edge.source === 'manual' && openEditRelation(edge)"
-            @click.stop="edge.source === 'manual' && openEditRelation(edge)"
+            :class="{ dimmed: isEdgeDimmed(edge), active: isEdgeActive(edge), selected: selectedEdgeKey === edge.key, manual: edge.source === 'manual', graphrag: edge.source === 'graphrag' }"
+            :role="edge.source === 'manual' ? 'button' : undefined"
+            :tabindex="edge.source === 'manual' ? 0 : undefined"
+            :aria-label="edge.source === 'manual' ? edge.tooltip : undefined"
+            @pointerdown.stop
+            @click.stop="selectRelationEdge(edge)"
+            @keydown.enter.prevent="selectRelationEdge(edge)"
+            @keydown.space.prevent="selectRelationEdge(edge)"
           >
             <title>{{ edge.tooltip }}</title>
-            <path :d="edge.path" />
+            <path
+              v-if="edge.source === 'manual'"
+              class="relation-hit"
+              :d="edge.path"
+              @pointerdown.stop="selectedEdgeKey = edge.key"
+              @click.stop="selectRelationEdge(edge)"
+            />
+            <path class="relation-stroke" :d="edge.path" />
             <text :x="edge.labelX" :y="edge.labelY">{{ edge.label }}</text>
           </g>
         </svg>
@@ -142,9 +154,13 @@
           :class="{
             selected: selectedId === node.id,
             dimmed: isNodeDimmed(node),
+            'is-dragging': nodeDrag.id === node.id,
           }"
           :style="node.style"
-          @pointerdown.stop
+          @pointerdown.stop="startNodeDrag($event, node)"
+          @pointermove.stop="moveNodeDrag($event)"
+          @pointerup.stop="stopNodeDrag($event)"
+          @pointercancel.stop="stopNodeDrag($event)"
           @mouseenter="hoveredId = node.id"
           @mouseleave="hoveredId = null"
           @click="handleNodeClick(node.character)"
@@ -173,7 +189,7 @@
 
       <div v-if="characters.length" class="atlas-legend">
         <span><i class="legend-line manual"></i>{{ t('views.characters.manualRelationLegend') }}</span>
-        <span><i class="legend-line" :class="{ fallback: layout.usesFallback }"></i>{{ relationLegend }}</span>
+        <span v-if="showGraphLegend"><i class="legend-line"></i>{{ relationLegend }}</span>
         <span><i class="legend-node"></i>{{ t('views.characters.openProfileHint') }}</span>
       </div>
     </div>
@@ -318,7 +334,7 @@ type AtlasEdge = {
   tooltip: string;
   labelX: number;
   labelY: number;
-  source: 'manual' | 'graphrag' | 'profile';
+  source: 'manual' | 'graphrag';
   relationId?: string;
   note?: string;
 };
@@ -332,8 +348,60 @@ type RelationInput = {
   note?: string;
 };
 
+const NODE_WIDTH = 274;
+const NODE_HEIGHT = 104;
+
+type AtlasPoint = { x: number; y: number };
+
+function boundaryPoint(node: AtlasNode, dx: number, dy: number): AtlasPoint {
+  const centerX = node.x + NODE_WIDTH / 2;
+  const centerY = node.y + NODE_HEIGHT / 2;
+  const scaleX = Math.abs(dx) > 0.0001 ? (NODE_WIDTH / 2) / Math.abs(dx) : Number.POSITIVE_INFINITY;
+  const scaleY = Math.abs(dy) > 0.0001 ? (NODE_HEIGHT / 2) / Math.abs(dy) : Number.POSITIVE_INFINITY;
+  const scale = Math.min(scaleX, scaleY);
+  return { x: centerX + dx * scale, y: centerY + dy * scale };
+}
+
+function shiftBoundaryPoint(point: AtlasPoint, node: AtlasNode, horizontal: boolean, amount: number): AtlasPoint {
+  const inset = 12;
+  if (horizontal) {
+    return {
+      x: point.x,
+      y: Math.max(node.y + inset, Math.min(node.y + NODE_HEIGHT - inset, point.y + amount)),
+    };
+  }
+  return {
+    x: Math.max(node.x + inset, Math.min(node.x + NODE_WIDTH - inset, point.x + amount)),
+    y: point.y,
+  };
+}
+
+function buildRelationRoute(from: AtlasNode, to: AtlasNode, parallelOffset: number) {
+  const fromCenter = { x: from.x + NODE_WIDTH / 2, y: from.y + NODE_HEIGHT / 2 };
+  const toCenter = { x: to.x + NODE_WIDTH / 2, y: to.y + NODE_HEIGHT / 2 };
+  const dx = toCenter.x - fromCenter.x;
+  const dy = toCenter.y - fromCenter.y;
+  const distance = Math.max(1, Math.hypot(dx, dy));
+  const horizontal = Math.abs(dx) / NODE_WIDTH >= Math.abs(dy) / NODE_HEIGHT;
+  const normalX = -dy / distance;
+  const normalY = dx / distance;
+  const fromBase = boundaryPoint(from, dx, dy);
+  const toBase = boundaryPoint(to, -dx, -dy);
+  const offset = Math.max(-34, Math.min(34, parallelOffset));
+  const fromPoint = shiftBoundaryPoint(fromBase, from, horizontal, horizontal ? normalY * offset : normalX * offset);
+  const toPoint = shiftBoundaryPoint(toBase, to, horizontal, horizontal ? normalY * offset : normalX * offset);
+  const midX = (fromPoint.x + toPoint.x) / 2 + normalX * offset * 0.65;
+  const midY = (fromPoint.y + toPoint.y) / 2 + normalY * offset * 0.65;
+  return {
+    path: `M ${fromPoint.x} ${fromPoint.y} Q ${midX} ${midY} ${toPoint.x} ${toPoint.y}`,
+    labelX: midX,
+    labelY: midY - 8,
+  };
+}
+
 const props = defineProps<{
   characters: AtlasCharacter[];
+  projectName?: string;
   graph?: GraphRAGCharacterGraph | null;
   manualRelations?: CharacterRelation[];
   graphLoading?: boolean;
@@ -376,7 +444,54 @@ const relationTargetId = ref('');
 const relationName = ref('');
 const relationNote = ref('');
 const relationSaving = ref(false);
+const selectedEdgeKey = ref<string | null>(null);
+const nodePositions = ref<Record<string, AtlasPoint>>({});
+const nodeDrag = ref<{ id: string | null; startX: number; startY: number; originX: number; originY: number; moved: boolean }>({
+  id: null,
+  startX: 0,
+  startY: 0,
+  originX: 0,
+  originY: 0,
+  moved: false,
+});
+const suppressNodeClick = ref(false);
 let viewportResizeObserver: ResizeObserver | null = null;
+
+const NODE_POSITION_STORAGE_PREFIX = 'spark_character_atlas_positions_v1:';
+
+function nodePositionStorageKey(projectName = props.projectName) {
+  const scope = String(projectName || 'default').trim() || 'default';
+  return `${NODE_POSITION_STORAGE_PREFIX}${scope}`;
+}
+
+function loadNodePositions(projectName = props.projectName) {
+  if (typeof localStorage === 'undefined') return;
+  try {
+    const raw = localStorage.getItem(nodePositionStorageKey(projectName));
+    const parsed = raw ? JSON.parse(raw) : {};
+    if (!parsed || typeof parsed !== 'object' || Array.isArray(parsed)) {
+      nodePositions.value = {};
+      return;
+    }
+    nodePositions.value = Object.fromEntries(
+      Object.entries(parsed).filter(([, value]) => {
+        const item = value as Partial<AtlasPoint>;
+        return Number.isFinite(Number(item?.x)) && Number.isFinite(Number(item?.y));
+      }).map(([id, value]) => [id, { x: Number((value as AtlasPoint).x), y: Number((value as AtlasPoint).y) }]),
+    );
+  } catch {
+    nodePositions.value = {};
+  }
+}
+
+function saveNodePositions() {
+  if (typeof localStorage === 'undefined') return;
+  try {
+    localStorage.setItem(nodePositionStorageKey(), JSON.stringify(nodePositions.value));
+  } catch {
+    // 浏览器存储不可用时仍保留当前会话内的位置。
+  }
+}
 
 const graphStatus = computed(() => {
   if (props.graphLoading && !props.graph) return 'loading';
@@ -451,6 +566,14 @@ const groupOptions = computed(() => [
   ...groupedCharacters.value.map(group => ({ label: group.name, value: group.name })),
 ]);
 
+function positionFor(character: AtlasCharacter, defaultX: number, defaultY: number) {
+  const saved = nodePositions.value[String(character.id)];
+  return {
+    x: Math.max(18, Number.isFinite(saved?.x) ? saved.x : defaultX),
+    y: Math.max(18, Number.isFinite(saved?.y) ? saved.y : defaultY),
+  };
+}
+
 const layout = computed(() => {
   const groups = groupedCharacters.value;
   const zoneWidth = 310;
@@ -468,8 +591,9 @@ const layout = computed(() => {
       const color = COLORS[groupIndex % COLORS.length];
       const x = 18 + groupIndex * (zoneWidth + gap);
       group.characters.forEach((character, index) => {
-        const nodeX = x + 18;
-        const nodeY = 76 + index * 132;
+        const position = positionFor(character, x + 18, 76 + index * 132);
+        const nodeX = position.x;
+        const nodeY = position.y;
         nodes.push({
           id: String(character.id),
           name: character.name || t('views.characters.unnamedCharacter'),
@@ -498,8 +622,9 @@ const layout = computed(() => {
     props.characters.forEach((character, index) => {
       const column = index % columns;
       const row = Math.floor(index / columns);
-      const nodeX = 36 + column * (zoneWidth + gap);
-      const nodeY = 36 + row * 132;
+      const position = positionFor(character, 36 + column * (zoneWidth + gap), 36 + row * 132);
+      const nodeX = position.x;
+      const nodeY = position.y;
       const color = COLORS[index % COLORS.length];
       nodes.push({
         id: String(character.id),
@@ -515,6 +640,9 @@ const layout = computed(() => {
       });
     });
   }
+
+  width = Math.max(width, ...nodes.map(node => node.x + NODE_WIDTH + 36));
+  height = Math.max(height, ...nodes.map(node => node.y + NODE_HEIGHT + 36));
 
   const nodeById = new Map(nodes.map(node => [node.id, node]));
   const edges: AtlasEdge[] = [];
@@ -540,15 +668,7 @@ const layout = computed(() => {
         }),
         source: 'graphrag' as const,
       }))
-      : nodes.flatMap(source => nodes
-        .filter(target => source.id !== target.id && String(source.character.content || '').includes(target.name))
-        .map(target => ({
-          sourceId: source.id,
-          targetId: target.id,
-          relation: t('views.characters.profileMentionRelation'),
-          tooltip: t('views.characters.profileMentionHint'),
-          source: 'profile' as const,
-        }))))
+      : [])
   ];
 
   const pairCounts = new Map<string, number>();
@@ -566,33 +686,30 @@ const layout = computed(() => {
       const from = nodeById.get(relation.sourceId);
       const to = nodeById.get(relation.targetId);
       if (!from || !to) continue;
-      const x1 = from.x + 256;
-      const y1 = from.y + 48;
-      const x2 = to.x + 4;
-      const y2 = to.y + 48;
-      const bend = Math.max(60, Math.abs(x2 - x1) * 0.42);
-      const parallelOffset = (pairIndex - ((pairCounts.get(pair) || 1) - 1) / 2) * 24;
+      const rawOffset = (pairIndex - ((pairCounts.get(pair) || 1) - 1) / 2) * 20;
+      // 反向关系使用同一个基准法线，避免 A→B 与 B→A 的分流方向互相抵消。
+      const parallelOffset = relation.sourceId <= relation.targetId ? rawOffset : -rawOffset;
+      const route = buildRelationRoute(from, to, parallelOffset);
       edges.push({
         key,
         sourceId: relation.sourceId,
         targetId: relation.targetId,
-        path: `M ${x1} ${y1} C ${x1 + bend} ${y1 + parallelOffset}, ${x2 - bend} ${y2 - parallelOffset}, ${x2} ${y2}`,
+        path: route.path,
         relation: relation.relation,
         label: relation.relation.length > 18 ? `${relation.relation.slice(0, 18)}...` : relation.relation,
         tooltip: relation.tooltip,
-        labelX: (x1 + x2) / 2,
-        labelY: (y1 + y2) / 2 + parallelOffset - 8,
+        labelX: route.labelX,
+        labelY: route.labelY,
         source: relation.source,
         relationId: relation.relationId,
         note: relation.note,
       });
   }
-  return { width, height, nodes, groups: groupLayouts, edges, usesFallback: !graphAvailable };
+  return { width, height, nodes, groups: groupLayouts, edges };
 });
 
-const relationLegend = computed(() => layout.value.usesFallback
-  ? t('views.characters.profileMentionLegend')
-  : t('views.characters.graphRelationLegend'));
+const showGraphLegend = computed(() => Boolean(props.graph?.graphReady));
+const relationLegend = computed(() => t('views.characters.graphRelationLegend'));
 
 const characterOptions = computed(() => props.characters.map(character => ({
   label: character.name || t('views.characters.unnamedCharacter'),
@@ -668,6 +785,7 @@ function onWheel(event: WheelEvent) {
 
 function startPan(event: PointerEvent) {
   if (event.button !== 0) return;
+  if (!relationMode.value) selectedEdgeKey.value = null;
   isPanning.value = true;
   panOrigin.value = { x: event.clientX, y: event.clientY, panX: panX.value, panY: panY.value };
   viewportRef.value?.setPointerCapture(event.pointerId);
@@ -683,6 +801,45 @@ function stopPan(event: PointerEvent) {
   if (!isPanning.value) return;
   isPanning.value = false;
   if (viewportRef.value?.hasPointerCapture(event.pointerId)) viewportRef.value.releasePointerCapture(event.pointerId);
+}
+
+function startNodeDrag(event: PointerEvent, node: AtlasNode) {
+  if (event.button !== 0 || relationMode.value) return;
+  nodeDrag.value = {
+    id: node.id,
+    startX: event.clientX,
+    startY: event.clientY,
+    originX: node.x,
+    originY: node.y,
+    moved: false,
+  };
+  const target = event.currentTarget as HTMLElement | null;
+  if (typeof target?.setPointerCapture === 'function') target.setPointerCapture(event.pointerId);
+}
+
+function moveNodeDrag(event: PointerEvent) {
+  const drag = nodeDrag.value;
+  if (!drag.id) return;
+  const dx = (event.clientX - drag.startX) / Math.max(0.1, zoom.value);
+  const dy = (event.clientY - drag.startY) / Math.max(0.1, zoom.value);
+  if (!drag.moved && Math.hypot(dx, dy) < 3) return;
+  drag.moved = true;
+  suppressNodeClick.value = true;
+  nodePositions.value[drag.id] = {
+    x: Math.max(18, drag.originX + dx),
+    y: Math.max(18, drag.originY + dy),
+  };
+}
+
+function stopNodeDrag(event: PointerEvent) {
+  const drag = nodeDrag.value;
+  if (!drag.id) return;
+  if (drag.moved) saveNodePositions();
+  const target = event.currentTarget as HTMLElement | null;
+  if (typeof target?.hasPointerCapture === 'function' && target.hasPointerCapture(event.pointerId)) {
+    target.releasePointerCapture(event.pointerId);
+  }
+  nodeDrag.value = { id: null, startX: 0, startY: 0, originX: 0, originY: 0, moved: false };
 }
 
 function openEditModal(character: AtlasCharacter) {
@@ -706,6 +863,10 @@ function cancelRelationMode() {
 }
 
 function handleNodeClick(character: AtlasCharacter) {
+  if (suppressNodeClick.value) {
+    suppressNodeClick.value = false;
+    return;
+  }
   if (!relationMode.value) {
     openEditModal(character);
     return;
@@ -721,6 +882,7 @@ function handleNodeClick(character: AtlasCharacter) {
 }
 
 function openCreateRelation(sourceId = '', targetId = '') {
+  selectedEdgeKey.value = null;
   relationEditing.value = null;
   relationSourceId.value = sourceId;
   relationTargetId.value = targetId;
@@ -732,6 +894,7 @@ function openCreateRelation(sourceId = '', targetId = '') {
 
 function openEditRelation(edge: AtlasEdge) {
   if (edge.source !== 'manual' || !edge.relationId) return;
+  selectedEdgeKey.value = edge.key;
   relationEditing.value = edge;
   relationSourceId.value = edge.sourceId;
   relationTargetId.value = edge.targetId;
@@ -739,6 +902,11 @@ function openEditRelation(edge: AtlasEdge) {
   relationNote.value = edge.note || '';
   relationSaving.value = false;
   relationModalVisible.value = true;
+}
+
+function selectRelationEdge(edge: AtlasEdge) {
+  selectedEdgeKey.value = edge.key;
+  if (edge.source === 'manual') openEditRelation(edge);
 }
 
 function submitRelation() {
@@ -753,6 +921,7 @@ function submitRelation() {
     if (success) {
       relationModalVisible.value = false;
       relationEditing.value = null;
+      selectedEdgeKey.value = null;
       cancelRelationMode();
     }
   };
@@ -779,6 +948,7 @@ function removeEditingRelation() {
     if (success) {
       relationModalVisible.value = false;
       relationEditing.value = null;
+      selectedEdgeKey.value = null;
     }
   });
 }
@@ -840,9 +1010,15 @@ function openCreateModal() {
 }
 
 watch(
-  () => [props.characters.length, groupByFaction.value, layout.value.width, layout.value.height],
+  () => [props.characters.length, groupByFaction.value],
   () => { void fitViewport(); },
   { flush: 'post' },
+);
+
+watch(
+  () => props.projectName,
+  projectName => loadNodePositions(projectName),
+  { immediate: true },
 );
 
 onMounted(() => {
@@ -882,15 +1058,18 @@ onBeforeUnmount(() => viewportResizeObserver?.disconnect());
 .relation-layer { position: absolute; inset: 0; overflow: visible; pointer-events: none; color: var(--spark-text-muted); }
 .relation-edge { transition: opacity 160ms ease, color 160ms ease; }
 .relation-edge.manual { color: var(--spark-primary); pointer-events: auto; cursor: pointer; }
-.relation-edge.manual path { stroke-width: 2.4; opacity: .92; }
 .relation-edge.graphrag { color: var(--spark-text-muted); }
-.relation-edge path { fill: none; stroke: currentColor; stroke-width: 1.6; opacity: .72; }
-.relation-edge.fallback path { stroke-dasharray: 5 5; }
-.relation-edge text { fill: var(--spark-text-muted); font-size: 10px; text-anchor: middle; paint-order: stroke; stroke: var(--spark-bg); stroke-width: 4px; }
+.relation-edge .relation-stroke { fill: none; stroke: currentColor; stroke-width: 3; opacity: .82; vector-effect: non-scaling-stroke; pointer-events: none; }
+.relation-edge.manual .relation-stroke { stroke-width: 5.5; opacity: 1; }
+.relation-edge .relation-hit { fill: none; stroke: transparent; stroke-width: 28; vector-effect: non-scaling-stroke; pointer-events: stroke; cursor: pointer; }
+.relation-edge text { fill: var(--spark-text-muted); font-size: 10px; text-anchor: middle; paint-order: stroke; stroke: var(--spark-bg); stroke-width: 4px; pointer-events: none; }
 .relation-edge.active { color: var(--spark-primary); }
-.relation-edge.active path { stroke-width: 2.5; stroke-dasharray: none; opacity: 1; }
+.relation-edge.active .relation-stroke { stroke-width: 4; stroke-dasharray: none; opacity: 1; }
+.relation-edge.manual.active .relation-stroke { stroke-width: 7; }
+.relation-edge.selected .relation-stroke { filter: drop-shadow(0 0 4px color-mix(in srgb, var(--spark-primary), transparent 38%)); }
 .relation-edge.dimmed { opacity: .1; }
-.character-node { position: absolute; z-index: 2; width: 274px; height: 104px; display: grid; grid-template-columns: 42px minmax(0, 1fr) 18px; align-items: center; gap: 10px; padding: 12px; overflow: hidden; border: 1px solid var(--spark-border); border-left: 3px solid var(--node-color); border-radius: 6px; color: var(--spark-text); background: color-mix(in srgb, var(--spark-panel-bg), var(--spark-bg) 16%); box-shadow: var(--spark-shadow-sm); text-align: left; cursor: pointer; user-select: none; -webkit-user-select: none; transition: border-color 160ms ease, box-shadow 160ms ease, opacity 160ms ease, transform 160ms ease; }
+.character-node { position: absolute; z-index: 2; width: 274px; height: 104px; display: grid; grid-template-columns: 42px minmax(0, 1fr) 18px; align-items: center; gap: 10px; padding: 12px; overflow: hidden; border: 1px solid var(--spark-border); border-left: 3px solid var(--node-color); border-radius: 6px; color: var(--spark-text); background: color-mix(in srgb, var(--spark-panel-bg), var(--spark-bg) 16%); box-shadow: var(--spark-shadow-sm); text-align: left; cursor: grab; user-select: none; -webkit-user-select: none; touch-action: none; transition: border-color 160ms ease, box-shadow 160ms ease, opacity 160ms ease, transform 160ms ease; }
+.character-node.is-dragging { cursor: grabbing; transition: none; }
 .character-node:hover, .character-node.selected { border-color: var(--node-color); box-shadow: 0 8px 24px color-mix(in srgb, var(--node-color), transparent 82%); transform: translateY(-2px); }
 .character-node.dimmed { opacity: .2; }
 .node-avatar, .profile-avatar { display: grid; place-items: center; width: 40px; height: 40px; border: 1px solid color-mix(in srgb, var(--node-color, var(--spark-primary)), transparent 46%); border-radius: 50%; color: var(--node-color, var(--spark-primary)); background: color-mix(in srgb, var(--node-color, var(--spark-primary)), transparent 88%); font-size: 18px; font-weight: 800; }
@@ -908,7 +1087,6 @@ onBeforeUnmount(() => viewportResizeObserver?.disconnect());
 .atlas-legend span { display: inline-flex; align-items: center; gap: 6px; }
 .legend-line { width: 20px; border-top: 2px solid var(--spark-text-muted); }
 .legend-line.manual { border-top-color: var(--spark-primary); }
-.legend-line.fallback { border-top-style: dashed; border-top-width: 1px; }
 .legend-node { width: 8px; height: 8px; border: 2px solid var(--spark-primary); border-radius: 50%; }
 .profile-title { display: flex; align-items: center; gap: 12px; }
 .profile-title > div { display: grid; gap: 2px; }

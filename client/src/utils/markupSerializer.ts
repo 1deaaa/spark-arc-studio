@@ -9,6 +9,9 @@
 
 import type { OutlineData, OutlineChapter, OutlineScene, BeatSheetData, BeatSheetBeat } from '../services/aiContracts';
 
+// 世界观继续使用 Markdown 作为唯一真相源，通过统一 Markup 门面提供结构化编辑能力。
+export * from './worldviewMarkdown';
+
 // ==================== 梗概类型 ====================
 
 export interface SynopsisData {

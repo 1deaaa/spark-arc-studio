@@ -6,6 +6,7 @@ from langchain.tools import tool
 from pydantic import BaseModel, Field, field_validator
 
 from core.utils import get_project_path
+from core.character_relations import read_character_relation_lines
 from agents.project_content import load_worldview
 
 from .common import ToolExecutionContext, _apply_patch
@@ -115,7 +116,11 @@ def read_character(character_name: str) -> str:
     if not char_id:
         return f"未找到名为 '{character_name}' 的角色档案。"
 
-    return load_character_content(user_id, project_name, char_id)
+    content = load_character_content(user_id, project_name, char_id)
+    relation_lines = read_character_relation_lines(user_id, project_name, char_id)
+    if relation_lines:
+        content = f"{content}\n\n【作者确认关系】\n{chr(10).join(relation_lines)}"
+    return content
 
 
 @tool

@@ -1,10 +1,12 @@
 import { mount } from '@vue/test-utils';
 import { createI18n } from 'vue-i18n';
-import { describe, expect, it } from 'vitest';
+import { nextTick } from 'vue';
+import { beforeEach, describe, expect, it } from 'vitest';
 import { NInput } from 'naive-ui';
 
 import CharacterAtlas from '../CharacterAtlas.vue';
 import type { GraphRAGCharacterGraph } from '@/services/graphragService';
+import type { CharacterRelation } from '@/services/storyService';
 
 const messages = {
   views: {
@@ -19,9 +21,13 @@ const messages = {
       },
       graphBuilding: '构建中', graphBuildingProgress: '{done}/{total}', refreshGraph: '刷新', enableGraph: '启用',
       graphRelation: '角色关系', graphRelationLegend: 'GraphRAG 角色关系',
-      graphRelationEvidence: '{relation}，证据 {count} 条', profileMentionRelation: '档案提名',
-      profileMentionLegend: '档案提名关联（降级）', profileMentionHint: '仅为档案提名',
+      manualRelationLegend: '人工关系',
+      graphRelationEvidence: '{relation}，证据 {count} 条',
       zoomOut: '缩小', zoomIn: '放大', fitView: '适配', addCharacter: '添加角色',
+      connectRelation: '连接关系', connectRelationHint: '手动连接两个角色',
+      relationChooseTarget: '选择目标角色', relationChooseSource: '选择起始角色',
+      relationFrom: '起始角色', relationTo: '目标角色', relationName: '关系', relationNamePlaceholder: '填写关系',
+      relationNote: '备注', relationNotePlaceholder: '填写备注', deleteRelationConfirm: '确认删除关系',
       emptyTitle: '暂无角色', emptyDescription: '暂无', nameLabel: '名称', namePlaceholder: '名称',
       profileLabel: '档案', profilePlaceholder: '档案', deleteConfirm: '确认删除 {name}', sprite: '立绘', create: '创建',
     },
@@ -34,13 +40,15 @@ const characters = [
   { id: 2, name: '林烬', desc: '', content: '阵营：调查组\n身份：调查员' },
 ];
 
-function mountAtlas(graph: GraphRAGCharacterGraph | null) {
+function mountAtlas(graph: GraphRAGCharacterGraph | null, manualRelations: CharacterRelation[] = [], projectName = 'test-project') {
   const i18n = createI18n({ legacy: false, locale: 'zh-CN', messages: { 'zh-CN': messages } });
   return mount(CharacterAtlas, {
-    props: { characters, graph },
+    props: { characters, graph, manualRelations, projectName },
     global: { plugins: [i18n], stubs: { teleport: true } },
   });
 }
+
+beforeEach(() => localStorage.clear());
 
 describe('角色画布 GraphRAG 融合', () => {
   it('添加角色命令位于缩放工具之前，避开右侧全局浮动按钮', () => {
@@ -112,7 +120,7 @@ describe('角色画布 GraphRAG 融合', () => {
     expect(wrapper.find('.zoom-value').text()).toBe('53%');
   });
 
-  it('图谱就绪时使用真实关系并关闭档案提名降级', () => {
+  it('图谱就绪时使用真实关系', () => {
     const graph: GraphRAGCharacterGraph = {
       projectName: 'demo', enabled: true, graphReady: true, needsRebuild: false,
       buildState: {
@@ -130,17 +138,61 @@ describe('角色画布 GraphRAG 融合', () => {
     const wrapper = mountAtlas(graph);
 
     expect(wrapper.findAll('.relation-edge')).toHaveLength(1);
-    expect(wrapper.find('.relation-edge').classes()).not.toContain('fallback');
     expect(wrapper.find('.relation-edge text').text()).toBe('共同调查旧案');
     expect(wrapper.find('.atlas-legend').text()).toContain('GraphRAG 角色关系');
   });
 
-  it('图谱不可用时才把档案提名显示为虚线降级关系', () => {
+  it('图谱不可用时默认不自动绘制档案提名关系', () => {
     const wrapper = mountAtlas(null);
 
-    expect(wrapper.findAll('.relation-edge')).toHaveLength(1);
-    expect(wrapper.find('.relation-edge').classes()).toContain('fallback');
-    expect(wrapper.find('.relation-edge text').text()).toBe('档案提名');
-    expect(wrapper.find('.atlas-legend').text()).toContain('档案提名关联（降级）');
+    expect(wrapper.findAll('.relation-edge')).toHaveLength(0);
+    expect(wrapper.find('.atlas-legend').text()).not.toContain('档案提名');
+    expect(wrapper.find('.atlas-legend').text()).not.toContain('GraphRAG 角色关系');
+  });
+
+  it('关系线连接同排节点相向的最近边缘', () => {
+    const wrapper = mountAtlas(null, [{
+      id: 'manual-1', source: '1', target: '2', relation: '盟友', note: '',
+    }]);
+
+    const path = wrapper.find('.relation-edge.manual .relation-stroke').attributes('d');
+    expect(path).toMatch(/^M 310 88 Q /);
+    expect(path).toMatch(/ 370 88$/);
+  });
+
+  it('单击人工关系的宽点击区后选中连线并打开快捷编辑', async () => {
+    const wrapper = mountAtlas(null, [{
+      id: 'manual-1', source: '1', target: '2', relation: '盟友', note: '共同调查旧案',
+    }]);
+
+    const hitArea = wrapper.find('.relation-edge.manual .relation-hit');
+    expect(hitArea.exists()).toBe(true);
+    await hitArea.trigger('click');
+
+    expect(wrapper.find('.relation-edge.manual').classes()).toContain('selected');
+    expect(wrapper.find('.relation-modal').exists()).toBe(true);
+  });
+
+  it('拖动角色后保存位置，并在重新进入项目时恢复', async () => {
+    const wrapper = mountAtlas(null);
+    const node = wrapper.find('.character-node');
+    const dispatchPointer = async (type: string, clientX: number, clientY: number) => {
+      const event = new MouseEvent(type, { bubbles: true, button: 0, clientX, clientY });
+      Object.defineProperty(event, 'pointerId', { value: 1 });
+      node.element.dispatchEvent(event);
+      await nextTick();
+    };
+
+    await dispatchPointer('pointerdown', 100, 100);
+    await dispatchPointer('pointermove', 220, 150);
+    await dispatchPointer('pointerup', 220, 150);
+
+    expect(node.attributes('style')).toContain('left: 156px');
+    expect(node.attributes('style')).toContain('top: 86px');
+    expect(localStorage.getItem('spark_character_atlas_positions_v1:test-project')).toContain('"x":156');
+
+    const restored = mountAtlas(null);
+    expect(restored.find('.character-node').attributes('style')).toContain('left: 156px');
+    expect(restored.find('.character-node').attributes('style')).toContain('top: 86px');
   });
 });

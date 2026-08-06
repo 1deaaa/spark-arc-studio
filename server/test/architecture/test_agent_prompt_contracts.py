@@ -136,6 +136,35 @@ def test_lorebook_character_writes_are_incremental_by_default() -> None:
         assert token in tool_rules
 
 
+def test_lorebook_worldview_tools_share_visual_markdown_protocol() -> None:
+    prompts = load_prompt("lorebook")
+    system = prompts["system"]
+    rewrite_system = prompts["rewrite_worldview"]["system"]
+    tool_rules = prompts["tool_rules"]
+
+    for prompt in (system, rewrite_system):
+        for token in (
+            "世界观 Markdown 结构协议",
+            "一级标题 `#`",
+            "二级标题 `##`",
+            "三级标题 `###`",
+            "字段名：具体内容",
+        ):
+            assert token in prompt
+
+    for token in (
+        "完整世界观正文",
+        "至少按实际内容划分若干 `##` 模块",
+        "只替换用户指定的模块或字段",
+        "保留其他 `##` 模块",
+    ):
+        assert token in tool_rules
+
+    patch_system = prompts["patch_worldview"]["system"]
+    for token in ("局部、精确、可回溯", "不得重写全文", "未涉及的 `##` 模块"):
+        assert token in patch_system
+
+
 def test_director_and_lorebook_share_external_research_handoff_contract() -> None:
     director_prompts = load_prompt("director")
     director_rules = director_prompts["tool_rules"]

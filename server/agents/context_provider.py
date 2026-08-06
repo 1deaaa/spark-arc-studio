@@ -211,6 +211,13 @@ class AgentContextProvider:
         """获取角色列表及简要描述"""
         return self._bundle().get("characters_summary") or ""
 
+    def get_character_relations_context(self) -> str:
+        """获取作者确认的角色关系，供需要掌握全局状态的 Agent 使用。"""
+        relations = (self._bundle().get("relations_text") or "").strip()
+        if not relations:
+            return ""
+        return f"【作者确认的角色关系】\n{relations}"
+
     def _build_story_tags_block(self) -> str:
         """从项目设置读取 story tags，并通过统一格式化入口注入上下文。"""
         if not self.project_name:
@@ -328,6 +335,7 @@ class AgentContextProvider:
                 bundle = self._bundle()
                 worldview = (bundle.get("worldview") or "").strip()
                 roles = (bundle.get("roles") or "").strip()
+                relations = self.get_character_relations_context()
                 synopsis = self.get_synopsis_context()
                 beats = self.get_beat_sheet_context()
                 outline = self.get_outline_summary()
@@ -338,6 +346,8 @@ class AgentContextProvider:
                     status_parts.append(f"【已有】世界观（{len(worldview)}字）：\n{worldview}")
                 if roles:
                     status_parts.append(f"【已有】角色档案（{len(roles)}字）")
+                if relations:
+                    status_parts.append(relations)
                 if synopsis:
                     status_parts.append(synopsis)
                 if beats:
