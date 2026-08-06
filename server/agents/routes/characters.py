@@ -17,6 +17,13 @@ from core.character_store import (
     read_character_records,
     upsert_character,
 )
+from core.character_relations import (
+    create_character_relation,
+    delete_character_relation,
+    read_character_relations,
+    remove_character_relations,
+    update_character_relation,
+)
 from core.request_context import get_current_project_name, resolve_project_name
 from core.utils import (
     ensure_project_characters_directory,
@@ -28,9 +35,15 @@ from story.arc_parser import rename_speaker_markers_in_arc_text
 from .schemas import (
     CharacterSettingsCreate, CharacterSettingsSave,
     CharacterSettingsRename, CharacterSettingsDelete,
+    CharacterRelationCreate, CharacterRelationUpdate,
 )
 
 characters_router = APIRouter()
+
+
+def _relation_error(exc: Exception) -> JSONResponse:
+    status = 409 if "已经存在" in str(exc) else 400
+    return JSONResponse(status_code=status, content={"error": str(exc)})
 
 
 def _validate_arc_speaker_name(name: str) -> Optional[str]:
@@ -273,5 +286,83 @@ async def delete_character(
         return JSONResponse(status_code=403, content={'error': '系统保留角色不能删除'})
     
     delete_character_record(user_id, project_name, chr_id)
+    remove_character_relations(user_id, project_name, chr_id)
     
+    return {'success': True}
+
+
+@characters_router.get('/api/character-relations')
+async def get_character_relations(
+    projectName: str = Query(None),
+    user: dict = Depends(get_current_user),
+):
+    """读取项目中作者手动确认的角色关系。"""
+    user_id = str(user['user_id'])
+    project_name = resolve_project_name(get_current_project_name(), projectName)
+    if not project_name:
+        return JSONResponse(status_code=400, content={'error': '缺少项目名称'})
+    records = read_character_records(user_id, project_name)
+    valid_ids = set(records)
+    return [
+        item for item in read_character_relations(user_id, project_name)
+        if item['source'] in valid_ids and item['target'] in valid_ids
+    ]
+
+
+@characters_router.post('/api/character-relations')
+async def post_character_relation(
+    data: CharacterRelationCreate,
+    user: dict = Depends(get_current_user),
+):
+    """创建一条作者手动确认的角色关系。"""
+    user_id = str(user['user_id'])
+    project_name = resolve_project_name(get_current_project_name(), data.projectName)
+    if not project_name:
+        return JSONResponse(status_code=400, content={'error': '缺少项目名称'})
+    try:
+        item = create_character_relation(
+            user_id, project_name, source=str(data.source), target=str(data.target),
+            relation=data.relation, note=data.note,
+        )
+    except ValueError as exc:
+        return _relation_error(exc)
+    return {'success': True, 'relation': item}
+
+
+@characters_router.put('/api/character-relations/{relation_id}')
+async def put_character_relation(
+    relation_id: str,
+    data: CharacterRelationUpdate,
+    user: dict = Depends(get_current_user),
+):
+    """更新一条作者手动确认的角色关系。"""
+    user_id = str(user['user_id'])
+    project_name = resolve_project_name(get_current_project_name(), data.projectName)
+    if not project_name:
+        return JSONResponse(status_code=400, content={'error': '缺少项目名称'})
+    try:
+        item = update_character_relation(
+            user_id, project_name, relation_id, source=str(data.source), target=str(data.target),
+            relation=data.relation, note=data.note,
+        )
+    except KeyError as exc:
+        return JSONResponse(status_code=404, content={'error': str(exc)})
+    except ValueError as exc:
+        return _relation_error(exc)
+    return {'success': True, 'relation': item}
+
+
+@characters_router.delete('/api/character-relations/{relation_id}')
+async def remove_character_relation(
+    relation_id: str,
+    projectName: str = Query(None),
+    user: dict = Depends(get_current_user),
+):
+    """删除一条作者手动确认的角色关系。"""
+    user_id = str(user['user_id'])
+    project_name = resolve_project_name(get_current_project_name(), projectName)
+    if not project_name:
+        return JSONResponse(status_code=400, content={'error': '缺少项目名称'})
+    if not delete_character_relation(user_id, project_name, relation_id):
+        return JSONResponse(status_code=404, content={'error': '人工关系不存在'})
     return {'success': True}

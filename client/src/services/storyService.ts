@@ -359,6 +359,67 @@ export async function deleteCharacter(projectName: string, id: number): Promise<
   return result;
 }
 
+export interface CharacterRelation {
+  id: string;
+  source: string;
+  target: string;
+  relation: string;
+  note: string;
+  created_at?: string;
+  updated_at?: string;
+}
+
+export async function fetchCharacterRelations(projectName: string): Promise<CharacterRelation[]> {
+  if (!projectName) return [];
+  const response = await fetchWithAuth(`/api/character-relations?projectName=${encodeURIComponent(projectName)}`);
+  const result = await response.json() as CharacterRelation[] | { error?: string };
+  if (!response.ok) throw new Error((result as { error?: string }).error || '获取角色关系失败');
+  return Array.isArray(result) ? result : [];
+}
+
+export async function createCharacterRelation(
+  projectName: string,
+  payload: Omit<CharacterRelation, 'id' | 'created_at' | 'updated_at'>,
+): Promise<CharacterRelation> {
+  const response = await fetchWithAuth('/api/character-relations', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ projectName, ...payload }),
+  });
+  const result = await response.json() as { success?: boolean; relation?: CharacterRelation; error?: string };
+  if (!response.ok || result.success === false || !result.relation) {
+    throw new Error(result.error || '创建角色关系失败');
+  }
+  return result.relation;
+}
+
+export async function updateCharacterRelation(
+  projectName: string,
+  relationId: string,
+  payload: Omit<CharacterRelation, 'id' | 'created_at' | 'updated_at'>,
+): Promise<CharacterRelation> {
+  const response = await fetchWithAuth(`/api/character-relations/${encodeURIComponent(relationId)}`, {
+    method: 'PUT',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ projectName, ...payload }),
+  });
+  const result = await response.json() as { success?: boolean; relation?: CharacterRelation; error?: string };
+  if (!response.ok || result.success === false || !result.relation) {
+    throw new Error(result.error || '保存角色关系失败');
+  }
+  return result.relation;
+}
+
+export async function deleteCharacterRelation(projectName: string, relationId: string): Promise<ApiMutationResult> {
+  const response = await fetchWithAuth(
+    `/api/character-relations/${encodeURIComponent(relationId)}?projectName=${encodeURIComponent(projectName)}`,
+    { method: 'DELETE' },
+  );
+  const result = await response.json() as ApiMutationResult;
+  if (!response.ok || result.success === false) throw new Error(result.error || '删除角色关系失败');
+  return result;
+}
+
 export async function fetchBlueprint(projectName: string): Promise<JsonObject> {
   const response = await fetchWithAuth(`/api/blueprint/${encodeURIComponent(projectName)}`);
   if (!response.ok) {

@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import json
 import hashlib
+import os
 from pathlib import Path
 
 import networkx as nx
@@ -67,6 +68,58 @@ def test_character_subgraph_reuses_character_ids_aliases_and_graph_evidence(
             "evidence_samples": ["并肩调查旧案", "林烬替沈棠隐瞒行踪"],
         }
     ]
+
+
+def test_agent_research_reads_author_confirmed_character_relations(
+    monkeypatch,
+    tmp_path: Path,
+) -> None:
+    from agents.tools.research import _manual_relation_lines
+    from core.character_relations import create_character_relation
+    from core.character_store import write_character_records
+
+    monkeypatch.setattr("core.utils.USERDATA_ROOT", str(tmp_path))
+    write_character_records(
+        "21",
+        "demo",
+        {
+            "0": {"name": "甲", "content": ""},
+            "1": {"name": "乙", "content": ""},
+        },
+    )
+    create_character_relation("21", "demo", source="0", target="1", relation="盟友", note="共同目标")
+
+    assert _manual_relation_lines("21", "demo") == ["甲 ↔ 乙：盟友；备注：共同目标"]
+
+
+def test_character_graph_uses_worldview_only_and_has_separate_scope(
+    monkeypatch,
+    tmp_path: Path,
+) -> None:
+    from agents.graphrag.character_service import CharacterGraphService
+    from core.character_store import write_character_records
+
+    monkeypatch.setattr("core.utils.USERDATA_ROOT", str(tmp_path))
+    project_path = tmp_path / "uid_22" / "projects" / "demo"
+    project_path.mkdir(parents=True)
+    (project_path / "世界观.txt").write_text("甲与乙在旧城共同守护边境。", encoding="utf-8")
+    (project_path / "大纲.txt").write_text("甲与乙在第三章决裂。", encoding="utf-8")
+    write_character_records(
+        "22",
+        "demo",
+        {
+            "0": {"name": "甲", "content": "角色档案正文不应作为角色图输入。"},
+            "1": {"name": "乙", "content": "角色档案正文不应作为角色图输入。"},
+        },
+    )
+
+    service = CharacterGraphService("22", "demo")
+    documents = service._collect_source_documents()
+
+    assert [document.metadata["source"] for document in documents] == ["世界观.txt"]
+    assert all("角色档案正文" not in document.page_content for document in documents)
+    assert service._artifacts.base_dir.endswith(os.path.join(".graphrag", "character"))
+    assert service._task_key().startswith("character:")
 
 
 def test_project_file_collector_reads_nested_story_files(monkeypatch, tmp_path: Path) -> None:

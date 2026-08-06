@@ -292,6 +292,28 @@ export async function fetchGraphRAGCharacterGraph(projectName: string): Promise<
   return normalizeCharacterGraph(result);
 }
 
+export async function enableCharacterGraph(projectName: string): Promise<GraphRAGToggleResponse> {
+  const response = await fetchWithAuth('/api/graphrag/character-graph/enable', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ projectName }),
+  });
+  const result = await response.json() as RawGraphRAGToggleResponse;
+  if (!response.ok) throw new Error(result.detail || '启用角色关系图失败');
+  return { success: Boolean(result.success ?? true), ...normalizeProjectStatus(result) };
+}
+
+export async function refreshCharacterGraph(projectName: string): Promise<GraphRAGRefreshResponse> {
+  const response = await fetchWithAuth('/api/graphrag/character-graph/refresh', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ projectName }),
+  });
+  const result = await response.json() as RawGraphRAGToggleResponse;
+  if (!response.ok) throw new Error(result.detail || '刷新角色关系图失败');
+  return { success: Boolean(result.success ?? true), ...normalizeProjectStatus(result), triggered: Boolean(result.triggered) };
+}
+
 export async function enableGraphRAG(projectName: string): Promise<GraphRAGToggleResponse> {
   const response = await fetchWithAuth('/api/graphrag/enable', {
     method: 'POST',

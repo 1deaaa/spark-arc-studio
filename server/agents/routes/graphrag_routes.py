@@ -201,9 +201,9 @@ async def _trigger_project_graphrag_refresh(user_id: str, project_name: str) -> 
 
 def _resolve_character_graph_sync(user_id: str, project_name: str, enabled: bool) -> dict:
     """读取角色页需要的最小 GraphRAG 子图与状态。"""
-    from agents.graphrag import GraphRAGService
+    from agents.graphrag.character_service import CharacterGraphService
 
-    service = GraphRAGService(user_id=user_id, project_name=project_name)
+    service = CharacterGraphService(user_id=user_id, project_name=project_name)
     service._ensure_project_exists()
     status = service.get_status(check_freshness=enabled)
     graph_ready = bool(status.get("graph_ready", False))
@@ -220,6 +220,41 @@ def _resolve_character_graph_sync(user_id: str, project_name: str, enabled: bool
         "nodes": payload.get("nodes", []),
         "edges": payload.get("edges", []),
     }
+
+
+def _trigger_character_graph_refresh_sync(user_id: str, project_name: str) -> dict:
+    """只触发角色关系专用轻量图谱，不触发项目级 GraphRAG。"""
+    settings = get_project_settings(user_id, project_name)
+    enabled = bool(settings.get("character_graph_enabled", False))
+    if not enabled:
+        status = _resolve_character_graph_sync(user_id, project_name, False)
+        return {"enabled": False, "triggered": False, **{key: value for key, value in status.items() if key != "enabled"}}
+
+    try:
+        from agents.graphrag.character_service import CharacterGraphService
+
+        service = CharacterGraphService(user_id=user_id, project_name=project_name)
+        build_state = service.start_background_build(force_rebuild=False)
+        full_status = service.get_status(check_freshness=False)
+        return {
+            "enabled": True,
+            "triggered": True,
+            "graph_ready": bool(full_status.get("graph_ready", False)),
+            "metadata_ready": bool(full_status.get("metadata_ready", False)),
+            "needs_rebuild": bool(full_status.get("needs_rebuild", False)),
+            "build_state": full_status.get("build_state", build_state),
+            "metadata": _summarize_metadata(full_status.get("metadata", {})),
+        }
+    except Exception as exc:
+        return {
+            "enabled": True,
+            "triggered": False,
+            "graph_ready": False,
+            "metadata_ready": False,
+            "needs_rebuild": False,
+            "build_state": {**_empty_build_state(), "status": "error", "stage": "error", "error": str(exc)},
+            "metadata": _summarize_metadata({}),
+        }
 
 
 # ==================== 请求模型 ====================
@@ -299,7 +334,7 @@ async def get_graphrag_character_graph(
 
     user_id = str(user['user_id'])
     settings = get_project_settings(user_id, project_name)
-    enabled = bool(settings.get("graphrag_enabled", False))
+    enabled = bool(settings.get("character_graph_enabled", False))
     try:
         return await run_in_threadpool(
             _resolve_character_graph_sync, user_id, project_name, enabled,
@@ -308,6 +343,30 @@ async def get_graphrag_character_graph(
         raise HTTPException(status_code=404, detail="项目或知识图谱不存在")
     except Exception as exc:
         raise HTTPException(status_code=500, detail=str(exc))
+
+
+@graphrag_router.post('/character-graph/enable')
+async def enable_character_graph(data: ProjectNameRequest, user: dict = Depends(get_current_user)):
+    """启用并构建角色关系专用轻量图谱，不改变项目级 GraphRAG 开关。"""
+    user_id = str(user['user_id'])
+    project_name = data.project_name.strip()
+    if not project_name:
+        raise HTTPException(status_code=400, detail="缺少项目名称")
+    set_project_setting(user_id, project_name, "character_graph_enabled", True)
+    status = await run_in_threadpool(_trigger_character_graph_refresh_sync, user_id, project_name)
+    return {"success": True, "projectName": project_name, **status}
+
+
+@graphrag_router.post('/character-graph/refresh')
+async def refresh_character_graph(data: ProjectNameRequest, user: dict = Depends(get_current_user)):
+    """刷新角色关系专用轻量图谱。"""
+    user_id = str(user['user_id'])
+    project_name = data.project_name.strip()
+    if not project_name:
+        raise HTTPException(status_code=400, detail="缺少项目名称")
+    set_project_setting(user_id, project_name, "character_graph_enabled", True)
+    status = await run_in_threadpool(_trigger_character_graph_refresh_sync, user_id, project_name)
+    return {"success": True, "projectName": project_name, **status}
 
 
 @graphrag_router.post('/enable')

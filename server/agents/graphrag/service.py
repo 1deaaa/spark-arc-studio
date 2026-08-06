@@ -58,9 +58,10 @@ class GraphRAGArtifactPaths:
 class GraphRAGService:
     """Production GraphRAG service for project-scoped indexing and retrieval."""
 
-    def __init__(self, user_id: str, project_name: str):
+    def __init__(self, user_id: str, project_name: str, *, scope: str = "project"):
         self.user_id = str(user_id)
         self.project_name = project_name
+        self.scope = str(scope or "project").strip() or "project"
         self._chunk_size = int(os.getenv("SPARKARC_GRAPHRAG_CHUNK_SIZE", "1200"))
         self._chunk_overlap = int(os.getenv("SPARKARC_GRAPHRAG_CHUNK_OVERLAP", "160"))
         self._max_chunks = int(os.getenv("SPARKARC_GRAPHRAG_MAX_CHUNKS", "120"))
@@ -69,6 +70,10 @@ class GraphRAGService:
         self._max_constraints = int(os.getenv("SPARKARC_GRAPHRAG_MAX_CONSTRAINTS", "12"))
         self._build_usage_key = (os.getenv("SPARKARC_GRAPHRAG_BUILD_USAGE_KEY", "fast") or "fast").strip().lower() or "fast"
         self._llm_timeout = float(os.getenv("SPARKARC_GRAPHRAG_LLM_TIMEOUT", "90"))
+
+    def _task_key(self) -> str:
+        """返回按索引作用域隔离的后台构建任务键。"""
+        return f"{self.scope}:{_build_task_key(self.user_id, self.project_name)}"
 
     @property
     def _project_path(self) -> str:
@@ -132,7 +137,7 @@ class GraphRAGService:
         }
 
     def _set_build_state(self, **fields) -> dict:
-        task_key = _build_task_key(self.user_id, self.project_name)
+        task_key = self._task_key()
         with _build_state_lock:
             current = dict(_build_state_registry.get(task_key) or {})
             if "progress" in fields:
@@ -142,7 +147,7 @@ class GraphRAGService:
             return dict(current)
 
     def _get_cancel_event(self) -> threading.Event | None:
-        task_key = _build_task_key(self.user_id, self.project_name)
+        task_key = self._task_key()
         with _build_state_lock:
             event = (_build_state_registry.get(task_key) or {}).get("_cancel_event")
         return event if isinstance(event, threading.Event) else None
@@ -154,7 +159,7 @@ class GraphRAGService:
 
     def cancel_background_build(self, wait_timeout: float = 5.0) -> dict:
         """请求取消后台图谱构建，并在限定时间内等待线程主动退出。"""
-        task_key = _build_task_key(self.user_id, self.project_name)
+        task_key = self._task_key()
         with _build_state_lock:
             current = dict(_build_state_registry.get(task_key) or {})
             status = current.get("status")
@@ -182,7 +187,7 @@ class GraphRAGService:
         - 进程内有进行中 / 已完成快照时直接返回；
         - 否则回退到磁盘 metadata 推断（ready / not_built）。
         """
-        task_key = _build_task_key(self.user_id, self.project_name)
+        task_key = self._task_key()
         with _build_state_lock:
             stored = dict(_build_state_registry.get(task_key) or {})
         if stored:
@@ -218,7 +223,7 @@ class GraphRAGService:
 
     def start_background_build(self, force_rebuild: bool = False) -> dict:
         """在 daemon 线程中触发后台构建；重复触发自动排队补一轮。"""
-        task_key = _build_task_key(self.user_id, self.project_name)
+        task_key = self._task_key()
         now = datetime.now(timezone.utc).isoformat()
         cancel_event = threading.Event()
         with _build_state_lock:
@@ -566,6 +571,9 @@ class GraphRAGService:
             "只返回 JSON 数组，每项结构为 {\"subject\":\"\",\"relation\":\"\",\"object\":\"\"}。"
             "只保留具体实体与明确关系；禁止代词、空泛概念、句子片段。"
         )
+        hint = self._triplet_entity_hint()
+        if hint:
+            system_prompt += f"\n{hint}"
         user_prompt = (
             f"请从以下文本提取不超过 {self._max_triplets_per_chunk} 条高质量三元组。"
             "仅返回 JSON，不要额外解释。\n\n"
@@ -587,6 +595,10 @@ class GraphRAGService:
         retry_raw = self._invoke_text(self._get_build_llm(), system_prompt, retry_prompt)
         retry_payload = self._safe_json_loads(retry_raw, fallback=[])
         return self._parse_triplets_from_payload(retry_payload)
+
+    def _triplet_entity_hint(self) -> str:
+        """返回可选的实体提示，不改变项目级索引的默认提示。"""
+        return ""
 
     @staticmethod
     def _merge_relation(existing: str, new_relation: str) -> str:
@@ -925,7 +937,7 @@ class GraphRAGService:
             shutil.rmtree(artifacts.base_dir)
             removed = True
         # 同步清掉进程内的 build_state，避免 UI 上残留 ready/stale
-        task_key = _build_task_key(self.user_id, self.project_name)
+        task_key = self._task_key()
         with _build_state_lock:
             _build_state_registry.pop(task_key, None)
         return {

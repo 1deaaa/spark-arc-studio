@@ -30,6 +30,7 @@
         ref="characterAtlasRef"
         :characters="characters"
         :graph="characterGraph"
+        :manual-relations="manualRelations"
         :graph-loading="characterGraphLoading"
         :is-script-mode="isScriptMode"
         @create="createAtlasCharacter"
@@ -37,6 +38,9 @@
         @delete="deleteCharacter"
         @sprite="openCharacterSpriteModal"
         @refresh-graph="refreshCharacterGraph"
+        @create-relation="createAtlasRelation"
+        @update-relation="updateAtlasRelation"
+        @delete-relation="deleteAtlasRelation"
       />
 
       <div v-else-if="showCharacters" class="lorebook-card-wrap character-wrap">
@@ -235,7 +239,7 @@ import { useProjectStore } from '../stores/projectStore';
 import { useFileStore } from '../stores/fileStore';
 import { useCharacterStore } from '../stores/characterStore';
 import { useSceneStore } from '../stores/sceneStore';
-import { fetchWithAuth, fetchCharacters, createCharacter, saveCharacter as saveCharacterApi, renameCharacter as renameCharacterApi, deleteCharacter as deleteCharacterApi } from '../../services/api';
+import { fetchWithAuth, fetchCharacters, createCharacter, saveCharacter as saveCharacterApi, renameCharacter as renameCharacterApi, deleteCharacter as deleteCharacterApi, fetchCharacterRelations, createCharacterRelation, updateCharacterRelation, deleteCharacterRelation, type CharacterRelation } from '../../services/api';
 import {
   fetchPresentationImageModels,
   fetchPresentationManifest,
@@ -252,8 +256,8 @@ import { AUTO_SAVE_DEBOUNCE_TIME } from '../../config';
 import { buildCreativeCacheKey, isCreativeCacheEqual, loadCreativeCache, saveCreativeCache } from '@/utils/creativeLocalCache';
 import {
   fetchGraphRAGCharacterGraph,
-  enableGraphRAG,
-  refreshGraphRAGProject,
+  enableCharacterGraph,
+  refreshCharacterGraph as refreshCharacterGraphApi,
   type GraphRAGCharacterGraph,
 } from '@/services/graphragService';
 
@@ -283,6 +287,7 @@ const showWorldview = computed(() => mode.value !== 'characters');
 const showCharacters = computed(() => mode.value !== 'worldview');
 const isCharacterAtlas = computed(() => mode.value === 'characters');
 const characters = ref<any[]>([]); // [{id, name, content}]
+const manualRelations = ref<CharacterRelation[]>([]);
 const characterGraph = ref<GraphRAGCharacterGraph | null>(null);
 const characterAtlasRef = ref<{ revealCharacter: (id: number | string, openProfile?: boolean) => void } | null>(null);
 const characterGraphLoading = ref(false);
@@ -437,6 +442,9 @@ async function loadCharacters() {
     if (!isCreativeCacheEqual(characters.value, remoteCharacters)) {
       characters.value = userCharactersOnly(remoteCharacters);
     }
+    try {
+      manualRelations.value = await fetchCharacterRelations(projectStore.currentProject);
+    } catch {}
   } catch {}
   saveLorebookSnapshot();
 }
@@ -476,9 +484,9 @@ async function refreshCharacterGraph() {
   if (!projectName) return;
   try {
     if (characterGraph.value?.enabled) {
-      await refreshGraphRAGProject(projectName);
+      await refreshCharacterGraphApi(projectName);
     } else {
-      await enableGraphRAG(projectName);
+      await enableCharacterGraph(projectName);
     }
   } catch {
     bus.emit('toast', { type: 'error', message: t('views.characters.graphSyncFailed') });
@@ -782,6 +790,59 @@ async function saveAtlasCharacter(payload: { character: any; name: string; conte
     bus.emit('toast', { type: 'success', message: t('views.characters.saved') });
   } catch {
     bus.emit('toast', { type: 'error', message: t('views.characters.saveFailed') });
+  }
+}
+
+type AtlasRelationPayload = Omit<CharacterRelation, 'id' | 'created_at' | 'updated_at'>;
+
+async function createAtlasRelation(payload: AtlasRelationPayload, complete: (success: boolean) => void) {
+  const projectName = projectStore.currentProject;
+  if (!projectName) {
+    complete(false);
+    return;
+  }
+  try {
+    const relation = await createCharacterRelation(projectName, payload);
+    manualRelations.value = [...manualRelations.value, relation];
+    complete(true);
+    bus.emit('toast', { type: 'success', message: t('views.characters.relationCreated') });
+  } catch (error: unknown) {
+    complete(false);
+    bus.emit('toast', { type: 'error', message: error instanceof Error ? error.message : t('views.characters.relationSaveFailed') });
+  }
+}
+
+async function updateAtlasRelation(relationId: string, payload: AtlasRelationPayload, complete: (success: boolean) => void) {
+  const projectName = projectStore.currentProject;
+  if (!projectName) {
+    complete(false);
+    return;
+  }
+  try {
+    const relation = await updateCharacterRelation(projectName, relationId, payload);
+    manualRelations.value = manualRelations.value.map(item => item.id === relationId ? relation : item);
+    complete(true);
+    bus.emit('toast', { type: 'success', message: t('views.characters.relationSaved') });
+  } catch (error: unknown) {
+    complete(false);
+    bus.emit('toast', { type: 'error', message: error instanceof Error ? error.message : t('views.characters.relationSaveFailed') });
+  }
+}
+
+async function deleteAtlasRelation(relation: CharacterRelation, complete: (success: boolean) => void) {
+  const projectName = projectStore.currentProject;
+  if (!projectName) {
+    complete(false);
+    return;
+  }
+  try {
+    await deleteCharacterRelation(projectName, relation.id);
+    manualRelations.value = manualRelations.value.filter(item => item.id !== relation.id);
+    complete(true);
+    bus.emit('toast', { type: 'success', message: t('views.characters.relationDeleted') });
+  } catch (error: unknown) {
+    complete(false);
+    bus.emit('toast', { type: 'error', message: error instanceof Error ? error.message : t('views.characters.relationDeleteFailed') });
   }
 }
 

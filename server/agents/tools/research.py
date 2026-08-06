@@ -5,6 +5,8 @@ from typing import Literal
 from langchain.tools import tool
 from pydantic import BaseModel, Field
 
+from core.character_relations import read_character_relations
+from core.character_store import read_character_records
 from .common import ToolExecutionContext
 
 
@@ -69,6 +71,21 @@ def _guard_not_ready_message(status: dict) -> str:
     )
 
 
+def _manual_relation_lines(user_id: str, project_name: str) -> list[str]:
+    """读取作者确认关系，作为 AI 写作时的高优先级事实约束。"""
+    records = read_character_records(user_id, project_name)
+    relations = read_character_relations(user_id, project_name)
+    lines: list[str] = []
+    for item in relations:
+        source = records.get(str(item.get("source")), {}).get("name")
+        target = records.get(str(item.get("target")), {}).get("name")
+        if not source or not target:
+            continue
+        note = f"；备注：{item['note']}" if item.get("note") else ""
+        lines.append(f"{source} ↔ {target}：{item['relation']}{note}")
+    return lines
+
+
 @tool(args_schema=GraphRagToolInput)
 def graph_rag_tool(
     action: Literal["query", "status"],
@@ -91,9 +108,12 @@ def graph_rag_tool(
     service = GraphRAGService(user_id=user_id, project_name=project_name)
 
     try:
+        manual_relations = _manual_relation_lines(user_id, project_name)
         if action == "status":
             status = service.get_status(check_freshness=True)
-            return _format_status_lines(status)
+            result = _format_status_lines(status)
+            result += f"\n- 作者确认关系数: {len(manual_relations)}"
+            return result
 
         # action == "query"
         if not question or not question.strip():
@@ -102,7 +122,9 @@ def graph_rag_tool(
         # 查询前做就绪检查，不就绪/过期直接返回友好提示，绝不私自构建
         status = service.get_status(check_freshness=True)
         if not status.get("graph_ready") or status.get("needs_rebuild"):
-            return _guard_not_ready_message(status)
+            manual_text = "\n".join(f"- {line}" for line in manual_relations)
+            prefix = "作者确认关系（优先保持）\n" + (manual_text or "- 暂无") + "\n\n"
+            return prefix + _guard_not_ready_message(status)
         build_state = status.get("build_state") or {}
         if str(build_state.get("status") or "").lower() in {"queued", "building"}:
             return _guard_not_ready_message(status)
@@ -119,7 +141,7 @@ def graph_rag_tool(
 
         if response_mode == "writing_guardrails":
             constraints = payload.get("fact_constraints") or {}
-            must_keep = constraints.get("must_keep") or []
+            must_keep = [*manual_relations, *(constraints.get("must_keep") or [])]
             avoid_conflicts = constraints.get("avoid_conflicts") or []
             unresolved = constraints.get("unresolved") or []
 
@@ -149,11 +171,15 @@ def graph_rag_tool(
 
             return "\n".join(lines)
 
+        manual_text = "\n\n作者确认关系（优先保持）\n" + "\n".join(f"- {line}" for line in manual_relations)
+        if not manual_relations:
+            manual_text += "- 暂无"
         return (
             "GraphRAG 查询结果\n"
             f"- mode: {payload.get('mode')}\n"
             f"- matched_entities: {entities_line}\n\n"
             f"{payload.get('answer') or '未生成回答。'}"
+            f"{manual_text}"
         )
     except Exception as e:
         return f"GraphRAG 工具执行失败：{e}"

@@ -48,6 +48,22 @@
         </n-button>
         <n-tooltip trigger="hover">
           <template #trigger>
+            <n-button
+              size="small"
+              :type="relationMode ? 'primary' : 'default'"
+              :secondary="relationMode"
+              :disabled="characters.length < 2"
+              :aria-pressed="relationMode"
+              @click="toggleRelationMode"
+            >
+              <template #icon><n-icon :component="Link2" /></template>
+              {{ t('views.characters.connectRelation') }}
+            </n-button>
+          </template>
+          {{ t('views.characters.connectRelationHint') }}
+        </n-tooltip>
+        <n-tooltip trigger="hover">
+          <template #trigger>
             <n-button quaternary circle size="small" @click="changeZoom(-0.1)">
               <template #icon><n-icon :component="ZoomOut" /></template>
             </n-button>
@@ -85,13 +101,19 @@
       @pointercancel="stopPan"
       @pointerleave="stopPan"
     >
+      <div v-if="relationMode" class="relation-mode-banner">
+        <span>{{ relationSourceId ? t('views.characters.relationChooseTarget') : t('views.characters.relationChooseSource') }}</span>
+        <n-button quaternary size="tiny" @click="cancelRelationMode">{{ t('common.cancel') }}</n-button>
+      </div>
       <div v-if="characters.length" class="atlas-canvas" :style="canvasTransformStyle">
         <svg class="relation-layer" :width="layout.width" :height="layout.height" aria-hidden="true">
           <g
             v-for="edge in layout.edges"
             :key="edge.key"
             class="relation-edge"
-            :class="{ dimmed: isEdgeDimmed(edge), active: isEdgeActive(edge), fallback: edge.source === 'profile' }"
+            :class="{ dimmed: isEdgeDimmed(edge), active: isEdgeActive(edge), fallback: edge.source === 'profile', manual: edge.source === 'manual', graphrag: edge.source === 'graphrag' }"
+            @pointerdown.stop="edge.source === 'manual' && openEditRelation(edge)"
+            @click.stop="edge.source === 'manual' && openEditRelation(edge)"
           >
             <title>{{ edge.tooltip }}</title>
             <path :d="edge.path" />
@@ -125,7 +147,7 @@
           @pointerdown.stop
           @mouseenter="hoveredId = node.id"
           @mouseleave="hoveredId = null"
-          @click="openEditModal(node.character)"
+          @click="handleNodeClick(node.character)"
         >
           <span class="node-avatar" :style="{ '--node-color': node.color }">
             {{ node.initial }}
@@ -150,6 +172,7 @@
       </div>
 
       <div v-if="characters.length" class="atlas-legend">
+        <span><i class="legend-line manual"></i>{{ t('views.characters.manualRelationLegend') }}</span>
         <span><i class="legend-line" :class="{ fallback: layout.usesFallback }"></i>{{ relationLegend }}</span>
         <span><i class="legend-node"></i>{{ t('views.characters.openProfileHint') }}</span>
       </div>
@@ -216,6 +239,50 @@
         </div>
       </template>
     </n-modal>
+
+    <n-modal v-model:show="relationModalVisible" preset="card" class="relation-modal" :bordered="false">
+      <template #header>{{ relationEditing ? t('views.characters.editRelation') : t('views.characters.createRelation') }}</template>
+      <div class="relation-form">
+        <div class="relation-endpoints">
+          <label>
+            <span>{{ t('views.characters.relationFrom') }}</span>
+            <n-select v-model:value="relationSourceId" :options="characterOptions" :disabled="Boolean(relationEditing)" />
+          </label>
+          <span class="relation-arrow">→</span>
+          <label>
+            <span>{{ t('views.characters.relationTo') }}</span>
+            <n-select v-model:value="relationTargetId" :options="characterOptions" :disabled="Boolean(relationEditing)" />
+          </label>
+        </div>
+        <label>
+          <span>{{ t('views.characters.relationName') }}</span>
+          <n-input v-model:value="relationName" :placeholder="t('views.characters.relationNamePlaceholder')" />
+        </label>
+        <label>
+          <span>{{ t('views.characters.relationNote') }}</span>
+          <n-input v-model:value="relationNote" type="textarea" :autosize="{ minRows: 3, maxRows: 6 }" :placeholder="t('views.characters.relationNotePlaceholder')" />
+        </label>
+      </div>
+      <template #footer>
+        <div class="relation-footer">
+          <n-popconfirm v-if="relationEditing" :positive-text="t('common.delete')" :negative-text="t('common.cancel')" @positive-click="removeEditingRelation">
+            <template #trigger>
+              <n-button type="error" quaternary>
+                <template #icon><n-icon :component="Trash2" /></template>
+                {{ t('common.delete') }}
+              </n-button>
+            </template>
+            {{ t('views.characters.deleteRelationConfirm') }}
+          </n-popconfirm>
+          <div class="relation-footer-actions">
+            <n-button @click="relationModalVisible = false">{{ t('common.cancel') }}</n-button>
+            <n-button type="primary" :loading="relationSaving" :disabled="!relationSourceId || !relationTargetId || relationSourceId === relationTargetId || !relationName.trim()" @click="submitRelation">
+              {{ t('views.common.save') }}
+            </n-button>
+          </div>
+        </div>
+      </template>
+    </n-modal>
   </section>
 </template>
 
@@ -223,9 +290,10 @@
 import { computed, nextTick, onBeforeUnmount, onMounted, ref, watch } from 'vue';
 import { useI18n } from 'vue-i18n';
 import { NButton, NCheckbox, NIcon, NInput, NModal, NPopconfirm, NSelect, NTooltip } from 'naive-ui';
-import { ChevronRight, ImagePlus, Maximize2, Network, Plus, RefreshCw, Search, Trash2, UsersRound, ZoomIn, ZoomOut } from '@lucide/vue';
+import { ChevronRight, ImagePlus, Link2, Maximize2, Network, Plus, RefreshCw, Search, Trash2, UsersRound, ZoomIn, ZoomOut } from '@lucide/vue';
 import type { StoryCharacterDetail } from '@/services/aiContracts';
 import type { GraphRAGCharacterGraph } from '@/services/graphragService';
+import type { CharacterRelation } from '@/services/storyService';
 
 type AtlasCharacter = StoryCharacterDetail & { id: number | string };
 type AtlasNode = {
@@ -245,16 +313,29 @@ type AtlasEdge = {
   sourceId: string;
   targetId: string;
   path: string;
+  relation: string;
   label: string;
   tooltip: string;
   labelX: number;
   labelY: number;
-  source: 'graphrag' | 'profile';
+  source: 'manual' | 'graphrag' | 'profile';
+  relationId?: string;
+  note?: string;
+};
+type RelationInput = {
+  sourceId: string;
+  targetId: string;
+  relation: string;
+  tooltip: string;
+  source: AtlasEdge['source'];
+  relationId?: string;
+  note?: string;
 };
 
 const props = defineProps<{
   characters: AtlasCharacter[];
   graph?: GraphRAGCharacterGraph | null;
+  manualRelations?: CharacterRelation[];
   graphLoading?: boolean;
   isScriptMode?: boolean;
 }>();
@@ -265,6 +346,9 @@ const emit = defineEmits<{
   delete: [character: AtlasCharacter];
   sprite: [character: AtlasCharacter];
   'refresh-graph': [];
+  'create-relation': [payload: Omit<CharacterRelation, 'id' | 'created_at' | 'updated_at'>, complete: (success: boolean) => void];
+  'update-relation': [relationId: string, payload: Omit<CharacterRelation, 'id' | 'created_at' | 'updated_at'>, complete: (success: boolean) => void];
+  'delete-relation': [relation: CharacterRelation, complete: (success: boolean) => void];
 }>();
 
 const { t } = useI18n();
@@ -284,6 +368,14 @@ const activeCharacter = ref<AtlasCharacter | null>(null);
 const draftName = ref('');
 const draftContent = ref('');
 const creatingCharacter = ref(false);
+const relationMode = ref(false);
+const relationModalVisible = ref(false);
+const relationEditing = ref<AtlasEdge | null>(null);
+const relationSourceId = ref('');
+const relationTargetId = ref('');
+const relationName = ref('');
+const relationNote = ref('');
+const relationSaving = ref(false);
 let viewportResizeObserver: ResizeObserver | null = null;
 
 const graphStatus = computed(() => {
@@ -426,10 +518,19 @@ const layout = computed(() => {
 
   const nodeById = new Map(nodes.map(node => [node.id, node]));
   const edges: AtlasEdge[] = [];
-  const seen = new Set<string>();
   const graphAvailable = Boolean(props.graph?.graphReady);
-  const relationInputs = graphAvailable
-    ? (props.graph?.edges || []).map(edge => ({
+  const relationInputs: RelationInput[] = [
+    ...(props.manualRelations || []).map(edge => ({
+      sourceId: String(edge.source),
+      targetId: String(edge.target),
+      relation: edge.relation,
+      tooltip: edge.note ? `${edge.relation} · ${edge.note}` : edge.relation,
+      source: 'manual' as const,
+      relationId: edge.id,
+      note: edge.note,
+    })),
+    ...(graphAvailable
+      ? (props.graph?.edges || []).map(edge => ({
         sourceId: String(edge.source),
         targetId: String(edge.target),
         relation: edge.relation || t('views.characters.graphRelation'),
@@ -439,7 +540,7 @@ const layout = computed(() => {
         }),
         source: 'graphrag' as const,
       }))
-    : nodes.flatMap(source => nodes
+      : nodes.flatMap(source => nodes
         .filter(target => source.id !== target.id && String(source.character.content || '').includes(target.name))
         .map(target => ({
           sourceId: source.id,
@@ -447,12 +548,21 @@ const layout = computed(() => {
           relation: t('views.characters.profileMentionRelation'),
           tooltip: t('views.characters.profileMentionHint'),
           source: 'profile' as const,
-        })));
+        }))))
+  ];
+
+  const pairCounts = new Map<string, number>();
+  for (const relation of relationInputs) {
+    const pair = [relation.sourceId, relation.targetId].sort().join(':');
+    pairCounts.set(pair, (pairCounts.get(pair) || 0) + 1);
+  }
+  const pairIndexes = new Map<string, number>();
 
   for (const relation of relationInputs) {
-      const key = [relation.sourceId, relation.targetId].sort().join(':');
-      if (seen.has(key)) continue;
-      seen.add(key);
+      const pair = [relation.sourceId, relation.targetId].sort().join(':');
+      const pairIndex = pairIndexes.get(pair) || 0;
+      pairIndexes.set(pair, pairIndex + 1);
+      const key = `${pair}:${relation.source}:${relation.relationId || pairIndex}`;
       const from = nodeById.get(relation.sourceId);
       const to = nodeById.get(relation.targetId);
       if (!from || !to) continue;
@@ -461,16 +571,20 @@ const layout = computed(() => {
       const x2 = to.x + 4;
       const y2 = to.y + 48;
       const bend = Math.max(60, Math.abs(x2 - x1) * 0.42);
+      const parallelOffset = (pairIndex - ((pairCounts.get(pair) || 1) - 1) / 2) * 24;
       edges.push({
         key,
         sourceId: relation.sourceId,
         targetId: relation.targetId,
-        path: `M ${x1} ${y1} C ${x1 + bend} ${y1}, ${x2 - bend} ${y2}, ${x2} ${y2}`,
+        path: `M ${x1} ${y1} C ${x1 + bend} ${y1 + parallelOffset}, ${x2 - bend} ${y2 - parallelOffset}, ${x2} ${y2}`,
+        relation: relation.relation,
         label: relation.relation.length > 18 ? `${relation.relation.slice(0, 18)}...` : relation.relation,
         tooltip: relation.tooltip,
         labelX: (x1 + x2) / 2,
-        labelY: (y1 + y2) / 2 - 8,
+        labelY: (y1 + y2) / 2 + parallelOffset - 8,
         source: relation.source,
+        relationId: relation.relationId,
+        note: relation.note,
       });
   }
   return { width, height, nodes, groups: groupLayouts, edges, usesFallback: !graphAvailable };
@@ -479,6 +593,11 @@ const layout = computed(() => {
 const relationLegend = computed(() => layout.value.usesFallback
   ? t('views.characters.profileMentionLegend')
   : t('views.characters.graphRelationLegend'));
+
+const characterOptions = computed(() => props.characters.map(character => ({
+  label: character.name || t('views.characters.unnamedCharacter'),
+  value: String(character.id),
+})));
 
 const canvasTransformStyle = computed(() => ({
   width: `${layout.value.width}px`,
@@ -508,6 +627,7 @@ function matchesFilters(node: AtlasNode) {
 
 function isNodeDimmed(node: AtlasNode) {
   if (!matchesFilters(node)) return true;
+  if (relationMode.value) return false;
   return !!focusId.value && !connectedIds.value.has(node.id);
 }
 
@@ -571,6 +691,96 @@ function openEditModal(character: AtlasCharacter) {
   draftName.value = character.name || '';
   draftContent.value = character.content || '';
   profileVisible.value = true;
+}
+
+function toggleRelationMode() {
+  relationMode.value = !relationMode.value;
+  relationSourceId.value = '';
+  selectedId.value = null;
+}
+
+function cancelRelationMode() {
+  relationMode.value = false;
+  relationSourceId.value = '';
+  selectedId.value = null;
+}
+
+function handleNodeClick(character: AtlasCharacter) {
+  if (!relationMode.value) {
+    openEditModal(character);
+    return;
+  }
+  const id = String(character.id);
+  if (!relationSourceId.value) {
+    relationSourceId.value = id;
+    selectedId.value = id;
+    return;
+  }
+  if (relationSourceId.value === id) return;
+  openCreateRelation(relationSourceId.value, id);
+}
+
+function openCreateRelation(sourceId = '', targetId = '') {
+  relationEditing.value = null;
+  relationSourceId.value = sourceId;
+  relationTargetId.value = targetId;
+  relationName.value = '';
+  relationNote.value = '';
+  relationSaving.value = false;
+  relationModalVisible.value = true;
+}
+
+function openEditRelation(edge: AtlasEdge) {
+  if (edge.source !== 'manual' || !edge.relationId) return;
+  relationEditing.value = edge;
+  relationSourceId.value = edge.sourceId;
+  relationTargetId.value = edge.targetId;
+  relationName.value = edge.relation;
+  relationNote.value = edge.note || '';
+  relationSaving.value = false;
+  relationModalVisible.value = true;
+}
+
+function submitRelation() {
+  const source = relationSourceId.value;
+  const target = relationTargetId.value;
+  const relation = relationName.value.trim();
+  if (!source || !target || source === target || !relation || relationSaving.value) return;
+  relationSaving.value = true;
+  const payload = { source, target, relation, note: relationNote.value.trim() };
+  const complete = (success: boolean) => {
+    relationSaving.value = false;
+    if (success) {
+      relationModalVisible.value = false;
+      relationEditing.value = null;
+      cancelRelationMode();
+    }
+  };
+  if (relationEditing.value?.relationId) {
+    emit('update-relation', relationEditing.value.relationId, payload, complete);
+  } else {
+    emit('create-relation', payload, complete);
+  }
+}
+
+function removeEditingRelation() {
+  const edge = relationEditing.value;
+  const relationId = edge?.relationId;
+  if (!edge || !relationId) return;
+  relationSaving.value = true;
+  emit('delete-relation', {
+    id: relationId,
+    source: edge.sourceId,
+    target: edge.targetId,
+    relation: edge.relation,
+    note: edge.note || '',
+  }, (success) => {
+    relationSaving.value = false;
+    if (success) {
+      relationModalVisible.value = false;
+      relationEditing.value = null;
+    }
+  });
 }
 
 async function revealCharacter(characterId: number | string, openProfile = false) {
@@ -662,6 +872,7 @@ onBeforeUnmount(() => viewportResizeObserver?.disconnect());
 .zoom-value { width: 42px; color: var(--spark-text-muted); font-size: var(--spark-fs-xs); text-align: center; }
 .atlas-viewport { position: relative; flex: 1; min-height: 0; overflow: hidden; cursor: grab; background-color: var(--spark-bg); background-image: radial-gradient(circle, color-mix(in srgb, var(--spark-text), transparent 88%) 1px, transparent 1px); background-size: 22px 22px; touch-action: none; }
 .atlas-viewport.is-panning { cursor: grabbing; }
+.relation-mode-banner { position: absolute; z-index: 5; top: 12px; left: 50%; display: flex; align-items: center; gap: 10px; transform: translateX(-50%); padding: 7px 10px 7px 14px; border: 1px solid color-mix(in srgb, var(--spark-primary), transparent 52%); border-radius: 7px; color: var(--spark-text); background: color-mix(in srgb, var(--spark-panel-bg), var(--spark-primary) 8%); box-shadow: var(--spark-shadow-sm); font-size: 12px; white-space: nowrap; }
 .atlas-canvas { position: absolute; left: 0; top: 0; transform-origin: 0 0; transition: transform 120ms ease-out; }
 .is-panning .atlas-canvas { transition: none; }
 .faction-zone { position: absolute; border: 1px solid color-mix(in srgb, var(--group-color), transparent 62%); border-top: 3px solid var(--group-color); border-radius: 6px; background: color-mix(in srgb, var(--group-color), transparent 96%); }
@@ -670,13 +881,16 @@ onBeforeUnmount(() => viewportResizeObserver?.disconnect());
 .faction-color { width: 8px; height: 8px; border-radius: 50%; box-shadow: 0 0 0 4px color-mix(in srgb, var(--group-color), transparent 84%); }
 .relation-layer { position: absolute; inset: 0; overflow: visible; pointer-events: none; color: var(--spark-text-muted); }
 .relation-edge { transition: opacity 160ms ease, color 160ms ease; }
+.relation-edge.manual { color: var(--spark-primary); pointer-events: auto; cursor: pointer; }
+.relation-edge.manual path { stroke-width: 2.4; opacity: .92; }
+.relation-edge.graphrag { color: var(--spark-text-muted); }
 .relation-edge path { fill: none; stroke: currentColor; stroke-width: 1.6; opacity: .72; }
 .relation-edge.fallback path { stroke-dasharray: 5 5; }
 .relation-edge text { fill: var(--spark-text-muted); font-size: 10px; text-anchor: middle; paint-order: stroke; stroke: var(--spark-bg); stroke-width: 4px; }
 .relation-edge.active { color: var(--spark-primary); }
 .relation-edge.active path { stroke-width: 2.5; stroke-dasharray: none; opacity: 1; }
 .relation-edge.dimmed { opacity: .1; }
-.character-node { position: absolute; z-index: 2; width: 274px; height: 104px; display: grid; grid-template-columns: 42px minmax(0, 1fr) 18px; align-items: center; gap: 10px; padding: 12px; overflow: hidden; border: 1px solid var(--spark-border); border-left: 3px solid var(--node-color); border-radius: 6px; color: var(--spark-text); background: color-mix(in srgb, var(--spark-panel-bg), var(--spark-bg) 16%); box-shadow: var(--spark-shadow-sm); text-align: left; cursor: pointer; transition: border-color 160ms ease, box-shadow 160ms ease, opacity 160ms ease, transform 160ms ease; }
+.character-node { position: absolute; z-index: 2; width: 274px; height: 104px; display: grid; grid-template-columns: 42px minmax(0, 1fr) 18px; align-items: center; gap: 10px; padding: 12px; overflow: hidden; border: 1px solid var(--spark-border); border-left: 3px solid var(--node-color); border-radius: 6px; color: var(--spark-text); background: color-mix(in srgb, var(--spark-panel-bg), var(--spark-bg) 16%); box-shadow: var(--spark-shadow-sm); text-align: left; cursor: pointer; user-select: none; -webkit-user-select: none; transition: border-color 160ms ease, box-shadow 160ms ease, opacity 160ms ease, transform 160ms ease; }
 .character-node:hover, .character-node.selected { border-color: var(--node-color); box-shadow: 0 8px 24px color-mix(in srgb, var(--node-color), transparent 82%); transform: translateY(-2px); }
 .character-node.dimmed { opacity: .2; }
 .node-avatar, .profile-avatar { display: grid; place-items: center; width: 40px; height: 40px; border: 1px solid color-mix(in srgb, var(--node-color, var(--spark-primary)), transparent 46%); border-radius: 50%; color: var(--node-color, var(--spark-primary)); background: color-mix(in srgb, var(--node-color, var(--spark-primary)), transparent 88%); font-size: 18px; font-weight: 800; }
@@ -693,6 +907,7 @@ onBeforeUnmount(() => viewportResizeObserver?.disconnect());
 .atlas-legend { position: absolute; left: 14px; bottom: 14px; display: flex; gap: 14px; padding: 7px 10px; border: 1px solid var(--spark-border); border-radius: 6px; color: var(--spark-text-muted); background: color-mix(in srgb, var(--spark-panel-bg), transparent 8%); box-shadow: var(--spark-shadow-sm); font-size: 11px; pointer-events: none; }
 .atlas-legend span { display: inline-flex; align-items: center; gap: 6px; }
 .legend-line { width: 20px; border-top: 2px solid var(--spark-text-muted); }
+.legend-line.manual { border-top-color: var(--spark-primary); }
 .legend-line.fallback { border-top-style: dashed; border-top-width: 1px; }
 .legend-node { width: 8px; height: 8px; border: 2px solid var(--spark-primary); border-radius: 50%; }
 .profile-title { display: flex; align-items: center; gap: 12px; }
@@ -705,6 +920,15 @@ onBeforeUnmount(() => viewportResizeObserver?.disconnect());
 .profile-footer { display: flex; align-items: center; justify-content: space-between; gap: 12px; }
 .profile-footer > div { display: flex; justify-content: flex-end; gap: 8px; }
 :global(.profile-modal.n-card) { width: min(720px, calc(100vw - 28px)); border-radius: 8px; }
+.relation-modal :global(.n-card__content) { padding-top: 4px; }
+.relation-form { display: grid; gap: 16px; }
+.relation-form label { display: grid; gap: 7px; color: var(--spark-text); font-weight: 600; }
+.relation-form label > span { font-size: var(--spark-fs-sm); }
+.relation-endpoints { display: grid; grid-template-columns: minmax(0, 1fr) auto minmax(0, 1fr); align-items: end; gap: 10px; }
+.relation-arrow { padding-bottom: 8px; color: var(--spark-primary); font-size: 20px; font-weight: 700; }
+.relation-footer { display: flex; align-items: center; justify-content: space-between; gap: 12px; }
+.relation-footer-actions { display: flex; gap: 8px; }
+:global(.relation-modal.n-card) { width: min(560px, calc(100vw - 28px)); border-radius: 8px; }
 @media (max-width: 900px) {
   .graph-state > span { display: none; }
   .graph-state { padding-left: 7px; }
@@ -716,5 +940,9 @@ onBeforeUnmount(() => viewportResizeObserver?.disconnect());
   .atlas-actions { grid-column: 1 / -1; justify-content: flex-end; margin-left: 0; }
   .profile-footer { align-items: stretch; flex-direction: column-reverse; }
   .profile-footer > div { justify-content: flex-end; }
+  .relation-endpoints { grid-template-columns: 1fr; }
+  .relation-arrow { display: none; }
+  .relation-footer { align-items: stretch; flex-direction: column-reverse; }
+  .relation-footer-actions { justify-content: flex-end; }
 }
 </style>

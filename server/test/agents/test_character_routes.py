@@ -68,3 +68,47 @@ def test_character_create_route_never_starts_graphrag_build(
 
     assert result["success"] is True
     assert result["id"] == 0
+
+
+def test_character_relations_are_manual_and_persist_without_graphrag(
+    monkeypatch,
+    tmp_path: Path,
+) -> None:
+    from agents.routes.characters import (
+        create_character,
+        get_character_relations,
+        post_character_relation,
+        put_character_relation,
+        remove_character_relation,
+    )
+    from agents.routes.schemas import CharacterRelationCreate, CharacterSettingsCreate
+
+    monkeypatch.setattr("core.utils.USERDATA_ROOT", str(tmp_path))
+    user = {"user_id": "18"}
+    asyncio.run(create_character(CharacterSettingsCreate(projectName="demo", name="甲"), user=user))
+    asyncio.run(create_character(CharacterSettingsCreate(projectName="demo", name="乙"), user=user))
+
+    created = asyncio.run(post_character_relation(
+        CharacterRelationCreate(projectName="demo", source=0, target=1, relation="盟友", note="共同调查"),
+        user=user,
+    ))
+    assert created["success"] is True
+    relation = created["relation"]
+    assert relation["relation"] == "盟友"
+    assert asyncio.run(get_character_relations(projectName="demo", user=user)) == [relation]
+
+    updated = asyncio.run(put_character_relation(
+        relation["id"],
+        CharacterRelationCreate(projectName="demo", source=0, target=1, relation="旧识", note="关系改变"),
+        user=user,
+    ))
+    assert updated["relation"]["relation"] == "旧识"
+    second = asyncio.run(post_character_relation(
+        CharacterRelationCreate(projectName="demo", source=0, target=1, relation="竞争者", note="立场冲突"),
+        user=user,
+    ))["relation"]
+    assert len(asyncio.run(get_character_relations(projectName="demo", user=user))) == 2
+    assert asyncio.run(remove_character_relation(relation["id"], projectName="demo", user=user)) == {"success": True}
+    assert asyncio.run(get_character_relations(projectName="demo", user=user)) == [second]
+    assert asyncio.run(remove_character_relation(second["id"], projectName="demo", user=user)) == {"success": True}
+    assert asyncio.run(get_character_relations(projectName="demo", user=user)) == []

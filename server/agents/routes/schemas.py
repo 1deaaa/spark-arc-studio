@@ -248,6 +248,18 @@ class CharacterSettingsDelete(BaseModel):
     id: int
 
 
+class CharacterRelationCreate(BaseModel):
+    projectName: Optional[str] = None
+    source: int
+    target: int
+    relation: str
+    note: str = ""
+
+
+class CharacterRelationUpdate(CharacterRelationCreate):
+    pass
+
+
 class StyleApplyRequest(BaseModel):
     styleId: str
     projectName: str
