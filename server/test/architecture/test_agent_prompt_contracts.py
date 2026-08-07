@@ -229,3 +229,37 @@ def test_only_director_overrides_dynamic_tool_system_prompt() -> None:
         if "_build_tool_system_prompt" in cls.__dict__:
             source = inspect.getsource(cls.__dict__["_build_tool_system_prompt"])
             assert "super()._build_tool_system_prompt" in source
+
+
+def test_showrunner_and_scriptwriter_bind_fact_research_tools() -> None:
+    showrunner_tools = {tool.name for tool in get_tools_for_agent("agent_showrunner")}
+    scriptwriter_tools = {tool.name for tool in get_tools_for_agent("agent_scriptwriter")}
+
+    for tool_name in (
+        "story_memory_tool",
+        "graph_rag_tool",
+        "list_chapters",
+        "read_chapter_scene",
+        "search_project",
+        "semantic_search",
+    ):
+        assert tool_name in showrunner_tools
+
+    for tool_name in ("search_project", "semantic_search"):
+        assert tool_name in scriptwriter_tools
+
+
+def test_showrunner_stage_prompts_define_distinct_artifact_contracts() -> None:
+    prompts = load_prompt("showrunner")
+    synopsis = prompts["generate_synopsis"]["system"]
+    beats = prompts["generate_beat_sheet"]["system"]
+    outline = prompts["generate_outline"]["system"]
+
+    assert "故事承诺" in synopsis
+    assert "不得拆分章节、逐场设计" in synopsis
+    assert "稀疏的状态转折图" in beats
+    assert "不是梗概的分段复述" in beats
+    for token in ("前置状态", "后置状态", "知情变化"):
+        assert token in beats
+    for token in ("地点", "前置状态", "后置状态", "禁止铺垫"):
+        assert token in outline

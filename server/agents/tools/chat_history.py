@@ -33,7 +33,7 @@ def _match_excerpt(
     *,
     match_start: int | None = None,
     match_end: int | None = None,
-    radius: int = 450,
+    radius: int = 1000,
 ) -> str:
     """保留命中点附近原文，防止一次工具结果重新撑爆上下文。"""
     text = str(content or "")
@@ -49,7 +49,7 @@ def _match_excerpt(
     return ("..." if start > 0 else "") + text[start:end] + ("..." if end < len(text) else "")
 
 
-def _context_excerpt(content: Any, limit: int = 500) -> str:
+def _context_excerpt(content: Any, limit: int = 1200) -> str:
     text = content if isinstance(content, str) else json.dumps(content, ensure_ascii=False)
     if len(text) <= limit:
         return text

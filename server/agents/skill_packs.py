@@ -173,7 +173,7 @@ def _section_score(heading: str, body: str) -> int:
     return quality_hits * 2 - runtime_hits * 3
 
 
-def build_quality_adapter_text(raw: str, *, max_chars: int = 12000) -> tuple[str, dict[str, Any]]:
+def build_quality_adapter_text(raw: str, *, max_chars: int = 32000) -> tuple[str, dict[str, Any]]:
     parsed = parse_skill_markdown(raw)
     sections = _markdown_sections(parsed["body"])
     kept: list[str] = []
@@ -687,7 +687,7 @@ def read_skill_reference(user_id: str | int, skill_id: str, path: str) -> str:
         return "[读取失败] 非法路径。"
     if not target.exists() or not target.is_file():
         return f"[读取失败] 参考文件不存在：{rel}"
-    adapted, _meta = build_quality_adapter_text(target.read_text(encoding="utf-8"), max_chars=8000)
+    adapted, _meta = build_quality_adapter_text(target.read_text(encoding="utf-8"), max_chars=24000)
     return (
         f"# Skill Reference: {skill.get('name')} / {rel}\n"
         "- 读取视图：quality_only（已尽量剥离脚本、安装、工具调用、外部工作流说明）。\n"

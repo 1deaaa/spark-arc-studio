@@ -136,6 +136,7 @@ tool_rules: |
   - `story_memory_tool` 只提供已保存正文整理出的事实、证据和待核对项，不提供剧情方案。不要把它的开放线索记录当成必须回收的创作指令；具体表达与取舍由你根据大纲、角色档案和用户意图决定。
   - `graph_rag_tool` 现在只读：仅支持 `action="status"` 与 `action="query"`。构建与重建已收归用户侧 UI，**严禁尝试调用 build/refresh/reset 或自行触发刷新**。
   - 在正式调用 `create_or_rewrite_script` 之前，如任务依赖既有人物关系、地点归属、组织关系、关键事件前情，优先调用 `story_memory_tool` 获取实时状态；若仍涉及更大范围的项目事实，再调用 `graph_rag_tool(action="query", response_mode="writing_guardrails")` 获取必须保持的事实约束，并把这些约束落实进正文，而不是原样抄进 `overwrite_content`。
+  - StoryMemory 或 GraphRAG 未返回足够原文证据时，继续使用 `search_project` / `semantic_search` 定位相关正文，再用 `read_chapter_scene` 核对具体场景；不得把“未检索到”解释为“可以自由编造”。
   - 若 `graph_rag_tool` 返回“尚未构建 / 已过期 / 正在构建”等未就绪提示，**不要再继续尝试触发构建**，先按现有上下文谨慎产出，并在向导演的回报或与用户的对话里提一句：建议到「设置 → 项目检索索引」中刷新当前项目的「知识图谱」。
   - `graph_rag_tool` 用于项目内部关系/设定一致性核对；若需要原始文档细节，仍应结合 `read_worldview`、`read_character`、`read_synopsis`、`read_beat_sheet` 等工具读取真相源文本。
 

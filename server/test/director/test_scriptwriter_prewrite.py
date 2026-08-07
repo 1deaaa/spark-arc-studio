@@ -37,9 +37,11 @@ class _FakeBoundLlm:
     def __init__(self, responses: list[AIMessage]) -> None:
         self.responses = list(responses)
         self.invoke_count = 0
+        self.message_snapshots: list[list] = []
 
-    def invoke(self, _messages):
+    def invoke(self, messages):
         self.invoke_count += 1
+        self.message_snapshots.append(list(messages))
         return self.responses.pop(0)
 
 
@@ -93,6 +95,50 @@ def test_autonomous_prewrite_only_binds_read_tools_and_limits_rounds(monkeypatch
     assert result.tools_used == ("prewrite_read_probe", "prewrite_read_probe")
     assert "只读事实" in result.research_context
     assert "关键选择" in result.planning_note
+
+
+def test_autonomous_prewrite_uses_model_budget_without_fixed_character_truncation(monkeypatch) -> None:
+    long_tool_result = "工具结果开头" + ("证据" * 5000) + "工具结果结尾"
+
+    @tool
+    def long_prewrite_probe() -> str:
+        """返回超过旧版固定上限的测试资料。"""
+        return long_tool_result
+
+    monkeypatch.setattr("agents.scriptwriter_prewrite._build_prewrite_brief", lambda _request: "场景任务包")
+    monkeypatch.setattr("agents.scriptwriter_prewrite._prewrite_read_tools", lambda: [long_prewrite_probe])
+    llm = _FakeLlm([
+        AIMessage(content="", tool_calls=[{
+            "name": "long_prewrite_probe",
+            "args": {},
+            "id": "call-long",
+            "type": "tool_call",
+        }]),
+        AIMessage(content="连续性简报"),
+    ])
+    full_outline = "大纲开头" + ("章节" * 6000) + "大纲结尾"
+    available_context = "上下文开头" + ("状态" * 5000) + "上下文结尾"
+
+    result = run_autonomous_scriptwriter_prewrite(
+        ScriptwriterPreWriteRequest(
+            user_id="u-long",
+            project_name="p-long",
+            task_description="写当前场景",
+            chapter_name="十 · 返家",
+            scene_name="10-3 开门",
+            full_outline=full_outline,
+            available_context=available_context,
+        ),
+        llm=llm,
+        max_tool_rounds=2,
+    )
+
+    first_user_message = str(llm.bound.message_snapshots[0][1].content)
+    assert "大纲开头" in first_user_message and "大纲结尾" in first_user_message
+    assert "上下文开头" in first_user_message and "上下文结尾" in first_user_message
+    assert "工具结果开头" in result.research_context
+    assert "工具结果结尾" in result.research_context
+    assert "按 PreWrite 上下文预算截断" not in result.research_context
 
 
 def test_prepare_tool_issues_matching_receipt(monkeypatch) -> None:

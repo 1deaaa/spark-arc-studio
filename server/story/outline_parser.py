@@ -110,7 +110,20 @@ def parse_outline_markup(text: str) -> Dict[str, Any]:
                 "mood": "",
                 "tension": "",
                 "beat_refs": [],
-                "key_dialogues": []
+                "key_dialogues": [],
+                "location": "",
+                "time": "",
+                "pre_state": "",
+                "objective": "",
+                "conflict": "",
+                "turn": "",
+                "post_state": "",
+                "knowledge_before": "",
+                "knowledge_after": "",
+                "forbidden_setup": "",
+                "causal_dependencies": [],
+                "setup_refs": [],
+                "payoff_refs": [],
             }
             current_chapter["children"].append(current_scene)
             i += 1
@@ -145,6 +158,38 @@ def parse_outline_markup(text: str) -> Dict[str, Any]:
                             current_scene['characters'] = chars
                         elif 'guide' in k.lower() or '指引' in k:
                             current_scene['guide'] = v
+                        elif '地点' in k or 'location' in k.lower():
+                            current_scene['location'] = v
+                        elif '时间' in k or 'time' in k.lower():
+                            current_scene['time'] = v
+                        elif '前置状态' in k or '入场状态' in k or 'pre_state' in k.lower():
+                            current_scene['pre_state'] = v
+                        elif '目标' in k or 'objective' in k.lower():
+                            current_scene['objective'] = v
+                        elif '冲突' in k or 'conflict' in k.lower():
+                            current_scene['conflict'] = v
+                        elif '转折' in k or 'turn' in k.lower():
+                            current_scene['turn'] = v
+                        elif '后置状态' in k or '离场状态' in k or 'post_state' in k.lower():
+                            current_scene['post_state'] = v
+                        elif '知情前' in k or 'knowledge_before' in k.lower():
+                            current_scene['knowledge_before'] = v
+                        elif '知情后' in k or 'knowledge_after' in k.lower():
+                            current_scene['knowledge_after'] = v
+                        elif '禁止铺垫' in k or 'forbidden_setup' in k.lower():
+                            current_scene['forbidden_setup'] = v
+                        elif '因果依赖' in k or 'causal' in k.lower():
+                            current_scene['causal_dependencies'] = [
+                                item.strip() for item in re.split(r'[,，、;；]', v) if item.strip()
+                            ]
+                        elif '设置引用' in k or 'setup_refs' in k.lower():
+                            current_scene['setup_refs'] = [
+                                item.strip() for item in re.split(r'[,，、;；]', v) if item.strip()
+                            ]
+                        elif '兑现引用' in k or 'payoff_refs' in k.lower():
+                            current_scene['payoff_refs'] = [
+                                item.strip() for item in re.split(r'[,，、;；]', v) if item.strip()
+                            ]
             i += 1
             continue
             
@@ -233,7 +278,16 @@ def parse_beat_sheet_markup(text: str) -> Dict[str, Any]:
                 "narrative_action": "",
                 "emotional_goal": "",
                 "reader_experience": "",
-                "tension_level": ""
+                "tension_level": "",
+                "pre_state": "",
+                "trigger": "",
+                "choice_or_action": "",
+                "post_state": "",
+                "reveal": "",
+                "knowledge_change": "",
+                "causal_dependencies": [],
+                "setup_refs": [],
+                "payoff_refs": [],
             }
             result["beats"].append(current_beat)
             i += 1
@@ -255,6 +309,30 @@ def parse_beat_sheet_markup(text: str) -> Dict[str, Any]:
                             current_beat['emotional_goal'] = v
                         elif '张力' in k or 'tension' in k:
                             current_beat['tension_level'] = v
+                        elif '前置状态' in k or 'pre_state' in k:
+                            current_beat['pre_state'] = v
+                        elif '触发' in k or 'trigger' in k:
+                            current_beat['trigger'] = v
+                        elif '选择' in k or '行动' in k or 'choice' in k or 'action' in k:
+                            current_beat['choice_or_action'] = v
+                        elif '后置状态' in k or 'post_state' in k:
+                            current_beat['post_state'] = v
+                        elif '揭示' in k or 'reveal' in k:
+                            current_beat['reveal'] = v
+                        elif '知情变化' in k or 'knowledge' in k:
+                            current_beat['knowledge_change'] = v
+                        elif '因果依赖' in k or 'causal' in k:
+                            current_beat['causal_dependencies'] = [
+                                item.strip() for item in re.split(r'[,，、;；]', v) if item.strip()
+                            ]
+                        elif '设置引用' in k or 'setup_refs' in k.lower():
+                            current_beat['setup_refs'] = [
+                                item.strip() for item in re.split(r'[,，、;；]', v) if item.strip()
+                            ]
+                        elif '兑现引用' in k or 'payoff_refs' in k.lower():
+                            current_beat['payoff_refs'] = [
+                                item.strip() for item in re.split(r'[,，、;；]', v) if item.strip()
+                            ]
             i += 1
             continue
             
@@ -392,6 +470,27 @@ def serialize_outline_to_markup(outline: Dict[str, Any]) -> str:
             guide = scene.get('guide', '')
             if guide:
                 meta_parts.append(f"指引：{guide}")
+            field_labels = (
+                ("地点", "location"),
+                ("时间", "time"),
+                ("前置状态", "pre_state"),
+                ("目标", "objective"),
+                ("冲突", "conflict"),
+                ("转折", "turn"),
+                ("后置状态", "post_state"),
+                ("知情前", "knowledge_before"),
+                ("知情后", "knowledge_after"),
+                ("禁止铺垫", "forbidden_setup"),
+            )
+            for label, key in field_labels:
+                value = str(scene.get(key) or "").strip()
+                if value:
+                    meta_parts.append(f"{label}：{value}")
+            for label, key in (("因果依赖", "causal_dependencies"), ("设置引用", "setup_refs"), ("兑现引用", "payoff_refs")):
+                values = scene.get(key) if isinstance(scene.get(key), list) else []
+                values = [str(item).strip() for item in values if str(item).strip()]
+                if values:
+                    meta_parts.append(f"{label}：{', '.join(values)}")
             if meta_parts:
                 lines.append("> " + " | ".join(meta_parts))
 
@@ -435,6 +534,24 @@ def serialize_beat_sheet_to_markup(beats_data: Dict[str, Any]) -> str:
             meta_parts.append(f"张力：{tension_level}")
         if meta_parts:
             lines.append("> " + " | ".join(meta_parts))
+
+        beat_fields = (
+            ("前置状态", "pre_state"),
+            ("触发", "trigger"),
+            ("选择/行动", "choice_or_action"),
+            ("后置状态", "post_state"),
+            ("揭示", "reveal"),
+            ("知情变化", "knowledge_change"),
+        )
+        for label, key in beat_fields:
+            value = str(beat.get(key) or '').strip()
+            if value:
+                lines.append(f"> {label}：{value}")
+        for label, key in (("因果依赖", "causal_dependencies"), ("设置引用", "setup_refs"), ("兑现引用", "payoff_refs")):
+            values = beat.get(key) if isinstance(beat.get(key), list) else []
+            values = [str(item).strip() for item in values if str(item).strip()]
+            if values:
+                lines.append(f"> {label}：{', '.join(values)}")
 
         narrative = (beat.get('narrative_action') or '').strip()
         if narrative:

@@ -18,6 +18,21 @@
         />
       </template>
     </n-select>
+    <n-tooltip trigger="hover">
+      <template #trigger>
+        <n-button
+          class="project-create-button"
+          circle
+          @click="projectStore.createProject"
+          size="small"
+        >
+          <template #icon>
+            <n-icon :component="FilePlus2" />
+          </template>
+        </n-button>
+      </template>
+      {{ t('components.projectSelector.newProject') }}
+    </n-tooltip>
     <n-space :size="6">
       <StoryTagsPanel emphasized />
       <n-tooltip trigger="hover">
@@ -57,7 +72,7 @@
 import { onMounted, computed, h } from 'vue';
 import { useI18n } from 'vue-i18n';
 import { NSpace, NText, NSelect, NButton, NIcon, NTooltip, useDialog, type SelectOption } from 'naive-ui';
-import { BookOpen, Clapperboard, SquarePen, Trash } from '@lucide/vue';
+import { BookOpen, Clapperboard, FilePlus2, SquarePen, Trash } from '@lucide/vue';
 import { useProjectStore } from '../stores/projectStore';
 import { useFileStore } from '../stores/fileStore';
 import bus from '@/eventBus';
@@ -173,6 +188,14 @@ onMounted(() => {
 
 .project-select-mode-icon.is-novel {
   color: var(--spark-primary);
+}
+
+.project-create-button {
+  color: var(--spark-primary) !important;
+}
+
+.project-create-button:hover {
+  color: var(--spark-primary) !important;
 }
 
 .project-option-label {

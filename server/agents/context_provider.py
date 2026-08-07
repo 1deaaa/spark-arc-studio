@@ -109,8 +109,19 @@ class AgentContextProvider:
         if not beats:
             return ""
 
-        beat_names = [b.get("name") or b.get("type") or f"Beat{i+1}" for i, b in enumerate(beats)]
-        return f"【节拍表】共{len(beats)}个节拍: {', '.join(beat_names)}"
+        lines = [f"【节拍表】共 {len(beats)} 个节拍"]
+        for i, beat in enumerate(beats):
+            beat_id = beat.get("beat_id", beat.get("index", i + 1))
+            beat_type = beat.get("beat_type") or beat.get("type") or f"Beat {beat_id}"
+            action = str(beat.get("narrative_action") or beat.get("description") or "").strip()
+            post_state = str(beat.get("post_state") or "").strip()
+            line = f"  - Beat {beat_id} [{beat_type}]"
+            if action:
+                line += f"：{action}"
+            if post_state:
+                line += f" → {post_state}"
+            lines.append(line)
+        return "\n".join(lines)
 
     def get_outline_summary(self) -> str:
         """获取大纲摘要（章节 + 场景层级，与 list_chapters 工具输出格式一致）"""
@@ -252,6 +263,15 @@ class AgentContextProvider:
         """
         parts: List[str] = []
 
+        if agent_id in ("agent_showrunner", "agent_scriptwriter", "agent_director", "agent_critic"):
+            try:
+                from agents.structure_state import format_structure_state_warning
+                warning = format_structure_state_warning(self._bundle().get("structure_state") or {})
+                if warning:
+                    parts.append(warning)
+            except Exception as e:
+                print(f"[ContextProvider] Error loading structure state: {e}")
+
         # 所有 Agent 统一注入项目级 story tags（含 POV 醒目优化），除了风格和工具 Agent
         if agent_id not in ("agent_style", "agent_utility"):
             story_tags_block = self._build_story_tags_block()
@@ -265,19 +285,20 @@ class AgentContextProvider:
                 parts.append(insp)
         
         elif agent_id == "agent_showrunner":
-            # Showrunner: 故事结构
-            synopsis = self.get_synopsis_context()
-            beats = self.get_beat_sheet_context()
-            outline = self.get_outline_summary()
-            
-            if synopsis or beats or outline:
-                parts.append("### 当前故事结构")
-                if synopsis:
-                    parts.append(synopsis)
-                if beats:
-                    parts.append(beats)
-                if outline:
-                    parts.append(outline)
+            # Showrunner 在已有项目中负责跨章节规划，需要与专有生成入口共享全量事实。
+            bundle = self._bundle()
+            worldview = bundle.get("worldview", "")
+            roles = bundle.get("roles", "")
+            narrative_memory = bundle.get("narrative_memory", "")
+            full_outline = bundle.get("full_outline", "")
+            if worldview:
+                parts.append(f"### 世界观设定\n{worldview}")
+            if roles:
+                parts.append(f"### 角色详细档案\n{roles}")
+            if narrative_memory:
+                parts.append(f"### 当前故事契约与节拍\n{narrative_memory}")
+            if full_outline:
+                parts.append(f"### 当前完整大纲\n{full_outline}")
         
         elif agent_id == "agent_scriptwriter":
             # ScriptWriter：通过 context_builder 加载全量数据

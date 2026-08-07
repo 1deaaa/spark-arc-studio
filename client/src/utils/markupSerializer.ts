@@ -132,6 +132,15 @@ export function parseBeatSheetMarkup(text: string): BeatSheetData {
         emotional_goal: '',
         reader_experience: '',
         tension_level: '',
+        pre_state: '',
+        trigger: '',
+        choice_or_action: '',
+        post_state: '',
+        reveal: '',
+        knowledge_change: '',
+        causal_dependencies: [],
+        setup_refs: [],
+        payoff_refs: [],
       };
       result.beats.push(currentBeat);
       continue;
@@ -154,6 +163,24 @@ export function parseBeatSheetMarkup(text: string): BeatSheetData {
           currentBeat.reader_experience = value;
         } else if (key.includes('张力') || key.includes('tension')) {
           currentBeat.tension_level = value;
+        } else if (key.includes('前置状态') || key.includes('pre_state')) {
+          currentBeat.pre_state = value;
+        } else if (key.includes('触发') || key.includes('trigger')) {
+          currentBeat.trigger = value;
+        } else if (key.includes('选择') || key.includes('行动') || key.includes('choice') || key.includes('action')) {
+          currentBeat.choice_or_action = value;
+        } else if (key.includes('后置状态') || key.includes('post_state')) {
+          currentBeat.post_state = value;
+        } else if (key.includes('揭示') || key.includes('reveal')) {
+          currentBeat.reveal = value;
+        } else if (key.includes('知情变化') || key.includes('knowledge')) {
+          currentBeat.knowledge_change = value;
+        } else if (key.includes('因果依赖') || key.includes('causal')) {
+          currentBeat.causal_dependencies = value.split(/[,，、;；]+/).map(s => s.trim()).filter(Boolean);
+        } else if (key.includes('设置引用') || key.includes('setup_refs')) {
+          currentBeat.setup_refs = value.split(/[,，、;；]+/).map(s => s.trim()).filter(Boolean);
+        } else if (key.includes('兑现引用') || key.includes('payoff_refs')) {
+          currentBeat.payoff_refs = value.split(/[,，、;；]+/).map(s => s.trim()).filter(Boolean);
         }
       }
       continue;
@@ -256,6 +283,22 @@ export function parseOutlineMarkup(text: string): OutlineData {
         tension: 'Medium',
         characters: [],
         mapped_beats: [],
+        beat_refs: [],
+        guide: '',
+        key_dialogues: [],
+        location: '',
+        time: '',
+        pre_state: '',
+        objective: '',
+        conflict: '',
+        turn: '',
+        post_state: '',
+        knowledge_before: '',
+        knowledge_after: '',
+        forbidden_setup: '',
+        causal_dependencies: [],
+        setup_refs: [],
+        payoff_refs: [],
       };
       currentChapter.children.push(currentScene);
       continue;
@@ -282,17 +325,33 @@ export function parseOutlineMarkup(text: string): OutlineData {
             currentScene.characters = v.split(/[,，、]+/).map(s => s.trim()).filter(Boolean);
           }
           else if (k.includes('节拍') || k.includes('beat')) {
+            currentScene.beat_refs = v.split(/[,，、;；\s]+/).map(s => s.trim()).filter(Boolean);
             currentScene.mapped_beats = v.split(/[,，、]+/)
               .map(s => parseInt(s.replace(/\D/g, '')))
               .filter(n => !isNaN(n));
           }
+          else if (k.includes('指引') || k.includes('guide')) currentScene.guide = v;
+          else if (k.includes('地点') || k.includes('location')) currentScene.location = v;
+          else if (k.includes('时间') || k.includes('time')) currentScene.time = v;
+          else if (k.includes('前置状态') || k.includes('入场状态') || k.includes('pre_state')) currentScene.pre_state = v;
+          else if (k.includes('目标') || k.includes('objective')) currentScene.objective = v;
+          else if (k.includes('冲突') || k.includes('conflict')) currentScene.conflict = v;
+          else if (k.includes('转折') || k.includes('turn')) currentScene.turn = v;
+          else if (k.includes('后置状态') || k.includes('离场状态') || k.includes('post_state')) currentScene.post_state = v;
+          else if (k.includes('知情前') || k.includes('knowledge_before')) currentScene.knowledge_before = v;
+          else if (k.includes('知情后') || k.includes('knowledge_after')) currentScene.knowledge_after = v;
+          else if (k.includes('禁止铺垫') || k.includes('forbidden_setup')) currentScene.forbidden_setup = v;
+          else if (k.includes('因果依赖') || k.includes('causal')) currentScene.causal_dependencies = v.split(/[,，、;；]+/).map(s => s.trim()).filter(Boolean);
+          else if (k.includes('设置引用') || k.includes('setup_refs')) currentScene.setup_refs = v.split(/[,，、;；]+/).map(s => s.trim()).filter(Boolean);
+          else if (k.includes('兑现引用') || k.includes('payoff_refs')) currentScene.payoff_refs = v.split(/[,，、;；]+/).map(s => s.trim()).filter(Boolean);
         }
       }
       continue;
     }
 
-    // @key_dialogue 行 — 跳过，前端类型不含此字段
     if (currentScene && line.startsWith('@key_dialogue')) {
+      const value = line.replace('@key_dialogue', '').trim();
+      if (value) currentScene.key_dialogues = [...(currentScene.key_dialogues || []), value];
       continue;
     }
 
@@ -356,12 +415,36 @@ export function serializeOutlineToMarkup(outline: OutlineData): string {
       if (scene.characters && scene.characters.length > 0) {
         metaParts.push(`登场：${scene.characters.join(', ')}`);
       }
+      const beatRefs = scene.beat_refs?.length
+        ? scene.beat_refs
+        : (scene.mapped_beats || []).map(String);
+      if (beatRefs.length > 0) metaParts.push(`对应节拍：${beatRefs.join(', ')}`);
+      if (scene.guide) metaParts.push(`指引：${scene.guide}`);
+      const scalarFields: Array<[string, keyof OutlineScene]> = [
+        ['地点', 'location'], ['时间', 'time'], ['前置状态', 'pre_state'],
+        ['目标', 'objective'], ['冲突', 'conflict'], ['转折', 'turn'],
+        ['后置状态', 'post_state'], ['知情前', 'knowledge_before'],
+        ['知情后', 'knowledge_after'], ['禁止铺垫', 'forbidden_setup'],
+      ];
+      for (const [label, key] of scalarFields) {
+        const value = scene[key];
+        if (typeof value === 'string' && value.trim()) metaParts.push(`${label}：${value.trim()}`);
+      }
+      for (const [label, values] of [
+        ['因果依赖', scene.causal_dependencies],
+        ['设置引用', scene.setup_refs],
+        ['兑现引用', scene.payoff_refs],
+      ] as Array<[string, string[] | undefined]>) {
+        if (values?.length) metaParts.push(`${label}：${values.join(', ')}`);
+      }
       if (metaParts.length > 0) lines.push('> ' + metaParts.join(' | '));
 
       const scDesc = (scene.description || '').trim();
       if (scDesc) lines.push(scDesc);
 
-      // key_dialogues 不在前端类型中，跳过
+      for (const dialogue of scene.key_dialogues || []) {
+        if (dialogue.trim()) lines.push(`@key_dialogue ${dialogue.trim()}`);
+      }
     }
 
     lines.push('');
@@ -391,6 +474,21 @@ export function serializeBeatSheetToMarkup(beatsData: BeatSheetData): string {
     if (beat.emotional_goal) metaParts.push(`情感目标：${beat.emotional_goal}`);
     if (beat.tension_level) metaParts.push(`张力：${beat.tension_level}`);
     if (metaParts.length > 0) lines.push('> ' + metaParts.join(' | '));
+
+    for (const [label, value] of [
+      ['前置状态', beat.pre_state], ['触发', beat.trigger],
+      ['选择/行动', beat.choice_or_action], ['后置状态', beat.post_state],
+      ['揭示', beat.reveal], ['知情变化', beat.knowledge_change],
+    ] as Array<[string, string | undefined]>) {
+      if (value?.trim()) lines.push(`> ${label}：${value.trim()}`);
+    }
+    for (const [label, values] of [
+      ['因果依赖', beat.causal_dependencies],
+      ['设置引用', beat.setup_refs],
+      ['兑现引用', beat.payoff_refs],
+    ] as Array<[string, string[] | undefined]>) {
+      if (values?.length) lines.push(`> ${label}：${values.join(', ')}`);
+    }
 
     const narrative = (beat.narrative_action || '').trim();
     if (narrative) lines.push(narrative);

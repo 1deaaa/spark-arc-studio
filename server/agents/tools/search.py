@@ -99,7 +99,7 @@ def _line_no_from_offset(line_starts: list[int], offset: int) -> int:
     return max(1, bisect.bisect_right(line_starts, max(offset, 0)))
 
 
-def _build_match_context(text: str, start: int, end: int, radius: int = 40) -> str:
+def _build_match_context(text: str, start: int, end: int, radius: int = 400) -> str:
     context_start = max(0, start - radius)
     context_end = min(len(text), end + radius)
     context = text[context_start:context_end]
@@ -438,8 +438,8 @@ def semantic_search(query: str, scope: list[str] | None = None, k: int = 8) -> s
                 "start_line": hit.start_line,
                 "end_line": hit.end_line,
                 "narrative_ref": hit.narrative_ref,
-                "match_text": hit.match_text[:200],
-                "context": hit.match_text[:200],
+                "match_text": hit.match_text[:1200],
+                "context": hit.match_text[:1200],
                 "score": hit.score,
                 "chunk_text": hit.match_text,
                 "pattern": None,
@@ -476,8 +476,8 @@ def semantic_search(query: str, scope: list[str] | None = None, k: int = 8) -> s
             tag = "[项目]"
             loc = f"{r['rel_path']}:{r['start_line']}"
             lines.append(f"[{r['index']}] {tag} {r['narrative_ref']} ({loc}) {score_str}")
-        preview = r['context'][:150]
-        if len(r['context']) > 150:
+        preview = r['context'][:800]
+        if len(r['context']) > 800:
             preview += "..."
         lines.append(f"  {preview}")
         lines.append("")

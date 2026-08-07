@@ -4,7 +4,6 @@ import uuid
 from dataclasses import dataclass, field
 from typing import Any, Callable
 
-from agents.prompt_layout import build_prompt_messages
 from core.request_context import (
     current_agent_id,
     current_project_name,
@@ -16,10 +15,8 @@ from core.request_context import (
 
 PREWRITE_STATUS_MESSAGE = "编剧正在调研规划。"
 PREWRITE_TOOL_NAME = "prepare_script_creation"
-PREWRITE_MAX_TOOL_ROUNDS = 2
-PREWRITE_MAX_TOOL_CALLS = 6
-PREWRITE_MAX_TOOL_RESULT_CHARS = 4000
-PREWRITE_MAX_RESEARCH_CHARS = 12000
+PREWRITE_MAX_TOOL_ROUNDS = 4
+PREWRITE_MAX_TOOL_CALLS = 10
 
 
 @dataclass(frozen=True)
@@ -49,7 +46,7 @@ class ScriptwriterPreWriteResult:
         if self.research_context.strip():
             parts.append("### PreWrite 调研所得\n" + self.research_context.strip())
         if self.planning_note.strip():
-            parts.append("### PreWrite 创作规划\n" + self.planning_note.strip())
+            parts.append("### PreWrite 连续性简报\n" + self.planning_note.strip())
         return "\n\n".join(parts)
 
 
@@ -124,7 +121,10 @@ def prepare_interactive_scriptwriter_prewrite(
         receipt_id=receipt_id,
         brief=brief,
         research_context="",
-        planning_note="系统已确定性预装目标场景契约与相关 StoryMemory；仅当具体原文证据仍缺失时，再调用只读工具补查后落盘。",
+        planning_note=(
+            "系统已预装目标场景契约与相关 StoryMemory。请在当前工具循环中先核对入场状态、"
+            "角色目标、知情边界、禁止提前发生事项、离场状态和待查事实；证据不足时继续调用只读工具。"
+        ),
         tools_used=(),
     )
 
@@ -156,6 +156,10 @@ def run_autonomous_scriptwriter_prewrite(
     max_tool_rounds: int = PREWRITE_MAX_TOOL_ROUNDS,
 ) -> ScriptwriterPreWriteResult:
     """业务生产流模式：用受限只读工具循环完成写前调查，不承担正文生成。"""
+    from agents.context_budget import (
+        prepare_specialized_prompt_messages_with_budget,
+        rebudget_existing_messages,
+    )
     from agents.language_policy import prepend_prompt_language_policy
     from langchain_core.messages import HumanMessage, ToolMessage
     from llm.agen_matchbox.reasoning_compat import extract_text_content_from_message
@@ -174,21 +178,30 @@ def run_autonomous_scriptwriter_prewrite(
 - 跨文件关系与更大范围事实约束：graph_rag_tool。
 - 必须核对原始措辞或历史场景细节：章节、场景、世界观、角色、梗概、节拍表读取工具。
 
-信息已经足够时不要为了形式调用工具。调查结束后输出不超过 200 字的创作规划，只写本场目标、冲突推进、必须保持的事实与落点。"""
+信息已经足够时不要为了形式调用工具。调查结束后输出“连续性简报”，依次写明：
+1. 入场状态：人物、地点、物品、关系与开放线索的当前状态；
+2. 角色目标：每个关键角色本场想达成什么；
+3. 知情边界：谁知道什么、谁仍不知道什么；
+4. 冲突与转折：本场如何改变局势，而不是只重复既有信息；
+5. 禁止提前：哪些行为、信息或铺垫会破坏后续惊喜、秘密、误会或转折；
+6. 离场状态与待查事实：本场结束后必须留下什么，哪些事实仍未核实。
+
+简报应具体、可执行、有原文依据；不得生成正文，也不得用字数上限压缩掉关键状态。"""
     )
     context_preview = request.available_context.strip()
-    if len(context_preview) > 6000:
-        context_preview = context_preview[-6000:]
     outline_preview = request.full_outline.strip()
-    if len(outline_preview) > 8000:
-        outline_preview = outline_preview[:8000]
     user_prompt = "\n\n".join(part for part in [
         brief,
         f"### 当前已经准备的上下文摘要\n{context_preview}" if context_preview else "",
         f"### 完整大纲\n{outline_preview}" if outline_preview else "",
         "请完成 PreWrite。",
     ] if part)
-    messages = build_prompt_messages(system_prompt=system_prompt, user_prompt=user_prompt)
+    messages = prepare_specialized_prompt_messages_with_budget(
+        agent_id="agent_scriptwriter",
+        system_prompt=system_prompt,
+        user_prompt=user_prompt,
+        llm_client=llm,
+    ).messages
 
     user_token = current_user_id.set(str(request.user_id))
     project_token = current_project_name.set(request.project_name)
@@ -228,22 +241,31 @@ def run_autonomous_scriptwriter_prewrite(
                     except Exception as exc:
                         result = f"工具 {tool_name} 执行失败：{exc}"
                 cleaned = clean(result).strip()
-                if len(cleaned) > PREWRITE_MAX_TOOL_RESULT_CHARS:
-                    cleaned = cleaned[:PREWRITE_MAX_TOOL_RESULT_CHARS] + "\n[结果已按 PreWrite 上下文预算截断]"
-                remaining = PREWRITE_MAX_RESEARCH_CHARS - sum(len(item) for item in gathered)
-                if remaining <= 0:
-                    cleaned = "PreWrite 调研上下文已达到上限，请基于现有证据完成规划。"
-                elif len(cleaned) > remaining:
-                    cleaned = cleaned[:remaining] + "\n[调研上下文已达到上限]"
                 gathered.append(f"[{tool_name}]\n{cleaned}")
                 tools_used.append(tool_name)
                 total_calls += 1
                 messages.append(ToolMessage(content=cleaned, tool_call_id=call_id, name=tool_name))
+            messages = rebudget_existing_messages(
+                user_id=str(request.user_id),
+                project_name=request.project_name,
+                agent_id="agent_scriptwriter",
+                messages=messages,
+                llm_client=llm,
+                current_user_message=user_prompt,
+            ).messages
             if total_calls >= PREWRITE_MAX_TOOL_CALLS:
                 break
 
         if not planning_note:
-            messages.append(HumanMessage(content="PreWrite 调研阶段已结束。不得再调用工具；请基于现有证据输出不超过 200 字的创作规划。"))
+            messages.append(HumanMessage(content="PreWrite 调研阶段已结束。不得再调用工具；请基于现有证据输出完整的连续性简报，不得省略知情边界、禁止提前事项和离场状态。"))
+            messages = rebudget_existing_messages(
+                user_id=str(request.user_id),
+                project_name=request.project_name,
+                agent_id="agent_scriptwriter",
+                messages=messages,
+                llm_client=llm,
+                current_user_message="输出完整的 PreWrite 连续性简报。",
+            ).messages
             response = llm.invoke(messages)
             planning_note = clean(extract_text_content_from_message(response)).strip()
     finally:

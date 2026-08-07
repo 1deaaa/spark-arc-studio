@@ -275,10 +275,8 @@ export function useSynopsisLogic() {
                 estimated_chapters: synopsisData.estimated_chapters,
             });
             const bMarkup = serializeBeatSheetToMarkup(beatSheet);
-            await Promise.all([
-                saveSynopsis(projectStore.currentProject, synMarkup),
-                saveBeatSheet(projectStore.currentProject, bMarkup)
-            ]);
+            await saveSynopsis(projectStore.currentProject, synMarkup);
+            await saveBeatSheet(projectStore.currentProject, bMarkup);
             saveCreativeCache(buildSynopsisCacheKey(), getSynopsisSnapshot());
         } catch (e: unknown) {
             message.error('保存失败: ' + getErrorMessage(e));
@@ -534,10 +532,8 @@ export function useSynopsisLogic() {
                 estimated_chapters: synopsisData.estimated_chapters,
             });
             const bMarkup = serializeBeatSheetToMarkup(beatSheet);
-            await Promise.all([
-                saveSynopsis(projectStore.currentProject, synMarkup),
-                saveBeatSheet(projectStore.currentProject, bMarkup)
-            ]);
+            await saveSynopsis(projectStore.currentProject, synMarkup);
+            await saveBeatSheet(projectStore.currentProject, bMarkup);
             saveCreativeCache(buildSynopsisCacheKey(), getSynopsisSnapshot());
         } catch (e) {
             console.error('Auto-save failed:', e);

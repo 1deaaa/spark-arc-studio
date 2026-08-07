@@ -1,29 +1,33 @@
 <template>
   <div class="view-container">
-    <div class="engine-page-heading">
-      <h2>{{ t('activityBar.engine') }}</h2>
-      <OnboardingHelpButton scene-id="page-engine" />
+    <div class="engine-page-heading spark-desktop-header">
+      <div class="spark-desktop-header__left">
+        <div class="spark-desktop-header__title-row">
+          <h2 class="spark-desktop-title">{{ t('activityBar.engine') }}</h2>
+          <OnboardingHelpButton scene-id="page-engine" />
+        </div>
+      </div>
     </div>
-    <n-tooltip trigger="hover">
-      <template #trigger>
-        <n-button
-          class="skills-trigger-btn"
-          type="primary"
-          secondary
-          circle
-          size="large"
-          @click="skillsModalVisible = true"
-        >
-          <template #icon>
-            <n-icon :component="BrainCircuit" size="20" />
-          </template>
-        </n-button>
-      </template>
-      {{ t('components.agentSkillManager.title') }}
-    </n-tooltip>
 
     <div class="engine-main">
       <AgentFlowBlueprint />
+      <n-tooltip trigger="hover">
+        <template #trigger>
+          <n-button
+            class="skills-trigger-btn"
+            type="primary"
+            secondary
+            circle
+            size="large"
+            @click="skillsModalVisible = true"
+          >
+            <template #icon>
+              <n-icon :component="BrainCircuit" size="20" />
+            </template>
+          </n-button>
+        </template>
+        {{ t('components.agentSkillManager.title') }}
+      </n-tooltip>
     </div>
 
     <n-modal
@@ -58,6 +62,7 @@ const skillsModalVisible = ref(false);
   flex: 1 1 auto;
   min-width: 0;
   display: flex;
+  flex-direction: column;
   background-color: var(--spark-bg);
   overflow: hidden;
 }
@@ -65,29 +70,12 @@ const skillsModalVisible = ref(false);
 .skills-trigger-btn {
   position: absolute;
   top: 16px;
-  left: 16px;
+  right: 16px;
   z-index: 40;
-}
-
-.engine-page-heading {
-  position: absolute;
-  top: 16px;
-  left: 72px;
-  z-index: 40;
-  display: flex;
-  align-items: center;
-  gap: 4px;
-  min-height: 40px;
-}
-
-.engine-page-heading h2 {
-  margin: 0;
-  color: var(--spark-text);
-  font-size: var(--spark-fs-lg);
-  font-weight: 650;
 }
 
 .engine-main {
+  position: relative;
   flex: 1 1 auto;
   width: 100%;
   min-width: 0;
@@ -95,10 +83,4 @@ const skillsModalVisible = ref(false);
   overflow: hidden;
 }
 
-@media (max-width: 900px) {
-  .skills-trigger-btn {
-    top: 12px;
-    left: 12px;
-  }
-}
 </style>

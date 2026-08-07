@@ -372,8 +372,23 @@ def _write_worldview(user_id: str, project_name: str, content: str) -> None:
 def _save_project_markup(user_id: str, project_name: str, filename: str, markup_text: str) -> None:
     """通用纯文本写入：将 markup_text 写入项目目录下的指定文件名"""
     filepath = os.path.join(get_project_path(user_id, project_name), filename)
+    artifact_existed_before = os.path.isfile(filepath) and os.path.getsize(filepath) > 0
     with open(filepath, 'w', encoding='utf-8') as f:
         f.write(markup_text)
+    artifact_map = {
+        '梗概.txt': 'synopsis',
+        '节拍表.txt': 'beat_sheet',
+        '大纲.txt': 'outline',
+    }
+    artifact_name = artifact_map.get(filename)
+    if artifact_name:
+        from agents.structure_state import record_structure_save
+        record_structure_save(
+            user_id,
+            project_name,
+            artifact_name,
+            artifact_existed_before=artifact_existed_before,
+        )
 
 
 def _save_project_outline(user_id: str, project_name: str, markup_text: str) -> None:

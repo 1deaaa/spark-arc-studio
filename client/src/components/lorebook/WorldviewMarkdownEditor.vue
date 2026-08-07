@@ -409,7 +409,7 @@ function removeSection() {
 
 .workbench-main {
   display: grid;
-  grid-template-columns: minmax(124px, 0.34fr) minmax(0, 1fr);
+  grid-template-columns: max-content minmax(0, 1fr);
   min-height: 0;
   overflow: hidden;
 }
@@ -617,7 +617,7 @@ function removeSection() {
   }
 
   .workbench-main {
-    grid-template-columns: minmax(96px, 0.32fr) minmax(0, 1fr);
+    grid-template-columns: max-content minmax(0, 1fr);
   }
 
   .section-editor-header {
