@@ -95,15 +95,24 @@ def test_specialized_prompt_budget_does_not_trim_before_hard_limit(monkeypatch) 
 
     assert result.compacted is False
     assert result.messages[1].content == user_prompt
-    assert events[-1]["reason"] == "within_hard_budget_high_usage"
+    assert events[-1]["reason"] == "within_budget"
     assert events[-1]["usage_ratio"] > 0.85
 
 
-def test_large_context_budget_reserves_less_than_legacy_quarter() -> None:
-    hard_budget, trigger_budget = _budget_limits(1_000_000, 200_000)
+def test_context_budget_uses_continuous_reserve_ratio() -> None:
+    cases = (
+        (256_000, 20_000, 236_000),
+        (384_000, 24_000, 360_000),
+        (512_000, 32_000, 480_000),
+        (1_000_000, 62_500, 937_500),
+    )
 
-    assert hard_budget == 830_000
-    assert trigger_budget == 830_000
+    for max_context, reserved_context, expected_budget in cases:
+        hard_budget, trigger_budget = _budget_limits(max_context, 64_000)
+
+        assert max_context - expected_budget == reserved_context
+        assert hard_budget == expected_budget
+        assert trigger_budget == expected_budget
 
 
 def test_production_single_node_stream_uses_specialized_budget_guard() -> None:

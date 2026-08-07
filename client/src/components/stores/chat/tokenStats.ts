@@ -11,8 +11,7 @@ export type ContextWindowStats = {
   maxOutputTokens: number;
   hardBudget: number;
   triggerBudget: number;
-  reservedOutputTokens: number;
-  safetyMarginTokens: number;
+  reservedContextTokens: number;
   usageRatio: number | null;
   originalUsageRatio: number | null;
   hardUsageRatio: number | null;
@@ -92,8 +91,14 @@ export function extractContextWindowStats(evt: AnyRecord): ContextWindowStats {
     maxOutputTokens: Number(evt.max_output_tokens ?? evt.maxOutputTokens ?? 0) || 0,
     hardBudget: Number(evt.hard_budget ?? evt.hardBudget ?? 0) || 0,
     triggerBudget: Number(evt.trigger_budget ?? evt.triggerBudget ?? 0) || 0,
-    reservedOutputTokens: Number(evt.reserved_output_tokens ?? evt.reservedOutputTokens ?? 0) || 0,
-    safetyMarginTokens: Number(evt.safety_margin_tokens ?? evt.safetyMarginTokens ?? 0) || 0,
+    reservedContextTokens: Number(
+      evt.reserved_context_tokens
+      ?? evt.reservedContextTokens
+      // 兼容旧版聊天记录中的统计字段。
+      ?? evt.reserved_output_tokens
+      ?? evt.reservedOutputTokens
+      ?? 0,
+    ) || 0,
     usageRatio: clampRatio(evt.usage_ratio ?? evt.usageRatio),
     originalUsageRatio: clampRatio(evt.original_usage_ratio ?? evt.originalUsageRatio),
     hardUsageRatio: clampRatio(evt.hard_usage_ratio ?? evt.hardUsageRatio),

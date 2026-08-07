@@ -63,6 +63,8 @@ def _extract_context_window_stats_from_event(delta: Any) -> Dict[str, Any] | Non
         "max_output_tokens",
         "hard_budget",
         "trigger_budget",
+        "reserved_context_tokens",
+        # 兼容旧版聊天事件中的字段。
         "reserved_output_tokens",
         "safety_margin_tokens",
         "usage_ratio",
