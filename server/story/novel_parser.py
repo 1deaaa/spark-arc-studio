@@ -6,18 +6,31 @@ from core.utils import get_project_stories_path, get_project_path
 from story.file_naming import (
     build_scene_story_filename,
     list_story_files,
+    sanitize_story_display_name,
     strip_story_filename_meta,
-    parse_story_filename,
     story_extension,
 )
 
 
+def _coerce_positive_int(value: Any, fallback: int) -> int:
+    try:
+        number = int(str(value).strip())
+    except (TypeError, ValueError):
+        return fallback
+    return number if number > 0 else fallback
+
+
+def _normalize_path(path: str) -> str:
+    return os.path.normcase(os.path.abspath(path))
+
+
 def _find_scene_file(
     stories_path: str,
-    chapter_num: int,
-    scene_num: int,
+    chapter_num: Any,
+    scene_num: Any,
     scene_title: str,
     file_format: str = "md",
+    story_files: Optional[list[tuple[str, str, Optional[Dict[str, Any]]]]] = None,
 ) -> Tuple[Optional[str], bool]:
     """
     递归查找匹配指定章节/场景编号的文件。
@@ -26,25 +39,38 @@ def _find_scene_file(
     返回 (文件绝对路径, 是否存在)。
     """
     target_ext = story_extension(file_format)
+    normalized_chapter_num = _coerce_positive_int(chapter_num, 1)
+    normalized_scene_num = _coerce_positive_int(scene_num, 1)
+    available_story_files = story_files if story_files is not None else list_story_files(
+        stories_path,
+        file_format=file_format,
+    )
 
-    # 递归扫描 stories 目录
-    for root, _, files in os.walk(stories_path):
-        for filename in files:
-            if not filename.endswith(target_ext):
+    # 优先使用规划元数据，避免同名小节被错误归并。
+    for _, absolute_path, parsed in available_story_files:
+        if not parsed or parsed.get("extension") != target_ext or parsed.get("free"):
+            continue
+        if (
+            parsed.get("chapter_num") == normalized_chapter_num
+            and parsed.get("scene_num") == normalized_scene_num
+        ):
+            return absolute_path, True
+
+    # 兼容手动创建或整理进章节但尚未补齐 scene 元数据的文件。
+    desired_display_name = sanitize_story_display_name(str(scene_title or "").strip(), "")
+    if desired_display_name:
+        for _, absolute_path, parsed in available_story_files:
+            if not parsed or parsed.get("extension") != target_ext:
                 continue
-            parsed = parse_story_filename(filename)
-            if not parsed:
-                continue
-            # 按元数据匹配：章节号 + 场景号
-            if (
-                parsed.get("chapter_num") == chapter_num
-                and parsed.get("scene_num") == scene_num
-            ):
-                return os.path.join(root, filename), True
+            if parsed.get("display_name") == desired_display_name:
+                return absolute_path, True
 
     # 未找到，返回预期路径（用于显示）
     expected_filename = build_scene_story_filename(
-        chapter_num, scene_num, scene_title, file_format=file_format
+        normalized_chapter_num,
+        normalized_scene_num,
+        scene_title,
+        file_format=file_format,
     )
     return os.path.join(stories_path, expected_filename), False
 
@@ -82,15 +108,19 @@ def get_novel_chapter_list(user_id: str, project_name: str, export_format: str =
     """
     outline = _load_project_outline(user_id, project_name)
     stories_path = get_project_stories_path(user_id, project_name)
+    story_files = list_story_files(stories_path, file_format=export_format)
+    matched_paths: set[str] = set()
     
     chapter_nodes = [node for node in (outline.get("nodes", [])) if node.get("type") == "chapter"]
     
     toc = []
     
     for ch_idx, chapter in enumerate(chapter_nodes):
-        chapter_num = chapter.get("chapter", ch_idx + 1)
-        chapter_title = chapter.get("title", f"Chapter {chapter_num}")
+        chapter_num = _coerce_positive_int(chapter.get("chapter"), ch_idx + 1)
+        chapter_title = chapter.get("title") or chapter.get("name") or f"Chapter {chapter_num}"
         scenes = chapter.get("children", [])
+        if not isinstance(scenes, list):
+            scenes = []
         
         chapter_info = {
             "chapter_num": chapter_num,
@@ -99,14 +129,17 @@ def get_novel_chapter_list(user_id: str, project_name: str, export_format: str =
         }
         
         for s_idx, scene in enumerate(scenes):
-            scene_title = scene.get("title", f"Scene {s_idx + 1}")
+            scene = scene if isinstance(scene, dict) else {}
+            scene_title = scene.get("title") or scene.get("name") or f"Scene {s_idx + 1}"
+            scene_num = _coerce_positive_int(scene.get("scene_num") or scene.get("scene"), s_idx + 1)
             # 递归查找场景文件（支持子目录）
             filepath, exists = _find_scene_file(
                 stories_path,
                 chapter_num,
-                s_idx + 1,
+                scene_num,
                 scene_title,
                 file_format=export_format,
+                story_files=story_files,
             )
             
             content = ""
@@ -117,8 +150,11 @@ def get_novel_chapter_list(user_id: str, project_name: str, export_format: str =
             
             # 从实际路径提取文件名用于显示
             actual_filename = os.path.basename(filepath) if exists else build_scene_story_filename(
-                chapter_num, s_idx + 1, scene_title, file_format=export_format
+                chapter_num, scene_num, scene_title, file_format=export_format
             )
+
+            if exists:
+                matched_paths.add(_normalize_path(filepath))
                 
             chapter_info["scenes"].append({
                 "scene_idx": s_idx,
@@ -127,9 +163,62 @@ def get_novel_chapter_list(user_id: str, project_name: str, export_format: str =
                 "exists": exists,
                 "filename": strip_story_filename_meta(actual_filename)
             })
-            
-        toc.append(chapter_info)
         
+        toc.append(chapter_info)
+
+    chapters_by_num: dict[int, Dict[str, Any]] = {
+        _coerce_positive_int(chapter.get("chapter_num"), index + 1): chapter
+        for index, chapter in enumerate(toc)
+    }
+    next_chapter_num = max(chapters_by_num, default=0) + 1
+
+    # 手动创建的 free 文件，以及整理进章节后仍保留 free 标记的文件，
+    # 可能没有完整的规划元数据；只要有正文就必须纳入导出目录。
+    # 只要文件确实有正文，就补入目录，避免投稿或整本导出静默丢失内容。
+    for relative_path, absolute_path, parsed in story_files:
+        if _normalize_path(absolute_path) in matched_paths:
+            continue
+
+        with open(absolute_path, "r", encoding="utf-8") as f:
+            content = parse_scene_md(f.read())
+        if not content:
+            continue
+
+        parsed_chapter_num = parsed.get("chapter_num") if parsed else None
+        if parsed_chapter_num is not None:
+            chapter_num = _coerce_positive_int(parsed_chapter_num, next_chapter_num)
+            chapter_info = chapters_by_num.get(chapter_num)
+            if chapter_info is None:
+                display_name = parsed.get("display_name") if parsed else ""
+                chapter_info = {
+                    "chapter_num": chapter_num,
+                    "title": display_name or os.path.splitext(os.path.basename(relative_path))[0],
+                    "scenes": [],
+                }
+                toc.append(chapter_info)
+                chapters_by_num[chapter_num] = chapter_info
+                next_chapter_num = max(next_chapter_num, chapter_num + 1)
+        else:
+            display_name = parsed.get("display_name") if parsed else ""
+            chapter_info = {
+                "chapter_num": next_chapter_num,
+                "title": display_name or os.path.splitext(os.path.basename(relative_path))[0],
+                "scenes": [],
+            }
+            toc.append(chapter_info)
+            chapters_by_num[next_chapter_num] = chapter_info
+            next_chapter_num += 1
+
+        display_name = parsed.get("display_name") if parsed else os.path.splitext(os.path.basename(relative_path))[0]
+        chapter_info["scenes"].append({
+            "scene_idx": len(chapter_info["scenes"]),
+            "title": display_name,
+            "content": content,
+            "exists": True,
+            "filename": strip_story_filename_meta(os.path.basename(relative_path)),
+        })
+        matched_paths.add(_normalize_path(absolute_path))
+
     return toc
 
 def aggregate_novel(user_id: str, project_name: str, export_format: str = "md") -> str:
@@ -137,41 +226,27 @@ def aggregate_novel(user_id: str, project_name: str, export_format: str = "md") 
     按 大纲.txt 顺序聚合所有场景 .md 文件，返回完整 Markdown 文本。
     """
     toc = get_novel_chapter_list(user_id, project_name, export_format)
-    stories_path = get_project_stories_path(user_id, project_name)
     
     full_text_blocks = []
     full_text_blocks.append(f"# {project_name}\n")
     
-    matched_scene_keys: set[tuple[int, int]] = set()
     for chapter in toc:
-        has_content = any(s["exists"] and s["content"].strip() for s in chapter["scenes"])
+        content_scenes = [
+            scene["content"].strip()
+            for scene in chapter["scenes"]
+            if scene.get("exists") and scene.get("content", "").strip()
+        ]
+        has_content = bool(content_scenes)
         if not has_content:
             continue
             
         # 章节大标题
         full_text_blocks.append(f"## 第{chapter['chapter_num']}章 {chapter['title']}")
         
-        for scene in chapter["scenes"]:
-            if not scene["exists"] or not scene["content"].strip():
-                continue
-            matched_scene_keys.add((int(chapter["chapter_num"]), int(scene["scene_idx"]) + 1))
-            
+        for content in content_scenes:
             # 场景正文（自带 # 场景名，如果是 AI 生成的话。为避免重复，可以直接使用清洗后的 content）
-            full_text_blocks.append(scene["content"])
+            full_text_blocks.append(content)
             
         full_text_blocks.append("")  # 章节末尾加空行
-
-    # 大纲可能尚未生成，旧文件也可能没有规划场景元数据。此时仍应把所有小说正文
-    # 纳入演出快照；已有大纲命中的文件按场景身份去重，其余文件沿统一文件排序追加。
-    for _, absolute_path, parsed in list_story_files(stories_path, file_format=export_format):
-        scene_key = None
-        if parsed and parsed.get("chapter_num") is not None and parsed.get("scene_num") is not None:
-            scene_key = (int(parsed["chapter_num"]), int(parsed["scene_num"]))
-        if scene_key and scene_key in matched_scene_keys:
-            continue
-        with open(absolute_path, "r", encoding="utf-8") as f:
-            content = parse_scene_md(f.read())
-        if content:
-            full_text_blocks.append(content)
 
     return "\n\n".join(full_text_blocks).strip()

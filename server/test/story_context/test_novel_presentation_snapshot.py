@@ -45,3 +45,4 @@ def test_aggregate_novel_includes_unplanned_markdown_files(monkeypatch, tmp_path
 
     assert result.startswith("# 演出测试")
     assert "没有大纲也必须进入演出。" in result
+    assert result.count("没有大纲也必须进入演出。") == 1
