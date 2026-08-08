@@ -183,7 +183,6 @@ enum ManagedProcessState {
 #[derive(Debug, Deserialize)]
 struct GithubRelease {
     tag_name: String,
-    html_url: String,
     draft: bool,
     prerelease: bool,
     #[serde(default)]
@@ -1758,17 +1757,19 @@ fn parse_release_response(
     candidate: &ReleaseApiCandidate,
 ) -> Result<NormalizedRelease, reqwest::Error> {
     match candidate.provider {
-        ReleaseProvider::Github => {
-            response
-                .json::<GithubRelease>()
-                .map(|release| NormalizedRelease {
-                    tag_name: release.tag_name,
-                    release_url: release_url_for_source(&candidate.endpoint, &release.html_url),
-                    draft: release.draft,
-                    prerelease: release.prerelease,
-                    assets: release.assets,
-                })
-        }
+        ReleaseProvider::Github => response.json::<GithubRelease>().map(|release| {
+            let release_url = project_config::repository_urls().release_page.replace(
+                "/releases/latest",
+                &format!("/releases/tag/{}", release.tag_name),
+            );
+            NormalizedRelease {
+                tag_name: release.tag_name,
+                release_url: release_url_for_source(&candidate.endpoint, &release_url),
+                draft: release.draft,
+                prerelease: release.prerelease,
+                assets: release.assets,
+            }
+        }),
         ReleaseProvider::Gitee => response.json::<GiteeRelease>().map(|release| {
             normalize_gitee_release(release, &project_config::repository_urls().mainland_release)
         }),

@@ -2,7 +2,8 @@
 
 from __future__ import annotations
 
-from langchain_core.messages import HumanMessage
+import pytest
+from langchain_core.messages import AIMessage, HumanMessage, ToolMessage
 
 
 def test_tool_schema_required_is_always_an_array() -> None:
@@ -102,3 +103,33 @@ def test_generic_400_uses_neutral_invalid_request_guidance(monkeypatch) -> None:
 
     assert "请求无效" in message
     assert "内容安全" not in message
+
+
+def test_gateway_rejects_incomplete_tool_history_before_upstream_request() -> None:
+    from llm.agen_matchbox.gateway import ChatUniversal
+    from llm.agen_matchbox.tool_protocol import ToolMessageProtocolError
+
+    llm = ChatUniversal(
+        model="offline-tool-protocol-check",
+        api_key="offline-key",
+        base_url="https://example.invalid/v1",
+    )
+    messages = [
+        HumanMessage(content="继续任务"),
+        AIMessage(content="", tool_calls=[{
+            "id": "call_delegate",
+            "name": "delegate_task",
+            "args": {},
+            "type": "tool_call",
+        }]),
+        AIMessage(content="", tool_calls=[{
+            "id": "call_tracker",
+            "name": "work_tracker",
+            "args": {},
+            "type": "tool_call",
+        }]),
+        ToolMessage(content="已更新", tool_call_id="call_tracker", name="work_tracker"),
+    ]
+
+    with pytest.raises(ToolMessageProtocolError, match="call_delegate"):
+        llm._get_request_payload(messages)

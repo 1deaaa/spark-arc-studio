@@ -11,6 +11,13 @@ from core.request_context import (
     get_scriptwriter_prewrite_receipt,
     set_scriptwriter_prewrite_receipt,
 )
+from llm.agen_matchbox.tool_protocol import (
+    build_tool_history_message,
+    build_tool_result_messages,
+    extract_tool_specs_from_message,
+    prepare_tool_specs_for_execution,
+)
+from agents.tools.stream_events import normalize_tool_name
 
 
 PREWRITE_STATUS_MESSAGE = "编剧正在调研规划。"
@@ -165,7 +172,7 @@ def run_autonomous_scriptwriter_prewrite(
         rebudget_existing_messages,
     )
     from agents.language_policy import prepend_prompt_language_policy
-    from langchain_core.messages import HumanMessage, ToolMessage
+    from langchain_core.messages import HumanMessage
     from llm.agen_matchbox.reasoning_compat import extract_text_content_from_message
 
     brief = _build_prewrite_brief(request)
@@ -222,22 +229,25 @@ def run_autonomous_scriptwriter_prewrite(
         tool_rounds = max(0, int(max_tool_rounds))
         for _ in range(tool_rounds):
             response = llm_with_tools.invoke(messages)
-            messages.append(response)
-            tool_calls = getattr(response, "tool_calls", None) or []
-            if not tool_calls:
+            tool_specs = prepare_tool_specs_for_execution(
+                extract_tool_specs_from_message(response),
+                normalize_name=normalize_tool_name,
+            )
+            if not tool_specs:
                 planning_note = clean(extract_text_content_from_message(response)).strip()
                 break
 
-            for tool_call in tool_calls:
+            # 只把规范化后的 assistant 消息写入历史，确保空 ID / 重复 ID
+            # 与后续 ToolMessage 使用同一份调用定义。
+            messages.append(build_tool_history_message(response, tool_specs))
+            tool_results: list[tuple[str, str, Any]] = []
+            for tool_call in tool_specs:
                 tool_name = str(tool_call.get("name") or "").strip()
-                tool_args = tool_call.get("args") if isinstance(tool_call, dict) else {}
-                call_id = str(tool_call.get("id") or uuid.uuid4().hex) if isinstance(tool_call, dict) else uuid.uuid4().hex
+                tool_args = tool_call.get("args") or {}
+                call_id = str(tool_call["call_id"])
                 if total_calls >= PREWRITE_MAX_TOOL_CALLS:
-                    messages.append(ToolMessage(
-                        content="PreWrite 已达到只读工具调用上限，请基于现有证据完成规划。",
-                        tool_call_id=call_id,
-                        name=tool_name or "unknown_tool",
-                    ))
+                    result = "PreWrite 已达到只读工具调用上限，请基于现有证据完成规划。"
+                    tool_results.append((call_id, tool_name or "unknown_tool", result))
                     continue
                 tool = allowed_tools.get(tool_name)
                 if tool is None:
@@ -251,7 +261,8 @@ def run_autonomous_scriptwriter_prewrite(
                 gathered.append(f"[{tool_name}]\n{cleaned}")
                 tools_used.append(tool_name)
                 total_calls += 1
-                messages.append(ToolMessage(content=cleaned, tool_call_id=call_id, name=tool_name))
+                tool_results.append((call_id, tool_name, cleaned))
+            messages.extend(build_tool_result_messages(tool_results))
             messages = rebudget_existing_messages(
                 user_id=str(request.user_id),
                 project_name=request.project_name,

@@ -49,6 +49,13 @@ from .tools.stream_events import (
     is_tool_result_failure,
     normalize_tool_name,
 )
+from llm.agen_matchbox.tool_protocol import (
+    build_tool_history_message,
+    build_tool_result_messages,
+    dedupe_tool_specs,
+    extract_tool_call_id,
+    prepare_tool_specs_for_execution,
+)
 
 
 # ── ToolEventSink: 嵌套工具事件广播 ──────────────────────────────
@@ -834,16 +841,7 @@ class SparkBaseAgent:
         return isinstance(args, dict) and any(value is not None for value in args.values())
 
     def _extract_tool_call_id(self, tool_call: Any) -> str:
-        tool_call_dict = self._tool_call_as_dict(tool_call)
-        function_obj = tool_call_dict.get("function") or getattr(tool_call, "function", None)
-        function_dict = self._tool_call_as_dict(function_obj)
-
-        call_id = tool_call_dict.get("id")
-        if call_id is None:
-            call_id = getattr(tool_call, "id", None)
-        if call_id is None:
-            call_id = function_dict.get("id")
-        return str(call_id or "")
+        return extract_tool_call_id(tool_call)
 
     def _dedupe_tool_specs(self, items: List[Dict[str, Any]]) -> List[Dict[str, Any]]:
         """按 tool id / name 去重，优先保留带参数的版本。
@@ -852,86 +850,19 @@ class SparkBaseAgent:
         `additional_kwargs.tool_calls` 中保留同一条调用。如果不做去重，可能造成
         同一个工具被执行两次。
         """
-        deduped: Dict[str, Dict[str, Any]] = {}
-        ordered_keys: List[str] = []
-
-        for index, item in enumerate(items):
-            raw = item.get("raw")
-            item_index = item.get("index")
-            key = (
-                self._extract_tool_call_id(raw)
-                or f"{item.get('name') or 'unknown_tool'}::{item_index if item_index is not None else index}"
-            )
-            if key not in deduped:
-                deduped[key] = item
-                ordered_keys.append(key)
-                continue
-
-            if self._tool_spec_has_args(item) and not self._tool_spec_has_args(deduped[key]):
-                deduped[key] = item
-
-        return [deduped[key] for key in ordered_keys]
+        return dedupe_tool_specs(items)
 
     def _prepare_tool_specs_for_execution(self, tool_specs: List[Dict[str, Any]]) -> List[Dict[str, Any]]:
         """为工具执行和下一轮消息历史建立同一份规范调用。"""
-        prepared: List[Dict[str, Any]] = []
-        used_call_ids: set[str] = set()
-
-        for index, spec in enumerate(tool_specs):
-            item = dict(spec)
-            tool_name = normalize_tool_name(str(
-                item.get("name") or self._extract_tool_name(item.get("raw")) or "unknown_tool"
-            ))
-            tool_args = item.get("args")
-            if not isinstance(tool_args, dict):
-                tool_args = self._extract_tool_args(item.get("raw"))
-            if not isinstance(tool_args, dict):
-                tool_args = {}
-
-            call_id = self._extract_tool_call_id(item.get("raw")).strip()
-            if not call_id or call_id in used_call_ids:
-                call_id = f"call_{uuid.uuid4().hex}"
-            used_call_ids.add(call_id)
-
-            item.update({
-                "raw": {
-                    "id": call_id,
-                    "name": tool_name,
-                    "args": tool_args,
-                    "type": "tool_call",
-                },
-                "name": tool_name,
-                "args": tool_args,
-                "call_id": call_id,
-                "index": item.get("index", index),
-            })
-            prepared.append(item)
-
-        return prepared
+        return prepare_tool_specs_for_execution(
+            tool_specs,
+            normalize_name=normalize_tool_name,
+        )
 
     @staticmethod
     def _build_tool_history_message(message: Any, tool_specs: List[Dict[str, Any]]) -> Any:
         """重建协议合法的 assistant 工具消息，只声明实际进入执行链的调用。"""
-        from langchain_core.messages import AIMessage
-
-        additional_kwargs = dict(getattr(message, "additional_kwargs", None) or {})
-        additional_kwargs.pop("tool_calls", None)
-        additional_kwargs.pop("function_call", None)
-
-        message_kwargs: Dict[str, Any] = {
-            "content": getattr(message, "content", "") or "",
-            "additional_kwargs": additional_kwargs,
-            "tool_calls": [dict(spec["raw"]) for spec in tool_specs],
-        }
-        response_metadata = getattr(message, "response_metadata", None)
-        if isinstance(response_metadata, dict):
-            message_kwargs["response_metadata"] = dict(response_metadata)
-        for field_name in ("name", "id", "usage_metadata"):
-            field_value = getattr(message, field_name, None)
-            if field_value is not None:
-                message_kwargs[field_name] = field_value
-
-        return AIMessage(**message_kwargs)
+        return build_tool_history_message(message, tool_specs)
 
     def _merge_tool_args_into_raw(
         self,
@@ -1374,7 +1305,6 @@ class SparkBaseAgent:
 
         # 2. 调用 LLM（支持多轮工具调用）
         try:
-            from langchain_core.messages import ToolMessage as _ToolMessage
             from llm.agen_matchbox import matchbox
             from agents.tools.registry import get_tools_for_agent
             from agents.context_budget import prepare_chat_messages_with_budget, rebudget_existing_messages
@@ -1453,8 +1383,7 @@ class SparkBaseAgent:
                     response.content = extract_visible_text_from_plain_text(response.content)
                 messages.append(self._build_tool_history_message(response, tool_specs))
                 fresh_call_ids = {cid for cid, _, _ in tool_results}
-                for call_id, t_name, t_result in tool_results:
-                    messages.append(_ToolMessage(content=t_result or "", tool_call_id=call_id, name=t_name))
+                messages.extend(build_tool_result_messages(tool_results))
                 # 附件分片滑动窗口：只保留本轮新 read_attachment_chunk 的完整正文，其余折叠
                 collapse_attachment_chunk_history(messages, fresh_call_ids=fresh_call_ids)
                 messages = rebudget_existing_messages(
@@ -1534,8 +1463,6 @@ class SparkBaseAgent:
             stream_llm = stream_llm.bind_tools(tools)
 
         try:
-            from langchain_core.messages import ToolMessage as _ToolMessage
-
             while True:
                 if is_stop_event_set(stop_event):
                     return
@@ -1765,8 +1692,7 @@ class SparkBaseAgent:
                         aggregated_chunk.content = extract_visible_text_from_plain_text(aggregated_chunk.content)
                     messages.append(self._build_tool_history_message(aggregated_chunk, tool_specs))
                 fresh_call_ids = {cid for cid, _, _ in tool_results}
-                for call_id, t_name, t_result in tool_results:
-                    messages.append(_ToolMessage(content=t_result or "", tool_call_id=call_id, name=t_name))
+                messages.extend(build_tool_result_messages(tool_results))
                 # 附件分片滑动窗口：只保留本轮新 read_attachment_chunk 的完整正文，其余折叠
                 collapse_attachment_chunk_history(messages, fresh_call_ids=fresh_call_ids)
                 tool_budget_result = yield from stream_context_budget_events(

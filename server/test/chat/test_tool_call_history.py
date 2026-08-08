@@ -4,10 +4,15 @@
 本测试禁止调用真实模型或外部服务。
 """
 
-from langchain_core.messages import AIMessage, ToolMessage
+import pytest
+from langchain_core.messages import AIMessage, HumanMessage, ToolMessage
 from langchain_core.messages.utils import convert_to_openai_messages
 
 from agents.communication import SparkBaseAgent
+from llm.agen_matchbox.tool_protocol import (
+    ToolMessageProtocolError,
+    validate_tool_message_history,
+)
 
 
 def _agent() -> SparkBaseAgent:
@@ -97,4 +102,60 @@ def test_rebuilt_history_declares_only_executed_calls_with_matching_tool_results
     assert declared_ids == [payload[1]["tool_call_id"]]
     assert "call_not_executed" not in declared_ids
     assert "tool_calls" not in assistant_message.additional_kwargs
+
+
+def test_validator_reproduces_missing_delegate_result_before_next_tool_turn() -> None:
+    messages = [
+        HumanMessage(content="继续任务"),
+        AIMessage(content="", tool_calls=[{
+            "id": "call_delegate",
+            "name": "delegate_task",
+            "args": {},
+            "type": "tool_call",
+        }]),
+        AIMessage(content="", tool_calls=[{
+            "id": "call_tracker",
+            "name": "work_tracker",
+            "args": {},
+            "type": "tool_call",
+        }]),
+        ToolMessage(
+            content="任务板已更新",
+            tool_call_id="call_tracker",
+            name="work_tracker",
+        ),
+    ]
+
+    with pytest.raises(ToolMessageProtocolError, match="call_delegate"):
+        validate_tool_message_history(messages)
+
+
+def test_validator_accepts_multiple_complete_tool_turns() -> None:
+    messages = [
+        HumanMessage(content="继续任务"),
+        AIMessage(content="", tool_calls=[{
+            "id": "call_delegate",
+            "name": "delegate_task",
+            "args": {},
+            "type": "tool_call",
+        }]),
+        ToolMessage(
+            content="专家已回交",
+            tool_call_id="call_delegate",
+            name="delegate_task",
+        ),
+        AIMessage(content="", tool_calls=[{
+            "id": "call_tracker",
+            "name": "work_tracker",
+            "args": {},
+            "type": "tool_call",
+        }]),
+        ToolMessage(
+            content="任务板已更新",
+            tool_call_id="call_tracker",
+            name="work_tracker",
+        ),
+    ]
+
+    validate_tool_message_history(messages)
 

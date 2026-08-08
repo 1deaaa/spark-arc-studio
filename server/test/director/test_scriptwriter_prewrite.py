@@ -28,6 +28,7 @@ from core.request_context import (
     set_current_export_format,
     set_scriptwriter_prewrite_receipt,
 )
+from llm.agen_matchbox.tool_protocol import validate_tool_message_history
 
 
 @tool
@@ -98,6 +99,36 @@ def test_autonomous_prewrite_only_binds_read_tools_and_limits_rounds(monkeypatch
     assert result.tools_used == ("prewrite_read_probe", "prewrite_read_probe")
     assert "只读事实" in result.research_context
     assert "关键选择" in result.planning_note
+
+
+def test_autonomous_prewrite_normalizes_missing_tool_call_id(monkeypatch) -> None:
+    monkeypatch.setattr("agents.scriptwriter_prewrite._build_prewrite_brief", lambda _request: "场景任务包")
+    monkeypatch.setattr("agents.scriptwriter_prewrite._prewrite_read_tools", lambda: [prewrite_read_probe])
+
+    class CapturingLlm(_FakeLlm):
+        final_messages: list | None = None
+
+        def invoke(self, messages):
+            self.final_messages = list(messages)
+            return super().invoke(messages)
+
+    llm = CapturingLlm([_tool_call("")])
+    run_autonomous_scriptwriter_prewrite(
+        ScriptwriterPreWriteRequest(
+            user_id="u-missing-id",
+            project_name="p-missing-id",
+            task_description="核对当前场景",
+        ),
+        llm=llm,
+        max_tool_rounds=1,
+    )
+
+    assert llm.final_messages is not None
+    validate_tool_message_history(llm.final_messages[:-1])
+    assistant = next(message for message in llm.final_messages if isinstance(message, AIMessage))
+    tool_message = llm.final_messages[llm.final_messages.index(assistant) + 1]
+    assert assistant.tool_calls[0]["id"]
+    assert assistant.tool_calls[0]["id"] == tool_message.tool_call_id
 
 
 def test_prewrite_default_research_budget_and_search_tools() -> None:

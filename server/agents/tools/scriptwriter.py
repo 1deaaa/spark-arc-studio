@@ -84,10 +84,16 @@ class OrganizeScenesToChapterInput(BaseModel):
 
 
 def _ensure_chapter_dir(stories_path: str, chapter_name: str) -> str:
-    safe = (chapter_name or "").strip().replace("\\", "_").replace("/", "_")
-    if not safe:
+    name = (chapter_name or "").strip()
+    if not name:
         return stories_path
-    chapter_dir = os.path.join(stories_path, safe)
+    from story.file_naming import parse_chapter_identity_from_title, resolve_chapter_directory
+
+    chapter_dir = resolve_chapter_directory(
+        stories_path,
+        name,
+        chapter_num=parse_chapter_identity_from_title(name),
+    )
     os.makedirs(chapter_dir, exist_ok=True)
     return chapter_dir
 
@@ -198,9 +204,12 @@ def create_or_rewrite_script(
 
     from core.utils import get_project_stories_path
     from story.file_naming import (
+        DuplicateSceneIdentityError,
         build_story_filename,
         next_story_order,
+        parse_chapter_identity_from_title,
         parse_scene_identity_from_title,
+        canonical_scene_display_name,
         resolve_planned_scene_file_path,
         sanitize_story_display_name,
     )
@@ -254,17 +263,39 @@ def create_or_rewrite_script(
         target_dir = stories_path
         relative_dir = ""
 
-    display = sanitize_story_display_name(work_name.strip() if work_name and work_name.strip() else "新场景")
-    chapter_num, scene_num = parse_scene_identity_from_title(display)
-    if chapter_num is not None and scene_num is not None:
-        file_path, existed, _ = resolve_planned_scene_file_path(
-            stories_path,
-            chapter_num,
-            scene_num,
-            display,
-            chapter_dir_name=chapter_name.strip() if chapter_name else "",
-            file_format=effective_format,
+    raw_display = sanitize_story_display_name(work_name.strip() if work_name and work_name.strip() else "")
+    if not raw_display:
+        return "创建/重写剧本失败：work_name 不能为空。"
+    chapter_num, scene_num = parse_scene_identity_from_title(raw_display)
+    if chapter_num is not None or scene_num is not None:
+        if chapter_num is None or scene_num is None or chapter_num <= 0 or scene_num <= 0:
+            return "创建/重写剧本失败：场景编号必须是大于 0 的‘章节号-场景号’，例如 3-4。"
+        try:
+            display = canonical_scene_display_name(raw_display, chapter_num, scene_num)
+        except ValueError as exc:
+            return f"创建/重写剧本失败：{exc}"
+    else:
+        display = raw_display
+    chapter_identity = parse_chapter_identity_from_title(chapter_name)
+    if chapter_identity is None:
+        return "创建/重写剧本失败：chapter_name 必须包含大于 0 的章节编号，例如‘三 · 转折’。"
+    if chapter_num is not None and chapter_identity != chapter_num:
+        return (
+            "创建/重写剧本失败：chapter_name 的章节编号与 work_name 不一致，"
+            f"当前分别为 {chapter_identity} 和 {chapter_num}。"
         )
+    if chapter_num is not None and scene_num is not None:
+        try:
+            file_path, existed, _ = resolve_planned_scene_file_path(
+                stories_path,
+                chapter_num,
+                scene_num,
+                display,
+                chapter_dir_name=chapter_name.strip() if chapter_name else "",
+                file_format=effective_format,
+            )
+        except DuplicateSceneIdentityError as exc:
+            return f"创建/重写剧本失败：{exc}。请先在作品管理器中确认并整理重复文件。"
         os.makedirs(os.path.dirname(file_path), exist_ok=True)
         relative_dir = os.path.relpath(os.path.dirname(file_path), stories_path)
         if relative_dir == ".":
@@ -340,6 +371,10 @@ def create_chapter(chapter_name: str) -> str:
     name = (chapter_name or "").strip()
     if not name:
         return "创建章节失败：chapter_name 不能为空。"
+    from story.file_naming import parse_chapter_identity_from_title
+
+    if parse_chapter_identity_from_title(name) is None:
+        return "创建章节失败：chapter_name 必须包含大于 0 的章节编号，例如‘三 · 转折’。"
 
     user_id, project_name = ToolExecutionContext.get_context()
     stories_path = get_project_stories_path(user_id, project_name)

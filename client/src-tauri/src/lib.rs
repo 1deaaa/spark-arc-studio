@@ -267,11 +267,15 @@ async fn stop_managed_local_backend() -> Result<(), String> {
 
 /// 直接查询 GitHub Releases API，首期仅用于提示 Launcher 壳更新。
 #[tauri::command]
-async fn check_launcher_update(app: AppHandle) -> Result<LauncherReleaseStatus, String> {
+async fn check_launcher_update(app: AppHandle) -> Result<Option<LauncherReleaseStatus>, String> {
+    let Some(current_version) = launcher_update_version(&app) else {
+        return Ok(None);
+    };
     let manager = DeploymentManager::new()?;
-    let current_version = app.package_info().version.to_string();
     tauri::async_runtime::spawn_blocking(move || {
-        Ok::<LauncherReleaseStatus, String>(manager.check_launcher_release(&current_version))
+        Ok::<Option<LauncherReleaseStatus>, String>(Some(
+            manager.check_launcher_release(&current_version),
+        ))
     })
     .await
     .map_err(|err| format!("Launcher Release 检查任务异常结束: {err}"))?
@@ -283,8 +287,11 @@ async fn apply_launcher_update(app: AppHandle) -> Result<(), String> {
     if is_mobile_runtime() {
         return Err("移动端不支持 Launcher 自动更新。".to_string());
     }
+    let current_version = launcher_update_version(&app).ok_or_else(|| {
+        "开发构建默认禁用 Launcher 自更新；如需测试，请设置 SPARKARC_ENABLE_DEV_UPDATES=1。"
+            .to_string()
+    })?;
     let manager = DeploymentManager::new()?;
-    let current_version = app.package_info().version.to_string();
     tauri::async_runtime::spawn_blocking(move || {
         manager.download_and_launch_launcher_update(&current_version)
     })
@@ -292,6 +299,15 @@ async fn apply_launcher_update(app: AppHandle) -> Result<(), String> {
     .map_err(|err| format!("Launcher 更新任务异常结束: {err}"))??;
     app.exit(0);
     Ok(())
+}
+
+fn launcher_update_version(app: &AppHandle) -> Option<String> {
+    if cfg!(debug_assertions)
+        && std::env::var("SPARKARC_ENABLE_DEV_UPDATES").ok().as_deref() != Some("1")
+    {
+        return None;
+    }
+    Some(app.package_info().version.to_string())
 }
 
 /// 启动后端服务。

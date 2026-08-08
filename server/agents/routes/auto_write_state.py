@@ -9,6 +9,7 @@ from core.utils import get_project_path, get_project_stories_path
 from core.json_state import json_state_lock, load_json_file, save_json_file_atomic
 from story.file_naming import (
     build_scene_story_filename,
+    canonical_scene_display_name,
     find_scene_file_by_identity,
     strip_story_filename_meta,
 )
@@ -41,6 +42,19 @@ def sanitize_scene_title(title: str) -> str:
     return _sanitize_name(title, "未命名场景")
 
 
+def normalize_planned_scene_title(chapter_num: int, scene_idx: int, scene_title: str) -> str:
+    """状态预览保持可用；命名错误由生成链路正式阻断。"""
+    try:
+        chapter = int(chapter_num)
+        scene = int(scene_idx) + 1
+    except (TypeError, ValueError):
+        return "?-? 命名无效"
+    try:
+        return canonical_scene_display_name(scene_title, chapter, scene)
+    except (TypeError, ValueError):
+        return f"{chapter}-{scene} 命名无效"
+
+
 def build_chapter_output_filename(chapter_title: str, export_format: str = "arc") -> str:
     """章节级别文件命名（兜底用，正常情况使用 build_scene_output_filename）。"""
     safe_title = sanitize_chapter_title(chapter_title)
@@ -56,7 +70,9 @@ def build_scene_output_filename(
     export_format: str = "arc",
 ) -> str:
     """场景级别物理文件命名：显示名 + 隐形排序元数据。"""
-    safe_scene = sanitize_scene_title(scene_title)
+    safe_scene = normalize_planned_scene_title(
+        int(chapter_num), scene_idx, sanitize_scene_title(scene_title)
+    )
     return build_scene_story_filename(
         int(chapter_num),
         int(scene_idx) + 1,
@@ -222,7 +238,9 @@ def build_auto_write_chapter_plan(
         from agents.tools.scriptwriter import _ensure_chapter_dir
         chapter_dir = _ensure_chapter_dir(stories_path, chapter_title)
         for s_idx, scene in enumerate(scenes):
-            scene_title = scene.get("title", f"Scene {s_idx + 1}")
+            scene_title = normalize_planned_scene_title(
+                int(chapter_num), s_idx, scene.get("title", f"场景 {s_idx + 1}")
+            )
             fn = build_scene_output_filename(chapter_num, chapter_title, s_idx, scene_title, export_format)
             existing_path, _ = find_scene_file_by_identity(
                 stories_path,
@@ -274,7 +292,9 @@ def build_auto_write_scene_plan(
         chapter_title = chapter.get("title", f"Chapter {chapter_num}")
         scenes = chapter.get("children", [])
         for s_idx, scene in enumerate(scenes):
-            scene_title = scene.get("title", f"Scene {s_idx + 1}")
+            scene_title = normalize_planned_scene_title(
+                int(chapter_num), s_idx, scene.get("title", f"场景 {s_idx + 1}")
+            )
             from agents.tools.scriptwriter import _ensure_chapter_dir
             chapter_dir = _ensure_chapter_dir(stories_path, chapter_title)
             filename = build_scene_output_filename(chapter_num, chapter_title, s_idx, scene_title, export_format)

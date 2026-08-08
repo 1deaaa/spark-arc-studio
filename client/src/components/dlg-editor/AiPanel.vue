@@ -311,85 +311,6 @@
           </div>
         </div>
 
-        <!-- Critic 手动评审 -->
-        <div v-show="mode === 'critic'" class="mode-content critic-mode">
-          <SparkAlert type="info" style="margin-bottom: 12px;">
-            {{ criticTargetLabel }}。Critic 会结合当前项目上下文，输出结构化审查意见，但不会自动改稿。
-          </SparkAlert>
-
-          <n-form-item label="审查重点（可选）">
-            <n-input
-              v-model:value="criticGuidance"
-              type="textarea"
-              :autosize="{ minRows: 3, maxRows: 6 }"
-              :placeholder="isNovelMode ? '例如：重点看是否有解释腔、段尾升华、心理描写假大空。' : '例如：重点看当前场景对白是否像真人说话，是否有 AI 味。'"
-            />
-          </n-form-item>
-
-          <n-button
-            type="error"
-            :disabled="!canRunCritic"
-            :loading="generating"
-            @click="handleCriticReview"
-            block
-            strong
-          >
-            <template #icon>
-              <n-icon :component="CircleCheck" />
-            </template>
-            {{ generating ? '评审中...' : '开始评审' }}
-          </n-button>
-
-          <div v-if="criticResult" class="critic-result">
-            <n-space justify="space-between" align="center">
-              <n-space align="center">
-                <n-tag :type="criticDecisionTagType" size="small">{{ criticResult.decision || 'PASS' }}</n-tag>
-                <span class="critic-risk-score">总评 {{ criticResult.overall_grade || 'A' }}</span>
-              </n-space>
-              <n-tag size="small" :bordered="false">{{ criticResult.status || 'APPROVE' }}</n-tag>
-            </n-space>
-
-            <div v-if="criticResult.overall_summary" class="critic-summary">
-              {{ criticResult.overall_summary }}
-            </div>
-
-            <div v-if="criticResult.rewrite_brief" class="critic-brief">
-              <strong>修改摘要：</strong>{{ criticResult.rewrite_brief }}
-            </div>
-
-            <n-divider title-placement="left">维度等级</n-divider>
-            <div class="critic-score-grid">
-              <div v-for="item in criticDimensionItems" :key="item.key" class="critic-score-item">
-                <span class="critic-score-label">{{ item.label }}</span>
-                <n-tag size="small" :bordered="false">{{ item.value }}</n-tag>
-              </div>
-            </div>
-
-            <n-divider title-placement="left">命中问题</n-divider>
-            <div v-if="criticHits.length === 0" class="critic-empty-hits">
-              未命中明显问题，当前稿件整体可用。
-            </div>
-            <div v-else class="critic-hit-list">
-              <div v-for="(hit, idx) in criticHits" :key="`${hit.feature}-${idx}`" class="critic-hit-item">
-                <n-space align="center" style="margin-bottom: 6px;">
-                  <n-tag size="small" :type="criticSeverityTagType(hit.severity)">{{ formatCriticFeature(hit.feature) }}</n-tag>
-                  <n-tag size="small" :bordered="false">{{ formatCriticSeverity(hit.severity) }}</n-tag>
-                </n-space>
-
-                <div v-if="hit.reason" class="critic-hit-reason">{{ hit.reason }}</div>
-                <div v-if="hit.suggestion" class="critic-hit-suggestion">建议：{{ hit.suggestion }}</div>
-
-                <div v-if="Array.isArray(hit.evidence) && hit.evidence.length" class="critic-evidence-list">
-                  <div v-for="(ev, evIdx) in hit.evidence" :key="evIdx" class="critic-evidence-item">
-                    <div v-if="ev.quote" class="critic-evidence-quote">“{{ ev.quote }}”</div>
-                    <div v-if="ev.reason" class="critic-evidence-reason">{{ ev.reason }}</div>
-                  </div>
-                </div>
-              </div>
-            </div>
-          </div>
-        </div>
-
         <!-- 重写整个场景控件 -->
         <div v-show="mode === 'rewrite-scene'" class="mode-content">
           <SparkAlert type="warning" title="覆盖警告" style="margin-bottom: 16px;">
@@ -508,6 +429,92 @@
           </div>
         </div>
         </section>
+
+        <!-- Critic 手动评审 -->
+        <section class="toolbox-module critic-module">
+          <div class="toolbox-module-heading">
+            <n-icon :component="CircleCheck" />
+            <span>{{ t('nodeEditor.presentation.criticModule') }}</span>
+          </div>
+
+          <div class="mode-content critic-mode">
+            <SparkAlert type="info" style="margin-bottom: 12px;">
+              {{ criticTargetLabel }}。Critic 会结合当前项目上下文，输出结构化审查意见，但不会自动改稿。
+            </SparkAlert>
+
+            <n-form-item label="审查重点（可选）">
+              <n-input
+                v-model:value="criticGuidance"
+                type="textarea"
+                :autosize="{ minRows: 3, maxRows: 6 }"
+                :placeholder="isNovelMode ? '例如：重点看是否有解释腔、段尾升华、心理描写假大空。' : '例如：重点看当前场景对白是否像真人说话，是否有 AI 味。'"
+              />
+            </n-form-item>
+
+            <n-button
+              type="error"
+              :disabled="!canRunCritic"
+              :loading="generating"
+              @click="handleCriticReview"
+              block
+              strong
+            >
+              <template #icon>
+                <n-icon :component="CircleCheck" />
+              </template>
+              {{ generating ? '评审中...' : '开始评审' }}
+            </n-button>
+
+            <div v-if="criticResult" class="critic-result">
+              <n-space justify="space-between" align="center">
+                <n-space align="center">
+                  <n-tag :type="criticDecisionTagType" size="small">{{ criticResult.decision || 'PASS' }}</n-tag>
+                  <span class="critic-risk-score">总评 {{ criticResult.overall_grade || 'A' }}</span>
+                </n-space>
+                <n-tag size="small" :bordered="false">{{ criticResult.status || 'APPROVE' }}</n-tag>
+              </n-space>
+
+              <div v-if="criticResult.overall_summary" class="critic-summary">
+                {{ criticResult.overall_summary }}
+              </div>
+
+              <div v-if="criticResult.rewrite_brief" class="critic-brief">
+                <strong>修改摘要：</strong>{{ criticResult.rewrite_brief }}
+              </div>
+
+              <n-divider title-placement="left">维度等级</n-divider>
+              <div class="critic-score-grid">
+                <div v-for="item in criticDimensionItems" :key="item.key" class="critic-score-item">
+                  <span class="critic-score-label">{{ item.label }}</span>
+                  <n-tag size="small" :bordered="false">{{ item.value }}</n-tag>
+                </div>
+              </div>
+
+              <n-divider title-placement="left">命中问题</n-divider>
+              <div v-if="criticHits.length === 0" class="critic-empty-hits">
+                未命中明显问题，当前稿件整体可用。
+              </div>
+              <div v-else class="critic-hit-list">
+                <div v-for="(hit, idx) in criticHits" :key="`${hit.feature}-${idx}`" class="critic-hit-item">
+                  <n-space align="center" style="margin-bottom: 6px;">
+                    <n-tag size="small" :type="criticSeverityTagType(hit.severity)">{{ formatCriticFeature(hit.feature) }}</n-tag>
+                    <n-tag size="small" :bordered="false">{{ formatCriticSeverity(hit.severity) }}</n-tag>
+                  </n-space>
+
+                  <div v-if="hit.reason" class="critic-hit-reason">{{ hit.reason }}</div>
+                  <div v-if="hit.suggestion" class="critic-hit-suggestion">建议：{{ hit.suggestion }}</div>
+
+                  <div v-if="Array.isArray(hit.evidence) && hit.evidence.length" class="critic-evidence-list">
+                    <div v-for="(ev, evIdx) in hit.evidence" :key="evIdx" class="critic-evidence-item">
+                      <div v-if="ev.quote" class="critic-evidence-quote">“{{ ev.quote }}”</div>
+                      <div v-if="ev.reason" class="critic-evidence-reason">{{ ev.reason }}</div>
+                    </div>
+                  </div>
+                </div>
+              </div>
+            </div>
+          </div>
+        </section>
       </n-form>
     </n-card>
   </div>
@@ -544,7 +551,7 @@ import type { CancelLoadingPayload } from '@/eventBus';
 import type { StoryCharacterDetail } from '@/services/aiContracts';
 import { formatSpeakerMarker, type ArcDialogueNode, type ArcScene, type PresentationCue } from '@/services/arcParser';
 
-type PanelMode = 'single-node' | 'multi-node' | 'critic' | 'rewrite-scene' | 'bridge';
+type PanelMode = 'single-node' | 'multi-node' | 'rewrite-scene' | 'bridge';
 
 type PanelProps = {
   defaultMode?: string;
@@ -671,7 +678,6 @@ const visible = computed(() => sceneStore.selectionType === 'dialogue' || sceneS
 const baseModeOptions = [
   { label: '单段续写', value: 'single-node', icon: FileText },
   { label: '多段续写', value: 'multi-node', icon: Files },
-  { label: 'Critic 评审', value: 'critic', icon: CircleCheck },
   { label: '重写整个场景', value: 'rewrite-scene', icon: RefreshCw },
   { label: '场景过渡', value: 'bridge', icon: GitBranch }
 ];
@@ -2087,9 +2093,11 @@ function insertBridgeResult() {
   overflow: hidden;
 }
 
+#ai-screenwriter :deep(.n-card__content),
 #ai-screenwriter :deep(.n-card-content) {
   flex: 1;
   min-height: 0;
+  overflow-x: hidden;
   overflow-y: auto;
 }
 
@@ -2104,6 +2112,8 @@ function insertBridgeResult() {
   display: flex;
   flex-direction: column;
   gap: 18px;
+  min-height: 0;
+  padding-bottom: 20px;
 }
 
 .toolbox-module {
@@ -2117,8 +2127,14 @@ function insertBridgeResult() {
   order: 0;
 }
 
-.image-generation-module {
+.critic-module {
   order: 1;
+  padding-top: 18px;
+  border-top: 1px solid color-mix(in srgb, var(--spark-border), transparent 12%);
+}
+
+.image-generation-module {
+  order: 2;
   padding-top: 18px;
   border-top: 1px solid color-mix(in srgb, var(--spark-border), transparent 12%);
 }

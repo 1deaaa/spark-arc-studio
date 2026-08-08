@@ -201,17 +201,16 @@
             <Download :size="14" />
           </button>
 
-          <a
+          <button
             v-if="launcherReleaseStatus?.updateAvailable && launcherReleaseStatus.releaseUrl"
+            type="button"
             class="launcher-status-bar__icon-command is-release"
-            :href="launcherReleaseStatus.releaseUrl"
-            target="_blank"
-            rel="noreferrer"
             :title="`${t('launcher.localDeploy.launcherUpdateAvailable')} · ${t('launcher.localDeploy.openRelease')}`"
             :aria-label="`${t('launcher.localDeploy.launcherUpdateAvailable')} · ${t('launcher.localDeploy.openRelease')}`"
+            @click="handleLauncherUpdateIcon"
           >
             <AppWindow :size="14" />
-          </a>
+          </button>
         </div>
       </main>
 
@@ -419,6 +418,7 @@
 import { computed, onBeforeUnmount, onMounted, ref, watch } from 'vue';
 import { useI18n } from 'vue-i18n';
 import { invoke } from '@tauri-apps/api/core';
+import { openUrl } from '@tauri-apps/plugin-opener';
 import { AppWindow, Download, ServerCog } from '@lucide/vue';
 import SparkLoaderAnimation from '@/components/share/SparkLoaderAnimation.vue';
 import { useThemeStore } from '@/components/stores/themeStore';
@@ -745,7 +745,7 @@ async function checkLocalUpdate(): Promise<DeploymentStatusSnapshot | null> {
 async function checkLauncherRelease(): Promise<LauncherReleaseStatus | null> {
   if (!isTauriDesktop.value) return null;
   try {
-    launcherReleaseStatus.value = await invoke<LauncherReleaseStatus>('check_launcher_update');
+    launcherReleaseStatus.value = await invoke<LauncherReleaseStatus | null>('check_launcher_update');
     return launcherReleaseStatus.value;
   } catch {
     // 壳层更新检查失败不影响服务部署。
@@ -769,6 +769,21 @@ function dismissUpdatePrompt() {
   if (updateApplying.value) return;
   showUpdatePrompt.value = false;
   updateApplyError.value = '';
+}
+
+async function handleLauncherUpdateIcon() {
+  remoteOpenError.value = '';
+  if (launcherUpdateAvailable.value) {
+    showUpdatePrompt.value = true;
+    return;
+  }
+  const releaseUrl = launcherReleaseStatus.value?.releaseUrl;
+  if (!releaseUrl) return;
+  try {
+    await openUrl(releaseUrl);
+  } catch (error) {
+    remoteOpenError.value = t('server.errors.openFailed', { detail: String(error) });
+  }
 }
 
 async function applyDiscoveredUpdates() {

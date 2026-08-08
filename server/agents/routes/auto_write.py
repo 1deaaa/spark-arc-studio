@@ -58,7 +58,12 @@ from .auto_write_state import (
     build_scene_output_filename,
     patch_auto_write_state,
 )
-from story.file_naming import resolve_planned_scene_file_path, strip_story_filename_meta
+from story.file_naming import (
+    DuplicateSceneIdentityError,
+    canonical_scene_display_name,
+    resolve_planned_scene_file_path,
+    strip_story_filename_meta,
+)
 from .context_builder import (
     load_worldview,
     load_all_roles,
@@ -358,7 +363,25 @@ async def generate_script_stream(
                 )
                 return
 
-            scene_title = scene.get("title", f"Scene {scene_idx + 1}")
+            raw_scene_title = scene.get("title", f"场景 {scene_idx + 1}")
+            try:
+                scene_title = canonical_scene_display_name(
+                    raw_scene_title,
+                    int(chapter_num),
+                    int(scene_idx) + 1,
+                )
+            except (TypeError, ValueError) as exc:
+                message = f"自动写作已停止：大纲中的章节或场景命名无效（{exc}）"
+                update_state(
+                    "error",
+                    nextChapterIndex=i,
+                    availableResumeChapterIndex=i,
+                    availableResumeSceneIndex=scene_idx,
+                    availableRestartChapterIndex=i,
+                    lastError=message,
+                )
+                yield semantic_sse_data("error", message=message, **on_error(message))
+                return
             scene_desc = scene.get("description", "")
             key_dialogues = scene.get("key_dialogues", [])
             current_scene_index = scene_idx
@@ -366,14 +389,27 @@ async def generate_script_stream(
             
             # Prepare file path for this specific scene
             filename = build_scene_output_filename(chapter_num, chapter_title, scene_idx, scene_title, export_format)
-            filepath, _, _ = resolve_planned_scene_file_path(
-                stories_path,
-                int(chapter_num),
-                int(scene_idx) + 1,
-                scene_title,
-                chapter_dir_name=chapter_title,
-                file_format=export_format,
-            )
+            try:
+                filepath, _, _ = resolve_planned_scene_file_path(
+                    stories_path,
+                    int(chapter_num),
+                    int(scene_idx) + 1,
+                    scene_title,
+                    chapter_dir_name=chapter_title,
+                    file_format=export_format,
+                )
+            except DuplicateSceneIdentityError as exc:
+                message = f"自动写作已停止：{exc}。请先在作品管理器中确认并整理重复文件。"
+                update_state(
+                    "error",
+                    nextChapterIndex=i,
+                    availableResumeChapterIndex=i,
+                    availableResumeSceneIndex=scene_idx,
+                    availableRestartChapterIndex=i,
+                    lastError=message,
+                )
+                yield semantic_sse_data("error", message=message, **on_error(message))
+                return
             os.makedirs(os.path.dirname(filepath), exist_ok=True)
             filename = os.path.basename(filepath)
             display_filename = strip_story_filename_meta(filename)
