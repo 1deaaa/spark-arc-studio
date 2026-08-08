@@ -204,6 +204,16 @@ function generateId(prefix: string): string {
   return `${prefix}_${Date.now()}_${++_idCounter}`;
 }
 
+function parseBeatRefs(value: string): string[] {
+  const labeled = Array.from(value.matchAll(/(?:beat|节拍)\s*[,，:：]?\s*(\d+)/gi));
+  if (labeled.length > 0) return labeled.map(match => `Beat ${match[1]}`);
+  return value
+    .replace(/^[\[【]|[\]】]$/g, '')
+    .split(/[,，、;；]+/)
+    .map(item => item.trim())
+    .filter(Boolean);
+}
+
 export function parseOutlineMarkup(text: string): OutlineData {
   const outlineData: OutlineData = {
     title: '未命名故事',
@@ -325,7 +335,7 @@ export function parseOutlineMarkup(text: string): OutlineData {
             currentScene.characters = v.split(/[,，、]+/).map(s => s.trim()).filter(Boolean);
           }
           else if (k.includes('节拍') || k.includes('beat')) {
-            currentScene.beat_refs = v.split(/[,，、;；\s]+/).map(s => s.trim()).filter(Boolean);
+            currentScene.beat_refs = parseBeatRefs(v);
             currentScene.mapped_beats = v.split(/[,，、]+/)
               .map(s => parseInt(s.replace(/\D/g, '')))
               .filter(n => !isNaN(n));

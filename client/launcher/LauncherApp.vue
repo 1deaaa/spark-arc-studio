@@ -356,6 +356,39 @@
         </div>
       </Transition>
 
+      <!-- 启动时统一更新提示 -->
+      <Transition name="panel-slide">
+        <div v-if="showUpdatePrompt" class="launcher-overlay">
+          <div class="launcher-overlay__card">
+            <div class="launcher-overlay__header">
+              <span class="launcher-overlay__title">{{ updatePromptTitle }}</span>
+            </div>
+            <div class="launcher-overlay__body">
+              <p class="launcher-disclaimer__body">{{ updatePromptBody }}</p>
+              <p v-if="updateApplyError" class="launcher-deploy-error">{{ updateApplyError }}</p>
+              <div class="launcher-disclaimer__actions">
+                <button
+                  type="button"
+                  class="launcher-disclaimer__btn launcher-disclaimer__btn--secondary"
+                  :disabled="updateApplying"
+                  @click="dismissUpdatePrompt"
+                >
+                  {{ t('launcher.updatePrompt.later') }}
+                </button>
+                <button
+                  type="button"
+                  class="launcher-disclaimer__btn launcher-disclaimer__btn--primary"
+                  :disabled="updateApplying"
+                  @click="applyDiscoveredUpdates"
+                >
+                  {{ updateApplying ? t('launcher.updatePrompt.applying') : t('launcher.updatePrompt.restartAndUpdate') }}
+                </button>
+              </div>
+            </div>
+          </div>
+        </div>
+      </Transition>
+
       <!-- 移动端本地部署引导弹窗 -->
       <Transition name="panel-slide">
         <div v-if="showMobileGuide" class="launcher-overlay" @click.self="closeMobileGuide">
@@ -436,6 +469,10 @@ type DeploymentStatusSnapshot = {
 type LauncherReleaseStatus = {
   updateAvailable: boolean;
   releaseUrl: string | null;
+  latestVersion: string | null;
+  assetName: string | null;
+  assetDownloadUrl: string | null;
+  lastError: string | null;
 };
 
 const APP_DEFAULT_SERVER = LAUNCHER_DEFAULT_REMOTE_SERVER;
@@ -508,6 +545,9 @@ const deploymentStatus = ref<DeploymentStatusSnapshot | null>(null);
 const localUpdateChecking = ref(false);
 const localUpdateError = ref('');
 const launcherReleaseStatus = ref<LauncherReleaseStatus | null>(null);
+const showUpdatePrompt = ref(false);
+const updateApplying = ref(false);
+const updateApplyError = ref('');
 
 const serverDisplayAddr = computed(() => {
   const addr = serverInput.value || APP_DEFAULT_SERVER;
@@ -533,6 +573,18 @@ const localDeploymentPresentation = computed(() => resolveLocalDeploymentPresent
 }));
 
 const localUpdateAvailable = computed(() => deploymentStatus.value?.updateAvailable === true);
+const launcherUpdateAvailable = computed(() => (
+  launcherReleaseStatus.value?.updateAvailable === true &&
+  !!launcherReleaseStatus.value.assetDownloadUrl
+));
+const updatePromptKind = computed<'backend' | 'launcher' | 'both'>(() => {
+  if (localUpdateAvailable.value && launcherUpdateAvailable.value) return 'both';
+  return localUpdateAvailable.value ? 'backend' : 'launcher';
+});
+const updatePromptTitle = computed(() => t(`launcher.updatePrompt.${updatePromptKind.value}.title`));
+const updatePromptBody = computed(() => t(`launcher.updatePrompt.${updatePromptKind.value}.body`, {
+  version: launcherReleaseStatus.value?.latestVersion ?? '',
+}));
 
 const localUpdateStatusText = computed(() => {
   if (localUpdateChecking.value) return t('launcher.localDeploy.checkingUpdate');
@@ -690,22 +742,56 @@ async function checkLocalUpdate(): Promise<DeploymentStatusSnapshot | null> {
   }
 }
 
-async function checkLauncherRelease() {
-  if (!isTauriDesktop.value) return;
+async function checkLauncherRelease(): Promise<LauncherReleaseStatus | null> {
+  if (!isTauriDesktop.value) return null;
   try {
     launcherReleaseStatus.value = await invoke<LauncherReleaseStatus>('check_launcher_update');
+    return launcherReleaseStatus.value;
   } catch {
     // 壳层更新检查失败不影响服务部署。
+    return null;
   }
 }
 
 async function initializeLocalUpdateState(): Promise<DeploymentStatusSnapshot | null> {
   const status = await refreshDeploymentStatus();
-  if (status?.managed) {
-    void checkLocalUpdate();
+  const [localStatus] = await Promise.all([
+    status?.managed ? checkLocalUpdate() : Promise.resolve(status),
+    checkLauncherRelease(),
+  ]);
+  if (localStatus?.updateAvailable || launcherUpdateAvailable.value) {
+    showUpdatePrompt.value = true;
   }
-  void checkLauncherRelease();
-  return status;
+  return localStatus;
+}
+
+function dismissUpdatePrompt() {
+  if (updateApplying.value) return;
+  showUpdatePrompt.value = false;
+  updateApplyError.value = '';
+}
+
+async function applyDiscoveredUpdates() {
+  if (updateApplying.value) return;
+  updateApplying.value = true;
+  updateApplyError.value = '';
+  try {
+    if (localUpdateAvailable.value) {
+      await invoke('stop_managed_local_backend');
+      deploymentStatus.value = await invoke<DeploymentStatusSnapshot>('apply_local_update');
+      localUpdateError.value = '';
+    }
+    if (launcherUpdateAvailable.value) {
+      await invoke('apply_launcher_update');
+      return;
+    }
+    showUpdatePrompt.value = false;
+    await startLocalDeployment();
+  } catch (error) {
+    updateApplyError.value = String(error);
+  } finally {
+    updateApplying.value = false;
+  }
 }
 
 function acknowledgeDefaultRemote() {
@@ -919,7 +1005,8 @@ async function checkServerOnLauncherStartup() {
   const shouldAutoEnter =
     autoEnterNextTime.value &&
     !skipAutoConnectOnce.value &&
-    !initialDeploymentStatus?.updateAvailable;
+    !initialDeploymentStatus?.updateAvailable &&
+    !launcherUpdateAvailable.value;
 
   if (shouldAutoEnter && openRemoteApp(configured)) {
     return;

@@ -15,8 +15,8 @@ from core.request_context import (
 
 PREWRITE_STATUS_MESSAGE = "编剧正在调研规划。"
 PREWRITE_TOOL_NAME = "prepare_script_creation"
-PREWRITE_MAX_TOOL_ROUNDS = 4
-PREWRITE_MAX_TOOL_CALLS = 10
+PREWRITE_MAX_TOOL_ROUNDS = 6
+PREWRITE_MAX_TOOL_CALLS = 12
 
 
 @dataclass(frozen=True)
@@ -124,6 +124,7 @@ def prepare_interactive_scriptwriter_prewrite(
         planning_note=(
             "系统已预装目标场景契约与相关 StoryMemory。请在当前工具循环中先核对入场状态、"
             "角色目标、知情边界、禁止提前发生事项、离场状态和待查事实；证据不足时继续调用只读工具。"
+            "本轮任务或场景指导给出的结束边界比完整大纲中的后续动作更具体；不得把边界后的动作提前到本场。"
         ),
         tools_used=(),
     )
@@ -131,6 +132,7 @@ def prepare_interactive_scriptwriter_prewrite(
 
 def _prewrite_read_tools() -> list[Any]:
     from agents.tools.research import graph_rag_tool
+    from agents.tools.search import search_project, semantic_search
     from agents.tools.scriptwriter import read_beat_sheet, read_character, read_synopsis, read_worldview
     from agents.tools.shared_read import list_chapters, read_chapter_outline_raw, read_chapter_scene
     from agents.tools.story_memory import story_memory_tool
@@ -145,6 +147,8 @@ def _prewrite_read_tools() -> list[Any]:
         read_character,
         read_synopsis,
         read_beat_sheet,
+        search_project,
+        semantic_search,
     ]
 
 
@@ -177,6 +181,7 @@ def run_autonomous_scriptwriter_prewrite(
 - 人物关系、最近状态、秘密知情边界、开放线索：story_memory_tool。
 - 跨文件关系与更大范围事实约束：graph_rag_tool。
 - 必须核对原始措辞或历史场景细节：章节、场景、世界观、角色、梗概、节拍表读取工具。
+- 已知关键词、人物或物品需要定位原文：search_project；只有关键词不足时再使用 semantic_search。
 
 信息已经足够时不要为了形式调用工具。调查结束后输出“连续性简报”，依次写明：
 1. 入场状态：人物、地点、物品、关系与开放线索的当前状态；
@@ -185,6 +190,8 @@ def run_autonomous_scriptwriter_prewrite(
 4. 冲突与转折：本场如何改变局势，而不是只重复既有信息；
 5. 禁止提前：哪些行为、信息或铺垫会破坏后续惊喜、秘密、误会或转折；
 6. 离场状态与待查事实：本场结束后必须留下什么，哪些事实仍未核实。
+
+范围优先级：本轮任务描述与场景指导中明确的开始/结束边界，高于完整大纲里更宽泛或属于后续场景的动作。若本轮要求“结束在某动作前”，该动作只能记入“禁止提前/下一场边界”，不得写入本场转折或离场状态。
 
 简报应具体、可执行、有原文依据；不得生成正文，也不得用字数上限压缩掉关键状态。"""
     )

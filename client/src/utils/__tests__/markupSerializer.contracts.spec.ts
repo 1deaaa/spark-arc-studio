@@ -57,4 +57,26 @@ describe('结构产物 Markup 契约', () => {
     expect(reparsedScene.knowledge_after).toBe('兄弟二人都知道哥哥已经返家');
     expect(reparsedScene.key_dialogues).toEqual(['门开了。']);
   });
+
+  it('不会把带标签的节拍引用按空格拆开', () => {
+    const parsed = parseOutlineMarkup([
+      '## 一 · 开端',
+      '### 1-1 起航',
+      '> 对应节拍：[beat 1, beat 2] | 登场：周岑',
+    ].join('\n'));
+
+    expect(parsed.nodes[0].children[0].beat_refs).toEqual(['Beat 1', 'Beat 2']);
+    expect(serializeOutlineToMarkup(parsed)).toContain('对应节拍：Beat 1, Beat 2');
+  });
+
+  it('会修复旧解析器写坏的节拍引用', () => {
+    const parsed = parseOutlineMarkup([
+      '## 一 · 开端',
+      '### 1-1 起航',
+      '> 对应节拍：[beat, 1] | 登场：周岑',
+    ].join('\n'));
+
+    expect(parsed.nodes[0].children[0].beat_refs).toEqual(['Beat 1']);
+    expect(serializeOutlineToMarkup(parsed)).toContain('对应节拍：Beat 1');
+  });
 });

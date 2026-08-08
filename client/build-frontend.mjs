@@ -15,6 +15,7 @@ import { get as httpsGet } from 'node:https';
 import { networkCandidates, readSparkArcConfig } from '../scripts/sparkarc-config.mjs';
 
 const clientDir = dirname(fileURLToPath(import.meta.url));
+const buildScript = fileURLToPath(import.meta.url);
 const packageJson = join(clientDir, 'package.json');
 const packageLock = join(clientDir, 'package-lock.json');
 const markerPath = join(clientDir, '.frontend_build_complete');
@@ -90,6 +91,8 @@ async function buildInputsChanged(lockHash) {
     packageLock,
     join(clientDir, 'vite.config.ts'),
     join(clientDir, 'tsconfig.json'),
+    join(clientDir, 'index.html'),
+    buildScript,
     join(clientDir, 'src'),
     join(clientDir, 'public'),
   ];

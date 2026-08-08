@@ -147,11 +147,7 @@ def parse_outline_markup(text: str) -> Dict[str, Any]:
                         elif '张力' in k or 'tension' in k.lower():
                             current_scene['tension'] = v
                         elif '节拍' in k or 'beat' in k.lower():
-                            current_scene['beat_refs'] = [
-                                item.strip()
-                                for item in re.split(r'[,，、;；\s]+', v)
-                                if item.strip()
-                            ]
+                            current_scene['beat_refs'] = _parse_beat_refs(v)
                         elif '出场' in k or '登场' in k or '人物' in k or '角色' in k or 'characters' in k.lower():
                             # 切分人物列表
                             chars = [c.strip() for c in re.split(r'[,，、]', v) if c.strip()]
@@ -602,3 +598,16 @@ def serialize_synopsis_to_markup(synopsis: Dict[str, Any]) -> str:
 
     return '\n'.join(lines).strip()
 
+
+def _parse_beat_refs(value: str) -> list[str]:
+    """解析节拍引用，避免把 ``[beat 1]`` 按空格拆成两个引用。"""
+    text = str(value or "").strip()
+    labeled = re.findall(
+        r"(?:beat|节拍)\s*[,，:：]?\s*(\d+)",
+        text,
+        flags=re.IGNORECASE,
+    )
+    if labeled:
+        return [f"Beat {number}" for number in labeled]
+    text = text.strip("[]【】")
+    return [item.strip() for item in re.split(r"[,，、;；]+", text) if item.strip()]

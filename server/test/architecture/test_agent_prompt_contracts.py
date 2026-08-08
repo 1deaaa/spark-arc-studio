@@ -231,7 +231,7 @@ def test_only_director_overrides_dynamic_tool_system_prompt() -> None:
             assert "super()._build_tool_system_prompt" in source
 
 
-def test_showrunner_and_scriptwriter_bind_fact_research_tools() -> None:
+def test_scriptwriter_binds_fact_research_tools() -> None:
     showrunner_tools = {tool.name for tool in get_tools_for_agent("agent_showrunner")}
     scriptwriter_tools = {tool.name for tool in get_tools_for_agent("agent_scriptwriter")}
 
@@ -243,7 +243,7 @@ def test_showrunner_and_scriptwriter_bind_fact_research_tools() -> None:
         "search_project",
         "semantic_search",
     ):
-        assert tool_name in showrunner_tools
+        assert tool_name not in showrunner_tools
 
     for tool_name in ("search_project", "semantic_search"):
         assert tool_name in scriptwriter_tools

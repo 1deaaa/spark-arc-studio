@@ -11,7 +11,10 @@ from langchain_core.tools import tool
 from pydantic import ValidationError
 
 from agents.scriptwriter_prewrite import (
+    PREWRITE_MAX_TOOL_CALLS,
+    PREWRITE_MAX_TOOL_ROUNDS,
     ScriptwriterPreWriteRequest,
+    _prewrite_read_tools,
     run_autonomous_scriptwriter_prewrite,
 )
 from agents.routes.chat import _run_chat_background_context
@@ -95,6 +98,14 @@ def test_autonomous_prewrite_only_binds_read_tools_and_limits_rounds(monkeypatch
     assert result.tools_used == ("prewrite_read_probe", "prewrite_read_probe")
     assert "只读事实" in result.research_context
     assert "关键选择" in result.planning_note
+
+
+def test_prewrite_default_research_budget_and_search_tools() -> None:
+    tool_names = {tool.name for tool in _prewrite_read_tools()}
+
+    assert PREWRITE_MAX_TOOL_ROUNDS == 6
+    assert PREWRITE_MAX_TOOL_CALLS == 12
+    assert {"search_project", "semantic_search"} <= tool_names
 
 
 def test_autonomous_prewrite_uses_model_budget_without_fixed_character_truncation(monkeypatch) -> None:

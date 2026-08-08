@@ -42,7 +42,7 @@ from agents.tools.showrunner import (
 )
 from agents.tools.story_memory import story_memory_tool
 from agents.tools.web_search import web_search
-from core.request_context import current_user_id, get_current_chat_session
+from core.request_context import current_user_id, get_current_chat_session, get_current_project_name
 
 MCP_ONLY_TOOLS = [capture_inspiration]
 EXTERNAL_SEARCH_TOOLS = [web_search]
@@ -72,7 +72,7 @@ LOREBOOK_BASE_TOOLS = [
     patch_worldview,
     *EXTERNAL_SEARCH_TOOLS,
 ]
-SHOWRUNNER_BASE_TOOLS = [
+SHOWRUNNER_STRUCTURE_TOOLS = [
     rewrite_synopsis,
     rewrite_beat_sheet,
     rewrite_outline,
@@ -83,6 +83,8 @@ SHOWRUNNER_BASE_TOOLS = [
     read_character,
     read_synopsis,
     read_beat_sheet,
+]
+SHOWRUNNER_CONTINUITY_TOOLS = [
     list_chapters,
     read_chapter_scene,
     read_chapter_outline_raw,
@@ -91,6 +93,7 @@ SHOWRUNNER_BASE_TOOLS = [
     search_project,
     semantic_search,
 ]
+SHOWRUNNER_BASE_TOOLS = SHOWRUNNER_STRUCTURE_TOOLS + SHOWRUNNER_CONTINUITY_TOOLS
 SCRIPTWRITER_BASE_TOOLS = [
     prepare_script_creation,
     create_chapter,
@@ -159,6 +162,22 @@ def _with_contextual_tools(agent_id: str, base_tools: list, user_id: str | int |
     return tools
 
 
+def _showrunner_runtime_tools(user_id: str | int | None = None) -> list:
+    """新项目只提供结构工具；已有正文时再开放连续性研究工具。"""
+    resolved_user_id = _resolve_user_id(user_id)
+    project_name = get_current_project_name()
+    if not resolved_user_id or not project_name:
+        return list(SHOWRUNNER_STRUCTURE_TOOLS)
+    try:
+        from agents.project_content import project_has_written_story_content
+
+        if project_has_written_story_content(resolved_user_id, project_name):
+            return list(SHOWRUNNER_BASE_TOOLS)
+    except Exception:
+        pass
+    return list(SHOWRUNNER_STRUCTURE_TOOLS)
+
+
 MUSE_TOOLS = MUSE_BASE_TOOLS + SHARED_SKILL_TOOLS
 LOREBOOK_TOOLS = LOREBOOK_BASE_TOOLS + SHARED_SKILL_TOOLS
 SHOWRUNNER_TOOLS = SHOWRUNNER_BASE_TOOLS + SHARED_SKILL_TOOLS
@@ -195,7 +214,7 @@ def get_tools_for_agent(agent_id: str, user_id: str | int | None = None) -> list
     tool_map = {
         "agent_muse": MUSE_BASE_TOOLS,
         "agent_lorebook": LOREBOOK_BASE_TOOLS,
-        "agent_showrunner": SHOWRUNNER_BASE_TOOLS,
+        "agent_showrunner": _showrunner_runtime_tools(user_id),
         "agent_scriptwriter": SCRIPTWRITER_BASE_TOOLS + SHARED_READ_TOOLS,
         "agent_director": DIRECTOR_BASE_TOOLS,
         "agent_critic": CRITIC_BASE_TOOLS,

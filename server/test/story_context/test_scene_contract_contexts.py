@@ -87,6 +87,28 @@ def test_outline_markup_preserves_scene_contract_fields() -> None:
     assert "导演指引：对白必须像互相试探" in text
 
 
+def test_outline_markup_keeps_labeled_beat_reference_as_one_value() -> None:
+    outline = parse_outline_markup(
+        "## 一 · 开端\n### 1-1 起航\n> 对应节拍：[beat 1, beat 2] | 登场：周岑"
+    )
+
+    scene = outline["nodes"][0]["children"][0]
+    assert scene["beat_refs"] == ["Beat 1", "Beat 2"]
+    serialized = serialize_outline_to_markup(outline)
+    assert "对应节拍：Beat 1, Beat 2" in serialized
+
+
+def test_outline_markup_repairs_legacy_split_beat_reference() -> None:
+    outline = parse_outline_markup(
+        "## 一 · 开端\n### 1-1 起航\n> 对应节拍：[beat, 1] | 登场：周岑"
+    )
+
+    scene = outline["nodes"][0]["children"][0]
+    assert scene["beat_refs"] == ["Beat 1"]
+    serialized = serialize_outline_to_markup(outline)
+    assert "对应节拍：Beat 1" in serialized
+
+
 def test_outline_markup_preserves_continuity_contract_fields() -> None:
     raw = "\n".join(
         [

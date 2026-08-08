@@ -26,6 +26,7 @@ from .common import _apply_patch
 class SearchProjectInput(BaseModel):
     pattern: str = Field(description="正则表达式模式，用于搜索全项目文本文件。例如 '张三' 或 '哭泣|泪水'")
     case_sensitive: bool = Field(default=False, description="是否区分大小写")
+    max_results: int = Field(default=20, ge=1, le=100, description="返回匹配数量上限，默认20，最多100")
 
 
 class SemanticSearchInput(BaseModel):
@@ -252,7 +253,7 @@ def _locate_chunk_positions(user_id: str, project_name: str, chunks: list[Any]) 
 
 
 @tool(args_schema=SearchProjectInput)
-def search_project(pattern: str, case_sensitive: bool = False) -> str:
+def search_project(pattern: str, case_sensitive: bool = False, max_results: int = 20) -> str:
     """按正则搜索项目文本。"""
     user_id = current_user_id.get()
     project_name = get_current_project_name()
@@ -274,7 +275,9 @@ def search_project(pattern: str, case_sensitive: bool = False) -> str:
     outline_data = load_outline_data(user_id, project_name)
     project_path = get_project_path(user_id, project_name)
 
+    result_limit = max(1, min(int(max_results or 20), 100))
     results: list[dict] = []
+    reached_limit = False
     for project_file in project_files:
         rel_path = project_file.rel_path
         if project_file.format_key == "character":
@@ -326,8 +329,13 @@ def search_project(pattern: str, case_sensitive: bool = False) -> str:
                         "character_id": project_file.metadata.get("character_id", ""),
                     }
                 )
+                if len(results) >= result_limit:
+                    reached_limit = True
+                    break
         except RegexSearchTimeoutError as exc:
             return f"正则搜索失败：{exc}"
+        if reached_limit:
+            break
 
     # 去重：相同文件、相同字节位置的重复命中（来自重叠分块）只保留第一条
     # 重叠分块（RecursiveCharacterTextSplitter chunk_overlap=100）会导致落在
@@ -352,7 +360,11 @@ def search_project(pattern: str, case_sensitive: bool = False) -> str:
     if not results:
         return f"正则搜索 \"{pattern}\" 未找到匹配。"
 
-    lines = [f"正则搜索 \"{pattern}\" 找到 {len(results)} 处匹配：\n"]
+    if reached_limit:
+        summary = f"正则搜索 \"{pattern}\" 返回前 {len(results)} 处匹配（已达到结果上限）：\n"
+    else:
+        summary = f"正则搜索 \"{pattern}\" 找到 {len(results)} 处匹配：\n"
+    lines = [summary]
     for r in results:
         loc = f"{r['rel_path']}:{r['start_line']}"
         lines.append(f"[{r['index']}] {r['narrative_ref']} ({loc})")

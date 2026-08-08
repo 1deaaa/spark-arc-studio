@@ -10,6 +10,7 @@ from agents.tools.stream_events import (
     is_tool_result_failure,
     normalize_tool_name,
 )
+from core.request_context import current_project_name, current_user_id
 
 
 CORE_AGENT_IDS = {
@@ -50,6 +51,35 @@ def test_core_agent_tool_boundaries() -> None:
     assert "delegate_task" not in tool_names("agent_scriptwriter")
     assert "delegate_task" not in tool_names("agent_critic")
     assert tool_names("agent_style") == set()
+
+
+def test_showrunner_only_binds_continuity_tools_when_story_exists(monkeypatch, tmp_path) -> None:
+    monkeypatch.setattr("core.utils.USERDATA_ROOT", str(tmp_path))
+    user_token = current_user_id.set("88")
+    project_token = current_project_name.set("demo")
+    continuity_tools = {
+        "story_memory_tool",
+        "graph_rag_tool",
+        "list_chapters",
+        "read_chapter_scene",
+        "read_chapter_outline_raw",
+        "search_project",
+        "semantic_search",
+    }
+    try:
+        fresh_tools = tool_names("agent_showrunner", user_id="88")
+        assert continuity_tools.isdisjoint(fresh_tools)
+        assert {"rewrite_synopsis", "rewrite_beat_sheet", "rewrite_outline"} <= fresh_tools
+
+        story_path = tmp_path / "uid_88" / "projects" / "demo" / "stories" / "一 · 开端" / "1.1.arc"
+        story_path.parent.mkdir(parents=True)
+        story_path.write_text("---scene 1-1\n[旁白] 已写正文", encoding="utf-8")
+
+        existing_tools = tool_names("agent_showrunner", user_id="88")
+        assert continuity_tools <= existing_tools
+    finally:
+        current_project_name.reset(project_token)
+        current_user_id.reset(user_token)
 
 
 def test_long_write_tools_expose_batching_and_append_guidance() -> None:

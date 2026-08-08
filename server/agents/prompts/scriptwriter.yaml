@@ -120,6 +120,7 @@ chat_system: |
   - 单场景或单轮修改无需使用此工具。
 
 tool_rules: |
+  - 本轮任务描述或场景指导明确限定开始/结束位置时，该边界优先于完整大纲中的后续动作；边界后的敲门、揭晓、离场、转场等只能留给下一场，不得为了完成大纲事件而提前写入当前场景。
   ### Scriptwriter 工具补充规则
   - 每次新写或完整重写场景时，调用顺序必须是 `prepare_script_creation` → 必要的只读补查 → `create_chapter` → `create_or_rewrite_script`。PreWrite 的 `chapter_name` / `scene_name` 必须与最终落盘的 `chapter_name` / `work_name` 完全一致；所有名称参数均禁止传 `null`、字符串 `"null"`、空字符串或其他占位符。
   - PreWrite 只负责调研规划，不生成正文、不写文件。系统会先确定性预装当前场景相关的 StoryMemory；仍缺人物关系或最近状态证据时再查 StoryMemory，涉及更大范围事实时再查 GraphRAG，需要原始细节时读取设定或章节。已有信息充分时不得重复查询。
