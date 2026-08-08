@@ -17,14 +17,30 @@
           @rerun="$emit('rerun')"
         />
         <ChatProgressBoardPopover :history="history" :agent-id="agentId" />
-        <div v-if="contextTokenLabel" class="chat-token-meter">
-          <n-tooltip v-if="contextTokenLabel" trigger="hover">
-            <template #trigger>
-              <span class="chat-token-chip">{{ contextTokenLabel }}</span>
-            </template>
-            {{ contextTokenHint }}
-          </n-tooltip>
-        </div>
+        <n-popover
+          v-if="contextTokenLabel"
+          trigger="click"
+          placement="bottom-start"
+          :show-arrow="false"
+          :overlap="false"
+        >
+          <template #trigger>
+            <button
+              type="button"
+              class="chat-token-chip"
+              :title="contextTokenHint"
+              :aria-label="contextTokenHint"
+              @mousedown.stop
+            >
+              {{ contextTokenLabel }}
+            </button>
+          </template>
+          <ChatTokenUsagePanel
+            :usage="contextTokenUsage"
+            :agent-id="agentId"
+            :live="sending"
+          />
+        </n-popover>
         <n-popconfirm
           :positive-text="t('common.confirm')"
           :negative-text="t('common.cancel')"
@@ -170,16 +186,18 @@
  */
 import { computed, nextTick, onBeforeUnmount, onMounted, ref, useSlots, watch, type PropType } from 'vue';
 import { useI18n } from 'vue-i18n';
-import { NButton, NInput, NPopconfirm, NTooltip } from 'naive-ui';
+import { NButton, NInput, NPopconfirm, NPopover, NTooltip } from 'naive-ui';
 import ChatMessageList from '@/components/chat/ChatMessageList.vue';
 import AgentRadialPicker from '@/components/chat/AgentRadialPicker.vue';
 import ChatProgressBoardPopover from '@/components/chat/ChatProgressBoardPopover.vue';
+import ChatTokenUsagePanel from '@/components/chat/ChatTokenUsagePanel.vue';
 import GlobalLoading from '@/components/share/GlobalLoading.vue';
 import type { ChatMessage } from '@/services/chatService';
 import {
   selectChatTailWindowStart,
   selectOlderChatWindowStart,
 } from '@/components/chat/message/render';
+import type { TokenUsageStats } from '@/components/stores/chat/tokenStats';
 
 type AgentOption = {
   label: string;
@@ -205,12 +223,6 @@ type ContextWindowStats = {
   model?: string;
   agentId?: string;
   compacted?: boolean;
-};
-
-type TokenUsageStats = {
-  promptTokens?: number;
-  completionTokens?: number;
-  totalTokens?: number;
 };
 
 const props = defineProps({
@@ -368,27 +380,8 @@ function formatTokenCount(value: number): string {
   return String(Math.round(n));
 }
 
-function formatPercent(value: number | null | undefined): string {
-  if (value == null || !Number.isFinite(value)) return '-';
-  const percent = Math.max(0, value) * 100;
-  return percent >= 10 ? `${Math.round(percent)}%` : `${Math.round(percent * 10) / 10}%`;
-}
-
-const contextWindowUsageRatio = computed(() => {
-  const raw = props.contextWindowStats?.usageRatio;
-  if (typeof raw === 'number' && Number.isFinite(raw)) return Math.max(0, raw);
-  const input = Number(props.contextWindowStats?.inputTokens ?? props.contextTokenUsage?.promptTokens ?? 0) || 0;
-  const maxContext = Number(props.contextWindowStats?.maxContextTokens ?? 0) || 0;
-  if (input > 0 && maxContext > 0) return input / maxContext;
-  return null;
-});
-
 const contextTokenLabel = computed(() => {
   const usage = props.contextTokenUsage;
-  const cached = Number(props.contextWindowStats?.cachedPromptTokens ?? 0) || 0;
-  const usageSuffix = contextWindowUsageRatio.value == null
-    ? ''
-    : ` · ${t('components.chatMessageList.windowUsageLabel', { ratio: formatPercent(contextWindowUsageRatio.value) })}`;
   if (usage) {
     const input = Number(usage.promptTokens ?? 0) || 0;
     const output = Number(usage.completionTokens ?? 0) || 0;
@@ -397,43 +390,15 @@ const contextTokenLabel = computed(() => {
         input: formatTokenCount(input),
         output: formatTokenCount(output),
       });
-      if (cached <= 0) return `${baseLabel}${usageSuffix}`;
-      return `${baseLabel}${usageSuffix} · ${t('components.chatMessageList.cachedTokenLabel', {
-        cached: formatTokenCount(cached),
-      })}`;
+      return baseLabel;
     }
   }
   const total = Number(props.contextTokenCount ?? 0);
-  if (!Number.isFinite(total) || total <= 0) {
-    if (cached <= 0) return '';
-    return t('components.chatMessageList.cachedTokenLabel', {
-      cached: formatTokenCount(cached),
-    });
-  }
-  const baseLabel = t('components.chatPanel.taskTokenLabel', { tokens: formatTokenCount(total) });
-  if (cached <= 0) return `${baseLabel}${usageSuffix}`;
-  return `${baseLabel}${usageSuffix} · ${t('components.chatMessageList.cachedTokenLabel', {
-    cached: formatTokenCount(cached),
-  })}`;
+  if (!Number.isFinite(total) || total <= 0) return '';
+  return t('components.chatPanel.taskTokenLabel', { tokens: formatTokenCount(total) });
 });
 
-const contextTokenHint = computed(() => {
-  const cached = Number(props.contextWindowStats?.cachedPromptTokens ?? 0) || 0;
-  const maxContext = Number(props.contextWindowStats?.maxContextTokens ?? 0) || 0;
-  const usageSuffix = contextWindowUsageRatio.value == null ? '' : ` · ${t('components.chatMessageList.windowUsageHint', {
-    ratio: formatPercent(contextWindowUsageRatio.value),
-    max: maxContext > 0 ? formatTokenCount(maxContext) : '-',
-  })}`;
-  if (cached <= 0) return `${t('components.chatPanel.taskTokenHint')}${usageSuffix}`;
-  const rateRaw = props.contextWindowStats?.cacheHitRate;
-  const rate = typeof rateRaw === 'number' && Number.isFinite(rateRaw)
-    ? `${Math.round(Math.max(0, Math.min(1, rateRaw)) * 100)}%`
-    : '-';
-  return `${t('components.chatPanel.taskTokenHint')}${usageSuffix} · ${t('components.chatMessageList.cachedTokenHint', {
-    cached: formatTokenCount(cached),
-    rate,
-  })}`;
-});
+const contextTokenHint = computed(() => t('components.chatPanel.taskTokenHint'));
 
 /** AgentRadialPicker 选中 Agent 时透传给上层（轮盘自身会自动关闭） */
 function onAgentSelected(val: string): void {
@@ -524,30 +489,33 @@ defineExpose({ listRef: chatListRef });
   min-width: 0;
 }
 
-.chat-token-meter {
-  display: inline-flex;
-  align-items: center;
-  gap: 4px;
-  min-width: 0;
-  margin-left: 2px;
-}
-
 .chat-token-chip {
   display: inline-flex;
   align-items: center;
   max-width: 120px;
   height: 22px;
   padding: 0 7px;
+  margin-left: 2px;
   border-radius: 999px;
   border: 1px solid rgba(var(--spark-primary-rgb), 0.16);
   background: rgba(var(--spark-primary-rgb), 0.06);
   color: var(--spark-text-muted);
   font-size: var(--spark-fs-2xs);
   font-weight: 700;
+  font-family: inherit;
   line-height: 1;
   white-space: nowrap;
   overflow: hidden;
   text-overflow: ellipsis;
+  cursor: pointer;
+}
+
+.chat-token-chip:hover,
+.chat-token-chip:focus-visible {
+  border-color: rgba(var(--spark-primary-rgb), 0.34);
+  background: rgba(var(--spark-primary-rgb), 0.1);
+  color: var(--spark-primary);
+  outline: none;
 }
 
 .chat-token-chip.is-window {

@@ -280,6 +280,64 @@ describe('chatStore NDJSON 消费契约', () => {
     vi.runOnlyPendingTimers();
   });
 
+  it('在 task_done 前消费实时 llm_usage 并更新任务累计用量', async () => {
+    const store = useChatStore();
+    const session = store.primarySession;
+    session.sending = true;
+    session.backgroundTaskStatus = 'running';
+    session.streamEpoch = 1;
+    const assistantMsg: any = {
+      clientId: 'assistant-live-usage',
+      role: 'assistant',
+      content: '',
+      reasoning: '',
+      tool_traces: [],
+      segments: [],
+      timestamp: 1,
+    };
+
+    const reader = readerFromEvents([{
+      event: 'llm_usage',
+      seq: 1,
+      llm_usage: {
+        prompt_tokens: 1800,
+        completion_tokens: 300,
+        total_tokens: 2100,
+        requests: 2,
+        by_agent: {
+          agent_director: {
+            prompt_tokens: 1000,
+            completion_tokens: 100,
+            total_tokens: 1100,
+            requests: 1,
+          },
+          agent_lorebook: {
+            prompt_tokens: 800,
+            completion_tokens: 200,
+            total_tokens: 1000,
+            requests: 1,
+          },
+        },
+      },
+    }]);
+
+    await store._consumeStream(session, assistantMsg, false, reader, 0, {
+      agentId: 'agent_director',
+      contextKey: 'global',
+      streamEpoch: 1,
+    });
+
+    expect(session.contextTokenCount).toBe(2100);
+    expect(session.contextTokenUsage).toMatchObject({
+      promptTokens: 1800,
+      completionTokens: 300,
+      totalTokens: 2100,
+      requests: 2,
+    });
+    expect(session.contextTokenUsage?.byAgent.agent_lorebook.totalTokens).toBe(1000);
+    expect(assistantMsg.metadata.llm_usage.total_tokens).toBe(2100);
+  });
+
   it('消费上下文压缩事件并将同一动画段更新为完成态', async () => {
     const store = useChatStore();
     const session = store.primarySession;

@@ -23,6 +23,7 @@ from agents.routes.chat import (
 )
 from agents.routes.chat_task import ChatTaskEntry
 from core.request_context import (
+    current_llm_usage_reporter,
     current_scriptwriter_prewrite_receipt,
     get_scriptwriter_prewrite_receipt,
     set_scriptwriter_prewrite_receipt,
@@ -69,6 +70,69 @@ def test_chat_background_context_shares_prewrite_receipt_with_tool_subcontexts()
         assert get_scriptwriter_prewrite_receipt() == {"receipt_id": "outer"}
     finally:
         current_scriptwriter_prewrite_receipt.reset(outer_token)
+
+
+def test_chat_background_context_routes_committed_usage_and_restores_reporter() -> None:
+    captured = []
+    outer_reporter = lambda payload: None
+    outer_token = current_llm_usage_reporter.set(outer_reporter)
+
+    def callback() -> None:
+        from llm.matchbox_adapter import _usage_recorded
+
+        _usage_recorded({"agent_name": "agent_director", "prompt_tokens": 120})
+
+    try:
+        _run_chat_background_context(
+            user_id="u",
+            project_name="p",
+            is_admin=False,
+            locale="zh-CN",
+            llm_usage_context="task:usage-live",
+            llm_usage_reporter=captured.append,
+            chat_agent_id="agent_director",
+            chat_context_key="global",
+            callback=callback,
+        )
+        assert captured == [{"agent_name": "agent_director", "prompt_tokens": 120}]
+        assert current_llm_usage_reporter.get() is outer_reporter
+    finally:
+        current_llm_usage_reporter.reset(outer_token)
+
+
+def test_chat_task_entry_accumulates_live_usage_by_agent() -> None:
+    entry = make_entry()
+
+    first = entry.record_llm_usage({
+        "agent_name": "agent_director",
+        "prompt_tokens": 1000,
+        "completion_tokens": 100,
+        "total_tokens": 1100,
+        "cached_prompt_tokens": 600,
+        "cache_miss_prompt_tokens": 400,
+        "success": True,
+    })
+    second = entry.record_llm_usage({
+        "agent_name": "agent_lorebook",
+        "prompt_tokens": 800,
+        "completion_tokens": 200,
+        "total_tokens": 1000,
+        "cached_prompt_tokens": 0,
+        "cache_miss_prompt_tokens": None,
+        "success": True,
+    })
+
+    assert first["total_tokens"] == 1100
+    assert second["prompt_tokens"] == 1800
+    assert second["completion_tokens"] == 300
+    assert second["total_tokens"] == 2100
+    assert second["requests"] == 2
+    assert second["by_agent"]["agent_director"]["cache_hit_rate"] == 0.6
+    assert second["by_agent"]["agent_lorebook"]["cache_hit_rate"] is None
+
+    entry.append_control_event({"event": "llm_usage", "llm_usage": second})
+    assert entry.event_log[-1]["event"] == "llm_usage"
+    assert entry.build_snapshot()["llm_usage"]["by_agent"]["agent_lorebook"]["total_tokens"] == 1000
 
 
 def test_tool_args_hydration_replaces_streamed_null_placeholders() -> None:

@@ -402,6 +402,7 @@ class LLMBuilderMixin:
                 quota_scope=quota_scope,
                 billing_enabled=self.billing_enabled,
                 usage_context_provider=getattr(self, "_usage_context_provider", None),
+                usage_recorded_handler=getattr(self, "_usage_recorded_handler", None),
             )
  
             # 构建 LLM 客户端（ChatUniversal 子类保留了第三方模型的 reasoning_content）
@@ -696,6 +697,7 @@ class LLMBuilderMixin:
                 quota_scope=quota_scope,
                 billing_enabled=self.billing_enabled,
                 usage_context_provider=getattr(self, "_usage_context_provider", None),
+                usage_recorded_handler=getattr(self, "_usage_recorded_handler", None),
             )
  
             llm = ChatUniversal(

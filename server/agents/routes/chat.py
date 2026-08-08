@@ -67,6 +67,7 @@ from core.request_context import (
     set_current_locale,
     set_current_export_format,
     current_llm_usage_context,
+    current_llm_usage_reporter,
     reset_current_chat_session,
     set_current_chat_session,
 )
@@ -134,6 +135,7 @@ def _run_chat_background_context(
     is_admin: bool,
     locale: str,
     llm_usage_context: str,
+    llm_usage_reporter: Callable[[Dict[str, Any]], None] | None = None,
     chat_agent_id: str,
     chat_context_key: str,
     callback: Any,
@@ -154,11 +156,13 @@ def _run_chat_background_context(
     prewrite_receipt_token = current_scriptwriter_prewrite_receipt.set({})
     locale_token = set_current_locale(locale)
     usage_token = current_llm_usage_context.set(llm_usage_context)
+    usage_reporter_token = current_llm_usage_reporter.set(llm_usage_reporter)
     chat_tokens = set_current_chat_session(chat_agent_id, chat_context_key)
     try:
         return callback()
     finally:
         reset_current_chat_session(chat_tokens)
+        current_llm_usage_reporter.reset(usage_reporter_token)
         current_llm_usage_context.reset(usage_token)
         reset_current_locale(locale_token)
         current_scriptwriter_prewrite_receipt.reset(prewrite_receipt_token)
@@ -441,6 +445,15 @@ def _make_llm_usage_context(task_id: str) -> str:
     return f"chat_task:{task_id}"
 
 
+def _publish_chat_task_llm_usage(entry: ChatTaskEntry, usage: Dict[str, Any]) -> None:
+    """把单次真实用量累加到任务，并写入可重放 NDJSON 事件。"""
+    snapshot = entry.record_llm_usage(usage)
+    entry.append_control_event({
+        "event": "llm_usage",
+        "llm_usage": snapshot,
+    })
+
+
 def _collect_chat_task_llm_usage(entry: ChatTaskEntry) -> Dict[str, Any] | None:
     """Aggregate real LLM usage rows produced by this chat task."""
     usage_context = _make_llm_usage_context(entry.task_id)
@@ -455,6 +468,7 @@ def _collect_chat_task_llm_usage(entry: ChatTaskEntry) -> Dict[str, Any] | None:
                 func.coalesce(func.sum(UsageLogEntry.total_tokens), 0).label("total_tokens"),
                 func.coalesce(func.sum(UsageLogEntry.cached_prompt_tokens), 0).label("cached_prompt_tokens"),
                 func.coalesce(func.sum(UsageLogEntry.cache_miss_prompt_tokens), 0).label("cache_miss_prompt_tokens"),
+                func.count(UsageLogEntry.cache_miss_prompt_tokens).label("cache_stats_requests"),
                 func.count(UsageLogEntry.id).label("requests"),
                 func.coalesce(func.sum(1 - UsageLogEntry.success), 0).label("errors"),
             ).filter(
@@ -468,6 +482,7 @@ def _collect_chat_task_llm_usage(entry: ChatTaskEntry) -> Dict[str, Any] | None:
                 func.coalesce(func.sum(UsageLogEntry.total_tokens), 0).label("total_tokens"),
                 func.coalesce(func.sum(UsageLogEntry.cached_prompt_tokens), 0).label("cached_prompt_tokens"),
                 func.coalesce(func.sum(UsageLogEntry.cache_miss_prompt_tokens), 0).label("cache_miss_prompt_tokens"),
+                func.count(UsageLogEntry.cache_miss_prompt_tokens).label("cache_stats_requests"),
                 func.count(UsageLogEntry.id).label("requests"),
                 func.coalesce(func.sum(1 - UsageLogEntry.success), 0).label("errors"),
             ).filter(
@@ -483,6 +498,10 @@ def _collect_chat_task_llm_usage(entry: ChatTaskEntry) -> Dict[str, Any] | None:
     by_agent = {}
     for row in agent_rows or []:
         agent_name = str(row.agent_name or "").strip() or "unknown"
+        cache_stats_available = bool(
+            int(row.cached_prompt_tokens or 0) > 0
+            or int(row.cache_stats_requests or 0) > 0
+        )
         by_agent[agent_name] = {
             "prompt_tokens": int(row.prompt_tokens or 0),
             "completion_tokens": int(row.completion_tokens or 0),
@@ -491,13 +510,18 @@ def _collect_chat_task_llm_usage(entry: ChatTaskEntry) -> Dict[str, Any] | None:
             "cache_miss_prompt_tokens": int(row.cache_miss_prompt_tokens or 0),
             "cache_hit_rate": (
                 (int(row.cached_prompt_tokens or 0) / int(row.prompt_tokens or 1))
-                if int(row.prompt_tokens or 0) > 0
+                if cache_stats_available and int(row.prompt_tokens or 0) > 0
                 else None
             ),
+            "cache_stats_available": cache_stats_available,
             "requests": int(row.requests or 0),
             "errors": int(row.errors or 0),
         }
 
+    cache_stats_available = bool(
+        int(result.cached_prompt_tokens or 0) > 0
+        or int(result.cache_stats_requests or 0) > 0
+    )
     return {
         "prompt_tokens": int(result.prompt_tokens or 0),
         "completion_tokens": int(result.completion_tokens or 0),
@@ -506,9 +530,10 @@ def _collect_chat_task_llm_usage(entry: ChatTaskEntry) -> Dict[str, Any] | None:
         "cache_miss_prompt_tokens": int(result.cache_miss_prompt_tokens or 0),
         "cache_hit_rate": (
             (int(result.cached_prompt_tokens or 0) / int(result.prompt_tokens or 1))
-            if int(result.prompt_tokens or 0) > 0
+            if cache_stats_available and int(result.prompt_tokens or 0) > 0
             else None
         ),
+        "cache_stats_available": cache_stats_available,
         "requests": requests,
         "errors": int(result.errors or 0),
         "by_agent": by_agent,
@@ -667,7 +692,9 @@ def _start_chat_stream_task(
                     if final_error_message
                     else 'completed'
                 )
-                entry.llm_usage = _collect_chat_task_llm_usage(entry)
+                collected_usage = _collect_chat_task_llm_usage(entry)
+                if collected_usage is not None:
+                    entry.llm_usage = collected_usage
                 if entry.accumulator is not None:
                     entry.accumulator.context_window_stats = _merge_context_window_stats_with_usage(
                         entry.accumulator.context_window_stats,
@@ -705,6 +732,7 @@ def _start_chat_stream_task(
             is_admin=bool(user.get('is_admin')),
             locale=request_locale,
             llm_usage_context=_make_llm_usage_context(entry.task_id),
+            llm_usage_reporter=lambda usage: _publish_chat_task_llm_usage(entry, usage),
             chat_agent_id=agent_id,
             chat_context_key=context_key,
             callback=_in_context,

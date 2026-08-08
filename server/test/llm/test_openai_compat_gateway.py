@@ -133,3 +133,63 @@ def test_gateway_rejects_incomplete_tool_history_before_upstream_request() -> No
 
     with pytest.raises(ToolMessageProtocolError, match="call_delegate"):
         llm._get_request_payload(messages)
+
+
+def test_usage_callback_notifies_host_after_usage_commit(monkeypatch) -> None:
+    from llm.agen_matchbox.tracked_model import UsageTrackingCallback
+
+    class FakeSession:
+        def __enter__(self):
+            return self
+
+        def __exit__(self, *_args):
+            return False
+
+        def add(self, entry):
+            self.entry = entry
+
+        def flush(self):
+            return None
+
+        def commit(self):
+            return None
+
+    events = []
+    monkeypatch.setattr(
+        "llm.agen_matchbox.tracked_model.settle_usage_entry_credit",
+        lambda *_args, **_kwargs: None,
+    )
+    callback = UsageTrackingCallback(
+        user_id="u",
+        model_id=1,
+        platform_id=2,
+        model_name="offline-model",
+        platform_name="offline-provider",
+        session_maker=FakeSession,
+        agent_name="agent_director",
+        usage_recorded_handler=events.append,
+    )
+
+    callback._record_usage(
+        prompt_tokens=100,
+        completion_tokens=20,
+        cached_prompt_tokens=60,
+        cache_miss_prompt_tokens=40,
+        usage_source="upstream",
+        cache_source="provider",
+    )
+
+    assert events == [{
+        "agent_name": "agent_director",
+        "model_name": "offline-model",
+        "platform_name": "offline-provider",
+        "prompt_tokens": 100,
+        "completion_tokens": 20,
+        "total_tokens": 120,
+        "cached_prompt_tokens": 60,
+        "cache_miss_prompt_tokens": 40,
+        "usage_source": "upstream",
+        "cache_source": "provider",
+        "success": True,
+        "context_key": None,
+    }]

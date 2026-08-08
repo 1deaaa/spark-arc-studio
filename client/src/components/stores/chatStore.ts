@@ -2163,6 +2163,16 @@ export const useChatStore = defineStore('chat', {
           syncAssistantSnapshot();
           return;
         }
+        if (eventType === 'llm_usage') {
+          applyPersistedTokenStats(session, evt);
+          ensureAssistantAdded();
+          assistantMsg.metadata = {
+            ...(assistantMsg.metadata || {}),
+            llm_usage: evt.llm_usage || evt.llmUsage || {},
+          };
+          syncAssistantSnapshot();
+          return;
+        }
         if (eventType === 'task_done') {
           streamState.receivedTaskDone = true;
           session.backgroundTaskStatus = null;
@@ -2518,7 +2528,7 @@ export const useChatStore = defineStore('chat', {
         } catch {}
       }
 
-      // Token 显示由后端 task_done/task_snapshot 携带的真实 LLM usage 驱动。
+      // Token 显示由后端 llm_usage 实时事件及 task_done/task_snapshot 终态快照共同驱动。
     },
   },
 });

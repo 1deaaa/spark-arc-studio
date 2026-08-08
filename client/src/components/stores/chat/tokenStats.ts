@@ -24,10 +24,20 @@ export type ContextWindowStats = {
   reason: string;
 };
 
-export type TokenUsageStats = {
+export type AgentTokenUsageStats = {
+  agentId: string;
   promptTokens: number;
   completionTokens: number;
   totalTokens: number;
+  cachedPromptTokens: number;
+  cacheMissPromptTokens: number;
+  cacheHitRate: number | null;
+  requests: number;
+  errors: number;
+};
+
+export type TokenUsageStats = Omit<AgentTokenUsageStats, 'agentId'> & {
+  byAgent: Record<string, AgentTokenUsageStats>;
 };
 
 export type TokenStatsSession = {
@@ -52,10 +62,53 @@ export function extractLlmUsageStats(payload: AnyRecord | null | undefined): Tok
     ? Number(rawTotal)
     : promptTokens + completionTokens;
   if (!Number.isFinite(total) || total < 0) return null;
+  const cachedPromptTokens = Math.max(0, Number(usage.cached_prompt_tokens ?? usage.cachedPromptTokens ?? 0) || 0);
+  const cacheMissPromptTokens = Math.max(0, Number(usage.cache_miss_prompt_tokens ?? usage.cacheMissPromptTokens ?? 0) || 0);
+  const normalizeCacheHitRate = (source: AnyRecord, prompt: number, cached: number, missed: number): number | null => {
+    const available = source.cache_stats_available === true
+      || source.cacheStatsAvailable === true
+      || cached > 0
+      || missed > 0;
+    if (!available || prompt <= 0) return null;
+    const rawRate = source.cache_hit_rate ?? source.cacheHitRate;
+    const rate = rawRate == null ? cached / prompt : Number(rawRate);
+    return Number.isFinite(rate) ? Math.max(0, Math.min(1, rate)) : null;
+  };
+  const rawByAgent = usage.by_agent || usage.byAgent;
+  const byAgent: Record<string, AgentTokenUsageStats> = {};
+  if (rawByAgent && typeof rawByAgent === 'object') {
+    Object.entries(rawByAgent).forEach(([agentId, raw]) => {
+      if (!raw || typeof raw !== 'object') return;
+      const agent = raw as AnyRecord;
+      const agentPrompt = Math.max(0, Number(agent.prompt_tokens ?? agent.promptTokens ?? 0) || 0);
+      const agentCompletion = Math.max(0, Number(agent.completion_tokens ?? agent.completionTokens ?? 0) || 0);
+      const agentTotalRaw = agent.total_tokens ?? agent.totalTokens;
+      const agentTotal = Math.max(0, Number(agentTotalRaw ?? agentPrompt + agentCompletion) || 0);
+      const agentCached = Math.max(0, Number(agent.cached_prompt_tokens ?? agent.cachedPromptTokens ?? 0) || 0);
+      const agentMissed = Math.max(0, Number(agent.cache_miss_prompt_tokens ?? agent.cacheMissPromptTokens ?? 0) || 0);
+      byAgent[agentId] = {
+        agentId,
+        promptTokens: agentPrompt,
+        completionTokens: agentCompletion,
+        totalTokens: agentTotal,
+        cachedPromptTokens: agentCached,
+        cacheMissPromptTokens: agentMissed,
+        cacheHitRate: normalizeCacheHitRate(agent, agentPrompt, agentCached, agentMissed),
+        requests: Math.max(0, Number(agent.requests ?? 0) || 0),
+        errors: Math.max(0, Number(agent.errors ?? 0) || 0),
+      };
+    });
+  }
   return {
     promptTokens: Math.max(0, promptTokens),
     completionTokens: Math.max(0, completionTokens),
     totalTokens: Math.max(0, total),
+    cachedPromptTokens,
+    cacheMissPromptTokens,
+    cacheHitRate: normalizeCacheHitRate(usage, promptTokens, cachedPromptTokens, cacheMissPromptTokens),
+    requests: Math.max(0, Number(usage.requests ?? 0) || 0),
+    errors: Math.max(0, Number(usage.errors ?? 0) || 0),
+    byAgent,
   };
 }
 

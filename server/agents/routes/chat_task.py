@@ -81,6 +81,64 @@ class ChatTaskEntry:
     def append_control_event(self, event: Dict[str, Any]) -> Dict[str, Any]:
         return self.append_event(event, accumulate=False)
 
+    def record_llm_usage(self, usage: Dict[str, Any]) -> Dict[str, Any]:
+        """累加一次已落库的 LLM 用量，并返回当前任务快照。"""
+        with self.log_lock:
+            current = dict(self.llm_usage or {})
+            by_agent = {
+                str(key): dict(value)
+                for key, value in (current.get("by_agent") or {}).items()
+                if isinstance(value, dict)
+            }
+            agent_name = str(usage.get("agent_name") or "").strip() or "unknown"
+            agent_usage = dict(by_agent.get(agent_name) or {})
+
+            prompt_tokens = max(int(usage.get("prompt_tokens") or 0), 0)
+            completion_tokens = max(int(usage.get("completion_tokens") or 0), 0)
+            total_tokens = max(int(usage.get("total_tokens") or prompt_tokens + completion_tokens), 0)
+            cached_tokens = max(int(usage.get("cached_prompt_tokens") or 0), 0)
+            cache_miss_raw = usage.get("cache_miss_prompt_tokens")
+            cache_stats_available = bool(
+                agent_usage.get("cache_stats_available")
+                or cached_tokens > 0
+                or cache_miss_raw is not None
+            )
+
+            for target in (current, agent_usage):
+                target["prompt_tokens"] = int(target.get("prompt_tokens") or 0) + prompt_tokens
+                target["completion_tokens"] = int(target.get("completion_tokens") or 0) + completion_tokens
+                target["total_tokens"] = int(target.get("total_tokens") or 0) + total_tokens
+                target["cached_prompt_tokens"] = int(target.get("cached_prompt_tokens") or 0) + cached_tokens
+                target["cache_miss_prompt_tokens"] = int(target.get("cache_miss_prompt_tokens") or 0) + max(
+                    int(cache_miss_raw or 0),
+                    0,
+                )
+                target["requests"] = int(target.get("requests") or 0) + 1
+                target["errors"] = int(target.get("errors") or 0) + (0 if usage.get("success", True) else 1)
+
+            current_cache_available = bool(
+                current.get("cache_stats_available")
+                or cached_tokens > 0
+                or cache_miss_raw is not None
+            )
+            agent_usage["cache_stats_available"] = cache_stats_available
+            agent_usage["cache_hit_rate"] = (
+                agent_usage["cached_prompt_tokens"] / agent_usage["prompt_tokens"]
+                if cache_stats_available and agent_usage["prompt_tokens"] > 0
+                else None
+            )
+            by_agent[agent_name] = agent_usage
+            current["cache_stats_available"] = current_cache_available
+            current["cache_hit_rate"] = (
+                current["cached_prompt_tokens"] / current["prompt_tokens"]
+                if current_cache_available and current["prompt_tokens"] > 0
+                else None
+            )
+            current["by_agent"] = by_agent
+            current["source"] = "usage_callback"
+            self.llm_usage = current
+            return dict(current)
+
     def get_events_after(self, after_seq: int = 0) -> List[Dict[str, Any]]:
         cursor = int(after_seq or 0)
         with self.log_lock:

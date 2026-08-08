@@ -134,9 +134,10 @@ chat_system: |
   ## 工作追踪规范（work_tracker）
   - 当前任务板由系统自动注入到每轮消息尾部，无需也不能调用工具读取。多步骤创作开始前，直接检查该快照是否存在未完成历史任务。
   - 若有历史任务，向用户简短说明后继续推进；若为全新任务，必须立即用 `work_tracker(overwrite=true)` 创建任务清单，`summary` 写清本轮总目标，`items` 写入完整步骤列表。只有创建全新计划或用户明确要求重建任务板时才允许 `overwrite=true`。
-  - 后续更新默认使用 `operations` 增量修改：`add` 末尾新增、`insert` 指定位置插入、`edit` 修改条目、`set_status` 标记状态、`delete` 彻底删除。一次调用可传多个 operation 完成批量操作。
+  - 后续更新默认使用 `operations` 增量修改：`add` 末尾新增、`insert` 指定位置插入、`edit` 修改内容/优先级/备注、`set_status` 只标记状态、`delete` 彻底删除。一次调用可传多个 operation 完成批量操作。
+  - 参数形状必须明确区分：仅改状态用 `{"operation":"set_status","item_id":"task_x","status":"completed"}`；状态与备注分开用两个 operation：`{"operation":"set_status","item_id":"task_x","status":"completed"}` + `{"operation":"edit","item_id":"task_x","item":{"notes":"已完成并通过检查"}}`。`set_status` 不传 `item` 或 `notes`，`edit` 的修改字段必须放入 `item`。
   - **完成不等于删除**：任务已经做完时必须用 `set_status(status="completed")` 保留记录；只有用户明确取消该任务、确认以后完全不需要做时，才使用 `delete`。
-  - 每收到一个子 Agent 回交结果后，先调用 `work_tracker(operations=[...])` 按实际结果增量更新：成功才把当前项标为 `completed` 并把下一项标为 `in_progress`；执行失败或质量不达标时用 `edit` 保持当前项为 `in_progress` 并在 `notes` 记录失败原因与重做要求；只有确实无法继续时才标为 `blocked`。更新后可立即委派原专家重做或更换专家，不得因任务板协议终止流程。
+  - 每收到一个子 Agent 回交结果后，先调用 `work_tracker(operations=[...])` 按实际结果增量更新：成功才用 `set_status` 把当前项标为 `completed` 并把下一项标为 `in_progress`；执行失败或质量不达标时用 `edit` 保持当前项为 `in_progress` 并在 `item.notes` 记录失败原因与重做要求；只有确实无法继续时才用 `set_status(status="blocked")`，再用 `edit.item.notes` 记录具体阻塞原因。更新后可立即委派原专家重做或更换专家，不得因任务板协议终止流程。
   - 全部任务完成后保留最终任务板，禁止清空。
   - 单轮简单回答无需使用此工具。
 

@@ -116,6 +116,7 @@ class UsageTrackingCallback(BaseCallbackHandler):
         quota_scope: Optional[str] = None,
         billing_enabled: bool = False,
         usage_context_provider=None,
+        usage_recorded_handler=None,
     ):
         super().__init__()
         self.user_id = user_id
@@ -128,6 +129,7 @@ class UsageTrackingCallback(BaseCallbackHandler):
         self.billing_enabled = bool(billing_enabled)
         self._session_maker = session_maker
         self._usage_context_provider = usage_context_provider
+        self._usage_recorded_handler = usage_recorded_handler
 
         # 流式累积缓冲区（按 run_id 隔离，支持并发）
         self._stream_buffers: Dict[str, List[str]] = {}
@@ -289,6 +291,29 @@ class UsageTrackingCallback(BaseCallbackHandler):
             session.flush()
             settle_usage_entry_credit(session, entry, billing_enabled=self.billing_enabled)
             session.commit()
+        if self._usage_recorded_handler is not None:
+            try:
+                self._usage_recorded_handler({
+                    "agent_name": self.agent_name or "unknown",
+                    "model_name": self.model_name,
+                    "platform_name": self.platform_name,
+                    "prompt_tokens": max(int(prompt_tokens or 0), 0),
+                    "completion_tokens": max(int(completion_tokens or 0), 0),
+                    "total_tokens": max(int(total_tokens or 0), 0),
+                    "cached_prompt_tokens": max(int(cached_prompt_tokens or 0), 0),
+                    "cache_miss_prompt_tokens": (
+                        max(int(cache_miss_prompt_tokens), 0)
+                        if cache_miss_prompt_tokens is not None
+                        else None
+                    ),
+                    "usage_source": str(usage_source) if usage_source else None,
+                    "cache_source": str(cache_source) if cache_source else None,
+                    "success": bool(success),
+                    "context_key": str(usage_context) if usage_context else None,
+                })
+            except Exception:
+                # 宿主通知属于观测能力，失败不能影响已经成功提交的用量与模型调用。
+                pass
 
     async def _arecord_usage(
         self,
