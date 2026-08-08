@@ -47,6 +47,20 @@ def _parse_number_token(value: str) -> Optional[int]:
     return number if number > 0 else None
 
 
+def _format_chinese_number(value: int) -> str:
+    """把正整数格式化为适合章节显示的中文数字。"""
+    number = int(value)
+    if number <= 0:
+        raise ValueError("章节号必须是大于 0 的整数。")
+    digits = "零一二三四五六七八九"
+    if number < 10:
+        return digits[number]
+    if number < 100:
+        tens, ones = divmod(number, 10)
+        return ("十" if tens == 1 else f"{digits[tens]}十") + (digits[ones] if ones else "")
+    return str(number)
+
+
 def normalize_story_format(file_format: str | None) -> str:
     return "novel" if str(file_format or "").strip().lower() in {"novel", "md"} else "arc"
 
@@ -200,6 +214,24 @@ def canonical_scene_display_name(value: str | None, chapter_num: int, scene_num:
     return f"{chapter}-{scene} {text}"
 
 
+def canonical_chapter_display_name(value: str | None, chapter_num: int) -> str:
+    """把章节/分卷标题归一化为稳定的“中文编号 · 标题”显示名。"""
+    chapter = int(chapter_num)
+    prefix = _format_chinese_number(chapter)
+    text = sanitize_story_display_name(str(value or "").strip(), "")
+    text = re.sub(
+        r"^\s*(?:Chapter\s*)?(?:第\s*)?(?:卷\s*)?"
+        r"(?:\d{1,4}|[零〇一二两三四五六七八九十]+)\s*(?:章|卷)?\s*"
+        r"(?:[·•:：._-]\s*|\s+)?",
+        "",
+        text,
+        flags=re.IGNORECASE,
+    ).strip()
+    if not text:
+        raise ValueError("章节标题必须包含可读标题，不能只有编号。")
+    return f"{prefix} · {text}"
+
+
 def find_scene_file_by_identity(
     stories_path: str,
     chapter_num: int,
@@ -268,16 +300,20 @@ def resolve_chapter_directory(
     if os.path.isdir(exact_path):
         return exact_path
 
-    identity = chapter_num if chapter_num is not None else parse_chapter_identity_from_title(safe_name)
-    if identity is not None and os.path.isdir(stories_path):
-        matches = [
-            item for item in os.listdir(stories_path)
-            if os.path.isdir(os.path.join(stories_path, item))
-            and parse_chapter_identity_from_title(item) == int(identity)
-        ]
-        if matches:
-            matches.sort(key=str.casefold)
-            return os.path.join(stories_path, matches[0])
+    # 章节目录本身没有稳定元数据；只有目录内正文文件的 chap 元数据可用于复用。
+    if chapter_num is not None and os.path.isdir(stories_path):
+        matches: list[str] = []
+        for item in os.listdir(stories_path):
+            directory = os.path.join(stories_path, item)
+            if not os.path.isdir(directory):
+                continue
+            for filename in os.listdir(directory):
+                parsed = parse_story_filename(filename)
+                if parsed and parsed.get("chapter_num") == int(chapter_num) and not parsed.get("free"):
+                    matches.append(directory)
+                    break
+        if len(matches) == 1:
+            return matches[0]
     return exact_path
 
 

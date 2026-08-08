@@ -60,6 +60,7 @@ from .auto_write_state import (
 )
 from story.file_naming import (
     DuplicateSceneIdentityError,
+    canonical_chapter_display_name,
     canonical_scene_display_name,
     resolve_planned_scene_file_path,
     strip_story_filename_meta,
@@ -313,7 +314,21 @@ async def generate_script_stream(
 
         chapter = chapter_nodes[i]
         chapter_num = chapter.get("chapter", i + 1)
-        chapter_title = chapter.get("title", f"Chapter {chapter_num}")
+        raw_chapter_title = chapter.get("title", f"Chapter {chapter_num}")
+        try:
+            chapter_title = canonical_chapter_display_name(raw_chapter_title, int(chapter_num))
+        except (TypeError, ValueError) as exc:
+            message = f"自动写作已停止：大纲中的章节命名无效（{exc}）"
+            update_state(
+                "error",
+                nextChapterIndex=i,
+                availableResumeChapterIndex=i,
+                availableResumeSceneIndex=0,
+                availableRestartChapterIndex=i,
+                lastError=message,
+            )
+            yield semantic_sse_data("error", message=message, **on_error(message))
+            return
         scenes = chapter.get("children", [])
         current_chapter_index = i
         current_chapter_title = chapter_title
@@ -428,7 +443,7 @@ async def generate_script_stream(
                 availableResumeChapterIndex=i,
                 availableResumeSceneIndex=scene_idx,
                 availableRestartChapterIndex=i,
-                lastSavedFilename=filename if os.path.exists(filepath) else "",
+                lastSavedFilename=display_filename if os.path.exists(filepath) else "",
             )
             dialogues_str = ""
             if key_dialogues:
@@ -590,7 +605,7 @@ async def generate_script_stream(
                             availableResumeChapterIndex=i,
                             availableResumeSceneIndex=scene_idx,
                             availableRestartChapterIndex=i,
-                            lastSavedFilename=filename if os.path.exists(filepath) else "",
+                            lastSavedFilename=display_filename if os.path.exists(filepath) else "",
                             lastError="",
                         )
                         yield semantic_sse_data(
@@ -678,7 +693,7 @@ async def generate_script_stream(
                         availableResumeChapterIndex=i,
                         availableResumeSceneIndex=scene_idx,
                         availableRestartChapterIndex=i,
-                        lastSavedFilename=filename if os.path.exists(filepath) else "",
+                        lastSavedFilename=display_filename if os.path.exists(filepath) else "",
                         lastError="",
                     )
                     yield semantic_sse_data(
@@ -729,7 +744,7 @@ async def generate_script_stream(
                     availableResumeChapterIndex=i,
                     availableResumeSceneIndex=scene_idx,
                     availableRestartChapterIndex=i,
-                    lastSavedFilename=filename if os.path.exists(filepath) else "",
+                    lastSavedFilename=display_filename if os.path.exists(filepath) else "",
                     lastError="",
                 )
                 yield semantic_sse_data(
@@ -757,8 +772,8 @@ async def generate_script_stream(
                 message = str(e)
                 with open(filepath, "w", encoding="utf-8") as f:
                     f.write("\n".join(scene_arc_content))
-                if filename not in generated_scene_files:
-                    generated_scene_files.append(filename)
+                if display_filename not in generated_scene_files:
+                    generated_scene_files.append(display_filename)
                 update_state(
                     "error",
                     nextChapterIndex=i,
@@ -779,7 +794,7 @@ async def generate_script_stream(
                     availableResumeChapterIndex=i,
                     availableResumeSceneIndex=scene_idx,
                     availableRestartChapterIndex=i,
-                    lastSavedFilename=filename if os.path.exists(filepath) else "",
+                    lastSavedFilename=display_filename if os.path.exists(filepath) else "",
                     lastError="",
                 )
                 yield semantic_sse_data(
@@ -843,8 +858,8 @@ async def generate_script_stream(
                     ),
                 )
 
-            if filename not in generated_scene_files:
-                generated_scene_files.append(filename)
+            if display_filename not in generated_scene_files:
+                generated_scene_files.append(display_filename)
 
             next_resume_chapter_index = i
             next_resume_scene_index = scene_idx + 1

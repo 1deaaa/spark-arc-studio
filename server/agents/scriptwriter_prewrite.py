@@ -61,9 +61,73 @@ def _normalize_target(value: str) -> str:
     return str(value or "").strip().replace("\\", "/").casefold()
 
 
+def _resolve_request_scene_identity(request: ScriptwriterPreWriteRequest) -> tuple[int, int]:
+    """由大纲或现有文件元数据签发身份，禁止从模型标题编号推断。"""
+    import os
+
+    from agents.routes.context_builder import (
+        load_project_context_bundle,
+        resolve_outline_scene_contract_for_task,
+    )
+    from core.utils import get_project_stories_path
+    from story.file_naming import list_story_files, sanitize_story_display_name
+
+    bundle = load_project_context_bundle(request.user_id, request.project_name)
+    contract = resolve_outline_scene_contract_for_task(
+        bundle.get("outline_data") or {},
+        task_description=request.task_description,
+        chapter_title=request.chapter_name,
+        scene_name=request.scene_name,
+        file_path="",
+    )
+    chapter_index = contract.get("chapter_index")
+    scene_index = contract.get("scene_index")
+    if isinstance(chapter_index, int) and isinstance(scene_index, int):
+        return chapter_index + 1, scene_index + 1
+
+    stories_path = get_project_stories_path(request.user_id, request.project_name)
+    story_files = list_story_files(stories_path)
+    desired_display = sanitize_story_display_name(request.scene_name, "")
+    for _, _, parsed in story_files:
+        if not parsed or parsed.get("free"):
+            continue
+        if parsed.get("display_name") != desired_display:
+            continue
+        if isinstance(parsed.get("chapter_num"), int) and isinstance(parsed.get("scene_num"), int):
+            return int(parsed["chapter_num"]), int(parsed["scene_num"])
+
+    safe_chapter = str(request.chapter_name or "").strip().replace("\\", "_").replace("/", "_")
+    chapter_dir = os.path.join(stories_path, safe_chapter)
+    chapter_numbers: set[int] = set()
+    scene_numbers: list[int] = []
+    for _, absolute_path, parsed in story_files:
+        if not parsed or parsed.get("free"):
+            continue
+        chapter_num = parsed.get("chapter_num")
+        scene_num = parsed.get("scene_num")
+        if isinstance(chapter_num, int):
+            chapter_numbers.add(chapter_num)
+        if os.path.dirname(absolute_path) == chapter_dir and isinstance(chapter_num, int):
+            if isinstance(scene_num, int):
+                scene_numbers.append(scene_num)
+
+    if scene_numbers:
+        target_chapter = next(
+            int(parsed["chapter_num"])
+            for _, absolute_path, parsed in story_files
+            if parsed
+            and os.path.dirname(absolute_path) == chapter_dir
+            and isinstance(parsed.get("chapter_num"), int)
+        )
+        return target_chapter, max(scene_numbers) + 1
+
+    return max(chapter_numbers, default=0) + 1, 1
+
+
 def _issue_receipt(request: ScriptwriterPreWriteRequest, *, persist: bool = True) -> str:
     receipt_id = uuid.uuid4().hex
     if persist:
+        chapter_num, scene_num = _resolve_request_scene_identity(request)
         set_scriptwriter_prewrite_receipt({
             "receipt_id": receipt_id,
             "user_id": str(request.user_id),
@@ -71,6 +135,8 @@ def _issue_receipt(request: ScriptwriterPreWriteRequest, *, persist: bool = True
             "chapter_name": request.chapter_name.strip(),
             "scene_name": request.scene_name.strip(),
             "task_description": request.task_description.strip(),
+            "chapter_num": chapter_num,
+            "scene_num": scene_num,
         })
     return receipt_id
 

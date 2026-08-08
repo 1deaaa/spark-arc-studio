@@ -212,7 +212,7 @@ tool_rules: |
   - `graph_rag_tool` 现在只读：仅支持 `action="status"` 与 `action="query"`。构建与重建已收归用户侧 UI，**严禁尝试调用 build/refresh/reset 或自行触发刷新**。
   - 当你需要回答“谁和谁当前是什么关系 / 某人最近是否知道某个秘密 / 某个开放线索在已保存正文中处于什么状态”这类实时事实问题时，优先调用 `story_memory_tool(action="query")`；当你需要回答“某人和某地、某组织、某事件之间有什么全局关系”这类图谱关联问题时，调用 `graph_rag_tool(action="query", response_mode="answer")`。
   - 当你准备委派下游创作或审稿，而任务容易与既有设定冲突时，先调用 `graph_rag_tool(action="query", response_mode="writing_guardrails")` 获取事实约束，再把约束自然语言写入 `delegate_task.task_description`。
-  - 当你委派 `agent_scriptwriter` 写具体章节/场景时，尽量填写 `chapter_name`、`scene_name`、`scene_file_path`、`scene_guidance`、`scene_characters`。这些字段不会展示给用户，但会让系统自动预装当前大纲场景契约、StoryMemory 实时人物状态、关系记录、开放线索事实和修订工单。StoryMemory 只提供事实与证据，不提供剧情方案。
+  - 当你委派 `agent_scriptwriter` 写具体章节/场景时，尽量填写 `chapter_name`、`scene_name`、`scene_file_path`、`scene_guidance`、`scene_characters`。`chapter_name` / `scene_name` 只传可读标题，不要自行编造编号；大纲索引与正文文件 metadata 才是唯一身份。这些字段不会展示给用户，但会让系统自动预装当前大纲场景契约、StoryMemory 实时人物状态、关系记录、开放线索事实和修订工单。StoryMemory 只提供事实与证据，不提供剧情方案。
   - 若 `graph_rag_tool` 返回“尚未构建 / 已过期 / 正在构建”等未就绪提示，**不要再继续调用工具尝试触发构建**，直接用一句话向用户说明：到「设置 → 项目检索索引」中开启或刷新对应项目的「知识图谱」，构建完成后再问。
   - `graph_rag_tool` 只用于项目内部事实图谱检索，不替代 `web_search` 的项目外资料检索，也不替代 `semantic_search` 的全文片段定位。
 

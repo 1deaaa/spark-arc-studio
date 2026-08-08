@@ -34,6 +34,40 @@ def test_scene_identity_parser_accepts_legacy_prefixes_and_chinese_numbers() -> 
     assert canonical_scene_display_name("场景 第三-四：旧标题", 3, 4) == "3-4 旧标题"
 
 
+def test_outline_parser_separates_protocol_numbers_from_reader_facing_titles() -> None:
+    from story.outline_parser import parse_outline_markup
+
+    outline = parse_outline_markup(
+        "## Chapter 3: 三 · 深水\n\n### 场景 3-4：旧船返航\n\n正文说明"
+    )
+
+    chapter = outline["nodes"][0]
+    scene = chapter["children"][0]
+    assert chapter["chapter"] == 3
+    assert chapter["title"] == "三 · 深水"
+    assert scene["chapter_num"] == 3
+    assert scene["scene_num"] == 4
+    assert scene["title"] == "旧船返航"
+
+
+def test_auto_write_state_hides_physical_filename_metadata(monkeypatch, tmp_path: Path) -> None:
+    from agents.routes.auto_write_state import load_auto_write_state, save_auto_write_state
+
+    monkeypatch.setattr("core.utils.USERDATA_ROOT", str(tmp_path))
+    physical = "一 · 开端/1-1 初遇.__spark__chap=001.scene=001.order=001001.arc"
+    saved = save_auto_write_state("7", "demo", {
+        "lastSavedFilename": physical,
+        "generatedFiles": [physical],
+        "generatedSceneFiles": [physical],
+    })
+    loaded = load_auto_write_state("7", "demo")
+
+    for state in (saved, loaded):
+        assert state["lastSavedFilename"] == "一 · 开端/1-1 初遇.arc"
+        assert state["generatedFiles"] == ["一 · 开端/1-1 初遇.arc"]
+        assert state["generatedSceneFiles"] == ["一 · 开端/1-1 初遇.arc"]
+
+
 def test_find_scene_file_by_identity_reuses_legacy_filename_without_metadata(tmp_path: Path) -> None:
     from story.file_naming import find_scene_file_by_identity
 

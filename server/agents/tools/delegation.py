@@ -29,8 +29,8 @@ class DelegateTaskInput(BaseModel):
     requires_review: bool = Field(default=False, description="是否要求专家完成后必须回到导演复核。为 true 时会强制采用 return_to_director")
     user_confirmation_state: str = Field(default=HANDOFF_CONFIRMATION_PENDING, description="用户确认状态。already_confirmed=上游已确认可直接执行；needs_confirmation=仍需确认；not_required=本任务无需确认")
     chapter_name: str | None = Field(default=None, description="委派给 agent_scriptwriter 时可填：目标章节名称，例如「一 · 开端」。用于预装场景任务包。")
-    scene_name: str | None = Field(default=None, description="委派给 agent_scriptwriter 时可填：目标场景名称，例如「1-1 钟楼交易」。用于匹配大纲场景契约。")
-    scene_file_path: str | None = Field(default=None, description="委派给 agent_scriptwriter 时可填：目标或参考场景相对路径，例如「一 · 开端/1-1 钟楼交易.arc」。")
+    scene_name: str | None = Field(default=None, description="委派给 agent_scriptwriter 时可填：目标场景的可读标题，例如「钟楼交易」。编号由大纲契约和文件 metadata 决定，用于匹配场景契约。")
+    scene_file_path: str | None = Field(default=None, description="委派给 agent_scriptwriter 时可填：目标或参考场景相对路径；路径中的编号只用于兼容读取，不是身份真相源。")
     scene_guidance: str | None = Field(default=None, description="委派给 agent_scriptwriter 时可填：本场必须执行的导演指引，会进入写前任务包。")
     scene_characters: list[str] | None = Field(default=None, description="委派给 agent_scriptwriter 时可填：本场登场角色名列表，用于召回实时人物状态与关系。")
 

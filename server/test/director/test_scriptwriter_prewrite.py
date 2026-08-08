@@ -206,6 +206,8 @@ def test_prepare_tool_issues_matching_receipt(monkeypatch) -> None:
         assert receipt is not None
         assert receipt["chapter_name"] == "一 · 开端"
         assert receipt["scene_name"] == "1-1 初遇"
+        assert receipt["chapter_num"] == 1
+        assert receipt["scene_num"] == 1
     finally:
         clear_scriptwriter_prewrite_receipt()
         current_scriptwriter_prewrite_receipt.reset(receipt_token)

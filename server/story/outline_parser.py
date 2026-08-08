@@ -62,16 +62,22 @@ def parse_outline_markup(text: str) -> Dict[str, Any]:
             continue
             
         # 章节处理 (##)
-        chapter_match = re.match(r'^##\s+(?:Chapter\s*\d*:?\s*)?(.+)$', line, re.IGNORECASE)
+        chapter_match = re.match(
+            r'^##\s+(?:Chapter\s*(\d+)\s*[:：]?\s*)?(.+)$',
+            line,
+            re.IGNORECASE,
+        )
         if chapter_match:
             # 如果有前一个章节且没保存过场景，说明只有章节概述。但在我们业务里通常会带着场景一起保存
             # 无论如何，开启新章
-            title = chapter_match.group(1).strip()
+            chapter_number = int(chapter_match.group(1)) if chapter_match.group(1) else len(outline_data["nodes"]) + 1
+            title = chapter_match.group(2).strip()
             current_chapter = {
                 "id": _generate_id("chap"),
                 "name": title,
                 "title": title,
                 "type": "chapter",
+                "chapter": chapter_number,
                 "description": "",
                 "children": []
             }
@@ -81,11 +87,14 @@ def parse_outline_markup(text: str) -> Dict[str, Any]:
             continue
             
         # 场景处理 (###)
-        scene_match = re.match(r'^###\s+(?!Scene)(.+)$|^###\s+(?:Scene\s*\d*:?\s*)?(.+)$', line, re.IGNORECASE)
-        # 支持 "### 场景标题" 或 "### Scene 1: 场景标题" 
+        scene_match = re.match(
+            r'^###\s+(?:(?:场景|Scene)\s*)?(?:(\d+)\s*[-－—_]\s*(\d+)\s*[:：]?\s*)?(.+)$',
+            line,
+            re.IGNORECASE,
+        )
+        # 编号属于结构协议，解析后不得混入用户可见标题。
         if scene_match:
-            title = scene_match.group(1) or scene_match.group(2)
-            title = title.strip()
+            title = scene_match.group(3).strip()
             
             # 如果找不到挂载的章节，就建一个虚拟章节（错误兜底）
             if not current_chapter:
@@ -104,6 +113,8 @@ def parse_outline_markup(text: str) -> Dict[str, Any]:
                 "name": title,
                 "title": title,
                 "type": "scene",
+                "chapter_num": int(scene_match.group(1)) if scene_match.group(1) else None,
+                "scene_num": int(scene_match.group(2)) if scene_match.group(2) else len(current_chapter["children"]) + 1,
                 "guide": "",
                 "description": "",
                 "characters": [],
