@@ -25,6 +25,13 @@ class UpdateCharacterInput(BaseModel):
     overwrite_content: str = Field(description="该角色的完整覆盖文本。调用后将直接覆盖该角色内容")
 
 
+class CreateCharacterRelationInput(BaseModel):
+    source_character: str = Field(description="关系起点角色的准确名称，必须是已落盘角色")
+    target_character: str = Field(description="关系终点角色的准确名称，必须是已落盘角色")
+    relation: str = Field(description="简短、稳定的关系名称，例如‘师徒’‘竞争对手’‘互相利用’")
+    note: str = Field(default="", description="关系的长期事实备注，可选；不要写当前章节临时状态")
+
+
 class PatchWorldviewInput(BaseModel):
     search_text: str = Field(description="需要被替换的世界观 Markdown 原文片段（必须精确匹配连续文字，优先包含所属 ## 模块标题或完整字段行；不要用过短片段）。传入空字符串可将 replace_text 追加到文件末尾")
     replace_text: str = Field(description="修改后的 Markdown 片段：保留原模块层级，新增模块使用 ##，子体系使用 ###，字段使用 - 字段名：内容；不要覆盖未涉及的其他模块")
@@ -93,6 +100,38 @@ def update_character(character_name: str, overwrite_content: str) -> str:
     )
 
     return f"已成功修改角色 '{character_name}' 的设定。"
+
+
+@tool(args_schema=CreateCharacterRelationInput)
+def create_character_relation(
+    source_character: str,
+    target_character: str,
+    relation: str,
+    note: str = "",
+) -> str:
+    """为两个已存在角色创建作者确认关系。"""
+    from core.character_relations import create_character_relation as persist_relation
+    from story.project_files import lookup_character_id_by_name
+
+    user_id, project_name = ToolExecutionContext.get_context()
+    source_id = lookup_character_id_by_name(user_id, project_name, source_character)
+    target_id = lookup_character_id_by_name(user_id, project_name, target_character)
+    if not source_id:
+        return f"创建角色关系失败：未找到起点角色‘{source_character}’。请先落盘角色设定。"
+    if not target_id:
+        return f"创建角色关系失败：未找到终点角色‘{target_character}’。请先落盘角色设定。"
+    try:
+        persist_relation(
+            user_id,
+            project_name,
+            source=str(source_id),
+            target=str(target_id),
+            relation=relation,
+            note=note,
+        )
+    except (KeyError, ValueError) as exc:
+        return f"创建角色关系失败：{exc}"
+    return f"已创建角色关系：{source_character} → {target_character}（{relation}）。"
 
 
 @tool(args_schema=PatchWorldviewInput)

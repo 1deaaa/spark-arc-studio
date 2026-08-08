@@ -8,6 +8,7 @@ from agents.agent_lorebook import WorldviewAgent, _is_invalid_worldview_document
 from agents.agent_scriptwriter import ScriptwriterAgent
 from agents.agent_showrunner import ShowrunnerAgent
 from agents.agent_utils import load_prompt
+from agents.language_policy import build_language_policy_prefix
 from agents.setup_agents import MuseAgent
 from agents.tools.registry import EXTERNAL_SEARCH_TOOLS, LOREBOOK_BASE_TOOLS, get_tools_for_agent
 
@@ -27,6 +28,13 @@ AGENTS_WITH_PERSIST_TOOLS = [
     ("agent_showrunner", ShowrunnerAgent),
     ("agent_scriptwriter", ScriptwriterAgent),
 ]
+
+
+def test_language_policy_forbids_unrequested_parenthetical_names() -> None:
+    policy = build_language_policy_prefix("zh-CN")
+    for token in ("单一正式名称", "括号翻译", "外语释义", "缩写展开", "罗马音", "学术式副标题"):
+        assert token in policy
+    assert "正文中的必要括号说明不受此限制" in policy
 
 
 @pytest.mark.parametrize("prompt_name", CORE_AGENT_PROMPTS)
@@ -134,6 +142,17 @@ def test_lorebook_character_writes_are_incremental_by_default() -> None:
     assert "rewrite_all_characters(overwrite_content=新角色内容, append=true)" in pipeline
     for token in ("新增角色", "update_character", "清空重做", "append=false"):
         assert token in tool_rules
+
+
+def test_lorebook_names_are_single_formal_names_and_relations_are_persisted() -> None:
+    prompts = load_prompt("lorebook")
+    combined = "\n".join((
+        str(prompts.get("system") or ""),
+        str(prompts.get("tool_rules") or ""),
+        str(prompts.get("generate_characters", {}).get("system") or ""),
+    ))
+    for token in ("单一正式名称", "禁止在名字后自动追加括号", "create_character_relation", "关系图已更新"):
+        assert token in combined
 
 
 def test_lorebook_worldview_tools_share_visual_markdown_protocol() -> None:

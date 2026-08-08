@@ -1225,6 +1225,7 @@ class SparkBaseAgent:
             "rewrite_worldview": "正在重写世界观设定...",
             "rewrite_all_characters": "正在重写所有角色设定...",
             "update_character": "正在更新角色设定...",
+            "create_character_relation": "正在记录角色关系...",
             "patch_worldview": "正在局部更新世界观...",
             "rewrite_synopsis": "正在重写故事梗概...",
             "patch_synopsis": "正在局部更新故事梗概...",

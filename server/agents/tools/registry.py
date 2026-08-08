@@ -9,7 +9,13 @@ from agents.tools.automation import (
     work_tracker,
 )
 from agents.tools.delegation import delegate_task
-from agents.tools.lorebook import patch_worldview, rewrite_all_characters, rewrite_worldview, update_character
+from agents.tools.lorebook import (
+    create_character_relation,
+    patch_worldview,
+    rewrite_all_characters,
+    rewrite_worldview,
+    update_character,
+)
 from agents.tools.muse import (
     bind_inspiration_to_current_project,
     capture_inspiration,
@@ -69,6 +75,7 @@ LOREBOOK_BASE_TOOLS = [
     rewrite_worldview,
     rewrite_all_characters,
     update_character,
+    create_character_relation,
     patch_worldview,
     *EXTERNAL_SEARCH_TOOLS,
 ]

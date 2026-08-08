@@ -34,10 +34,12 @@ from agents.tools.common import (
 from agents.tools.delegation import DelegateTaskInput, delegate_task
 from agents.tools.lorebook import (
     PatchWorldviewInput,
+    CreateCharacterRelationInput,
     RewriteAllCharactersInput,
     RewriteWorldviewInput,
     UpdateCharacterInput,
     patch_worldview,
+    create_character_relation,
     rewrite_all_characters,
     rewrite_worldview,
     update_character,
@@ -145,6 +147,7 @@ __all__ = [
     "ReadInspirationInput",
     "CheckScriptwriterStatusInput",
     "CreateChapterInput",
+    "CreateCharacterRelationInput",
     "CreateOrRewriteScriptInput",
     "CRITIC_TOOLS",
     "DIRECTOR_TOOLS",
@@ -205,6 +208,7 @@ __all__ = [
     "read_inspiration",
     "check_scriptwriter_status",
     "create_chapter",
+    "create_character_relation",
     "create_or_rewrite_script",
     "delegate_task",
     "get_tools_for_agent",
