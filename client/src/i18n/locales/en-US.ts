@@ -1028,6 +1028,15 @@ const enUS = {
       placeholderLine1: 'Start your novel here…',
       placeholderLine2: 'Let the story flow from the very first word.',
       editorAria: 'Novel body editor',
+      conception: {
+        button: 'Edit chapter conception',
+        title: 'Chapter conception',
+        placeholder: 'Record plot goals, emotional shifts, foreshadowing, and writing constraints…',
+        hint: 'This conception is only visible in the editor. It is excluded from the novel body, reader preview, and submission packages.',
+      },
+      pagination: {
+        aria: 'Novel editor pagination',
+      },
       stats: {
         words: 'Words',
         paragraphs: 'Paragraphs',
@@ -1182,7 +1191,7 @@ const enUS = {
       closePanel: 'Close panel',
       paused: 'Paused',
       preparing: 'Preparing...',
-      prewriteStatus: 'The scriptwriter is researching and planning.',
+      prewriteStatus: 'Scriptwriter research',
       chapterProgress: 'Chapter {current} / {total}{title}',
       // Setup phase
       genMode: 'Generation mode',
@@ -1256,9 +1265,13 @@ const enUS = {
       noProject: 'Please select a project first',
       saveSuccess: 'Project story tags saved',
       saveFailed: 'Save failed',
+      workScale: 'Work scale',
+      workScaleOptions: { short: 'Short', medium: 'Medium', long: 'Long' },
       sceneLength: {
-        title: 'Scene length',
-        tooltip: 'Sets an approximate length for newly written scenes without hard-truncating the text.',
+        title: 'Per-request body target',
+        titleScript: 'Current scene body target',
+        titleNovel: 'Current chapter body target',
+        tooltip: 'Sets an approximate body length for new chapters or scenes without hard-truncating the text.',
         concise: 'Concise',
         standard: 'Standard',
         expanded: 'Rich',

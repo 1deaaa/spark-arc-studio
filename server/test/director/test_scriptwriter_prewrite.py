@@ -80,6 +80,7 @@ def test_autonomous_prewrite_only_binds_read_tools_and_limits_rounds(monkeypatch
     monkeypatch.setattr("agents.scriptwriter_prewrite._build_prewrite_brief", lambda _request: "场景任务包")
     monkeypatch.setattr("agents.scriptwriter_prewrite._prewrite_read_tools", lambda: [prewrite_read_probe])
     llm = _FakeLlm([_tool_call("call-1"), _tool_call("call-2")])
+    progress_tools = []
 
     result = run_autonomous_scriptwriter_prewrite(
         ScriptwriterPreWriteRequest(
@@ -90,6 +91,7 @@ def test_autonomous_prewrite_only_binds_read_tools_and_limits_rounds(monkeypatch
             scene_name="1-1 初遇",
         ),
         llm=llm,
+        on_tool_progress=progress_tools.append,
         max_tool_rounds=2,
     )
 
@@ -97,6 +99,7 @@ def test_autonomous_prewrite_only_binds_read_tools_and_limits_rounds(monkeypatch
     assert llm.bound.invoke_count == 2
     assert llm.final_invoke_count == 1
     assert result.tools_used == ("prewrite_read_probe", "prewrite_read_probe")
+    assert progress_tools == ["prewrite_read_probe", "prewrite_read_probe"]
     assert "只读事实" in result.research_context
     assert "关键选择" in result.planning_note
 
@@ -175,8 +178,10 @@ def test_autonomous_prewrite_uses_model_budget_without_fixed_character_truncatio
         max_tool_rounds=2,
     )
 
+    first_system_message = str(llm.bound.message_snapshots[0][0].content)
     first_user_message = str(llm.bound.message_snapshots[0][1].content)
-    assert "大纲开头" in first_user_message and "大纲结尾" in first_user_message
+    assert "大纲开头" in first_system_message and "大纲结尾" in first_system_message
+    assert "大纲开头" not in first_user_message and "大纲结尾" not in first_user_message
     assert "上下文开头" in first_user_message and "上下文结尾" in first_user_message
     assert "工具结果开头" in result.research_context
     assert "工具结果结尾" in result.research_context
@@ -398,6 +403,7 @@ def test_auto_write_emits_prewrite_before_writing_scene(monkeypatch, tmp_path: P
             return str(value or "")
 
     state_updates: list[dict] = []
+    prewrite_tool_payloads: list[dict] = []
     monkeypatch.setattr(auto_write, "ScriptwriterAgent", FakeWriter)
     monkeypatch.setattr(auto_write, "begin_auto_write_run", lambda *_args, **_kwargs: {})
 
@@ -421,17 +427,19 @@ def test_auto_write_emits_prewrite_before_writing_scene(monkeypatch, tmp_path: P
         "resolve_planned_scene_file_path",
         lambda *_args, **_kwargs: (str(scene_path), False, None),
     )
-    monkeypatch.setattr(
-        auto_write,
-        "run_autonomous_scriptwriter_prewrite",
-        lambda *_args, **_kwargs: ScriptwriterPreWriteResult(
+    def fake_prewrite(*_args, **kwargs):
+        callback = kwargs.get("on_tool_progress")
+        if callback is not None:
+            callback("story_memory_tool")
+        return ScriptwriterPreWriteResult(
             receipt_id="autonomous",
             brief="任务包",
             research_context="事实",
             planning_note="规划",
             tools_used=(),
-        ),
-    )
+        )
+
+    monkeypatch.setattr(auto_write, "run_autonomous_scriptwriter_prewrite", fake_prewrite)
 
     outline = {
         "nodes": [{
@@ -453,6 +461,7 @@ def test_auto_write_emits_prewrite_before_writing_scene(monkeypatch, tmp_path: P
             outline,
             mode="continuous_write",
             export_format="arc",
+            prewrite_tool_callback=prewrite_tool_payloads.append,
         )
         statuses: list[str] = []
         try:
@@ -468,5 +477,15 @@ def test_auto_write_emits_prewrite_before_writing_scene(monkeypatch, tmp_path: P
     statuses = asyncio.run(collect_statuses())
 
     assert statuses.index("prewrite") < statuses.index("writing_scene")
+    assert prewrite_tool_payloads[0]["tool_name"] == "story_memory_tool"
+    from agents.auto_write_service import _prewrite_tool_event
+
+    replay_payload = json.loads(
+        _prewrite_tool_event(prewrite_tool_payloads[0]).removeprefix("data: ").strip()
+    )
+    assert replay_payload["status"] == "prewrite_tool"
+    assert replay_payload["tool_name"] == "story_memory_tool"
     phase_sequence = [item.get("phase") for item in state_updates if item.get("phase")]
-    assert phase_sequence[:2] == ["prewrite", "writing"]
+    assert phase_sequence[0] == "prewrite"
+    assert "writing" in phase_sequence
+    assert any(item.get("phaseToolName") == "story_memory_tool" for item in state_updates)

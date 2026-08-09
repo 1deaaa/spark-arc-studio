@@ -40,6 +40,7 @@ export interface AutoWriteSnapshot {
   currentSceneTitle: string;
   phase?: 'prewrite' | 'writing' | '';
   phaseMessage?: string;
+  phaseToolName?: string;
   totalChapters?: number;    // 前端注册时从旁路事件得到
   totalScenes?: number;
   completedScenes?: number;
@@ -224,6 +225,7 @@ export const useDirectorAutoWriteStore = defineStore('directorAutoWrite', () => 
         currentSceneTitle: '',
         phase: '',
         phaseMessage: '',
+        phaseToolName: '',
         totalChapters: total_chapters,
         totalScenes: total_scenes,
         availableResumeChapterIndex: payload.start_chapter_index,
@@ -287,6 +289,7 @@ export const useDirectorAutoWriteStore = defineStore('directorAutoWrite', () => 
             currentSceneTitle: '',
             phase: '',
             phaseMessage: '',
+            phaseToolName: '',
             totalScenes: data.totalScenes ?? 0,
             completedScenes: data.completedScenes ?? 0,
             lastSavedFilename: '',
@@ -480,6 +483,7 @@ export const useDirectorAutoWriteStore = defineStore('directorAutoWrite', () => 
         currentSceneTitle: '',
         phase: '',
         phaseMessage: '',
+        phaseToolName: '',
         lastSavedFilename: '',
         lastError: '',
         updatedAt: new Date().toISOString(),
@@ -596,6 +600,7 @@ export const useDirectorAutoWriteStore = defineStore('directorAutoWrite', () => 
       snap.currentSceneTitle = (data.scene_title as string) ?? snap.currentSceneTitle;
       snap.phase = 'prewrite';
       snap.phaseMessage = (data.message as string) ?? snap.phaseMessage;
+      snap.phaseToolName = '';
       snap.streamingPreview = '';
       snap.streamingSpeed = 0;
       snap.streamingChars = 0;
@@ -605,6 +610,10 @@ export const useDirectorAutoWriteStore = defineStore('directorAutoWrite', () => 
       snap.currentSceneTitle = (data.scene_title as string) ?? snap.currentSceneTitle;
       snap.phase = 'writing';
       snap.phaseMessage = (data.message as string) ?? snap.phaseMessage;
+      snap.phaseToolName = '';
+    } else if (data.status === 'prewrite_tool') {
+      snap.phase = 'prewrite';
+      snap.phaseToolName = (data.tool_name as string) ?? snap.phaseToolName;
       snap.streamingPreview = '';
     } else if (data.status === 'streaming') {
       // 实时文字流！这是手动触发独有的体验

@@ -38,13 +38,26 @@ export type AgentTokenUsageStats = {
 
 export type TokenUsageStats = Omit<AgentTokenUsageStats, 'agentId'> & {
   byAgent: Record<string, AgentTokenUsageStats>;
+  source?: string;
 };
 
 export type TokenStatsSession = {
   contextTokenCount: number | null;
   contextTokenUsage: TokenUsageStats | null;
   contextWindowStats: ContextWindowStats | null;
+  tokenUsageByTask?: Record<string, TokenUsageStats>;
 };
+
+function extractTaskId(payload: AnyRecord | null | undefined): string {
+  if (!payload || typeof payload !== 'object') return '';
+  return String(
+    payload.task_id
+    ?? payload.taskId
+    ?? payload.metadata?.task_id
+    ?? payload.metadata?.taskId
+    ?? '',
+  ).trim();
+}
 
 export function extractLlmUsageTotal(payload: AnyRecord | null | undefined): number | null {
   const usageStats = extractLlmUsageStats(payload);
@@ -109,7 +122,108 @@ export function extractLlmUsageStats(payload: AnyRecord | null | undefined): Tok
     requests: Math.max(0, Number(usage.requests ?? 0) || 0),
     errors: Math.max(0, Number(usage.errors ?? 0) || 0),
     byAgent,
+    source: String(usage.source || ''),
   };
+}
+
+function sumTokenUsageStats(items: TokenUsageStats[]): TokenUsageStats | null {
+  if (!items.length) return null;
+  const byAgent: Record<string, AgentTokenUsageStats> = {};
+  let promptTokens = 0;
+  let completionTokens = 0;
+  let totalTokens = 0;
+  let cachedPromptTokens = 0;
+  let cacheMissPromptTokens = 0;
+  let requests = 0;
+  let errors = 0;
+
+  for (const usage of items) {
+    promptTokens += usage.promptTokens;
+    completionTokens += usage.completionTokens;
+    totalTokens += usage.totalTokens;
+    cachedPromptTokens += usage.cachedPromptTokens;
+    cacheMissPromptTokens += usage.cacheMissPromptTokens;
+    requests += usage.requests;
+    errors += usage.errors;
+    for (const [agentId, agent] of Object.entries(usage.byAgent)) {
+      const current = byAgent[agentId] || {
+        agentId,
+        promptTokens: 0,
+        completionTokens: 0,
+        totalTokens: 0,
+        cachedPromptTokens: 0,
+        cacheMissPromptTokens: 0,
+        cacheHitRate: null,
+        requests: 0,
+        errors: 0,
+      };
+      current.promptTokens += agent.promptTokens;
+      current.completionTokens += agent.completionTokens;
+      current.totalTokens += agent.totalTokens;
+      current.cachedPromptTokens += agent.cachedPromptTokens;
+      current.cacheMissPromptTokens += agent.cacheMissPromptTokens;
+      current.requests += agent.requests;
+      current.errors += agent.errors;
+      current.cacheHitRate = current.promptTokens > 0
+        && (current.cachedPromptTokens > 0 || current.cacheMissPromptTokens > 0)
+        ? current.cachedPromptTokens / current.promptTokens
+        : null;
+      byAgent[agentId] = current;
+    }
+  }
+
+  return {
+    promptTokens,
+    completionTokens,
+    totalTokens,
+    cachedPromptTokens,
+    cacheMissPromptTokens,
+    cacheHitRate: promptTokens > 0 && (cachedPromptTokens > 0 || cacheMissPromptTokens > 0)
+      ? cachedPromptTokens / promptTokens
+      : null,
+    requests,
+    errors,
+    byAgent,
+    source: 'task_aggregate',
+  };
+}
+
+function shouldReplaceTaskSnapshot(current: TokenUsageStats | undefined, next: TokenUsageStats): boolean {
+  if (!current) return true;
+  if (next.source === 'usage_log') return true;
+  return next.requests > current.requests
+    || (next.requests === current.requests && next.totalTokens >= current.totalTokens);
+}
+
+function applyUsageMap(session: TokenStatsSession, usageByTask: Record<string, TokenUsageStats>) {
+  session.tokenUsageByTask = usageByTask;
+  session.contextTokenUsage = sumTokenUsageStats(Object.values(usageByTask));
+  session.contextTokenCount = session.contextTokenUsage?.totalTokens ?? null;
+}
+
+export function restoreHistoryTokenStats(
+  session: TokenStatsSession,
+  history: AnyRecord[] = [],
+  options: { preserveLive?: boolean } = {},
+) {
+  const usageByTask: Record<string, TokenUsageStats> = {};
+  history.forEach((message, index) => {
+    if (message?.role !== 'assistant') return;
+    const usage = extractLlmUsageStats(message);
+    if (!usage) return;
+    const taskId = extractTaskId(message) || `history:${String(message?.id ?? index)}`;
+    if (shouldReplaceTaskSnapshot(usageByTask[taskId], usage)) {
+      usageByTask[taskId] = usage;
+    }
+  });
+  if (options.preserveLive) {
+    for (const [taskId, usage] of Object.entries(session.tokenUsageByTask || {})) {
+      if (shouldReplaceTaskSnapshot(usageByTask[taskId], usage)) {
+        usageByTask[taskId] = usage;
+      }
+    }
+  }
+  applyUsageMap(session, usageByTask);
 }
 
 export function extractAgentCompletionTokens(payload: AnyRecord | null | undefined, agentId: string): number | null {
@@ -227,8 +341,12 @@ export function latestHistoryContextWindowStats(history: AnyRecord[] = []): Cont
 export function applyPersistedTokenStats(session: TokenStatsSession, payload: AnyRecord | null | undefined) {
   const usageStats = extractLlmUsageStats(payload);
   if (usageStats != null) {
-    session.contextTokenUsage = usageStats;
-    session.contextTokenCount = usageStats.totalTokens;
+    const taskId = extractTaskId(payload) || 'legacy:latest';
+    const usageByTask = { ...(session.tokenUsageByTask || {}) };
+    if (shouldReplaceTaskSnapshot(usageByTask[taskId], usageStats)) {
+      usageByTask[taskId] = usageStats;
+    }
+    applyUsageMap(session, usageByTask);
   }
 
   const nextWindowStats = extractContextWindowStatsFromPayload(payload);

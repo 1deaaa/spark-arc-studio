@@ -152,6 +152,9 @@ def _run_auto_write(
                 auto_review=auto_review,
                 from_director=from_director,
                 stop_event=entry.stop_event,
+                prewrite_tool_callback=lambda payload: entry.append(
+                    _prewrite_tool_event(payload)
+                ),
             ):
                 if not event.lstrip().startswith(":"):
                     entry.append(event)
@@ -165,6 +168,20 @@ def _run_auto_write(
             entry.finish()
 
     asyncio.run(_drain())
+
+
+def _prewrite_tool_event(payload: dict[str, Any]) -> str:
+    """把写前调研工具调用转换为可回放的业务语义帧。"""
+    from agents.routes.stream_semantics import semantic_sse_data
+
+    return semantic_sse_data(
+        "prewrite_tool",
+        tool_name=str(payload.get("tool_name") or ""),
+        chapter_index=payload.get("chapter_index"),
+        scene_index=payload.get("scene_index"),
+        chapter_title=str(payload.get("chapter_title") or ""),
+        scene_title=str(payload.get("scene_title") or ""),
+    )
 
 
 def stop_auto_write(user_id: str, project_name: str) -> bool:

@@ -20,7 +20,7 @@ from llm.agen_matchbox.tool_protocol import (
 from agents.tools.stream_events import normalize_tool_name
 
 
-PREWRITE_STATUS_MESSAGE = "编剧正在调研规划。"
+PREWRITE_STATUS_MESSAGE = "编剧调研"
 PREWRITE_TOOL_NAME = "prepare_script_creation"
 PREWRITE_MAX_TOOL_ROUNDS = 6
 PREWRITE_MAX_TOOL_CALLS = 12
@@ -230,6 +230,7 @@ def run_autonomous_scriptwriter_prewrite(
     *,
     llm: Any,
     clean_text: Callable[[Any], str] | None = None,
+    on_tool_progress: Callable[[str], None] | None = None,
     max_tool_rounds: int = PREWRITE_MAX_TOOL_ROUNDS,
 ) -> ScriptwriterPreWriteResult:
     """业务生产流模式：用受限只读工具循环完成写前调查，不承担正文生成。"""
@@ -270,10 +271,15 @@ def run_autonomous_scriptwriter_prewrite(
     )
     context_preview = request.available_context.strip()
     outline_preview = request.full_outline.strip()
+    if outline_preview:
+        system_prompt = (
+            system_prompt.rstrip()
+            + "\n\n### 本次自动写作的稳定完整大纲\n"
+            + outline_preview
+        )
     user_prompt = "\n\n".join(part for part in [
         brief,
         f"### 当前已经准备的上下文摘要\n{context_preview}" if context_preview else "",
-        f"### 完整大纲\n{outline_preview}" if outline_preview else "",
         "请完成 PreWrite。",
     ] if part)
     messages = prepare_specialized_prompt_messages_with_budget(
@@ -320,6 +326,8 @@ def run_autonomous_scriptwriter_prewrite(
                     result = f"PreWrite 拒绝未知或非只读工具：{tool_name}"
                 else:
                     try:
+                        if on_tool_progress is not None:
+                            on_tool_progress(tool_name)
                         result = tool.invoke(tool_args or {})
                     except Exception as exc:
                         result = f"工具 {tool_name} 执行失败：{exc}"

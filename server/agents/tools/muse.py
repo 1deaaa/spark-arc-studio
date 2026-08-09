@@ -19,7 +19,7 @@ class CaptureInspirationInput(BaseModel):
     genres: list[str] | None = Field(default=None, description="可选题材标签列表")
     tones: list[str] | None = Field(default=None, description="可选基调标签列表")
     worldviews: list[str] | None = Field(default=None, description="可选世界观标签列表")
-    length_hint: str | None = Field(default=None, description="可选篇幅建议，如短篇、中篇、长篇")
+    length_hint: str | None = Field(default=None, description="可选作品规模，如短篇、中篇、长篇")
 
 
 class RewriteInspirationInput(BaseModel):

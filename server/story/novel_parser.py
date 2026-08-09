@@ -93,6 +93,81 @@ _CONCEPTION_FIELD_RE = re.compile(
     re.IGNORECASE,
 )
 
+_CONCEPTION_BLOCK_RE = re.compile(
+    r"<conception(?:\s[^>]*)?>([\s\S]*?)(?:</conception\s*>|$)",
+    re.IGNORECASE,
+)
+
+
+def parse_novel_document(text: Any) -> Dict[str, str]:
+    """拆分小说原文中的模型构思和用户可见正文。"""
+    raw = str(text or "").replace("\r\n", "\n").replace("\r", "\n")
+    stripped = raw.strip()
+    if stripped.startswith("{") and stripped.endswith("}"):
+        try:
+            payload = json.loads(stripped)
+        except (TypeError, ValueError, json.JSONDecodeError):
+            payload = None
+        if isinstance(payload, dict):
+            body_candidates = [
+                payload.get(key)
+                for key in ("content", "body", "text", "正文", "novel")
+                if isinstance(payload.get(key), str)
+            ]
+            body = next((item for item in body_candidates if item.strip()), body_candidates[0] if body_candidates else None)
+            conception = next((payload.get(key) for key in ("conception", "scene_conception", "sceneConception") if isinstance(payload.get(key), str)), "")
+            if isinstance(body, str):
+                return {"body": clean_novel_visible_text(body), "conception": str(conception or "").strip()}
+
+    conceptions = [match.group(1).strip() for match in _CONCEPTION_BLOCK_RE.finditer(raw) if match.group(1).strip()]
+    raw = _CONCEPTION_BLOCK_RE.sub("", raw)
+    raw = re.sub(r"<conception\s*/>\s*", "", raw, flags=re.IGNORECASE)
+    lines: list[str] = []
+    source_lines = raw.split("\n")
+    index = 0
+    while index < len(source_lines):
+        line = source_lines[index]
+        match = _CONCEPTION_FIELD_RE.match(line)
+        if not match:
+            lines.append(line)
+            index += 1
+            continue
+
+        value = match.group("value").strip()
+        if value:
+            conceptions.append(value)
+            index += 1
+            continue
+
+        conception_indent = len(match.group("indent").replace("\t", "    "))
+        nested: list[str] = []
+        index += 1
+        while index < len(source_lines):
+            candidate = source_lines[index]
+            if not candidate.strip():
+                index += 1
+                continue
+            candidate_indent = len(candidate) - len(candidate.lstrip(" \t"))
+            if candidate_indent <= conception_indent:
+                break
+            nested.append(candidate.strip())
+            index += 1
+        if nested:
+            conceptions.append("\n".join(nested))
+    return {
+        "body": clean_novel_visible_text("\n".join(lines)),
+        "conception": next((item for item in reversed(conceptions) if item), "").strip(),
+    }
+
+
+def serialize_novel_document(body: Any, conception: Any = "") -> str:
+    """将小说正文与模型构思序列化为稳定的单一文档格式。"""
+    normalized_body = str(body or "").replace("\r\n", "\n").replace("\r", "\n").strip()
+    normalized_conception = str(conception or "").replace("\r\n", "\n").replace("\r", "\n").strip()
+    if not normalized_conception:
+        return normalized_body
+    return f"<conception>\n{normalized_conception}\n</conception>" + (f"\n\n{normalized_body}" if normalized_body else "")
+
 
 def clean_novel_visible_text(text: Any) -> str:
     """清洗小说对用户可见的正文，隐藏仅供模型使用的构思字段。"""

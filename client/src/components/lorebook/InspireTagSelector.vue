@@ -183,11 +183,16 @@
         @update:model-value="v => selectedPov = v || null"
       />
     </div>
-    <!-- 篇幅建议 -->
+    <!-- 作品规模 -->
     <div v-if="showLength" class="selector-row length-row">
+      <span class="length-label">{{ t('components.storyTagsPanel.workScale') }}</span>
       <SparkSegment
         :model-value="selectedLength || ''"
-        :options="[{value:'短篇',label:'短篇'},{value:'中篇',label:'中篇'},{value:'长篇',label:'长篇'}]"
+        :options="[
+          {value:'短篇',label:t('components.storyTagsPanel.workScaleOptions.short')},
+          {value:'中篇',label:t('components.storyTagsPanel.workScaleOptions.medium')},
+          {value:'长篇',label:t('components.storyTagsPanel.workScaleOptions.long')}
+        ]"
         size="small"
         :block="true"
         @update:model-value="v => selectedLength = v || null"
@@ -238,6 +243,9 @@ import SparkSegment from '../share/SparkSegment.vue';
 import SparkCollapseTransition from '../share/SparkCollapseTransition.vue';
 import { ChevronDown, Plus, Tag } from '@lucide/vue';
 import { fetchWithAuth } from '../../services/api';
+import { useI18n } from 'vue-i18n';
+
+const { t } = useI18n();
 
 const props = defineProps({
   title: { type: String, default: '故事主题参数' },

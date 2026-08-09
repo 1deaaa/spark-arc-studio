@@ -704,8 +704,6 @@ class ScriptwriterAgent(SparkBaseAgent, SparkAgentExecutor):
         """提取模型正文并通过统一 ARC 输出门禁。"""
         text = text.strip()
 
-        text = clean_novel_visible_text(text)
-
         # Remove markdown code fences if present
         if text.startswith("```"):
             # Find the first newline after opening fence
@@ -715,6 +713,12 @@ class ScriptwriterAgent(SparkBaseAgent, SparkAgentExecutor):
             # Remove closing fence
             if text.endswith("```"):
                 text = text[:-3]
+
+        from core.request_context import get_current_export_format
+        if get_current_export_format() == "novel":
+            return text.strip()
+
+        text = clean_novel_visible_text(text)
 
         settings = self._visual_illustration_settings()
         return sanitize_arc_ai_output(

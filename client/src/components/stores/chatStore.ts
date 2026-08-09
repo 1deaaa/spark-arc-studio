@@ -47,7 +47,7 @@ import {
   applyPersistedTokenStats,
   extractContextWindowStats,
   latestHistoryContextWindowStats,
-  latestHistoryLlmUsageStats,
+  restoreHistoryTokenStats,
   type ContextWindowStats,
   type TokenUsageStats,
 } from './chat/tokenStats';
@@ -116,10 +116,12 @@ type ChatSession = {
    * ``setSessionAttachments`` / ``addSessionAttachment`` 等多附件 actions。
    */
   importedContext: ChatImportedContext | null;
-  /** 最近一次聊天任务真实 LLM token 总数（后端 usage log 聚合，null 表示未统计） */
+  /** 当前聊天上下文累计的真实 LLM token 总数（按 task_id 去重） */
   contextTokenCount: number | null;
-  /** 最近一次聊天任务真实输入/输出 token（所有 Agent/请求聚合） */
+  /** 当前聊天上下文的真实输入/输出 token（跨轮汇总所有 Agent/请求） */
   contextTokenUsage: TokenUsageStats | null;
+  /** 每个后端聊天任务的最新累计快照，用于实时覆盖与历史回放去重。 */
+  tokenUsageByTask: Record<string, TokenUsageStats>;
   /** 最近一次实际塞入当前 Agent LLM 窗口的请求 token 统计 */
   contextWindowStats: ContextWindowStats | null;
 };
@@ -193,6 +195,7 @@ function _createSession(id: number, agentId = 'agent_director', kind: ChatSessio
     importedContext: null,
     contextTokenCount: null,
     contextTokenUsage: null,
+    tokenUsageByTask: {},
     contextWindowStats: null,
   };
 }
@@ -756,6 +759,7 @@ export const useChatStore = defineStore('chat', {
       session.importedContext = null;
       session.contextTokenCount = null;
       session.contextTokenUsage = null;
+      session.tokenUsageByTask = {};
       session.contextWindowStats = null;
       session.historyRequestSeq += 1;
       return true;
@@ -773,6 +777,7 @@ export const useChatStore = defineStore('chat', {
         session.importedContext = null;
         session.contextTokenCount = null;
         session.contextTokenUsage = null;
+        session.tokenUsageByTask = {};
         session.contextWindowStats = null;
         session.historyRequestSeq += 1;
       }
@@ -855,8 +860,9 @@ export const useChatStore = defineStore('chat', {
         const fallbackAssistant = authoritative ? null : preserveLocalTail;
         const localHistory = authoritative ? [] : session.history;
         session.history = reconcileSessionHistory(rawHistory || [], fallbackAssistant, localHistory);
-        session.contextTokenUsage = latestHistoryLlmUsageStats(session.history);
-        session.contextTokenCount = session.contextTokenUsage?.totalTokens ?? null;
+        restoreHistoryTokenStats(session, session.history, {
+          preserveLive: session.sending || session.backgroundTaskStatus === 'running',
+        });
         session.contextWindowStats = latestHistoryContextWindowStats(session.history);
         // 历史中存在附件且 session.attachments 为空时，恢复完整列表（多附件场景下也能正确还原）。
         if ((session.attachments?.length || 0) === 0) {
@@ -1484,6 +1490,7 @@ export const useChatStore = defineStore('chat', {
       session.attachments = [];
       session.contextTokenCount = null;
       session.contextTokenUsage = null;
+      session.tokenUsageByTask = {};
       session.contextWindowStats = null;
       session.lastError = '';
     },

@@ -35,6 +35,24 @@ def test_tool_schema_required_is_always_an_array() -> None:
         "target_agent",
         "task_description",
     ]
+    delegate_properties = parameters_by_name["delegate_task"]["properties"]
+    assert set(delegate_properties) == {
+        "target_agent",
+        "task_description",
+        "completion_mode",
+        "chapter_name",
+        "scene_name",
+        "scene_file_path",
+        "scene_guidance",
+        "scene_characters",
+    }
+    assert delegate_properties["target_agent"]["enum"] == [
+        "agent_scriptwriter",
+        "agent_showrunner",
+        "agent_lorebook",
+        "agent_muse",
+        "agent_critic",
+    ]
 
 
 def test_tool_schema_required_is_completed_recursively_without_mutating_input() -> None:

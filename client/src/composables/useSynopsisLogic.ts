@@ -33,6 +33,7 @@ type InspirationAdoptionPayload = {
     logline?: string;
     inspiration?: string;
     lengthHint?: unknown;
+    estimatedChapters?: unknown;
     pov?: string;
     autoGenerateSynopsis?: boolean;
     autoGenerateBeats?: boolean;
@@ -73,7 +74,7 @@ export function useSynopsisLogic() {
 
     const isGenerating = ref(false);
     const isSaving = ref(false);
-    const currentLengthHint = ref<unknown>(null); // 篇幅提示，来自世界页
+    const currentLengthHint = ref<unknown>(null); // 作品规模提示，来自世界页
     let suppressAutoSave = false;
 
     // --- 节拍表数据 ---
@@ -467,7 +468,8 @@ export function useSynopsisLogic() {
             projectName: projectStore.currentProject,
             context: synopsisContext,
             guidance: synopsisGuidance,
-            lengthHint: synopsisData.estimated_chapters || currentLengthHint.value || null,
+            lengthHint: currentLengthHint.value || null,
+            estimatedChapters: synopsisData.estimated_chapters || null,
             autoGenerateOutline: !!options.autoGenerateOutline,
         };
 

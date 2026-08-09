@@ -12,6 +12,23 @@ from agents.story_memory import StoryMemoryFacade
 from agents.tools.registry import get_tools_for_agent
 
 
+def test_story_memory_job_propagates_request_context(monkeypatch) -> None:
+    from core.request_context import current_llm_usage_context
+    from agents.story_memory import jobs
+
+    usage_token = current_llm_usage_context.set("story-memory-context-test")
+    try:
+        with ThreadPoolExecutor(max_workers=1) as executor:
+            monkeypatch.setattr(jobs, "_executor", lambda: executor)
+            future = jobs._submit(
+                "上下文测试",
+                lambda: current_llm_usage_context.get(),
+            )
+            assert future.result(timeout=2) == "story-memory-context-test"
+    finally:
+        current_llm_usage_context.reset(usage_token)
+
+
 def test_story_memory_serializes_same_project_updates(monkeypatch, tmp_path: Path) -> None:
     monkeypatch.setattr("core.utils.USERDATA_ROOT", str(tmp_path))
     (tmp_path / "uid_31" / "projects" / "demo").mkdir(parents=True)

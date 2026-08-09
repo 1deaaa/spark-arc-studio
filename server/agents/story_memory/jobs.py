@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import copy
+import contextvars
 import os
 import threading
 from concurrent.futures import Future, ThreadPoolExecutor
@@ -34,7 +35,8 @@ def _executor() -> ThreadPoolExecutor:
 
 def _submit(label: str, fn, *args, **kwargs) -> Future:
     try:
-        return _executor().submit(fn, *args, **kwargs)
+        worker_context = contextvars.copy_context()
+        return _executor().submit(worker_context.run, fn, *args, **kwargs)
     except Exception as exc:
         failed: Future = Future()
         failed.set_exception(exc)

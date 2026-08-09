@@ -120,9 +120,9 @@ class UpdateProjectStoryTagsInput(BaseModel):
     tones: list[str] | None = Field(default=None, description="基调，多选字符串数组，如 ['暗黑', '治愈']；即使只有一个也必须传数组。")
     worldviews: list[str] | None = Field(default=None, description="世界观，多选字符串数组，如 ['修真']；即使只有一个也必须传数组。")
     pov: str | None = Field(default=None, validation_alias=AliasChoices("pov", "point_of_view", "pointOfView"), description="人称视角，单选字符串，如 '第一人称'、'第三人称全知'。")
-    length_hint: str | None = Field(default=None, validation_alias=AliasChoices("length_hint", "lengthHint", "length"), description="篇幅，单选字符串，如 '短篇'、'中篇'、'长篇'。")
-    scene_length_hint: str | None = Field(default=None, validation_alias=AliasChoices("scene_length_hint", "sceneLengthHint", "scene_length"), description="单场篇幅软目标：concise=精简、standard=标准、expanded=充实。用户要求今后的场景整体变短或变长时使用。")
-    scene_target_chars: int | None = Field(default=None, ge=100, le=100000, validation_alias=AliasChoices("scene_target_chars", "sceneTargetChars", "target_chars"), description="单场目标正文字符数，作为软目标；具体值存在时优先于三档区间。")
+    length_hint: str | None = Field(default=None, validation_alias=AliasChoices("length_hint", "lengthHint", "length"), description="作品规模，单选字符串，如 '短篇'、'中篇'、'长篇'；不要填写单章或单场目标。")
+    scene_length_hint: str | None = Field(default=None, validation_alias=AliasChoices("scene_length_hint", "sceneLengthHint", "scene_length"), description="单次正文软目标：concise=精简、standard=标准、expanded=充实。用户要求今后的章节/场景正文整体变短或变长时使用。")
+    scene_target_chars: int | None = Field(default=None, ge=100, le=100000, validation_alias=AliasChoices("scene_target_chars", "sceneTargetChars", "target_chars"), description="单次章节/场景正文目标字符数，作为软目标；具体值存在时优先于三档区间。")
     clear_scene_target_chars: bool = Field(default=False, validation_alias=AliasChoices("clear_scene_target_chars", "clearSceneTargetChars"), description="是否清除项目级具体字数目标，恢复仅按三档控制。")
     active_inspiration_id: str | None = Field(default=None, validation_alias=AliasChoices("active_inspiration_id", "activeInspirationId"), description="当前生效的灵感 ID，可选字符串，用于追溯来源。")
 
@@ -387,7 +387,7 @@ def work_tracker(
 
 @tool
 def read_project_story_tags() -> str:
-    """读取当前项目的故事主题参数（风格/题材/基调/世界观/人称/篇幅/单场篇幅）。
+    """读取当前项目的故事主题参数（风格/题材/基调/世界观/人称/作品规模/单次正文目标）。
     
     这些参数是"项目宪法"，贯穿整个创作周期，所有 Agent 通过 context_provider 统一读取。
     返回格式化的文本，若某项未设置则标注"未设置"。
@@ -426,16 +426,16 @@ def read_project_story_tags() -> str:
     lines.append(f"世界观：{'、'.join(worldviews) if worldviews else '未设置'}")
     
     length_hint = tags.get("length_hint")
-    lines.append(f"篇幅：{length_hint or '未设置'}")
+    lines.append(f"作品规模：{length_hint or '未设置'}")
 
     scene_length_labels = {"concise": "精简", "standard": "标准", "expanded": "充实"}
     scene_length_hint = tags.get("scene_length_hint", "standard")
-    lines.append(f"单场篇幅：{scene_length_labels.get(scene_length_hint, '标准')}（软目标）")
+    lines.append(f"单次正文目标：{scene_length_labels.get(scene_length_hint, '标准')}（软目标）")
     scene_target_chars = tags.get("scene_target_chars")
     lines.append(
-        f"单场目标字数：约 {scene_target_chars} 个可见正文字符（软目标，优先于档位区间）"
+        f"单次正文目标字数：约 {scene_target_chars} 个可见正文字符（软目标，优先于档位区间）"
         if scene_target_chars
-        else "单场目标字数：自动（使用档位区间）"
+        else "单次正文目标字数：自动（使用档位区间）"
     )
     
     return "\n".join(lines)
@@ -499,15 +499,15 @@ def update_project_story_tags(
     if pov is not None:
         updated_fields.append(f"人称视角={pov}")
     if length_hint is not None:
-        updated_fields.append(f"篇幅={length_hint}")
+        updated_fields.append(f"作品规模={length_hint}")
     if scene_length_hint is not None:
         scene_length_labels = {"concise": "精简", "standard": "标准", "expanded": "充实"}
         normalized_scene_length = tags.get("scene_length_hint", "standard")
-        updated_fields.append(f"单场篇幅={scene_length_labels.get(normalized_scene_length, '标准')}")
+        updated_fields.append(f"单次正文目标={scene_length_labels.get(normalized_scene_length, '标准')}")
     if clear_scene_target_chars:
-        updated_fields.append("单场目标字数=自动")
+        updated_fields.append("单次正文目标字数=自动")
     elif scene_target_chars is not None:
-        updated_fields.append(f"单场目标字数≈{tags.get('scene_target_chars')}字")
+        updated_fields.append(f"单次正文目标字数≈{tags.get('scene_target_chars')}字")
     if active_inspiration_id is not None:
         updated_fields.append(f"灵感ID={active_inspiration_id}")
     

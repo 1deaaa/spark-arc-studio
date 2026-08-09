@@ -643,6 +643,7 @@ class StoryMemoryFacade:
         llm = matchbox().get_user_llm(
             self.user_id,
             usage_key=usage_key,
+            agent_name="agent_story_memory",
             timeout=timeout,
         )
         known_characters = "、".join(characters) or "（未识别）"

@@ -1028,6 +1028,15 @@ const jaJP = {
       placeholderLine1: 'ここから小説を書き始めましょう……',
       placeholderLine2: '物語を最初の一文字から流れ出させて。',
       editorAria: '小説本文エディター',
+      conception: {
+        button: '章の構想を編集',
+        title: '章の構想',
+        placeholder: '展開目標、感情の変化、伏線、執筆上の制約を記録…',
+        hint: '構想は編集画面でのみ表示され、小説本文、閲覧プレビュー、投稿パッケージには含まれません。',
+      },
+      pagination: {
+        aria: '小説エディターのページ移動',
+      },
       stats: {
         words: '文字数',
         paragraphs: '段落',
@@ -1182,7 +1191,7 @@ const jaJP = {
       closePanel: 'パネルを閉じる',
       paused: '一時停止',
       preparing: '準備中...',
-      prewriteStatus: '脚本家が調査と構成を進めています。',
+      prewriteStatus: '脚本家の調査',
       chapterProgress: '第 {current} / {total} 章{title}',
       // Setup phase
       genMode: '生成モード',
@@ -1256,9 +1265,13 @@ const jaJP = {
       noProject: 'プロジェクトを選択してください',
       saveSuccess: 'プロジェクトストーリータグを保存しました',
       saveFailed: '保存に失敗しました',
+      workScale: '作品規模',
+      workScaleOptions: { short: '短編', medium: '中編', long: '長編' },
       sceneLength: {
-        title: 'シーンの長さ',
-        tooltip: '今後作成するシーンのおおよその長さを設定します。本文を強制的に切りません。',
+        title: '1回の本文目標',
+        titleScript: '現在のシーン本文目標',
+        titleNovel: '現在の章本文目標',
+        tooltip: '章またはシーン本文のおおよその長さを設定します。本文を強制的に切りません。',
         concise: '簡潔',
         standard: '標準',
         expanded: '充実',

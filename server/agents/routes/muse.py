@@ -248,7 +248,7 @@ async def muse_expand(request: Request, data: MuseRequest, user: dict = Depends(
     - genres: 题材标签列表
     - tones: 基调标签列表
     - worldviews: 世界观标签列表
-    - lengthHint: 篇幅建议（短篇/中篇/长篇）
+    - lengthHint: 作品规模（短篇/中篇/长篇）
     - inspirationId: 可选，关联的灵感ID（用于更新已有灵感的 content）
     """
     raw_input = (data.inspiration or "").strip()

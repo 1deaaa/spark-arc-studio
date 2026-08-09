@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import json
 import uuid
+from typing import Literal
 
 from langchain.tools import tool
 from pydantic import BaseModel, Field
@@ -20,19 +21,33 @@ from .common import ToolExecutionContext
 
 
 class DelegateTaskInput(BaseModel):
-    target_agent: str = Field(description="目标专家 Agent 的 ID，可选值: agent_scriptwriter, agent_showrunner, agent_lorebook, agent_muse, agent_critic")
-    task_description: str = Field(description="需要委派给该专家的具体任务描述，应包含足够的上下文信息")
-    delivery_mode: str = Field(default=HANDOFF_DELIVERY_DIRECT_TO_USER, description="交付模式。direct_to_user=专家结果直接交付用户；return_to_director=专家结果回到导演继续复核/汇总")
-    completion_mode: str = Field(default=HANDOFF_COMPLETION_REPORT_TO_USER, description="子任务完成后的即时行为。report_to_user=当前子任务完成后可直接面向用户交付；return_to_director=完成后回导演等待复核/汇总；silent_continue=完成后静默回导演并继续后续流水线，不单独向用户汇报")
-    return_to: str = Field(default="agent_director", description="当需要复核或汇总时，结果应返回给哪个 Agent。默认 agent_director")
-    grant_baton_to: str = Field(default="", description="本次委派后由哪个 Agent 接过旗帜（接力棒）。留空时默认授予 target_agent")
-    requires_review: bool = Field(default=False, description="是否要求专家完成后必须回到导演复核。为 true 时会强制采用 return_to_director")
-    user_confirmation_state: str = Field(default=HANDOFF_CONFIRMATION_PENDING, description="用户确认状态。already_confirmed=上游已确认可直接执行；needs_confirmation=仍需确认；not_required=本任务无需确认")
-    chapter_name: str | None = Field(default=None, description="委派给 agent_scriptwriter 时可填：目标章节名称，例如「一 · 开端」。用于预装场景任务包。")
-    scene_name: str | None = Field(default=None, description="委派给 agent_scriptwriter 时可填：目标场景的可读标题，例如「钟楼交易」。编号由大纲契约和文件 metadata 决定，用于匹配场景契约。")
-    scene_file_path: str | None = Field(default=None, description="委派给 agent_scriptwriter 时可填：目标或参考场景相对路径；路径中的编号只用于兼容读取，不是身份真相源。")
-    scene_guidance: str | None = Field(default=None, description="委派给 agent_scriptwriter 时可填：本场必须执行的导演指引，会进入写前任务包。")
-    scene_characters: list[str] | None = Field(default=None, description="委派给 agent_scriptwriter 时可填：本场登场角色名列表，用于召回实时人物状态与关系。")
+    target_agent: Literal[
+        "agent_scriptwriter",
+        "agent_showrunner",
+        "agent_lorebook",
+        "agent_muse",
+        "agent_critic",
+    ] = Field(description="唯一的目标专家 ID。必须从枚举中选择一个，不要填写专家中文名。")
+    task_description: str = Field(
+        min_length=1,
+        description="专家可独立执行的完整任务说明，写清目标、范围、已有事实和交付要求；不要在这里重复工具参数。",
+    )
+    completion_mode: Literal[
+        "report_to_user",
+        "return_to_director",
+        "silent_continue",
+    ] = Field(
+        default=HANDOFF_COMPLETION_REPORT_TO_USER,
+        description=(
+            "完成后的控制流：单步任务用 report_to_user；需要导演复核后统一回复用 return_to_director；"
+            "还有后续委派步骤时必须用 silent_continue。"
+        ),
+    )
+    chapter_name: str | None = Field(default=None, description="仅委派编剧写具体正文时填写：章节可读标题，不含自行编造的编号。其他专家不要传。")
+    scene_name: str | None = Field(default=None, description="仅委派编剧写具体正文时填写：场景可读标题，不含自行编造的编号。其他专家不要传。")
+    scene_file_path: str | None = Field(default=None, description="仅委派编剧且已有目标文件时填写：stories 下的相对路径。没有可靠路径就省略。")
+    scene_guidance: str | None = Field(default=None, description="仅委派编剧时填写：当前场景必须落实的导演指引。没有额外指引就省略。")
+    scene_characters: list[str] | None = Field(default=None, description="仅委派编剧时填写：当前场景确定登场的角色名数组。未知时省略，不要传字符串。")
 
 
 @tool(args_schema=DelegateTaskInput)
@@ -51,7 +66,12 @@ def delegate_task(
     scene_guidance: str | None = None,
     scene_characters: list[str] | None = None,
 ) -> str:
-    """将任务委派给指定专家 Agent。"""
+    """将一个任务委派给一位专家。
+
+    最小调用只传 target_agent 和 task_description。单步交付可省略
+    completion_mode；多步骤流水线的中间委派将其设为 silent_continue。
+    chapter_name 等场景字段只属于 agent_scriptwriter，其他专家不要传。
+    """
     from agents.agent_factory import create_agent_instance
 
     user_id = current_user_id.get()

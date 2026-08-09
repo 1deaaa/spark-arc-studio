@@ -254,6 +254,14 @@ def create_or_rewrite_script(
             min_node_gap=visual_settings["min_node_gap"],
             allowed_background_ids=allowed_background_ids,
         )
+    else:
+        from story.novel_parser import parse_novel_document, serialize_novel_document
+
+        novel_document = parse_novel_document(content)
+        content = serialize_novel_document(
+            novel_document["body"],
+            novel_document["conception"],
+        )
     if not content:
         return "创建/重写剧本失败：overwrite_content 为空。"
 

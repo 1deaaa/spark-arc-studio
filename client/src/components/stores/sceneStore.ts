@@ -5,6 +5,7 @@ import bus from '@/eventBus';
 import { parseArc, serializeToArc, type ActValue, type ArcDialogueNode, type ArcOptionNode, type ArcScene } from '@/services/arcParser';
 import { buildCreativeCacheKey, isCreativeCacheEqual, loadCreativeCache, saveCreativeCache } from '@/utils/creativeLocalCache';
 import { createAutoSaveScheduler, type AutoSaveScheduler } from '@/utils/autoSaveScheduler';
+import { parseNovelDocument, serializeNovelDocument } from '@/utils/novelDocument';
 
 export type SceneSelectionType = '' | 'scene' | 'dialogue' | 'option' | 'novel';
 
@@ -42,6 +43,7 @@ type SceneStoreState = {
   selectionType: SceneSelectionType;
   fileFormat: 'arc' | 'novel';
   workspaceMode: 'script' | 'novel';
+  novelConception: string;
   lastScriptwriterThought: string;
   canUndo: boolean;
   canRedo: boolean;
@@ -51,6 +53,7 @@ type StoryCacheSnapshot = {
   currentFilePath: string;
   fileFormat: 'arc' | 'novel';
   scriptData: SceneWithClientId[] | string;
+  novelConception?: string;
 };
 
 type StorySavePayload = {
@@ -95,14 +98,17 @@ function buildStoryCacheKey(projectName: string | null | undefined, filePath: st
 function normalizeStoryResponse(filePath: string, data: unknown): StoryCacheSnapshot {
   const isNovel = filePath.endsWith('.md');
   if (isNovel) {
+    const rawContent = typeof data === 'string'
+      ? data
+      : data && typeof data === 'object' && 'content' in (data as Record<string, unknown>) && typeof (data as Record<string, unknown>).content === 'string'
+        ? String((data as Record<string, unknown>).content || '')
+        : '';
+    const document = parseNovelDocument(rawContent);
     return {
       currentFilePath: filePath,
       fileFormat: 'novel',
-      scriptData: typeof data === 'string'
-        ? data
-        : data && typeof data === 'object' && 'content' in (data as Record<string, unknown>) && typeof (data as Record<string, unknown>).content === 'string'
-          ? String((data as Record<string, unknown>).content || '')
-          : '',
+      scriptData: document.body,
+      novelConception: document.conception,
     };
   }
 
@@ -148,9 +154,9 @@ function closeHistoryGroup(history: StoryHistoryState) {
   history.groupOpen = false;
 }
 
-function serializeStoryDataForSave(filePath: string, scriptData: SceneWithClientId[] | string): string {
+function serializeStoryDataForSave(filePath: string, scriptData: SceneWithClientId[] | string, novelConception = ''): string {
   if (filePath.endsWith('.md')) {
-    return String(scriptData ?? '');
+    return serializeNovelDocument(scriptData, novelConception);
   }
   return serializeToArc(Array.isArray(scriptData) ? scriptData : []);
 }
@@ -202,6 +208,7 @@ function buildStorySnapshot(filePath: string, store: SceneStoreState): StoryCach
     scriptData: filePath.endsWith('.md')
       ? String(store.scriptData ?? '')
       : assignSceneClientIds(Array.isArray(store.scriptData) ? store.scriptData : []),
+    novelConception: filePath.endsWith('.md') ? store.novelConception : '',
   };
 }
 
@@ -215,6 +222,7 @@ export const useSceneStore = defineStore('scene', {
     selectionType: '', // 'scene' | 'dialogue' | 'option' | 'novel'
     fileFormat: 'arc', // 支持 arc / novel
     workspaceMode: 'script', // script | novel
+    novelConception: '', // 小说构思，仅编辑器可见，正文展示和投稿均不包含
     lastScriptwriterThought: '', // scriptwriter 的 thought（最近一次多段续写返回）
     canUndo: false,
     canRedo: false,
@@ -237,6 +245,7 @@ export const useSceneStore = defineStore('scene', {
 
       if (snapshot.fileFormat === 'novel') {
         this.scriptData = String(snapshot.scriptData ?? '');
+        this.novelConception = String(snapshot.novelConception ?? '');
         this.currentScene = null;
         this.currentNode = null;
         this.nodeParent = null;
@@ -298,7 +307,7 @@ export const useSceneStore = defineStore('scene', {
       storyHistories.set(identity.key, {
         past: [],
         future: [],
-        observed: serializeStoryDataForSave(identity.filePath, this.scriptData),
+        observed: serializeStoryDataForSave(identity.filePath, this.scriptData, this.novelConception),
         groupOpen: false,
         groupTimer: null,
       });
@@ -306,7 +315,7 @@ export const useSceneStore = defineStore('scene', {
     _trackStoryChange(boundary = false) {
       const identity = this._currentStoryIdentity();
       if (!identity) return;
-      const current = serializeStoryDataForSave(identity.filePath, this.scriptData);
+      const current = serializeStoryDataForSave(identity.filePath, this.scriptData, this.novelConception);
       let history = storyHistories.get(identity.key);
       if (!history) {
         history = { past: [], future: [], observed: current, groupOpen: false, groupTimer: null };
@@ -332,7 +341,7 @@ export const useSceneStore = defineStore('scene', {
     _scheduleCurrentStoryPayload() {
       const identity = this._currentStoryIdentity();
       if (!identity) return null;
-      const content = serializeStoryDataForSave(identity.filePath, this.scriptData);
+      const content = serializeStoryDataForSave(identity.filePath, this.scriptData, this.novelConception);
       saveCreativeCache(
         buildStoryCacheKey(identity.projectName, identity.filePath),
         buildStorySnapshot(identity.filePath, this),
@@ -356,7 +365,7 @@ export const useSceneStore = defineStore('scene', {
       const history = storyHistories.get(identity.key);
       if (!history?.past.length) return false;
       closeHistoryGroup(history);
-      const current = serializeStoryDataForSave(identity.filePath, this.scriptData);
+      const current = serializeStoryDataForSave(identity.filePath, this.scriptData, this.novelConception);
       const target = history.past.pop()!;
       history.future.push(current);
       history.observed = target;
@@ -373,7 +382,7 @@ export const useSceneStore = defineStore('scene', {
       const history = storyHistories.get(identity.key);
       if (!history?.future.length) return false;
       closeHistoryGroup(history);
-      const current = serializeStoryDataForSave(identity.filePath, this.scriptData);
+      const current = serializeStoryDataForSave(identity.filePath, this.scriptData, this.novelConception);
       const target = history.future.pop()!;
       history.past.push(current);
       history.observed = target;
@@ -409,6 +418,7 @@ export const useSceneStore = defineStore('scene', {
       this.currentNode = null;
       this.nodeParent = null;
       this.lastScriptwriterThought = '';
+      this.novelConception = '';
       this.canUndo = false;
       this.canRedo = false;
       if (normalized === 'novel') {
@@ -435,6 +445,7 @@ export const useSceneStore = defineStore('scene', {
         this.selectionType = '';
         this.fileFormat = 'arc';
         this.lastScriptwriterThought = '';
+        this.novelConception = '';
         this.canUndo = false;
         this.canRedo = false;
         return;
@@ -569,6 +580,15 @@ export const useSceneStore = defineStore('scene', {
 
     async updateNovelContent(content: unknown) {
       this.scriptData = String(content ?? '');
+      this.currentScene = null;
+      this.currentNode = null;
+      this.nodeParent = null;
+      this.selectionType = 'novel';
+      this.scheduleStorySave();
+    },
+
+    updateNovelConception(conception: unknown) {
+      this.novelConception = String(conception ?? '');
       this.currentScene = null;
       this.currentNode = null;
       this.nodeParent = null;

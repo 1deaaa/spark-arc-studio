@@ -25,10 +25,11 @@ Auto-Write API - 自动化剧本撰写的异步批处理引擎。
 import json
 import os
 import asyncio
+import contextvars
 import time
 import queue
 import threading
-from typing import Optional, List, Dict, Any
+from typing import Optional, List, Dict, Any, Callable
 from fastapi import APIRouter, Depends, Request
 from fastapi.responses import StreamingResponse
 
@@ -157,6 +158,7 @@ async def generate_script_stream(
     auto_review: bool = False,
     from_director: bool = False,
     stop_event: threading.Event | None = None,
+    prewrite_tool_callback: Callable[[Dict[str, Any]], None] | None = None,
 ):
     """
     Generator function for SSE streaming of script generation progress.
@@ -285,7 +287,7 @@ async def generate_script_stream(
     style_profile = load_project_style_profile(user_id=user_id, project_name=project_name)
     
     # ── 加载项目级故事主题参数（story_tags）────────────────────────────────
-    # 这些参数是"项目宪法"，包含 POV、风格、题材、基调、世界观、篇幅等
+    # 这些参数是“项目宪法”，包含 POV、风格、题材、基调、世界观、作品规模等。
     story_tags = get_project_story_tags(user_id, project_name)
     
     # 构建 story_tags 注入块（与 context_provider._build_story_tags_block 保持一致）
@@ -514,6 +516,25 @@ async def generate_script_stream(
                     sceneIndex=scene_idx,
                 ),
             )
+
+            def report_prewrite_tool(tool_name: str) -> None:
+                """更新可恢复状态，并把当前只读调研工具送入观察者日志。"""
+                normalized_tool_name = str(tool_name or "").strip()
+                update_state(
+                    "running",
+                    phase="prewrite",
+                    phaseMessage=PREWRITE_STATUS_MESSAGE,
+                    phaseToolName=normalized_tool_name,
+                )
+                if prewrite_tool_callback is not None:
+                    prewrite_tool_callback({
+                        "tool_name": normalized_tool_name,
+                        "chapter_index": i,
+                        "scene_index": scene_idx,
+                        "chapter_title": chapter_title,
+                        "scene_title": scene_title,
+                    })
+
             prewrite_result = await asyncio.to_thread(
                 run_autonomous_scriptwriter_prewrite,
                 ScriptwriterPreWriteRequest(
@@ -529,6 +550,7 @@ async def generate_script_stream(
                 ),
                 llm=writer.llm,
                 clean_text=writer._clean_model_visible_arc_text,
+                on_tool_progress=report_prewrite_tool,
             )
             if prewrite_result.context_addition:
                 context_str = context_str + "\n\n" + prewrite_result.context_addition
@@ -589,7 +611,11 @@ async def generate_script_stream(
                         result_queue.put(None)
 
                 # 启动生成线程
-                gen_thread = threading.Thread(target=run_stream_to_queue)
+                generation_context = contextvars.copy_context()
+                gen_thread = threading.Thread(
+                    target=generation_context.run,
+                    args=(run_stream_to_queue,),
+                )
                 gen_thread.start()
 
                 # 异步消费队列，实时推送

@@ -24,6 +24,7 @@ type StructureAdoptionPayload = {
     context?: string;
     guidance?: string;
     lengthHint?: unknown;
+    estimatedChapters?: unknown;
     autoGenerateOutline?: boolean;
     [key: string]: unknown;
 };
@@ -59,6 +60,13 @@ function resolveLengthTypeFromHint(raw: unknown): string | null {
     if (lower.includes('long')) return 'long';
     if (lower.includes('unlimit')) return 'unlimited';
     return null;
+}
+
+function resolveEstimatedChapterCount(raw: unknown): number | null {
+    const match = String(raw || '').match(/\d+/);
+    if (!match) return null;
+    const count = Number(match[0]);
+    return Number.isFinite(count) && count > 0 ? Math.round(count) : null;
 }
 
 export function useStructureLogic() {
@@ -135,7 +143,7 @@ export function useStructureLogic() {
             const data = await response.json();
             return data?.success ? data?.tags?.length_hint || null : null;
         } catch (error) {
-            console.warn('加载结构页篇幅偏好失败:', error);
+            console.warn('加载结构页作品规模偏好失败:', error);
             return null;
         }
     }
@@ -336,7 +344,11 @@ export function useStructureLogic() {
                 }
                 if (synMarkup && synMarkup.trim()) {
                     const synopsisMeta = parseSynopsisMarkup(synMarkup);
-                    applyLengthHintIfPristine(synopsisMeta.estimated_chapters);
+                    const estimatedChapters = resolveEstimatedChapterCount(synopsisMeta.estimated_chapters);
+                    if (estimatedChapters && isStructureLengthPristine()) {
+                        lengthType.value = 'custom';
+                        chapterCount.value = estimatedChapters;
+                    }
                 }
             } catch (e) {
                 console.warn('Failed to pre-load synopsis', e);
@@ -360,6 +372,11 @@ export function useStructureLogic() {
             guidance.value = data.guidance;
         }
         applyLengthHintIfPristine(data?.lengthHint);
+        const estimatedChapters = resolveEstimatedChapterCount(data?.estimatedChapters);
+        if (estimatedChapters && isStructureLengthPristine()) {
+            lengthType.value = 'custom';
+            chapterCount.value = estimatedChapters;
+        }
         saveStructureSnapshot();
     }
 
