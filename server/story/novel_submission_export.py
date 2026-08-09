@@ -8,6 +8,8 @@ from html import escape as html_escape
 from typing import Any
 from xml.sax.saxutils import escape as xml_escape
 
+from story.novel_parser import clean_novel_visible_text
+
 
 class NovelSubmissionExportError(ValueError):
     """小说投稿包生成失败。"""
@@ -114,7 +116,8 @@ def _format_chapter_num_for_filename(value: Any) -> str:
 
 def _clean_body_text(value: Any) -> str:
     lines: list[str] = []
-    for raw_line in _normalize_newlines(value).split("\n"):
+    visible_text = clean_novel_visible_text(_normalize_newlines(value))
+    for raw_line in visible_text.split("\n"):
         line = raw_line.rstrip()
         if _MARKDOWN_HEADING_RE.match(line):
             continue

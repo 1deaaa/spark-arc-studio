@@ -101,6 +101,7 @@ from .chat_task import (
     cancel_task,
     update_task_status,
     cleanup_task,
+    wait_for_task_exit,
     list_recent_tasks,
     build_task_status_payload,
 )
@@ -211,7 +212,13 @@ def _mark_chat_task_error(
 ) -> str:
     error_message = _coerce_stream_error_text(error_payload) or '聊天生成失败'
     entry.error_message = error_message
-    update_task_status(task_key, 'error', error_message=error_message, retry_count=retry_count)
+    update_task_status(
+        task_key,
+        'error',
+        expected_task_id=entry.task_id,
+        error_message=error_message,
+        retry_count=retry_count,
+    )
     _checkpoint_chat_task(cm, entry, force=True, stream_status='error')
     return error_message
 
@@ -395,7 +402,12 @@ def _run_chat_stream_with_retry(
                 'max_retries': max_retries,
                 'error_summary': last_error_summary,
             }, accumulate=False)
-            update_task_status(task_key, 'running', retry_count=attempt)
+            update_task_status(
+                task_key,
+                'running',
+                expected_task_id=entry.task_id,
+                retry_count=attempt,
+            )
             if stop_event.wait(retry_delay):
                 terminated_early = True
                 break
@@ -619,7 +631,7 @@ def _start_chat_stream_task(
     message: str,
     active_context: Any,
     cm: ChatManager,
-    prepare_history: Callable[[], list],
+    prepare_history: Callable[[], tuple[list, int | None]],
 ) -> ChatTaskEntry:
     """注册并启动统一聊天后台任务，入口差异仅由历史准备回调承载。"""
     task_key = _make_task_key(user_id, project_name, agent_id, context_key)
@@ -641,7 +653,8 @@ def _start_chat_stream_task(
         raise HTTPException(status_code=409, detail='该会话已有任务在执行') from exc
 
     try:
-        history = prepare_history()
+        history, user_message_id = prepare_history()
+        entry.user_message_id = user_message_id
         assistant_msg = cm.append_message(
             agent_id=agent_id,
             context_key=context_key,
@@ -659,8 +672,9 @@ def _start_chat_stream_task(
         _checkpoint_chat_task(cm, entry, force=True, stream_status='running')
         agent_inst = create_agent_instance(agent_id, user_id, project_name)
     except Exception:
-        update_task_status(task_key, 'error')
-        cleanup_task(task_key, delay=0)
+        update_task_status(task_key, 'error', expected_task_id=entry.task_id)
+        entry.finished_event.set()
+        cleanup_task(task_key, delay=0, task_id=entry.task_id)
         raise
     request_locale = get_current_locale()
 
@@ -717,13 +731,15 @@ def _start_chat_stream_task(
                 update_task_status(
                     task_key,
                     final_status,
+                    expected_task_id=entry.task_id,
                     result_message_id=entry.assistant_message_id,
                     result_content=reply,
                     result_metadata=metadata,
                     error_message=final_error_message,
                     retry_count=retry_count,
                 )
-                cleanup_task(task_key)
+                entry.finished_event.set()
+                cleanup_task(task_key, task_id=entry.task_id)
 
         ctx.run(
             _run_chat_background_context,
@@ -1333,6 +1349,16 @@ async def edit_chat_message_stream(request: Request, data: ChatMessageEditReques
         cm.delete_after(agent_id=data.agentId, context_key=data.contextKey, message_id=msg_id)
         return StreamingResponse(iter(['']), media_type='text/plain')
 
+    # 编辑是“替换当前任务”，必须先让同一会话的旧后台线程真实退出。
+    task_key = _make_task_key(user_id, project_name, data.agentId, data.contextKey)
+    existing_task = get_task_by_parts(user_id, project_name, data.agentId, data.contextKey)
+    if existing_task and not existing_task.finished_event.is_set():
+        if existing_task.status == 'running':
+            cancel_task(task_key)
+        stopped = await asyncio.to_thread(wait_for_task_exit, task_key, 10.0)
+        if not stopped:
+            raise HTTPException(status_code=409, detail='上一条聊天任务仍在退出，请稍后重试')
+
     effective_active_context = _resolve_effective_active_context(user_id, project_name, data.agentId, data.activeContext)
     _apply_request_runtime_meta(data.activeMeta, user_id=user_id, project_name=project_name)
     imported_files_meta = _extract_imported_files_meta(data.activeMeta)
@@ -1340,13 +1366,13 @@ async def edit_chat_message_stream(request: Request, data: ChatMessageEditReques
         user_id, project_name, effective_active_context, imported_files_meta,
     )
 
-    def prepare_history() -> list:
+    def prepare_history() -> tuple[list, int]:
         cm.update_message(data.messageId, data.content)
         cm.delete_after(agent_id=data.agentId, context_key=data.contextKey, message_id=msg_id)
         history = cm.get_context_history(agent_id=data.agentId, context_key=data.contextKey)
         if history and history[-1].get('role') == 'user':
             history = history[:-1]
-        return history
+        return history, msg_id
 
     entry = _start_chat_stream_task(
         user=user,
@@ -1476,16 +1502,16 @@ async def send_chat_message_stream(request: Request, data: ChatSendRequest, user
 
     cm = ChatManager(user_id=user_id, project_name=project_name)
 
-    def prepare_history() -> list:
+    def prepare_history() -> tuple[list, int]:
         history = cm.get_context_history(agent_id=agent_id, context_key=context_key)
-        cm.append_message(
+        user_message = cm.append_message(
             agent_id=agent_id,
             context_key=context_key,
             role='user',
             content=message,
             metadata=_build_user_message_metadata('direct', data.activeContext, imported_files_meta),
         )
-        return history
+        return history, user_message.id
 
     entry = _start_chat_stream_task(
         user=user,

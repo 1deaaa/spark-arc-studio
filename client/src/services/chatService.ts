@@ -191,6 +191,7 @@ export type ChatTaskStatus = {
   channel?: string;
   startedAt?: number;
   taskId?: string;
+  userMessageId?: number;
   assistantMessageId?: number;
   lastSeq?: number;
   resultMessageId?: number;

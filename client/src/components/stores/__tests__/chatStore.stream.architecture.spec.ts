@@ -2,7 +2,7 @@ import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { createPinia, setActivePinia } from 'pinia';
 import { useChatStore } from '../chatStore';
 import { useDirectorAutoWriteStore } from '../directorAutoWriteStore';
-import { compactChatContext, getChatHistory, getChatTaskStatus } from '@/services/chatService';
+import { cancelChatTask, compactChatContext, getChatHistory, getChatTaskStatus } from '@/services/chatService';
 import bus from '@/eventBus';
 
 vi.mock('@/components/stores/projectStore', () => ({
@@ -15,6 +15,7 @@ vi.mock('@/services/chatService', async () => {
     compactChatContext: vi.fn(),
     getChatHistory: vi.fn(),
     getChatTaskStatus: vi.fn(),
+    cancelChatTask: vi.fn(),
   };
 });
 
@@ -39,6 +40,8 @@ type ConsumeStreamState = {
   streamEpoch: number;
   lastSeq?: number;
   receivedTaskDone?: boolean;
+  userMessageClientId?: string;
+  userMessageContent?: string;
 };
 
 describe('chatStore NDJSON 消费契约', () => {
@@ -131,6 +134,7 @@ describe('chatStore NDJSON 消费契约', () => {
     session.sending = true;
     session.backgroundTaskStatus = 'running';
     session.streamEpoch = 1;
+    session.history = [{ clientId: 'user-local', role: 'user', content: '修正后的问题' }];
 
     const assistantMsg: any = {
       clientId: 'assistant-local',
@@ -149,6 +153,7 @@ describe('chatStore NDJSON 消费契约', () => {
         seq: 1,
         task_id: 'task-1',
         assistant_message_id: 99,
+        user_message_id: 98,
         content: '旧正文',
         reasoning: '旧推理',
         segments: [{ type: 'text', text: '旧正文', source_agent: 'agent_director' }],
@@ -235,10 +240,13 @@ describe('chatStore NDJSON 消费契约', () => {
       agentId: 'agent_director',
       contextKey: 'global',
       streamEpoch: 1,
+      userMessageClientId: 'user-local',
+      userMessageContent: '修正后的问题',
     };
     await store._consumeStream(session, assistantMsg, false, reader, 0, streamState);
 
     expect(assistantMsg.id).toBe(99);
+    expect(session.history[0]).toMatchObject({ clientId: 'user-local', id: 98, content: '修正后的问题' });
     expect(assistantMsg.task_id).toBe('task-1');
     expect(assistantMsg.content).toBe('旧正文新正文');
     expect(assistantMsg.reasoning).toBe('旧推理新推理');
@@ -278,6 +286,30 @@ describe('chatStore NDJSON 消费契约', () => {
     });
 
     vi.runOnlyPendingTimers();
+  });
+
+  it('替换工作中消息时先取消服务端旧任务并等待真实终态', async () => {
+    const store = useChatStore();
+    const session = store.primarySession;
+    const abort = vi.fn();
+    session.abortController = { abort } as unknown as AbortController;
+    vi.mocked(getChatTaskStatus)
+      .mockResolvedValueOnce({ hasTask: true, status: 'running' })
+      .mockResolvedValueOnce({ hasTask: true, status: 'cancelled' });
+    vi.mocked(cancelChatTask).mockResolvedValue({ success: true });
+
+    const replacement = store._cancelAndWaitForChatTaskReplacement(
+      session,
+      'agent_director',
+      'global',
+      '测试项目',
+    );
+    await vi.runAllTimersAsync();
+    await replacement;
+
+    expect(abort).toHaveBeenCalledWith('message_replaced');
+    expect(cancelChatTask).toHaveBeenCalledWith('测试项目', 'agent_director', 'global');
+    expect(getChatTaskStatus).toHaveBeenCalledTimes(2);
   });
 
   it('在 task_done 前消费实时 llm_usage 并更新任务累计用量', async () => {

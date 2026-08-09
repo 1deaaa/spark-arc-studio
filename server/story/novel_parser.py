@@ -87,19 +87,72 @@ def _load_project_outline(user_id: str, project_name: str) -> Dict[str, Any]:
     except Exception:
         return {"nodes": []}
 
+
+_CONCEPTION_FIELD_RE = re.compile(
+    r"^(?P<indent>\s*)(?:[-*]\s*)?[\"']?(?:conception|scene[_ -]?conception|sceneConception)[\"']?\s*[:：=]\s*(?P<value>.*)$",
+    re.IGNORECASE,
+)
+
+
+def clean_novel_visible_text(text: Any) -> str:
+    """清洗小说对用户可见的正文，隐藏仅供模型使用的构思字段。"""
+    raw = str(text or "").replace("\r\n", "\n").replace("\r", "\n")
+    stripped = raw.strip()
+
+    # 模型偶尔会返回 JSON/Markup 对象；只取正文候选字段，丢弃 conception。
+    if stripped.startswith("{") and stripped.endswith("}"):
+        try:
+            payload = json.loads(stripped)
+        except (TypeError, ValueError, json.JSONDecodeError):
+            payload = None
+        if isinstance(payload, dict):
+            for key in ("content", "body", "text", "正文", "novel"):
+                value = payload.get(key)
+                if isinstance(value, str) and value.strip():
+                    raw = value
+                    break
+
+    raw = re.sub(r"<!--.*?-->", "", raw, flags=re.DOTALL)
+    raw = re.sub(
+        r"<conception(?:\s[^>]*)?>.*?(?:</conception\s*>|$)",
+        "",
+        raw,
+        flags=re.DOTALL | re.IGNORECASE,
+    )
+    raw = re.sub(r"<conception\s*/>\s*", "", raw, flags=re.IGNORECASE)
+
+    # 只删除行首的明确字段，正文中正常出现“构思”一词不会被误删。
+    lines: list[str] = []
+    skip_indented = False
+    conception_indent = 0
+    for line in raw.split("\n"):
+        match = _CONCEPTION_FIELD_RE.match(line)
+        if match:
+            skip_indented = not match.group("value").strip()
+            conception_indent = len(match.group("indent").replace("\t", "    "))
+            continue
+        if skip_indented:
+            if not line.strip():
+                continue
+            line_indent = len(line) - len(line.lstrip(" \t"))
+            if line_indent > conception_indent:
+                continue
+            skip_indented = False
+        lines.append(line)
+    raw = "\n".join(lines)
+    raw = re.sub(r"^\s*[@#]?conception\s*$", "", raw, flags=re.IGNORECASE | re.MULTILINE)
+    raw = re.sub(r"\n{3,}", "\n\n", raw)
+    return raw.strip()
+
+
 def parse_scene_md(text: str) -> str:
     """
     清洗单个场景 .md 文件：移除 thought 块与 HTML 注释头。
     """
-    # 移除 <!-- 注释 -->
-    text = re.sub(r'<!--.*?-->', '', text, flags=re.DOTALL)
-    # 移除 <conception>...</conception>
-    text = re.sub(r'<conception>.*?</conception>', '', text, flags=re.DOTALL)
+    text = clean_novel_visible_text(text)
     # 移除可能存在的 @intro 开头的多行信息直到遇到空行或 #
     text = re.sub(r'@intro\s*.*?(?=\n\n|\n#|$)', '', text, flags=re.DOTALL)
     
-    # 清理多余空行，保证最多两个连续换行
-    text = re.sub(r'\n{3,}', '\n\n', text)
     return text.strip()
 
 def get_novel_chapter_list(user_id: str, project_name: str, export_format: str = "md") -> List[Dict[str, Any]]:

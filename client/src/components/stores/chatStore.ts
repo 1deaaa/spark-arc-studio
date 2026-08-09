@@ -955,6 +955,8 @@ export const useChatStore = defineStore('chat', {
           agentId: agentIdAtStart,
           contextKey: contextKeyAtStart,
           streamEpoch,
+          userMessageClientId: userClientId,
+          userMessageContent: text,
         };
         await this._consumeStream(session, assistantMsg, assistantMsgAdded, reader, sessionId, streamState);
 
@@ -1180,6 +1182,28 @@ export const useChatStore = defineStore('chat', {
       } catch {
         return 'unknown';
       }
+    },
+
+    async _cancelAndWaitForChatTaskReplacement(session: ChatSession, agentId: string, contextKey: string, projectName: string) {
+      // 先使旧观察器失效，再通知服务端停止后台线程。
+      if (session.abortController) {
+        session.abortRequested = true;
+        try {
+          session.abortController.abort('message_replaced');
+        } catch {}
+      }
+
+      let status = await getChatTaskStatus(projectName, agentId, contextKey) as AnyRecord;
+      if (!status?.hasTask || status.status !== 'running') return status;
+      await cancelChatTask(projectName, agentId, contextKey);
+
+      const deadline = Date.now() + 10000;
+      while (Date.now() < deadline) {
+        await _delay(100);
+        status = await getChatTaskStatus(projectName, agentId, contextKey) as AnyRecord;
+        if (!status?.hasTask || status.status !== 'running') return status;
+      }
+      throw new Error('上一条聊天任务仍在退出，请稍后重试');
     },
 
     _applyChatTaskAuthorityState(session: ChatSession, state: ChatTaskAuthorityState): boolean {
@@ -1597,7 +1621,6 @@ export const useChatStore = defineStore('chat', {
     async editSessionMessage(sessionId, messageId, newContent) {
       const session = this.sessions[sessionId];
       if (!session || messageId == null || String(messageId).trim() === '') return;
-      if (session.sending) return;
 
       const targetIndex = (session.history || []).findIndex(
         (m) => String(m?.id ?? '') === String(messageId) || String(m?.clientId ?? '') === String(messageId)
@@ -1605,19 +1628,22 @@ export const useChatStore = defineStore('chat', {
       if (targetIndex === -1) return;
 
       const targetMessage = session.history[targetIndex];
-      const hasPersistedId = targetMessage?.id != null && String(targetMessage.id).trim() !== '';
+      let hasPersistedId = targetMessage?.id != null && String(targetMessage.id).trim() !== '';
       if (!hasPersistedId) {
-        const normalizedContent = String(newContent || '').trim();
-        if (!normalizedContent) return;
-        const resolvedContext = resolveMessageContextForEdit(this._contextProvider, targetMessage);
-        const nextHistory = session.history.slice(0, targetIndex + 1);
-        nextHistory[targetIndex] = {
-          ...nextHistory[targetIndex],
-          content: normalizedContent,
-          ...(resolvedContext.messageMetadata ? { metadata: resolvedContext.messageMetadata } : {}),
-        };
-        session.history = nextHistory;
-        return this.sendSessionMessage(sessionId, normalizedContent, undefined, true, resolvedContext);
+        const projectName = this._resolveSessionProjectName(session);
+        if (!projectName) return;
+        const status = await getChatTaskStatus(projectName, session.agentId, session.contextKey) as AnyRecord;
+        const persistedId = status?.userMessageId ?? status?.user_message_id;
+        if (persistedId != null && String(persistedId).trim() !== '') {
+          targetMessage.id = persistedId;
+          hasPersistedId = true;
+        } else {
+          await this.refreshSessionHistory(sessionId, 80, { silent: true, authoritative: true });
+          const refreshed = (session.history || []).filter(item => item?.role === 'user');
+          const candidate = refreshed.slice().reverse().find(item => String(item?.content || '').trim() === String(targetMessage.content || '').trim());
+          if (!candidate?.id) throw new Error('消息尚未完成保存，请稍后再编辑');
+          return this.editSessionMessage(sessionId, candidate.id, newContent);
+        }
       }
 
       const projectName = this._resolveSessionProjectName(session);
@@ -1627,6 +1653,18 @@ export const useChatStore = defineStore('chat', {
       const contextKeyAtStart = session.contextKey;
       const streamEpoch = (session.streamEpoch || 0) + 1;
       session.streamEpoch = streamEpoch;
+
+      try {
+        await this._cancelAndWaitForChatTaskReplacement(session, agentIdAtStart, contextKeyAtStart, projectName);
+      } catch (error) {
+        if (session.streamEpoch === streamEpoch) {
+          session.sending = false;
+          session.backgroundTaskStatus = null;
+          session.abortController = null;
+          session.abortRequested = false;
+        }
+        throw error;
+      }
 
       const abortController = new AbortController();
       this._setSessionAbortController(sessionId, abortController);
@@ -1678,6 +1716,8 @@ export const useChatStore = defineStore('chat', {
           agentId: agentIdAtStart,
           contextKey: contextKeyAtStart,
           streamEpoch,
+          userMessageClientId: targetMessage.clientId,
+          userMessageContent: String(newContent || '').trim(),
         };
         await this._consumeStream(session, assistantMsg, assistantMsgAdded, reader, sessionId, streamState);
 
@@ -2092,6 +2132,26 @@ export const useChatStore = defineStore('chat', {
 
       const applyTaskSnapshot = (evt: AnyRecord) => {
         if (!isStreamCurrent()) return;
+        const userMessageId = evt.user_message_id ?? evt.userMessageId;
+        if (userMessageId != null && String(userMessageId).trim() !== '') {
+          const targetClientId = streamState.userMessageClientId;
+          let userIndex = targetClientId
+            ? (session.history || []).findIndex(item => String(item?.clientId || '') === String(targetClientId))
+            : -1;
+          if (userIndex < 0 && streamState.userMessageContent) {
+            userIndex = (session.history || []).map((item, index) => ({ item, index })).reverse().find(({ item }) => (
+              item?.role === 'user'
+              && !item?.id
+              && String(item?.content || '').trim() === String(streamState.userMessageContent).trim()
+            ))?.index ?? -1;
+          }
+          if (userIndex >= 0) {
+            session.history[userIndex] = {
+              ...session.history[userIndex],
+              id: userMessageId,
+            };
+          }
+        }
         const assistantId = evt.assistant_message_id ?? evt.assistantMessageId ?? evt.result_message_id ?? evt.resultMessageId;
         if (assistantId != null && String(assistantId).trim() !== '') {
           assistantMsg.id = assistantId;

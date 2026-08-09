@@ -4,6 +4,21 @@ from story import novel_parser
 from story.file_naming import build_scene_story_filename
 
 
+def test_novel_visible_text_hides_tagged_field_and_structured_conception() -> None:
+    assert novel_parser.clean_novel_visible_text(
+        '<conception>隐藏构思</conception>正文里的构思一词。'
+    ) == '正文里的构思一词。'
+    assert novel_parser.clean_novel_visible_text(
+        '"conception": "隐藏构思"\n\n正文。'
+    ) == '正文。'
+    assert novel_parser.clean_novel_visible_text(
+        '{"conception":"隐藏构思","content":"正文。"}'
+    ) == '正文。'
+    assert novel_parser.clean_novel_visible_text(
+        'conception:\n  隐藏构思\n\n正文。'
+    ) == '正文。'
+
+
 def test_aggregate_novel_treats_md_as_novel_format(monkeypatch, tmp_path: Path) -> None:
     stories_path = tmp_path / "stories"
     stories_path.mkdir()

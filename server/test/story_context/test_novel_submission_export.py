@@ -20,7 +20,7 @@ def _sample_toc():
             "title": "星火初燃",
             "scenes": [
                 {
-                    "content": "# 场景一\n\n**她**醒来。\n\n> 风声在窗外。",
+                    "content": "# 场景一\n\nconception: 隐藏构思\n\n**她**醒来。\n\n> 风声在窗外。",
                 }
             ],
         },
@@ -59,6 +59,7 @@ def test_submission_zip_exports_plain_chapters():
         assert "**" not in full_text
         assert "`" not in full_text
         assert "她醒来。" in full_text
+        assert "隐藏构思" not in full_text
 
 
 def test_submission_zip_exports_jinjiang_layout():

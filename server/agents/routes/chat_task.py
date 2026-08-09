@@ -46,7 +46,10 @@ class ChatTaskEntry:
 
     # 稳定任务 ID 与可重放事件日志
     task_id: str = field(default_factory=lambda: uuid.uuid4().hex)
+    user_message_id: Optional[int] = None
     assistant_message_id: Optional[int] = None
+    finished_event: threading.Event = field(default_factory=threading.Event)
+    cancel_requested: bool = False
     event_log: List[Dict[str, Any]] = field(default_factory=list)
     next_seq: int = 0
     accumulator: Optional[ChatStreamAccumulator] = None
@@ -158,6 +161,8 @@ class ChatTaskEntry:
             if self.llm_usage:
                 snapshot["metadata"]["llm_usage"] = dict(self.llm_usage)
                 snapshot["llm_usage"] = dict(self.llm_usage)
+            if self.user_message_id is not None:
+                snapshot["user_message_id"] = self.user_message_id
             return snapshot
 
     def build_metadata(self, *, stream_status: str | None = None) -> Dict[str, Any]:
@@ -192,10 +197,10 @@ def _make_task_key(user_id: str, project_name: str, agent_id: str, context_key: 
 
 
 def register_task(entry: ChatTaskEntry) -> None:
-    """注册新的聊天后台任务。如果同 key 已有 running 任务则抛 ValueError。"""
+    """注册新的聊天后台任务，禁止覆盖尚未真正退出的旧代任务。"""
     with _registry_lock:
         existing = _active_chat_tasks.get(entry.task_key)
-        if existing and existing.status == 'running':
+        if existing and not existing.finished_event.is_set():
             raise ValueError(f'聊天任务 {entry.task_key} 已在运行中')
         _active_chat_tasks[entry.task_key] = entry
 
@@ -212,34 +217,50 @@ def get_task_by_parts(user_id: str, project_name: str, agent_id: str, context_ke
 
 
 def cancel_task(task_key: str) -> bool:
-    """取消指定任务（设置 stop_event）。返回 True 表示成功取消，False 表示任务不存在或已结束。"""
+    """请求取消指定任务；最终状态由后台线程在真实退出时写入。"""
     with _registry_lock:
         entry = _active_chat_tasks.get(task_key)
-    if not entry or entry.status != 'running':
+    if not entry or entry.finished_event.is_set() or entry.status != 'running':
         return False
     entry.stop_event.set()
+    entry.cancel_requested = True
     entry.append_control_event({"event": "task_cancel_requested", "status": "cancelled"})
-    entry.status = 'cancelled'
     return True
 
 
-def update_task_status(task_key: str, status: str, **fields: Any) -> None:
+def update_task_status(task_key: str, status: str, *, expected_task_id: str | None = None, **fields: Any) -> None:
     """更新任务状态和字段。"""
     with _registry_lock:
         entry = _active_chat_tasks.get(task_key)
-    if entry:
+    if entry and (expected_task_id is None or entry.task_id == expected_task_id):
         entry.status = status
         for k, v in fields.items():
             if hasattr(entry, k):
                 setattr(entry, k, v)
 
 
-def cleanup_task(task_key: str, delay: float = 60.0) -> None:
-    """延迟清理已结束的任务（给前端/观察者足够时间查询结果并重连）。"""
+def cleanup_task(task_key: str, delay: float = 60.0, *, task_id: str | None = None) -> None:
+    """延迟清理已结束的任务，并校验任务代次避免误删新任务。"""
+    if task_id is None:
+        current = get_task(task_key)
+        task_id = current.task_id if current else None
+
     def _do_cleanup():
         with _registry_lock:
-            _active_chat_tasks.pop(task_key, None)
+            current = _active_chat_tasks.get(task_key)
+            if current and (task_id is None or current.task_id == task_id):
+                _active_chat_tasks.pop(task_key, None)
     threading.Timer(delay, _do_cleanup).start()
+
+
+def wait_for_task_exit(task_key: str, timeout: float = 10.0) -> bool:
+    """等待任务后台线程退出，返回是否已退出。"""
+    entry = get_task(task_key)
+    if not entry:
+        return True
+    if entry.finished_event.is_set():
+        return True
+    return entry.finished_event.wait(max(float(timeout or 0), 0.0))
 
 
 def list_recent_tasks(user_id: str, project_name: str) -> list[ChatTaskEntry]:
@@ -266,6 +287,7 @@ def build_task_status_payload(entry: ChatTaskEntry) -> Dict[str, Any]:
         'retryCount': entry.retry_count,
         'taskId': entry.task_id,
         'assistantMessageId': entry.assistant_message_id,
+        'userMessageId': entry.user_message_id,
         'lastSeq': entry.next_seq,
     }
     if entry.result_message_id is not None:

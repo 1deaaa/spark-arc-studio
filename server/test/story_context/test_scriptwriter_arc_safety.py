@@ -471,3 +471,49 @@ def test_scriptwriter_chat_context_uses_clean_model_visible_arc_view(monkeypatch
     assert "@next" not in captured["history_content"]
     assert "当前文本" in captured["active_context"]
     assert "旧文本" in captured["history_content"]
+
+
+def test_scriptwriter_novel_stream_never_exposes_split_conception_field(monkeypatch) -> None:
+    from types import SimpleNamespace
+
+    from agents import agent_scriptwriter as scriptwriter_module
+    from agents.agent_scriptwriter import ScriptwriterAgent
+    from story.novel_parser import clean_novel_visible_text
+
+    class FakeLlm:
+        def stream(self, _messages):
+            for content in (
+                "concep",
+                "tion: 隐藏构思\n",
+                "\n正文第一",
+                "段。\n",
+                "正文第二段。",
+            ):
+                yield SimpleNamespace(content=content)
+
+    monkeypatch.setattr(
+        scriptwriter_module,
+        "load_prompt",
+        lambda *_args, **_kwargs: {"system": "system", "user": "user"},
+    )
+    agent = object.__new__(ScriptwriterAgent)
+    agent.llm = FakeLlm()
+    agent._get_arc_example = lambda: ""
+    agent._build_chr_reference = lambda _chr_map: ""
+    agent._build_write_messages = lambda **_kwargs: []
+    agent._extract_arc_script = clean_novel_visible_text
+
+    events = list(
+        agent.write_script_stream(
+            context="",
+            worldview="",
+            roles="",
+            export_format="novel",
+        )
+    )
+    visible_chunks = "".join(event["content"] for event in events if event["type"] == "chunk")
+    done = events[-1]
+
+    assert visible_chunks == "正文第一段。\n正文第二段。"
+    assert done["arc_script"] == visible_chunks
+    assert "隐藏构思" not in visible_chunks

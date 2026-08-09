@@ -6,6 +6,7 @@ import json
 import threading
 import time
 
+import pytest
 from langchain_core.messages import HumanMessage, ToolMessage
 
 from agents.communication import (
@@ -21,7 +22,13 @@ from agents.routes.chat import (
     _run_chat_background_context,
     _run_chat_stream_with_retry,
 )
-from agents.routes.chat_task import ChatTaskEntry
+from agents.routes.chat_task import (
+    ChatTaskEntry,
+    cancel_task,
+    cleanup_task,
+    get_task,
+    register_task,
+)
 from core.request_context import (
     current_llm_usage_reporter,
     current_scriptwriter_prewrite_receipt,
@@ -42,6 +49,33 @@ def make_entry() -> ChatTaskEntry:
         started_at=time.time(),
         assistant_message_id=42,
     )
+
+
+def test_chat_task_replacement_waits_for_real_exit_and_cleanup_is_generation_safe() -> None:
+    task_key = f"u:p:agent_director:generation-{time.time_ns()}"
+    first = make_entry()
+    first.task_key = task_key
+    register_task(first)
+
+    assert cancel_task(task_key) is True
+    assert first.stop_event.is_set()
+    assert first.cancel_requested is True
+    assert first.status == "running"
+
+    second = make_entry()
+    second.task_key = task_key
+    with pytest.raises(ValueError, match="已在运行中"):
+        register_task(second)
+
+    first.status = "cancelled"
+    first.finished_event.set()
+    register_task(second)
+    cleanup_task(task_key, delay=0, task_id=first.task_id)
+    time.sleep(0.02)
+    assert get_task(task_key) is second
+
+    second.finished_event.set()
+    cleanup_task(task_key, delay=0, task_id=second.task_id)
 
 
 def test_chat_background_context_shares_prewrite_receipt_with_tool_subcontexts() -> None:
@@ -191,6 +225,7 @@ def test_chat_task_entry_replays_seq_and_builds_snapshot_segments() -> None:
         "tool_result": "完成",
     })
     entry.append_event({"event": "assistant_delta", "text": "正文二", "source_agent": "agent_lorebook"})
+    entry.user_message_id = 41
 
     assert [event["seq"] for event in entry.event_log] == [1, 2, 3, 4, 5, 6]
     assert [event["seq"] for event in entry.get_events_after(3)] == [4, 5, 6]
@@ -199,6 +234,7 @@ def test_chat_task_entry_replays_seq_and_builds_snapshot_segments() -> None:
     assert snapshot["event"] == "task_snapshot"
     assert snapshot["seq"] == 6
     assert snapshot["assistant_message_id"] == 42
+    assert snapshot["user_message_id"] == 41
     assert snapshot["content"] == "正文一正文二"
     assert snapshot["reasoning"] == "思考"
 
