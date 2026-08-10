@@ -9,6 +9,7 @@
 
 from __future__ import annotations
 
+import asyncio
 import threading
 import time
 import uuid
@@ -56,6 +57,7 @@ class ChatTaskEntry:
     log_lock: threading.RLock = field(default_factory=threading.RLock)
     last_checkpoint_seq: int = 0
     last_checkpoint_at: float = 0.0
+    observer_signals: set[tuple[asyncio.AbstractEventLoop, asyncio.Event]] = field(default_factory=set)
 
     def __post_init__(self) -> None:
         if self.accumulator is None:
@@ -79,7 +81,9 @@ class ChatTaskEntry:
             self.event_log.append(payload)
             if accumulate and self.accumulator is not None:
                 self.accumulator.append_event(payload, seq=self.next_seq)
-            return dict(payload)
+            result = dict(payload)
+        self.notify_observers()
+        return result
 
     def append_control_event(self, event: Dict[str, Any]) -> Dict[str, Any]:
         return self.append_event(event, accumulate=False)
@@ -183,6 +187,24 @@ class ChatTaskEntry:
                 self.accumulator = ChatStreamAccumulator(channel=self.channel, task_id=self.task_id)
             self.accumulator.reset_for_retry()
 
+    def subscribe(self, loop: asyncio.AbstractEventLoop, signal: asyncio.Event) -> None:
+        with self.log_lock:
+            self.observer_signals.add((loop, signal))
+
+    def unsubscribe(self, loop: asyncio.AbstractEventLoop, signal: asyncio.Event) -> None:
+        with self.log_lock:
+            self.observer_signals.discard((loop, signal))
+
+    def notify_observers(self) -> None:
+        """从后台线程安全唤醒所有异步观察者。"""
+        with self.log_lock:
+            observers = list(self.observer_signals)
+        for loop, signal in observers:
+            try:
+                loop.call_soon_threadsafe(signal.set)
+            except RuntimeError:
+                self.unsubscribe(loop, signal)
+
 
 # ─────────────────────────────────────────────────────────────────────────────
 # 全局注册表
@@ -233,10 +255,12 @@ def update_task_status(task_key: str, status: str, *, expected_task_id: str | No
     with _registry_lock:
         entry = _active_chat_tasks.get(task_key)
     if entry and (expected_task_id is None or entry.task_id == expected_task_id):
-        entry.status = status
-        for k, v in fields.items():
-            if hasattr(entry, k):
-                setattr(entry, k, v)
+        with entry.log_lock:
+            entry.status = status
+            for k, v in fields.items():
+                if hasattr(entry, k):
+                    setattr(entry, k, v)
+        entry.notify_observers()
 
 
 def cleanup_task(task_key: str, delay: float = 60.0, *, task_id: str | None = None) -> None:

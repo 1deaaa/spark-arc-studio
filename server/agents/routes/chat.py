@@ -824,31 +824,47 @@ def _checkpoint_chat_task(cm: ChatManager, entry: ChatTaskEntry, *, force: bool 
 async def _observe_chat_task_events(request: Request, entry: ChatTaskEntry, *, after_seq: int = 0, include_snapshot: bool = True):
     """Yield replayable NDJSON events for one observer without consuming the task log."""
     cursor = max(0, int(after_seq or 0))
-    if include_snapshot:
-        snapshot = entry.build_snapshot()
-        yield _serialize_stream_event(snapshot)
-        cursor = max(cursor, int(snapshot.get("seq") or 0))
+    loop = asyncio.get_running_loop()
+    signal = asyncio.Event()
+    entry.subscribe(loop, signal)
+    try:
+        if include_snapshot:
+            snapshot = entry.build_snapshot()
+            yield _serialize_stream_event(snapshot)
+            cursor = max(cursor, int(snapshot.get("seq") or 0))
 
-    heartbeat_interval = 5.0
-    last_heartbeat = time.time()
-    while True:
-        events = entry.get_events_after(cursor)
-        if events:
-            for event in events:
-                cursor = max(cursor, int(event.get("seq") or 0))
-                yield _serialize_stream_event(event)
-            continue
+        heartbeat_interval = 5.0
+        last_heartbeat = time.time()
+        while True:
+            events = entry.get_events_after(cursor)
+            if events:
+                for event in events:
+                    cursor = max(cursor, int(event.get("seq") or 0))
+                    yield _serialize_stream_event(event)
+                continue
 
-        if entry.status != 'running':
-            break
-        if request and await request.is_disconnected():
-            break
+            if entry.status != 'running':
+                break
+            if request and await request.is_disconnected():
+                break
 
-        current = time.time()
-        if current - last_heartbeat >= heartbeat_interval:
-            yield _serialize_stream_event({"event": "heartbeat"})
-            last_heartbeat = current
-        await asyncio.sleep(0.05)
+            signal.clear()
+            # 清除信号后重新检查，避免事件恰好落在查询与 clear 之间造成漏唤醒。
+            if entry.get_events_after(cursor) or entry.status != 'running':
+                continue
+
+            remaining = max(0.05, heartbeat_interval - (time.time() - last_heartbeat))
+            try:
+                await asyncio.wait_for(signal.wait(), timeout=min(remaining, 1.0))
+            except asyncio.TimeoutError:
+                pass
+
+            current = time.time()
+            if current - last_heartbeat >= heartbeat_interval:
+                yield _serialize_stream_event({"event": "heartbeat"})
+                last_heartbeat = current
+    finally:
+        entry.unsubscribe(loop, signal)
 
 
 @chat_router.get('/api/chat/history')

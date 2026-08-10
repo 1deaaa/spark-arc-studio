@@ -29,6 +29,7 @@ from agents.routes.chat_task import (
     get_task,
     register_task,
 )
+from agents.chat_manager import mark_stream_metadata_interrupted
 from core.request_context import (
     current_llm_usage_reporter,
     current_scriptwriter_prewrite_receipt,
@@ -270,6 +271,64 @@ def test_observer_replays_snapshot_then_events_after_cursor() -> None:
     assert len(rows) == 1
     assert '"seq": 2' in rows[0]
     assert '"二"' in rows[0]
+
+
+def test_observer_is_woken_by_background_event_without_polling() -> None:
+    entry = make_entry()
+
+    class Request:
+        async def is_disconnected(self) -> bool:
+            return False
+
+    async def collect_rows():
+        rows = []
+
+        async def produce() -> None:
+            await asyncio.sleep(0.01)
+            entry.append_event({"event": "assistant_delta", "text": "即时事件"})
+            entry.append_control_event({"event": "task_done", "status": "completed"})
+            entry.status = "completed"
+            entry.notify_observers()
+
+        producer = asyncio.create_task(produce())
+        async for line in _observe_chat_task_events(Request(), entry, include_snapshot=False):
+            rows.append(json.loads(line))
+        await producer
+        return rows
+
+    rows = asyncio.run(collect_rows())
+
+    assert [row["event"] for row in rows] == ["assistant_delta", "task_done"]
+    assert rows[0]["text"] == "即时事件"
+
+
+def test_stale_running_chat_metadata_becomes_interrupted_without_losing_progress() -> None:
+    original = {
+        "stream_status": "running",
+        "stream_seq": 12,
+        "segments": [
+            {"type": "text", "text": "已生成正文"},
+            {"type": "tool_trace", "tool_name": "rewrite_outline", "status": "running"},
+        ],
+        "tool_traces": [
+            {"tool_name": "rewrite_outline", "status": "running"},
+        ],
+    }
+
+    repaired, changed = mark_stream_metadata_interrupted(original)
+
+    assert changed is True
+    assert original["stream_status"] == "running"
+    assert repaired["stream_status"] == "error"
+    assert repaired["finish_reason"] == "interrupted"
+    assert repaired["stream_seq"] == 12
+    assert repaired["segments"][0]["text"] == "已生成正文"
+    assert repaired["segments"][1]["status"] == "failed"
+    assert repaired["tool_traces"][0]["status"] == "failed"
+
+    unchanged, changed_again = mark_stream_metadata_interrupted(repaired)
+    assert changed_again is False
+    assert unchanged == repaired
 
 
 def test_chat_stream_retry_suppresses_intermediate_error_events(monkeypatch) -> None:

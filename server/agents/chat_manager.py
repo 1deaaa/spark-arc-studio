@@ -16,12 +16,72 @@ from sqlalchemy import delete, func, select
 from agents.context_budget import CONTEXT_CHECKPOINT_KIND, LEGACY_CONTEXT_SUMMARY_KIND
 from agents.text_search import compile_search_pattern, search_first_match
 
+
+_INTERRUPTED_CHAT_MESSAGE = "服务上次退出时聊天任务仍在运行，已保留退出前的生成进度。"
+
+
+def mark_stream_metadata_interrupted(metadata: Dict[str, Any]) -> tuple[Dict[str, Any], bool]:
+    """把遗留的运行中消息收口为可展示的中断终态。"""
+    current = dict(metadata or {})
+    if current.get("stream_status") != "running":
+        return current, False
+
+    current.update({
+        "stream_status": "error",
+        "finish_reason": "interrupted",
+        "interrupted": True,
+        "error": _INTERRUPTED_CHAT_MESSAGE,
+        "interrupted_at": int(time.time()),
+    })
+
+    tool_traces = []
+    for trace in current.get("tool_traces") or []:
+        item = dict(trace) if isinstance(trace, dict) else trace
+        if isinstance(item, dict) and item.get("status") in {"started", "running"}:
+            item["status"] = "failed"
+            item.setdefault("message", _INTERRUPTED_CHAT_MESSAGE)
+        tool_traces.append(item)
+    if tool_traces:
+        current["tool_traces"] = tool_traces
+
+    segments = []
+    for segment in current.get("segments") or []:
+        item = dict(segment) if isinstance(segment, dict) else segment
+        if isinstance(item, dict) and item.get("status") in {"started", "running"}:
+            item["status"] = "failed"
+            item.setdefault("message", _INTERRUPTED_CHAT_MESSAGE)
+        segments.append(item)
+    if segments:
+        current["segments"] = segments
+    return current, True
+
+
 class ChatManager:
     """Database-backed chat history."""
 
     def __init__(self, user_id: str | int, project_name: str):
         self.user_id = int(user_id)
         self.project_name = str(project_name)
+
+    @staticmethod
+    def mark_interrupted_stream_messages() -> int:
+        """启动时修复上次进程退出遗留的聊天运行态，并保留最后 checkpoint。"""
+        repaired = 0
+        with UserInfoSession() as session:
+            stmt = (
+                select(ChatMessage)
+                .where(ChatMessage.role == "assistant")
+                .where(ChatMessage.metadata_json.is_not(None))
+            )
+            for message in session.execute(stmt).scalars():
+                metadata, changed = mark_stream_metadata_interrupted(dict(message.metadata_json or {}))
+                if not changed:
+                    continue
+                message.metadata_json = metadata
+                repaired += 1
+            if repaired:
+                session.commit()
+        return repaired
 
     def append_message(
         self,

@@ -427,13 +427,8 @@ export const useChatStore = defineStore('chat', {
     _invalidateSessionStream(sessionId) {
       const session = this.sessions[sessionId];
       if (!session) return;
-      // 状态唯一性收口：切换 agent / contextKey / 关闭窗口时，必须把"前端清零 sending"
-      // 与"后端取消任务"两个动作一并完成，否则后端 _active_chat_tasks 中残留的
-      // running 任务会在用户下一次发送时抛 409（"该会话已有任务在执行"），
-      // 导致按钮可用但发送失败的状态分歧。fire-and-forget 即可，不阻塞 UI。
-      const wasRunning = !!(session.sending || session.backgroundTaskStatus === 'running');
-      const agentIdSnapshot = session.agentId;
-      const contextKeySnapshot = session.contextKey;
+      // 关闭窗口、切换 Agent 或上下文只代表前端停止观察，不能隐式取消后端任务。
+      // 后台任务的生命周期只由显式“停止”操作或后端终态控制。
       session.streamEpoch = (session.streamEpoch || 0) + 1;
       if (session.toolClearTimer) {
         clearTimeout(session.toolClearTimer);
@@ -453,14 +448,6 @@ export const useChatStore = defineStore('chat', {
       session.toolProgressText = '';
       session.toolStateStartedAt = 0;
       _clearRetryState(session);
-
-      if (wasRunning && agentIdSnapshot) {
-        const projectName = session.projectName;
-        if (projectName) {
-          // fire-and-forget：失败也不阻塞，后端最终会通过 60s cleanup 自然清理
-          cancelChatTask(projectName, agentIdSnapshot, contextKeySnapshot || 'global').catch(() => {});
-        }
-      }
     },
 
     /** 注册全局上下文提供器 */
@@ -811,24 +798,39 @@ export const useChatStore = defineStore('chat', {
       const session = this.sessions[sessionId];
       if (!session) return;
 
-      // 如果有后台任务在跑，通知后端取消
-      if (session.sending || session.backgroundTaskStatus === 'running') {
-        const projectName = this._resolveSessionProjectName(session);
-        if (projectName) {
-          try {
-            await cancelChatTask(projectName, session.agentId, session.contextKey);
-          } catch {
-            // 后端取消失败不阻塞前端流程
-          }
+      if (!session.sending && session.backgroundTaskStatus !== 'running') return;
+      const projectName = this._resolveSessionProjectName(session);
+      if (!projectName) return;
+
+      // “已请求取消”不等于“任务已退出”。保留观察流和发送锁，直到后端发出 task_done。
+      let result;
+      try {
+        result = await cancelChatTask(projectName, session.agentId, session.contextKey);
+      } catch (error) {
+        session.sending = true;
+        session.backgroundTaskStatus = 'running';
+        bus.emit('toast', {
+          type: 'error',
+          message: _getErrorMessage(error, i18n.global.t('components.chatMessageList.cancelFailed')),
+        });
+        return;
+      }
+      if (!result.success) {
+        const state = await this._getChatTaskAuthorityState(session.agentId, session.contextKey, projectName);
+        this._applyChatTaskAuthorityState(session, state);
+        if (state === 'terminal' || state === 'missing') {
+          await this.refreshSessionHistory(sessionId, 80, { silent: true, authoritative: true });
         }
+        return;
       }
 
-      // 中断前端 HTTP 请求读取
-      if (session.abortController) {
-        session.abortRequested = true;
-        session.abortController.abort('user_cancelled');
+      session.sending = true;
+      session.backgroundTaskStatus = 'running';
+      if (!session.abortController || session.abortController.signal.aborted) {
+        void this._reconnectTaskStream(session, session.agentId, session.contextKey).catch(error => {
+          console.warn('恢复取消中的聊天任务观察流失败', error);
+        });
       }
-      session.backgroundTaskStatus = null;
     },
 
     // ==================== 统一的会话操作 ====================
@@ -894,6 +896,33 @@ export const useChatStore = defineStore('chat', {
       if (!projectName) throw new Error('未选择项目');
       const text = (message || '').trim();
       if (!text) return;
+
+      // 本地状态可能因刷新、窗口切换或旧版客户端取消竞态而落后。
+      // 提交新任务前先向后端确认房间所有权，避免乐观消息写入后才收到 409。
+      // 查询本身也是提交临界区，必须先占本地锁，防止双击并发通过预检。
+      session.sending = true;
+      let authoritativeStatus: AnyRecord;
+      try {
+        authoritativeStatus = await getChatTaskStatus(projectName, session.agentId, session.contextKey) as AnyRecord;
+      } catch (error) {
+        session.sending = false;
+        throw error;
+      }
+      if (authoritativeStatus?.hasTask && authoritativeStatus.status === 'running') {
+        session.backgroundTaskStatus = 'running';
+        session.lastError = '';
+        applyPersistedTokenStats(session, authoritativeStatus);
+        if (!session.abortController || session.abortController.signal.aborted) {
+          void this._reconnectTaskStream(session, session.agentId, session.contextKey).catch(error => {
+            console.warn('恢复已有聊天任务观察流失败', error);
+          });
+        }
+        bus.emit('toast', {
+          type: 'info',
+          message: i18n.global.t('components.chatMessageList.reconnectWaiting'),
+        });
+        return;
+      }
 
       const agentIdAtStart = session.agentId;
       const contextKeyAtStart = session.contextKey;

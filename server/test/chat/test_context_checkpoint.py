@@ -72,6 +72,41 @@ def _checkpoint(boundary: int, *, summary: str = "早期摘要", original_messag
     }
 
 
+def test_startup_repair_persists_interrupted_chat_progress(isolated_chat_db) -> None:
+    manager = ChatManager(user_id=1, project_name="项目")
+    running = manager.append_message(
+        agent_id="agent_director",
+        context_key="global",
+        role="assistant",
+        content="退出前已生成的正文",
+        metadata={
+            "stream_status": "running",
+            "stream_seq": 9,
+            "segments": [{"type": "text", "text": "退出前已生成的正文"}],
+        },
+    )
+    completed = manager.append_message(
+        agent_id="agent_director",
+        context_key="global",
+        role="assistant",
+        content="已完成正文",
+        metadata={"stream_status": "completed", "stream_seq": 3},
+    )
+
+    repaired = ChatManager.mark_interrupted_stream_messages()
+
+    assert repaired == 1
+    with isolated_chat_db() as session:
+        repaired_message = session.get(ChatMessage, running.id)
+        completed_message = session.get(ChatMessage, completed.id)
+        assert repaired_message.content == "退出前已生成的正文"
+        assert repaired_message.metadata_json["stream_status"] == "error"
+        assert repaired_message.metadata_json["finish_reason"] == "interrupted"
+        assert repaired_message.metadata_json["stream_seq"] == 9
+        assert repaired_message.metadata_json["segments"][0]["text"] == "退出前已生成的正文"
+        assert completed_message.metadata_json == {"stream_status": "completed", "stream_seq": 3}
+
+
 def test_runtime_history_uses_latest_checkpoint_and_keeps_original_searchable(isolated_chat_db) -> None:
     manager = ChatManager(user_id=1, project_name="项目")
     first_user = manager.append_message(agent_id="agent_director", context_key="global", role="user", content="最早的蓝色钟楼设定")

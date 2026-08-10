@@ -76,6 +76,73 @@ describe('chatStore NDJSON 消费契约', () => {
     expect(store.sending).toBe(true);
   });
 
+  it('断开本地观察流不会隐式取消后端任务', () => {
+    const store = useChatStore();
+    const session = store.primarySession;
+    session.sending = true;
+    session.backgroundTaskStatus = 'running';
+
+    store._invalidateSessionStream(session.id);
+
+    expect(cancelChatTask).not.toHaveBeenCalled();
+    expect(session.sending).toBe(false);
+    expect(session.backgroundTaskStatus).toBeNull();
+  });
+
+  it('显式取消成功后保持锁定直到服务端终态', async () => {
+    vi.mocked(cancelChatTask).mockResolvedValueOnce({ success: true });
+    const store = useChatStore();
+    const session = store.primarySession;
+    session.sending = true;
+    session.backgroundTaskStatus = 'running';
+    session.abortController = new AbortController();
+
+    await store.cancelSessionRequest(session.id);
+
+    expect(cancelChatTask).toHaveBeenCalledWith('测试项目', 'agent_director', 'global');
+    expect(session.abortController.signal.aborted).toBe(false);
+    expect(session.sending).toBe(true);
+    expect(session.backgroundTaskStatus).toBe('running');
+  });
+
+  it('取消请求失败时保持运行锁并提示错误', async () => {
+    vi.mocked(cancelChatTask).mockRejectedValueOnce(new Error('取消任务失败'));
+    const store = useChatStore();
+    const session = store.primarySession;
+    session.sending = true;
+    session.backgroundTaskStatus = 'running';
+    const toasts: any[] = [];
+    const onToast = (payload: any) => toasts.push(payload);
+    bus.on('toast', onToast);
+
+    await store.cancelSessionRequest(session.id);
+
+    bus.off('toast', onToast);
+    expect(session.sending).toBe(true);
+    expect(session.backgroundTaskStatus).toBe('running');
+    expect(toasts.at(-1)?.type).toBe('error');
+  });
+
+  it('发送前发现后端已有任务时恢复观察且不追加乐观消息', async () => {
+    vi.mocked(getChatTaskStatus).mockResolvedValueOnce({
+      hasTask: true,
+      status: 'running',
+      agentId: 'agent_director',
+      contextKey: 'global',
+      lastSeq: 8,
+    });
+    const store = useChatStore();
+    const session = store.primarySession;
+    const reconnectSpy = vi.spyOn(store, '_reconnectTaskStream').mockResolvedValueOnce(undefined);
+
+    await store.sendSessionMessage(session.id, '新消息');
+
+    expect(session.history).toEqual([]);
+    expect(session.sending).toBe(true);
+    expect(session.backgroundTaskStatus).toBe('running');
+    expect(reconnectSpy).toHaveBeenCalledWith(session, 'agent_director', 'global');
+  });
+
   it('切换项目后旧项目流只更新其绑定会话，返回时仍可继续查看', async () => {
     const store = useChatStore();
     store.switchProject('huang');

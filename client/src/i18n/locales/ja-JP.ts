@@ -1103,6 +1103,7 @@ const jaJP = {
       reconnectWaiting: '接続が切断されました。バックグラウンドタスクから進捗を同期しています',
       retryFailed: '{max}回の再試行後に失敗',
       backgroundTaskError: 'バックグラウンドタスクでエラーが発生しました',
+      cancelFailed: 'チャットタスクを停止できませんでした。実行状態は維持されます。',
       workTrackerUpdatedAt: '{time}に更新',
       progressBoardTitle: '{agent} · 進捗ボード',
       openProgressBoard: '{agent} の進捗ボードを開く',

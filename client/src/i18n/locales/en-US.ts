@@ -1103,6 +1103,7 @@ const enUS = {
       reconnectWaiting: 'Connection lost. Catching up from the background task',
       retryFailed: 'Failed after {max} retries',
       backgroundTaskError: 'Background task failed',
+      cancelFailed: 'Failed to stop the chat task. Its running state will be preserved.',
       workTrackerUpdatedAt: 'Updated {time}',
       progressBoardTitle: '{agent} · Progress',
       openProgressBoard: 'Open {agent} progress board',

@@ -1101,6 +1101,7 @@ const zhCN = {
       reconnectWaiting: '连接中断，正在从后台任务追平进度',
       retryFailed: '重试{max}次后仍然失败',
       backgroundTaskError: '后台任务出错',
+      cancelFailed: '停止聊天任务失败，任务状态将继续保持',
       workTrackerUpdatedAt: '更新于 {time}',
       progressBoardTitle: '{agent} · 进度板',
       openProgressBoard: '查看 {agent} 的进度板',

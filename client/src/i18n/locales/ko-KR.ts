@@ -1101,6 +1101,7 @@ const koKR = {
       reconnectWaiting: '연결이 끊겼습니다. 백그라운드 작업에서 진행 상황을 따라잡는 중입니다',
       retryFailed: '총 {max}회 재호출을 시도했으나 응답 확보 실패',
       backgroundTaskError: '백그라운드 연산 도중 에러 발생',
+      cancelFailed: '채팅 작업을 중지하지 못했습니다. 실행 상태가 유지됩니다.',
       workTrackerUpdatedAt: '{time} 에 마지막 업데이트됨',
       progressBoardTitle: '{agent} · 진행도',
       openProgressBoard: '{agent} 진행도 보드 열기',
