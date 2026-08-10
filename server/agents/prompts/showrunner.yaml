@@ -110,20 +110,20 @@ generate_synopsis:
   user: |
     {story_tags}
 
-    ### 核心概念 (Logline):
-    {logline}
-
     ### 世界观设定 (Worldview):
     {worldview}
 
     ### 角色档案 (Cast):
     {roles}
 
-    ### 导演指导 (Guidance):
-    {guidance}
-
     ### 风格参考 (Style Profile):
     {style_profile}
+
+    ### 核心概念 (Logline):
+    {logline}
+
+    ### 导演指导 (Guidance):
+    {guidance}
 
     ### 用户长度意向:
     {length_hint}
@@ -183,20 +183,20 @@ generate_beat_sheet:
   user: |
     {story_tags}
 
-    ### 故事梗概 (Synopsis):
-    {synopsis}
-
     ### 世界观设定 (Worldview):
     {worldview}
 
     ### 角色档案 (Cast):
     {roles}
 
-    ### 导演指导 (Guidance):
-    {guidance}
-
     ### 风格参考 (Style Profile):
     {style_profile}
+
+    ### 故事梗概 (Synopsis):
+    {synopsis}
+
+    ### 导演指导 (Guidance):
+    {guidance}
 
     ### 预估体量:
     {length_hint}
@@ -282,6 +282,9 @@ generate_outline:
     ### 角色档案 (Cast)：
     {roles}
 
+    ### 风格参考 (Style Profile):
+    {style_profile}
+
     ### 当前上下文/前情提要 (Context)：
     {context}
 
@@ -290,9 +293,6 @@ generate_outline:
 
     ### 导演指导 (Guidance)：
     {guidance}
-
-    ### 风格参考 (Style Profile):
-    {style_profile}
 
     ### 本轮数量建议:
     用户推荐章节目标约 {chapter_count} 章，场景密度参考约 {scene_count_per_chapter} 场/章（若是"不限"则由你根据故事体量自主决断）。

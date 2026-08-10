@@ -211,3 +211,45 @@ def test_usage_callback_notifies_host_after_usage_commit(monkeypatch) -> None:
         "success": True,
         "context_key": None,
     }]
+
+
+def test_usage_callback_falls_back_to_context_captured_at_creation(monkeypatch) -> None:
+    from llm.agen_matchbox.tracked_model import UsageTrackingCallback
+
+    class FakeSession:
+        def __enter__(self):
+            return self
+
+        def __exit__(self, *_args):
+            return False
+
+        def add(self, entry):
+            self.entry = entry
+
+        def flush(self):
+            return None
+
+        def commit(self):
+            return None
+
+    current_context = ["batch-context"]
+    events = []
+    monkeypatch.setattr(
+        "llm.agen_matchbox.tracked_model.settle_usage_entry_credit",
+        lambda *_args, **_kwargs: None,
+    )
+    callback = UsageTrackingCallback(
+        user_id="u",
+        model_id=1,
+        platform_id=2,
+        model_name="offline-model",
+        platform_name="offline-provider",
+        session_maker=FakeSession,
+        usage_context_provider=lambda: current_context[0],
+        usage_recorded_handler=events.append,
+    )
+
+    current_context[0] = None
+    callback._record_usage(prompt_tokens=3, completion_tokens=1)
+
+    assert events[0]["context_key"] == "batch-context"

@@ -220,6 +220,24 @@ def _build_director_prompt_context(
     return system_instruction, runtime_context
 
 
+def _append_director_runtime_user_message(
+    messages: List[Any],
+    *,
+    current_user_message: str,
+    active_context: str,
+    runtime_tail: str,
+) -> List[Any]:
+    """保留历史前缀，在末尾追加本轮刷新后的动态项目现场。"""
+    result = list(messages)
+    if active_context or runtime_tail:
+        result.append(HumanMessage(content=build_current_user_message(
+            user_message=current_user_message,
+            active_context=active_context,
+            runtime_tail=runtime_tail,
+        )))
+    return result
+
+
 # ==================== 导演节点 ====================
 
 def director_node(state: DirectorState) -> Dict[str, Any]:
@@ -317,17 +335,14 @@ def director_node(state: DirectorState) -> Dict[str, Any]:
         project_name,
         "agent_director",
     )
-    if active_context or runtime_tail:
-        for index in range(len(messages_with_system) - 1, -1, -1):
-            if isinstance(messages_with_system[index], HumanMessage):
-                messages_with_system[index] = HumanMessage(
-                    content=build_current_user_message(
-                        user_message=current_user_message,
-                        active_context=active_context,
-                        runtime_tail=runtime_tail,
-                    )
-                )
-                break
+    # 项目状态会在委派后刷新。只能追加到历史尾部，不能覆盖最早用户消息，
+    # 否则一次状态变化会让它之后的全部历史前缀失去缓存。
+    messages_with_system = _append_director_runtime_user_message(
+        messages_with_system,
+        current_user_message=current_user_message,
+        active_context=active_context,
+        runtime_tail=runtime_tail,
+    )
 
     stream_events = []
     from agents.context_budget import rebudget_existing_messages

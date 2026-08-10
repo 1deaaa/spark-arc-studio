@@ -172,15 +172,6 @@ system: |
 user: |
   {story_tags}
 
-  ### 审阅目标：
-  {review_target}
-
-  ### 前情提要：
-  {context}
-
-  ### 写作指导：
-  {guidance}
-
   ### 世界观：
   {worldview}
 
@@ -189,6 +180,15 @@ user: |
 
   ### 作者风格档案（参考）：
   {style_profile}
+
+  ### 审阅目标：
+  {review_target}
+
+  ### 前情提要：
+  {context}
+
+  ### 写作指导：
+  {guidance}
 
   ### 待审阅剧本：
   {script}

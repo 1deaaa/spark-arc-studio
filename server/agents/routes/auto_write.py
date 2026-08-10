@@ -9,8 +9,7 @@ Auto-Write API - 自动化剧本撰写的异步批处理引擎。
 
 【工作流核心机制】
 1. 状态落地：通过 `auto_write_state.py` 将当前运行游标（Chapter / Scene Index）实时落盘。
-2. 线程隔离与心跳通信：长耗时的 AI 调用被推入子线程，通过 `queue.Queue` 与主协程通讯，主协程
-   负责发送 Keep-Alive 心跳 (`: heartbeat\\n\\n`) 和定时打包的 progress 进度帧，防止前端或网关超时断连。
+2. 线程隔离：长耗时的 AI 调用通过 `asyncio.to_thread` 执行，避免阻塞事件循环。
 3. 状态帧约定：推送极为精细的语义帧：
    - chapter_start / scene_start / streaming
    - chapter_saved / scene_completed
@@ -25,22 +24,20 @@ Auto-Write API - 自动化剧本撰写的异步批处理引擎。
 import json
 import os
 import asyncio
-import contextvars
 import time
-import queue
 import threading
 from typing import Optional, List, Dict, Any, Callable
 from fastapi import APIRouter, Depends, Request
 from fastapi.responses import StreamingResponse
 
 from core.auth import get_current_user
-from core.utils import get_project_path, get_project_stories_path
+from core.utils import get_project_path
 from core.project_settings import get_project_story_tags, get_workspace_mode
 from agents.agent_scriptwriter import ScriptwriterAgent
 from agents.scriptwriter_prewrite import (
     PREWRITE_STATUS_MESSAGE,
     ScriptwriterPreWriteRequest,
-    run_autonomous_scriptwriter_prewrite,
+    run_autonomous_scriptwriter_creation,
 )
 from agents.agent_critic import CriticAgent
 from .stream_semantics import (
@@ -70,11 +67,13 @@ from .context_builder import (
     load_worldview,
     load_all_roles,
     load_full_outline,
-    load_narrative_memory,
     build_scene_context,
     build_story_tags_hint,
 )
-from agents.agent_style.utils import load_project_style_profile
+from agents.agent_style.utils import (
+    format_style_profile_for_prompt,
+    load_project_style_profile,
+)
 
 auto_write_router = APIRouter()
 
@@ -283,7 +282,6 @@ async def generate_script_stream(
     worldview = load_worldview(user_id, project_name)
     roles, chr_map = load_all_roles(user_id, project_name)
     full_outline = load_full_outline(user_id, project_name)
-    narrative_memory, _ = load_narrative_memory(user_id, project_name)
     style_profile = load_project_style_profile(user_id=user_id, project_name=project_name)
     
     # ── 加载项目级故事主题参数（story_tags）────────────────────────────────
@@ -431,14 +429,6 @@ async def generate_script_stream(
             filename = os.path.basename(filepath)
             display_filename = strip_story_filename_meta(filename)
             
-            scene_arc_content = []
-            if export_format != "novel":
-                scene_arc_content.append(f"<!-- 章节 {chapter_num}: {chapter_title} -->")
-                if chapter.get("description"):
-                    scene_arc_content.append(f"<!-- {chapter.get('description')} -->")
-                scene_arc_content.append(f"<!-- 场景 {scene_idx + 1}: {scene_title} -->")
-                scene_arc_content.append("")
-            
             update_state(
                 "running",
                 nextChapterIndex=i,
@@ -518,12 +508,21 @@ async def generate_script_stream(
             )
 
             def report_prewrite_tool(tool_name: str) -> None:
-                """更新可恢复状态，并把当前只读调研工具送入观察者日志。"""
+                """更新可恢复状态，并把当前调查或落盘工具送入观察者日志。"""
                 normalized_tool_name = str(tool_name or "").strip()
+                is_writing_tool = normalized_tool_name in {
+                    "create_chapter",
+                    "create_or_rewrite_script",
+                }
+                phase_message = (
+                    f"正在撰写：{chapter_title} - {scene_title}"
+                    if is_writing_tool
+                    else PREWRITE_STATUS_MESSAGE
+                )
                 update_state(
                     "running",
-                    phase="prewrite",
-                    phaseMessage=PREWRITE_STATUS_MESSAGE,
+                    phase="writing" if is_writing_tool else "prewrite",
+                    phaseMessage=phase_message,
                     phaseToolName=normalized_tool_name,
                 )
                 if prewrite_tool_callback is not None:
@@ -535,25 +534,39 @@ async def generate_script_stream(
                         "scene_title": scene_title,
                     })
 
+            scene_started_at = time.time()
             prewrite_result = await asyncio.to_thread(
-                run_autonomous_scriptwriter_prewrite,
+                run_autonomous_scriptwriter_creation,
                 ScriptwriterPreWriteRequest(
                     user_id=user_id,
                     project_name=project_name,
                     task_description=scene_goal,
-                    chapter_name=chapter_title,
-                    scene_name=scene_title,
+                    chapter_name=str(raw_chapter_title or "").strip(),
+                    scene_name=str(raw_scene_title or "").strip(),
                     scene_guidance=scene_desc,
                     scene_characters=[str(name) for name in scene_characters],
                     full_outline=full_outline,
                     available_context=context_str,
+                    worldview=worldview,
+                    roles=roles,
+                    style_profile=format_style_profile_for_prompt(style_profile),
+                    story_tags=story_tags_block,
+                    chr_reference=writer._build_chr_reference(chr_map),
+                    export_format=export_format,
+                    target_chars=(
+                        story_tags.get("scene_target_chars")
+                        if isinstance(story_tags.get("scene_target_chars"), int)
+                        else None
+                    ),
                 ),
-                llm=writer.llm,
-                clean_text=writer._clean_model_visible_arc_text,
+                agent=writer,
                 on_tool_progress=report_prewrite_tool,
             )
-            if prewrite_result.context_addition:
-                context_str = context_str + "\n\n" + prewrite_result.context_addition
+            if not prewrite_result.saved:
+                raise RuntimeError(
+                    prewrite_result.blocked_reason
+                    or "编剧在 4 次请求内未完成当前场景落盘。"
+                )
 
             update_state(
                 "running",
@@ -575,143 +588,36 @@ async def generate_script_stream(
             )
 
             try:
+                saved_payload = prewrite_result.saved_payload or {}
+                saved_relative_path = str(saved_payload.get("path") or "").strip()
+                if not saved_relative_path:
+                    raise RuntimeError("编剧已返回落盘成功，但没有提供场景文件路径。")
 
-                # 使用队列实现真正的实时流式推送
-                arc_text = ""
-                thought = ""
-                start_time = time.time()
-                total_chars = 0
-                last_progress_time = start_time
-                accumulated_content = ""
-
-                # 创建队列用于线程间通信
-                result_queue = queue.Queue()
-
-                def run_stream_to_queue():
-                    """在线程中运行生成器，将结果放入队列"""
-                    try:
-                        for event in writer.write_script_stream(
-                            context=context_str,
-                            worldview=worldview,
-                            roles=roles,
-                            full_outline=full_outline,
-                            narrative_memory=narrative_memory,
-                            chr_map=chr_map,
-                            segment_count=0,
-                            guidance=scene_goal,
-                            style_profile=style_profile,
-                            export_format=export_format,
-                        ):
-                            if stop_event.is_set():
-                                break
-                            result_queue.put(event)
-                        result_queue.put(None)  # 结束标记
-                    except Exception as e:
-                        result_queue.put({"type": "error", "message": str(e)})
-                        result_queue.put(None)
-
-                # 启动生成线程
-                generation_context = contextvars.copy_context()
-                gen_thread = threading.Thread(
-                    target=generation_context.run,
-                    args=(run_stream_to_queue,),
+                stories_root = os.path.abspath(stories_path)
+                saved_absolute_path = os.path.abspath(
+                    os.path.join(stories_root, saved_relative_path)
                 )
-                gen_thread.start()
+                if os.path.commonpath((stories_root, saved_absolute_path)) != stories_root:
+                    raise RuntimeError("编剧返回的场景文件路径超出项目故事目录。")
+                if not os.path.isfile(saved_absolute_path):
+                    raise RuntimeError(
+                        f"编剧报告已落盘，但找不到场景文件：{saved_relative_path}"
+                    )
+                with open(saved_absolute_path, "r", encoding="utf-8") as saved_file:
+                    current_scene_full_text = saved_file.read().strip()
 
-                # 异步消费队列，实时推送
-                heartbeat_interval = 2.0  # 每2秒发一次心跳防止连接超时
-                last_heartbeat = time.time()
+                filepath = saved_absolute_path
+                filename = os.path.basename(filepath)
+                display_filename = strip_story_filename_meta(filename)
+                arc_text = prewrite_result.written_content.strip() or current_scene_full_text
+                total_chars = int(saved_payload.get("written_chars") or 0)
+                if total_chars <= 0:
+                    total_chars = len(arc_text)
+                elapsed = max(time.time() - scene_started_at, 0.0)
+                avg_speed = total_chars / elapsed if elapsed > 0 else 0
 
-                while True:
-                    if request is not None and await request.is_disconnected():
-                        stop_event.set()
-                        update_state(
-                            "interrupted",
-                            nextChapterIndex=i,
-                            availableResumeChapterIndex=i,
-                            availableResumeSceneIndex=scene_idx,
-                            availableRestartChapterIndex=i,
-                            lastSavedFilename=display_filename if os.path.exists(filepath) else "",
-                            lastError="",
-                        )
-                        yield semantic_sse_data(
-                            "cancelled",
-                            message="自动撰写任务已取消",
-                            **on_cancelled("自动撰写任务已取消"),
-                        )
-                        break
-
-                    # 非阻塞检查队列
-                    try:
-                        event = result_queue.get_nowait()
-                    except queue.Empty:
-                        # 发送心跳保持连接
-                        current_time = time.time()
-                        if current_time - last_heartbeat >= heartbeat_interval:
-                            yield f": heartbeat\n\n"  # SSE 注释格式，客户端会忽略
-                            last_heartbeat = current_time
-                        await asyncio.sleep(0.05)  # 更短的检查间隔
-                        continue
-
-                    if event is None:  # 结束标记
-                        break
-
-                    if event["type"] == "error":
-                        raise Exception(event["message"])
-
-                    if event["type"] == "chunk":
-                        accumulated_content += event["content"]
-                        total_chars = event["total_chars"]
-                        current_time = time.time()
-                        elapsed = current_time - start_time
-
-                        # 每 0.5 秒推送一次进度更新
-                        if current_time - last_progress_time >= 0.1:
-                            speed = total_chars / elapsed if elapsed > 0 else 0
-                            # 取累积内容的最后 30 个字符作为预览
-                            preview = (
-                                accumulated_content[-30:]
-                                if len(accumulated_content) > 30
-                                else accumulated_content
-                            )
-
-                            yield semantic_sse_data(
-                                "streaming",
-                                scene_title=scene_title,
-                                preview=preview,
-                                accumulated_content=accumulated_content,
-                                total_chars=total_chars,
-                                speed=round(speed, 1),
-                                elapsed=round(elapsed, 1),
-                                **merge_semantics(
-                                    on_progress(
-                                        f"正在撰写场景：{scene_title}",
-                                        stage="streaming",
-                                    ),
-                                    on_stats(
-                                        chars=total_chars,
-                                        speed=round(speed, 1),
-                                        elapsed=round(elapsed, 1),
-                                        label=f"已撰写 {total_chars} 字 · {round(speed, 1)} 字/秒",
-                                    ),
-                                ),
-                            )
-                            # 同步更新 state 中的实时统计字段，供轮询模式获取
-                            update_state(
-                                "running",
-                                streamingPreview=preview,
-                                streamingSpeed=round(speed, 1),
-                                streamingChars=total_chars,
-                                streamingElapsed=round(elapsed, 1),
-                            )
-                            last_progress_time = current_time
-
-                    elif event["type"] == "done":
-                        arc_text = event["arc_script"]
-                        thought = event.get("thought", "")
-                        total_chars = event["total_chars"]
-
-                gen_thread.join()  # 确保线程结束
+                if request is not None and await request.is_disconnected():
+                    stop_event.set()
                 if stop_event.is_set():
                     update_state(
                         "interrupted",
@@ -719,7 +625,7 @@ async def generate_script_stream(
                         availableResumeChapterIndex=i,
                         availableResumeSceneIndex=scene_idx,
                         availableRestartChapterIndex=i,
-                        lastSavedFilename=display_filename if os.path.exists(filepath) else "",
+                        lastSavedFilename=display_filename,
                         lastError="",
                     )
                     yield semantic_sse_data(
@@ -729,41 +635,7 @@ async def generate_script_stream(
                     )
                     return
 
-                # 清洗 AI 返回的内容，去掉它自己生成的 # 标题和 @intro 等格式
-                if export_format == "arc":
-                    try:
-                        from story.arc_parser import (
-                            parse_arc_to_dialogues,
-                            _serialize_dialogues,
-                        )
-
-                        nodes = parse_arc_to_dialogues(arc_text, chr_map=chr_map)
-                        if nodes:
-                            clean_lines = _serialize_dialogues(nodes, chr_map, 0)
-                            arc_text = "\n".join(clean_lines).strip()
-                    except Exception as e:
-                        print(f"Error cleaning arc text: {e}")
-
-                elapsed = time.time() - start_time
-                avg_speed = total_chars / elapsed if elapsed > 0 else 0
-
-                # Append to scene file content
-                if export_format == "novel":
-                    scene_arc_content = [arc_text.strip()]
-                else:
-                    scene_arc_content.append(f"# {scene_title}")
-                    if scene_desc:
-                        scene_arc_content.append(f"@intro\n{scene_desc}")
-
-                    if thought:
-                        scene_arc_content.append(f"<conception>\n{thought.strip()}\n</conception>")
-
-                    scene_arc_content.append("")
-                    scene_arc_content.append(arc_text)
-                    scene_arc_content.append("")
-
-                current_scene_full_text = "\n".join(scene_arc_content).strip()
-                # Send completion with stats
+                # 落盘工具已经保存了最终正文，这里只发送完成事件，不再次生成或覆盖文件。
                 update_state(
                     "running",
                     nextChapterIndex=i,
@@ -796,10 +668,6 @@ async def generate_script_stream(
             except Exception as e:
                 print(f"Error writing scene {scene_title}: {e}")
                 message = str(e)
-                with open(filepath, "w", encoding="utf-8") as f:
-                    f.write("\n".join(scene_arc_content))
-                if display_filename not in generated_scene_files:
-                    generated_scene_files.append(display_filename)
                 update_state(
                     "error",
                     nextChapterIndex=i,
@@ -829,37 +697,13 @@ async def generate_script_stream(
                     **on_cancelled("自动撰写任务已取消"),
                 )
                 return
-            with open(filepath, "w", encoding="utf-8") as f:
-                f.write("\n".join(scene_arc_content))
-
-            from agents.story_memory import enqueue_scene_memory_write
-
-            source_rel_path = os.path.relpath(
-                filepath,
-                get_project_stories_path(user_id, project_name),
-            ).replace("\\", "/")
-            enqueue_scene_memory_write(
-                user_id=user_id,
-                project_name=project_name,
-                label="自动写作场景",
-                scene_text="\n".join(scene_arc_content),
-                chapter_index=i,
-                scene_index=scene_idx,
-                chapter_title=chapter_title,
-                scene_title=scene_title,
-                scene_description=scene_desc,
-                guidance=scene_goal,
-                source_path=source_rel_path,
-                export_format=export_format,
-                chr_map=chr_map,
-                scene_characters=scene_characters,
-            )
+            source_rel_path = saved_relative_path
 
             review = record_auto_write_scene_review(
                 user_id=user_id,
                 project_name=project_name,
                 critic=critic if auto_review else None,
-                scene_text="\n".join(scene_arc_content),
+                scene_text=current_scene_full_text,
                 context_text=context_str,
                 guidance_text=scene_goal,
                 scene_title=scene_title,

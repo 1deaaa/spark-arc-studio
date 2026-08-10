@@ -15,6 +15,7 @@ from agents.scriptwriter_prewrite import (
     PREWRITE_MAX_TOOL_ROUNDS,
     ScriptwriterPreWriteRequest,
     _prewrite_read_tools,
+    run_autonomous_scriptwriter_creation,
     run_autonomous_scriptwriter_prewrite,
 )
 from agents.routes.chat import _run_chat_background_context
@@ -97,11 +98,54 @@ def test_autonomous_prewrite_only_binds_read_tools_and_limits_rounds(monkeypatch
 
     assert llm.bound_tool_names == ["prewrite_read_probe"]
     assert llm.bound.invoke_count == 2
-    assert llm.final_invoke_count == 1
+    assert llm.final_invoke_count == 0
     assert result.tools_used == ("prewrite_read_probe", "prewrite_read_probe")
     assert progress_tools == ["prewrite_read_probe", "prewrite_read_probe"]
     assert "只读事实" in result.research_context
-    assert "关键选择" in result.planning_note
+    assert result.planning_note == ""
+
+
+def test_autonomous_prewrite_allows_same_tool_retry_after_failure(monkeypatch) -> None:
+    attempts = {"count": 0}
+
+    @tool
+    def retry_probe() -> str:
+        """读取可重试的测试资料。"""
+        attempts["count"] += 1
+        if attempts["count"] == 1:
+            raise RuntimeError("临时读取失败")
+        return "重试后取得的事实"
+
+    monkeypatch.setattr("agents.scriptwriter_prewrite._build_prewrite_brief", lambda _request: "场景任务包")
+    monkeypatch.setattr("agents.scriptwriter_prewrite._prewrite_read_tools", lambda: [retry_probe])
+    llm = _FakeLlm([
+        AIMessage(content="", tool_calls=[{
+            "name": "retry_probe",
+            "args": {},
+            "id": "retry-1",
+            "type": "tool_call",
+        }]),
+        AIMessage(content="", tool_calls=[{
+            "name": "retry_probe",
+            "args": {},
+            "id": "retry-2",
+            "type": "tool_call",
+        }]),
+    ])
+
+    result = run_autonomous_scriptwriter_prewrite(
+        ScriptwriterPreWriteRequest(
+            user_id="u-retry",
+            project_name="p-retry",
+            task_description="核对当前场景",
+        ),
+        llm=llm,
+        max_tool_rounds=2,
+    )
+
+    assert attempts["count"] == 2
+    assert result.tools_used == ("retry_probe", "retry_probe")
+    assert "重试后取得的事实" in result.research_context
 
 
 def test_autonomous_prewrite_normalizes_missing_tool_call_id(monkeypatch) -> None:
@@ -115,7 +159,7 @@ def test_autonomous_prewrite_normalizes_missing_tool_call_id(monkeypatch) -> Non
             self.final_messages = list(messages)
             return super().invoke(messages)
 
-    llm = CapturingLlm([_tool_call("")])
+    llm = CapturingLlm([_tool_call(""), AIMessage(content="PREWRITE_READY")])
     run_autonomous_scriptwriter_prewrite(
         ScriptwriterPreWriteRequest(
             user_id="u-missing-id",
@@ -123,13 +167,14 @@ def test_autonomous_prewrite_normalizes_missing_tool_call_id(monkeypatch) -> Non
             task_description="核对当前场景",
         ),
         llm=llm,
-        max_tool_rounds=1,
+        max_tool_rounds=2,
     )
 
-    assert llm.final_messages is not None
-    validate_tool_message_history(llm.final_messages[:-1])
-    assistant = next(message for message in llm.final_messages if isinstance(message, AIMessage))
-    tool_message = llm.final_messages[llm.final_messages.index(assistant) + 1]
+    assert llm.bound.message_snapshots
+    final_messages = llm.bound.message_snapshots[-1]
+    validate_tool_message_history(final_messages)
+    assistant = next(message for message in final_messages if isinstance(message, AIMessage))
+    tool_message = final_messages[final_messages.index(assistant) + 1]
     assert assistant.tool_calls[0]["id"]
     assert assistant.tool_calls[0]["id"] == tool_message.tool_call_id
 
@@ -137,8 +182,8 @@ def test_autonomous_prewrite_normalizes_missing_tool_call_id(monkeypatch) -> Non
 def test_prewrite_default_research_budget_and_search_tools() -> None:
     tool_names = {tool.name for tool in _prewrite_read_tools()}
 
-    assert PREWRITE_MAX_TOOL_ROUNDS == 6
-    assert PREWRITE_MAX_TOOL_CALLS == 12
+    assert PREWRITE_MAX_TOOL_ROUNDS == 4
+    assert PREWRITE_MAX_TOOL_CALLS is None
     assert {"search_project", "semantic_search"} <= tool_names
 
 
@@ -186,6 +231,111 @@ def test_autonomous_prewrite_uses_model_budget_without_fixed_character_truncatio
     assert "工具结果开头" in result.research_context
     assert "工具结果结尾" in result.research_context
     assert "按 PreWrite 上下文预算截断" not in result.research_context
+
+
+def test_autonomous_creation_batches_research_and_saves_without_summary_request(monkeypatch) -> None:
+    calls = []
+
+    @tool
+    def first_research_probe() -> str:
+        """读取第一份事实。"""
+        calls.append("first_research_probe")
+        return "事实一"
+
+    @tool
+    def second_research_probe() -> str:
+        """读取第二份事实。"""
+        calls.append("second_research_probe")
+        return "事实二"
+
+    @tool
+    def create_chapter(chapter_name: str) -> str:
+        """创建章节。"""
+        calls.append(f"create_chapter:{chapter_name}")
+        return "章节已存在"
+
+    @tool
+    def create_or_rewrite_script(
+        overwrite_content: str,
+        chapter_name: str,
+        work_name: str,
+    ) -> str:
+        """保存正文。"""
+        calls.append(f"create_or_rewrite_script:{chapter_name}:{work_name}")
+        return json.dumps({
+            "status": "saved",
+            "path": "一 · 开端/1-1 初遇.arc",
+            "written_chars": 8,
+        }, ensure_ascii=False)
+
+    tools = [
+        first_research_probe,
+        second_research_probe,
+        create_chapter,
+        create_or_rewrite_script,
+    ]
+    response = AIMessage(content="", tool_calls=[
+        {"name": "first_research_probe", "args": {}, "id": "read-1", "type": "tool_call"},
+        {"name": "second_research_probe", "args": {}, "id": "read-2", "type": "tool_call"},
+        {
+            "name": "create_chapter",
+            "args": {"chapter_name": "一 · 开端"},
+            "id": "chapter-1",
+            "type": "tool_call",
+        },
+        {
+            "name": "create_or_rewrite_script",
+            "args": {
+                "overwrite_content": "<conception>保持知情边界</conception>\n[旁白] 雨落。",
+                "chapter_name": "一 · 开端",
+                "work_name": "1-1 初遇",
+            },
+            "id": "write-1",
+            "type": "tool_call",
+        },
+    ])
+    llm = _FakeLlm([response])
+
+    class FakeAgent:
+        def __init__(self):
+            self.llm = llm
+
+        @staticmethod
+        def _clean_model_visible_arc_text(value) -> str:
+            return str(value or "")
+
+        @staticmethod
+        def _build_tool_system_prompt(*_args, **_kwargs) -> str:
+            return "固定系统提示"
+
+    monkeypatch.setattr("agents.scriptwriter_prewrite._build_prewrite_brief", lambda _request: "场景任务包")
+    monkeypatch.setattr("agents.scriptwriter_prewrite._prewrite_read_tools", lambda: tools[:2])
+    monkeypatch.setattr("agents.scriptwriter_prewrite._autonomous_creation_tools", lambda: tools)
+    monkeypatch.setattr("agents.scriptwriter_prewrite._issue_receipt", lambda *_args, **_kwargs: "receipt")
+
+    result = run_autonomous_scriptwriter_creation(
+        ScriptwriterPreWriteRequest(
+            user_id="u-batch",
+            project_name="p-batch",
+            task_description="写第一场",
+            chapter_name="一 · 开端",
+            scene_name="1-1 初遇",
+        ),
+        agent=FakeAgent(),
+    )
+
+    assert result.saved is True
+    assert result.request_count == 1
+    assert result.planning_note == ""
+    assert "<conception>" in result.written_content
+    assert calls == [
+        "first_research_probe",
+        "second_research_probe",
+        "create_chapter:一 · 开端",
+        "create_or_rewrite_script:一 · 开端:1-1 初遇",
+    ]
+    assert llm.bound.invoke_count == 1
+    assert llm.final_invoke_count == 0
 
 
 def test_prepare_tool_issues_matching_receipt(monkeypatch) -> None:
@@ -399,6 +549,10 @@ def test_auto_write_emits_prewrite_before_writing_scene(monkeypatch, tmp_path: P
             self.llm = object()
 
         @staticmethod
+        def _build_chr_reference(_chr_map) -> str:
+            return "[旁白] = 旁白叙述"
+
+        @staticmethod
         def _clean_model_visible_arc_text(value) -> str:
             return str(value or "")
 
@@ -416,7 +570,6 @@ def test_auto_write_emits_prewrite_before_writing_scene(monkeypatch, tmp_path: P
     monkeypatch.setattr(auto_write, "load_worldview", lambda *_args: "世界观")
     monkeypatch.setattr(auto_write, "load_all_roles", lambda *_args: ("角色", {1: "林舟"}))
     monkeypatch.setattr(auto_write, "load_full_outline", lambda *_args: "完整大纲")
-    monkeypatch.setattr(auto_write, "load_narrative_memory", lambda *_args: ("叙事记忆", {}))
     monkeypatch.setattr(auto_write, "load_project_style_profile", lambda **_kwargs: None)
     monkeypatch.setattr(auto_write, "get_project_story_tags", lambda *_args: {})
     monkeypatch.setattr(auto_write, "build_story_tags_hint", lambda _tags: "")
@@ -431,15 +584,26 @@ def test_auto_write_emits_prewrite_before_writing_scene(monkeypatch, tmp_path: P
         callback = kwargs.get("on_tool_progress")
         if callback is not None:
             callback("story_memory_tool")
+        scene_path.parent.mkdir(parents=True, exist_ok=True)
+        scene_path.write_text(
+            "# 初遇\n<conception>\n本场建立雨夜悬念。\n</conception>\n[旁白] 已保存正文",
+            encoding="utf-8",
+        )
         return ScriptwriterPreWriteResult(
             receipt_id="autonomous",
             brief="任务包",
             research_context="事实",
-            planning_note="规划",
+            planning_note="",
             tools_used=(),
+            saved_payload={
+                "status": "saved",
+                "path": "一 · 开端/1-1 初遇.arc",
+                "written_chars": 12,
+            },
+            written_content="[旁白] 已保存正文",
         )
 
-    monkeypatch.setattr(auto_write, "run_autonomous_scriptwriter_prewrite", fake_prewrite)
+    monkeypatch.setattr(auto_write, "run_autonomous_scriptwriter_creation", fake_prewrite)
 
     outline = {
         "nodes": [{
@@ -468,8 +632,6 @@ def test_auto_write_emits_prewrite_before_writing_scene(monkeypatch, tmp_path: P
             async for raw_event in stream:
                 payload = json.loads(raw_event.removeprefix("data: ").strip())
                 statuses.append(str(payload.get("status") or ""))
-                if payload.get("status") == "writing_scene":
-                    break
         finally:
             await stream.aclose()
         return statuses
@@ -477,6 +639,10 @@ def test_auto_write_emits_prewrite_before_writing_scene(monkeypatch, tmp_path: P
     statuses = asyncio.run(collect_statuses())
 
     assert statuses.index("prewrite") < statuses.index("writing_scene")
+    assert statuses.index("writing_scene") < statuses.index("scene_completed")
+    assert statuses.index("scene_completed") < statuses.index("scene_saved")
+    assert statuses[-1] == "complete"
+    assert scene_path.read_text(encoding="utf-8").count("<conception>") == 1
     assert prewrite_tool_payloads[0]["tool_name"] == "story_memory_tool"
     from agents.auto_write_service import _prewrite_tool_event
 

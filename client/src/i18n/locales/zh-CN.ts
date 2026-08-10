@@ -1140,7 +1140,7 @@ const zhCN = {
         rewriteOutline: '重写大纲',
         patchOutline: '局部更新大纲',
         createChapter: '创建章节',
-        prepareScriptCreation: 'PreWrite 调研规划',
+        prepareScriptCreation: '编剧调研',
         createOrRewriteScript: '重写正文',
         organizeScenesToChapter: '整理场景到章节',
         patchScript: '局部更新正文',

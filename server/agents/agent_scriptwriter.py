@@ -287,9 +287,9 @@ class ScriptwriterAgent(SparkBaseAgent, SparkAgentExecutor):
             },
         }
 
-    def _build_tool_prompt_reference_block(self) -> str:
+    def _build_tool_prompt_reference_block(self, *, tools_override=None) -> str:
         """让聊天与导演委派的落盘工具复用同一条件视觉协议。"""
-        block = super()._build_tool_prompt_reference_block()
+        block = super()._build_tool_prompt_reference_block(tools_override=tools_override)
         protocol = self._visual_illustration_protocol()
         return f"{block}\n\n{protocol}".strip() if protocol else block
 

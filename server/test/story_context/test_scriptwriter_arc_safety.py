@@ -46,7 +46,7 @@ def test_scriptwriter_visual_protocol_is_absent_when_disabled_and_shared_by_tool
     monkeypatch.setattr(
         SparkBaseAgent,
         "_build_tool_prompt_reference_block",
-        lambda self: "基础工具规范",
+        lambda self, *, tools_override=None: "基础工具规范",
     )
     monkeypatch.setattr(
         ScriptwriterAgent,

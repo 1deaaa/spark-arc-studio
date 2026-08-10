@@ -262,13 +262,14 @@ class AgentContextProvider:
             格式化的上下文字符串
         """
         parts: List[str] = []
+        structure_warning = ""
 
         if agent_id in ("agent_showrunner", "agent_scriptwriter", "agent_director", "agent_critic"):
             try:
                 from agents.structure_state import format_structure_state_warning
-                warning = format_structure_state_warning(self._bundle().get("structure_state") or {})
-                if warning:
-                    parts.append(warning)
+                structure_warning = format_structure_state_warning(
+                    self._bundle().get("structure_state") or {}
+                )
             except Exception as e:
                 print(f"[ContextProvider] Error loading structure state: {e}")
 
@@ -295,10 +296,10 @@ class AgentContextProvider:
                 parts.append(f"### 世界观设定\n{worldview}")
             if roles:
                 parts.append(f"### 角色详细档案\n{roles}")
-            if narrative_memory:
-                parts.append(f"### 当前故事契约与节拍\n{narrative_memory}")
             if full_outline:
                 parts.append(f"### 当前完整大纲\n{full_outline}")
+            if narrative_memory:
+                parts.append(f"### 当前故事契约与节拍\n{narrative_memory}")
         
         elif agent_id == "agent_scriptwriter":
             # ScriptWriter：通过 context_builder 加载全量数据
@@ -419,6 +420,9 @@ class AgentContextProvider:
                 if scenes:
                     parts.append(scenes)
         
+        if structure_warning:
+            parts.append(structure_warning)
+
         # 添加额外上下文（如前端传入的当前编辑内容）
         if extra_context and extra_context.strip():
             parts.append(f"### 当前编辑内容\n{extra_context.strip()}")

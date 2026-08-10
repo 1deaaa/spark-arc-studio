@@ -475,14 +475,26 @@ class SparkBaseAgent:
             "message": "基础 Agent 已收到消息"
         }
 
-    def _build_tool_system_prompt(self, base_prompt: str, active_context: str = None, skip_tool_confirmation: bool = False) -> str:
+    def _build_tool_system_prompt(
+        self,
+        base_prompt: str,
+        active_context: str = None,
+        skip_tool_confirmation: bool = False,
+        *,
+        tools_override: Optional[List[Any]] = None,
+        tool_rules_key: str = "tool_rules",
+    ) -> str:
         """
         构建系统提示词，注入工具使用规范。
         active_context 参数仅为兼容旧调用签名保留，本轮动态上下文由 prompt_layout 放入最后 user。
         子类应当重写此方法以定制不同的提示词结构。
         """
         from agents.tools.registry import get_tools_for_agent
-        tools = get_tools_for_agent(self.agent_id, user_id=self.user_id)
+        tools = (
+            list(tools_override)
+            if tools_override is not None
+            else get_tools_for_agent(self.agent_id, user_id=self.user_id)
+        )
         
         system_instruction = prepend_prompt_language_policy(base_prompt)
         
@@ -540,7 +552,7 @@ class SparkBaseAgent:
 """
             system_instruction += tool_instruction
 
-            tool_reference_block = self._build_tool_prompt_reference_block()
+            tool_reference_block = self._build_tool_prompt_reference_block(tools_override=tools)
             if tool_reference_block:
                 system_instruction += tool_reference_block
 
@@ -550,7 +562,7 @@ class SparkBaseAgent:
                 from .agent_utils import load_prompt as _load_prompt
                 _prompt_name = self.agent_id.replace("agent_", "")
                 _prompts = _load_prompt(_prompt_name)
-                _tool_rules = _prompts.get('tool_rules')
+                _tool_rules = _prompts.get(tool_rules_key)
                 if isinstance(_tool_rules, str) and _tool_rules.strip():
                     system_instruction += "\n\n" + _tool_rules.strip()
             except Exception:
@@ -614,7 +626,11 @@ class SparkBaseAgent:
         """返回加载工具参考提示词时使用的占位符默认值。"""
         return {}
 
-    def _build_tool_prompt_reference_block(self) -> str:
+    def _build_tool_prompt_reference_block(
+        self,
+        *,
+        tools_override: Optional[List[Any]] = None,
+    ) -> str:
         from agents.tools.registry import get_tools_for_agent
         from .agent_utils import load_prompt
 
@@ -623,7 +639,12 @@ class SparkBaseAgent:
             return ""
 
         prompt_name = self.agent_id.replace("agent_", "")
-        tool_names = {tool.name for tool in get_tools_for_agent(self.agent_id, user_id=self.user_id)}
+        tools = (
+            list(tools_override)
+            if tools_override is not None
+            else get_tools_for_agent(self.agent_id, user_id=self.user_id)
+        )
+        tool_names = {tool.name for tool in tools}
         reference_values = self._get_tool_prompt_reference_values() or {}
         blocks: list[str] = []
 
@@ -1234,7 +1255,7 @@ class SparkBaseAgent:
             "rewrite_outline": "正在重写剧情大纲...",
             "patch_outline": "正在局部更新剧情大纲...",
             "create_chapter": "正在创建章节...",
-            "prepare_script_creation": "编剧正在调研规划。",
+            "prepare_script_creation": "编剧调研",
             "create_or_rewrite_script": "正在新建/重写剧本文本...",
             "patch_script": "正在局部更新剧本文本...",
             "list_chapters": "正在查阅章节结构...",

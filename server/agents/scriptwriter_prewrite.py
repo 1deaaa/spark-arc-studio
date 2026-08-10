@@ -1,12 +1,15 @@
 from __future__ import annotations
 
 import uuid
+import json
 from dataclasses import dataclass, field
 from typing import Any, Callable
 
 from core.request_context import (
     current_agent_id,
+    current_export_format,
     current_project_name,
+    current_scriptwriter_prewrite_receipt,
     current_user_id,
     get_scriptwriter_prewrite_receipt,
     set_scriptwriter_prewrite_receipt,
@@ -17,13 +20,15 @@ from llm.agen_matchbox.tool_protocol import (
     extract_tool_specs_from_message,
     prepare_tool_specs_for_execution,
 )
-from agents.tools.stream_events import normalize_tool_name
+from agents.tools.stream_events import is_tool_result_failure, normalize_tool_name
 
 
 PREWRITE_STATUS_MESSAGE = "编剧调研"
 PREWRITE_TOOL_NAME = "prepare_script_creation"
-PREWRITE_MAX_TOOL_ROUNDS = 6
-PREWRITE_MAX_TOOL_CALLS = 12
+PREWRITE_MAX_REQUESTS = 4
+# 兼容旧调用名；限制的是模型请求次数，不限制单轮或累计工具数量。
+PREWRITE_MAX_TOOL_ROUNDS = PREWRITE_MAX_REQUESTS
+PREWRITE_MAX_TOOL_CALLS = None
 
 
 @dataclass(frozen=True)
@@ -37,6 +42,13 @@ class ScriptwriterPreWriteRequest:
     scene_characters: list[str] = field(default_factory=list)
     full_outline: str = ""
     available_context: str = ""
+    worldview: str = ""
+    roles: str = ""
+    style_profile: str = ""
+    story_tags: str = ""
+    chr_reference: str = ""
+    export_format: str = "arc"
+    target_chars: int | None = None
 
 
 @dataclass(frozen=True)
@@ -46,14 +58,20 @@ class ScriptwriterPreWriteResult:
     research_context: str
     planning_note: str
     tools_used: tuple[str, ...]
+    request_count: int = 0
+    saved_payload: dict[str, Any] | None = None
+    written_content: str = ""
+    blocked_reason: str = ""
+
+    @property
+    def saved(self) -> bool:
+        return bool(self.saved_payload and self.saved_payload.get("status") == "saved")
 
     @property
     def context_addition(self) -> str:
         parts = []
         if self.research_context.strip():
             parts.append("### PreWrite 调研所得\n" + self.research_context.strip())
-        if self.planning_note.strip():
-            parts.append("### PreWrite 连续性简报\n" + self.planning_note.strip())
         return "\n\n".join(parts)
 
 
@@ -194,11 +212,7 @@ def prepare_interactive_scriptwriter_prewrite(
         receipt_id=receipt_id,
         brief=brief,
         research_context="",
-        planning_note=(
-            "系统已预装目标场景契约与相关 StoryMemory。请在当前工具循环中先核对入场状态、"
-            "角色目标、知情边界、禁止提前发生事项、离场状态和待查事实；证据不足时继续调用只读工具。"
-            "本轮任务或场景指导给出的结束边界比完整大纲中的后续动作更具体；不得把边界后的动作提前到本场。"
-        ),
+        planning_note="",
         tools_used=(),
     )
 
@@ -225,63 +239,102 @@ def _prewrite_read_tools() -> list[Any]:
     ]
 
 
-def run_autonomous_scriptwriter_prewrite(
+def _autonomous_creation_tools() -> list[Any]:
+    """自动写作固定工具集：调查与最终落盘共用同一份 Schema。"""
+    from agents.tools.scriptwriter import create_chapter, create_or_rewrite_script
+
+    return [*_prewrite_read_tools(), create_chapter, create_or_rewrite_script]
+
+
+def _append_stable_project_context(system_prompt: str, request: ScriptwriterPreWriteRequest) -> str:
+    """按稳定性排列项目级材料，把逐场变化内容留在最后一条 user。"""
+    sections = [
+        ("项目故事参数", request.story_tags),
+        ("完整世界观", request.worldview),
+        ("稳定完整大纲", request.full_outline),
+        ("完整角色档案", request.roles),
+        ("可用说话人标记", request.chr_reference),
+        ("作者文风档案", request.style_profile),
+    ]
+    blocks = [system_prompt.rstrip()]
+    for title, value in sections:
+        text = str(value or "").strip()
+        if text:
+            blocks.append(f"### {title}\n{text}")
+    return "\n\n".join(blocks)
+
+
+def _build_research_system_prompt(request: ScriptwriterPreWriteRequest) -> str:
+    from agents.language_policy import prepend_prompt_language_policy
+
+    prompt = prepend_prompt_language_policy(
+        """你是 Scriptwriter 的写前事实核对器。你只负责判断当前材料是否足以安全写作，不生成正文，也不输出自然语言调查总结。
+
+系统已经提供确定性场景任务包。不要重复查询其中已有的 StoryMemory 条目。缺少关键原文证据时，优先在同一次响应中批量调用所有相互独立的只读工具；获得结果后只针对仍然存在的关键缺口深入查询。
+
+你最多获得 4 次模型请求，但每次可调用任意数量的只读工具。资料足够时停止调用工具，仅返回 `PREWRITE_READY`。非关键细节缺少确定证据时，将边界理解为“当前材料不足以形成确定结论，本场不得作确定性描写”，不把它误判为可以自由编造。只有关键依据冲突、任何写法都会破坏既有事实时，才返回一段明确的冲突说明。
+
+本轮任务描述与场景指导给出的开始/结束边界，高于完整大纲中属于后续场景的动作；不得把边界后的行为提前到当前场景。"""
+    )
+    return _append_stable_project_context(prompt, request)
+
+
+def _build_autonomous_creation_system_prompt(
+    request: ScriptwriterPreWriteRequest,
+    *,
+    agent: Any,
+    tools: list[Any],
+) -> str:
+    from agents.agent_utils import load_prompt
+
+    prompts = load_prompt("scriptwriter")
+    base_prompt = prompts.get("pipeline_system") or prompts.get("system") or "你是专业执笔编剧。"
+    prompt = agent._build_tool_system_prompt(
+        base_prompt,
+        skip_tool_confirmation=True,
+        tools_override=tools,
+        tool_rules_key="autonomous_tool_rules",
+    )
+    return _append_stable_project_context(prompt, request)
+
+
+def _parse_saved_payload(value: Any) -> dict[str, Any] | None:
+    try:
+        payload = json.loads(str(value or ""))
+    except (TypeError, ValueError, json.JSONDecodeError):
+        return None
+    if isinstance(payload, dict) and payload.get("status") == "saved":
+        return payload
+    return None
+
+
+def _run_prewrite_tool_loop(
     request: ScriptwriterPreWriteRequest,
     *,
     llm: Any,
-    clean_text: Callable[[Any], str] | None = None,
-    on_tool_progress: Callable[[str], None] | None = None,
-    max_tool_rounds: int = PREWRITE_MAX_TOOL_ROUNDS,
+    tools: list[Any],
+    system_prompt: str,
+    user_prompt: str,
+    clean_text: Callable[[Any], str] | None,
+    on_tool_progress: Callable[[str], None] | None,
+    max_requests: int,
+    require_save: bool,
 ) -> ScriptwriterPreWriteResult:
-    """业务生产流模式：用受限只读工具循环完成写前调查，不承担正文生成。"""
     from agents.context_budget import (
         prepare_specialized_prompt_messages_with_budget,
         rebudget_existing_messages,
     )
-    from agents.language_policy import prepend_prompt_language_policy
-    from langchain_core.messages import HumanMessage
+    from langchain_core.messages import AIMessage, HumanMessage
     from llm.agen_matchbox.reasoning_compat import extract_text_content_from_message
 
-    brief = _build_prewrite_brief(request)
-    tools = _prewrite_read_tools()
-    allowed_tools = {str(getattr(tool, "name", "")): tool for tool in tools}
-    llm_with_tools = llm.bind_tools(tools)
     clean = clean_text or (lambda value: str(value or ""))
-
-    system_prompt = prepend_prompt_language_policy(
-        """你是 Scriptwriter 的 PreWrite 调研规划器。你的职责仅限正式创作前的事实核对与创作规划，不得生成正文、不得调用写入工具。
-
-先阅读系统确定性检索并提供的场景任务包，不要重复查询已经出现的 StoryMemory 条目。只有在任务包仍缺少关键原文证据时才调用只读工具：
-- 人物关系、最近状态、秘密知情边界、开放线索：story_memory_tool。
-- 跨文件关系与更大范围事实约束：graph_rag_tool。
-- 必须核对原始措辞或历史场景细节：章节、场景、世界观、角色、梗概、节拍表读取工具。
-- 已知关键词、人物或物品需要定位原文：search_project；只有关键词不足时再使用 semantic_search。
-
-信息已经足够时不要为了形式调用工具。调查结束后输出“连续性简报”，依次写明：
-1. 入场状态：人物、地点、物品、关系与开放线索的当前状态；
-2. 角色目标：每个关键角色本场想达成什么；
-3. 知情边界：谁知道什么、谁仍不知道什么；
-4. 冲突与转折：本场如何改变局势，而不是只重复既有信息；
-5. 禁止提前：哪些行为、信息或铺垫会破坏后续惊喜、秘密、误会或转折；
-6. 离场状态与待查事实：本场结束后必须留下什么，哪些事实仍未核实。
-
-范围优先级：本轮任务描述与场景指导中明确的开始/结束边界，高于完整大纲里更宽泛或属于后续场景的动作。若本轮要求“结束在某动作前”，该动作只能记入“禁止提前/下一场边界”，不得写入本场转折或离场状态。
-
-简报应具体、可执行、有原文依据；不得生成正文，也不得用字数上限压缩掉关键状态。"""
-    )
-    context_preview = request.available_context.strip()
-    outline_preview = request.full_outline.strip()
-    if outline_preview:
-        system_prompt = (
-            system_prompt.rstrip()
-            + "\n\n### 本次自动写作的稳定完整大纲\n"
-            + outline_preview
-        )
-    user_prompt = "\n\n".join(part for part in [
-        brief,
-        f"### 当前已经准备的上下文摘要\n{context_preview}" if context_preview else "",
-        "请完成 PreWrite。",
-    ] if part)
+    brief = _build_prewrite_brief(request)
+    allowed_tools = {str(getattr(tool, "name", "")): tool for tool in tools}
+    read_tool_names = set(allowed_tools) - {
+        "create_chapter",
+        "create_or_rewrite_script",
+    }
+    llm_with_tools = llm.bind_tools(tools)
     messages = prepare_specialized_prompt_messages_with_budget(
         agent_id="agent_scriptwriter",
         system_prompt=system_prompt,
@@ -292,51 +345,92 @@ def run_autonomous_scriptwriter_prewrite(
     user_token = current_user_id.set(str(request.user_id))
     project_token = current_project_name.set(request.project_name)
     agent_token = current_agent_id.set("agent_scriptwriter")
+    format_token = current_export_format.set(request.export_format or "arc")
+    receipt_state_token = current_scriptwriter_prewrite_receipt.set({})
+    receipt_id = _issue_receipt(request, persist=require_save)
     gathered: list[str] = []
     tools_used: list[str] = []
-    planning_note = ""
-    total_calls = 0
+    saved_payload: dict[str, Any] | None = None
+    written_content = ""
+    blocked_reason = ""
+    last_tool_failure = ""
+    request_count = 0
 
     try:
-        tool_rounds = max(0, int(max_tool_rounds))
-        for _ in range(tool_rounds):
+        request_limit = max(1, min(int(max_requests), PREWRITE_MAX_REQUESTS))
+        for round_index in range(request_limit):
+            if require_save and round_index == request_limit - 1:
+                messages.append(HumanMessage(content=(
+                    "这是本场允许的最后一次模型请求。现在必须作出最终决定：资料足够或只有非关键缺口时，"
+                    "直接调用 create_chapter 与 create_or_rewrite_script 完成落盘；不得再调用任何只读调查工具。"
+                    "只有关键依据冲突时才停止并明确说明冲突。"
+                )))
             response = llm_with_tools.invoke(messages)
+            request_count += 1
             tool_specs = prepare_tool_specs_for_execution(
                 extract_tool_specs_from_message(response),
                 normalize_name=normalize_tool_name,
             )
             if not tool_specs:
-                planning_note = clean(extract_text_content_from_message(response)).strip()
-                break
+                response_text = clean(extract_text_content_from_message(response)).strip()
+                if not require_save:
+                    if response_text and response_text != "PREWRITE_READY":
+                        blocked_reason = response_text
+                    break
+                if round_index == request_limit - 1:
+                    blocked_reason = response_text
+                    break
+                messages.append(AIMessage(content=response_text or "未调用工具。"))
+                messages.append(HumanMessage(content=(
+                    "不要输出调查总结。若不存在关键事实冲突，请继续调查或直接调用正文落盘工具；"
+                    "若存在关键冲突，请明确指出冲突材料与需要裁决的问题。"
+                )))
+                continue
 
-            # 只把规范化后的 assistant 消息写入历史，确保空 ID / 重复 ID
-            # 与后续 ToolMessage 使用同一份调用定义。
             messages.append(build_tool_history_message(response, tool_specs))
             tool_results: list[tuple[str, str, Any]] = []
             for tool_call in tool_specs:
                 tool_name = str(tool_call.get("name") or "").strip()
-                tool_args = tool_call.get("args") or {}
+                tool_args = tool_call.get("args") if isinstance(tool_call.get("args"), dict) else {}
                 call_id = str(tool_call["call_id"])
-                if total_calls >= PREWRITE_MAX_TOOL_CALLS:
-                    result = "PreWrite 已达到只读工具调用上限，请基于现有证据完成规划。"
-                    tool_results.append((call_id, tool_name or "unknown_tool", result))
-                    continue
                 tool = allowed_tools.get(tool_name)
                 if tool is None:
-                    result = f"PreWrite 拒绝未知或非只读工具：{tool_name}"
+                    result = f"PreWrite 拒绝未绑定工具：{tool_name}"
+                elif (
+                    require_save
+                    and tool_name == "create_or_rewrite_script"
+                    and "<conception>" not in str(tool_args.get("overwrite_content") or "")
+                ):
+                    result = (
+                        "创建/重写剧本失败：自动写作正文必须包含一个 <conception>...</conception>，"
+                        "记录最终场景设计与连续性约束；请补齐后重新调用。"
+                    )
                 else:
                     try:
                         if on_tool_progress is not None:
                             on_tool_progress(tool_name)
-                        result = tool.invoke(tool_args or {})
+                        result = tool.invoke(tool_args)
                     except Exception as exc:
                         result = f"工具 {tool_name} 执行失败：{exc}"
+
                 cleaned = clean(result).strip()
-                gathered.append(f"[{tool_name}]\n{cleaned}")
+                if is_tool_result_failure(tool_name, result):
+                    last_tool_failure = str(result).strip()
                 tools_used.append(tool_name)
-                total_calls += 1
-                tool_results.append((call_id, tool_name, cleaned))
+                if tool_name in read_tool_names:
+                    gathered.append(f"[{tool_name}]\n{cleaned}")
+                if tool_name == "create_or_rewrite_script":
+                    payload = _parse_saved_payload(result)
+                    if payload is not None:
+                        saved_payload = payload
+                        written_content = str(tool_args.get("overwrite_content") or "").strip()
+                tool_results.append((call_id, tool_name or "unknown_tool", cleaned))
+                if saved_payload is not None:
+                    break
+
             messages.extend(build_tool_result_messages(tool_results))
+            if saved_payload is not None:
+                break
             messages = rebudget_existing_messages(
                 user_id=str(request.user_id),
                 project_name=request.project_name,
@@ -345,31 +439,86 @@ def run_autonomous_scriptwriter_prewrite(
                 llm_client=llm,
                 current_user_message=user_prompt,
             ).messages
-            if total_calls >= PREWRITE_MAX_TOOL_CALLS:
-                break
-
-        if not planning_note:
-            messages.append(HumanMessage(content="PreWrite 调研阶段已结束。不得再调用工具；请基于现有证据输出完整的连续性简报，不得省略知情边界、禁止提前事项和离场状态。"))
-            messages = rebudget_existing_messages(
-                user_id=str(request.user_id),
-                project_name=request.project_name,
-                agent_id="agent_scriptwriter",
-                messages=messages,
-                llm_client=llm,
-                current_user_message="输出完整的 PreWrite 连续性简报。",
-            ).messages
-            response = llm.invoke(messages)
-            planning_note = clean(extract_text_content_from_message(response)).strip()
     finally:
+        current_scriptwriter_prewrite_receipt.reset(receipt_state_token)
+        current_export_format.reset(format_token)
         current_agent_id.reset(agent_token)
         current_project_name.reset(project_token)
         current_user_id.reset(user_token)
 
-    receipt_id = _issue_receipt(request, persist=False)
+    if require_save and saved_payload is None and not blocked_reason:
+        blocked_reason = last_tool_failure or "在 4 次模型请求内未完成正文落盘，现有结果不足以安全继续。"
     return ScriptwriterPreWriteResult(
         receipt_id=receipt_id,
         brief=brief,
         research_context="\n\n".join(gathered),
-        planning_note=planning_note,
+        planning_note="",
         tools_used=tuple(tools_used),
+        request_count=request_count,
+        saved_payload=saved_payload,
+        written_content=written_content,
+        blocked_reason=blocked_reason,
+    )
+
+
+def run_autonomous_scriptwriter_prewrite(
+    request: ScriptwriterPreWriteRequest,
+    *,
+    llm: Any,
+    clean_text: Callable[[Any], str] | None = None,
+    on_tool_progress: Callable[[str], None] | None = None,
+    max_tool_rounds: int = PREWRITE_MAX_TOOL_ROUNDS,
+) -> ScriptwriterPreWriteResult:
+    """局部编辑兼容模式：最多四次请求完成只读调查，不再生成独立总结。"""
+    brief = _build_prewrite_brief(request)
+    tools = _prewrite_read_tools()
+    user_prompt = "\n\n".join(part for part in [
+        brief,
+        f"### 当前已经准备的动态上下文\n{request.available_context.strip()}" if request.available_context.strip() else "",
+        "请核对当前材料是否足够安全写作。",
+    ] if part)
+    return _run_prewrite_tool_loop(
+        request,
+        llm=llm,
+        tools=tools,
+        system_prompt=_build_research_system_prompt(request),
+        user_prompt=user_prompt,
+        clean_text=clean_text,
+        on_tool_progress=on_tool_progress,
+        max_requests=max_tool_rounds,
+        require_save=False,
+    )
+
+
+def run_autonomous_scriptwriter_creation(
+    request: ScriptwriterPreWriteRequest,
+    *,
+    agent: Any,
+    on_tool_progress: Callable[[str], None] | None = None,
+    max_requests: int = PREWRITE_MAX_REQUESTS,
+) -> ScriptwriterPreWriteResult:
+    """Auto-Write 模式：调查、判断、正文生成和落盘都在同一工具循环完成。"""
+    brief = _build_prewrite_brief(request)
+    tools = _autonomous_creation_tools()
+    user_prompt = "\n\n".join(part for part in [
+        brief,
+        f"### 当前场景动态上下文\n{request.available_context.strip()}" if request.available_context.strip() else "",
+        (
+            "### 本次落盘必须逐字复用的可读名称\n"
+            f"chapter_name：{request.chapter_name.strip()}\n"
+            f"scene_name/work_name：{request.scene_name.strip()}"
+        ),
+        f"### 当前创作任务\n{request.task_description.strip()}",
+        "请按需调查；材料足够后直接创建章节并调用正文工具落盘。不要输出独立的 PreWrite 总结。",
+    ] if part)
+    return _run_prewrite_tool_loop(
+        request,
+        llm=agent.llm,
+        tools=tools,
+        system_prompt=_build_autonomous_creation_system_prompt(request, agent=agent, tools=tools),
+        user_prompt=user_prompt,
+        clean_text=agent._clean_model_visible_arc_text,
+        on_tool_progress=on_tool_progress,
+        max_requests=max_requests,
+        require_save=True,
     )

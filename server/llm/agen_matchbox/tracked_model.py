@@ -130,6 +130,13 @@ class UsageTrackingCallback(BaseCallbackHandler):
         self._session_maker = session_maker
         self._usage_context_provider = usage_context_provider
         self._usage_recorded_handler = usage_recorded_handler
+        self._usage_context_snapshot = None
+        if usage_context_provider is not None:
+            try:
+                self._usage_context_snapshot = usage_context_provider()
+            except Exception:
+                # 回调创建阶段没有上下文时，仍允许后续调用阶段重新读取。
+                self._usage_context_snapshot = None
 
         # 流式累积缓冲区（按 run_id 隔离，支持并发）
         self._stream_buffers: Dict[str, List[str]] = {}
@@ -270,6 +277,8 @@ class UsageTrackingCallback(BaseCallbackHandler):
                 usage_context = self._usage_context_provider()
             except Exception:
                 usage_context = None
+        if not usage_context:
+            usage_context = self._usage_context_snapshot
         total_tokens = prompt_tokens + completion_tokens
         with self._session_maker() as session:
             entry = UsageLogEntry(
