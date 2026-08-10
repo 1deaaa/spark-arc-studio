@@ -49,6 +49,10 @@ from .tools.stream_events import (
     is_tool_result_failure,
     normalize_tool_name,
 )
+from .tools.pipeline import (
+    PIPELINE_COMPLETION_MARKER,
+    PIPELINE_COMPLETION_TOOL_NAME,
+)
 from llm.agen_matchbox.tool_protocol import (
     build_tool_history_message,
     build_tool_result_messages,
@@ -87,6 +91,94 @@ def is_stop_event_set(stop_event: Any = None) -> bool:
         return bool(is_set())
     except Exception:
         return False
+
+
+def is_pipeline_tool_result_failure(tool_name: str, result: Any) -> bool:
+    """对落盘回执做保守失败识别，避免把文本型失败当成流水线完成。"""
+    if is_tool_result_failure(tool_name, result):
+        return True
+    from agents.tools.registry import PIPELINE_PERSIST_TOOL_NAMES
+
+    if tool_name not in PIPELINE_PERSIST_TOOL_NAMES:
+        return False
+    first_line = str(result or "").strip().splitlines()[:1]
+    return bool(first_line) and any(
+        marker in first_line[0]
+        for marker in ("失败", "未找到", "未知工具")
+    )
+
+
+def _format_pipeline_receipt_result(result: Any) -> str:
+    """从真实工具返回中提取短回执，不把正文或完整工具参数带回导演。"""
+    text = str(result or "").strip()
+    if not text:
+        return "执行成功"
+    if isinstance(result, dict):
+        payload = result
+    else:
+        try:
+            payload = json.loads(text)
+        except (TypeError, ValueError, json.JSONDecodeError):
+            payload = None
+    if isinstance(payload, dict):
+        parts = []
+        message = str(payload.get("message") or payload.get("status") or "执行成功").strip()
+        if message:
+            parts.append(message)
+        path = str(payload.get("path") or "").strip()
+        if path and path not in message:
+            parts.append(f"路径：{path}")
+        written_chars = payload.get("written_chars")
+        if isinstance(written_chars, int):
+            parts.append(f"正文 {written_chars} 字")
+        return "；".join(parts)[:300] or "执行成功"
+    return text.splitlines()[0][:300]
+
+
+def build_pipeline_completion_receipt(
+    agent_id: str,
+    write_receipts: List[tuple[str, Any]],
+) -> str:
+    """根据已成功执行的落盘工具生成给导演的确定性短回执。"""
+    lines = [f"[{agent_id}] 流水线步骤已完成，项目真相源已更新。"]
+    seen: set[tuple[str, str]] = set()
+    for tool_name, result in write_receipts:
+        summary = _format_pipeline_receipt_result(result)
+        key = (tool_name, summary)
+        if key in seen:
+            continue
+        seen.add(key)
+        lines.append(f"- {tool_name}：{summary}")
+    return "\n".join(lines)
+
+
+def resolve_pipeline_completion(
+    agent_id: str,
+    tool_results: List[tuple[str, str, Any]],
+    write_receipts: List[tuple[str, Any]],
+) -> Optional[str]:
+    """累计真实落盘回执；仅在最终控制工具确认且本批无失败时返回完成回执。"""
+    from agents.tools.registry import PIPELINE_PERSIST_TOOL_NAMES
+
+    current_batch_failed = False
+    for _, tool_name, tool_result in tool_results:
+        if tool_name == PIPELINE_COMPLETION_TOOL_NAME:
+            continue
+        failed = is_pipeline_tool_result_failure(tool_name, tool_result)
+        if failed:
+            current_batch_failed = True
+        elif tool_name in PIPELINE_PERSIST_TOOL_NAMES:
+            write_receipts.append((tool_name, tool_result))
+
+    completion_is_last = bool(tool_results) and (
+        tool_results[-1][1] == PIPELINE_COMPLETION_TOOL_NAME
+    )
+    completion_acknowledged = completion_is_last and str(
+        tool_results[-1][2] or ""
+    ).strip() == PIPELINE_COMPLETION_MARKER
+    if completion_acknowledged and not current_batch_failed and write_receipts:
+        return build_pipeline_completion_receipt(agent_id, write_receipts)
+    return None
 
 
 class ModelStreamRetryExhaustedError(RuntimeError):
@@ -493,7 +585,11 @@ class SparkBaseAgent:
         tools = (
             list(tools_override)
             if tools_override is not None
-            else get_tools_for_agent(self.agent_id, user_id=self.user_id)
+            else get_tools_for_agent(
+                self.agent_id,
+                user_id=self.user_id,
+                pipeline_mode=skip_tool_confirmation,
+            )
         )
         
         system_instruction = prepend_prompt_language_policy(base_prompt)
@@ -537,9 +633,10 @@ class SparkBaseAgent:
 你当前正处于由导演驱动的自动化创作流水线中。**你的受众是导演，不是用户。** 严格遵守以下规则：
 
 1. **凡是涉及内容创作或修改的任务，必须直接调用对应工具将内容落盘。** 严禁用正文输出内容来代替工具调用——例如：写好了世界观但不调用 `rewrite_worldview` 直接输出正文，是错误行为，工具必须被调用。
-2. **工具已经被导演授权，无需征求用户确认，立即执行。** 一次性调用所有需要的工具。
-3. 全部工具执行完毕后，向导演报告完成了什么、关键结果摘要。
-4. **绝对禁止**输出任何面向用户的引导语、前言、寒暄、解释说明或"如果你想要..."等话术。只有行动和报告。
+2. **工具已经被导演授权，无需征求用户确认，立即执行。** 每轮尽量并行调用相互独立且确有必要的工具；若工具结果存在关键缺口、冲突或失败，可以继续补查、修正和重试，不得为了减少轮次牺牲事实与产出完整性。
+3. 若协作元信息中的 `completion_mode=\"silent_continue\"`：完成全部必要调查和落盘后，在最终工具批次中把 `complete_pipeline_step` 放在最后调用。成功后系统会直接把真实工具回执交还导演；不要再输出自然语言总结。工具失败、只完成部分内容或仍需补查时不得调用该标记。
+4. 若 `completion_mode` 不是 `silent_continue`：全部工具执行完毕后，向导演报告完成了什么、关键结果摘要。
+5. **绝对禁止**输出任何面向用户的引导语、前言、寒暄、解释说明或"如果你想要..."等话术。只有行动和必要报告。
 """
             else:
                 tool_instruction += """
@@ -1290,7 +1387,14 @@ class SparkBaseAgent:
                 return ctx
         return None
 
-    def chat(self, user_message: str, history: List[Dict[str, Any]] = None, active_context: str = None, skip_tool_confirmation: bool = False) -> str:
+    def chat(
+        self,
+        user_message: str,
+        history: List[Dict[str, Any]] = None,
+        active_context: str = None,
+        skip_tool_confirmation: bool = False,
+        stop_after_pipeline_completion: bool = False,
+    ) -> str:
         """
         通用的直接对话入口。
         """
@@ -1347,7 +1451,11 @@ class SparkBaseAgent:
             )
             self._set_context_checkpoint_candidate(budget_result.checkpoint)
             messages = budget_result.messages
-            tools = get_tools_for_agent(self.agent_id, user_id=self.user_id)
+            tools = get_tools_for_agent(
+                self.agent_id,
+                user_id=self.user_id,
+                pipeline_mode=skip_tool_confirmation,
+            )
             if tools:
                 invoke_llm = invoke_llm.bind_tools(tools)
 
@@ -1361,6 +1469,7 @@ class SparkBaseAgent:
                 [t.name for t in tools] if tools else [],
             )
 
+            pipeline_write_receipts: List[tuple[str, Any]] = []
             while True:
                 response = invoke_llm.invoke(messages)
 
@@ -1395,9 +1504,21 @@ class SparkBaseAgent:
                 tool_results = []
                 for tool_spec in tool_specs:
                     tool_call_id = tool_spec["call_id"]
-                    tool_name = str(tool_spec.get("name") or self._extract_tool_name(tool_spec.get("raw")))
+                    tool_name = normalize_tool_name(str(
+                        tool_spec.get("name")
+                        or self._extract_tool_name(tool_spec.get("raw"))
+                    ))
                     result = self._execute_tool_calls([tool_spec])
                     tool_results.append((tool_call_id, tool_name, result))
+
+                if stop_after_pipeline_completion:
+                    completion_receipt = resolve_pipeline_completion(
+                        self.agent_id,
+                        tool_results,
+                        pipeline_write_receipts,
+                    )
+                    if completion_receipt:
+                        return completion_receipt
 
                 # 将 AI 消息（含 tool_calls）和工具结果追加到消息历史
                 # 清洗 think 标签，避免下一轮 LLM 把推理内容当正文回显
@@ -1425,7 +1546,15 @@ class SparkBaseAgent:
                 raise
             return f"[Agent Error] 对话失败: {e}"
 
-    def chat_stream(self, user_message: str, history: List[Dict[str, Any]] = None, active_context: str = None, skip_tool_confirmation: bool = False, stop_event: Any = None):
+    def chat_stream(
+        self,
+        user_message: str,
+        history: List[Dict[str, Any]] = None,
+        active_context: str = None,
+        skip_tool_confirmation: bool = False,
+        stop_event: Any = None,
+        stop_after_pipeline_completion: bool = False,
+    ):
         """通用流式对话入口。逐段 yield 文本增量。"""
         from .agent_utils import load_prompt
         self._set_context_checkpoint_candidate(None)
@@ -1447,7 +1576,19 @@ class SparkBaseAgent:
         except Exception:
             system_prompt = f"你是一个专业的助手：{self.name}。你的职责是：{self.intro}"
 
-        system_instruction = self._build_tool_system_prompt(system_prompt, active_context, skip_tool_confirmation=skip_tool_confirmation)
+        from agents.tools.registry import get_tools_for_agent
+
+        tools = get_tools_for_agent(
+            self.agent_id,
+            user_id=self.user_id,
+            pipeline_mode=skip_tool_confirmation,
+        )
+        system_instruction = self._build_tool_system_prompt(
+            system_prompt,
+            active_context,
+            skip_tool_confirmation=skip_tool_confirmation,
+            tools_override=tools,
+        )
         from agents.prompt_layout import build_chat_prompt_layout
         prompt_layout = build_chat_prompt_layout(
             system_instruction=system_instruction,
@@ -1457,7 +1598,6 @@ class SparkBaseAgent:
         )
 
         from llm.agen_matchbox import matchbox
-        from agents.tools.registry import get_tools_for_agent
         from agents.context_budget import (
             prepare_chat_messages_with_budget,
             rebudget_existing_messages,
@@ -1480,11 +1620,11 @@ class SparkBaseAgent:
         )
         self._set_context_checkpoint_candidate(budget_result.checkpoint)
         messages = budget_result.messages
-        tools = get_tools_for_agent(self.agent_id, user_id=self.user_id)
         if tools:
             stream_llm = stream_llm.bind_tools(tools)
 
         try:
+            pipeline_write_receipts: List[tuple[str, Any]] = []
             while True:
                 if is_stop_event_set(stop_event):
                     return
@@ -1545,6 +1685,8 @@ class SparkBaseAgent:
                         if not tool_name:
                             continue
                         tool_name = normalize_tool_name(tool_name)
+                        if tool_name == PIPELINE_COMPLETION_TOOL_NAME:
+                            continue
                         tool_call_key = self._tool_call_event_key(tool_name, tcc, tool_index, len(started_tools))
                         if tool_call_key in started_tools:
                             continue
@@ -1606,6 +1748,7 @@ class SparkBaseAgent:
                             break
 
                         tool_name = normalize_tool_name(str(tool_spec.get("name") or self._extract_tool_name(tool_spec.get("raw"))))
+                        is_pipeline_control = tool_name == PIPELINE_COMPLETION_TOOL_NAME
                         spec_index = tool_spec.get("index")
                         raw_call_id = tool_spec["call_id"]
                         indexed_tool_call_key = self._tool_call_event_key(tool_name, tool_spec.get("raw"), spec_index, len(tool_results)) if spec_index is not None else ""
@@ -1621,7 +1764,7 @@ class SparkBaseAgent:
                         if tool_event_metadata.get("tool_provider"):
                             progress_text = f"正在使用 {tool_event_metadata['tool_provider'].title()} 搜索..."
 
-                        if tool_call_key not in started_tools:
+                        if not is_pipeline_control and tool_call_key not in started_tools:
                             yield build_tool_stream_event(
                                 "tool_intent_started",
                                 tool_name,
@@ -1635,14 +1778,15 @@ class SparkBaseAgent:
                                 break
                             started_tools.add(tool_call_key)
 
-                        yield build_tool_stream_event(
-                            "tool_exec_started",
-                            tool_name,
-                            source_agent=self.agent_id,
-                            message=progress_text,
-                            tool_call_key=tool_call_key,
-                            **tool_event_metadata,
-                        )
+                        if not is_pipeline_control:
+                            yield build_tool_stream_event(
+                                "tool_exec_started",
+                                tool_name,
+                                source_agent=self.agent_id,
+                                message=progress_text,
+                                tool_call_key=tool_call_key,
+                                **tool_event_metadata,
+                            )
                         if is_stop_event_set(stop_event):
                             cancelled_during_tools = True
                             break
@@ -1664,8 +1808,8 @@ class SparkBaseAgent:
                             except queue.Empty:
                                 break
 
-                        _is_tool_failure = is_tool_result_failure(tool_name, tool_result)
-                        if _is_tool_failure:
+                        _is_tool_failure = is_pipeline_tool_result_failure(tool_name, tool_result)
+                        if _is_tool_failure and not is_pipeline_control:
                             yield build_tool_stream_event(
                                 "tool_exec_failed",
                                 tool_name,
@@ -1674,7 +1818,7 @@ class SparkBaseAgent:
                                 message=get_tool_result_failure_message(tool_name, tool_result),
                                 **tool_event_metadata,
                             )
-                        else:
+                        elif not is_pipeline_control:
                             yield build_tool_stream_event(
                                 "tool_exec_finished",
                                 tool_name,
@@ -1706,6 +1850,20 @@ class SparkBaseAgent:
 
                 if cancelled_during_tools or is_stop_event_set(stop_event):
                     return
+
+                if stop_after_pipeline_completion:
+                    completion_receipt = resolve_pipeline_completion(
+                        self.agent_id,
+                        tool_results,
+                        pipeline_write_receipts,
+                    )
+                    if completion_receipt:
+                        yield {
+                            "event": "pipeline_step_completed",
+                            "source_agent": self.agent_id,
+                            "receipt": completion_receipt,
+                        }
+                        return
 
                 # 将 AI 消息（含 tool_calls）和工具结果追加到消息历史，进入下一轮
                 # 清洗 think 标签，避免下一轮 LLM 把推理内容当正文回显

@@ -23,6 +23,7 @@ from agents.tools.muse import (
     read_inspiration,
     rewrite_inspiration,
 )
+from agents.tools.pipeline import complete_pipeline_step
 from agents.tools.research import graph_rag_tool
 from agents.tools.scriptwriter import (
     create_chapter,
@@ -55,6 +56,13 @@ EXTERNAL_SEARCH_TOOLS = [web_search]
 OPTIONAL_RESEARCH_TOOLS = [story_memory_tool, graph_rag_tool]
 SHARED_SKILL_TOOLS = [search_skills, read_skill, read_skill_reference]
 SHARED_CHAT_HISTORY_TOOLS = [search_chat_history]
+PIPELINE_CONTROL_TOOLS = [complete_pipeline_step]
+PIPELINE_CAPABLE_AGENT_IDS = {
+    "agent_muse",
+    "agent_lorebook",
+    "agent_showrunner",
+    "agent_scriptwriter",
+}
 SKILL_CAPABLE_AGENT_IDS = {
     "agent_director",
     "agent_muse",
@@ -191,6 +199,23 @@ SHOWRUNNER_TOOLS = SHOWRUNNER_BASE_TOOLS + SHARED_SKILL_TOOLS
 SCRIPTWRITER_TOOLS = SCRIPTWRITER_BASE_TOOLS + SHARED_SKILL_TOOLS
 DIRECTOR_TOOLS = DIRECTOR_BASE_TOOLS + SHARED_SKILL_TOOLS
 CRITIC_TOOLS = CRITIC_BASE_TOOLS + SHARED_SKILL_TOOLS
+PIPELINE_PERSIST_TOOLS = [
+    rewrite_inspiration,
+    rewrite_worldview,
+    rewrite_all_characters,
+    update_character,
+    create_character_relation,
+    patch_worldview,
+    rewrite_synopsis,
+    rewrite_beat_sheet,
+    rewrite_outline,
+    patch_synopsis,
+    patch_beat_sheet,
+    patch_outline,
+    create_or_rewrite_script,
+    patch_script,
+]
+PIPELINE_PERSIST_TOOL_NAMES = frozenset(tool.name for tool in PIPELINE_PERSIST_TOOLS)
 ALL_TOOLS = (
     MUSE_TOOLS
     + LOREBOOK_TOOLS
@@ -211,13 +236,19 @@ ALL_TOOLS = (
     + SHARED_CHAT_HISTORY_TOOLS
     + EXTERNAL_SEARCH_TOOLS
     + OPTIONAL_RESEARCH_TOOLS
+    + PIPELINE_CONTROL_TOOLS
 )
 TOOLS_BY_NAME = {}
 for tool in ALL_TOOLS:
     TOOLS_BY_NAME.setdefault(tool.name, tool)
 
 
-def get_tools_for_agent(agent_id: str, user_id: str | int | None = None) -> list:
+def get_tools_for_agent(
+    agent_id: str,
+    user_id: str | int | None = None,
+    *,
+    pipeline_mode: bool = False,
+) -> list:
     tool_map = {
         "agent_muse": MUSE_BASE_TOOLS,
         "agent_lorebook": LOREBOOK_BASE_TOOLS,
@@ -227,7 +258,10 @@ def get_tools_for_agent(agent_id: str, user_id: str | int | None = None) -> list
         "agent_critic": CRITIC_BASE_TOOLS,
         "agent_style": [],
     }
-    return _with_contextual_tools(agent_id, tool_map.get(agent_id, []), user_id)
+    tools = _with_contextual_tools(agent_id, tool_map.get(agent_id, []), user_id)
+    if pipeline_mode and agent_id in PIPELINE_CAPABLE_AGENT_IDS:
+        tools.extend(PIPELINE_CONTROL_TOOLS)
+    return tools
 
 
 # MCP 远程操控暴露的纯查询工具白名单（P0 第二层）

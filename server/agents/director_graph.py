@@ -792,6 +792,7 @@ def sub_agent_node(state: DirectorState) -> Dict[str, Any]:
     cancelled = False
     suppress_scriptwriter_draft = target_agent == "agent_scriptwriter" and skip_tool_confirmation
     scriptwriter_saved = False
+    pipeline_completion_receipt = ""
     
     try:
         # NOTE: 此处不使用 yield，而是将生成内容全部截留后向 writer 推送同时汇聚 buf，
@@ -802,6 +803,9 @@ def sub_agent_node(state: DirectorState) -> Dict[str, Any]:
             active_context=merged_active_context,
             skip_tool_confirmation=skip_tool_confirmation,
             stop_event=stop_event,
+            stop_after_pipeline_completion=(
+                completion_mode == HANDOFF_COMPLETION_SILENT_CONTINUE
+            ),
         )
         
         for delta in iterable:
@@ -828,6 +832,9 @@ def sub_agent_node(state: DirectorState) -> Dict[str, Any]:
             
             if isinstance(delta, dict):
                 event_type = delta.get("event", "")
+                if event_type == "pipeline_step_completed":
+                    pipeline_completion_receipt = str(delta.get("receipt") or "").strip()
+                    continue
                 tagged_delta = {**delta, "source_agent": target_agent, "nested": True}
                 tool_name = str(delta.get("tool_name") or "")
                 if _is_scriptwriter_persist_tool(tool_name) and event_type == "tool_exec_finished":
@@ -886,7 +893,7 @@ def sub_agent_node(state: DirectorState) -> Dict[str, Any]:
         }
     
     # 清洗子 agent 收集到的正文，防止 </think> 残留正文进入导演的下一轮对话历史
-    result = extract_visible_text_from_plain_text("".join(buf).strip())
+    result = pipeline_completion_receipt or extract_visible_text_from_plain_text("".join(buf).strip())
 
     if suppress_scriptwriter_draft and not scriptwriter_saved:
         result = (
@@ -903,6 +910,8 @@ def sub_agent_node(state: DirectorState) -> Dict[str, Any]:
         sub_agent_result = f"[{target_agent}] Execution failed:\n{result}"
     elif completion_mode == HANDOFF_COMPLETION_REPORT_TO_USER:
         sub_agent_result = result
+    elif completion_mode == HANDOFF_COMPLETION_SILENT_CONTINUE and pipeline_completion_receipt:
+        sub_agent_result = pipeline_completion_receipt
     elif completion_mode == HANDOFF_COMPLETION_SILENT_CONTINUE:
         sub_agent_result = f"[{target_agent}] Silent execution result:\n{result}"
     else:
