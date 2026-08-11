@@ -1455,7 +1455,7 @@ class SparkBaseAgent:
                 fresh_call_ids = {cid for cid, _, _ in tool_results}
                 for call_id, t_name, t_result in tool_results:
                     messages.append(_ToolMessage(content=t_result or "", tool_call_id=call_id, name=t_name))
-                # 附件分片滑动窗口：只保留本轮新 read_attachment_chunk 的完整正文，其余折叠
+                # 长读取滑动窗口：保留当前用户请求内的全部原文，只折叠旧用户轮次结果
                 collapse_attachment_chunk_history(messages, fresh_call_ids=fresh_call_ids)
                 messages = rebudget_existing_messages(
                     user_id=self.user_id,
@@ -1767,7 +1767,7 @@ class SparkBaseAgent:
                 fresh_call_ids = {cid for cid, _, _ in tool_results}
                 for call_id, t_name, t_result in tool_results:
                     messages.append(_ToolMessage(content=t_result or "", tool_call_id=call_id, name=t_name))
-                # 附件分片滑动窗口：只保留本轮新 read_attachment_chunk 的完整正文，其余折叠
+                # 长读取滑动窗口：保留当前用户请求内的全部原文，只折叠旧用户轮次结果
                 collapse_attachment_chunk_history(messages, fresh_call_ids=fresh_call_ids)
                 tool_budget_result = yield from stream_context_budget_events(
                     rebudget_existing_messages,

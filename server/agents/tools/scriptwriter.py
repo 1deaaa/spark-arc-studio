@@ -56,7 +56,7 @@ class CreateChapterInput(BaseModel):
 
 
 class PatchScriptInput(BaseModel):
-    search_text: str = Field(description="需要被替换的剧本片段（必须精确匹配原文）。传入空字符串可将 replace_text 追加到文件末尾")
+    search_text: str = Field(description="需要被替换的剧本片段。必须逐字复制 read_chapter_scene 返回的‘已落盘剧本’代码块内部连续原文，不得包含代码围栏、文件标题或解释文字；优先选择可唯一定位的 1-3 句。传入空字符串可将 replace_text 追加到文件末尾")
     replace_text: str = Field(description="修改后的新文本片段")
 
 
@@ -349,7 +349,7 @@ def create_chapter(chapter_name: str) -> str:
 
 @tool(args_schema=PatchScriptInput)
 def patch_script(search_text: str, replace_text: str) -> str:
-    """局部修改剧本内容。search_text 传空字符串可将 replace_text 追加到文件末尾。"""
+    """局部修改剧本内容；匹配失败时应重新读取原文并缩短定位片段，不要直接完整重写。"""
     from core.utils import get_project_stories_path
 
     user_id, project_name = ToolExecutionContext.get_context()
@@ -416,7 +416,9 @@ def patch_script(search_text: str, replace_text: str) -> str:
 
     return (
         "局部修改剧本失败：在当前项目所有剧本文件中均未找到与 search_text 匹配的片段。\n"
-        "提示：请确保 search_text 取自原文的完整连续片段（建议 1‑3 句），不要包含额外解释性文字。"
+        "恢复步骤：调用 read_chapter_scene 重新读取目标场景，从‘已落盘剧本’代码块内部逐字复制一段"
+        "可唯一定位的连续原文（建议 1-3 句），缩短 search_text 后重试；不要包含代码围栏、文件标题或解释文字，"
+        "也不要重复提交同一个失败片段。仅因局部匹配失败时，不得改用完整重写。"
     )
 
 

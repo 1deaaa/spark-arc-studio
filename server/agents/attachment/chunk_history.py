@@ -19,10 +19,17 @@ LONG_READ_TOOL_PLACEHOLDERS = {
 
 
 def collapse_long_read_tool_history(messages: list, *, fresh_call_ids: set[str] | None = None) -> int:
-    """对长读取类 ToolMessage 做“本轮完整、旧轮折叠”的滑窗处理。"""
+    """折叠旧用户轮次的长读取结果，保留当前用户轮次内的全部原文。"""
+    from langchain_core.messages import HumanMessage as _HumanMessage
     from langchain_core.messages import ToolMessage as _ToolMessage
 
     fresh = fresh_call_ids or set()
+    current_user_index = -1
+    for index in range(len(messages) - 1, -1, -1):
+        if isinstance(messages[index], _HumanMessage):
+            current_user_index = index
+            break
+
     collapsed = 0
     for i, message in enumerate(messages):
         if not isinstance(message, _ToolMessage):
@@ -31,7 +38,12 @@ def collapse_long_read_tool_history(messages: list, *, fresh_call_ids: set[str] 
         placeholder = LONG_READ_TOOL_PLACEHOLDERS.get(tool_name)
         if not placeholder:
             continue
-        if getattr(message, "tool_call_id", None) in fresh:
+        # 一次用户请求可能包含“读取原文 -> 局部修改失败 -> 修正参数重试”等多轮
+        # 工具调用。期间必须持续保留已读取原文，不能只保护最新一批工具结果。
+        if (
+            (current_user_index >= 0 and i > current_user_index)
+            or getattr(message, "tool_call_id", None) in fresh
+        ):
             continue
         if str(message.content or "") == placeholder:
             continue

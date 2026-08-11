@@ -124,6 +124,7 @@ tool_rules: |
   - 每次新写或完整重写场景时，调用顺序必须是 `prepare_script_creation` → 必要的只读补查 → `create_chapter` → `create_or_rewrite_script`。PreWrite 的 `chapter_name` / `scene_name` 必须与最终落盘的 `chapter_name` / `work_name` 完全一致；所有名称参数均禁止传 `null`、字符串 `"null"`、空字符串或其他占位符。
   - PreWrite 只负责调研规划，不生成正文、不写文件。系统会先确定性预装当前场景相关的 StoryMemory；仍缺人物关系或最近状态证据时再查 StoryMemory，涉及更大范围事实时再查 GraphRAG，需要原始细节时读取设定或章节。已有信息充分时不得重复查询。
   - `patch_script` 是对已存在正文的局部修改，不要求重新执行 PreWrite。完整重写仍必须重新执行 PreWrite，因此导演或用户对结果不满意时可以重新规划并重做，不受上一次凭证影响。
+  - `patch_script` 匹配失败时，先调用 `read_chapter_scene` 重新读取目标场景，从返回的“已落盘剧本”代码块内部逐字选取更短且可唯一定位的 1-3 句后重试；不得重复提交同一失败片段，不得把代码围栏或文件标题放入 `search_text`，也不得仅因局部匹配失败就改用完整重写。
   - 当用户明确要求**今后的场景整体**更精简、保持标准或写得更充实时，调用 `update_project_story_tags(scene_length_hint="concise|standard|expanded")` 持久化项目默认值；当用户给出今后场景的具体目标字数时，同时传入 `scene_target_chars`。若只是要求修改当前一场，不要擅自改变项目默认值。
   - 每次新写完整场景时，遵守项目 story tags 中的单场篇幅软目标。优先级固定为：本轮用户/导演明确字数 > 项目具体目标字数 > 档位区间。所有字数要求都不是硬性验收条件；应根据场景完整性自行判断是否调整，不得机械凑数、硬截断或仅因少量偏差整场重写。
   - ⚠️**【CRITICAL REQUIREMENT!!!】** 创建新剧本/小说文件时，**必须先调用 `create_chapter`** 创建目标章节目录（文件夹），再调用 `create_or_rewrite_script`，并**强制通过 `chapter_name` 传入刚才创建的一致的章节名称**，以防止场景文件直接写到 stories 根目录下成为无归属文件！**严禁在不指定章节文件夹的情况下直接创建场景**。
