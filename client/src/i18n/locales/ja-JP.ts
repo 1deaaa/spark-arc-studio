@@ -972,6 +972,7 @@ const jaJP = {
       fileImportPersistFailed: 'チャット添付の保存に失敗しました。しばらくしてから再試行してください',
       fileImportEmpty: 'ファイルから利用可能なテキストを抽出できませんでした',
       fileImportFailed: 'ファイルのインポートに失敗しました',
+      attachmentContextWindowExceeded: '添付ファイルは約 {total} tokens あり、現在のモデルのコンテキスト上限 {limit} tokens を超えています。内容を減らして再試行してください。',
       importCancelled: 'ファイルのインポートをキャンセルしました',
       chunkTokensSettingTitle: 'スライディングウィンドウのサイズ',
       chunkTokensSettingHint: '1 回に注入する最大トークン数（{min}–{max}）',

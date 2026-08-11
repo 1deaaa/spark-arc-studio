@@ -31,6 +31,18 @@ class ChatAttachmentPreparation:
     attachment_id: str
     chunk_count: int
     total_tokens_estimated: int
+    is_partial: bool
+
+
+class AttachmentContextWindowExceededError(ValueError):
+    """附件全文 token 数超过当前模型上下文窗口。"""
+
+    def __init__(self, *, total_tokens: int, max_context_tokens: int):
+        self.total_tokens = max(int(total_tokens or 0), 0)
+        self.max_context_tokens = max(int(max_context_tokens or 0), 0)
+        super().__init__(
+            f"附件约 {self.total_tokens} tokens，超过当前模型 {self.max_context_tokens} tokens 的上下文窗口"
+        )
 
 
 class UtilityAgent:
@@ -225,12 +237,21 @@ class UtilityAgent:
         filename: str,
         chunk_tokens: int,
         estimate_model: str | None = None,
+        max_context_tokens: int | None = None,
     ) -> ChatAttachmentPreparation:
         """聊天附件解析、Token 切分与附件缓存落盘的统一 facade。"""
         from agents.attachment import save_attachment
         from core.file_ingest.service import parse_uploaded_file
 
         parsed = parse_uploaded_file(file_path, filename, estimate_model)
+        total_tokens_estimated = estimate_tokens(parsed.full_text, model=estimate_model)
+        normalized_context_limit = max(int(max_context_tokens or 0), 0)
+        if normalized_context_limit and total_tokens_estimated > normalized_context_limit:
+            raise AttachmentContextWindowExceededError(
+                total_tokens=total_tokens_estimated,
+                max_context_tokens=normalized_context_limit,
+            )
+
         splitter = TokenTextSplitter(
             chunk_tokens=chunk_tokens,
             tail_merge_threshold_ratio=0.5,
@@ -238,7 +259,10 @@ class UtilityAgent:
             estimate_model=estimate_model,
         )
         chunks, chunk_info = splitter.split_with_info(parsed.full_text)
-        total_tokens_estimated = int(chunk_info.get("total_tokens_estimated") or 0)
+        total_tokens_estimated = int(chunk_info.get("total_tokens_estimated") or total_tokens_estimated)
+        from core.project_settings import CHAT_ATTACHMENT_DIRECT_INJECTION_MAX_TOKENS
+
+        is_partial = total_tokens_estimated > CHAT_ATTACHMENT_DIRECT_INJECTION_MAX_TOKENS
         meta = save_attachment(
             user_id=user_id,
             project_name=project_name,
@@ -255,4 +279,5 @@ class UtilityAgent:
             attachment_id=meta.attachment_id,
             chunk_count=len(chunks),
             total_tokens_estimated=total_tokens_estimated,
+            is_partial=is_partial,
         )

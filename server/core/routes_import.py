@@ -26,18 +26,25 @@ from core.request_context import get_current_project_name, resolve_project_name
 import_router = APIRouter()
 
 
-def _resolve_import_estimate_model_name(user_id: str) -> str | None:
-    """复用当前主用途模型，统一附件解析与切分的 token 估算口径。"""
+def _resolve_import_model_limits(user_id: str) -> tuple[str | None, int]:
+    """复用当前主用途模型，统一附件 token 估算口径与总量上限。"""
     try:
         from llm.agen_matchbox import DEFAULT_USAGE_KEY, matchbox
+        from llm.agen_matchbox.models import DEFAULT_MAX_CONTEXT_TOKENS
 
         detail = matchbox().get_user_selection_detail(str(user_id), usage_key=DEFAULT_USAGE_KEY)
         current = detail.get("current") if isinstance(detail, dict) else None
         model_name = current.get("model_name") if isinstance(current, dict) else None
         normalized = str(model_name or "").strip()
-        return normalized or None
+        raw_limit = current.get("max_context_tokens") if isinstance(current, dict) else None
+        max_context_tokens = int(raw_limit or DEFAULT_MAX_CONTEXT_TOKENS)
+        if max_context_tokens <= 0:
+            max_context_tokens = DEFAULT_MAX_CONTEXT_TOKENS
+        return normalized or None, max_context_tokens
     except Exception:
-        return None
+        from llm.agen_matchbox.models import DEFAULT_MAX_CONTEXT_TOKENS
+
+        return None, DEFAULT_MAX_CONTEXT_TOKENS
 
 
 @import_router.get("/api/import/capabilities")
@@ -125,7 +132,7 @@ async def parse_import_file(
         with open(tmp_path, "wb") as f:
             shutil.copyfileobj(file.file, f)
 
-        estimate_model = _resolve_import_estimate_model_name(user_id)
+        estimate_model, max_context_tokens = _resolve_import_model_limits(user_id)
         # chunk_tokens 优先级：前端显式传值 > 项目级配置 > 默认值。
         # 不再硬编码 30000——项目可在附件面板里调整滑动窗口大小并持久化。
         from core.project_settings import _coerce_attachment_chunk_tokens
@@ -144,6 +151,7 @@ async def parse_import_file(
             filename=file.filename or "",
             chunk_tokens=chunk_tokens,
             estimate_model=estimate_model,
+            max_context_tokens=max_context_tokens,
         )
 
         if not prepared.attachment_id:
@@ -212,12 +220,26 @@ async def parse_import_file(
             ],
             "chunk_info": prepared.chunk_info,
             "chunk_count": prepared.chunk_count,
+            "is_partial": prepared.is_partial,
+            "max_context_tokens": max_context_tokens,
         }
     except UnsupportedImportFormatError as e:
         return JSONResponse(status_code=400, content={"error": str(e)})
     except ImportTextEmptyError as e:
         return JSONResponse(status_code=400, content={"error": str(e)})
     except Exception as e:
+        from agents.utility_agent import AttachmentContextWindowExceededError
+
+        if isinstance(e, AttachmentContextWindowExceededError):
+            return JSONResponse(
+                status_code=413,
+                content={
+                    "error": str(e),
+                    "code": "attachment_context_window_exceeded",
+                    "total_tokens": e.total_tokens,
+                    "max_context_tokens": e.max_context_tokens,
+                },
+            )
         return JSONResponse(status_code=500, content={"error": str(e)})
     finally:
         if tmp_path and os.path.exists(tmp_path):

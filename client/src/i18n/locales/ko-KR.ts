@@ -970,6 +970,7 @@ const koKR = {
       fileImportPersistFailed: '첨부 파일의 내부 전처리 및 저장 단계에서 오류가 발생했습니다',
       fileImportEmpty: '제시된 파일에서 판독 가능한 텍스트 콘텐츠를 검출하지 못했습니다',
       fileImportFailed: '파일 가져오기 실패',
+      attachmentContextWindowExceeded: '첨부 파일은 약 {total} tokens로, 현재 모델의 컨텍스트 한도 {limit} tokens를 초과합니다. 내용을 줄인 후 다시 시도해 주세요.',
       importCancelled: '가져오기 취소됨',
       chunkTokensSettingTitle: '단락기 슬라이딩 윈도우 크기',
       chunkTokensSettingHint: '대화 주입 시 1회당 반영할 최대 조각 토큰 영역 범위 지정 ({min}–{max})',

@@ -5,14 +5,12 @@ import { useChatStore } from '@/components/stores/chatStore';
 import { useProjectStore } from '@/components/stores/projectStore';
 import {
   getAttachmentChunkTokensSetting,
+  FileImportError,
   parseImportFile,
   setAttachmentChunkTokensSetting,
   type AttachmentChunkTokensSetting,
 } from '@/services/fileImportService';
 import { useDocumentImport } from '@/composables/useDocumentImport';
-
-/** 单附件场景下"全文注入 vs 首片注入"的判定阈值（与单附件后端策略对齐）。 */
-const CHAT_DIRECT_UPLOAD_MAX_TOKENS = 100000;
 
 const ATTACHMENT_CHUNK_TOKENS_FALLBACK: AttachmentChunkTokensSetting = {
   success: true,
@@ -124,7 +122,7 @@ export function useChatFileImport(getSessionId: () => number | null | undefined)
           const totalTokens = Number((parsed.chunk_info as { total_tokens_estimated?: unknown } | null)?.total_tokens_estimated || 0);
           // 单附件场景下：超阈值就走 partial（仅注入首片），后端按项目配置切分；否则灌全文。
           // 多附件场景下：partial 标记仅作为元信息保留，实际是否注入由后端"多附件 ≥ 2 仅注入清单"策略决定。
-          const shouldUsePartialChunk = totalTokens > CHAT_DIRECT_UPLOAD_MAX_TOKENS;
+          const shouldUsePartialChunk = Boolean(parsed.is_partial);
           const attachmentId = String(parsed.attachment_id || '').trim();
           if (!attachmentId) {
             throw new Error(t('components.chatPanel.fileImportPersistFailed'));
@@ -167,9 +165,15 @@ export function useChatFileImport(getSessionId: () => number | null | undefined)
             throw innerErr;
           }
           // 单文件失败时继续处理后续文件，避免一个坏文件阻塞其他附件。
-          const message = innerErr instanceof Error
-            ? innerErr.message
-            : String(innerErr || t('components.chatPanel.fileImportFailed'));
+          const message = innerErr instanceof FileImportError
+            && innerErr.code === 'attachment_context_window_exceeded'
+            ? t('components.chatPanel.attachmentContextWindowExceeded', {
+                total: formatTokenCount(innerErr.totalTokens),
+                limit: formatTokenCount(innerErr.maxContextTokens),
+              })
+            : innerErr instanceof Error
+              ? innerErr.message
+              : String(innerErr || t('components.chatPanel.fileImportFailed'));
           bus.emit('toast', {
             type: 'error',
             message: t('components.chatPanel.singleFileImportFailed', { filename: file.name, message }),
