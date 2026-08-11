@@ -5,114 +5,14 @@ import threading
 from langchain_core.messages import AIMessage, ToolMessage
 
 from agents.director_graph import (
+    _build_director_message_update,
     _is_tracker_progress_update,
-    _retain_only_pending_delegate_tool_call,
     _tracker_update_required_message,
     route_after_director,
     run_director_stream,
 )
-
-
-def _tool_call_ids(message: AIMessage) -> set[str]:
-    ids: set[str] = set()
-    for item in getattr(message, "tool_calls", None) or []:
-        ids.add(str(item.get("id") or ""))
-    for item in getattr(message, "additional_kwargs", {}).get("tool_calls", []) or []:
-        if isinstance(item, dict):
-            ids.add(str(item.get("id") or ""))
-    return ids
-
-
-def test_pending_delegate_history_keeps_only_matching_tool_call() -> None:
-    message = AIMessage(
-        content="",
-        tool_calls=[
-            {
-                "id": "call_tracker",
-                "name": "work_tracker",
-                "args": {"operations": [{"operation": "set_status"}]},
-                "type": "tool_call",
-            },
-            {
-                "id": "call_delegate",
-                "name": "delegate_task",
-                "args": {"target_agent": "agent_lorebook"},
-                "type": "tool_call",
-            },
-        ],
-        additional_kwargs={
-            "tool_calls": [
-                {
-                    "id": "call_tracker",
-                    "type": "function",
-                    "function": {"name": "work_tracker", "arguments": "{\"operations\":[]}"},
-                },
-                {
-                    "id": "call_delegate",
-                    "type": "function",
-                    "function": {"name": "delegate_task", "arguments": "{\"target_agent\":\"agent_lorebook\"}"},
-                },
-            ]
-        },
-    )
-
-    pruned = _retain_only_pending_delegate_tool_call(
-        message,
-        selected_spec={
-            "raw": message.tool_calls[1],
-            "name": "delegate_task",
-            "args": {"target_agent": "agent_lorebook"},
-            "index": 1,
-        },
-        call_id="call_delegate",
-        tool_name="delegate_task",
-    )
-
-    assert [item["id"] for item in pruned.tool_calls] == ["call_delegate"]
-    assert [item["id"] for item in pruned.additional_kwargs["tool_calls"]] == ["call_delegate"]
-    assert _tool_call_ids(pruned) == {"call_delegate"}
-
-
-def test_pending_delegate_history_injects_fallback_tool_call_id() -> None:
-    message = AIMessage(
-        content="",
-        tool_calls=[
-            {
-                "id": "",
-                "name": "delegate_task",
-                "args": {"target_agent": "agent_lorebook"},
-                "type": "tool_call",
-            }
-        ],
-        additional_kwargs={
-            "tool_calls": [
-                {
-                    "type": "function",
-                    "function": {"name": "delegate_task", "arguments": "{\"target_agent\":\"agent_lorebook\"}"},
-                }
-            ]
-        },
-    )
-
-    pruned = _retain_only_pending_delegate_tool_call(
-        message,
-        selected_spec={
-            "raw": message.tool_calls[0],
-            "name": "delegate_task",
-            "args": {"target_agent": "agent_lorebook"},
-            "index": 0,
-        },
-        call_id="agent_director:delegate_task:0",
-        tool_name="delegate_task",
-    )
-    response = ToolMessage(
-        content="世界观已完成",
-        tool_call_id="agent_director:delegate_task:0",
-        name="delegate_task",
-    )
-
-    assert pruned.tool_calls[0]["id"] == response.tool_call_id
-    assert pruned.additional_kwargs["tool_calls"][0]["id"] == response.tool_call_id
+from agents.communication import SparkBaseAgent
+from llm.agen_matchbox.tool_protocol import validate_tool_message_history
 
 
 def test_tracker_progress_update_requires_explicit_overwrite_or_operations() -> None:
@@ -179,6 +79,48 @@ def test_tracker_protocol_keeps_failed_or_unsatisfactory_task_retryable() -> Non
     assert "notes 记录失败原因和重做要求" in message
     assert "重新委派原专家重做" in message
     assert "不会终止当前流程" in message
+
+
+def test_sub_agent_result_is_persisted_before_tracker_turn() -> None:
+    director = SparkBaseAgent(
+        "agent_director",
+        user_id="tool-history-test",
+        project_name="demo",
+    )
+    previous_state = [
+        AIMessage(content="", tool_calls=[{
+            "id": "call_delegate",
+            "name": "delegate_task",
+            "args": {},
+            "type": "tool_call",
+        }]),
+    ]
+    handoff_result = ToolMessage(
+        content="专家已回交",
+        tool_call_id="call_delegate",
+        name="delegate_task",
+    )
+    tracker_response = AIMessage(content="", tool_calls=[{
+        "id": "call_tracker",
+        "name": "work_tracker",
+        "args": {"operations": []},
+        "type": "tool_call",
+    }])
+    tracker_specs = director._prepare_tool_specs_for_execution(
+        director._extract_tool_call_specs_from_message(tracker_response)
+    )
+
+    update = _build_director_message_update(
+        persisted_prefix=[handoff_result],
+        director=director,
+        response=tracker_response,
+        tool_specs=tracker_specs,
+        tool_results=[("call_tracker", "work_tracker", "任务板已更新")],
+    )
+    next_state = previous_state + update
+
+    assert update[0] is handoff_result
+    validate_tool_message_history(next_state)
 
 
 def test_director_uses_full_history_budget_pipeline_and_emits_checkpoint(monkeypatch) -> None:

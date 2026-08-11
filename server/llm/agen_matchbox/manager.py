@@ -132,6 +132,7 @@ class AIManagerBase:
         self._default_usage_key_resolver = self._integrations.default_usage_key_resolver
         self._caller_context_provider = self._integrations.caller_context_provider
         self._usage_context_provider = self._integrations.usage_context_provider
+        self._usage_recorded_handler = self._integrations.usage_recorded_handler
         self._secret_rotation_handler = self._integrations.secret_rotation_handler
         
         state_file_path = get_state_file_path()

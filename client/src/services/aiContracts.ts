@@ -262,6 +262,15 @@ export type BeatSheetBeat = {
   emotional_goal: string;
   reader_experience: string;
   tension_level: string;
+  pre_state?: string;
+  trigger?: string;
+  choice_or_action?: string;
+  post_state?: string;
+  reveal?: string;
+  knowledge_change?: string;
+  causal_dependencies?: string[];
+  setup_refs?: string[];
+  payoff_refs?: string[];
 };
 
 export type BeatSheetData = {
@@ -279,6 +288,22 @@ export type OutlineScene = {
   tension: 'Low' | 'Medium' | 'High';
   characters: string[];
   mapped_beats: number[];
+  beat_refs?: string[];
+  guide?: string;
+  key_dialogues?: string[];
+  location?: string;
+  time?: string;
+  pre_state?: string;
+  objective?: string;
+  conflict?: string;
+  turn?: string;
+  post_state?: string;
+  knowledge_before?: string;
+  knowledge_after?: string;
+  forbidden_setup?: string;
+  causal_dependencies?: string[];
+  setup_refs?: string[];
+  payoff_refs?: string[];
 };
 
 export type OutlineChapter = {

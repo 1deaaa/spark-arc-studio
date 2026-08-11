@@ -32,6 +32,7 @@ def is_tool_result_failure(tool_name: str, result: Any) -> bool:
         "prepare_script_creation": ("PreWrite 失败",),
         "create_or_rewrite_script": ("创建/重写剧本失败",),
         "create_chapter": ("创建章节失败",),
+        "create_character_relation": ("创建角色关系失败",),
     }
     if stripped.startswith(domain_failure_prefixes.get(normalized, ())):
         return True
@@ -52,7 +53,7 @@ def get_tool_result_failure_message(tool_name: str, result: Any) -> str:
         if text.startswith(("联网搜索当前不可用", "联网搜索暂时不可用")):
             return "联网搜索上游暂不可用，AI 将基于失败状态继续回应"
         return "联网搜索未能完成，AI 将基于失败状态继续回应"
-    if text.strip().startswith(("PreWrite 失败", "创建/重写剧本失败", "创建章节失败")):
+    if text.strip().startswith(("PreWrite 失败", "创建/重写剧本失败", "创建章节失败", "创建角色关系失败")):
         return text.strip().splitlines()[0][:200]
     return "模型使用了错误的调用格式，正在尝试修正"
 
@@ -66,7 +67,7 @@ def get_tool_ui_binding(tool_name: str) -> Dict[str, Any]:
             "refresh_events": ["muse-refresh"],
         }
 
-    if normalized in {"rewrite_worldview", "rewrite_all_characters", "update_character"}:
+    if normalized in {"rewrite_worldview", "rewrite_all_characters", "update_character", "create_character_relation"}:
         target = "worldview" if normalized == "rewrite_worldview" else "characters"
         refresh_events = ["lorebook-refresh"]
         if target == "worldview":

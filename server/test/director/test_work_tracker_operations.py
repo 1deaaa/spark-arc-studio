@@ -131,6 +131,54 @@ def test_langchain_tool_accepts_structured_items_and_operations(monkeypatch, tmp
     assert completed["items"][0]["status"] == "completed"
 
 
+def test_set_status_rejects_nested_item_and_top_level_notes_with_actionable_error() -> None:
+    try:
+        work_tracker.args_schema.model_validate({
+            "operations": [{
+                "operation": "set_status",
+                "item_id": "task_1",
+                "status": "completed",
+                "notes": "错误位置",
+            }],
+        })
+    except ValueError as exc:
+        message = str(exc)
+        assert "set_status 只允许" in message
+        assert "edit" in message
+    else:
+        raise AssertionError("set_status 不应接受顶层 notes")
+
+    try:
+        work_tracker.args_schema.model_validate({
+            "operations": [{
+                "operation": "set_status",
+                "item_id": "task_1",
+                "status": "completed",
+                "item": {"notes": "错误位置"},
+            }],
+        })
+    except ValueError as exc:
+        assert "set_status 不使用 item" in str(exc)
+    else:
+        raise AssertionError("set_status 不应接受 item")
+
+
+def test_edit_rejects_top_level_notes_with_actionable_error() -> None:
+    try:
+        work_tracker.args_schema.model_validate({
+            "operations": [{
+                "operation": "edit",
+                "item_id": "task_1",
+                "item": {"priority": "high"},
+                "notes": "错误位置",
+            }],
+        })
+    except ValueError as exc:
+        assert "item.notes" in str(exc)
+    else:
+        raise AssertionError("edit 不应接受顶层 notes")
+
+
 def test_work_tracker_schema_is_update_only_and_describes_nested_item() -> None:
     schema = work_tracker.args_schema.model_json_schema()
 
@@ -145,6 +193,8 @@ def test_work_tracker_schema_is_update_only_and_describes_nested_item() -> None:
         "set_status",
     }
     assert "WorkTrackerOperationItemInput" in schema["$defs"]
+    assert "set_status" in operation_ref["properties"]["status"]["description"]
+    assert "item.notes" in operation_ref["properties"]["item"]["description"]
 
 
 def test_openai_tool_schema_preserves_work_tracker_field_guidance() -> None:
@@ -162,6 +212,8 @@ def test_openai_tool_schema_preserves_work_tracker_field_guidance() -> None:
     item = operations["properties"]["item"]["anyOf"][0]
     assert item["properties"]["task"]["description"]
     assert item["properties"]["notes"]["description"]
+    assert "set_status" in operations["properties"]["status"]["description"]
+    assert "item.notes" in operations["properties"]["item"]["description"]
 
 
 def test_work_tracker_snapshot_is_appended_to_user_message_tail(monkeypatch, tmp_path) -> None:

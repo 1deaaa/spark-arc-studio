@@ -39,6 +39,7 @@ from llm.agen_matchbox.reasoning_compat import extract_visible_text_from_plain_t
 from agents.agent_factory import create_agent_instance
 from agents.prompt_layout import build_current_user_message
 from agents.work_tracker import build_work_tracker_prompt_context
+from llm.agen_matchbox.tool_protocol import build_tool_result_messages
 
 # ==================== State 定义 ====================
 
@@ -105,142 +106,6 @@ def _is_scriptwriter_persist_tool(tool_name: str) -> bool:
     }
 
 
-def _tool_call_to_mapping(tool_call: Any) -> Dict[str, Any]:
-    if isinstance(tool_call, dict):
-        return tool_call
-    for method_name in ("model_dump", "dict"):
-        method = getattr(tool_call, method_name, None)
-        if callable(method):
-            try:
-                data = method()
-                if isinstance(data, dict):
-                    return data
-            except Exception:
-                pass
-    return {}
-
-
-def _tool_call_field(tool_call: Any, field_name: str, default: Any = None) -> Any:
-    data = _tool_call_to_mapping(tool_call)
-    if field_name in data:
-        return data.get(field_name)
-    return getattr(tool_call, field_name, default)
-
-
-def _tool_call_function_mapping(tool_call: Any) -> Dict[str, Any]:
-    function_obj = _tool_call_field(tool_call, "function")
-    if isinstance(function_obj, dict):
-        return function_obj
-    return _tool_call_to_mapping(function_obj)
-
-
-def _tool_call_id(tool_call: Any) -> str:
-    function_data = _tool_call_function_mapping(tool_call)
-    return str(
-        _tool_call_field(tool_call, "id")
-        or function_data.get("id")
-        or ""
-    )
-
-
-def _tool_call_name(tool_call: Any) -> str:
-    function_data = _tool_call_function_mapping(tool_call)
-    return normalize_tool_name(str(
-        _tool_call_field(tool_call, "name")
-        or function_data.get("name")
-        or ""
-    ))
-
-
-def _tool_call_index(tool_call: Any, fallback_index: int) -> Optional[int]:
-    value = _tool_call_field(tool_call, "index")
-    if value is None:
-        return fallback_index
-    try:
-        return int(value)
-    except Exception:
-        return fallback_index
-
-
-def _copy_tool_call_with_id(tool_call: Any, call_id: str) -> Any:
-    if isinstance(tool_call, dict):
-        cloned = dict(tool_call)
-        if call_id:
-            cloned["id"] = call_id
-        function_obj = cloned.get("function")
-        if isinstance(function_obj, dict):
-            cloned["function"] = dict(function_obj)
-        return cloned
-
-    if call_id:
-        try:
-            current_id = getattr(tool_call, "id", None)
-            if not current_id:
-                setattr(tool_call, "id", call_id)
-        except Exception:
-            pass
-    return tool_call
-
-
-def _retain_only_pending_delegate_tool_call(
-    message: Any,
-    *,
-    selected_spec: Dict[str, Any],
-    call_id: str,
-    tool_name: str = "delegate_task",
-) -> Any:
-    """委派会暂停本轮其它工具，历史里也只能保留待回填的那一个调用。"""
-    if message is None:
-        return message
-
-    selected_raw = selected_spec.get("raw") if isinstance(selected_spec, dict) else None
-    selected_index = selected_spec.get("index") if isinstance(selected_spec, dict) else None
-    try:
-        selected_index = int(selected_index) if selected_index is not None else None
-    except Exception:
-        selected_index = None
-    expected_name = normalize_tool_name(tool_name)
-
-    def _matches(candidate: Any, fallback_index: int) -> bool:
-        if selected_raw is not None and (candidate is selected_raw or candidate == selected_raw):
-            return True
-        candidate_id = _tool_call_id(candidate)
-        if call_id and candidate_id and candidate_id == call_id:
-            return True
-        candidate_index = _tool_call_index(candidate, fallback_index)
-        if selected_index is not None and candidate_index == selected_index:
-            return True
-        candidate_name = _tool_call_name(candidate)
-        return bool(expected_name and candidate_name == expected_name and not candidate_id)
-
-    def _filter(items: Any) -> list:
-        if not isinstance(items, list):
-            return []
-        for fallback_index, item in enumerate(items):
-            if _matches(item, fallback_index):
-                return [_copy_tool_call_with_id(item, call_id)]
-        return []
-
-    for attr_name in ("tool_calls", "invalid_tool_calls", "tool_call_chunks"):
-        if hasattr(message, attr_name):
-            try:
-                setattr(message, attr_name, _filter(getattr(message, attr_name, None)))
-            except Exception:
-                pass
-
-    additional_kwargs = getattr(message, "additional_kwargs", None)
-    if isinstance(additional_kwargs, dict):
-        additional = dict(additional_kwargs)
-        if isinstance(additional.get("tool_calls"), list):
-            additional["tool_calls"] = _filter(additional.get("tool_calls"))
-        try:
-            setattr(message, "additional_kwargs", additional)
-        except Exception:
-            pass
-
-    return message
-
-
 def _director_tracker_has_open_items(user_id: str, project_name: str) -> bool:
     """读取导演任务板，判断是否仍有待推进的任务。"""
     if not user_id or not project_name:
@@ -291,6 +156,30 @@ def _tracker_update_required_message() -> str:
     )
 
 
+def _build_director_message_update(
+    *,
+    persisted_prefix: list[Any],
+    director: Any,
+    response: Any = None,
+    tool_specs: list[Dict[str, Any]] | None = None,
+    tool_results: list[tuple[str, str, Any]] | None = None,
+) -> list[Any]:
+    """构造 Director 节点要提交给 LangGraph 的完整消息增量。
+
+    ``persisted_prefix`` 用于携带本节点请求前临时注入、但必须在下一节点继续存在的
+    ToolMessage，例如子 Agent 回交结果。它不能只存在于本地请求变量中。
+    """
+    specs = list(tool_specs or [])
+    messages = list(persisted_prefix or [])
+    if response is not None:
+        if specs:
+            messages.append(director._build_tool_history_message(response, specs))
+        elif getattr(response, "content", None):
+            messages.append(response)
+    messages.extend(build_tool_result_messages(tool_results or []))
+    return messages
+
+
 def _build_director_prompt_context(
     director: Any,
     *,
@@ -331,6 +220,24 @@ def _build_director_prompt_context(
     return system_instruction, runtime_context
 
 
+def _append_director_runtime_user_message(
+    messages: List[Any],
+    *,
+    current_user_message: str,
+    active_context: str,
+    runtime_tail: str,
+) -> List[Any]:
+    """保留历史前缀，在末尾追加本轮刷新后的动态项目现场。"""
+    result = list(messages)
+    if active_context or runtime_tail:
+        result.append(HumanMessage(content=build_current_user_message(
+            user_message=current_user_message,
+            active_context=active_context,
+            runtime_tail=runtime_tail,
+        )))
+    return result
+
+
 # ==================== 导演节点 ====================
 
 def director_node(state: DirectorState) -> Dict[str, Any]:
@@ -365,16 +272,20 @@ def director_node(state: DirectorState) -> Dict[str, Any]:
             "pending_delegate": None,
         }
     
-    # 注入子 Agent 结果
+    # 注入子 Agent 结果；该 ToolMessage 既要用于本次请求，也必须提交回图状态。
+    persisted_prefix: list[Any] = []
     if sub_agent_result:
-        tool_call_id = state.get("pending_delegate", {}).get("call_id", "delegate_call")
-        messages = messages + [
-            ToolMessage(
-                content=sub_agent_result,
-                tool_call_id=tool_call_id,
-                name="delegate_task",
-            )
-        ]
+        pending = state.get("pending_delegate") or {}
+        tool_call_id = str(pending.get("call_id") or "").strip()
+        if not tool_call_id:
+            raise ValueError("Director 回交结果缺少对应的 delegate_task tool_call_id。")
+        handoff_result = ToolMessage(
+            content=sub_agent_result,
+            tool_call_id=tool_call_id,
+            name="delegate_task",
+        )
+        persisted_prefix.append(handoff_result)
+        messages = messages + persisted_prefix
     
     director = DirectorAgent(user_id=user_id, project_name=project_name)
     ctx = get_global_context()
@@ -424,17 +335,14 @@ def director_node(state: DirectorState) -> Dict[str, Any]:
         project_name,
         "agent_director",
     )
-    if active_context or runtime_tail:
-        for index in range(len(messages_with_system) - 1, -1, -1):
-            if isinstance(messages_with_system[index], HumanMessage):
-                messages_with_system[index] = HumanMessage(
-                    content=build_current_user_message(
-                        user_message=current_user_message,
-                        active_context=active_context,
-                        runtime_tail=runtime_tail,
-                    )
-                )
-                break
+    # 项目状态会在委派后刷新。只能追加到历史尾部，不能覆盖最早用户消息，
+    # 否则一次状态变化会让它之后的全部历史前缀失去缓存。
+    messages_with_system = _append_director_runtime_user_message(
+        messages_with_system,
+        current_user_message=current_user_message,
+        active_context=active_context,
+        runtime_tail=runtime_tail,
+    )
 
     stream_events = []
     from agents.context_budget import rebudget_existing_messages
@@ -579,7 +487,11 @@ def director_node(state: DirectorState) -> Dict[str, Any]:
     tool_specs = director._prepare_tool_specs_for_execution(tool_specs)
     
     updates: Dict[str, Any] = {
-        "messages": [aggregated_chunk] if aggregated_chunk else [],
+        "messages": _build_director_message_update(
+            persisted_prefix=persisted_prefix,
+            director=director,
+            response=aggregated_chunk,
+        ),
         "stream_events": stream_events,
         "sub_agent_result": None,
         "baton_holder": baton_holder,
@@ -665,12 +577,12 @@ def director_node(state: DirectorState) -> Dict[str, Any]:
                     delegate_data = json.loads(tool_result.split("__DELEGATE__:", 1)[1])
                     pending_delegate = normalize_handoff_payload(delegate_data, sender_id="agent_director")
                     pending_delegate["call_id"] = call_id
-                    updates["messages"] = [
-                        director._build_tool_history_message(
-                            aggregated_chunk,
-                            [spec],
-                        )
-                    ] if aggregated_chunk else []
+                    updates["messages"] = _build_director_message_update(
+                        persisted_prefix=persisted_prefix,
+                        director=director,
+                        response=aggregated_chunk,
+                        tool_specs=[spec],
+                    )
 
                     target_agent = pending_delegate.get("target_agent", "")
                     grant_baton_to = pending_delegate.get("grant_baton_to") or target_agent
@@ -764,16 +676,13 @@ def director_node(state: DirectorState) -> Dict[str, Any]:
                 spec for spec in tool_specs
                 if spec.get("call_id") in completed_call_ids
             ]
-            tool_messages = [
-                ToolMessage(content=str(r), tool_call_id=cid, name=n)
-                for cid, n, r in tool_results
-            ]
-            history_messages = []
-            if aggregated_chunk is not None and (completed_specs or getattr(aggregated_chunk, "content", None)):
-                history_messages.append(
-                    director._build_tool_history_message(aggregated_chunk, completed_specs)
-                )
-            updates["messages"] = history_messages + tool_messages
+            updates["messages"] = _build_director_message_update(
+                persisted_prefix=persisted_prefix,
+                director=director,
+                response=aggregated_chunk,
+                tool_specs=completed_specs,
+                tool_results=tool_results,
+            )
 
     updates["pending_delegate"] = pending_delegate
     return updates
@@ -883,6 +792,7 @@ def sub_agent_node(state: DirectorState) -> Dict[str, Any]:
     cancelled = False
     suppress_scriptwriter_draft = target_agent == "agent_scriptwriter" and skip_tool_confirmation
     scriptwriter_saved = False
+    pipeline_completion_receipt = ""
     
     try:
         # NOTE: 此处不使用 yield，而是将生成内容全部截留后向 writer 推送同时汇聚 buf，
@@ -893,6 +803,9 @@ def sub_agent_node(state: DirectorState) -> Dict[str, Any]:
             active_context=merged_active_context,
             skip_tool_confirmation=skip_tool_confirmation,
             stop_event=stop_event,
+            stop_after_pipeline_completion=(
+                completion_mode == HANDOFF_COMPLETION_SILENT_CONTINUE
+            ),
         )
         
         for delta in iterable:
@@ -919,6 +832,9 @@ def sub_agent_node(state: DirectorState) -> Dict[str, Any]:
             
             if isinstance(delta, dict):
                 event_type = delta.get("event", "")
+                if event_type == "pipeline_step_completed":
+                    pipeline_completion_receipt = str(delta.get("receipt") or "").strip()
+                    continue
                 tagged_delta = {**delta, "source_agent": target_agent, "nested": True}
                 tool_name = str(delta.get("tool_name") or "")
                 if _is_scriptwriter_persist_tool(tool_name) and event_type == "tool_exec_finished":
@@ -977,7 +893,7 @@ def sub_agent_node(state: DirectorState) -> Dict[str, Any]:
         }
     
     # 清洗子 agent 收集到的正文，防止 </think> 残留正文进入导演的下一轮对话历史
-    result = extract_visible_text_from_plain_text("".join(buf).strip())
+    result = pipeline_completion_receipt or extract_visible_text_from_plain_text("".join(buf).strip())
 
     if suppress_scriptwriter_draft and not scriptwriter_saved:
         result = (
@@ -994,6 +910,8 @@ def sub_agent_node(state: DirectorState) -> Dict[str, Any]:
         sub_agent_result = f"[{target_agent}] Execution failed:\n{result}"
     elif completion_mode == HANDOFF_COMPLETION_REPORT_TO_USER:
         sub_agent_result = result
+    elif completion_mode == HANDOFF_COMPLETION_SILENT_CONTINUE and pipeline_completion_receipt:
+        sub_agent_result = pipeline_completion_receipt
     elif completion_mode == HANDOFF_COMPLETION_SILENT_CONTINUE:
         sub_agent_result = f"[{target_agent}] Silent execution result:\n{result}"
     else:

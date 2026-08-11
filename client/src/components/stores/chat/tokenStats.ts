@@ -11,8 +11,7 @@ export type ContextWindowStats = {
   maxOutputTokens: number;
   hardBudget: number;
   triggerBudget: number;
-  reservedOutputTokens: number;
-  safetyMarginTokens: number;
+  reservedContextTokens: number;
   usageRatio: number | null;
   originalUsageRatio: number | null;
   hardUsageRatio: number | null;
@@ -25,17 +24,40 @@ export type ContextWindowStats = {
   reason: string;
 };
 
-export type TokenUsageStats = {
+export type AgentTokenUsageStats = {
+  agentId: string;
   promptTokens: number;
   completionTokens: number;
   totalTokens: number;
+  cachedPromptTokens: number;
+  cacheMissPromptTokens: number;
+  cacheHitRate: number | null;
+  requests: number;
+  errors: number;
+};
+
+export type TokenUsageStats = Omit<AgentTokenUsageStats, 'agentId'> & {
+  byAgent: Record<string, AgentTokenUsageStats>;
+  source?: string;
 };
 
 export type TokenStatsSession = {
   contextTokenCount: number | null;
   contextTokenUsage: TokenUsageStats | null;
   contextWindowStats: ContextWindowStats | null;
+  tokenUsageByTask?: Record<string, TokenUsageStats>;
 };
+
+function extractTaskId(payload: AnyRecord | null | undefined): string {
+  if (!payload || typeof payload !== 'object') return '';
+  return String(
+    payload.task_id
+    ?? payload.taskId
+    ?? payload.metadata?.task_id
+    ?? payload.metadata?.taskId
+    ?? '',
+  ).trim();
+}
 
 export function extractLlmUsageTotal(payload: AnyRecord | null | undefined): number | null {
   const usageStats = extractLlmUsageStats(payload);
@@ -53,11 +75,155 @@ export function extractLlmUsageStats(payload: AnyRecord | null | undefined): Tok
     ? Number(rawTotal)
     : promptTokens + completionTokens;
   if (!Number.isFinite(total) || total < 0) return null;
+  const cachedPromptTokens = Math.max(0, Number(usage.cached_prompt_tokens ?? usage.cachedPromptTokens ?? 0) || 0);
+  const cacheMissPromptTokens = Math.max(0, Number(usage.cache_miss_prompt_tokens ?? usage.cacheMissPromptTokens ?? 0) || 0);
+  const normalizeCacheHitRate = (source: AnyRecord, prompt: number, cached: number, missed: number): number | null => {
+    const available = source.cache_stats_available === true
+      || source.cacheStatsAvailable === true
+      || cached > 0
+      || missed > 0;
+    if (!available || prompt <= 0) return null;
+    const rawRate = source.cache_hit_rate ?? source.cacheHitRate;
+    const rate = rawRate == null ? cached / prompt : Number(rawRate);
+    return Number.isFinite(rate) ? Math.max(0, Math.min(1, rate)) : null;
+  };
+  const rawByAgent = usage.by_agent || usage.byAgent;
+  const byAgent: Record<string, AgentTokenUsageStats> = {};
+  if (rawByAgent && typeof rawByAgent === 'object') {
+    Object.entries(rawByAgent).forEach(([agentId, raw]) => {
+      if (!raw || typeof raw !== 'object') return;
+      const agent = raw as AnyRecord;
+      const agentPrompt = Math.max(0, Number(agent.prompt_tokens ?? agent.promptTokens ?? 0) || 0);
+      const agentCompletion = Math.max(0, Number(agent.completion_tokens ?? agent.completionTokens ?? 0) || 0);
+      const agentTotalRaw = agent.total_tokens ?? agent.totalTokens;
+      const agentTotal = Math.max(0, Number(agentTotalRaw ?? agentPrompt + agentCompletion) || 0);
+      const agentCached = Math.max(0, Number(agent.cached_prompt_tokens ?? agent.cachedPromptTokens ?? 0) || 0);
+      const agentMissed = Math.max(0, Number(agent.cache_miss_prompt_tokens ?? agent.cacheMissPromptTokens ?? 0) || 0);
+      byAgent[agentId] = {
+        agentId,
+        promptTokens: agentPrompt,
+        completionTokens: agentCompletion,
+        totalTokens: agentTotal,
+        cachedPromptTokens: agentCached,
+        cacheMissPromptTokens: agentMissed,
+        cacheHitRate: normalizeCacheHitRate(agent, agentPrompt, agentCached, agentMissed),
+        requests: Math.max(0, Number(agent.requests ?? 0) || 0),
+        errors: Math.max(0, Number(agent.errors ?? 0) || 0),
+      };
+    });
+  }
   return {
     promptTokens: Math.max(0, promptTokens),
     completionTokens: Math.max(0, completionTokens),
     totalTokens: Math.max(0, total),
+    cachedPromptTokens,
+    cacheMissPromptTokens,
+    cacheHitRate: normalizeCacheHitRate(usage, promptTokens, cachedPromptTokens, cacheMissPromptTokens),
+    requests: Math.max(0, Number(usage.requests ?? 0) || 0),
+    errors: Math.max(0, Number(usage.errors ?? 0) || 0),
+    byAgent,
+    source: String(usage.source || ''),
   };
+}
+
+function sumTokenUsageStats(items: TokenUsageStats[]): TokenUsageStats | null {
+  if (!items.length) return null;
+  const byAgent: Record<string, AgentTokenUsageStats> = {};
+  let promptTokens = 0;
+  let completionTokens = 0;
+  let totalTokens = 0;
+  let cachedPromptTokens = 0;
+  let cacheMissPromptTokens = 0;
+  let requests = 0;
+  let errors = 0;
+
+  for (const usage of items) {
+    promptTokens += usage.promptTokens;
+    completionTokens += usage.completionTokens;
+    totalTokens += usage.totalTokens;
+    cachedPromptTokens += usage.cachedPromptTokens;
+    cacheMissPromptTokens += usage.cacheMissPromptTokens;
+    requests += usage.requests;
+    errors += usage.errors;
+    for (const [agentId, agent] of Object.entries(usage.byAgent)) {
+      const current = byAgent[agentId] || {
+        agentId,
+        promptTokens: 0,
+        completionTokens: 0,
+        totalTokens: 0,
+        cachedPromptTokens: 0,
+        cacheMissPromptTokens: 0,
+        cacheHitRate: null,
+        requests: 0,
+        errors: 0,
+      };
+      current.promptTokens += agent.promptTokens;
+      current.completionTokens += agent.completionTokens;
+      current.totalTokens += agent.totalTokens;
+      current.cachedPromptTokens += agent.cachedPromptTokens;
+      current.cacheMissPromptTokens += agent.cacheMissPromptTokens;
+      current.requests += agent.requests;
+      current.errors += agent.errors;
+      current.cacheHitRate = current.promptTokens > 0
+        && (current.cachedPromptTokens > 0 || current.cacheMissPromptTokens > 0)
+        ? current.cachedPromptTokens / current.promptTokens
+        : null;
+      byAgent[agentId] = current;
+    }
+  }
+
+  return {
+    promptTokens,
+    completionTokens,
+    totalTokens,
+    cachedPromptTokens,
+    cacheMissPromptTokens,
+    cacheHitRate: promptTokens > 0 && (cachedPromptTokens > 0 || cacheMissPromptTokens > 0)
+      ? cachedPromptTokens / promptTokens
+      : null,
+    requests,
+    errors,
+    byAgent,
+    source: 'task_aggregate',
+  };
+}
+
+function shouldReplaceTaskSnapshot(current: TokenUsageStats | undefined, next: TokenUsageStats): boolean {
+  if (!current) return true;
+  if (next.source === 'usage_log') return true;
+  return next.requests > current.requests
+    || (next.requests === current.requests && next.totalTokens >= current.totalTokens);
+}
+
+function applyUsageMap(session: TokenStatsSession, usageByTask: Record<string, TokenUsageStats>) {
+  session.tokenUsageByTask = usageByTask;
+  session.contextTokenUsage = sumTokenUsageStats(Object.values(usageByTask));
+  session.contextTokenCount = session.contextTokenUsage?.totalTokens ?? null;
+}
+
+export function restoreHistoryTokenStats(
+  session: TokenStatsSession,
+  history: AnyRecord[] = [],
+  options: { preserveLive?: boolean } = {},
+) {
+  const usageByTask: Record<string, TokenUsageStats> = {};
+  history.forEach((message, index) => {
+    if (message?.role !== 'assistant') return;
+    const usage = extractLlmUsageStats(message);
+    if (!usage) return;
+    const taskId = extractTaskId(message) || `history:${String(message?.id ?? index)}`;
+    if (shouldReplaceTaskSnapshot(usageByTask[taskId], usage)) {
+      usageByTask[taskId] = usage;
+    }
+  });
+  if (options.preserveLive) {
+    for (const [taskId, usage] of Object.entries(session.tokenUsageByTask || {})) {
+      if (shouldReplaceTaskSnapshot(usageByTask[taskId], usage)) {
+        usageByTask[taskId] = usage;
+      }
+    }
+  }
+  applyUsageMap(session, usageByTask);
 }
 
 export function extractAgentCompletionTokens(payload: AnyRecord | null | undefined, agentId: string): number | null {
@@ -92,8 +258,14 @@ export function extractContextWindowStats(evt: AnyRecord): ContextWindowStats {
     maxOutputTokens: Number(evt.max_output_tokens ?? evt.maxOutputTokens ?? 0) || 0,
     hardBudget: Number(evt.hard_budget ?? evt.hardBudget ?? 0) || 0,
     triggerBudget: Number(evt.trigger_budget ?? evt.triggerBudget ?? 0) || 0,
-    reservedOutputTokens: Number(evt.reserved_output_tokens ?? evt.reservedOutputTokens ?? 0) || 0,
-    safetyMarginTokens: Number(evt.safety_margin_tokens ?? evt.safetyMarginTokens ?? 0) || 0,
+    reservedContextTokens: Number(
+      evt.reserved_context_tokens
+      ?? evt.reservedContextTokens
+      // 兼容旧版聊天记录中的统计字段。
+      ?? evt.reserved_output_tokens
+      ?? evt.reservedOutputTokens
+      ?? 0,
+    ) || 0,
     usageRatio: clampRatio(evt.usage_ratio ?? evt.usageRatio),
     originalUsageRatio: clampRatio(evt.original_usage_ratio ?? evt.originalUsageRatio),
     hardUsageRatio: clampRatio(evt.hard_usage_ratio ?? evt.hardUsageRatio),
@@ -169,8 +341,12 @@ export function latestHistoryContextWindowStats(history: AnyRecord[] = []): Cont
 export function applyPersistedTokenStats(session: TokenStatsSession, payload: AnyRecord | null | undefined) {
   const usageStats = extractLlmUsageStats(payload);
   if (usageStats != null) {
-    session.contextTokenUsage = usageStats;
-    session.contextTokenCount = usageStats.totalTokens;
+    const taskId = extractTaskId(payload) || 'legacy:latest';
+    const usageByTask = { ...(session.tokenUsageByTask || {}) };
+    if (shouldReplaceTaskSnapshot(usageByTask[taskId], usageStats)) {
+      usageByTask[taskId] = usageStats;
+    }
+    applyUsageMap(session, usageByTask);
   }
 
   const nextWindowStats = extractContextWindowStatsFromPayload(payload);

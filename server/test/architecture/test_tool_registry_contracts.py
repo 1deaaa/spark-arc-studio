@@ -10,6 +10,7 @@ from agents.tools.stream_events import (
     is_tool_result_failure,
     normalize_tool_name,
 )
+from core.request_context import current_project_name, current_user_id
 
 
 CORE_AGENT_IDS = {
@@ -38,7 +39,7 @@ def test_tool_registry_has_stable_unique_truth_source() -> None:
 def test_core_agent_tool_boundaries() -> None:
     assert "delegate_task" in tool_names("agent_director")
     assert "rewrite_inspiration" in tool_names("agent_muse")
-    assert {"rewrite_worldview", "rewrite_all_characters", "update_character", "web_search"} <= tool_names("agent_lorebook")
+    assert {"rewrite_worldview", "rewrite_all_characters", "update_character", "create_character_relation", "web_search"} <= tool_names("agent_lorebook")
     assert {"rewrite_synopsis", "rewrite_beat_sheet", "rewrite_outline"} <= tool_names("agent_showrunner")
     assert {
         "prepare_script_creation",
@@ -50,6 +51,35 @@ def test_core_agent_tool_boundaries() -> None:
     assert "delegate_task" not in tool_names("agent_scriptwriter")
     assert "delegate_task" not in tool_names("agent_critic")
     assert tool_names("agent_style") == set()
+
+
+def test_showrunner_only_binds_continuity_tools_when_story_exists(monkeypatch, tmp_path) -> None:
+    monkeypatch.setattr("core.utils.USERDATA_ROOT", str(tmp_path))
+    user_token = current_user_id.set("88")
+    project_token = current_project_name.set("demo")
+    continuity_tools = {
+        "story_memory_tool",
+        "graph_rag_tool",
+        "list_chapters",
+        "read_chapter_scene",
+        "read_chapter_outline_raw",
+        "search_project",
+        "semantic_search",
+    }
+    try:
+        fresh_tools = tool_names("agent_showrunner", user_id="88")
+        assert continuity_tools.isdisjoint(fresh_tools)
+        assert {"rewrite_synopsis", "rewrite_beat_sheet", "rewrite_outline"} <= fresh_tools
+
+        story_path = tmp_path / "uid_88" / "projects" / "demo" / "stories" / "一 · 开端" / "1.1.arc"
+        story_path.parent.mkdir(parents=True)
+        story_path.write_text("---scene 1-1\n[旁白] 已写正文", encoding="utf-8")
+
+        existing_tools = tool_names("agent_showrunner", user_id="88")
+        assert continuity_tools <= existing_tools
+    finally:
+        current_project_name.reset(project_token)
+        current_user_id.reset(user_token)
 
 
 def test_long_write_tools_expose_batching_and_append_guidance() -> None:
@@ -101,6 +131,18 @@ def test_tool_name_aliases_match_ui_binding_normalization() -> None:
     assert get_tool_ui_binding("rewrite characters")["target"] == "characters"
 
 
+def test_character_relation_tool_refreshes_character_surface() -> None:
+    binding = get_tool_ui_binding("create_character_relation")
+    assert binding == {
+        "scope": "world",
+        "target": "characters",
+        "refresh_events": ["lorebook-refresh-characters", "lorebook-refresh"],
+    }
+    evt = build_tool_stream_event("tool_exec_started", "create_character_relation")
+    assert evt["ui_target"] == "characters"
+    assert "lorebook-refresh-characters" in evt["ui_refresh_events"]
+
+
 def test_web_search_degraded_result_is_not_reported_as_success() -> None:
     assert is_tool_result_failure(
         "web_search",
@@ -115,6 +157,54 @@ def test_web_search_degraded_result_is_not_reported_as_success() -> None:
         "web_search",
         "联网搜索失败（exa）：鉴权失败。",
     )
+
+
+def test_character_relation_failures_are_not_reported_as_success() -> None:
+    result = "创建角色关系失败：未找到终点角色‘乙’。请先落盘角色设定。"
+    assert is_tool_result_failure("create_character_relation", result) is True
+    assert "创建角色关系失败" in get_tool_result_failure_message("create_character_relation", result)
+
+
+def test_character_relation_tool_persists_only_existing_characters_and_rejects_duplicates(
+    monkeypatch,
+    tmp_path,
+) -> None:
+    from agents.tools.lorebook import create_character_relation
+    from core.character_relations import read_character_relations
+    from core.character_store import upsert_character
+
+    monkeypatch.setattr("core.utils.USERDATA_ROOT", str(tmp_path))
+    user_token = current_user_id.set("91")
+    project_token = current_project_name.set("demo")
+    try:
+        upsert_character("91", "demo", "0", name="甲", content="")
+        upsert_character("91", "demo", "1", name="乙", content="")
+
+        created = create_character_relation.invoke({
+            "source_character": "甲",
+            "target_character": "乙",
+            "relation": "盟友",
+            "note": "共同目标",
+        })
+        assert created.startswith("已创建角色关系")
+        assert read_character_relations("91", "demo")[0]["relation"] == "盟友"
+
+        duplicate = create_character_relation.invoke({
+            "source_character": "甲",
+            "target_character": "乙",
+            "relation": "盟友",
+        })
+        assert duplicate.startswith("创建角色关系失败")
+        missing = create_character_relation.invoke({
+            "source_character": "甲",
+            "target_character": "丙",
+            "relation": "亲属",
+        })
+        assert missing.startswith("创建角色关系失败")
+        assert len(read_character_relations("91", "demo")) == 1
+    finally:
+        current_project_name.reset(project_token)
+        current_user_id.reset(user_token)
 
 
 def test_scriptwriter_domain_failures_are_not_reported_as_success() -> None:

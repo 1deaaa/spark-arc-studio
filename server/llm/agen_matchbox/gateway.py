@@ -13,6 +13,7 @@ from .reasoning_compat import (
     extract_reasoning_text_from_chat_delta,
     extract_reasoning_text_from_message,
 )
+from .tool_protocol import validate_tool_message_history
 
 
 def _normalize_json_schema_required(schema: Any) -> Any:
@@ -163,6 +164,8 @@ class ChatUniversal(ChatOpenAI):
             reasoning = extract_metadata_reasoning_text_from_message(source_message)
             if reasoning:
                 payload_message["reasoning_content"] = reasoning
+
+        validate_tool_message_history(payload_messages)
 
         return payload
 

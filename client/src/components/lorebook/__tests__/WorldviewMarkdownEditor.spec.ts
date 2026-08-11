@@ -1,3 +1,5 @@
+import { readFileSync } from 'node:fs';
+import { resolve } from 'node:path';
 import { mount } from '@vue/test-utils';
 import { createI18n } from 'vue-i18n';
 import { describe, expect, it } from 'vitest';
@@ -20,6 +22,18 @@ function mountEditor(markdown: string) {
 }
 
 describe('世界观可视化编辑器', () => {
+  it('模块栏宽度由整列中最宽的模块项决定', () => {
+    const source = readFileSync(
+      resolve(process.cwd(), 'src/components/lorebook/WorldviewMarkdownEditor.vue'),
+      'utf-8',
+    );
+
+    expect(source).toMatch(
+      /\.workbench-main\s*\{[^}]*grid-template-columns:\s*max-content\s+minmax\(0,\s*1fr\)/s,
+    );
+    expect(source).not.toMatch(/grid-template-columns:\s*minmax\((?:124|96)px,\s*0\.\d+fr\)/);
+  });
+
   it('将二级标题显示为模块，并把字段列表显示为表单', () => {
     const wrapper = mountEditor('# 世界设定\n\n## 战力体系\n\n- 力量来源：灵气\n- 使用代价：寿命');
     expect(wrapper.findAll('.section-nav-item')).toHaveLength(1);

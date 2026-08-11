@@ -28,8 +28,8 @@ def _validate_story_target_name(value: object, *, field_name: str) -> str:
 
 class CreateOrRewriteScriptInput(BaseModel):
     overwrite_content: str = Field(description="完整的剧本/小说正文。若目标场景文件尚不存在，系统将自动创建；若已存在则覆盖。必须只包含最终可保存的正文，不得混入解释、确认话术或元话语。")
-    chapter_name: str = Field(min_length=1, description="目标章节名称（即文件夹名称），格式为「中文数字 · 标题」（如「一 · 开端」「二 · 相遇」）。【CRITICAL】剧本将保存到该章节目录下。写剧本/小说前，必须先调用 create_chapter 确保该章节目录存在，并在此传入一致的章节名。严禁传入 null、字符串 null 或省略此字段。")
-    work_name: str = Field(min_length=1, description="场景文件的显示名称（不含扩展名），格式为「章节号-场景号 场景名」（如「1-1 初遇」「2-3 决战」）。必须与 PreWrite 的 scene_name 完全一致，严禁传入 null、字符串 null 或省略此字段。")
+    chapter_name: str = Field(min_length=1, description="目标章节/分卷的可读标题（即文件夹名称）。编号由 PreWrite metadata 统一生成。【CRITICAL】剧本/小说将保存到该目录下。写作前必须先调用 create_chapter，并在此传入一致的标题。严禁传入 null、字符串 null 或省略此字段。")
+    work_name: str = Field(min_length=1, description="场景/章节的可读标题（不含扩展名）。不要自行编造或修改章节号-场景号；唯一身份由 PreWrite 签发的文件元数据决定。必须与 PreWrite 的 scene_name 完全一致，严禁传入 null、字符串 null 或省略此字段。")
     target_chars: int | None = Field(default=None, ge=100, le=100000, description="本轮用户或导演明确要求的目标正文字符数。仅作为软目标和落盘回执的统计基准；未传时使用项目默认目标。")
 
     @field_validator("chapter_name", "work_name", mode="before")
@@ -40,8 +40,8 @@ class CreateOrRewriteScriptInput(BaseModel):
 
 class PrepareScriptCreationInput(BaseModel):
     task_description: str = Field(description="本次完整场景创作任务，包含目标、冲突、衔接要求与用户意图。")
-    chapter_name: str = Field(min_length=1, description="目标章节名称，必须与随后 create_chapter 和 create_or_rewrite_script 使用的 chapter_name 完全一致。严禁传入 null、字符串 null 或其他占位符。")
-    scene_name: str = Field(min_length=1, description="目标场景名称，必须与随后 create_or_rewrite_script 使用的 work_name 完全一致。严禁传入 null、字符串 null 或其他占位符。")
+    chapter_name: str = Field(min_length=1, description="目标章节/分卷的可读标题，必须与随后 create_chapter 和 create_or_rewrite_script 使用的 chapter_name 完全一致。编号由系统 metadata 决定。严禁传入 null、字符串 null 或其他占位符。")
+    scene_name: str = Field(min_length=1, description="目标场景的可读标题，必须与随后 create_or_rewrite_script 使用的 work_name 完全一致；不要把编号当作身份来源。严禁传入 null、字符串 null 或其他占位符。")
     scene_guidance: str = Field(default="", description="大纲中对当前场景的具体指导、关键事件或落点。")
     scene_characters: list[str] = Field(default_factory=list, description="预计在本场出现或必须核对的角色名。")
 
@@ -52,7 +52,7 @@ class PrepareScriptCreationInput(BaseModel):
 
 
 class CreateChapterInput(BaseModel):
-    chapter_name: str = Field(description="章节名称，将作为 stories 目录下的子文件夹名称。格式为「中文数字 · 标题」（如「一 · 开端」「二 · 相遇」「十 · 终章」）。")
+    chapter_name: str = Field(description="章节/分卷的可读标题，将作为 stories 目录下的子文件夹名称；系统会按 metadata 补充稳定编号。")
 
 
 class PatchScriptInput(BaseModel):
@@ -84,10 +84,16 @@ class OrganizeScenesToChapterInput(BaseModel):
 
 
 def _ensure_chapter_dir(stories_path: str, chapter_name: str) -> str:
-    safe = (chapter_name or "").strip().replace("\\", "_").replace("/", "_")
-    if not safe:
+    name = (chapter_name or "").strip()
+    if not name:
         return stories_path
-    chapter_dir = os.path.join(stories_path, safe)
+    from story.file_naming import parse_chapter_identity_from_title, resolve_chapter_directory
+
+    chapter_dir = resolve_chapter_directory(
+        stories_path,
+        name,
+        chapter_num=parse_chapter_identity_from_title(name),
+    )
     os.makedirs(chapter_dir, exist_ok=True)
     return chapter_dir
 
@@ -198,14 +204,21 @@ def create_or_rewrite_script(
 
     from core.utils import get_project_stories_path
     from story.file_naming import (
+        DuplicateSceneIdentityError,
         build_story_filename,
+        canonical_chapter_display_name,
         next_story_order,
         parse_scene_identity_from_title,
+        canonical_scene_display_name,
         resolve_planned_scene_file_path,
         sanitize_story_display_name,
     )
 
-    from core.request_context import clear_scriptwriter_prewrite_receipt, get_current_export_format
+    from core.request_context import (
+        clear_scriptwriter_prewrite_receipt,
+        get_current_export_format,
+        get_scriptwriter_prewrite_receipt,
+    )
     from agents.scriptwriter_prewrite import has_matching_prewrite_receipt
 
     effective_format = get_current_export_format()
@@ -241,30 +254,69 @@ def create_or_rewrite_script(
             min_node_gap=visual_settings["min_node_gap"],
             allowed_background_ids=allowed_background_ids,
         )
+    else:
+        from story.novel_parser import parse_novel_document, serialize_novel_document
+
+        novel_document = parse_novel_document(content)
+        content = serialize_novel_document(
+            novel_document["body"],
+            novel_document["conception"],
+        )
     if not content:
         return "创建/重写剧本失败：overwrite_content 为空。"
 
     stories_path = get_project_stories_path(user_id, project_name)
     os.makedirs(stories_path, exist_ok=True)
 
-    if chapter_name and chapter_name.strip():
-        target_dir = _ensure_chapter_dir(stories_path, chapter_name.strip())
-        relative_dir = chapter_name.strip().replace("\\", "_").replace("/", "_")
-    else:
-        target_dir = stories_path
-        relative_dir = ""
+    target_dir = stories_path
+    relative_dir = ""
 
-    display = sanitize_story_display_name(work_name.strip() if work_name and work_name.strip() else "新场景")
-    chapter_num, scene_num = parse_scene_identity_from_title(display)
+    raw_display = sanitize_story_display_name(work_name.strip() if work_name and work_name.strip() else "")
+    if not raw_display:
+        return "创建/重写剧本失败：work_name 不能为空。"
+    receipt = get_scriptwriter_prewrite_receipt()
+    if ToolExecutionContext.get_agent_id() == "agent_scriptwriter":
+        try:
+            chapter_num = int(receipt.get("chapter_num")) if receipt else 0
+            scene_num = int(receipt.get("scene_num")) if receipt else 0
+        except (TypeError, ValueError):
+            chapter_num = scene_num = 0
+        if chapter_num <= 0 or scene_num <= 0:
+            # 兼容旧版请求凭证；新版 PreWrite 始终会写入元数据身份。
+            chapter_num, scene_num = parse_scene_identity_from_title(raw_display)
+            if chapter_num is None or scene_num is None or chapter_num <= 0 or scene_num <= 0:
+                return "创建/重写剧本失败：PreWrite 未签发有效的场景元数据身份。"
+    else:
+        chapter_num, scene_num = parse_scene_identity_from_title(raw_display)
+        if chapter_num is not None or scene_num is not None:
+            if chapter_num is None or scene_num is None or chapter_num <= 0 or scene_num <= 0:
+                return "创建/重写剧本失败：场景编号必须是大于 0 的‘章节号-场景号’，例如 3-4。"
+        else:
+            chapter_num = scene_num = None
     if chapter_num is not None and scene_num is not None:
-        file_path, existed, _ = resolve_planned_scene_file_path(
-            stories_path,
-            chapter_num,
-            scene_num,
-            display,
-            chapter_dir_name=chapter_name.strip() if chapter_name else "",
-            file_format=effective_format,
-        )
+        try:
+            display = canonical_scene_display_name(raw_display, chapter_num, scene_num)
+            chapter_display = canonical_chapter_display_name(chapter_name, chapter_num)
+        except ValueError as exc:
+            return f"创建/重写剧本失败：{exc}"
+    else:
+        display = raw_display
+        chapter_display = str(chapter_name or "").strip()
+        if chapter_display:
+            target_dir = _ensure_chapter_dir(stories_path, chapter_display)
+            relative_dir = os.path.relpath(target_dir, stories_path)
+    if chapter_num is not None and scene_num is not None:
+        try:
+            file_path, existed, _ = resolve_planned_scene_file_path(
+                stories_path,
+                chapter_num,
+                scene_num,
+                display,
+                chapter_dir_name=chapter_display,
+                file_format=effective_format,
+            )
+        except DuplicateSceneIdentityError as exc:
+            return f"创建/重写剧本失败：{exc}。请先在作品管理器中确认并整理重复文件。"
         os.makedirs(os.path.dirname(file_path), exist_ok=True)
         relative_dir = os.path.relpath(os.path.dirname(file_path), stories_path)
         if relative_dir == ".":
@@ -294,7 +346,7 @@ def create_or_rewrite_script(
         scene_text=content,
         chapter_index=(chapter_num - 1) if chapter_num is not None else None,
         scene_index=(scene_num - 1) if scene_num is not None else None,
-        chapter_title=chapter_name or "",
+        chapter_title=chapter_display,
         scene_title=display,
         source_path=rel,
         export_format=effective_format,
@@ -340,8 +392,17 @@ def create_chapter(chapter_name: str) -> str:
     name = (chapter_name or "").strip()
     if not name:
         return "创建章节失败：chapter_name 不能为空。"
-
     user_id, project_name = ToolExecutionContext.get_context()
+    if ToolExecutionContext.get_agent_id() == "agent_scriptwriter":
+        from core.request_context import get_scriptwriter_prewrite_receipt
+        from story.file_naming import canonical_chapter_display_name
+
+        receipt = get_scriptwriter_prewrite_receipt() or {}
+        try:
+            chapter_num = int(receipt.get("chapter_num"))
+            name = canonical_chapter_display_name(name, chapter_num)
+        except (TypeError, ValueError):
+            return "创建章节失败：PreWrite 未签发有效的章节元数据身份。"
     stories_path = get_project_stories_path(user_id, project_name)
     chapter_dir = _ensure_chapter_dir(stories_path, name)
     return f"章节已创建：{name}（路径：{chapter_dir}）"

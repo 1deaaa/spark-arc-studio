@@ -31,7 +31,9 @@ def count_story_body_chars(content: str, export_format: str) -> int:
     """统计最终可见正文字符，排除 ARC/Markdown 标记和构思块。"""
     text = str(content or "")
     if str(export_format or "").strip().lower() == "novel":
-        text = re.sub(r"<conception>[\s\S]*?</conception>", "", text)
+        from story.novel_parser import clean_novel_visible_text
+
+        text = clean_novel_visible_text(text)
         return _count_letters_and_numbers(text)
 
     try:

@@ -34,7 +34,11 @@
         :key="node.id"
         class="agent-node"
         :class="{ selected: selectedNode === node.id }"
-        :style="{ '--translateX': `${node.x}px`, '--translateY': `${node.y}px` }"
+        :style="{
+          '--translateX': `${node.x}px`,
+          '--translateY': `${node.y}px`,
+          '--node-scale': layoutScale,
+        }"
         :ref="(el) => setNodeRef(node.id, el as HTMLElement | null)"
         @click.stop="selectNode(node)"
         @mousedown="startDrag($event, node)"
@@ -54,7 +58,7 @@
         </n-tooltip>
 
         <!-- 允许自由拖拽卡片 -->
-        <div class="agent-node-header" style="cursor: grab;">
+        <div class="agent-node-header">
           <div class="agent-node-toprow">
             <n-tooltip trigger="hover">
               <template #trigger>
@@ -67,20 +71,34 @@
                   @mousedown.stop
                   @click.stop="openPromptPreferenceModal(node)"
                 >
-                  <template #icon><n-icon :component="FilePenLine" size="16" /></template>
+                  <template #icon><n-icon :component="Pencil" size="16" /></template>
                 </n-button>
               </template>
               {{ t('components.agentModelCard.promptPreferences') }}
             </n-tooltip>
             <div class="agent-node-title">{{ node.name }}</div>
+            <div v-if="getCurrentModelDisplayName(node.id)" class="agent-node-model">
+              {{ getCurrentModelDisplayName(node.id) }}
+            </div>
             <div class="indicators" v-if="shouldShowIndicators(node.id)">
               <BatonIndicator :agent-id="node.id" />
               <HornIndicator :agent-id="node.id" />
               <BeaconIndicator :agent-id="node.id" />
             </div>
-            <div class="agent-node-key">{{ node.id }}</div>
+            <n-tooltip trigger="hover" placement="top-start">
+              <template #trigger>
+                <n-icon
+                  class="agent-description-trigger"
+                  :component="Info"
+                  size="15"
+                  :aria-label="node.display || t('components.agentFlowBlueprint.noDescription')"
+                />
+              </template>
+              <span class="agent-description-tooltip">
+                {{ node.display || t('components.agentFlowBlueprint.noDescription') }}
+              </span>
+            </n-tooltip>
           </div>
-          <div class="agent-node-desc">{{ node.display || t('components.agentFlowBlueprint.noDescription') }}</div>
         </div>
 
         <div class="agent-node-body">
@@ -104,10 +122,6 @@
                   />
                 </n-form-item>
 
-                <div v-if="getBoundUsage(node.id)" class="binding-info">
-                  <n-icon :component="Link" size="16" />
-                  <span>{{ t('components.agentFlowBlueprint.currentBinding') }}: {{ getUsageModelName(getBoundUsage(node.id)) }}</span>
-                </div>
               </div>
             </n-tab-pane>
 
@@ -160,7 +174,7 @@
 import { ref, computed, onMounted, onBeforeUnmount, nextTick, watch } from 'vue';
 import { useI18n } from 'vue-i18n';
 import { NButton, NIcon, NTabs, NTabPane, NFormItem, NSelect, NTooltip } from 'naive-ui';
-import { FilePenLine, Link } from '@lucide/vue';
+import { Info, Pencil } from '@lucide/vue';
 import { fetchAgentUsageBindings, getDefaultAgentUsageKey, saveAgentBinding } from '@/services/agentUsage';
 import { useAgentRegistry } from '@/composables/useAgentRegistry';
 import { useAiStore } from '@/components/stores/aiStore';
@@ -272,8 +286,10 @@ const promptCustomizedByAgent = ref<Record<string, boolean>>({});
 
 const agentBindings = ref<Record<string, AgentBinding>>({});
 const directSelections = ref<Record<string, { platformId?: string | null; modelId?: string | null }>>({});
+const layoutScale = ref(1);
 
 let layoutRaf = 0;
+let canvasResizeObserver: ResizeObserver | null = null;
 
 // setNodeRef, selectNode, onCanvasClick 保持不变（使用 composable 的 setNodeRef）
 
@@ -318,6 +334,7 @@ async function loadPromptPreferenceBadges(agentIds: string[]) {
 // 使用 composable 提供的拖拽处理器
 const startDrag = createDragHandler({
   onDragEnd: () => {},
+  getCoordinateScale: () => layoutScale.value,
   shouldStartDrag: (e, node) => {
     if (e.button !== 0) return false; // 仅左键
     const target = e.target as HTMLElement | null;
@@ -327,22 +344,40 @@ const startDrag = createDragHandler({
     return true;
   }
 });
+
+type ResponsiveLayout = {
+  colX: number[];
+  rowHeight: number;
+  startY: number;
+};
+
+const BASE_NODE_WIDTH = 372;
+const BASE_COLUMN_GAP = 128;
+const BASE_START_X = 60;
+const BASE_START_Y = 80;
+const BASE_ROW_HEIGHT = 300;
+const BASE_RIGHT_PADDING = 48;
+const BASE_BOTTOM_PADDING = 36;
+const BASE_CARD_HEIGHT = 260;
+const MIN_LAYOUT_SCALE = 0.68;
+const BASE_LAYOUT_WIDTH = BASE_START_X + BASE_NODE_WIDTH * 4 + BASE_COLUMN_GAP * 3 + BASE_RIGHT_PADDING;
+const BASE_LAYOUT_HEIGHT = BASE_START_Y + BASE_ROW_HEIGHT * 1.5 + BASE_CARD_HEIGHT + BASE_BOTTOM_PADDING;
+
 function getResponsiveLayout() {
-  const width = window.innerWidth || 1920;
-  if (width < 1500) {
-    return {
-      colX: [36, 360, 684, 1008],
-      rowHeight: 260,
-      startY: 60,
-      nodeWidth: 300,
-    };
-  }
+  const width = canvasRef.value?.clientWidth || window.innerWidth || 1920;
+  const height = canvasRef.value?.clientHeight || window.innerHeight || 900;
+  const widthScale = (width - 32) / BASE_LAYOUT_WIDTH;
+  const heightScale = (height - 24) / BASE_LAYOUT_HEIGHT;
+  const scale = Math.max(MIN_LAYOUT_SCALE, Math.min(1, widthScale, heightScale));
+
+  layoutScale.value = scale;
+  const columnStep = (BASE_NODE_WIDTH + BASE_COLUMN_GAP) * scale;
+
   return {
-    colX: [60, 560, 1060, 1560],
-    rowHeight: 300,
-    startY: 80,
-    nodeWidth: 372,
-  };
+    colX: Array.from({ length: 4 }, (_, index) => Math.round((BASE_START_X * scale) + index * columnStep)),
+    rowHeight: Math.round(BASE_ROW_HEIGHT * scale),
+    startY: Math.round(BASE_START_Y * scale),
+  } satisfies ResponsiveLayout;
 }
 
 function buildDefaultPositions(registry: ReadonlyArray<{ key: string }>) {
@@ -473,7 +508,26 @@ const getBoundUsage = (agentKey: string) => {
   return val || defaultUsage;
 };
 
-const getUsageModelName = (usageKey: string) => aiStore.getUsageModelName(usageKey);
+function getCurrentModelId(agentKey: string): string | null {
+  const draftModelId = directSelections.value[agentKey]?.modelId;
+  if (draftModelId) return draftModelId;
+
+  const binding = agentBindings.value[agentKey];
+  if (typeof binding === 'object' && binding !== null && binding.binding === agentKey) {
+    return binding.direct?.model_id || null;
+  }
+
+  const usageKey = typeof binding === 'object' && binding !== null
+    ? binding.binding || getDefaultAgentUsageKey(agentKey)
+    : binding || getDefaultAgentUsageKey(agentKey);
+  return aiStore.usageSelections.find(slot => slot.usage_key === usageKey)?.model_id || null;
+}
+
+function getCurrentModelDisplayName(agentKey: string): string | null {
+  const modelId = getCurrentModelId(agentKey);
+  if (!modelId) return null;
+  return aiStore.allModels.find(model => model.model_id === modelId)?.display_name || null;
+}
 
 const getDirectPlatformId = (agentKey: string) => {
   if (directSelections.value[agentKey]?.platformId) return directSelections.value[agentKey].platformId;
@@ -663,6 +717,10 @@ function updateLayoutOnResize() {
 onMounted(async () => {
   await init();
   window.addEventListener('resize', updateLayoutOnResize);
+  if (typeof ResizeObserver !== 'undefined' && canvasRef.value) {
+    canvasResizeObserver = new ResizeObserver(() => updateLayoutOnResize());
+    canvasResizeObserver.observe(canvasRef.value);
+  }
 });
 
 watch(
@@ -681,6 +739,8 @@ watch(
 
 onBeforeUnmount(() => {
   if (layoutRaf) cancelAnimationFrame(layoutRaf);
+  canvasResizeObserver?.disconnect();
+  canvasResizeObserver = null;
   window.removeEventListener('resize', updateLayoutOnResize);
 });
 </script>
@@ -728,7 +788,8 @@ onBeforeUnmount(() => {
   border: 1px solid var(--spark-border);
   border-radius: 14px;
   box-shadow: var(--spark-shadow-sm);
-  transform: translate(var(--translateX, 0), var(--translateY, 0));
+  transform: translate(var(--translateX, 0), var(--translateY, 0)) scale(var(--node-scale, 1));
+  transform-origin: top left;
   z-index: 10;
   overflow: hidden;
   user-select: none;
@@ -743,7 +804,7 @@ onBeforeUnmount(() => {
 }
 
 .agent-node-header {
-  padding: 12px 14px 10px;
+  padding: 9px 12px 8px;
   background: color-mix(in srgb, var(--spark-primary-container), transparent 18%);
   border-bottom: 1px solid var(--spark-border);
   cursor: grab;
@@ -756,7 +817,7 @@ onBeforeUnmount(() => {
 .agent-node-toprow {
   display: flex;
   align-items: center;
-  gap: 10px;
+  gap: 8px;
 }
 
 .indicators {
@@ -766,9 +827,13 @@ onBeforeUnmount(() => {
 }
 
 .agent-node-title {
-  flex: 1 1 auto;
+  flex: 0 1 auto;
+  max-width: 44%;
   min-width: 0;
-  font-size: var(--spark-fs-lg);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  font-size: var(--spark-fs-md);
   font-weight: 750;
   color: var(--spark-text);
   line-height: 1.2;
@@ -776,8 +841,8 @@ onBeforeUnmount(() => {
 
 .prompt-entry-btn {
   flex: 0 0 auto;
-  width: 30px;
-  height: 30px;
+  width: 28px;
+  height: 28px;
   color: color-mix(in srgb, var(--spark-text), var(--spark-primary) 16%);
   background: color-mix(in srgb, var(--spark-primary-container), transparent 16%);
   border-color: color-mix(in srgb, var(--spark-primary), transparent 58%);
@@ -794,51 +859,47 @@ onBeforeUnmount(() => {
     0 4px 12px rgba(15, 23, 42, 0.08);
 }
 
-.agent-node-key {
-  flex: 0 0 auto;
-  font-family: inherit;
+.agent-node-model {
+  flex: 1 1 auto;
+  min-width: 0;
   font-size: var(--spark-fs-sm);
   color: var(--spark-text-muted);
-  padding: 2px 8px;
-  border-radius: 999px;
-  border: 1px solid color-mix(in srgb, var(--spark-border), transparent 15%);
-  background: color-mix(in srgb, var(--spark-panel-bg), transparent 20%);
   white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
 }
 
-.agent-node-desc {
-  margin-top: 8px;
-  font-size: var(--spark-fs-xs);
+.agent-description-trigger {
+  flex: 0 0 auto;
   color: var(--spark-text-muted);
-  line-height: 1.4;
+  cursor: help;
+}
+
+.agent-description-trigger:hover {
+  color: var(--spark-primary);
+}
+
+.agent-description-tooltip {
+  display: block;
+  max-width: 300px;
+  line-height: 1.5;
 }
 
 .agent-node-body {
-  padding: 10px 14px 14px;
+  padding: 8px 12px 10px;
 }
 
 .tab-content {
-  margin-top: 10px;
+  margin-top: 8px;
   display: flex;
   flex-direction: column;
-  gap: 10px;
+  gap: 8px;
 }
 
 .inline-fields {
   display: grid;
   grid-template-columns: 1fr 1fr;
   gap: 10px;
-}
-
-.binding-info {
-  display: flex;
-  align-items: center;
-  gap: 8px;
-  padding: 8px 10px;
-  background: var(--spark-primary-container);
-  border-radius: var(--spark-radius);
-  font-size: var(--spark-fs-xs);
-  color: var(--spark-primary);
 }
 
 .hint-box {
@@ -894,25 +955,4 @@ onBeforeUnmount(() => {
   color: var(--spark-danger);
 }
 
-@media (max-width: 1500px) {
-  .agent-node {
-    width: 300px;
-  }
-
-  .agent-node-title {
-    font-size: var(--spark-fs-base);
-  }
-
-  .agent-node-desc {
-    font-size: var(--spark-fs-2xs);
-  }
-
-  .agent-node-body {
-    padding: 8px 10px 10px;
-  }
-
-  .inline-fields {
-    gap: 6px;
-  }
-}
 </style>

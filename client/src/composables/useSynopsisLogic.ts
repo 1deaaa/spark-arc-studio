@@ -33,6 +33,7 @@ type InspirationAdoptionPayload = {
     logline?: string;
     inspiration?: string;
     lengthHint?: unknown;
+    estimatedChapters?: unknown;
     pov?: string;
     autoGenerateSynopsis?: boolean;
     autoGenerateBeats?: boolean;
@@ -73,7 +74,7 @@ export function useSynopsisLogic() {
 
     const isGenerating = ref(false);
     const isSaving = ref(false);
-    const currentLengthHint = ref<unknown>(null); // 篇幅提示，来自世界页
+    const currentLengthHint = ref<unknown>(null); // 作品规模提示，来自世界页
     let suppressAutoSave = false;
 
     // --- 节拍表数据 ---
@@ -275,10 +276,8 @@ export function useSynopsisLogic() {
                 estimated_chapters: synopsisData.estimated_chapters,
             });
             const bMarkup = serializeBeatSheetToMarkup(beatSheet);
-            await Promise.all([
-                saveSynopsis(projectStore.currentProject, synMarkup),
-                saveBeatSheet(projectStore.currentProject, bMarkup)
-            ]);
+            await saveSynopsis(projectStore.currentProject, synMarkup);
+            await saveBeatSheet(projectStore.currentProject, bMarkup);
             saveCreativeCache(buildSynopsisCacheKey(), getSynopsisSnapshot());
         } catch (e: unknown) {
             message.error('保存失败: ' + getErrorMessage(e));
@@ -469,7 +468,8 @@ export function useSynopsisLogic() {
             projectName: projectStore.currentProject,
             context: synopsisContext,
             guidance: synopsisGuidance,
-            lengthHint: synopsisData.estimated_chapters || currentLengthHint.value || null,
+            lengthHint: currentLengthHint.value || null,
+            estimatedChapters: synopsisData.estimated_chapters || null,
             autoGenerateOutline: !!options.autoGenerateOutline,
         };
 
@@ -534,10 +534,8 @@ export function useSynopsisLogic() {
                 estimated_chapters: synopsisData.estimated_chapters,
             });
             const bMarkup = serializeBeatSheetToMarkup(beatSheet);
-            await Promise.all([
-                saveSynopsis(projectStore.currentProject, synMarkup),
-                saveBeatSheet(projectStore.currentProject, bMarkup)
-            ]);
+            await saveSynopsis(projectStore.currentProject, synMarkup);
+            await saveBeatSheet(projectStore.currentProject, bMarkup);
             saveCreativeCache(buildSynopsisCacheKey(), getSynopsisSnapshot());
         } catch (e) {
             console.error('Auto-save failed:', e);

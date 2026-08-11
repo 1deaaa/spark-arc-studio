@@ -25,6 +25,64 @@ def test_find_scene_file_by_identity_uses_filename_meta_across_project(tmp_path:
     assert parsed["scene_num"] == 3
 
 
+def test_scene_identity_parser_accepts_legacy_prefixes_and_chinese_numbers() -> None:
+    from story.file_naming import canonical_scene_display_name, parse_scene_identity_from_title
+
+    assert parse_scene_identity_from_title("场景 3-4：旧标题") == (3, 4)
+    assert parse_scene_identity_from_title("第三-四 旧标题") == (3, 4)
+    assert parse_scene_identity_from_title("1-0 错误编号") == (1, None)
+    assert canonical_scene_display_name("场景 第三-四：旧标题", 3, 4) == "3-4 旧标题"
+
+
+def test_outline_parser_separates_protocol_numbers_from_reader_facing_titles() -> None:
+    from story.outline_parser import parse_outline_markup
+
+    outline = parse_outline_markup(
+        "## Chapter 3: 三 · 深水\n\n### 场景 3-4：旧船返航\n\n正文说明"
+    )
+
+    chapter = outline["nodes"][0]
+    scene = chapter["children"][0]
+    assert chapter["chapter"] == 3
+    assert chapter["title"] == "三 · 深水"
+    assert scene["chapter_num"] == 3
+    assert scene["scene_num"] == 4
+    assert scene["title"] == "旧船返航"
+
+
+def test_auto_write_state_hides_physical_filename_metadata(monkeypatch, tmp_path: Path) -> None:
+    from agents.routes.auto_write_state import load_auto_write_state, save_auto_write_state
+
+    monkeypatch.setattr("core.utils.USERDATA_ROOT", str(tmp_path))
+    physical = "一 · 开端/1-1 初遇.__spark__chap=001.scene=001.order=001001.arc"
+    saved = save_auto_write_state("7", "demo", {
+        "lastSavedFilename": physical,
+        "generatedFiles": [physical],
+        "generatedSceneFiles": [physical],
+    })
+    loaded = load_auto_write_state("7", "demo")
+
+    for state in (saved, loaded):
+        assert state["lastSavedFilename"] == "一 · 开端/1-1 初遇.arc"
+        assert state["generatedFiles"] == ["一 · 开端/1-1 初遇.arc"]
+        assert state["generatedSceneFiles"] == ["一 · 开端/1-1 初遇.arc"]
+
+
+def test_find_scene_file_by_identity_reuses_legacy_filename_without_metadata(tmp_path: Path) -> None:
+    from story.file_naming import find_scene_file_by_identity
+
+    stories_path = tmp_path / "stories"
+    stories_path.mkdir()
+    existing = stories_path / "旧章节" / "第三-四 旧标题.arc"
+    existing.parent.mkdir()
+    existing.write_text("# 第三-四 旧标题\n旧正文", encoding="utf-8")
+
+    found, parsed = find_scene_file_by_identity(str(stories_path), 3, 4, file_format="arc")
+
+    assert found == str(existing)
+    assert parsed and parsed["display_name"] == "第三-四 旧标题"
+
+
 def test_resolve_planned_scene_file_path_overwrites_existing_identity(tmp_path: Path) -> None:
     from story.file_naming import resolve_planned_scene_file_path
 
@@ -45,6 +103,30 @@ def test_resolve_planned_scene_file_path_overwrites_existing_identity(tmp_path: 
 
     assert resolved == str(existing)
     assert existed is True
+
+
+def test_resolve_planned_scene_file_path_blocks_ambiguous_duplicates(tmp_path: Path) -> None:
+    import pytest
+
+    from story.file_naming import DuplicateSceneIdentityError, resolve_planned_scene_file_path
+
+    stories_path = tmp_path / "stories"
+    for folder, title in (("旧章节", "第三-四 旧标题"), ("新章节", "3-4 新标题")):
+        target = stories_path / folder / f"{title}.arc"
+        target.parent.mkdir(parents=True, exist_ok=True)
+        target.write_text(f"# {title}\n正文", encoding="utf-8")
+
+    with pytest.raises(DuplicateSceneIdentityError) as exc_info:
+        resolve_planned_scene_file_path(
+            str(stories_path),
+            3,
+            4,
+            "3-4 再次生成",
+            chapter_dir_name="三 · 新章节名",
+            file_format="arc",
+        )
+
+    assert sorted(exc_info.value.paths) == ["新章节/3-4 新标题.arc", "旧章节/第三-四 旧标题.arc"]
 
 
 def test_create_or_rewrite_script_overwrites_existing_planned_scene(monkeypatch, tmp_path: Path) -> None:
@@ -78,6 +160,60 @@ def test_create_or_rewrite_script_overwrites_existing_planned_scene(monkeypatch,
     assert "已覆盖" in result
     assert "新正文" in existing.read_text(encoding="utf-8")
     assert "旧正文" not in existing.read_text(encoding="utf-8")
+
+
+def test_create_or_rewrite_script_reuses_legacy_scene_and_rejects_zero_scene(monkeypatch, tmp_path: Path) -> None:
+    from core.request_context import current_export_format, current_project_name, current_user_id
+    from agents.tools.scriptwriter import create_or_rewrite_script
+
+    monkeypatch.setattr("core.utils.USERDATA_ROOT", str(tmp_path))
+    monkeypatch.setattr("agents.story_memory.enqueue_scene_memory_write", lambda **_kwargs: None)
+    stories_path = tmp_path / "uid_7" / "projects" / "demo" / "stories" / "一 · 开端"
+    stories_path.mkdir(parents=True)
+    existing = stories_path / "第三-四 旧标题.arc"
+    existing.write_text("# 第三-四 旧标题\n旧正文", encoding="utf-8")
+
+    user_token = current_user_id.set("7")
+    project_token = current_project_name.set("demo")
+    format_token = current_export_format.set("arc")
+    try:
+        reused = create_or_rewrite_script.invoke({
+            "chapter_name": "三 · 改名后的章节",
+            "work_name": "场景 第三-四：改名后的场景",
+            "overwrite_content": "新正文",
+        })
+        rejected = create_or_rewrite_script.invoke({
+            "chapter_name": "一 · 开端",
+            "work_name": "1-0 错误场景",
+            "overwrite_content": "不应落盘",
+        })
+    finally:
+        current_export_format.reset(format_token)
+        current_project_name.reset(project_token)
+        current_user_id.reset(user_token)
+
+    assert "已覆盖" in reused
+    assert existing.read_text(encoding="utf-8").endswith("新正文")
+    assert "必须是大于 0" in rejected
+    assert len(list(stories_path.glob("*.arc"))) == 1
+
+
+def test_auto_write_scene_plan_uses_outline_position_instead_of_bad_title_number(monkeypatch, tmp_path: Path) -> None:
+    from agents.routes.auto_write_state import build_auto_write_scene_plan
+
+    monkeypatch.setattr("core.utils.USERDATA_ROOT", str(tmp_path))
+    outline = {
+        "nodes": [{
+            "type": "chapter",
+            "title": "一 · 开端",
+            "children": [{"type": "scene", "title": "场景 1-0：错误编号"}],
+        }],
+    }
+
+    plan = build_auto_write_scene_plan("7", "demo", outline, export_format="arc")
+
+    assert plan[0]["sceneTitle"] == "1-1 错误编号"
+    assert plan[0]["filename"] == "1-1 错误编号.arc"
 
 
 def test_read_chapter_scene_reads_nested_persisted_arc(monkeypatch, tmp_path: Path) -> None:

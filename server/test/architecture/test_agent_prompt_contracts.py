@@ -8,6 +8,7 @@ from agents.agent_lorebook import WorldviewAgent, _is_invalid_worldview_document
 from agents.agent_scriptwriter import ScriptwriterAgent
 from agents.agent_showrunner import ShowrunnerAgent
 from agents.agent_utils import load_prompt
+from agents.language_policy import build_language_policy_prefix
 from agents.setup_agents import MuseAgent
 from agents.tools.registry import EXTERNAL_SEARCH_TOOLS, LOREBOOK_BASE_TOOLS, get_tools_for_agent
 
@@ -27,6 +28,13 @@ AGENTS_WITH_PERSIST_TOOLS = [
     ("agent_showrunner", ShowrunnerAgent),
     ("agent_scriptwriter", ScriptwriterAgent),
 ]
+
+
+def test_language_policy_forbids_unrequested_parenthetical_names() -> None:
+    policy = build_language_policy_prefix("zh-CN")
+    for token in ("单一正式名称", "括号翻译", "外语释义", "缩写展开", "罗马音", "学术式副标题"):
+        assert token in policy
+    assert "正文中的必要括号说明不受此限制" in policy
 
 
 @pytest.mark.parametrize("prompt_name", CORE_AGENT_PROMPTS)
@@ -136,6 +144,17 @@ def test_lorebook_character_writes_are_incremental_by_default() -> None:
         assert token in tool_rules
 
 
+def test_lorebook_names_are_single_formal_names_and_relations_are_persisted() -> None:
+    prompts = load_prompt("lorebook")
+    combined = "\n".join((
+        str(prompts.get("system") or ""),
+        str(prompts.get("tool_rules") or ""),
+        str(prompts.get("generate_characters", {}).get("system") or ""),
+    ))
+    for token in ("单一正式名称", "禁止在名字后自动追加括号", "create_character_relation", "关系图已更新"):
+        assert token in combined
+
+
 def test_lorebook_worldview_tools_share_visual_markdown_protocol() -> None:
     prompts = load_prompt("lorebook")
     system = prompts["system"]
@@ -229,3 +248,37 @@ def test_only_director_overrides_dynamic_tool_system_prompt() -> None:
         if "_build_tool_system_prompt" in cls.__dict__:
             source = inspect.getsource(cls.__dict__["_build_tool_system_prompt"])
             assert "super()._build_tool_system_prompt" in source
+
+
+def test_scriptwriter_binds_fact_research_tools() -> None:
+    showrunner_tools = {tool.name for tool in get_tools_for_agent("agent_showrunner")}
+    scriptwriter_tools = {tool.name for tool in get_tools_for_agent("agent_scriptwriter")}
+
+    for tool_name in (
+        "story_memory_tool",
+        "graph_rag_tool",
+        "list_chapters",
+        "read_chapter_scene",
+        "search_project",
+        "semantic_search",
+    ):
+        assert tool_name not in showrunner_tools
+
+    for tool_name in ("search_project", "semantic_search"):
+        assert tool_name in scriptwriter_tools
+
+
+def test_showrunner_stage_prompts_define_distinct_artifact_contracts() -> None:
+    prompts = load_prompt("showrunner")
+    synopsis = prompts["generate_synopsis"]["system"]
+    beats = prompts["generate_beat_sheet"]["system"]
+    outline = prompts["generate_outline"]["system"]
+
+    assert "故事承诺" in synopsis
+    assert "不得拆分章节、逐场设计" in synopsis
+    assert "稀疏的状态转折图" in beats
+    assert "不是梗概的分段复述" in beats
+    for token in ("前置状态", "后置状态", "知情变化"):
+        assert token in beats
+    for token in ("地点", "前置状态", "后置状态", "禁止铺垫"):
+        assert token in outline

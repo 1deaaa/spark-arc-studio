@@ -22,6 +22,7 @@ use std::{
     io::Write,
     net::{IpAddr, Ipv4Addr, Ipv6Addr, SocketAddr, TcpStream},
     path::{Path, PathBuf},
+    process::Command,
     sync::{mpsc, Mutex, OnceLock},
     thread,
     time::{Duration, Instant},
@@ -31,14 +32,11 @@ use tar::Archive;
 use xz2::read::XzDecoder;
 use zip::ZipArchive;
 
-#[cfg(windows)]
-use std::process::Command;
-
 const MANAGED_MARKER_FILE: &str = ".sparkarc-managed.json";
 const DEPLOYMENT_STATE_FILE: &str = "deployment.json";
 const DEPLOYMENT_LOG_FILE: &str = "deploy.log";
 const LAUNCHER_RELEASE_CACHE_FILE: &str = "launcher-release.json";
-const LAUNCHER_RELEASE_CACHE_SCHEMA_VERSION: u32 = 2;
+const LAUNCHER_RELEASE_CACHE_SCHEMA_VERSION: u32 = 3;
 const MANAGED_SERVICE_PROCESS_FILE: &str = "managed-service-process.json";
 const STAGING_DIR_NAME: &str = ".staging";
 const MANAGED_INSTALL_DIR_NAME: &str = "sparkarc-server";
@@ -142,6 +140,9 @@ pub struct LauncherReleaseStatus {
     pub latest_version: Option<String>,
     pub update_available: bool,
     pub release_url: Option<String>,
+    pub asset_name: Option<String>,
+    pub asset_download_url: Option<String>,
+    pub asset_size: Option<u64>,
     pub last_error: Option<String>,
     pub source: Option<String>,
 }
@@ -155,6 +156,9 @@ struct LauncherReleaseCache {
     latest_version: Option<String>,
     update_available: bool,
     release_url: Option<String>,
+    asset_name: Option<String>,
+    asset_download_url: Option<String>,
+    asset_size: Option<u64>,
     source: Option<String>,
 }
 
@@ -179,15 +183,26 @@ enum ManagedProcessState {
 #[derive(Debug, Deserialize)]
 struct GithubRelease {
     tag_name: String,
-    html_url: String,
     draft: bool,
     prerelease: bool,
+    #[serde(default)]
+    assets: Vec<ReleaseAsset>,
 }
 
 #[derive(Debug, Deserialize)]
 struct GiteeRelease {
     tag_name: String,
     prerelease: bool,
+    #[serde(default)]
+    assets: Vec<ReleaseAsset>,
+}
+
+#[derive(Debug, Clone, Deserialize, PartialEq, Eq)]
+struct ReleaseAsset {
+    name: String,
+    browser_download_url: String,
+    #[serde(default)]
+    size: Option<u64>,
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -208,6 +223,7 @@ struct NormalizedRelease {
     release_url: String,
     draft: bool,
     prerelease: bool,
+    assets: Vec<ReleaseAsset>,
 }
 
 #[derive(Debug, Clone)]
@@ -582,6 +598,13 @@ impl DeploymentManager {
                 return Err(err);
             }
         };
+        let frontend_build_changed =
+            main_update_changes_frontend(&repository, &current, &available).unwrap_or_else(|err| {
+                self.append_log(format!(
+                    "无法精确比较前端构建输入，将强制重新构建以保证更新生效: {err}"
+                ));
+                true
+            });
 
         if let Err(err) = checkout_main_commit(&repository, &available) {
             let rollback_result = checkout_main_commit(&repository, &current);
@@ -602,6 +625,20 @@ impl DeploymentManager {
             let message = format!("恢复受保护运行时文件失败，已尝试回退: {err}");
             self.mark_failed(&message)?;
             return Err(message);
+        }
+        if frontend_build_changed {
+            let marker = project_root.join("client").join(".frontend_build_complete");
+            match fs::remove_file(&marker) {
+                Ok(()) => self.append_log("检测到前端代码变动，已安排下次启动自动重新构建。"),
+                Err(err) if err.kind() == std::io::ErrorKind::NotFound => {}
+                Err(err) => {
+                    let _ = checkout_main_commit(&repository, &current);
+                    let _ = restore_preserved_files(&project_root, &preserved);
+                    let message = format!("无法使旧前端构建失效，已尝试回退 main 更新: {err}");
+                    self.mark_failed(&message)?;
+                    return Err(message);
+                }
+            }
         }
 
         self.write_marker(&project_root, &repository)?;
@@ -683,12 +720,31 @@ impl DeploymentManager {
                 .as_deref()
                 .map(|latest| is_newer_version(latest, current_version))
                 .unwrap_or(false);
+            let asset = select_launcher_asset(&release.assets);
+            if update_available && asset.is_none() {
+                errors.push(format!(
+                    "{endpoint}: Release {} 缺少当前平台 {} 的 Launcher 安装资产",
+                    release.tag_name,
+                    launcher_platform_label()
+                ));
+                continue;
+            }
+            let asset = asset.map(|asset| ReleaseAsset {
+                name: asset.name.clone(),
+                browser_download_url: release_url_for_source(endpoint, &asset.browser_download_url),
+                size: asset.size,
+            });
             let status = LauncherReleaseStatus {
                 checked_at,
                 current_version: current_version.to_string(),
                 latest_version,
                 update_available,
                 release_url: Some(release.release_url),
+                asset_name: asset.as_ref().map(|value| value.name.clone()),
+                asset_download_url: asset
+                    .as_ref()
+                    .map(|value| value.browser_download_url.clone()),
+                asset_size: asset.and_then(|value| value.size),
                 last_error: None,
                 source: Some(endpoint.clone()),
             };
@@ -755,6 +811,9 @@ impl DeploymentManager {
                 latest_version,
                 update_available,
                 release_url: Some(release_url),
+                asset_name: None,
+                asset_download_url: None,
+                asset_size: None,
                 last_error: None,
                 source: Some(page),
             };
@@ -763,6 +822,85 @@ impl DeploymentManager {
         }
 
         self.release_check_failure_or_stale_cache(current_version, checked_at, errors, cached)
+    }
+
+    /// 下载并启动与当前 Launcher 平台匹配的稳定版安装资产。
+    ///
+    /// 下载地址只能来自统一 Release 检查结果，调用方不能注入任意 URL。安装载体启动成功后，
+    /// 由 Tauri 命令层退出当前 Launcher，为 Windows 安装器和 Linux AppImage 释放文件占用。
+    pub fn download_and_launch_launcher_update(
+        &self,
+        current_version: &str,
+    ) -> Result<PathBuf, String> {
+        let status = self.check_launcher_release(current_version);
+        if !status.update_available {
+            return Err("当前 Launcher 已是最新版本。".to_string());
+        }
+        let asset_name = status
+            .asset_name
+            .as_deref()
+            .ok_or_else(|| "最新 Release 缺少当前平台的 Launcher 安装资产。".to_string())?;
+        let asset_url = status
+            .asset_download_url
+            .as_deref()
+            .ok_or_else(|| "最新 Release 未提供当前平台的下载地址。".to_string())?;
+        let version = status
+            .latest_version
+            .as_deref()
+            .ok_or_else(|| "最新 Launcher 版本无效。".to_string())?;
+
+        self.ensure_user_dir()?;
+        let staging_dir = self.user_dir.join(STAGING_DIR_NAME).join("launcher-update");
+        fs::create_dir_all(&staging_dir).map_err(|err| err.to_string())?;
+        let destination = staging_dir.join(asset_name);
+        let partial = staging_dir.join(format!("{asset_name}.part"));
+        let _ = fs::remove_file(&partial);
+        self.append_log(format!(
+            "正在从 {} 下载 Launcher {}: {}",
+            status.source.as_deref().unwrap_or("Release 源"),
+            version,
+            asset_name
+        ));
+
+        let client = Client::builder()
+            .timeout(Duration::from_secs(10 * 60))
+            .user_agent("SparkArc-Launcher/1.0")
+            .build()
+            .map_err(|err| format!("无法创建 Launcher 更新下载客户端: {err}"))?;
+        let mut response = client
+            .get(asset_url)
+            .send()
+            .map_err(|err| format!("下载 Launcher 更新失败: {err}"))?;
+        if !response.status().is_success() {
+            return Err(format!(
+                "下载 Launcher 更新失败: HTTP {}",
+                response.status()
+            ));
+        }
+        let mut file = File::create(&partial)
+            .map_err(|err| format!("无法创建 Launcher 更新暂存文件: {err}"))?;
+        let downloaded = response
+            .copy_to(&mut file)
+            .map_err(|err| format!("写入 Launcher 更新失败: {err}"))?;
+        file.flush()
+            .map_err(|err| format!("无法刷新 Launcher 更新暂存文件: {err}"))?;
+        if let Some(expected) = status.asset_size.filter(|size| *size > 0) {
+            if downloaded != expected {
+                let _ = fs::remove_file(&partial);
+                return Err(format!(
+                    "Launcher 更新下载不完整：期望 {expected} 字节，实际 {downloaded} 字节。"
+                ));
+            }
+        }
+        if destination.exists() {
+            fs::remove_file(&destination)
+                .map_err(|err| format!("无法替换旧的 Launcher 更新暂存文件: {err}"))?;
+        }
+        fs::rename(&partial, &destination)
+            .map_err(|err| format!("无法完成 Launcher 更新下载: {err}"))?;
+        launch_launcher_installer(&destination)?;
+        self.append_log(format!("Launcher {} 安装载体已启动。", version));
+        Ok(destination)
     }
 
     /// 由 Launcher 启动 APP 数据目录中的 main 时写入进程记录。记录只属于 APP 数据目录，绝不登记
@@ -898,6 +1036,9 @@ impl DeploymentManager {
             latest_version: cache.latest_version,
             update_available: cache.update_available,
             release_url: cache.release_url,
+            asset_name: cache.asset_name,
+            asset_download_url: cache.asset_download_url,
+            asset_size: cache.asset_size,
             last_error: None,
             source: cache.source,
         })
@@ -921,6 +1062,9 @@ impl DeploymentManager {
             latest_version: status.latest_version.clone(),
             update_available: status.update_available,
             release_url: status.release_url.clone(),
+            asset_name: status.asset_name.clone(),
+            asset_download_url: status.asset_download_url.clone(),
+            asset_size: status.asset_size,
             source: status.source.clone(),
         };
         if let Err(err) = self
@@ -949,6 +1093,9 @@ impl DeploymentManager {
             latest_version: None,
             update_available: false,
             release_url: None,
+            asset_name: None,
+            asset_download_url: None,
+            asset_size: None,
             last_error: Some(error),
             source: None,
         }
@@ -1610,16 +1757,19 @@ fn parse_release_response(
     candidate: &ReleaseApiCandidate,
 ) -> Result<NormalizedRelease, reqwest::Error> {
     match candidate.provider {
-        ReleaseProvider::Github => {
-            response
-                .json::<GithubRelease>()
-                .map(|release| NormalizedRelease {
-                    tag_name: release.tag_name,
-                    release_url: release_url_for_source(&candidate.endpoint, &release.html_url),
-                    draft: release.draft,
-                    prerelease: release.prerelease,
-                })
-        }
+        ReleaseProvider::Github => response.json::<GithubRelease>().map(|release| {
+            let release_url = project_config::repository_urls().release_page.replace(
+                "/releases/latest",
+                &format!("/releases/tag/{}", release.tag_name),
+            );
+            NormalizedRelease {
+                tag_name: release.tag_name,
+                release_url: release_url_for_source(&candidate.endpoint, &release_url),
+                draft: release.draft,
+                prerelease: release.prerelease,
+                assets: release.assets,
+            }
+        }),
         ReleaseProvider::Gitee => response.json::<GiteeRelease>().map(|release| {
             normalize_gitee_release(release, &project_config::repository_urls().mainland_release)
         }),
@@ -1635,7 +1785,76 @@ fn normalize_gitee_release(
         tag_name: release.tag_name,
         draft: false,
         prerelease: release.prerelease,
+        assets: release.assets,
     }
+}
+
+fn launcher_platform_label() -> &'static str {
+    match (std::env::consts::OS, std::env::consts::ARCH) {
+        ("windows", "x86_64") => "Windows x64",
+        ("macos", "aarch64") => "macOS Apple Silicon",
+        ("macos", "x86_64") => "macOS Intel",
+        ("linux", "x86_64") => "Linux x64",
+        _ => "当前平台",
+    }
+}
+
+fn launcher_asset_suffix() -> Option<&'static str> {
+    launcher_asset_suffix_for(std::env::consts::OS, std::env::consts::ARCH)
+}
+
+fn launcher_asset_suffix_for(os: &str, arch: &str) -> Option<&'static str> {
+    match (os, arch) {
+        ("windows", "x86_64") => Some("_x64-setup.exe"),
+        ("macos", "aarch64") => Some("_aarch64.dmg"),
+        ("macos", "x86_64") => Some("_x64.dmg"),
+        ("linux", "x86_64") => Some("_amd64.AppImage"),
+        _ => None,
+    }
+}
+
+fn select_launcher_asset(assets: &[ReleaseAsset]) -> Option<&ReleaseAsset> {
+    let suffix = launcher_asset_suffix()?;
+    assets.iter().find(|asset| {
+        Path::new(&asset.name)
+            .file_name()
+            .is_some_and(|file_name| file_name == asset.name.as_str())
+            && asset.name.ends_with(suffix)
+    })
+}
+
+fn launch_launcher_installer(path: &Path) -> Result<(), String> {
+    #[cfg(windows)]
+    {
+        Command::new(path)
+            .spawn()
+            .map_err(|err| format!("无法启动 Launcher 安装器: {err}"))?;
+        return Ok(());
+    }
+    #[cfg(target_os = "macos")]
+    {
+        Command::new("open")
+            .arg(path)
+            .spawn()
+            .map_err(|err| format!("无法打开 Launcher 安装镜像: {err}"))?;
+        return Ok(());
+    }
+    #[cfg(target_os = "linux")]
+    {
+        use std::os::unix::fs::PermissionsExt;
+        let mut permissions = fs::metadata(path)
+            .map_err(|err| format!("无法读取 Launcher AppImage 权限: {err}"))?
+            .permissions();
+        permissions.set_mode(0o755);
+        fs::set_permissions(path, permissions)
+            .map_err(|err| format!("无法设置 Launcher AppImage 执行权限: {err}"))?;
+        Command::new(path)
+            .spawn()
+            .map_err(|err| format!("无法启动 Launcher AppImage: {err}"))?;
+        return Ok(());
+    }
+    #[allow(unreachable_code)]
+    Err("当前平台不支持 Launcher 自动更新。".to_string())
 }
 
 fn release_url_for_source(source: &str, release_url: &str) -> String {
@@ -1679,6 +1898,44 @@ fn is_preserved_relative_path(relative_path: &Path) -> bool {
         || normalized == "client/.frontend_build_complete"
         || normalized == "client/.package-lock.sha256"
         || normalized == "client/.frontend_build.log"
+}
+
+fn is_frontend_build_input(relative_path: &Path) -> bool {
+    let normalized = relative_path.to_string_lossy().replace('\\', "/");
+    normalized == "client/package.json"
+        || normalized == "client/package-lock.json"
+        || normalized == "client/vite.config.ts"
+        || normalized == "client/tsconfig.json"
+        || normalized == "client/index.html"
+        || normalized == "client/build-frontend.mjs"
+        || normalized.starts_with("client/src/")
+        || normalized.starts_with("client/public/")
+}
+
+fn main_update_changes_frontend(
+    repository: &Repository,
+    current_commit: &str,
+    available_commit: &str,
+) -> Result<bool, String> {
+    let current = repository
+        .find_commit(Oid::from_str(current_commit).map_err(|err| err.to_string())?)
+        .map_err(|err| format!("无法读取当前 main 提交: {err}"))?;
+    let available = repository
+        .find_commit(Oid::from_str(available_commit).map_err(|err| err.to_string())?)
+        .map_err(|err| format!("无法读取待更新 main 提交: {err}"))?;
+    let current_tree = current.tree().map_err(|err| err.to_string())?;
+    let available_tree = available.tree().map_err(|err| err.to_string())?;
+    let diff = repository
+        .diff_tree_to_tree(Some(&current_tree), Some(&available_tree), None)
+        .map_err(|err| format!("无法比较 main 更新内容: {err}"))?;
+    Ok(diff.deltas().any(|delta| {
+        delta
+            .old_file()
+            .path()
+            .into_iter()
+            .chain(delta.new_file().path())
+            .any(is_frontend_build_input)
+    }))
 }
 
 fn collect_preserved_changes(
@@ -2167,7 +2424,14 @@ mod tests {
 
     #[test]
     fn gitee_release_response_is_normalized_without_github_only_fields() {
-        let payload = r#"{"tag_name":"sparkarc-v0.6.1","prerelease":false}"#;
+        let payload = r#"{
+            "tag_name":"sparkarc-v0.6.1",
+            "prerelease":false,
+            "assets":[{
+                "name":"SparkArc.Studio_0.6.1_x64-setup.exe",
+                "browser_download_url":"https://gitee.example/update.exe"
+            }]
+        }"#;
         let release: GiteeRelease = serde_json::from_str(payload).unwrap();
         let normalized =
             normalize_gitee_release(release, &project_config::repository_urls().mainland_release);
@@ -2179,6 +2443,73 @@ mod tests {
             normalized.release_url,
             "https://gitee.com/aideaaa/spark-arc-studio/releases/tag/sparkarc-v0.6.1"
         );
+        assert_eq!(normalized.assets.len(), 1);
+        assert_eq!(
+            normalized.assets[0].name,
+            "SparkArc.Studio_0.6.1_x64-setup.exe"
+        );
+    }
+
+    #[test]
+    fn launcher_assets_match_every_published_desktop_platform() {
+        assert_eq!(
+            launcher_asset_suffix_for("windows", "x86_64"),
+            Some("_x64-setup.exe")
+        );
+        assert_eq!(
+            launcher_asset_suffix_for("macos", "aarch64"),
+            Some("_aarch64.dmg")
+        );
+        assert_eq!(
+            launcher_asset_suffix_for("macos", "x86_64"),
+            Some("_x64.dmg")
+        );
+        assert_eq!(
+            launcher_asset_suffix_for("linux", "x86_64"),
+            Some("_amd64.AppImage")
+        );
+        assert_eq!(launcher_asset_suffix_for("windows", "aarch64"), None);
+
+        #[cfg(windows)]
+        {
+            let assets = vec![
+                ReleaseAsset {
+                    name: "../SparkArc.Studio_0.6.4_x64-setup.exe".to_string(),
+                    browser_download_url: "https://example.invalid/unsafe".to_string(),
+                    size: None,
+                },
+                ReleaseAsset {
+                    name: "SparkArc.Studio_0.6.4_x64-setup.exe".to_string(),
+                    browser_download_url: "https://example.invalid/safe".to_string(),
+                    size: None,
+                },
+            ];
+            assert_eq!(
+                select_launcher_asset(&assets).map(|asset| asset.browser_download_url.as_str()),
+                Some("https://example.invalid/safe")
+            );
+        }
+    }
+
+    #[test]
+    fn frontend_build_invalidation_tracks_only_workspace_build_inputs() {
+        for path in [
+            "client/src/main.ts",
+            "client/public/favicon.ico",
+            "client/index.html",
+            "client/package-lock.json",
+            "client/build-frontend.mjs",
+        ] {
+            assert!(is_frontend_build_input(Path::new(path)), "{path}");
+        }
+        for path in [
+            "server/app.py",
+            "client/dist/index.html",
+            "client/.frontend_build_complete",
+            "client/launcher/LauncherApp.vue",
+        ] {
+            assert!(!is_frontend_build_input(Path::new(path)), "{path}");
+        }
     }
 
     #[test]
@@ -2209,6 +2540,9 @@ mod tests {
             latest_version: Some("0.5.0".to_string()),
             update_available: true,
             release_url: Some("https://example.invalid/release".to_string()),
+            asset_name: Some("SparkArc.Studio_0.5.0_x64-setup.exe".to_string()),
+            asset_download_url: Some("https://example.invalid/update.exe".to_string()),
+            asset_size: Some(1024),
             last_error: None,
             source: Some("test".to_string()),
         };

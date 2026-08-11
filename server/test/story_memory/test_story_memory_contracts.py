@@ -8,8 +8,27 @@ import time
 from concurrent.futures import ThreadPoolExecutor
 from pathlib import Path
 
+from langchain_core.messages import HumanMessage, SystemMessage
+
 from agents.story_memory import StoryMemoryFacade
 from agents.tools.registry import get_tools_for_agent
+
+
+def test_story_memory_job_propagates_request_context(monkeypatch) -> None:
+    from core.request_context import current_llm_usage_context
+    from agents.story_memory import jobs
+
+    usage_token = current_llm_usage_context.set("story-memory-context-test")
+    try:
+        with ThreadPoolExecutor(max_workers=1) as executor:
+            monkeypatch.setattr(jobs, "_executor", lambda: executor)
+            future = jobs._submit(
+                "上下文测试",
+                lambda: current_llm_usage_context.get(),
+            )
+            assert future.result(timeout=2) == "story-memory-context-test"
+    finally:
+        current_llm_usage_context.reset(usage_token)
 
 
 def test_story_memory_serializes_same_project_updates(monkeypatch, tmp_path: Path) -> None:
@@ -189,6 +208,43 @@ def test_story_memory_llm_delta_feeds_scene_task_pack(monkeypatch, tmp_path: Pat
     assert "旧钥匙交接" in task_pack
     assert "林烬持有旧钥匙" in task_pack
     assert "后续若写林烬没有钥匙会冲突" in task_pack
+
+
+def test_story_memory_schema_is_in_stable_system_prefix(monkeypatch, tmp_path: Path) -> None:
+    monkeypatch.setattr("core.utils.USERDATA_ROOT", str(tmp_path))
+    captured_messages = []
+
+    class FakeLlm:
+        def invoke(self, messages):
+            captured_messages.extend(messages)
+            return type("Response", (), {"content": "{}"})()
+
+    class FakeMatchbox:
+        @staticmethod
+        def get_user_llm(*_args, **_kwargs):
+            return FakeLlm()
+
+    monkeypatch.setattr("llm.agen_matchbox.matchbox", lambda: FakeMatchbox())
+    facade = StoryMemoryFacade("cache-user", "cache-project")
+    facade._extract_state_delta_with_llm(
+        scene_text="MARK_DYNAMIC_SCENE_TEXT",
+        scene_card={
+            "scene_id": "scene-1",
+            "chapter_title": "第一章",
+            "scene_title": "第一场",
+            "description": "场景描述",
+            "guidance": "写作指导",
+        },
+        characters=["林烬"],
+        chr_map={1: "林烬"},
+    )
+
+    assert isinstance(captured_messages[0], SystemMessage)
+    assert isinstance(captured_messages[1], HumanMessage)
+    assert "【输出 JSON schema】" in captured_messages[0].content
+    assert "【输出 JSON schema】" not in captured_messages[1].content
+    assert "MARK_DYNAMIC_SCENE_TEXT" not in captured_messages[0].content
+    assert "MARK_DYNAMIC_SCENE_TEXT" in captured_messages[1].content
 
 
 def test_scriptwriter_receives_story_memory_read_tool() -> None:
@@ -397,7 +453,8 @@ def test_scriptwriter_memory_write_call_sites_use_unified_memory_pipeline() -> N
     tool_source = inspect.getsource(scriptwriter.create_or_rewrite_script.func)
 
     assert "previous_scene_context" not in auto_write_source
-    assert "enqueue_scene_memory_write" in auto_write_source
+    assert "run_autonomous_scriptwriter_creation" in auto_write_source
+    assert "enqueue_scene_memory_write" not in auto_write_source
     assert "record_scene_write(" not in auto_write_source
 
     assert "enqueue_story_file_memory_write" in production_source

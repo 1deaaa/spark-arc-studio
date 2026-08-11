@@ -34,10 +34,12 @@ from agents.tools.common import (
 from agents.tools.delegation import DelegateTaskInput, delegate_task
 from agents.tools.lorebook import (
     PatchWorldviewInput,
+    CreateCharacterRelationInput,
     RewriteAllCharactersInput,
     RewriteWorldviewInput,
     UpdateCharacterInput,
     patch_worldview,
+    create_character_relation,
     rewrite_all_characters,
     rewrite_worldview,
     update_character,
@@ -54,6 +56,10 @@ from agents.tools.muse import (
     read_inspiration,
     rewrite_inspiration,
 )
+from agents.tools.pipeline import (
+    CompletePipelineStepInput,
+    complete_pipeline_step,
+)
 from agents.tools.registry import (
     ALL_TOOLS,
     CRITIC_TOOLS,
@@ -63,6 +69,8 @@ from agents.tools.registry import (
     MCP_ONLY_TOOLS,
     MUSE_TOOLS,
     OPTIONAL_RESEARCH_TOOLS,
+    PIPELINE_CONTROL_TOOLS,
+    PIPELINE_PERSIST_TOOL_NAMES,
     SCRIPTWRITER_TOOLS,
     SHARED_CHAT_HISTORY_TOOLS,
     SHARED_READ_TOOLS,
@@ -144,7 +152,9 @@ __all__ = [
     "ListInspirationsInput",
     "ReadInspirationInput",
     "CheckScriptwriterStatusInput",
+    "CompletePipelineStepInput",
     "CreateChapterInput",
+    "CreateCharacterRelationInput",
     "CreateOrRewriteScriptInput",
     "CRITIC_TOOLS",
     "DIRECTOR_TOOLS",
@@ -155,6 +165,8 @@ __all__ = [
     "MCP_ONLY_TOOLS",
     "MUSE_TOOLS",
     "OPTIONAL_RESEARCH_TOOLS",
+    "PIPELINE_CONTROL_TOOLS",
+    "PIPELINE_PERSIST_TOOL_NAMES",
     "OrganizeScenesToChapterInput",
     "PatchBeatSheetInput",
     "PatchOutlineInput",
@@ -204,7 +216,9 @@ __all__ = [
     "list_inspirations",
     "read_inspiration",
     "check_scriptwriter_status",
+    "complete_pipeline_step",
     "create_chapter",
+    "create_character_relation",
     "create_or_rewrite_script",
     "delegate_task",
     "get_tools_for_agent",

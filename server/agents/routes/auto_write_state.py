@@ -9,6 +9,8 @@ from core.utils import get_project_path, get_project_stories_path
 from core.json_state import json_state_lock, load_json_file, save_json_file_atomic
 from story.file_naming import (
     build_scene_story_filename,
+    canonical_chapter_display_name,
+    canonical_scene_display_name,
     find_scene_file_by_identity,
     strip_story_filename_meta,
 )
@@ -41,6 +43,27 @@ def sanitize_scene_title(title: str) -> str:
     return _sanitize_name(title, "未命名场景")
 
 
+def normalize_planned_scene_title(chapter_num: int, scene_idx: int, scene_title: str) -> str:
+    """状态预览保持可用；命名错误由生成链路正式阻断。"""
+    try:
+        chapter = int(chapter_num)
+        scene = int(scene_idx) + 1
+    except (TypeError, ValueError):
+        return "?-? 命名无效"
+    try:
+        return canonical_scene_display_name(scene_title, chapter, scene)
+    except (TypeError, ValueError):
+        return f"{chapter}-{scene} 命名无效"
+
+
+def normalize_planned_chapter_title(chapter_num: int, chapter_title: str) -> str:
+    """按大纲索引生成稳定章节显示名。"""
+    try:
+        return canonical_chapter_display_name(chapter_title, int(chapter_num))
+    except (TypeError, ValueError):
+        return "? · 命名无效"
+
+
 def build_chapter_output_filename(chapter_title: str, export_format: str = "arc") -> str:
     """章节级别文件命名（兜底用，正常情况使用 build_scene_output_filename）。"""
     safe_title = sanitize_chapter_title(chapter_title)
@@ -56,7 +79,9 @@ def build_scene_output_filename(
     export_format: str = "arc",
 ) -> str:
     """场景级别物理文件命名：显示名 + 隐形排序元数据。"""
-    safe_scene = sanitize_scene_title(scene_title)
+    safe_scene = normalize_planned_scene_title(
+        int(chapter_num), scene_idx, sanitize_scene_title(scene_title)
+    )
     return build_scene_story_filename(
         int(chapter_num),
         int(scene_idx) + 1,
@@ -88,6 +113,7 @@ def default_auto_write_state() -> Dict[str, Any]:
         "currentSceneTitle": "",
         "phase": "",
         "phaseMessage": "",
+        "phaseToolName": "",
         "lastCompletedChapterIndex": None,
         "lastCompletedChapterTitle": "",
         "nextChapterIndex": 0,
@@ -120,12 +146,32 @@ def default_auto_write_state() -> Dict[str, Any]:
     }
 
 
+def _normalize_state_display_filename(value: Any) -> str:
+    raw = str(value or "").strip()
+    if not raw:
+        return ""
+    directory, filename = os.path.split(raw.replace("\\", "/"))
+    visible = strip_story_filename_meta(filename)
+    return f"{directory}/{visible}" if directory else visible
+
+
+def _sanitize_state_display_names(state: Dict[str, Any]) -> Dict[str, Any]:
+    state["lastSavedFilename"] = _normalize_state_display_filename(state.get("lastSavedFilename"))
+    for key in ("generatedFiles", "generatedSceneFiles"):
+        values = state.get(key)
+        if isinstance(values, list):
+            state[key] = list(dict.fromkeys(
+                _normalize_state_display_filename(item) for item in values if str(item or "").strip()
+            ))
+    return state
+
+
 def load_auto_write_state(user_id: str, project_name: str) -> Dict[str, Any]:
     state_path = get_auto_write_state_path(user_id, project_name)
     data = load_json_file(state_path, default_auto_write_state) or {}
     state = default_auto_write_state()
     state.update(data)
-    return state
+    return _sanitize_state_display_names(state)
 
 
 def save_auto_write_state(user_id: str, project_name: str, state: Dict[str, Any]) -> Dict[str, Any]:
@@ -134,6 +180,7 @@ def save_auto_write_state(user_id: str, project_name: str, state: Dict[str, Any]
 
     normalized_state = default_auto_write_state()
     normalized_state.update(state or {})
+    _sanitize_state_display_names(normalized_state)
     normalized_state["updatedAt"] = _utc_now_iso()
 
     save_json_file_atomic(state_path, normalized_state)
@@ -181,6 +228,7 @@ def begin_auto_write_run(
             "currentSceneTitle": "",
             "phase": "",
             "phaseMessage": "",
+            "phaseToolName": "",
             "lastCompletedChapterIndex": None,
             "lastCompletedChapterTitle": "",
             "nextChapterIndex": start_chapter_index,
@@ -215,14 +263,18 @@ def build_auto_write_chapter_plan(
 
     for index, chapter in enumerate(chapter_nodes):
         chapter_num = chapter.get("chapter", index + 1)
-        chapter_title = chapter.get("title", f"Chapter {chapter_num}")
+        chapter_title = normalize_planned_chapter_title(
+            chapter_num, chapter.get("title", f"Chapter {chapter_num}")
+        )
         # 判断是否存在该章任意一个场景文件
         scenes = chapter.get("children", [])
         any_exists = False
         from agents.tools.scriptwriter import _ensure_chapter_dir
         chapter_dir = _ensure_chapter_dir(stories_path, chapter_title)
         for s_idx, scene in enumerate(scenes):
-            scene_title = scene.get("title", f"Scene {s_idx + 1}")
+            scene_title = normalize_planned_scene_title(
+                int(chapter_num), s_idx, scene.get("title", f"场景 {s_idx + 1}")
+            )
             fn = build_scene_output_filename(chapter_num, chapter_title, s_idx, scene_title, export_format)
             existing_path, _ = find_scene_file_by_identity(
                 stories_path,
@@ -271,10 +323,14 @@ def build_auto_write_scene_plan(
 
     for ch_idx, chapter in enumerate(chapter_nodes):
         chapter_num = chapter.get("chapter", ch_idx + 1)
-        chapter_title = chapter.get("title", f"Chapter {chapter_num}")
+        chapter_title = normalize_planned_chapter_title(
+            chapter_num, chapter.get("title", f"Chapter {chapter_num}")
+        )
         scenes = chapter.get("children", [])
         for s_idx, scene in enumerate(scenes):
-            scene_title = scene.get("title", f"Scene {s_idx + 1}")
+            scene_title = normalize_planned_scene_title(
+                int(chapter_num), s_idx, scene.get("title", f"场景 {s_idx + 1}")
+            )
             from agents.tools.scriptwriter import _ensure_chapter_dir
             chapter_dir = _ensure_chapter_dir(stories_path, chapter_title)
             filename = build_scene_output_filename(chapter_num, chapter_title, s_idx, scene_title, export_format)

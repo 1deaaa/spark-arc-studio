@@ -643,6 +643,7 @@ class StoryMemoryFacade:
         llm = matchbox().get_user_llm(
             self.user_id,
             usage_key=usage_key,
+            agent_name="agent_story_memory",
             timeout=timeout,
         )
         known_characters = "、".join(characters) or "（未识别）"
@@ -658,7 +659,37 @@ class StoryMemoryFacade:
         system_prompt = prepend_prompt_language_policy(
             "你是长篇小说项目的叙事状态抽取器。任务标签:[TASK:STORY_MEMORY_EXTRACT]。"
             "你只从用户提供的场景正文和场景目标中抽取事实，不补设定、不脑补隐含情节、不提供创作建议。"
-            "输出必须是严格 JSON 对象，不要 Markdown，不要解释。"
+            """输出必须是严格 JSON 对象，不要 Markdown，不要解释。
+
+【输出 JSON schema】
+{
+  "summary": "用 1-3 句话概括本场真正发生的剧情事实",
+  "events": [
+    {"summary": "事件", "participants": ["角色名"], "evidence": "原文证据短句"}
+  ],
+  "character_updates": [
+    {"character": "角色名", "status": "本场结束时状态", "goal": "当前目标", "emotion": "情绪", "knowledge": "本场后知道/不知道的关键信息", "evidence": "证据短句"}
+  ],
+  "relationship_changes": [
+    {"characters": ["角色A", "角色B"], "state": "本场结束时关系状态", "why": "原因", "evidence": "证据短句"}
+  ],
+  "foreshadows": [
+    {"description": "正文中明确出现的开放线索、秘密、承诺或已回收线索", "status": "open|advanced|resolved", "related_characters": ["角色名"], "evidence": "原文证据短句"}
+  ],
+  "fact_claims": [
+    {"claim": "正文已经确立、后续应核对保持的事实", "entities": ["实体名"], "evidence": "原文证据短句"}
+  ],
+  "conflict_risks": [
+    {"risk": "仅当正文或场景目标中明确出现自相矛盾、需人工核对的信息时填写", "severity": "low|medium|high", "evidence": "原文证据短句"}
+  ]
+}
+
+要求：
+- 数组最多各 8 条。
+- 没有就给空数组。
+- 角色名尽量使用项目角色表中的名称。
+- evidence 必须来自场景正文或场景指导。
+- 不要推测作者意图，不要设计伏笔，不要给后续写作方案。"""
         )
         user_prompt = f"""
 请从以下已保存场景中抽取结构化叙事状态增量。
@@ -674,36 +705,6 @@ class StoryMemoryFacade:
 
 【场景正文】
 {_compact_text(scene_text, int(os.getenv("SPARKARC_STORY_MEMORY_MAX_CHARS", "12000")))}
-
-【输出 JSON schema】
-{{
-  "summary": "用 1-3 句话概括本场真正发生的剧情事实",
-  "events": [
-    {{"summary": "事件", "participants": ["角色名"], "evidence": "原文证据短句"}}
-  ],
-  "character_updates": [
-    {{"character": "角色名", "status": "本场结束时状态", "goal": "当前目标", "emotion": "情绪", "knowledge": "本场后知道/不知道的关键信息", "evidence": "证据短句"}}
-  ],
-  "relationship_changes": [
-    {{"characters": ["角色A", "角色B"], "state": "本场结束时关系状态", "why": "原因", "evidence": "证据短句"}}
-  ],
-  "foreshadows": [
-    {{"description": "正文中明确出现的开放线索、秘密、承诺或已回收线索", "status": "open|advanced|resolved", "related_characters": ["角色名"], "evidence": "证据短句"}}
-  ],
-  "fact_claims": [
-    {{"claim": "正文已经确立、后续应核对保持的事实", "entities": ["实体名"], "evidence": "证据短句"}}
-  ],
-  "conflict_risks": [
-    {{"risk": "仅当正文或场景目标中明确出现自相矛盾、需人工核对的信息时填写", "severity": "low|medium|high", "evidence": "证据短句"}}
-  ]
-}}
-
-要求：
-- 数组最多各 8 条。
-- 没有就给空数组。
-- 角色名尽量使用项目角色表中的名称。
-- evidence 必须来自场景正文或场景指导。
-- 不要推测作者意图，不要设计伏笔，不要给后续写作方案。
 """
         response = llm.invoke([
             SystemMessage(content=system_prompt),

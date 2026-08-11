@@ -16,6 +16,7 @@ from .models import (
     DEFAULT_MAX_CONTEXT_TOKENS,
     DEFAULT_MAX_OUTPUT_TOKENS,
     get_model_modalities,
+    is_chat_model,
     is_embedding_model,
 )
 from .config import DEFAULT_USAGE_KEY, BUILTIN_USAGE_SLOTS
@@ -128,6 +129,17 @@ class UserServicesMixin:
                 raise ValueError("平台不存在")
             if self._is_platform_disabled(session, user_id, plat):
                 raise ValueError("平台已禁用")
+            if not plat.is_sys and plat.user_id != user_id:
+                raise ValueError("无权访问该平台")
+            model = session.query(LLModels).filter_by(id=model_id).first()
+            if not model:
+                raise ValueError("模型不存在")
+            if model.platform_id != plat.id:
+                raise ValueError("模型不属于该平台")
+            if self._is_model_disabled(model):
+                raise ValueError("模型已禁用")
+            if not is_chat_model(model):
+                raise ValueError("该模型不可用于文本生成")
             slot = self._get_usage_slot(session, user_id, normalized_usage)
             if not slot:
                 raise ValueError(f"用途 '{normalized_usage}' 不存在")
@@ -169,6 +181,23 @@ class UserServicesMixin:
                 platform_id = self._default_platform_id
             if model_id is None:
                 model_id = self._default_model_id
+
+            plat = session.query(LLMPlatform).filter_by(id=platform_id).first()
+            model = session.query(LLModels).filter_by(id=model_id).first()
+            if not plat:
+                raise ValueError("平台不存在")
+            if self._is_platform_disabled(session, user_id, plat):
+                raise ValueError("平台已禁用")
+            if not plat.is_sys and plat.user_id != user_id:
+                raise ValueError("无权访问该平台")
+            if not model:
+                raise ValueError("模型不存在")
+            if model.platform_id != plat.id:
+                raise ValueError("模型不属于该平台")
+            if self._is_model_disabled(model):
+                raise ValueError("模型已禁用")
+            if not is_chat_model(model):
+                raise ValueError("该模型不可用于文本生成")
             
             slot = UserModelUsage(
                 user_id=user_id,
@@ -346,8 +375,56 @@ class UserServicesMixin:
 
     def get_agent_bindings(self, user_id: str) -> List[Dict[str, Any]]:
         """获取用户的所有 Agent 绑定配置"""
+        user_id = str(user_id)
         with self.Session() as session:
             bindings = session.query(AgentModelBinding).filter_by(user_id=user_id).all()
+            has_changes = False
+            for binding in bindings:
+                if binding.target_type == "direct":
+                    old_ids = (binding.platform_id, binding.model_id)
+                    try:
+                        self._resolve_user_choice(
+                            session,
+                            user_id,
+                            binding.platform_id,
+                            binding.model_id,
+                            binding=binding,
+                            auto_fix=True,
+                            raise_on_missing_key=False,
+                        )
+                    except (RuntimeError, ValueError):
+                        # 没有任何可用模型时不继续暴露已经失效的主键。
+                        binding.platform_id = None
+                        binding.model_id = None
+                    has_changes = has_changes or old_ids != (binding.platform_id, binding.model_id)
+                    continue
+
+                usage_key = self._normalize_usage_key(
+                    binding.usage_key or self._agent_default_usage_key(binding.agent_name)
+                )
+                slot = self._get_usage_slot(session, user_id, usage_key)
+                if not slot:
+                    continue
+                old_ids = (slot.selected_platform_id, slot.selected_model_id)
+                try:
+                    self._resolve_user_choice(
+                        session,
+                        user_id,
+                        slot.selected_platform_id,
+                        slot.selected_model_id,
+                        usage_slot=slot,
+                        auto_fix=True,
+                        raise_on_missing_key=False,
+                    )
+                except (RuntimeError, ValueError):
+                    continue
+                has_changes = has_changes or old_ids != (
+                    slot.selected_platform_id,
+                    slot.selected_model_id,
+                )
+
+            if has_changes:
+                session.commit()
             return [
                 {
                     "agent_name": b.agent_name,
@@ -371,8 +448,35 @@ class UserServicesMixin:
         """保存 Agent 绑定配置"""
         if target_type not in ('usage', 'direct'):
             raise ValueError("target_type 必须是 'usage' 或 'direct'")
-        
+
+        user_id = str(user_id)
+        if target_type == "direct":
+            if platform_id is None or model_id is None:
+                raise ValueError("直接绑定必须同时指定平台和模型")
+
         with self.Session() as session:
+            if target_type == "direct":
+                plat = session.query(LLMPlatform).filter_by(id=platform_id).first()
+                model = session.query(LLModels).filter_by(id=model_id).first()
+                if not plat:
+                    raise ValueError("平台不存在")
+                if self._is_platform_disabled(session, user_id, plat):
+                    raise ValueError("平台已禁用")
+                if not plat.is_sys and plat.user_id != user_id:
+                    raise ValueError("无权访问该平台")
+                if not model:
+                    raise ValueError("模型不存在")
+                if model.platform_id != plat.id:
+                    raise ValueError("模型不属于该平台")
+                if self._is_model_disabled(model):
+                    raise ValueError("模型已禁用")
+                if not is_chat_model(model):
+                    raise ValueError("该模型不可用于文本生成")
+            else:
+                usage_key = self._normalize_usage_key(usage_key)
+                platform_id = None
+                model_id = None
+
             binding = session.query(AgentModelBinding).filter_by(
                 user_id=user_id, agent_name=agent_name
             ).first()

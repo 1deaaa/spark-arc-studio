@@ -31,6 +31,7 @@ type BlueprintCanvasOptions = {
 type DragHandlerOptions = {
     onDragEnd?: ((node: BlueprintNode) => void) | null;
     shouldStartDrag?: ((event: MouseEvent, node: BlueprintNode) => boolean) | null;
+    getCoordinateScale?: (() => number) | null;
 };
 
 /**
@@ -134,7 +135,7 @@ export function useBlueprintCanvas(options: BlueprintCanvasOptions = {}) {
      * @returns {Function} startDrag 函数
      */
     function createDragHandler(options: DragHandlerOptions = {}) {
-        const { onDragEnd, shouldStartDrag } = options;
+        const { onDragEnd, shouldStartDrag, getCoordinateScale } = options;
 
         return function startDrag(e: MouseEvent, node: BlueprintNode) {
             if (e.button !== 0) return; // 仅左键
@@ -146,12 +147,14 @@ export function useBlueprintCanvas(options: BlueprintCanvasOptions = {}) {
             const startY = e.clientY;
             const initialX = node.x;
             const initialY = node.y;
+            const rawScale = getCoordinateScale?.() ?? 1;
+            const coordinateScale = Number.isFinite(rawScale) && rawScale > 0 ? rawScale : 1;
 
             const onMouseMove = (moveEvent: MouseEvent) => {
                 const dx = moveEvent.clientX - startX;
                 const dy = moveEvent.clientY - startY;
-                node.x = initialX + dx;
-                node.y = initialY + dy;
+                node.x = initialX + dx / coordinateScale;
+                node.y = initialY + dy / coordinateScale;
                 layoutTick.value++;
             };
 

@@ -1,5 +1,5 @@
 from contextvars import ContextVar, Token
-from typing import Optional, Dict, Any
+from typing import Optional, Dict, Any, Callable
 
 from fastapi import Request
 
@@ -44,6 +44,12 @@ current_chat_context_key: ContextVar[Optional[str]] = ContextVar('current_chat_c
 # 当前聊天任务对应的 LLM usage 归属标记。
 # UsageTrackingCallback 会在单次 LLM 调用结束时读取它，便于聊天流按 task 聚合真实 token 用量。
 current_llm_usage_context: ContextVar[Optional[str]] = ContextVar('current_llm_usage_context', default=None)
+# 当前聊天任务的实时用量接收器。Matchbox 每提交一条 usage 日志后调用；
+# 非聊天任务保持 None，不产生聊天流事件。
+current_llm_usage_reporter: ContextVar[Optional[Callable[[Dict[str, Any]], None]]] = ContextVar(
+    'current_llm_usage_reporter',
+    default=None,
+)
 # 当前请求的输出格式上下文（如 'arc' / 'novel'）。
 # 供 Agent 的 _get_tool_prompt_references 等方法按格式动态选择注入规范。
 # 目前仅 ScriptwriterAgent 使用；若将来其他 Agent 也有双格式工具，可直接复用。

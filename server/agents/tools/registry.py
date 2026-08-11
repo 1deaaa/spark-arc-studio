@@ -9,7 +9,13 @@ from agents.tools.automation import (
     work_tracker,
 )
 from agents.tools.delegation import delegate_task
-from agents.tools.lorebook import patch_worldview, rewrite_all_characters, rewrite_worldview, update_character
+from agents.tools.lorebook import (
+    create_character_relation,
+    patch_worldview,
+    rewrite_all_characters,
+    rewrite_worldview,
+    update_character,
+)
 from agents.tools.muse import (
     bind_inspiration_to_current_project,
     capture_inspiration,
@@ -17,6 +23,7 @@ from agents.tools.muse import (
     read_inspiration,
     rewrite_inspiration,
 )
+from agents.tools.pipeline import complete_pipeline_step
 from agents.tools.research import graph_rag_tool
 from agents.tools.scriptwriter import (
     create_chapter,
@@ -42,13 +49,20 @@ from agents.tools.showrunner import (
 )
 from agents.tools.story_memory import story_memory_tool
 from agents.tools.web_search import web_search
-from core.request_context import current_user_id, get_current_chat_session
+from core.request_context import current_user_id, get_current_chat_session, get_current_project_name
 
 MCP_ONLY_TOOLS = [capture_inspiration]
 EXTERNAL_SEARCH_TOOLS = [web_search]
 OPTIONAL_RESEARCH_TOOLS = [story_memory_tool, graph_rag_tool]
 SHARED_SKILL_TOOLS = [search_skills, read_skill, read_skill_reference]
 SHARED_CHAT_HISTORY_TOOLS = [search_chat_history]
+PIPELINE_CONTROL_TOOLS = [complete_pipeline_step]
+PIPELINE_CAPABLE_AGENT_IDS = {
+    "agent_muse",
+    "agent_lorebook",
+    "agent_showrunner",
+    "agent_scriptwriter",
+}
 SKILL_CAPABLE_AGENT_IDS = {
     "agent_director",
     "agent_muse",
@@ -69,18 +83,32 @@ LOREBOOK_BASE_TOOLS = [
     rewrite_worldview,
     rewrite_all_characters,
     update_character,
+    create_character_relation,
     patch_worldview,
     *EXTERNAL_SEARCH_TOOLS,
 ]
-SHOWRUNNER_BASE_TOOLS = [
+SHOWRUNNER_STRUCTURE_TOOLS = [
     rewrite_synopsis,
     rewrite_beat_sheet,
     rewrite_outline,
     patch_synopsis,
     patch_beat_sheet,
     patch_outline,
-    read_chapter_outline_raw,
+    read_worldview,
+    read_character,
+    read_synopsis,
+    read_beat_sheet,
 ]
+SHOWRUNNER_CONTINUITY_TOOLS = [
+    list_chapters,
+    read_chapter_scene,
+    read_chapter_outline_raw,
+    story_memory_tool,
+    graph_rag_tool,
+    search_project,
+    semantic_search,
+]
+SHOWRUNNER_BASE_TOOLS = SHOWRUNNER_STRUCTURE_TOOLS + SHOWRUNNER_CONTINUITY_TOOLS
 SCRIPTWRITER_BASE_TOOLS = [
     prepare_script_creation,
     create_chapter,
@@ -91,6 +119,8 @@ SCRIPTWRITER_BASE_TOOLS = [
     read_character,
     read_synopsis,
     read_beat_sheet,
+    search_project,
+    semantic_search,
     work_tracker,
     update_project_story_tags,
     *OPTIONAL_RESEARCH_TOOLS,
@@ -147,12 +177,45 @@ def _with_contextual_tools(agent_id: str, base_tools: list, user_id: str | int |
     return tools
 
 
+def _showrunner_runtime_tools(user_id: str | int | None = None) -> list:
+    """新项目只提供结构工具；已有正文时再开放连续性研究工具。"""
+    resolved_user_id = _resolve_user_id(user_id)
+    project_name = get_current_project_name()
+    if not resolved_user_id or not project_name:
+        return list(SHOWRUNNER_STRUCTURE_TOOLS)
+    try:
+        from agents.project_content import project_has_written_story_content
+
+        if project_has_written_story_content(resolved_user_id, project_name):
+            return list(SHOWRUNNER_BASE_TOOLS)
+    except Exception:
+        pass
+    return list(SHOWRUNNER_STRUCTURE_TOOLS)
+
+
 MUSE_TOOLS = MUSE_BASE_TOOLS + SHARED_SKILL_TOOLS
 LOREBOOK_TOOLS = LOREBOOK_BASE_TOOLS + SHARED_SKILL_TOOLS
 SHOWRUNNER_TOOLS = SHOWRUNNER_BASE_TOOLS + SHARED_SKILL_TOOLS
 SCRIPTWRITER_TOOLS = SCRIPTWRITER_BASE_TOOLS + SHARED_SKILL_TOOLS
 DIRECTOR_TOOLS = DIRECTOR_BASE_TOOLS + SHARED_SKILL_TOOLS
 CRITIC_TOOLS = CRITIC_BASE_TOOLS + SHARED_SKILL_TOOLS
+PIPELINE_PERSIST_TOOLS = [
+    rewrite_inspiration,
+    rewrite_worldview,
+    rewrite_all_characters,
+    update_character,
+    create_character_relation,
+    patch_worldview,
+    rewrite_synopsis,
+    rewrite_beat_sheet,
+    rewrite_outline,
+    patch_synopsis,
+    patch_beat_sheet,
+    patch_outline,
+    create_or_rewrite_script,
+    patch_script,
+]
+PIPELINE_PERSIST_TOOL_NAMES = frozenset(tool.name for tool in PIPELINE_PERSIST_TOOLS)
 ALL_TOOLS = (
     MUSE_TOOLS
     + LOREBOOK_TOOLS
@@ -173,23 +236,32 @@ ALL_TOOLS = (
     + SHARED_CHAT_HISTORY_TOOLS
     + EXTERNAL_SEARCH_TOOLS
     + OPTIONAL_RESEARCH_TOOLS
+    + PIPELINE_CONTROL_TOOLS
 )
 TOOLS_BY_NAME = {}
 for tool in ALL_TOOLS:
     TOOLS_BY_NAME.setdefault(tool.name, tool)
 
 
-def get_tools_for_agent(agent_id: str, user_id: str | int | None = None) -> list:
+def get_tools_for_agent(
+    agent_id: str,
+    user_id: str | int | None = None,
+    *,
+    pipeline_mode: bool = False,
+) -> list:
     tool_map = {
         "agent_muse": MUSE_BASE_TOOLS,
         "agent_lorebook": LOREBOOK_BASE_TOOLS,
-        "agent_showrunner": SHOWRUNNER_BASE_TOOLS,
+        "agent_showrunner": _showrunner_runtime_tools(user_id),
         "agent_scriptwriter": SCRIPTWRITER_BASE_TOOLS + SHARED_READ_TOOLS,
         "agent_director": DIRECTOR_BASE_TOOLS,
         "agent_critic": CRITIC_BASE_TOOLS,
         "agent_style": [],
     }
-    return _with_contextual_tools(agent_id, tool_map.get(agent_id, []), user_id)
+    tools = _with_contextual_tools(agent_id, tool_map.get(agent_id, []), user_id)
+    if pipeline_mode and agent_id in PIPELINE_CAPABLE_AGENT_IDS:
+        tools.extend(PIPELINE_CONTROL_TOOLS)
+    return tools
 
 
 # MCP 远程操控暴露的纯查询工具白名单（P0 第二层）

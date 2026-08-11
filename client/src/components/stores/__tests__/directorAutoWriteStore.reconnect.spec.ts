@@ -90,7 +90,12 @@ describe('directorAutoWriteStore SSE 恢复契约', () => {
         streamSeq: 1,
         scene_index: 2,
         scene_title: '1-3 决断',
-        message: '编剧正在调研规划。',
+        message: '编剧调研',
+      },
+      {
+        status: 'prewrite_tool',
+        streamSeq: 2,
+        tool_name: 'story_memory_tool',
       },
     ])));
 
@@ -101,7 +106,8 @@ describe('directorAutoWriteStore SSE 恢复契约', () => {
 
     const snapshot = store.tasks['PreWrite 测试项目'].snapshot;
     expect(snapshot.phase).toBe('prewrite');
-    expect(snapshot.phaseMessage).toBe('编剧正在调研规划。');
+    expect(snapshot.phaseMessage).toBe('编剧调研');
+    expect(snapshot.phaseToolName).toBe('story_memory_tool');
     expect(snapshot.currentSceneTitle).toBe('1-3 决断');
     expect(snapshot.streamingChars).toBe(0);
   });

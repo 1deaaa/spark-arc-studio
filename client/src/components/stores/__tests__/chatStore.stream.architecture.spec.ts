@@ -2,7 +2,7 @@ import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { createPinia, setActivePinia } from 'pinia';
 import { useChatStore } from '../chatStore';
 import { useDirectorAutoWriteStore } from '../directorAutoWriteStore';
-import { compactChatContext, getChatHistory, getChatTaskStatus } from '@/services/chatService';
+import { cancelChatTask, compactChatContext, getChatHistory, getChatTaskStatus } from '@/services/chatService';
 import bus from '@/eventBus';
 
 vi.mock('@/components/stores/projectStore', () => ({
@@ -15,6 +15,7 @@ vi.mock('@/services/chatService', async () => {
     compactChatContext: vi.fn(),
     getChatHistory: vi.fn(),
     getChatTaskStatus: vi.fn(),
+    cancelChatTask: vi.fn(),
   };
 });
 
@@ -39,6 +40,8 @@ type ConsumeStreamState = {
   streamEpoch: number;
   lastSeq?: number;
   receivedTaskDone?: boolean;
+  userMessageClientId?: string;
+  userMessageContent?: string;
 };
 
 describe('chatStore NDJSON 消费契约', () => {
@@ -71,6 +74,73 @@ describe('chatStore NDJSON 消费契约', () => {
     expect(store.primarySession.id).toBe(directorSession.id);
     expect(store.history).toEqual([{ role: 'assistant', content: '导演仍在输出' }]);
     expect(store.sending).toBe(true);
+  });
+
+  it('断开本地观察流不会隐式取消后端任务', () => {
+    const store = useChatStore();
+    const session = store.primarySession;
+    session.sending = true;
+    session.backgroundTaskStatus = 'running';
+
+    store._invalidateSessionStream(session.id);
+
+    expect(cancelChatTask).not.toHaveBeenCalled();
+    expect(session.sending).toBe(false);
+    expect(session.backgroundTaskStatus).toBeNull();
+  });
+
+  it('显式取消成功后保持锁定直到服务端终态', async () => {
+    vi.mocked(cancelChatTask).mockResolvedValueOnce({ success: true });
+    const store = useChatStore();
+    const session = store.primarySession;
+    session.sending = true;
+    session.backgroundTaskStatus = 'running';
+    session.abortController = new AbortController();
+
+    await store.cancelSessionRequest(session.id);
+
+    expect(cancelChatTask).toHaveBeenCalledWith('测试项目', 'agent_director', 'global');
+    expect(session.abortController.signal.aborted).toBe(false);
+    expect(session.sending).toBe(true);
+    expect(session.backgroundTaskStatus).toBe('running');
+  });
+
+  it('取消请求失败时保持运行锁并提示错误', async () => {
+    vi.mocked(cancelChatTask).mockRejectedValueOnce(new Error('取消任务失败'));
+    const store = useChatStore();
+    const session = store.primarySession;
+    session.sending = true;
+    session.backgroundTaskStatus = 'running';
+    const toasts: any[] = [];
+    const onToast = (payload: any) => toasts.push(payload);
+    bus.on('toast', onToast);
+
+    await store.cancelSessionRequest(session.id);
+
+    bus.off('toast', onToast);
+    expect(session.sending).toBe(true);
+    expect(session.backgroundTaskStatus).toBe('running');
+    expect(toasts.at(-1)?.type).toBe('error');
+  });
+
+  it('发送前发现后端已有任务时恢复观察且不追加乐观消息', async () => {
+    vi.mocked(getChatTaskStatus).mockResolvedValueOnce({
+      hasTask: true,
+      status: 'running',
+      agentId: 'agent_director',
+      contextKey: 'global',
+      lastSeq: 8,
+    });
+    const store = useChatStore();
+    const session = store.primarySession;
+    const reconnectSpy = vi.spyOn(store, '_reconnectTaskStream').mockResolvedValueOnce(undefined);
+
+    await store.sendSessionMessage(session.id, '新消息');
+
+    expect(session.history).toEqual([]);
+    expect(session.sending).toBe(true);
+    expect(session.backgroundTaskStatus).toBe('running');
+    expect(reconnectSpy).toHaveBeenCalledWith(session, 'agent_director', 'global');
   });
 
   it('切换项目后旧项目流只更新其绑定会话，返回时仍可继续查看', async () => {
@@ -131,6 +201,7 @@ describe('chatStore NDJSON 消费契约', () => {
     session.sending = true;
     session.backgroundTaskStatus = 'running';
     session.streamEpoch = 1;
+    session.history = [{ clientId: 'user-local', role: 'user', content: '修正后的问题' }];
 
     const assistantMsg: any = {
       clientId: 'assistant-local',
@@ -149,6 +220,7 @@ describe('chatStore NDJSON 消费契约', () => {
         seq: 1,
         task_id: 'task-1',
         assistant_message_id: 99,
+        user_message_id: 98,
         content: '旧正文',
         reasoning: '旧推理',
         segments: [{ type: 'text', text: '旧正文', source_agent: 'agent_director' }],
@@ -235,10 +307,13 @@ describe('chatStore NDJSON 消费契约', () => {
       agentId: 'agent_director',
       contextKey: 'global',
       streamEpoch: 1,
+      userMessageClientId: 'user-local',
+      userMessageContent: '修正后的问题',
     };
     await store._consumeStream(session, assistantMsg, false, reader, 0, streamState);
 
     expect(assistantMsg.id).toBe(99);
+    expect(session.history[0]).toMatchObject({ clientId: 'user-local', id: 98, content: '修正后的问题' });
     expect(assistantMsg.task_id).toBe('task-1');
     expect(assistantMsg.content).toBe('旧正文新正文');
     expect(assistantMsg.reasoning).toBe('旧推理新推理');
@@ -278,6 +353,88 @@ describe('chatStore NDJSON 消费契约', () => {
     });
 
     vi.runOnlyPendingTimers();
+  });
+
+  it('替换工作中消息时先取消服务端旧任务并等待真实终态', async () => {
+    const store = useChatStore();
+    const session = store.primarySession;
+    const abort = vi.fn();
+    session.abortController = { abort } as unknown as AbortController;
+    vi.mocked(getChatTaskStatus)
+      .mockResolvedValueOnce({ hasTask: true, status: 'running' })
+      .mockResolvedValueOnce({ hasTask: true, status: 'cancelled' });
+    vi.mocked(cancelChatTask).mockResolvedValue({ success: true });
+
+    const replacement = store._cancelAndWaitForChatTaskReplacement(
+      session,
+      'agent_director',
+      'global',
+      '测试项目',
+    );
+    await vi.runAllTimersAsync();
+    await replacement;
+
+    expect(abort).toHaveBeenCalledWith('message_replaced');
+    expect(cancelChatTask).toHaveBeenCalledWith('测试项目', 'agent_director', 'global');
+    expect(getChatTaskStatus).toHaveBeenCalledTimes(2);
+  });
+
+  it('在 task_done 前消费实时 llm_usage 并更新任务累计用量', async () => {
+    const store = useChatStore();
+    const session = store.primarySession;
+    session.sending = true;
+    session.backgroundTaskStatus = 'running';
+    session.streamEpoch = 1;
+    const assistantMsg: any = {
+      clientId: 'assistant-live-usage',
+      role: 'assistant',
+      content: '',
+      reasoning: '',
+      tool_traces: [],
+      segments: [],
+      timestamp: 1,
+    };
+
+    const reader = readerFromEvents([{
+      event: 'llm_usage',
+      seq: 1,
+      llm_usage: {
+        prompt_tokens: 1800,
+        completion_tokens: 300,
+        total_tokens: 2100,
+        requests: 2,
+        by_agent: {
+          agent_director: {
+            prompt_tokens: 1000,
+            completion_tokens: 100,
+            total_tokens: 1100,
+            requests: 1,
+          },
+          agent_lorebook: {
+            prompt_tokens: 800,
+            completion_tokens: 200,
+            total_tokens: 1000,
+            requests: 1,
+          },
+        },
+      },
+    }]);
+
+    await store._consumeStream(session, assistantMsg, false, reader, 0, {
+      agentId: 'agent_director',
+      contextKey: 'global',
+      streamEpoch: 1,
+    });
+
+    expect(session.contextTokenCount).toBe(2100);
+    expect(session.contextTokenUsage).toMatchObject({
+      promptTokens: 1800,
+      completionTokens: 300,
+      totalTokens: 2100,
+      requests: 2,
+    });
+    expect(session.contextTokenUsage?.byAgent.agent_lorebook.totalTokens).toBe(1000);
+    expect(assistantMsg.metadata.llm_usage.total_tokens).toBe(2100);
   });
 
   it('消费上下文压缩事件并将同一动画段更新为完成态', async () => {

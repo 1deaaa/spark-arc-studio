@@ -7,12 +7,13 @@ Matchbox 的默认运行路径不需要这些回调。服务型宿主可以按�
 from __future__ import annotations
 
 from dataclasses import dataclass
-from typing import Callable, Optional
+from typing import Any, Callable, Optional
 
 
 DefaultUsageKeyResolver = Callable[[Optional[str]], str]
 CallerContextProvider = Callable[[], tuple[Optional[str], bool]]
 UsageContextProvider = Callable[[], Optional[str]]
+UsageRecordedHandler = Callable[[dict[str, Any]], None]
 SecretRotationHandler = Callable[..., None]
 
 
@@ -28,4 +29,5 @@ class MatchboxIntegrations:
     default_usage_key_resolver: Optional[DefaultUsageKeyResolver] = None
     caller_context_provider: Optional[CallerContextProvider] = None
     usage_context_provider: Optional[UsageContextProvider] = None
+    usage_recorded_handler: Optional[UsageRecordedHandler] = None
     secret_rotation_handler: Optional[SecretRotationHandler] = None

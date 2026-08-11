@@ -41,26 +41,19 @@ flowchart LR
 
 ## 3. 自适应预算
 
-预算基于模型配置中的 `max_context_tokens` 与 `max_output_tokens`，不使用固定 8K/32K 假设。
-
-| 模型窗口 | 自动压缩触发比例 |
-|---|---:|
-| 小于 512K | 85% |
-| 512K 至 1M | 90% |
-| 1M 及以上 | 92% |
-
-系统先预留：
-
-1. 模型最大单次输出额度，受窗口比例上限约束。
-2. 约 3% 的安全余量，最少 256、最多 32K token。
-3. 摘要空间，最多 12K token，且不超过可用历史预算的 20%。
-
-因此：
+预算使用 Agent Matchbox 提供的模型上下文上限；真正的历史压缩由 SparkArc 主项目完成。
+主项目按连续比例计算总预留，不按 512K/1M 硬切分：
 
 ```text
-hard_budget = max_context - reserved_output - safety_margin
-trigger_budget = min(hard_budget, max_context * trigger_ratio)
+small_context_floor = min(20_000, max_context * 10%)
+reserved_context = max(small_context_floor, max_context * 6.25%)
+hard_budget = max_context - reserved_context
+trigger_budget = hard_budget
 ```
+
+因此 256K、512K、1M 窗口约分别预留 20K、32K、62.5K（约 64K）token。极小窗口的最低预留会按 10% 平滑缩放，并额外保留至少 256 token 的可用预算。
+
+历史摘要空间最多 12K token，且不超过可用历史预算的 20%。模型的 `max_output_tokens` 仍作为模型能力元数据记录，但不再按旧的分段比例从聊天输入预算中重复扣除。
 
 只有完整请求超过 `trigger_budget` 才需要处理历史。系统优先完整保留 system、当前 user 和最近消息；工具调用消息按完整单元保留，不能留下没有对应 ToolMessage 的 assistant `tool_calls`。
 

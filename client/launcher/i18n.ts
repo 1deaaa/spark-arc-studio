@@ -61,6 +61,23 @@ const messages = {
         launcherUpdateAvailable: '启动器有最新版本',
         openRelease: '查看下载',
       },
+      updatePrompt: {
+        backend: {
+          title: '发现内核更新',
+          body: '本地内核（后端）的 main 分支有新提交。重新启动后将拉取最新代码、更新依赖，并自动重新构建有变动的前端。',
+        },
+        launcher: {
+          title: '发现启动器更新',
+          body: '发现启动器新版本 {version}。重新启动后将从当前网络更合适的平台下载适用于本机的最新安装包并开始更新。',
+        },
+        both: {
+          title: '发现内核与启动器更新',
+          body: '本地内核（后端）和启动器 {version} 均有更新。重新启动后将先更新 main 与前端，再下载适用于本机的最新启动器安装包。',
+        },
+        later: '稍后',
+        restartAndUpdate: '重启并更新',
+        applying: '正在准备更新...',
+      },
     },
     server: {
       title: '服务器配置',
@@ -135,6 +152,23 @@ const messages = {
         checkUpdateFailed: 'Unable to Check for Updates',
         launcherUpdateAvailable: 'A New Launcher Version Is Available',
         openRelease: 'View Download',
+      },
+      updatePrompt: {
+        backend: {
+          title: 'Kernel Update Available',
+          body: 'New commits are available on main for the local kernel (backend). Restarting will pull the latest code, update dependencies, and rebuild the frontend when its sources changed.',
+        },
+        launcher: {
+          title: 'Launcher Update Available',
+          body: 'Launcher {version} is available. Restarting will use the best source for the current network, download the latest installer for this platform, and start the update.',
+        },
+        both: {
+          title: 'Kernel and Launcher Updates Available',
+          body: 'Updates are available for both the local kernel (backend) and Launcher {version}. Restarting will update main and the frontend first, then download the latest installer for this platform.',
+        },
+        later: 'Later',
+        restartAndUpdate: 'Restart and Update',
+        applying: 'Preparing update...',
       },
     },
     server: {
@@ -211,6 +245,23 @@ const messages = {
         launcherUpdateAvailable: 'ランチャーの最新バージョンがあります',
         openRelease: 'ダウンロードを見る',
       },
+      updatePrompt: {
+        backend: {
+          title: 'カーネル更新があります',
+          body: 'ローカルカーネル（バックエンド）の main に新しいコミットがあります。再起動すると最新コードと依存関係を取得し、変更されたフロントエンドも自動で再ビルドします。',
+        },
+        launcher: {
+          title: 'ランチャー更新があります',
+          body: 'ランチャー {version} があります。再起動すると現在のネットワークに適した配布元から、この端末向けの最新インストーラーを取得して更新を開始します。',
+        },
+        both: {
+          title: 'カーネルとランチャーの更新があります',
+          body: 'ローカルカーネル（バックエンド）とランチャー {version} の両方に更新があります。再起動すると main とフロントエンドを更新してから、この端末向けの最新インストーラーを取得します。',
+        },
+        later: '後で',
+        restartAndUpdate: '再起動して更新',
+        applying: '更新を準備中...',
+      },
     },
     server: {
       title: 'サーバー設定',
@@ -285,6 +336,23 @@ const messages = {
         checkUpdateFailed: '업데이트를 확인할 수 없습니다',
         launcherUpdateAvailable: '런처의 최신 버전이 있습니다',
         openRelease: '다운로드 보기',
+      },
+      updatePrompt: {
+        backend: {
+          title: '커널 업데이트 발견',
+          body: '로컬 커널(백엔드)의 main 브랜치에 새 커밋이 있습니다. 다시 시작하면 최신 코드와 의존성을 가져오고 변경된 프런트엔드도 자동으로 다시 빌드합니다.',
+        },
+        launcher: {
+          title: '런처 업데이트 발견',
+          body: '런처 {version} 버전이 있습니다. 다시 시작하면 현재 네트워크에 적합한 배포처에서 이 플랫폼용 최신 설치 파일을 내려받아 업데이트를 시작합니다.',
+        },
+        both: {
+          title: '커널 및 런처 업데이트 발견',
+          body: '로컬 커널(백엔드)과 런처 {version}에 모두 업데이트가 있습니다. 다시 시작하면 main과 프런트엔드를 먼저 업데이트한 뒤 이 플랫폼용 최신 설치 파일을 내려받습니다.',
+        },
+        later: '나중에',
+        restartAndUpdate: '다시 시작하여 업데이트',
+        applying: '업데이트 준비 중...',
       },
     },
     server: {

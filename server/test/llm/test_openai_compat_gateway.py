@@ -2,7 +2,8 @@
 
 from __future__ import annotations
 
-from langchain_core.messages import HumanMessage
+import pytest
+from langchain_core.messages import AIMessage, HumanMessage, ToolMessage
 
 
 def test_tool_schema_required_is_always_an_array() -> None:
@@ -33,6 +34,24 @@ def test_tool_schema_required_is_always_an_array() -> None:
     assert parameters_by_name["delegate_task"]["required"] == [
         "target_agent",
         "task_description",
+    ]
+    delegate_properties = parameters_by_name["delegate_task"]["properties"]
+    assert set(delegate_properties) == {
+        "target_agent",
+        "task_description",
+        "completion_mode",
+        "chapter_name",
+        "scene_name",
+        "scene_file_path",
+        "scene_guidance",
+        "scene_characters",
+    }
+    assert delegate_properties["target_agent"]["enum"] == [
+        "agent_scriptwriter",
+        "agent_showrunner",
+        "agent_lorebook",
+        "agent_muse",
+        "agent_critic",
     ]
 
 
@@ -102,3 +121,135 @@ def test_generic_400_uses_neutral_invalid_request_guidance(monkeypatch) -> None:
 
     assert "请求无效" in message
     assert "内容安全" not in message
+
+
+def test_gateway_rejects_incomplete_tool_history_before_upstream_request() -> None:
+    from llm.agen_matchbox.gateway import ChatUniversal
+    from llm.agen_matchbox.tool_protocol import ToolMessageProtocolError
+
+    llm = ChatUniversal(
+        model="offline-tool-protocol-check",
+        api_key="offline-key",
+        base_url="https://example.invalid/v1",
+    )
+    messages = [
+        HumanMessage(content="继续任务"),
+        AIMessage(content="", tool_calls=[{
+            "id": "call_delegate",
+            "name": "delegate_task",
+            "args": {},
+            "type": "tool_call",
+        }]),
+        AIMessage(content="", tool_calls=[{
+            "id": "call_tracker",
+            "name": "work_tracker",
+            "args": {},
+            "type": "tool_call",
+        }]),
+        ToolMessage(content="已更新", tool_call_id="call_tracker", name="work_tracker"),
+    ]
+
+    with pytest.raises(ToolMessageProtocolError, match="call_delegate"):
+        llm._get_request_payload(messages)
+
+
+def test_usage_callback_notifies_host_after_usage_commit(monkeypatch) -> None:
+    from llm.agen_matchbox.tracked_model import UsageTrackingCallback
+
+    class FakeSession:
+        def __enter__(self):
+            return self
+
+        def __exit__(self, *_args):
+            return False
+
+        def add(self, entry):
+            self.entry = entry
+
+        def flush(self):
+            return None
+
+        def commit(self):
+            return None
+
+    events = []
+    monkeypatch.setattr(
+        "llm.agen_matchbox.tracked_model.settle_usage_entry_credit",
+        lambda *_args, **_kwargs: None,
+    )
+    callback = UsageTrackingCallback(
+        user_id="u",
+        model_id=1,
+        platform_id=2,
+        model_name="offline-model",
+        platform_name="offline-provider",
+        session_maker=FakeSession,
+        agent_name="agent_director",
+        usage_recorded_handler=events.append,
+    )
+
+    callback._record_usage(
+        prompt_tokens=100,
+        completion_tokens=20,
+        cached_prompt_tokens=60,
+        cache_miss_prompt_tokens=40,
+        usage_source="upstream",
+        cache_source="provider",
+    )
+
+    assert events == [{
+        "agent_name": "agent_director",
+        "model_name": "offline-model",
+        "platform_name": "offline-provider",
+        "prompt_tokens": 100,
+        "completion_tokens": 20,
+        "total_tokens": 120,
+        "cached_prompt_tokens": 60,
+        "cache_miss_prompt_tokens": 40,
+        "usage_source": "upstream",
+        "cache_source": "provider",
+        "success": True,
+        "context_key": None,
+    }]
+
+
+def test_usage_callback_falls_back_to_context_captured_at_creation(monkeypatch) -> None:
+    from llm.agen_matchbox.tracked_model import UsageTrackingCallback
+
+    class FakeSession:
+        def __enter__(self):
+            return self
+
+        def __exit__(self, *_args):
+            return False
+
+        def add(self, entry):
+            self.entry = entry
+
+        def flush(self):
+            return None
+
+        def commit(self):
+            return None
+
+    current_context = ["batch-context"]
+    events = []
+    monkeypatch.setattr(
+        "llm.agen_matchbox.tracked_model.settle_usage_entry_credit",
+        lambda *_args, **_kwargs: None,
+    )
+    callback = UsageTrackingCallback(
+        user_id="u",
+        model_id=1,
+        platform_id=2,
+        model_name="offline-model",
+        platform_name="offline-provider",
+        session_maker=FakeSession,
+        usage_context_provider=lambda: current_context[0],
+        usage_recorded_handler=events.append,
+    )
+
+    current_context[0] = None
+    callback._record_usage(prompt_tokens=3, completion_tokens=1)
+
+    assert events[0]["context_key"] == "batch-context"

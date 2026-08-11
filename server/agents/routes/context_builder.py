@@ -88,20 +88,31 @@ def build_story_tags_hint(story_tags: dict) -> str:
             "expanded": ("充实", "约 35-55 个有效叙事单元"),
         }
     scene_label, scene_target = scene_targets[scene_length_hint]
+    target_scope = "当前章节正文" if workspace_mode == "novel" else "当前场景正文"
+    flexibility_note = (
+        "可按章节功能、高潮位置和叙事节奏在目标附近约 ±30% 浮动；"
+        if workspace_mode == "novel"
+        else "可按过场、高潮、纯动作等实际节奏在目标附近约 ±30% 浮动；"
+    )
     scene_target_chars = story_tags.get("scene_target_chars")
     if isinstance(scene_target_chars, int) and scene_target_chars > 0:
         parts.append(
-            f"【单场篇幅软目标】目标约 {scene_target_chars} 个可见正文字符。"
+            f"【{target_scope}软目标】目标约 {scene_target_chars} 个可见正文字符。"
             f"{scene_label}档仅用于表达内容密度与节奏倾向，不再提供竞争性的字数区间。"
             "具体字数不是硬性验收条件；优先保证场景任务、情绪转折和叙事完整性，"
             "由你根据成稿质量自行判断是否需要补写或压缩，严禁为凑字数注水或机械截断。"
             "若本轮用户或导演明确给出不同的目标字数，以本轮要求为准。"
         )
     else:
+        unit_note = (
+            ""
+            if workspace_mode == "novel"
+            else "剧本中的有效叙事单元包括对白、动作、旁白和明确转折，不只计算对白句。"
+        )
         parts.append(
-            f"【单场篇幅软目标】{scene_label}档，{scene_target}。"
-            "剧本中的有效叙事单元包括对白、动作、旁白和明确转折，不只计算对白句。"
-            "可按过场、高潮、纯动作等实际节奏在目标附近约 ±30% 浮动；"
+            f"【{target_scope}软目标】{scene_label}档，{scene_target}。"
+            f"{unit_note}"
+            f"{flexibility_note}"
             "不得为凑数量注水，也不得在必要的动作或情绪转折中途硬截断。"
             "若本轮用户或导演明确给出具体目标字数，以本轮要求为准。"
         )
@@ -128,7 +139,7 @@ def build_story_tags_hint(story_tags: dict) -> str:
         tag_lines.append(f"世界观：{'、'.join(worldviews)}")
     length_hint = story_tags.get("length_hint")
     if length_hint:
-        tag_lines.append(f"篇幅：{length_hint}")
+        tag_lines.append(f"作品规模：{length_hint}")
 
     if tag_lines:
         parts.append("【创作参数】" + " | ".join(tag_lines))
@@ -297,6 +308,8 @@ def load_project_context_bundle(user_id: str, project_name: str) -> Dict[str, An
     outline_data = load_outline_data(user_id, project_name)
     full_outline = load_full_outline(user_id, project_name)
     narrative_memory, beats_summary = load_narrative_memory(user_id, project_name)
+    from agents.structure_state import load_structure_state
+    structure_state = load_structure_state(user_id, project_name)
 
     return {
         "worldview": worldview,
@@ -313,6 +326,7 @@ def load_project_context_bundle(user_id: str, project_name: str) -> Dict[str, An
         "full_outline": full_outline,
         "narrative_memory": narrative_memory,
         "beats_summary": beats_summary,
+        "structure_state": structure_state,
     }
 
 
@@ -363,6 +377,31 @@ def _outline_scene_contract_payload(
         "tension": str(scene.get("tension") or "").strip(),
         "beat_refs": [str(item).strip() for item in beat_refs if str(item).strip()],
         "key_dialogues": [str(item).strip() for item in key_dialogues if str(item).strip()],
+        "location": str(scene.get("location") or "").strip(),
+        "time": str(scene.get("time") or "").strip(),
+        "pre_state": str(scene.get("pre_state") or "").strip(),
+        "objective": str(scene.get("objective") or "").strip(),
+        "conflict": str(scene.get("conflict") or "").strip(),
+        "turn": str(scene.get("turn") or "").strip(),
+        "post_state": str(scene.get("post_state") or "").strip(),
+        "knowledge_before": str(scene.get("knowledge_before") or "").strip(),
+        "knowledge_after": str(scene.get("knowledge_after") or "").strip(),
+        "forbidden_setup": str(scene.get("forbidden_setup") or "").strip(),
+        "causal_dependencies": [
+            str(item).strip()
+            for item in (scene.get("causal_dependencies") or [])
+            if str(item).strip()
+        ],
+        "setup_refs": [
+            str(item).strip()
+            for item in (scene.get("setup_refs") or [])
+            if str(item).strip()
+        ],
+        "payoff_refs": [
+            str(item).strip()
+            for item in (scene.get("payoff_refs") or [])
+            if str(item).strip()
+        ],
     }
 
 
@@ -536,6 +575,28 @@ def format_outline_scene_contract(contract: Dict[str, Any]) -> str:
         scene_traits.append(f"登场：{'、'.join(contract.get('characters') or [])}")
     if scene_traits:
         lines.append("- 场景参数：" + " | ".join(scene_traits))
+    for label, key in (
+        ("地点", "location"),
+        ("时间", "time"),
+        ("入场状态", "pre_state"),
+        ("本场目标", "objective"),
+        ("核心冲突", "conflict"),
+        ("本场转折", "turn"),
+        ("离场状态", "post_state"),
+        ("揭示前知情边界", "knowledge_before"),
+        ("揭示后知情边界", "knowledge_after"),
+        ("禁止提前发生", "forbidden_setup"),
+    ):
+        if contract.get(key):
+            lines.append(f"- {label}：{contract.get(key)}")
+    for label, key in (
+        ("因果依赖", "causal_dependencies"),
+        ("设置引用", "setup_refs"),
+        ("兑现引用", "payoff_refs"),
+    ):
+        values = contract.get(key) or []
+        if values:
+            lines.append(f"- {label}：{'、'.join(values)}")
     if contract.get("guidance"):
         lines.append(f"- 导演指引：{contract.get('guidance')}")
     key_dialogues = contract.get("key_dialogues") or []
@@ -688,16 +749,27 @@ def load_narrative_memory(user_id: str, project_name: str) -> Tuple[str, str]:
     if beats:
         beats_lines.append("\n【情感节拍表】")
         for b in beats:
-            idx = b.get("index", "")
-            btype = b.get("type", "")
-            emotion = b.get("emotion", "")
-            desc = (b.get("description") or "").strip()
+            idx = b.get("beat_id", b.get("index", ""))
+            btype = b.get("beat_type", b.get("type", ""))
+            emotion = b.get("emotional_goal", b.get("emotion", ""))
+            desc = (b.get("narrative_action") or b.get("description") or "").strip()
             header = f"Beat {idx}"
             if btype:
                 header += f" [{btype}]"
             if emotion:
                 header += f" 情感目标: {emotion}"
             beats_lines.append(f"  {header}")
+            for label, key in (
+                ("前置状态", "pre_state"),
+                ("触发", "trigger"),
+                ("选择/行动", "choice_or_action"),
+                ("后置状态", "post_state"),
+                ("揭示", "reveal"),
+                ("知情变化", "knowledge_change"),
+            ):
+                value = str(b.get(key) or "").strip()
+                if value:
+                    beats_lines.append(f"    {label}: {value}")
             if desc:
                 beats_lines.append(f"    {desc}")
 
@@ -846,10 +918,48 @@ def build_scene_context(
     return "\n".join(parts)
 
 
-def get_current_beat(beats_data: Optional[Dict[str, Any]], chapter_index: int, scene_index: int) -> str:
+def _normalize_beat_ref(value: Any) -> str:
+    text = str(value or "").strip().casefold()
+    match = re.search(r"\d+", text)
+    return match.group(0) if match else text
+
+
+def _format_beat_for_context(beat: Dict[str, Any]) -> str:
+    beat_id = beat.get("beat_id", beat.get("index", ""))
+    beat_type = str(beat.get("beat_type") or beat.get("type") or "").strip()
+    emotion = str(beat.get("emotional_goal") or beat.get("emotion") or "").strip()
+    description = str(beat.get("narrative_action") or beat.get("description") or "").strip()
+    lines = [f"Beat {beat_id}" + (f" [{beat_type}]" if beat_type else "")]
+    if emotion:
+        lines[0] += f"（情感目标：{emotion}）"
+    for label, key in (
+        ("前置状态", "pre_state"),
+        ("触发", "trigger"),
+        ("选择/行动", "choice_or_action"),
+        ("后置状态", "post_state"),
+        ("揭示", "reveal"),
+        ("知情变化", "knowledge_change"),
+    ):
+        value = str(beat.get(key) or "").strip()
+        if value:
+            lines.append(f"- {label}：{value}")
+    if description:
+        lines.append(f"- 节拍动作：{description}")
+    return "\n".join(lines)
+
+
+def get_current_beat(
+    beats_data: Optional[Dict[str, Any]],
+    chapter_index: int,
+    scene_index: int,
+    *,
+    beat_refs: Optional[List[Any]] = None,
+) -> str:
     """
-    根据章节和场景索引，尽力匹配当前最接近的情感节拍名称。
-    这是一个启发式估算，供 Prompt 里展示"当前情感节拍"用。
+    根据大纲场景显式标注的 beat_refs 读取当前节拍。
+
+    章节/场景索引只保留调用兼容，不再用位置比例猜测节拍；没有明确引用时
+    返回空字符串，避免把伪精确结果作为创作事实注入 Prompt。
     """
     if not beats_data:
         return ""
@@ -857,19 +967,14 @@ def get_current_beat(beats_data: Optional[Dict[str, Any]], chapter_index: int, s
     if not beats:
         return ""
 
-    # 简单线性映射：按章节总数比例估算节拍位置
-    # 更精确的映射需要大纲里做节拍编号标注（outline 节点里的 beat_refs 字段）
-    total_beats = len(beats)
-    # 从 大纲.txt 推算当前是整本书第几个场景
-    # （此处只用 chapter_index 粗略估算，未来可精确到场景级）
-    ratio = chapter_index / max(1, chapter_index + 1)
-    beat_idx = min(int(ratio * total_beats), total_beats - 1)
-    beat = beats[beat_idx]
-    btype = beat.get("type", "")
-    emotion = beat.get("emotion", "")
-    if btype and emotion:
-        return f"{btype}（情感目标：{emotion}）"
-    return btype or emotion
+    refs = {_normalize_beat_ref(item) for item in (beat_refs or []) if str(item or "").strip()}
+    if not refs:
+        return ""
+    matched = [
+        beat for beat in beats
+        if _normalize_beat_ref(beat.get("beat_id", beat.get("index", ""))) in refs
+    ]
+    return "\n\n".join(_format_beat_for_context(beat) for beat in matched)
 
 
 # ───────────────────────── 核心组装入口 ─────────────────────────────
@@ -923,11 +1028,22 @@ def build_scriptwriter_context(
     bundle = load_project_context_bundle(user_id, project_name)
     full_outline = bundle.get("full_outline", "")
     narrative_memory = bundle.get("narrative_memory", "")
+    outline_data = bundle.get("outline_data") or {}
+    outline_scene_contract = resolve_outline_scene_contract(
+        outline_data,
+        chapter_index=current_chapter_index,
+        scene_index=current_scene_index,
+    ) if current_scene_index is not None else {}
 
     # 加载节拍表（用于 current_beat 估算）
     beats_data: Optional[Dict[str, Any]] = bundle.get("beats_data") or None
 
-    current_beat = get_current_beat(beats_data, current_chapter_index, current_scene_index or 0)
+    current_beat = get_current_beat(
+        beats_data,
+        current_chapter_index,
+        current_scene_index or 0,
+        beat_refs=outline_scene_contract.get("beat_refs") or [],
+    )
 
     # ── 三圈记忆前文 ──
     context = build_scene_context(
@@ -936,6 +1052,16 @@ def build_scriptwriter_context(
         current_chapter_index,
         current_chapter_arc_text=current_chapter_arc_text,
         current_scene_index=current_scene_index,
+        chapter_meta={
+            "title": outline_scene_contract.get("chapter_title", ""),
+            "description": outline_scene_contract.get("chapter_description", ""),
+        },
+        scene_meta={
+            "title": outline_scene_contract.get("scene_title", ""),
+            "description": outline_scene_contract.get("scene_description", ""),
+            "characters": outline_scene_contract.get("characters", []),
+            "guidance": outline_scene_contract.get("guidance", ""),
+        },
         chr_map=chr_map,
     )
 
@@ -959,4 +1085,5 @@ def build_scriptwriter_context(
         "current_beat": current_beat,
         "current_chapter_index": current_chapter_index,
         "current_scene_index": current_scene_index,
+        "outline_scene_contract": outline_scene_contract,
     }

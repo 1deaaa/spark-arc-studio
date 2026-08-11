@@ -17,6 +17,10 @@ from llm.agen_matchbox.estimate_tokens import estimate_tokens
 
 CHAT_HISTORY_FETCH_LIMIT = 200
 DEFAULT_CONTEXT_WINDOW_FALLBACK_TOKENS = 256_000
+CONTEXT_RESERVE_FLOOR_TOKENS = 20_000
+CONTEXT_RESERVE_RATIO = 0.0625
+SMALL_CONTEXT_RESERVE_RATIO = 0.10
+MIN_CONTEXT_BUDGET_TOKENS = 256
 CONTEXT_CHECKPOINT_KIND = "context_checkpoint"
 LEGACY_CONTEXT_SUMMARY_KIND = "context_summary"
 CONTEXT_CHECKPOINT_READY_EVENT = "context_checkpoint_ready"
@@ -124,8 +128,7 @@ class ContextBudgetPolicy:
 
     hard_budget: int
     trigger_budget: int
-    reserved_output: int
-    safety_margin: int
+    reserved_context: int
     trigger_ratio: float
 
 
@@ -427,29 +430,30 @@ def _get_limits(llm_client: Any) -> tuple[int, int]:
     return max(max_context, 1024), max(max_output, 256)
 
 
-def _context_budget_policy(max_context: int, max_output: int) -> ContextBudgetPolicy:
-    """按模型真实窗口推导预算，避免大窗口模型过早压缩动态写作上下文。"""
+def _context_budget_policy(max_context: int, _max_output: int) -> ContextBudgetPolicy:
+    """按连续的总预留比例推导上下文预算。"""
     context = max(int(max_context or 0), 1024)
-    output_limit = max(int(max_output or 0), 256)
-    if context >= 1_000_000:
-        trigger_ratio = 0.92
-        output_ratio_cap = 0.14
-    elif context >= 512_000:
-        trigger_ratio = 0.90
-        output_ratio_cap = 0.16
-    else:
-        trigger_ratio = 0.85
-        output_ratio_cap = 0.22
-
-    safety_margin = max(256, min(32_000, int(context * 0.03)))
-    reserved_output = min(output_limit, max(512, int(context * output_ratio_cap)))
-    hard_budget = max(256, context - reserved_output - safety_margin)
-    trigger_budget = max(256, min(hard_budget, int(context * trigger_ratio)))
+    # 大窗口按 6.25% 连续增长；较小窗口的最低保护量按 10% 平滑缩放，
+    # 使 256K、512K、1M 分别约保留 20K、32K、64K。
+    small_context_floor = min(
+        CONTEXT_RESERVE_FLOOR_TOKENS,
+        int(context * SMALL_CONTEXT_RESERVE_RATIO),
+    )
+    reserved_context = max(
+        small_context_floor,
+        int(context * CONTEXT_RESERVE_RATIO),
+    )
+    reserved_context = min(
+        reserved_context,
+        max(0, context - MIN_CONTEXT_BUDGET_TOKENS),
+    )
+    hard_budget = max(MIN_CONTEXT_BUDGET_TOKENS, context - reserved_context)
+    trigger_budget = hard_budget
+    trigger_ratio = trigger_budget / context if context else 0.0
     return ContextBudgetPolicy(
         hard_budget=hard_budget,
         trigger_budget=trigger_budget,
-        reserved_output=reserved_output,
-        safety_margin=safety_margin,
+        reserved_context=reserved_context,
         trigger_ratio=trigger_ratio,
     )
 
@@ -560,8 +564,7 @@ def _emit_context_window_stats(
         "max_output_tokens": max_output_tokens,
         "hard_budget": hard_budget,
         "trigger_budget": trigger_budget,
-        "reserved_output_tokens": policy.reserved_output,
-        "safety_margin_tokens": policy.safety_margin,
+        "reserved_context_tokens": policy.reserved_context,
         "trigger_ratio": round(policy.trigger_ratio, 4),
         "usage_ratio": round(_safe_ratio(clean_input, clean_context), 4),
         "original_usage_ratio": round(_safe_ratio(clean_original, clean_context), 4),

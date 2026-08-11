@@ -26,6 +26,7 @@ from agents.agent_style.utils import format_style_profile_for_prompt
 from agents.context_budget import prepare_specialized_prompt_messages_with_budget
 from agents.prompt_layout import build_prompt_messages
 from story.arc_safety import sanitize_arc_ai_output, sanitize_arc_for_ai_context
+from story.novel_parser import clean_novel_visible_text
 from .communication import SparkBaseAgent
 
 
@@ -286,9 +287,9 @@ class ScriptwriterAgent(SparkBaseAgent, SparkAgentExecutor):
             },
         }
 
-    def _build_tool_prompt_reference_block(self) -> str:
+    def _build_tool_prompt_reference_block(self, *, tools_override=None) -> str:
         """让聊天与导演委派的落盘工具复用同一条件视觉协议。"""
-        block = super()._build_tool_prompt_reference_block()
+        block = super()._build_tool_prompt_reference_block(tools_override=tools_override)
         protocol = self._visual_illustration_protocol()
         return f"{block}\n\n{protocol}".strip() if protocol else block
 
@@ -528,6 +529,7 @@ class ScriptwriterAgent(SparkBaseAgent, SparkAgentExecutor):
         messages = self._build_write_messages(system_prompt=system_prompt, user_prompt=prompts["user"])
 
         full_content = ""
+        visible_content = ""
         parser = PrefixReasoningStreamParser()
         for chunk in self.llm.stream(messages):
             content = getattr(chunk, "content", "")
@@ -536,19 +538,51 @@ class ScriptwriterAgent(SparkBaseAgent, SparkAgentExecutor):
                 if not visible:
                     continue
                 full_content += visible
+                if export_format != "novel":
+                    visible_content += visible
+                    yield {
+                        "type": "chunk",
+                        "content": visible,
+                        "total_chars": len(visible_content),
+                    }
+                    continue
+                stable_boundary = full_content.rfind("\n")
+                if stable_boundary < 0:
+                    continue
+                next_visible_content = clean_novel_visible_text(full_content[: stable_boundary + 1])
+                if not next_visible_content.startswith(visible_content):
+                    # 清洗规则只会隐藏字段；若模型在同一片段内改写了前缀，等待最终结果再发送。
+                    visible_content = next_visible_content
+                    continue
+                visible_delta = next_visible_content[len(visible_content):]
+                visible_content = next_visible_content
+                if not visible_delta:
+                    continue
                 yield {
                     "type": "chunk",
-                    "content": visible,
-                    "total_chars": len(full_content),
+                    "content": visible_delta,
+                    "total_chars": len(visible_content),
                 }
         _, trailing_visible = parser.flush()
         if trailing_visible:
             full_content += trailing_visible
+        if export_format != "novel" and trailing_visible:
+            visible_content += trailing_visible
             yield {
                 "type": "chunk",
                 "content": trailing_visible,
-                "total_chars": len(full_content),
+                "total_chars": len(visible_content),
             }
+        elif export_format == "novel":
+            next_visible_content = clean_novel_visible_text(full_content)
+            visible_delta = next_visible_content[len(visible_content):] if next_visible_content.startswith(visible_content) else ""
+            visible_content = next_visible_content
+            if visible_delta:
+                yield {
+                    "type": "chunk",
+                    "content": visible_delta,
+                    "total_chars": len(visible_content),
+                }
 
         # 解析完成后的结果
         thought = ""
@@ -562,7 +596,7 @@ class ScriptwriterAgent(SparkBaseAgent, SparkAgentExecutor):
             "type": "done",
             "arc_script": arc_script,
             "thought": thought,
-            "total_chars": len(full_content),
+            "total_chars": len(visible_content),
         }
 
     def stream_feedback(
@@ -670,9 +704,6 @@ class ScriptwriterAgent(SparkBaseAgent, SparkAgentExecutor):
         """提取模型正文并通过统一 ARC 输出门禁。"""
         text = text.strip()
 
-        # Remove <conception> block(s)
-        text = re.sub(r"<conception>.*?</conception>", "", text, flags=re.DOTALL).strip()
-
         # Remove markdown code fences if present
         if text.startswith("```"):
             # Find the first newline after opening fence
@@ -682,6 +713,12 @@ class ScriptwriterAgent(SparkBaseAgent, SparkAgentExecutor):
             # Remove closing fence
             if text.endswith("```"):
                 text = text[:-3]
+
+        from core.request_context import get_current_export_format
+        if get_current_export_format() == "novel":
+            return text.strip()
+
+        text = clean_novel_visible_text(text)
 
         settings = self._visual_illustration_settings()
         return sanitize_arc_ai_output(

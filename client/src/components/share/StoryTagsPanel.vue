@@ -12,7 +12,7 @@
     <template #trigger>
       <n-tooltip trigger="hover">
         <template #trigger>
-          <n-button quaternary circle :size="buttonSize" :type="emphasized ? 'error' : 'default'">
+          <n-button quaternary circle :size="buttonSize" :type="emphasized ? 'primary' : 'default'">
             <template #icon><n-icon :component="Tags" /></template>
           </n-button>
         </template>
@@ -46,7 +46,7 @@
       quaternary
       circle
       :size="buttonSize"
-      :type="emphasized ? 'error' : 'default'"
+      :type="emphasized ? 'primary' : 'default'"
       :aria-label="t('components.storyTagsPanel.title')"
       :title="t('components.storyTagsPanel.title')"
       @click="show = !show"
@@ -281,6 +281,7 @@ onBeforeUnmount(() => {
   transform: translateY(-8px);
   opacity: 0;
 }
+
 </style>
 
 <style>

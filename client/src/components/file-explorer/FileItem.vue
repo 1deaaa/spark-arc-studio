@@ -110,7 +110,7 @@ const fileMenuOptions = computed(() => {
       type: 'divider'
     },
     {
-      label: isNovelMode.value ? t('components.fileExplorer.deleteVolume') : t('components.fileExplorer.deleteAct'),
+      label: isNovelMode.value ? t('components.fileExplorer.deleteChapter') : t('components.fileExplorer.deleteScene'),
       key: 'delete',
       icon: _iconDanger(Trash),
       props: { style: 'color: #e74c3c;' }
@@ -139,7 +139,7 @@ const folderMenuOptions = computed(() => {
       icon: _icon(Plus)
     },
     {
-      label: t('components.fileExplorer.newVolume'),
+      label: isNovelMode.value ? t('components.fileExplorer.newVolume') : t('components.fileExplorer.newChapter'),
       key: 'new-folder',
       icon: _icon(SquarePen)
     },
@@ -155,7 +155,7 @@ const folderMenuOptions = computed(() => {
       type: 'divider'
     },
     {
-      label: t('components.fileExplorer.deleteVolume'),
+      label: isNovelMode.value ? t('components.fileExplorer.deleteVolume') : t('components.fileExplorer.deleteChapter'),
       key: 'delete',
       icon: _iconDanger(Trash),
       props: { style: 'color: #e74c3c;' }

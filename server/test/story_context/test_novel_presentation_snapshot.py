@@ -4,6 +4,40 @@ from story import novel_parser
 from story.file_naming import build_scene_story_filename
 
 
+def test_novel_visible_text_hides_tagged_field_and_structured_conception() -> None:
+    assert novel_parser.clean_novel_visible_text(
+        '<conception>隐藏构思</conception>正文里的构思一词。'
+    ) == '正文里的构思一词。'
+    assert novel_parser.clean_novel_visible_text(
+        '"conception": "隐藏构思"\n\n正文。'
+    ) == '正文。'
+
+
+def test_novel_document_round_trip_keeps_conception_outside_body() -> None:
+    document = novel_parser.parse_novel_document(
+        "<conception>先制造误会，再在章末揭示线索。</conception>\n\n# 第一章\n正文。"
+    )
+    assert document == {"conception": "先制造误会，再在章末揭示线索。", "body": "# 第一章\n正文。"}
+    serialized = novel_parser.serialize_novel_document(document["body"], document["conception"])
+    assert serialized.startswith("<conception>")
+    assert novel_parser.clean_novel_visible_text(serialized) == document["body"]
+    assert novel_parser.clean_novel_visible_text(
+        '{"conception":"隐藏构思","content":"正文。"}'
+    ) == '正文。'
+    assert novel_parser.clean_novel_visible_text(
+        'conception:\n  隐藏构思\n\n正文。'
+    ) == '正文。'
+
+
+def test_novel_document_handles_empty_json_body_and_multiline_conception() -> None:
+    assert novel_parser.parse_novel_document(
+        '{"conception":"仅有构思","content":""}'
+    ) == {"conception": "仅有构思", "body": ""}
+    assert novel_parser.parse_novel_document(
+        "conception:\n  第一行\n  第二行\n\n正文。"
+    ) == {"conception": "第一行\n第二行", "body": "正文。"}
+
+
 def test_aggregate_novel_treats_md_as_novel_format(monkeypatch, tmp_path: Path) -> None:
     stories_path = tmp_path / "stories"
     stories_path.mkdir()
@@ -45,3 +79,4 @@ def test_aggregate_novel_includes_unplanned_markdown_files(monkeypatch, tmp_path
 
     assert result.startswith("# 演出测试")
     assert "没有大纲也必须进入演出。" in result
+    assert result.count("没有大纲也必须进入演出。") == 1

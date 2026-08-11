@@ -84,6 +84,15 @@ def _usage_context() -> Optional[str]:
     return current_llm_usage_context.get()
 
 
+def _usage_recorded(payload: dict) -> None:
+    """把已提交的单次用量通知交给当前 SparkArc 请求。"""
+    from core.request_context import current_llm_usage_reporter
+
+    reporter = current_llm_usage_reporter.get()
+    if reporter is not None:
+        reporter(dict(payload))
+
+
 def build_sparkarc_matchbox_integrations():
     """构造 SparkArc 的 Matchbox 注入配置。"""
     configure_sparkarc_matchbox_environment()
@@ -98,6 +107,7 @@ def build_sparkarc_matchbox_integrations():
         default_usage_key_resolver=_default_usage_key,
         caller_context_provider=_caller_context,
         usage_context_provider=_usage_context,
+        usage_recorded_handler=_usage_recorded,
         secret_rotation_handler=matchbox_secret_rotation_handler,
     ), create_configured_engine, get_database_url("llm")
 

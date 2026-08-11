@@ -6,6 +6,7 @@ import json
 import threading
 import time
 
+import pytest
 from langchain_core.messages import HumanMessage, ToolMessage
 
 from agents.communication import (
@@ -21,8 +22,16 @@ from agents.routes.chat import (
     _run_chat_background_context,
     _run_chat_stream_with_retry,
 )
-from agents.routes.chat_task import ChatTaskEntry
+from agents.routes.chat_task import (
+    ChatTaskEntry,
+    cancel_task,
+    cleanup_task,
+    get_task,
+    register_task,
+)
+from agents.chat_manager import mark_stream_metadata_interrupted
 from core.request_context import (
+    current_llm_usage_reporter,
     current_scriptwriter_prewrite_receipt,
     get_scriptwriter_prewrite_receipt,
     set_scriptwriter_prewrite_receipt,
@@ -41,6 +50,33 @@ def make_entry() -> ChatTaskEntry:
         started_at=time.time(),
         assistant_message_id=42,
     )
+
+
+def test_chat_task_replacement_waits_for_real_exit_and_cleanup_is_generation_safe() -> None:
+    task_key = f"u:p:agent_director:generation-{time.time_ns()}"
+    first = make_entry()
+    first.task_key = task_key
+    register_task(first)
+
+    assert cancel_task(task_key) is True
+    assert first.stop_event.is_set()
+    assert first.cancel_requested is True
+    assert first.status == "running"
+
+    second = make_entry()
+    second.task_key = task_key
+    with pytest.raises(ValueError, match="已在运行中"):
+        register_task(second)
+
+    first.status = "cancelled"
+    first.finished_event.set()
+    register_task(second)
+    cleanup_task(task_key, delay=0, task_id=first.task_id)
+    time.sleep(0.02)
+    assert get_task(task_key) is second
+
+    second.finished_event.set()
+    cleanup_task(task_key, delay=0, task_id=second.task_id)
 
 
 def test_chat_background_context_shares_prewrite_receipt_with_tool_subcontexts() -> None:
@@ -69,6 +105,69 @@ def test_chat_background_context_shares_prewrite_receipt_with_tool_subcontexts()
         assert get_scriptwriter_prewrite_receipt() == {"receipt_id": "outer"}
     finally:
         current_scriptwriter_prewrite_receipt.reset(outer_token)
+
+
+def test_chat_background_context_routes_committed_usage_and_restores_reporter() -> None:
+    captured = []
+    outer_reporter = lambda payload: None
+    outer_token = current_llm_usage_reporter.set(outer_reporter)
+
+    def callback() -> None:
+        from llm.matchbox_adapter import _usage_recorded
+
+        _usage_recorded({"agent_name": "agent_director", "prompt_tokens": 120})
+
+    try:
+        _run_chat_background_context(
+            user_id="u",
+            project_name="p",
+            is_admin=False,
+            locale="zh-CN",
+            llm_usage_context="task:usage-live",
+            llm_usage_reporter=captured.append,
+            chat_agent_id="agent_director",
+            chat_context_key="global",
+            callback=callback,
+        )
+        assert captured == [{"agent_name": "agent_director", "prompt_tokens": 120}]
+        assert current_llm_usage_reporter.get() is outer_reporter
+    finally:
+        current_llm_usage_reporter.reset(outer_token)
+
+
+def test_chat_task_entry_accumulates_live_usage_by_agent() -> None:
+    entry = make_entry()
+
+    first = entry.record_llm_usage({
+        "agent_name": "agent_director",
+        "prompt_tokens": 1000,
+        "completion_tokens": 100,
+        "total_tokens": 1100,
+        "cached_prompt_tokens": 600,
+        "cache_miss_prompt_tokens": 400,
+        "success": True,
+    })
+    second = entry.record_llm_usage({
+        "agent_name": "agent_lorebook",
+        "prompt_tokens": 800,
+        "completion_tokens": 200,
+        "total_tokens": 1000,
+        "cached_prompt_tokens": 0,
+        "cache_miss_prompt_tokens": None,
+        "success": True,
+    })
+
+    assert first["total_tokens"] == 1100
+    assert second["prompt_tokens"] == 1800
+    assert second["completion_tokens"] == 300
+    assert second["total_tokens"] == 2100
+    assert second["requests"] == 2
+    assert second["by_agent"]["agent_director"]["cache_hit_rate"] == 0.6
+    assert second["by_agent"]["agent_lorebook"]["cache_hit_rate"] is None
+
+    entry.append_control_event({"event": "llm_usage", "llm_usage": second})
+    assert entry.event_log[-1]["event"] == "llm_usage"
+    assert entry.build_snapshot()["llm_usage"]["by_agent"]["agent_lorebook"]["total_tokens"] == 1000
 
 
 def test_tool_args_hydration_replaces_streamed_null_placeholders() -> None:
@@ -127,6 +226,7 @@ def test_chat_task_entry_replays_seq_and_builds_snapshot_segments() -> None:
         "tool_result": "完成",
     })
     entry.append_event({"event": "assistant_delta", "text": "正文二", "source_agent": "agent_lorebook"})
+    entry.user_message_id = 41
 
     assert [event["seq"] for event in entry.event_log] == [1, 2, 3, 4, 5, 6]
     assert [event["seq"] for event in entry.get_events_after(3)] == [4, 5, 6]
@@ -135,6 +235,7 @@ def test_chat_task_entry_replays_seq_and_builds_snapshot_segments() -> None:
     assert snapshot["event"] == "task_snapshot"
     assert snapshot["seq"] == 6
     assert snapshot["assistant_message_id"] == 42
+    assert snapshot["user_message_id"] == 41
     assert snapshot["content"] == "正文一正文二"
     assert snapshot["reasoning"] == "思考"
 
@@ -170,6 +271,64 @@ def test_observer_replays_snapshot_then_events_after_cursor() -> None:
     assert len(rows) == 1
     assert '"seq": 2' in rows[0]
     assert '"二"' in rows[0]
+
+
+def test_observer_is_woken_by_background_event_without_polling() -> None:
+    entry = make_entry()
+
+    class Request:
+        async def is_disconnected(self) -> bool:
+            return False
+
+    async def collect_rows():
+        rows = []
+
+        async def produce() -> None:
+            await asyncio.sleep(0.01)
+            entry.append_event({"event": "assistant_delta", "text": "即时事件"})
+            entry.append_control_event({"event": "task_done", "status": "completed"})
+            entry.status = "completed"
+            entry.notify_observers()
+
+        producer = asyncio.create_task(produce())
+        async for line in _observe_chat_task_events(Request(), entry, include_snapshot=False):
+            rows.append(json.loads(line))
+        await producer
+        return rows
+
+    rows = asyncio.run(collect_rows())
+
+    assert [row["event"] for row in rows] == ["assistant_delta", "task_done"]
+    assert rows[0]["text"] == "即时事件"
+
+
+def test_stale_running_chat_metadata_becomes_interrupted_without_losing_progress() -> None:
+    original = {
+        "stream_status": "running",
+        "stream_seq": 12,
+        "segments": [
+            {"type": "text", "text": "已生成正文"},
+            {"type": "tool_trace", "tool_name": "rewrite_outline", "status": "running"},
+        ],
+        "tool_traces": [
+            {"tool_name": "rewrite_outline", "status": "running"},
+        ],
+    }
+
+    repaired, changed = mark_stream_metadata_interrupted(original)
+
+    assert changed is True
+    assert original["stream_status"] == "running"
+    assert repaired["stream_status"] == "error"
+    assert repaired["finish_reason"] == "interrupted"
+    assert repaired["stream_seq"] == 12
+    assert repaired["segments"][0]["text"] == "已生成正文"
+    assert repaired["segments"][1]["status"] == "failed"
+    assert repaired["tool_traces"][0]["status"] == "failed"
+
+    unchanged, changed_again = mark_stream_metadata_interrupted(repaired)
+    assert changed_again is False
+    assert unchanged == repaired
 
 
 def test_chat_stream_retry_suppresses_intermediate_error_events(monkeypatch) -> None:

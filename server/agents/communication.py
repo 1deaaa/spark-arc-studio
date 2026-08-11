@@ -49,6 +49,17 @@ from .tools.stream_events import (
     is_tool_result_failure,
     normalize_tool_name,
 )
+from .tools.pipeline import (
+    PIPELINE_COMPLETION_MARKER,
+    PIPELINE_COMPLETION_TOOL_NAME,
+)
+from llm.agen_matchbox.tool_protocol import (
+    build_tool_history_message,
+    build_tool_result_messages,
+    dedupe_tool_specs,
+    extract_tool_call_id,
+    prepare_tool_specs_for_execution,
+)
 
 
 # ── ToolEventSink: 嵌套工具事件广播 ──────────────────────────────
@@ -80,6 +91,94 @@ def is_stop_event_set(stop_event: Any = None) -> bool:
         return bool(is_set())
     except Exception:
         return False
+
+
+def is_pipeline_tool_result_failure(tool_name: str, result: Any) -> bool:
+    """对落盘回执做保守失败识别，避免把文本型失败当成流水线完成。"""
+    if is_tool_result_failure(tool_name, result):
+        return True
+    from agents.tools.registry import PIPELINE_PERSIST_TOOL_NAMES
+
+    if tool_name not in PIPELINE_PERSIST_TOOL_NAMES:
+        return False
+    first_line = str(result or "").strip().splitlines()[:1]
+    return bool(first_line) and any(
+        marker in first_line[0]
+        for marker in ("失败", "未找到", "未知工具")
+    )
+
+
+def _format_pipeline_receipt_result(result: Any) -> str:
+    """从真实工具返回中提取短回执，不把正文或完整工具参数带回导演。"""
+    text = str(result or "").strip()
+    if not text:
+        return "执行成功"
+    if isinstance(result, dict):
+        payload = result
+    else:
+        try:
+            payload = json.loads(text)
+        except (TypeError, ValueError, json.JSONDecodeError):
+            payload = None
+    if isinstance(payload, dict):
+        parts = []
+        message = str(payload.get("message") or payload.get("status") or "执行成功").strip()
+        if message:
+            parts.append(message)
+        path = str(payload.get("path") or "").strip()
+        if path and path not in message:
+            parts.append(f"路径：{path}")
+        written_chars = payload.get("written_chars")
+        if isinstance(written_chars, int):
+            parts.append(f"正文 {written_chars} 字")
+        return "；".join(parts)[:300] or "执行成功"
+    return text.splitlines()[0][:300]
+
+
+def build_pipeline_completion_receipt(
+    agent_id: str,
+    write_receipts: List[tuple[str, Any]],
+) -> str:
+    """根据已成功执行的落盘工具生成给导演的确定性短回执。"""
+    lines = [f"[{agent_id}] 流水线步骤已完成，项目真相源已更新。"]
+    seen: set[tuple[str, str]] = set()
+    for tool_name, result in write_receipts:
+        summary = _format_pipeline_receipt_result(result)
+        key = (tool_name, summary)
+        if key in seen:
+            continue
+        seen.add(key)
+        lines.append(f"- {tool_name}：{summary}")
+    return "\n".join(lines)
+
+
+def resolve_pipeline_completion(
+    agent_id: str,
+    tool_results: List[tuple[str, str, Any]],
+    write_receipts: List[tuple[str, Any]],
+) -> Optional[str]:
+    """累计真实落盘回执；仅在最终控制工具确认且本批无失败时返回完成回执。"""
+    from agents.tools.registry import PIPELINE_PERSIST_TOOL_NAMES
+
+    current_batch_failed = False
+    for _, tool_name, tool_result in tool_results:
+        if tool_name == PIPELINE_COMPLETION_TOOL_NAME:
+            continue
+        failed = is_pipeline_tool_result_failure(tool_name, tool_result)
+        if failed:
+            current_batch_failed = True
+        elif tool_name in PIPELINE_PERSIST_TOOL_NAMES:
+            write_receipts.append((tool_name, tool_result))
+
+    completion_is_last = bool(tool_results) and (
+        tool_results[-1][1] == PIPELINE_COMPLETION_TOOL_NAME
+    )
+    completion_acknowledged = completion_is_last and str(
+        tool_results[-1][2] or ""
+    ).strip() == PIPELINE_COMPLETION_MARKER
+    if completion_acknowledged and not current_batch_failed and write_receipts:
+        return build_pipeline_completion_receipt(agent_id, write_receipts)
+    return None
 
 
 class ModelStreamRetryExhaustedError(RuntimeError):
@@ -468,14 +567,30 @@ class SparkBaseAgent:
             "message": "基础 Agent 已收到消息"
         }
 
-    def _build_tool_system_prompt(self, base_prompt: str, active_context: str = None, skip_tool_confirmation: bool = False) -> str:
+    def _build_tool_system_prompt(
+        self,
+        base_prompt: str,
+        active_context: str = None,
+        skip_tool_confirmation: bool = False,
+        *,
+        tools_override: Optional[List[Any]] = None,
+        tool_rules_key: str = "tool_rules",
+    ) -> str:
         """
         构建系统提示词，注入工具使用规范。
         active_context 参数仅为兼容旧调用签名保留，本轮动态上下文由 prompt_layout 放入最后 user。
         子类应当重写此方法以定制不同的提示词结构。
         """
         from agents.tools.registry import get_tools_for_agent
-        tools = get_tools_for_agent(self.agent_id, user_id=self.user_id)
+        tools = (
+            list(tools_override)
+            if tools_override is not None
+            else get_tools_for_agent(
+                self.agent_id,
+                user_id=self.user_id,
+                pipeline_mode=skip_tool_confirmation,
+            )
+        )
         
         system_instruction = prepend_prompt_language_policy(base_prompt)
         
@@ -518,9 +633,10 @@ class SparkBaseAgent:
 你当前正处于由导演驱动的自动化创作流水线中。**你的受众是导演，不是用户。** 严格遵守以下规则：
 
 1. **凡是涉及内容创作或修改的任务，必须直接调用对应工具将内容落盘。** 严禁用正文输出内容来代替工具调用——例如：写好了世界观但不调用 `rewrite_worldview` 直接输出正文，是错误行为，工具必须被调用。
-2. **工具已经被导演授权，无需征求用户确认，立即执行。** 一次性调用所有需要的工具。
-3. 全部工具执行完毕后，向导演报告完成了什么、关键结果摘要。
-4. **绝对禁止**输出任何面向用户的引导语、前言、寒暄、解释说明或"如果你想要..."等话术。只有行动和报告。
+2. **工具已经被导演授权，无需征求用户确认，立即执行。** 每轮尽量并行调用相互独立且确有必要的工具；若工具结果存在关键缺口、冲突或失败，可以继续补查、修正和重试，不得为了减少轮次牺牲事实与产出完整性。
+3. 若协作元信息中的 `completion_mode=\"silent_continue\"`：完成全部必要调查和落盘后，在最终工具批次中把 `complete_pipeline_step` 放在最后调用。成功后系统会直接把真实工具回执交还导演；不要再输出自然语言总结。工具失败、只完成部分内容或仍需补查时不得调用该标记。
+4. 若 `completion_mode` 不是 `silent_continue`：全部工具执行完毕后，向导演报告完成了什么、关键结果摘要。
+5. **绝对禁止**输出任何面向用户的引导语、前言、寒暄、解释说明或"如果你想要..."等话术。只有行动和必要报告。
 """
             else:
                 tool_instruction += """
@@ -533,7 +649,7 @@ class SparkBaseAgent:
 """
             system_instruction += tool_instruction
 
-            tool_reference_block = self._build_tool_prompt_reference_block()
+            tool_reference_block = self._build_tool_prompt_reference_block(tools_override=tools)
             if tool_reference_block:
                 system_instruction += tool_reference_block
 
@@ -543,7 +659,7 @@ class SparkBaseAgent:
                 from .agent_utils import load_prompt as _load_prompt
                 _prompt_name = self.agent_id.replace("agent_", "")
                 _prompts = _load_prompt(_prompt_name)
-                _tool_rules = _prompts.get('tool_rules')
+                _tool_rules = _prompts.get(tool_rules_key)
                 if isinstance(_tool_rules, str) and _tool_rules.strip():
                     system_instruction += "\n\n" + _tool_rules.strip()
             except Exception:
@@ -607,7 +723,11 @@ class SparkBaseAgent:
         """返回加载工具参考提示词时使用的占位符默认值。"""
         return {}
 
-    def _build_tool_prompt_reference_block(self) -> str:
+    def _build_tool_prompt_reference_block(
+        self,
+        *,
+        tools_override: Optional[List[Any]] = None,
+    ) -> str:
         from agents.tools.registry import get_tools_for_agent
         from .agent_utils import load_prompt
 
@@ -616,7 +736,12 @@ class SparkBaseAgent:
             return ""
 
         prompt_name = self.agent_id.replace("agent_", "")
-        tool_names = {tool.name for tool in get_tools_for_agent(self.agent_id, user_id=self.user_id)}
+        tools = (
+            list(tools_override)
+            if tools_override is not None
+            else get_tools_for_agent(self.agent_id, user_id=self.user_id)
+        )
+        tool_names = {tool.name for tool in tools}
         reference_values = self._get_tool_prompt_reference_values() or {}
         blocks: list[str] = []
 
@@ -834,16 +959,7 @@ class SparkBaseAgent:
         return isinstance(args, dict) and any(value is not None for value in args.values())
 
     def _extract_tool_call_id(self, tool_call: Any) -> str:
-        tool_call_dict = self._tool_call_as_dict(tool_call)
-        function_obj = tool_call_dict.get("function") or getattr(tool_call, "function", None)
-        function_dict = self._tool_call_as_dict(function_obj)
-
-        call_id = tool_call_dict.get("id")
-        if call_id is None:
-            call_id = getattr(tool_call, "id", None)
-        if call_id is None:
-            call_id = function_dict.get("id")
-        return str(call_id or "")
+        return extract_tool_call_id(tool_call)
 
     def _dedupe_tool_specs(self, items: List[Dict[str, Any]]) -> List[Dict[str, Any]]:
         """按 tool id / name 去重，优先保留带参数的版本。
@@ -852,86 +968,19 @@ class SparkBaseAgent:
         `additional_kwargs.tool_calls` 中保留同一条调用。如果不做去重，可能造成
         同一个工具被执行两次。
         """
-        deduped: Dict[str, Dict[str, Any]] = {}
-        ordered_keys: List[str] = []
-
-        for index, item in enumerate(items):
-            raw = item.get("raw")
-            item_index = item.get("index")
-            key = (
-                self._extract_tool_call_id(raw)
-                or f"{item.get('name') or 'unknown_tool'}::{item_index if item_index is not None else index}"
-            )
-            if key not in deduped:
-                deduped[key] = item
-                ordered_keys.append(key)
-                continue
-
-            if self._tool_spec_has_args(item) and not self._tool_spec_has_args(deduped[key]):
-                deduped[key] = item
-
-        return [deduped[key] for key in ordered_keys]
+        return dedupe_tool_specs(items)
 
     def _prepare_tool_specs_for_execution(self, tool_specs: List[Dict[str, Any]]) -> List[Dict[str, Any]]:
         """为工具执行和下一轮消息历史建立同一份规范调用。"""
-        prepared: List[Dict[str, Any]] = []
-        used_call_ids: set[str] = set()
-
-        for index, spec in enumerate(tool_specs):
-            item = dict(spec)
-            tool_name = normalize_tool_name(str(
-                item.get("name") or self._extract_tool_name(item.get("raw")) or "unknown_tool"
-            ))
-            tool_args = item.get("args")
-            if not isinstance(tool_args, dict):
-                tool_args = self._extract_tool_args(item.get("raw"))
-            if not isinstance(tool_args, dict):
-                tool_args = {}
-
-            call_id = self._extract_tool_call_id(item.get("raw")).strip()
-            if not call_id or call_id in used_call_ids:
-                call_id = f"call_{uuid.uuid4().hex}"
-            used_call_ids.add(call_id)
-
-            item.update({
-                "raw": {
-                    "id": call_id,
-                    "name": tool_name,
-                    "args": tool_args,
-                    "type": "tool_call",
-                },
-                "name": tool_name,
-                "args": tool_args,
-                "call_id": call_id,
-                "index": item.get("index", index),
-            })
-            prepared.append(item)
-
-        return prepared
+        return prepare_tool_specs_for_execution(
+            tool_specs,
+            normalize_name=normalize_tool_name,
+        )
 
     @staticmethod
     def _build_tool_history_message(message: Any, tool_specs: List[Dict[str, Any]]) -> Any:
         """重建协议合法的 assistant 工具消息，只声明实际进入执行链的调用。"""
-        from langchain_core.messages import AIMessage
-
-        additional_kwargs = dict(getattr(message, "additional_kwargs", None) or {})
-        additional_kwargs.pop("tool_calls", None)
-        additional_kwargs.pop("function_call", None)
-
-        message_kwargs: Dict[str, Any] = {
-            "content": getattr(message, "content", "") or "",
-            "additional_kwargs": additional_kwargs,
-            "tool_calls": [dict(spec["raw"]) for spec in tool_specs],
-        }
-        response_metadata = getattr(message, "response_metadata", None)
-        if isinstance(response_metadata, dict):
-            message_kwargs["response_metadata"] = dict(response_metadata)
-        for field_name in ("name", "id", "usage_metadata"):
-            field_value = getattr(message, field_name, None)
-            if field_value is not None:
-                message_kwargs[field_name] = field_value
-
-        return AIMessage(**message_kwargs)
+        return build_tool_history_message(message, tool_specs)
 
     def _merge_tool_args_into_raw(
         self,
@@ -1294,6 +1343,7 @@ class SparkBaseAgent:
             "rewrite_worldview": "正在重写世界观设定...",
             "rewrite_all_characters": "正在重写所有角色设定...",
             "update_character": "正在更新角色设定...",
+            "create_character_relation": "正在记录角色关系...",
             "patch_worldview": "正在局部更新世界观...",
             "rewrite_synopsis": "正在重写故事梗概...",
             "patch_synopsis": "正在局部更新故事梗概...",
@@ -1302,7 +1352,7 @@ class SparkBaseAgent:
             "rewrite_outline": "正在重写剧情大纲...",
             "patch_outline": "正在局部更新剧情大纲...",
             "create_chapter": "正在创建章节...",
-            "prepare_script_creation": "编剧正在调研规划。",
+            "prepare_script_creation": "编剧调研",
             "create_or_rewrite_script": "正在新建/重写剧本文本...",
             "patch_script": "正在局部更新剧本文本...",
             "list_chapters": "正在查阅章节结构...",
@@ -1337,7 +1387,14 @@ class SparkBaseAgent:
                 return ctx
         return None
 
-    def chat(self, user_message: str, history: List[Dict[str, Any]] = None, active_context: str = None, skip_tool_confirmation: bool = False) -> str:
+    def chat(
+        self,
+        user_message: str,
+        history: List[Dict[str, Any]] = None,
+        active_context: str = None,
+        skip_tool_confirmation: bool = False,
+        stop_after_pipeline_completion: bool = False,
+    ) -> str:
         """
         通用的直接对话入口。
         """
@@ -1374,7 +1431,6 @@ class SparkBaseAgent:
 
         # 2. 调用 LLM（支持多轮工具调用）
         try:
-            from langchain_core.messages import ToolMessage as _ToolMessage
             from llm.agen_matchbox import matchbox
             from agents.tools.registry import get_tools_for_agent
             from agents.context_budget import prepare_chat_messages_with_budget, rebudget_existing_messages
@@ -1395,7 +1451,11 @@ class SparkBaseAgent:
             )
             self._set_context_checkpoint_candidate(budget_result.checkpoint)
             messages = budget_result.messages
-            tools = get_tools_for_agent(self.agent_id, user_id=self.user_id)
+            tools = get_tools_for_agent(
+                self.agent_id,
+                user_id=self.user_id,
+                pipeline_mode=skip_tool_confirmation,
+            )
             if tools:
                 invoke_llm = invoke_llm.bind_tools(tools)
 
@@ -1409,6 +1469,7 @@ class SparkBaseAgent:
                 [t.name for t in tools] if tools else [],
             )
 
+            pipeline_write_receipts: List[tuple[str, Any]] = []
             while True:
                 response = invoke_llm.invoke(messages)
 
@@ -1443,9 +1504,21 @@ class SparkBaseAgent:
                 tool_results = []
                 for tool_spec in tool_specs:
                     tool_call_id = tool_spec["call_id"]
-                    tool_name = str(tool_spec.get("name") or self._extract_tool_name(tool_spec.get("raw")))
+                    tool_name = normalize_tool_name(str(
+                        tool_spec.get("name")
+                        or self._extract_tool_name(tool_spec.get("raw"))
+                    ))
                     result = self._execute_tool_calls([tool_spec])
                     tool_results.append((tool_call_id, tool_name, result))
+
+                if stop_after_pipeline_completion:
+                    completion_receipt = resolve_pipeline_completion(
+                        self.agent_id,
+                        tool_results,
+                        pipeline_write_receipts,
+                    )
+                    if completion_receipt:
+                        return completion_receipt
 
                 # 将 AI 消息（含 tool_calls）和工具结果追加到消息历史
                 # 清洗 think 标签，避免下一轮 LLM 把推理内容当正文回显
@@ -1453,8 +1526,7 @@ class SparkBaseAgent:
                     response.content = extract_visible_text_from_plain_text(response.content)
                 messages.append(self._build_tool_history_message(response, tool_specs))
                 fresh_call_ids = {cid for cid, _, _ in tool_results}
-                for call_id, t_name, t_result in tool_results:
-                    messages.append(_ToolMessage(content=t_result or "", tool_call_id=call_id, name=t_name))
+                messages.extend(build_tool_result_messages(tool_results))
                 # 长读取滑动窗口：保留当前用户请求内的全部原文，只折叠旧用户轮次结果
                 collapse_attachment_chunk_history(messages, fresh_call_ids=fresh_call_ids)
                 messages = rebudget_existing_messages(
@@ -1474,7 +1546,15 @@ class SparkBaseAgent:
                 raise
             return f"[Agent Error] 对话失败: {e}"
 
-    def chat_stream(self, user_message: str, history: List[Dict[str, Any]] = None, active_context: str = None, skip_tool_confirmation: bool = False, stop_event: Any = None):
+    def chat_stream(
+        self,
+        user_message: str,
+        history: List[Dict[str, Any]] = None,
+        active_context: str = None,
+        skip_tool_confirmation: bool = False,
+        stop_event: Any = None,
+        stop_after_pipeline_completion: bool = False,
+    ):
         """通用流式对话入口。逐段 yield 文本增量。"""
         from .agent_utils import load_prompt
         self._set_context_checkpoint_candidate(None)
@@ -1496,7 +1576,19 @@ class SparkBaseAgent:
         except Exception:
             system_prompt = f"你是一个专业的助手：{self.name}。你的职责是：{self.intro}"
 
-        system_instruction = self._build_tool_system_prompt(system_prompt, active_context, skip_tool_confirmation=skip_tool_confirmation)
+        from agents.tools.registry import get_tools_for_agent
+
+        tools = get_tools_for_agent(
+            self.agent_id,
+            user_id=self.user_id,
+            pipeline_mode=skip_tool_confirmation,
+        )
+        system_instruction = self._build_tool_system_prompt(
+            system_prompt,
+            active_context,
+            skip_tool_confirmation=skip_tool_confirmation,
+            tools_override=tools,
+        )
         from agents.prompt_layout import build_chat_prompt_layout
         prompt_layout = build_chat_prompt_layout(
             system_instruction=system_instruction,
@@ -1506,7 +1598,6 @@ class SparkBaseAgent:
         )
 
         from llm.agen_matchbox import matchbox
-        from agents.tools.registry import get_tools_for_agent
         from agents.context_budget import (
             prepare_chat_messages_with_budget,
             rebudget_existing_messages,
@@ -1529,13 +1620,11 @@ class SparkBaseAgent:
         )
         self._set_context_checkpoint_candidate(budget_result.checkpoint)
         messages = budget_result.messages
-        tools = get_tools_for_agent(self.agent_id, user_id=self.user_id)
         if tools:
             stream_llm = stream_llm.bind_tools(tools)
 
         try:
-            from langchain_core.messages import ToolMessage as _ToolMessage
-
+            pipeline_write_receipts: List[tuple[str, Any]] = []
             while True:
                 if is_stop_event_set(stop_event):
                     return
@@ -1596,6 +1685,8 @@ class SparkBaseAgent:
                         if not tool_name:
                             continue
                         tool_name = normalize_tool_name(tool_name)
+                        if tool_name == PIPELINE_COMPLETION_TOOL_NAME:
+                            continue
                         tool_call_key = self._tool_call_event_key(tool_name, tcc, tool_index, len(started_tools))
                         if tool_call_key in started_tools:
                             continue
@@ -1657,6 +1748,7 @@ class SparkBaseAgent:
                             break
 
                         tool_name = normalize_tool_name(str(tool_spec.get("name") or self._extract_tool_name(tool_spec.get("raw"))))
+                        is_pipeline_control = tool_name == PIPELINE_COMPLETION_TOOL_NAME
                         spec_index = tool_spec.get("index")
                         raw_call_id = tool_spec["call_id"]
                         indexed_tool_call_key = self._tool_call_event_key(tool_name, tool_spec.get("raw"), spec_index, len(tool_results)) if spec_index is not None else ""
@@ -1672,7 +1764,7 @@ class SparkBaseAgent:
                         if tool_event_metadata.get("tool_provider"):
                             progress_text = f"正在使用 {tool_event_metadata['tool_provider'].title()} 搜索..."
 
-                        if tool_call_key not in started_tools:
+                        if not is_pipeline_control and tool_call_key not in started_tools:
                             yield build_tool_stream_event(
                                 "tool_intent_started",
                                 tool_name,
@@ -1686,14 +1778,15 @@ class SparkBaseAgent:
                                 break
                             started_tools.add(tool_call_key)
 
-                        yield build_tool_stream_event(
-                            "tool_exec_started",
-                            tool_name,
-                            source_agent=self.agent_id,
-                            message=progress_text,
-                            tool_call_key=tool_call_key,
-                            **tool_event_metadata,
-                        )
+                        if not is_pipeline_control:
+                            yield build_tool_stream_event(
+                                "tool_exec_started",
+                                tool_name,
+                                source_agent=self.agent_id,
+                                message=progress_text,
+                                tool_call_key=tool_call_key,
+                                **tool_event_metadata,
+                            )
                         if is_stop_event_set(stop_event):
                             cancelled_during_tools = True
                             break
@@ -1715,8 +1808,8 @@ class SparkBaseAgent:
                             except queue.Empty:
                                 break
 
-                        _is_tool_failure = is_tool_result_failure(tool_name, tool_result)
-                        if _is_tool_failure:
+                        _is_tool_failure = is_pipeline_tool_result_failure(tool_name, tool_result)
+                        if _is_tool_failure and not is_pipeline_control:
                             yield build_tool_stream_event(
                                 "tool_exec_failed",
                                 tool_name,
@@ -1725,7 +1818,7 @@ class SparkBaseAgent:
                                 message=get_tool_result_failure_message(tool_name, tool_result),
                                 **tool_event_metadata,
                             )
-                        else:
+                        elif not is_pipeline_control:
                             yield build_tool_stream_event(
                                 "tool_exec_finished",
                                 tool_name,
@@ -1758,6 +1851,20 @@ class SparkBaseAgent:
                 if cancelled_during_tools or is_stop_event_set(stop_event):
                     return
 
+                if stop_after_pipeline_completion:
+                    completion_receipt = resolve_pipeline_completion(
+                        self.agent_id,
+                        tool_results,
+                        pipeline_write_receipts,
+                    )
+                    if completion_receipt:
+                        yield {
+                            "event": "pipeline_step_completed",
+                            "source_agent": self.agent_id,
+                            "receipt": completion_receipt,
+                        }
+                        return
+
                 # 将 AI 消息（含 tool_calls）和工具结果追加到消息历史，进入下一轮
                 # 清洗 think 标签，避免下一轮 LLM 把推理内容当正文回显
                 if aggregated_chunk is not None:
@@ -1765,9 +1872,8 @@ class SparkBaseAgent:
                         aggregated_chunk.content = extract_visible_text_from_plain_text(aggregated_chunk.content)
                     messages.append(self._build_tool_history_message(aggregated_chunk, tool_specs))
                 fresh_call_ids = {cid for cid, _, _ in tool_results}
-                for call_id, t_name, t_result in tool_results:
-                    messages.append(_ToolMessage(content=t_result or "", tool_call_id=call_id, name=t_name))
-                # 长读取滑动窗口：保留当前用户请求内的全部原文，只折叠旧用户轮次结果
+                messages.extend(build_tool_result_messages(tool_results))
+                # 附件分片滑动窗口：只保留本轮新 read_attachment_chunk 的完整正文，其余折叠
                 collapse_attachment_chunk_history(messages, fresh_call_ids=fresh_call_ids)
                 tool_budget_result = yield from stream_context_budget_events(
                     rebudget_existing_messages,

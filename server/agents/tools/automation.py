@@ -36,18 +36,32 @@ class WorkTrackerOperationItemInput(BaseModel):
     task: str | None = Field(default=None, description="任务描述。add/insert 必填；edit 时仅在修改描述时传入。")
     status: Literal["pending", "in_progress", "completed", "blocked"] | None = Field(default=None, description="任务状态。通常使用 set_status 操作修改状态。")
     priority: Literal["high", "medium", "low"] | None = Field(default=None, description="任务优先级。")
-    notes: str | None = Field(default=None, description="结果、失败原因、重做要求或其他备注。")
+    notes: str | None = Field(default=None, description="add/insert 的初始备注；edit 时用于修改备注。")
 
 
 class WorkTrackerOperationInput(BaseModel):
     model_config = ConfigDict(extra="forbid")
 
-    operation: Literal["add", "insert", "edit", "delete", "set_status"] = Field(description="条目操作：add=末尾新增；insert=指定位置插入；edit=修改；delete=彻底删除；set_status=标记状态。")
+    operation: Literal["add", "insert", "edit", "delete", "set_status"] = Field(description="条目操作：add=末尾新增；insert=指定位置插入；edit=修改内容/优先级/备注；delete=彻底删除；set_status=只修改状态。")
     item_id: str | None = Field(default=None, description="单个目标任务 ID，适用于 edit/delete/set_status。")
     item_ids: list[str] | None = Field(default=None, description="批量目标任务 ID，适用于 delete/set_status。")
-    item: WorkTrackerOperationItemInput | None = Field(default=None, description="add/insert 时传任务内容；edit 时只传需要修改的字段，禁止传 ID。")
+    item: WorkTrackerOperationItemInput | None = Field(default=None, description="add/insert 时传任务内容；edit 时只传需要修改的字段，禁止传 ID。set_status 不使用 item。备注只能通过 edit 的 item.notes 修改。")
     position: int | None = Field(default=None, ge=1, description="insert 的 1 基位置。")
-    status: Literal["pending", "in_progress", "completed", "blocked"] | None = Field(default=None, description="set_status 的目标状态。标记完成请传 completed；删除任务必须使用 delete。")
+    status: Literal["pending", "in_progress", "completed", "blocked"] | None = Field(default=None, description="仅供 set_status 使用的目标状态。标记完成请传 completed；删除任务必须使用 delete。")
+
+    @model_validator(mode="before")
+    @classmethod
+    def _explain_misplaced_fields(cls, value):
+        if not isinstance(value, dict):
+            return value
+        operation = str(value.get("operation") or "").strip().lower()
+        if operation == "set_status" and "notes" in value:
+            raise ValueError("set_status 只允许 operation、item_id/item_ids、status；备注请另用 edit，并传 item.notes。")
+        if operation == "set_status" and value.get("item") is not None:
+            raise ValueError("set_status 不使用 item；只传目标 ID 和顶层 status。备注请另用 edit，并传 item.notes。")
+        if operation in {"add", "insert", "edit"} and "notes" in value:
+            raise ValueError(f"{operation} 的备注必须放在 item.notes，不能传顶层 notes。")
+        return value
 
     @model_validator(mode="after")
     def _validate_operation_shape(self):
@@ -66,7 +80,7 @@ class WorkTrackerOperationInput(BaseModel):
         elif self.operation == "delete" and not target_ids:
             raise ValueError("delete 操作必须提供 item_id 或 item_ids。")
         elif self.operation == "set_status" and (not target_ids or self.status is None):
-            raise ValueError("set_status 操作必须提供目标 ID 和 status。")
+            raise ValueError("set_status 操作必须提供 item_id/item_ids 和 status；备注请另用 edit。")
         return self
 
 
@@ -75,7 +89,7 @@ class WorkTrackerInput(BaseModel):
 
     overwrite: bool = Field(default=False, description="仅在创建全新计划或用户明确要求重建任务板时设为 true；已有任务板的日常推进必须保持 false。")
     items: list[WorkTrackerItemInput] | None = Field(default=None, validation_alias=AliasChoices("items", "tasks", "todo_items"), description="仅 overwrite=true 时有效，用于提供新的完整任务列表。")
-    operations: list[WorkTrackerOperationInput] | None = Field(default=None, description="增量操作列表，可在一次调用中批量新增、插入、编辑、删除或标记状态。")
+    operations: list[WorkTrackerOperationInput] | None = Field(default=None, description="增量操作列表，可批量执行。set_status 只传目标 ID 和 status；edit 使用 item 包裹待修改字段（备注放在 item.notes）。")
     summary: str | None = Field(default=None, validation_alias=AliasChoices("summary", "goal", "objective"), description="任务板总目标；不传则保持原值。")
     contract: dict | None = Field(default=None, description="结构化创作契约；不传则保持原值。")
 
@@ -106,9 +120,9 @@ class UpdateProjectStoryTagsInput(BaseModel):
     tones: list[str] | None = Field(default=None, description="基调，多选字符串数组，如 ['暗黑', '治愈']；即使只有一个也必须传数组。")
     worldviews: list[str] | None = Field(default=None, description="世界观，多选字符串数组，如 ['修真']；即使只有一个也必须传数组。")
     pov: str | None = Field(default=None, validation_alias=AliasChoices("pov", "point_of_view", "pointOfView"), description="人称视角，单选字符串，如 '第一人称'、'第三人称全知'。")
-    length_hint: str | None = Field(default=None, validation_alias=AliasChoices("length_hint", "lengthHint", "length"), description="篇幅，单选字符串，如 '短篇'、'中篇'、'长篇'。")
-    scene_length_hint: str | None = Field(default=None, validation_alias=AliasChoices("scene_length_hint", "sceneLengthHint", "scene_length"), description="单场篇幅软目标：concise=精简、standard=标准、expanded=充实。用户要求今后的场景整体变短或变长时使用。")
-    scene_target_chars: int | None = Field(default=None, ge=100, le=100000, validation_alias=AliasChoices("scene_target_chars", "sceneTargetChars", "target_chars"), description="单场目标正文字符数，作为软目标；具体值存在时优先于三档区间。")
+    length_hint: str | None = Field(default=None, validation_alias=AliasChoices("length_hint", "lengthHint", "length"), description="作品规模，单选字符串，如 '短篇'、'中篇'、'长篇'；不要填写单章或单场目标。")
+    scene_length_hint: str | None = Field(default=None, validation_alias=AliasChoices("scene_length_hint", "sceneLengthHint", "scene_length"), description="单次正文软目标：concise=精简、standard=标准、expanded=充实。用户要求今后的章节/场景正文整体变短或变长时使用。")
+    scene_target_chars: int | None = Field(default=None, ge=100, le=100000, validation_alias=AliasChoices("scene_target_chars", "sceneTargetChars", "target_chars"), description="单次章节/场景正文目标字符数，作为软目标；具体值存在时优先于三档区间。")
     clear_scene_target_chars: bool = Field(default=False, validation_alias=AliasChoices("clear_scene_target_chars", "clearSceneTargetChars"), description="是否清除项目级具体字数目标，恢复仅按三档控制。")
     active_inspiration_id: str | None = Field(default=None, validation_alias=AliasChoices("active_inspiration_id", "activeInspirationId"), description="当前生效的灵感 ID，可选字符串，用于追溯来源。")
 
@@ -332,7 +346,7 @@ def work_tracker(
     summary: str | None = None,
     contract: dict | None = None,
 ) -> str:
-    """更新当前 Agent 的持久任务板；当前板面已由系统自动注入消息尾部。"""
+    """更新当前 Agent 的持久任务板；当前板面已由系统自动注入消息尾部。状态用 set_status，备注等字段用 edit。"""
     from agents.work_tracker import update_work_tracker
 
     user_id, project_name = ToolExecutionContext.get_context()
@@ -373,7 +387,7 @@ def work_tracker(
 
 @tool
 def read_project_story_tags() -> str:
-    """读取当前项目的故事主题参数（风格/题材/基调/世界观/人称/篇幅/单场篇幅）。
+    """读取当前项目的故事主题参数（风格/题材/基调/世界观/人称/作品规模/单次正文目标）。
     
     这些参数是"项目宪法"，贯穿整个创作周期，所有 Agent 通过 context_provider 统一读取。
     返回格式化的文本，若某项未设置则标注"未设置"。
@@ -412,16 +426,16 @@ def read_project_story_tags() -> str:
     lines.append(f"世界观：{'、'.join(worldviews) if worldviews else '未设置'}")
     
     length_hint = tags.get("length_hint")
-    lines.append(f"篇幅：{length_hint or '未设置'}")
+    lines.append(f"作品规模：{length_hint or '未设置'}")
 
     scene_length_labels = {"concise": "精简", "standard": "标准", "expanded": "充实"}
     scene_length_hint = tags.get("scene_length_hint", "standard")
-    lines.append(f"单场篇幅：{scene_length_labels.get(scene_length_hint, '标准')}（软目标）")
+    lines.append(f"单次正文目标：{scene_length_labels.get(scene_length_hint, '标准')}（软目标）")
     scene_target_chars = tags.get("scene_target_chars")
     lines.append(
-        f"单场目标字数：约 {scene_target_chars} 个可见正文字符（软目标，优先于档位区间）"
+        f"单次正文目标字数：约 {scene_target_chars} 个可见正文字符（软目标，优先于档位区间）"
         if scene_target_chars
-        else "单场目标字数：自动（使用档位区间）"
+        else "单次正文目标字数：自动（使用档位区间）"
     )
     
     return "\n".join(lines)
@@ -485,15 +499,15 @@ def update_project_story_tags(
     if pov is not None:
         updated_fields.append(f"人称视角={pov}")
     if length_hint is not None:
-        updated_fields.append(f"篇幅={length_hint}")
+        updated_fields.append(f"作品规模={length_hint}")
     if scene_length_hint is not None:
         scene_length_labels = {"concise": "精简", "standard": "标准", "expanded": "充实"}
         normalized_scene_length = tags.get("scene_length_hint", "standard")
-        updated_fields.append(f"单场篇幅={scene_length_labels.get(normalized_scene_length, '标准')}")
+        updated_fields.append(f"单次正文目标={scene_length_labels.get(normalized_scene_length, '标准')}")
     if clear_scene_target_chars:
-        updated_fields.append("单场目标字数=自动")
+        updated_fields.append("单次正文目标字数=自动")
     elif scene_target_chars is not None:
-        updated_fields.append(f"单场目标字数≈{tags.get('scene_target_chars')}字")
+        updated_fields.append(f"单次正文目标字数≈{tags.get('scene_target_chars')}字")
     if active_inspiration_id is not None:
         updated_fields.append(f"灵感ID={active_inspiration_id}")
     

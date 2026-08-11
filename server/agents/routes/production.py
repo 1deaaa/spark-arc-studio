@@ -316,16 +316,21 @@ def _persist_generated_text(
         file_path = os.path.join(stories_path, normalized_file)
 
     os.makedirs(os.path.dirname(file_path), exist_ok=True)
-    new_text = (generated_text or "").strip()
+    from story.novel_parser import parse_novel_document, serialize_novel_document
+
+    generated_document = parse_novel_document(generated_text)
+    new_text = generated_document["body"]
     if not new_text:
         return
 
     if rewrite or not os.path.exists(file_path):
-        final_text = new_text
+        final_text = serialize_novel_document(new_text, generated_document["conception"])
     else:
         with open(file_path, "r", encoding="utf-8") as f:
-            existing = f.read().rstrip()
-        final_text = f"{existing}\n\n{new_text}" if existing else new_text
+            existing_document = parse_novel_document(f.read())
+        body = f"{existing_document['body']}\n\n{new_text}" if existing_document["body"] else new_text
+        conception = generated_document["conception"] or existing_document["conception"]
+        final_text = serialize_novel_document(body, conception)
 
     with open(file_path, "w", encoding="utf-8") as f:
         f.write(final_text)

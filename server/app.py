@@ -311,6 +311,15 @@ async def lifespan(app: FastAPI):
     except Exception as _e:
         print(f"⚠️ Failed to clean up stale auto-write states (non-fatal): {_e}", flush=True)
 
+    try:
+        from agents.chat_manager import ChatManager
+
+        repaired_chat_streams = ChatManager.mark_interrupted_stream_messages()
+        if repaired_chat_streams:
+            print(f"⚠️ Marked {repaired_chat_streams} interrupted chat stream(s)", flush=True)
+    except Exception as _e:
+        print(f"⚠️ Failed to repair stale chat streams (non-fatal): {_e}", flush=True)
+
     # 检查必要组件
     server_root = os.path.dirname(os.path.abspath(__file__))
     arc_template_path = os.path.join(server_root, 'ARC_AI_Format.arc')

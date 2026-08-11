@@ -166,7 +166,9 @@
           <Transition name="daw-row-fade" mode="out-in">
             <div v-if="snapshot?.phase === 'prewrite'" class="daw-phase-row">
               <n-icon :component="Search" :size="13" class="daw-row-icon" />
-              <span class="daw-phase-text">{{ t('components.directorAutoWrite.prewriteStatus') }}</span>
+              <span class="daw-phase-text">
+                {{ t('components.directorAutoWrite.prewriteStatus') }}<template v-if="prewriteToolLabel"> - {{ prewriteToolLabel }}</template>
+              </span>
             </div>
           </Transition>
 
@@ -262,6 +264,7 @@ import { NIcon } from 'naive-ui';
 import { CircleAlert, CircleCheck, CircleX, FileText, FolderOpen, Info, Play, RotateCw, Search, Square, SquarePen, TriangleAlert, X } from '@lucide/vue';
 import { useI18n } from 'vue-i18n';
 import { useDirectorAutoWriteStore } from '@/components/stores/directorAutoWriteStore';
+import { getToolNameLabelKey } from '@/components/stores/chat/toolUi';
 import { useProjectStore } from '@/components/stores/projectStore';
 import { fetchWithAuth } from '@/services/apiClient';
 import SparkLoaderAnimation from '@/components/share/SparkLoaderAnimation.vue';
@@ -440,6 +443,13 @@ const showStreamingPreview = computed(() => {
 });
 
 const snapshot = computed(() => store.currentTask?.snapshot ?? null);
+
+const prewriteToolLabel = computed(() => {
+  const toolName = String(snapshot.value?.phaseToolName || '').trim();
+  if (!toolName) return '';
+  const labelKey = getToolNameLabelKey(toolName);
+  return labelKey ? t(labelKey) : toolName;
+});
 
 /** 章节进度文本 */
 const chapterProgressText = computed(() => {

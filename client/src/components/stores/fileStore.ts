@@ -180,11 +180,11 @@ export const useFileStore = defineStore('file', {
       // 兜底文案：当调用方未传入 i18n 文案时使用（应尽量由调用方传入 i18n 文案）
       const isNovel = sceneStore.workspaceMode === 'novel';
       const defaultTitle = type === 'folder'
-        ? '新建分卷'
-        : (isNovel ? '新建章节' : '新建剧幕');
+        ? (isNovel ? '新建分卷' : '新建章节')
+        : (isNovel ? '新建章节' : '新建场景');
       const defaultMessage = type === 'folder'
-        ? '请输入新的分卷名称：'
-        : (isNovel ? '请输入新的章节名称：' : '请输入新的剧幕名称：');
+        ? (isNovel ? '请输入新的分卷名称：' : '请输入新的章节名称：')
+        : (isNovel ? '请输入新的章节名称：' : '请输入新的场景名称：');
       const name = await new Promise<string | null>((resolve) => {
         bus.emit('prompt', {
           title: defaultTitle,

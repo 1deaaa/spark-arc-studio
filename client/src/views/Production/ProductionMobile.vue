@@ -61,7 +61,7 @@
         </div>
       </header>
 
-      <div v-if="selectedFilePath" class="detail-content">
+      <div v-if="selectedFilePath" class="detail-content" :class="{ 'novel-detail-content': isNovelMode }">
         <DialogueTree v-if="workspaceMode === 'script'" />
         <NovelReader v-else :content="typeof sceneStore.scriptData === 'string' ? sceneStore.scriptData : ''" />
       </div>
@@ -548,7 +548,7 @@ onUnmounted(() => {
   flex: 0 0 auto;
   display: flex;
   flex-direction: column;
-  padding: 2px 2px 8px;
+  padding: calc(var(--sat, env(safe-area-inset-top, 0px)) + 2px) 2px 8px;
   border-bottom: 1px solid var(--spark-border);
 }
 
@@ -607,6 +607,10 @@ onUnmounted(() => {
   gap: 8px;
   padding: 8px 0 calc(var(--sab, 0px) + 2px);
   border-top: 1px solid var(--spark-border);
+}
+
+.detail-content.novel-detail-content {
+  overflow: hidden;
 }
 
 .detail-bottom-actions :deep(.n-button) {

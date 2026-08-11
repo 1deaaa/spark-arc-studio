@@ -67,6 +67,7 @@ from core.request_context import (
     set_current_locale,
     set_current_export_format,
     current_llm_usage_context,
+    current_llm_usage_reporter,
     reset_current_chat_session,
     set_current_chat_session,
 )
@@ -100,6 +101,7 @@ from .chat_task import (
     cancel_task,
     update_task_status,
     cleanup_task,
+    wait_for_task_exit,
     list_recent_tasks,
     build_task_status_payload,
 )
@@ -134,6 +136,7 @@ def _run_chat_background_context(
     is_admin: bool,
     locale: str,
     llm_usage_context: str,
+    llm_usage_reporter: Callable[[Dict[str, Any]], None] | None = None,
     chat_agent_id: str,
     chat_context_key: str,
     callback: Any,
@@ -154,11 +157,13 @@ def _run_chat_background_context(
     prewrite_receipt_token = current_scriptwriter_prewrite_receipt.set({})
     locale_token = set_current_locale(locale)
     usage_token = current_llm_usage_context.set(llm_usage_context)
+    usage_reporter_token = current_llm_usage_reporter.set(llm_usage_reporter)
     chat_tokens = set_current_chat_session(chat_agent_id, chat_context_key)
     try:
         return callback()
     finally:
         reset_current_chat_session(chat_tokens)
+        current_llm_usage_reporter.reset(usage_reporter_token)
         current_llm_usage_context.reset(usage_token)
         reset_current_locale(locale_token)
         current_scriptwriter_prewrite_receipt.reset(prewrite_receipt_token)
@@ -207,7 +212,13 @@ def _mark_chat_task_error(
 ) -> str:
     error_message = _coerce_stream_error_text(error_payload) or '聊天生成失败'
     entry.error_message = error_message
-    update_task_status(task_key, 'error', error_message=error_message, retry_count=retry_count)
+    update_task_status(
+        task_key,
+        'error',
+        expected_task_id=entry.task_id,
+        error_message=error_message,
+        retry_count=retry_count,
+    )
     _checkpoint_chat_task(cm, entry, force=True, stream_status='error')
     return error_message
 
@@ -391,7 +402,12 @@ def _run_chat_stream_with_retry(
                 'max_retries': max_retries,
                 'error_summary': last_error_summary,
             }, accumulate=False)
-            update_task_status(task_key, 'running', retry_count=attempt)
+            update_task_status(
+                task_key,
+                'running',
+                expected_task_id=entry.task_id,
+                retry_count=attempt,
+            )
             if stop_event.wait(retry_delay):
                 terminated_early = True
                 break
@@ -441,6 +457,15 @@ def _make_llm_usage_context(task_id: str) -> str:
     return f"chat_task:{task_id}"
 
 
+def _publish_chat_task_llm_usage(entry: ChatTaskEntry, usage: Dict[str, Any]) -> None:
+    """把单次真实用量累加到任务，并写入可重放 NDJSON 事件。"""
+    snapshot = entry.record_llm_usage(usage)
+    entry.append_control_event({
+        "event": "llm_usage",
+        "llm_usage": snapshot,
+    })
+
+
 def _collect_chat_task_llm_usage(entry: ChatTaskEntry) -> Dict[str, Any] | None:
     """Aggregate real LLM usage rows produced by this chat task."""
     usage_context = _make_llm_usage_context(entry.task_id)
@@ -455,6 +480,7 @@ def _collect_chat_task_llm_usage(entry: ChatTaskEntry) -> Dict[str, Any] | None:
                 func.coalesce(func.sum(UsageLogEntry.total_tokens), 0).label("total_tokens"),
                 func.coalesce(func.sum(UsageLogEntry.cached_prompt_tokens), 0).label("cached_prompt_tokens"),
                 func.coalesce(func.sum(UsageLogEntry.cache_miss_prompt_tokens), 0).label("cache_miss_prompt_tokens"),
+                func.count(UsageLogEntry.cache_miss_prompt_tokens).label("cache_stats_requests"),
                 func.count(UsageLogEntry.id).label("requests"),
                 func.coalesce(func.sum(1 - UsageLogEntry.success), 0).label("errors"),
             ).filter(
@@ -468,6 +494,7 @@ def _collect_chat_task_llm_usage(entry: ChatTaskEntry) -> Dict[str, Any] | None:
                 func.coalesce(func.sum(UsageLogEntry.total_tokens), 0).label("total_tokens"),
                 func.coalesce(func.sum(UsageLogEntry.cached_prompt_tokens), 0).label("cached_prompt_tokens"),
                 func.coalesce(func.sum(UsageLogEntry.cache_miss_prompt_tokens), 0).label("cache_miss_prompt_tokens"),
+                func.count(UsageLogEntry.cache_miss_prompt_tokens).label("cache_stats_requests"),
                 func.count(UsageLogEntry.id).label("requests"),
                 func.coalesce(func.sum(1 - UsageLogEntry.success), 0).label("errors"),
             ).filter(
@@ -483,6 +510,10 @@ def _collect_chat_task_llm_usage(entry: ChatTaskEntry) -> Dict[str, Any] | None:
     by_agent = {}
     for row in agent_rows or []:
         agent_name = str(row.agent_name or "").strip() or "unknown"
+        cache_stats_available = bool(
+            int(row.cached_prompt_tokens or 0) > 0
+            or int(row.cache_stats_requests or 0) > 0
+        )
         by_agent[agent_name] = {
             "prompt_tokens": int(row.prompt_tokens or 0),
             "completion_tokens": int(row.completion_tokens or 0),
@@ -491,13 +522,18 @@ def _collect_chat_task_llm_usage(entry: ChatTaskEntry) -> Dict[str, Any] | None:
             "cache_miss_prompt_tokens": int(row.cache_miss_prompt_tokens or 0),
             "cache_hit_rate": (
                 (int(row.cached_prompt_tokens or 0) / int(row.prompt_tokens or 1))
-                if int(row.prompt_tokens or 0) > 0
+                if cache_stats_available and int(row.prompt_tokens or 0) > 0
                 else None
             ),
+            "cache_stats_available": cache_stats_available,
             "requests": int(row.requests or 0),
             "errors": int(row.errors or 0),
         }
 
+    cache_stats_available = bool(
+        int(result.cached_prompt_tokens or 0) > 0
+        or int(result.cache_stats_requests or 0) > 0
+    )
     return {
         "prompt_tokens": int(result.prompt_tokens or 0),
         "completion_tokens": int(result.completion_tokens or 0),
@@ -506,9 +542,10 @@ def _collect_chat_task_llm_usage(entry: ChatTaskEntry) -> Dict[str, Any] | None:
         "cache_miss_prompt_tokens": int(result.cache_miss_prompt_tokens or 0),
         "cache_hit_rate": (
             (int(result.cached_prompt_tokens or 0) / int(result.prompt_tokens or 1))
-            if int(result.prompt_tokens or 0) > 0
+            if cache_stats_available and int(result.prompt_tokens or 0) > 0
             else None
         ),
+        "cache_stats_available": cache_stats_available,
         "requests": requests,
         "errors": int(result.errors or 0),
         "by_agent": by_agent,
@@ -594,7 +631,7 @@ def _start_chat_stream_task(
     message: str,
     active_context: Any,
     cm: ChatManager,
-    prepare_history: Callable[[], list],
+    prepare_history: Callable[[], tuple[list, int | None]],
 ) -> ChatTaskEntry:
     """注册并启动统一聊天后台任务，入口差异仅由历史准备回调承载。"""
     task_key = _make_task_key(user_id, project_name, agent_id, context_key)
@@ -616,7 +653,8 @@ def _start_chat_stream_task(
         raise HTTPException(status_code=409, detail='该会话已有任务在执行') from exc
 
     try:
-        history = prepare_history()
+        history, user_message_id = prepare_history()
+        entry.user_message_id = user_message_id
         assistant_msg = cm.append_message(
             agent_id=agent_id,
             context_key=context_key,
@@ -634,8 +672,9 @@ def _start_chat_stream_task(
         _checkpoint_chat_task(cm, entry, force=True, stream_status='running')
         agent_inst = create_agent_instance(agent_id, user_id, project_name)
     except Exception:
-        update_task_status(task_key, 'error')
-        cleanup_task(task_key, delay=0)
+        update_task_status(task_key, 'error', expected_task_id=entry.task_id)
+        entry.finished_event.set()
+        cleanup_task(task_key, delay=0, task_id=entry.task_id)
         raise
     request_locale = get_current_locale()
 
@@ -667,7 +706,9 @@ def _start_chat_stream_task(
                     if final_error_message
                     else 'completed'
                 )
-                entry.llm_usage = _collect_chat_task_llm_usage(entry)
+                collected_usage = _collect_chat_task_llm_usage(entry)
+                if collected_usage is not None:
+                    entry.llm_usage = collected_usage
                 if entry.accumulator is not None:
                     entry.accumulator.context_window_stats = _merge_context_window_stats_with_usage(
                         entry.accumulator.context_window_stats,
@@ -690,13 +731,15 @@ def _start_chat_stream_task(
                 update_task_status(
                     task_key,
                     final_status,
+                    expected_task_id=entry.task_id,
                     result_message_id=entry.assistant_message_id,
                     result_content=reply,
                     result_metadata=metadata,
                     error_message=final_error_message,
                     retry_count=retry_count,
                 )
-                cleanup_task(task_key)
+                entry.finished_event.set()
+                cleanup_task(task_key, task_id=entry.task_id)
 
         ctx.run(
             _run_chat_background_context,
@@ -705,6 +748,7 @@ def _start_chat_stream_task(
             is_admin=bool(user.get('is_admin')),
             locale=request_locale,
             llm_usage_context=_make_llm_usage_context(entry.task_id),
+            llm_usage_reporter=lambda usage: _publish_chat_task_llm_usage(entry, usage),
             chat_agent_id=agent_id,
             chat_context_key=context_key,
             callback=_in_context,
@@ -780,31 +824,47 @@ def _checkpoint_chat_task(cm: ChatManager, entry: ChatTaskEntry, *, force: bool 
 async def _observe_chat_task_events(request: Request, entry: ChatTaskEntry, *, after_seq: int = 0, include_snapshot: bool = True):
     """Yield replayable NDJSON events for one observer without consuming the task log."""
     cursor = max(0, int(after_seq or 0))
-    if include_snapshot:
-        snapshot = entry.build_snapshot()
-        yield _serialize_stream_event(snapshot)
-        cursor = max(cursor, int(snapshot.get("seq") or 0))
+    loop = asyncio.get_running_loop()
+    signal = asyncio.Event()
+    entry.subscribe(loop, signal)
+    try:
+        if include_snapshot:
+            snapshot = entry.build_snapshot()
+            yield _serialize_stream_event(snapshot)
+            cursor = max(cursor, int(snapshot.get("seq") or 0))
 
-    heartbeat_interval = 5.0
-    last_heartbeat = time.time()
-    while True:
-        events = entry.get_events_after(cursor)
-        if events:
-            for event in events:
-                cursor = max(cursor, int(event.get("seq") or 0))
-                yield _serialize_stream_event(event)
-            continue
+        heartbeat_interval = 5.0
+        last_heartbeat = time.time()
+        while True:
+            events = entry.get_events_after(cursor)
+            if events:
+                for event in events:
+                    cursor = max(cursor, int(event.get("seq") or 0))
+                    yield _serialize_stream_event(event)
+                continue
 
-        if entry.status != 'running':
-            break
-        if request and await request.is_disconnected():
-            break
+            if entry.status != 'running':
+                break
+            if request and await request.is_disconnected():
+                break
 
-        current = time.time()
-        if current - last_heartbeat >= heartbeat_interval:
-            yield _serialize_stream_event({"event": "heartbeat"})
-            last_heartbeat = current
-        await asyncio.sleep(0.05)
+            signal.clear()
+            # 清除信号后重新检查，避免事件恰好落在查询与 clear 之间造成漏唤醒。
+            if entry.get_events_after(cursor) or entry.status != 'running':
+                continue
+
+            remaining = max(0.05, heartbeat_interval - (time.time() - last_heartbeat))
+            try:
+                await asyncio.wait_for(signal.wait(), timeout=min(remaining, 1.0))
+            except asyncio.TimeoutError:
+                pass
+
+            current = time.time()
+            if current - last_heartbeat >= heartbeat_interval:
+                yield _serialize_stream_event({"event": "heartbeat"})
+                last_heartbeat = current
+    finally:
+        entry.unsubscribe(loop, signal)
 
 
 @chat_router.get('/api/chat/history')
@@ -1305,6 +1365,16 @@ async def edit_chat_message_stream(request: Request, data: ChatMessageEditReques
         cm.delete_after(agent_id=data.agentId, context_key=data.contextKey, message_id=msg_id)
         return StreamingResponse(iter(['']), media_type='text/plain')
 
+    # 编辑是“替换当前任务”，必须先让同一会话的旧后台线程真实退出。
+    task_key = _make_task_key(user_id, project_name, data.agentId, data.contextKey)
+    existing_task = get_task_by_parts(user_id, project_name, data.agentId, data.contextKey)
+    if existing_task and not existing_task.finished_event.is_set():
+        if existing_task.status == 'running':
+            cancel_task(task_key)
+        stopped = await asyncio.to_thread(wait_for_task_exit, task_key, 10.0)
+        if not stopped:
+            raise HTTPException(status_code=409, detail='上一条聊天任务仍在退出，请稍后重试')
+
     effective_active_context = _resolve_effective_active_context(user_id, project_name, data.agentId, data.activeContext)
     _apply_request_runtime_meta(data.activeMeta, user_id=user_id, project_name=project_name)
     imported_files_meta = _extract_imported_files_meta(data.activeMeta)
@@ -1312,13 +1382,13 @@ async def edit_chat_message_stream(request: Request, data: ChatMessageEditReques
         user_id, project_name, effective_active_context, imported_files_meta,
     )
 
-    def prepare_history() -> list:
+    def prepare_history() -> tuple[list, int]:
         cm.update_message(data.messageId, data.content)
         cm.delete_after(agent_id=data.agentId, context_key=data.contextKey, message_id=msg_id)
         history = cm.get_context_history(agent_id=data.agentId, context_key=data.contextKey)
         if history and history[-1].get('role') == 'user':
             history = history[:-1]
-        return history
+        return history, msg_id
 
     entry = _start_chat_stream_task(
         user=user,
@@ -1448,16 +1518,16 @@ async def send_chat_message_stream(request: Request, data: ChatSendRequest, user
 
     cm = ChatManager(user_id=user_id, project_name=project_name)
 
-    def prepare_history() -> list:
+    def prepare_history() -> tuple[list, int]:
         history = cm.get_context_history(agent_id=agent_id, context_key=context_key)
-        cm.append_message(
+        user_message = cm.append_message(
             agent_id=agent_id,
             context_key=context_key,
             role='user',
             content=message,
             metadata=_build_user_message_metadata('direct', data.activeContext, imported_files_meta),
         )
-        return history
+        return history, user_message.id
 
     entry = _start_chat_stream_task(
         user=user,

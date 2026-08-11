@@ -47,7 +47,7 @@ import {
   applyPersistedTokenStats,
   extractContextWindowStats,
   latestHistoryContextWindowStats,
-  latestHistoryLlmUsageStats,
+  restoreHistoryTokenStats,
   type ContextWindowStats,
   type TokenUsageStats,
 } from './chat/tokenStats';
@@ -116,10 +116,12 @@ type ChatSession = {
    * ``setSessionAttachments`` / ``addSessionAttachment`` 等多附件 actions。
    */
   importedContext: ChatImportedContext | null;
-  /** 最近一次聊天任务真实 LLM token 总数（后端 usage log 聚合，null 表示未统计） */
+  /** 当前聊天上下文累计的真实 LLM token 总数（按 task_id 去重） */
   contextTokenCount: number | null;
-  /** 最近一次聊天任务真实输入/输出 token（所有 Agent/请求聚合） */
+  /** 当前聊天上下文的真实输入/输出 token（跨轮汇总所有 Agent/请求） */
   contextTokenUsage: TokenUsageStats | null;
+  /** 每个后端聊天任务的最新累计快照，用于实时覆盖与历史回放去重。 */
+  tokenUsageByTask: Record<string, TokenUsageStats>;
   /** 最近一次实际塞入当前 Agent LLM 窗口的请求 token 统计 */
   contextWindowStats: ContextWindowStats | null;
 };
@@ -193,6 +195,7 @@ function _createSession(id: number, agentId = 'agent_director', kind: ChatSessio
     importedContext: null,
     contextTokenCount: null,
     contextTokenUsage: null,
+    tokenUsageByTask: {},
     contextWindowStats: null,
   };
 }
@@ -424,13 +427,8 @@ export const useChatStore = defineStore('chat', {
     _invalidateSessionStream(sessionId) {
       const session = this.sessions[sessionId];
       if (!session) return;
-      // 状态唯一性收口：切换 agent / contextKey / 关闭窗口时，必须把"前端清零 sending"
-      // 与"后端取消任务"两个动作一并完成，否则后端 _active_chat_tasks 中残留的
-      // running 任务会在用户下一次发送时抛 409（"该会话已有任务在执行"），
-      // 导致按钮可用但发送失败的状态分歧。fire-and-forget 即可，不阻塞 UI。
-      const wasRunning = !!(session.sending || session.backgroundTaskStatus === 'running');
-      const agentIdSnapshot = session.agentId;
-      const contextKeySnapshot = session.contextKey;
+      // 关闭窗口、切换 Agent 或上下文只代表前端停止观察，不能隐式取消后端任务。
+      // 后台任务的生命周期只由显式“停止”操作或后端终态控制。
       session.streamEpoch = (session.streamEpoch || 0) + 1;
       if (session.toolClearTimer) {
         clearTimeout(session.toolClearTimer);
@@ -450,14 +448,6 @@ export const useChatStore = defineStore('chat', {
       session.toolProgressText = '';
       session.toolStateStartedAt = 0;
       _clearRetryState(session);
-
-      if (wasRunning && agentIdSnapshot) {
-        const projectName = session.projectName;
-        if (projectName) {
-          // fire-and-forget：失败也不阻塞，后端最终会通过 60s cleanup 自然清理
-          cancelChatTask(projectName, agentIdSnapshot, contextKeySnapshot || 'global').catch(() => {});
-        }
-      }
     },
 
     /** 注册全局上下文提供器 */
@@ -756,6 +746,7 @@ export const useChatStore = defineStore('chat', {
       session.importedContext = null;
       session.contextTokenCount = null;
       session.contextTokenUsage = null;
+      session.tokenUsageByTask = {};
       session.contextWindowStats = null;
       session.historyRequestSeq += 1;
       return true;
@@ -773,6 +764,7 @@ export const useChatStore = defineStore('chat', {
         session.importedContext = null;
         session.contextTokenCount = null;
         session.contextTokenUsage = null;
+        session.tokenUsageByTask = {};
         session.contextWindowStats = null;
         session.historyRequestSeq += 1;
       }
@@ -806,24 +798,39 @@ export const useChatStore = defineStore('chat', {
       const session = this.sessions[sessionId];
       if (!session) return;
 
-      // 如果有后台任务在跑，通知后端取消
-      if (session.sending || session.backgroundTaskStatus === 'running') {
-        const projectName = this._resolveSessionProjectName(session);
-        if (projectName) {
-          try {
-            await cancelChatTask(projectName, session.agentId, session.contextKey);
-          } catch {
-            // 后端取消失败不阻塞前端流程
-          }
+      if (!session.sending && session.backgroundTaskStatus !== 'running') return;
+      const projectName = this._resolveSessionProjectName(session);
+      if (!projectName) return;
+
+      // “已请求取消”不等于“任务已退出”。保留观察流和发送锁，直到后端发出 task_done。
+      let result;
+      try {
+        result = await cancelChatTask(projectName, session.agentId, session.contextKey);
+      } catch (error) {
+        session.sending = true;
+        session.backgroundTaskStatus = 'running';
+        bus.emit('toast', {
+          type: 'error',
+          message: _getErrorMessage(error, i18n.global.t('components.chatMessageList.cancelFailed')),
+        });
+        return;
+      }
+      if (!result.success) {
+        const state = await this._getChatTaskAuthorityState(session.agentId, session.contextKey, projectName);
+        this._applyChatTaskAuthorityState(session, state);
+        if (state === 'terminal' || state === 'missing') {
+          await this.refreshSessionHistory(sessionId, 80, { silent: true, authoritative: true });
         }
+        return;
       }
 
-      // 中断前端 HTTP 请求读取
-      if (session.abortController) {
-        session.abortRequested = true;
-        session.abortController.abort('user_cancelled');
+      session.sending = true;
+      session.backgroundTaskStatus = 'running';
+      if (!session.abortController || session.abortController.signal.aborted) {
+        void this._reconnectTaskStream(session, session.agentId, session.contextKey).catch(error => {
+          console.warn('恢复取消中的聊天任务观察流失败', error);
+        });
       }
-      session.backgroundTaskStatus = null;
     },
 
     // ==================== 统一的会话操作 ====================
@@ -855,8 +862,9 @@ export const useChatStore = defineStore('chat', {
         const fallbackAssistant = authoritative ? null : preserveLocalTail;
         const localHistory = authoritative ? [] : session.history;
         session.history = reconcileSessionHistory(rawHistory || [], fallbackAssistant, localHistory);
-        session.contextTokenUsage = latestHistoryLlmUsageStats(session.history);
-        session.contextTokenCount = session.contextTokenUsage?.totalTokens ?? null;
+        restoreHistoryTokenStats(session, session.history, {
+          preserveLive: session.sending || session.backgroundTaskStatus === 'running',
+        });
         session.contextWindowStats = latestHistoryContextWindowStats(session.history);
         // 历史中存在附件且 session.attachments 为空时，恢复完整列表（多附件场景下也能正确还原）。
         if ((session.attachments?.length || 0) === 0) {
@@ -888,6 +896,33 @@ export const useChatStore = defineStore('chat', {
       if (!projectName) throw new Error('未选择项目');
       const text = (message || '').trim();
       if (!text) return;
+
+      // 本地状态可能因刷新、窗口切换或旧版客户端取消竞态而落后。
+      // 提交新任务前先向后端确认房间所有权，避免乐观消息写入后才收到 409。
+      // 查询本身也是提交临界区，必须先占本地锁，防止双击并发通过预检。
+      session.sending = true;
+      let authoritativeStatus: AnyRecord;
+      try {
+        authoritativeStatus = await getChatTaskStatus(projectName, session.agentId, session.contextKey) as AnyRecord;
+      } catch (error) {
+        session.sending = false;
+        throw error;
+      }
+      if (authoritativeStatus?.hasTask && authoritativeStatus.status === 'running') {
+        session.backgroundTaskStatus = 'running';
+        session.lastError = '';
+        applyPersistedTokenStats(session, authoritativeStatus);
+        if (!session.abortController || session.abortController.signal.aborted) {
+          void this._reconnectTaskStream(session, session.agentId, session.contextKey).catch(error => {
+            console.warn('恢复已有聊天任务观察流失败', error);
+          });
+        }
+        bus.emit('toast', {
+          type: 'info',
+          message: i18n.global.t('components.chatMessageList.reconnectWaiting'),
+        });
+        return;
+      }
 
       const agentIdAtStart = session.agentId;
       const contextKeyAtStart = session.contextKey;
@@ -955,6 +990,8 @@ export const useChatStore = defineStore('chat', {
           agentId: agentIdAtStart,
           contextKey: contextKeyAtStart,
           streamEpoch,
+          userMessageClientId: userClientId,
+          userMessageContent: text,
         };
         await this._consumeStream(session, assistantMsg, assistantMsgAdded, reader, sessionId, streamState);
 
@@ -1180,6 +1217,28 @@ export const useChatStore = defineStore('chat', {
       } catch {
         return 'unknown';
       }
+    },
+
+    async _cancelAndWaitForChatTaskReplacement(session: ChatSession, agentId: string, contextKey: string, projectName: string) {
+      // 先使旧观察器失效，再通知服务端停止后台线程。
+      if (session.abortController) {
+        session.abortRequested = true;
+        try {
+          session.abortController.abort('message_replaced');
+        } catch {}
+      }
+
+      let status = await getChatTaskStatus(projectName, agentId, contextKey) as AnyRecord;
+      if (!status?.hasTask || status.status !== 'running') return status;
+      await cancelChatTask(projectName, agentId, contextKey);
+
+      const deadline = Date.now() + 10000;
+      while (Date.now() < deadline) {
+        await _delay(100);
+        status = await getChatTaskStatus(projectName, agentId, contextKey) as AnyRecord;
+        if (!status?.hasTask || status.status !== 'running') return status;
+      }
+      throw new Error('上一条聊天任务仍在退出，请稍后重试');
     },
 
     _applyChatTaskAuthorityState(session: ChatSession, state: ChatTaskAuthorityState): boolean {
@@ -1460,6 +1519,7 @@ export const useChatStore = defineStore('chat', {
       session.attachments = [];
       session.contextTokenCount = null;
       session.contextTokenUsage = null;
+      session.tokenUsageByTask = {};
       session.contextWindowStats = null;
       session.lastError = '';
     },
@@ -1597,7 +1657,6 @@ export const useChatStore = defineStore('chat', {
     async editSessionMessage(sessionId, messageId, newContent) {
       const session = this.sessions[sessionId];
       if (!session || messageId == null || String(messageId).trim() === '') return;
-      if (session.sending) return;
 
       const targetIndex = (session.history || []).findIndex(
         (m) => String(m?.id ?? '') === String(messageId) || String(m?.clientId ?? '') === String(messageId)
@@ -1605,19 +1664,22 @@ export const useChatStore = defineStore('chat', {
       if (targetIndex === -1) return;
 
       const targetMessage = session.history[targetIndex];
-      const hasPersistedId = targetMessage?.id != null && String(targetMessage.id).trim() !== '';
+      let hasPersistedId = targetMessage?.id != null && String(targetMessage.id).trim() !== '';
       if (!hasPersistedId) {
-        const normalizedContent = String(newContent || '').trim();
-        if (!normalizedContent) return;
-        const resolvedContext = resolveMessageContextForEdit(this._contextProvider, targetMessage);
-        const nextHistory = session.history.slice(0, targetIndex + 1);
-        nextHistory[targetIndex] = {
-          ...nextHistory[targetIndex],
-          content: normalizedContent,
-          ...(resolvedContext.messageMetadata ? { metadata: resolvedContext.messageMetadata } : {}),
-        };
-        session.history = nextHistory;
-        return this.sendSessionMessage(sessionId, normalizedContent, undefined, true, resolvedContext);
+        const projectName = this._resolveSessionProjectName(session);
+        if (!projectName) return;
+        const status = await getChatTaskStatus(projectName, session.agentId, session.contextKey) as AnyRecord;
+        const persistedId = status?.userMessageId ?? status?.user_message_id;
+        if (persistedId != null && String(persistedId).trim() !== '') {
+          targetMessage.id = persistedId;
+          hasPersistedId = true;
+        } else {
+          await this.refreshSessionHistory(sessionId, 80, { silent: true, authoritative: true });
+          const refreshed = (session.history || []).filter(item => item?.role === 'user');
+          const candidate = refreshed.slice().reverse().find(item => String(item?.content || '').trim() === String(targetMessage.content || '').trim());
+          if (!candidate?.id) throw new Error('消息尚未完成保存，请稍后再编辑');
+          return this.editSessionMessage(sessionId, candidate.id, newContent);
+        }
       }
 
       const projectName = this._resolveSessionProjectName(session);
@@ -1627,6 +1689,18 @@ export const useChatStore = defineStore('chat', {
       const contextKeyAtStart = session.contextKey;
       const streamEpoch = (session.streamEpoch || 0) + 1;
       session.streamEpoch = streamEpoch;
+
+      try {
+        await this._cancelAndWaitForChatTaskReplacement(session, agentIdAtStart, contextKeyAtStart, projectName);
+      } catch (error) {
+        if (session.streamEpoch === streamEpoch) {
+          session.sending = false;
+          session.backgroundTaskStatus = null;
+          session.abortController = null;
+          session.abortRequested = false;
+        }
+        throw error;
+      }
 
       const abortController = new AbortController();
       this._setSessionAbortController(sessionId, abortController);
@@ -1678,6 +1752,8 @@ export const useChatStore = defineStore('chat', {
           agentId: agentIdAtStart,
           contextKey: contextKeyAtStart,
           streamEpoch,
+          userMessageClientId: targetMessage.clientId,
+          userMessageContent: String(newContent || '').trim(),
         };
         await this._consumeStream(session, assistantMsg, assistantMsgAdded, reader, sessionId, streamState);
 
@@ -2092,6 +2168,26 @@ export const useChatStore = defineStore('chat', {
 
       const applyTaskSnapshot = (evt: AnyRecord) => {
         if (!isStreamCurrent()) return;
+        const userMessageId = evt.user_message_id ?? evt.userMessageId;
+        if (userMessageId != null && String(userMessageId).trim() !== '') {
+          const targetClientId = streamState.userMessageClientId;
+          let userIndex = targetClientId
+            ? (session.history || []).findIndex(item => String(item?.clientId || '') === String(targetClientId))
+            : -1;
+          if (userIndex < 0 && streamState.userMessageContent) {
+            userIndex = (session.history || []).map((item, index) => ({ item, index })).reverse().find(({ item }) => (
+              item?.role === 'user'
+              && !item?.id
+              && String(item?.content || '').trim() === String(streamState.userMessageContent).trim()
+            ))?.index ?? -1;
+          }
+          if (userIndex >= 0) {
+            session.history[userIndex] = {
+              ...session.history[userIndex],
+              id: userMessageId,
+            };
+          }
+        }
         const assistantId = evt.assistant_message_id ?? evt.assistantMessageId ?? evt.result_message_id ?? evt.resultMessageId;
         if (assistantId != null && String(assistantId).trim() !== '') {
           assistantMsg.id = assistantId;
@@ -2159,6 +2255,16 @@ export const useChatStore = defineStore('chat', {
           assistantMsg.metadata = {
             ...(assistantMsg.metadata || {}),
             context_window_stats: metadata,
+          };
+          syncAssistantSnapshot();
+          return;
+        }
+        if (eventType === 'llm_usage') {
+          applyPersistedTokenStats(session, evt);
+          ensureAssistantAdded();
+          assistantMsg.metadata = {
+            ...(assistantMsg.metadata || {}),
+            llm_usage: evt.llm_usage || evt.llmUsage || {},
           };
           syncAssistantSnapshot();
           return;
@@ -2518,7 +2624,7 @@ export const useChatStore = defineStore('chat', {
         } catch {}
       }
 
-      // Token 显示由后端 task_done/task_snapshot 携带的真实 LLM usage 驱动。
+      // Token 显示由后端 llm_usage 实时事件及 task_done/task_snapshot 终态快照共同驱动。
     },
   },
 });

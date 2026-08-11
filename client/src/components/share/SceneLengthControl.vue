@@ -1,17 +1,17 @@
 <template>
-  <section class="scene-length-control" :aria-label="t('components.storyTagsPanel.sceneLength.title')">
+  <section class="scene-length-control" :aria-label="titleText">
     <div class="scene-length-header">
       <div class="scene-length-heading">
-        <span class="scene-length-title">{{ t('components.storyTagsPanel.sceneLength.title') }}</span>
+        <span class="scene-length-title">{{ titleText }}</span>
         <n-tooltip trigger="hover">
           <template #trigger>
             <n-icon
               class="scene-length-info"
               :component="Info"
-              :aria-label="t('components.storyTagsPanel.sceneLength.tooltip')"
+              :aria-label="tooltipText"
             />
           </template>
-          {{ t('components.storyTagsPanel.sceneLength.tooltip') }}
+          {{ tooltipText }}
         </n-tooltip>
       </div>
     </div>
@@ -74,6 +74,10 @@ const emit = defineEmits<{
 
 const { t } = useI18n();
 const targetChars = computed(() => props.targetChars ?? null);
+const titleText = computed(() => props.workspaceMode === 'novel'
+  ? t('components.storyTagsPanel.sceneLength.titleNovel')
+  : t('components.storyTagsPanel.sceneLength.titleScript'));
+const tooltipText = computed(() => t('components.storyTagsPanel.sceneLength.tooltip'));
 
 const options = computed(() => [
   { value: 'concise' as const, label: t('components.storyTagsPanel.sceneLength.concise') },
