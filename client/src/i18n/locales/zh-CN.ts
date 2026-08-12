@@ -970,6 +970,7 @@ const zhCN = {
       fileImportPersistFailed: '聊天附件保存失败，请稍后重试',
       fileImportEmpty: '未从文件中提取到可用文本',
       fileImportFailed: '文件导入失败',
+      attachmentContextWindowExceeded: '附件内容约 {total} tokens，超过当前模型 {limit} tokens 的上下文窗口，请缩减附件后重试。',
       importCancelled: '已取消文件导入',
       chunkTokensSettingTitle: '滑动窗口大小',
       chunkTokensSettingHint: '每次注入的最大 token 数（{min}–{max}）',

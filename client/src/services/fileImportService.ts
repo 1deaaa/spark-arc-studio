@@ -35,7 +35,23 @@ export type ParsedImportResponse = {
   metadata: Record<string, unknown>;
   chunks: ParsedImportChunk[];
   chunk_info: Record<string, unknown>;
+  is_partial: boolean;
+  max_context_tokens: number;
 };
+
+export class FileImportError extends Error {
+  code: string;
+  totalTokens: number;
+  maxContextTokens: number;
+
+  constructor(payload: Record<string, unknown> | null, status: number) {
+    super(getFriendlyErrorMessage(String(payload?.error || '文件导入失败'), status));
+    this.name = 'FileImportError';
+    this.code = String(payload?.code || '');
+    this.totalTokens = Number(payload?.total_tokens || 0);
+    this.maxContextTokens = Number(payload?.max_context_tokens || 0);
+  }
+}
 
 export type ImportCapabilitiesResponse = {
   success: boolean;
@@ -92,7 +108,7 @@ export async function parseImportFile(
   });
   const result = await response.json().catch(() => null);
   if (!response.ok || !result?.success) {
-    throw new Error(getFriendlyErrorMessage(result?.error || '解析导入文件失败', response.status));
+    throw new FileImportError(result, response.status);
   }
   return result as ParsedImportResponse;
 }

@@ -9,6 +9,7 @@ from langchain_core.messages import HumanMessage, SystemMessage
 from agents.context_budget import (
     DEFAULT_SPECIALIZED_SECTION_BUDGETS,
     _budget_limits,
+    _context_budget_policy,
     prepare_specialized_prompt_messages_with_budget,
 )
 
@@ -83,7 +84,7 @@ def test_specialized_prompt_budget_does_not_trim_before_hard_limit(monkeypatch) 
 
     events = []
     system_prompt = "S" * 20
-    user_prompt = "U" * 220_000
+    user_prompt = "U" * 219_900
 
     result = prepare_specialized_prompt_messages_with_budget(
         agent_id="agent_scriptwriter",
@@ -99,20 +100,50 @@ def test_specialized_prompt_budget_does_not_trim_before_hard_limit(monkeypatch) 
     assert events[-1]["usage_ratio"] > 0.85
 
 
-def test_context_budget_uses_continuous_reserve_ratio() -> None:
+def test_context_budget_reserves_output_and_continuous_safety_buffer() -> None:
     cases = (
-        (256_000, 20_000, 236_000),
-        (384_000, 24_000, 360_000),
-        (512_000, 32_000, 480_000),
-        (1_000_000, 62_500, 937_500),
+        (256_000, 16_000, 20_000, 220_000),
+        (384_000, 24_000, 20_000, 340_000),
+        (512_000, 32_000, 20_000, 460_000),
+        (1_000_000, 62_500, 20_000, 917_500),
     )
 
-    for max_context, reserved_context, expected_budget in cases:
+    for max_context, safety_margin, reserved_output, expected_budget in cases:
+        policy = _context_budget_policy(max_context, 64_000)
         hard_budget, trigger_budget = _budget_limits(max_context, 64_000)
 
-        assert max_context - expected_budget == reserved_context
+        assert policy.safety_margin == safety_margin
+        assert policy.reserved_output == reserved_output
+        assert policy.reserved_context == safety_margin + reserved_output
         assert hard_budget == expected_budget
         assert trigger_budget == expected_budget
+
+
+def test_context_budget_does_not_reserve_more_than_model_output_limit() -> None:
+    policy = _context_budget_policy(256_000, 8_000)
+
+    assert policy.reserved_output == 8_000
+    assert policy.safety_margin == 16_000
+    assert policy.hard_budget == 232_000
+
+
+def test_context_window_stats_reports_reserve_components(monkeypatch) -> None:
+    monkeypatch.setattr("agents.context_budget.estimate_tokens", lambda text, model=None: len(text))
+    events = []
+
+    prepare_specialized_prompt_messages_with_budget(
+        agent_id="agent_scriptwriter",
+        system_prompt="系统",
+        user_prompt="正文",
+        llm_client=FakeNearLimitLLM(),
+        emit_event=events.append,
+    )
+
+    stats = events[-1]
+    assert stats["hard_budget"] == 220_000
+    assert stats["reserved_context_tokens"] == 36_000
+    assert stats["reserved_output_tokens"] == 20_000
+    assert stats["safety_margin_tokens"] == 16_000
 
 
 def test_production_single_node_stream_uses_specialized_budget_guard() -> None:

@@ -1527,7 +1527,7 @@ class SparkBaseAgent:
                 messages.append(self._build_tool_history_message(response, tool_specs))
                 fresh_call_ids = {cid for cid, _, _ in tool_results}
                 messages.extend(build_tool_result_messages(tool_results))
-                # 附件分片滑动窗口：只保留本轮新 read_attachment_chunk 的完整正文，其余折叠
+                # 长读取滑动窗口：保留当前用户请求内的全部原文，只折叠旧用户轮次结果
                 collapse_attachment_chunk_history(messages, fresh_call_ids=fresh_call_ids)
                 messages = rebudget_existing_messages(
                     user_id=self.user_id,

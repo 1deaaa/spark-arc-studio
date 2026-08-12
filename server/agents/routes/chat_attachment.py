@@ -53,13 +53,16 @@ def _normalize_attachment_meta(attachment_meta: Any) -> Dict[str, Any] | None:
             message = str(item.get('message') or '').strip()
             if code or message:
                 normalized_warnings.append({'code': code, 'message': message})
+    total_tokens = int(attachment_meta.get('totalTokens') or 0)
+    from core.project_settings import CHAT_ATTACHMENT_DIRECT_INJECTION_MAX_TOKENS
+
     payload: Dict[str, Any] = {
         'attachmentId': attachment_id,
         'filename': filename,
         'sourceFormat': str(attachment_meta.get('sourceFormat') or '').strip(),
-        'totalTokens': int(attachment_meta.get('totalTokens') or 0),
+        'totalTokens': total_tokens,
         'chunkTokens': int(attachment_meta.get('chunkTokens') or 0),
-        'isPartial': bool(attachment_meta.get('isPartial')),
+        'isPartial': bool(attachment_meta.get('isPartial')) or total_tokens > CHAT_ATTACHMENT_DIRECT_INJECTION_MAX_TOKENS,
         'warnings': normalized_warnings,
         'uploadedAt': int(attachment_meta.get('uploadedAt') or 0),
     }

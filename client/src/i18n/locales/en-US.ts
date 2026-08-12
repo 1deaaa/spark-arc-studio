@@ -972,6 +972,7 @@ const enUS = {
       fileImportPersistFailed: 'Failed to save the chat attachment. Please try again shortly',
       fileImportEmpty: 'No usable text was extracted from the file',
       fileImportFailed: 'Failed to import file',
+      attachmentContextWindowExceeded: 'This attachment contains about {total} tokens, exceeding the current model context window of {limit} tokens. Reduce the attachment and try again.',
       importCancelled: 'File import cancelled',
       chunkTokensSettingTitle: 'Sliding window size',
       chunkTokensSettingHint: 'Max tokens injected per slide ({min}–{max})',
