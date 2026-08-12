@@ -1998,6 +1998,26 @@ export const useChatStore = defineStore('chat', {
         return { binding, taskKey, removed: true };
       };
 
+      const disposeAllPanelToolTasks = () => {
+        for (const entry of panelToolTasks.values()) {
+          entry.task?.dispose?.();
+        }
+        panelToolTasks.clear();
+        panelToolEventKeyMap.clear();
+        toolLoadingStats = null;
+        currentToolName = '';
+        currentToolTarget = '';
+        currentToolSegId = '';
+        if (session.toolClearTimer) {
+          clearTimeout(session.toolClearTimer);
+          session.toolClearTimer = null;
+        }
+        session.toolCalling = false;
+        session.toolName = '';
+        session.toolProgressText = '';
+        session.toolStateStartedAt = 0;
+      };
+
       let currentTextSourceAgent = '';
 
       const appendAssistantDelta = (textDelta: unknown, sourceAgent = '') => {
@@ -2273,6 +2293,8 @@ export const useChatStore = defineStore('chat', {
           streamState.receivedTaskDone = true;
           session.backgroundTaskStatus = null;
           session.sending = false;
+          // 任务终态是工具遮罩的权威收口点，不依赖底层连接随后是否立即关闭。
+          disposeAllPanelToolTasks();
           const metadataPatch = extractTaskDoneMetadataPatch(evt);
           applyPersistedTokenStats(session, evt);
           if (metadataPatch.changed) {
@@ -2492,6 +2514,20 @@ export const useChatStore = defineStore('chat', {
           }
           return;
         }
+        if (eventType === 'tool_exec_failed') {
+          if (isNested) {
+            finishPanelToolTask(toolName, 'failed', evt);
+            toolLoadingStats = null;
+            scheduleSessionToolClear();
+          } else {
+            onToolCallEnd(toolName || currentToolName, 'failed', {
+              ...(evt.tool_call_key || evt.toolCallKey ? { tool_call_key: evt.tool_call_key || evt.toolCallKey } : {}),
+              ...(evt.message || evt.text ? { tool_result: evt.message || evt.text } : {}),
+              ...(evt.tool_provider || evt.toolProvider ? { tool_provider: evt.tool_provider || evt.toolProvider } : {}),
+            });
+          }
+          return;
+        }
         if (eventType === 'error') {
           // 状态唯一性原则：
           //   - sending / backgroundTaskStatus 的清零统一交给 sendSessionMessage / _reconnectTaskStream
@@ -2501,6 +2537,7 @@ export const useChatStore = defineStore('chat', {
           //     —— 后端中间错误已统一被 _run_chat_stream_with_retry 静默拦截，前端能拿到的
           //     error 事件已经是"全部重试均失败"的最终结论。
           streamState.receivedTaskDone = true;
+          disposeAllPanelToolTasks();
           const errMsg = _localizedStreamError(evt);
           session.lastError = errMsg;
           _clearRetryState(session);
@@ -2609,15 +2646,7 @@ export const useChatStore = defineStore('chat', {
         }
         if (orphanFixed) syncAssistantSnapshot();
       }
-      for (const entry of panelToolTasks.values()) {
-        entry.task?.dispose?.();
-      }
-      panelToolTasks.clear();
-      panelToolEventKeyMap.clear();
-      const toolStatsTask = toolLoadingStats as ToolLoadingStatsTask | null;
-      if (toolStatsTask?.dispose) {
-        toolStatsTask.dispose();
-      }
+      disposeAllPanelToolTasks();
       if (wasAborted()) {
         try {
           await reader.cancel();
