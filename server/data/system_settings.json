@@ -1,5 +1,5 @@
 {
   "disable_public_share": false,
   "force_public_share_review": false,
-  "local_embedding_enabled": true
+  "local_embedding_enabled": false
 }

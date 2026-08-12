@@ -53,6 +53,21 @@ class _CloudMatchbox:
     def __init__(self) -> None:
         self.calls: list[tuple[str, dict]] = []
 
+    def get_user_embedding_detail(self, user_id: str):
+        return {
+            "current": {
+                "platform_id": 1,
+                "platform_name": "Siliconflow",
+                "base_url": "https://api.siliconflow.cn/v1",
+                "model_id": 2,
+                "model_name": "Qwen/Qwen3-Embedding-0.6B",
+                "display_name": "Qwen Embedding",
+                "api_key_set": True,
+            },
+            "has_selection": False,
+            "source": "default",
+        }
+
     def get_user_embedding(self, user_id: str, **kwargs):
         self.calls.append((user_id, kwargs))
         return _FakeCloudEmbeddings()
@@ -121,6 +136,19 @@ def test_disabled_local_runtime_tests_matchbox_default_embedding(monkeypatch) ->
     assert cloud_matchbox.calls == [
         ("u-cloud", {"extra_body": embedding_extra_body()}),
     ]
+
+
+def test_embedding_status_uses_resolved_default_when_selection_is_empty(monkeypatch) -> None:
+    cloud_matchbox = _CloudMatchbox()
+
+    monkeypatch.setattr(routes, "get_local_embedding_enabled", lambda: False)
+    monkeypatch.setattr("llm.agen_matchbox.matchbox", lambda: cloud_matchbox)
+
+    ready, model_name = asyncio.run(routes._resolve_embedding_runtime_status("u-cloud"))
+
+    assert ready is True
+    assert model_name == "Qwen/Qwen3-Embedding-0.6B"
+    assert cloud_matchbox.calls == []
 
 
 def test_vector_service_does_not_use_cloud_when_local_runtime_is_selected(

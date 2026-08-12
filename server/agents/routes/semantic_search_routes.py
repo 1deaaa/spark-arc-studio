@@ -7,7 +7,6 @@ from fastapi import APIRouter, Depends, HTTPException
 from pydantic import BaseModel, ConfigDict, Field
 from starlette.concurrency import run_in_threadpool
 from typing import Annotated
-import threading
 
 from core.auth import get_current_user
 from core.auth import require_admin
@@ -135,8 +134,13 @@ async def _resolve_embedding_runtime_status(user_id: str) -> tuple[bool, str]:
 
     try:
         from llm.agen_matchbox import matchbox
-        emb = matchbox().get_user_embedding(user_id)
-        return True, emb.model
+        manager = matchbox()
+        detail = manager.get_user_embedding_detail(user_id)
+        current = detail.get("current") or {}
+        if current:
+            model_name = current.get("model_name") or current.get("display_name") or ""
+            return bool(current.get("api_key_set", False)), model_name
+        return False, ""
     except Exception:
         return False, ""
 
@@ -193,41 +197,11 @@ async def _test_active_embedding_runtime(user_id: str) -> dict:
     from llm.agen_matchbox import matchbox
 
     mb = matchbox()
+    detail = mb.get_user_embedding_detail(user_id)
+    current = detail.get("current") or {}
     emb = mb.get_user_embedding(user_id, extra_body=embedding_extra_body())
     model_name = emb.model
-    platform_name = ""
-
-    with mb.Session() as session:
-        from llm.agen_matchbox.models import UserEmbeddingSelection, LLMPlatform
-
-        selection = session.query(UserEmbeddingSelection).filter_by(user_id=user_id).first()
-        if selection and selection.platform_id:
-            plat = session.query(LLMPlatform).filter_by(id=selection.platform_id).first()
-            if not plat:
-                raise ValueError("嵌入模型所在平台不存在")
-            platform_name = plat.name
-            api_key = mb._get_effective_api_key(session, user_id, plat)
-            if not api_key:
-                raise ValueError("嵌入模型所在平台未配置 API Key")
-
-            from llm.agen_matchbox.utils import test_platform_embedding
-
-            result = await run_in_threadpool(
-                lambda: test_platform_embedding(
-                    plat.base_url,
-                    api_key,
-                    model_name,
-                    extra_body=embedding_extra_body(),
-                )
-            )
-            dims = _validate_embedding_dimensions(result.get("dims", 0), runtime_label="")
-            return {
-                "success": True,
-                "dims": dims,
-                "model_name": model_name,
-                "platform_name": platform_name,
-                "embedding_contract": embedding_contract_metadata(),
-            }
+    platform_name = current.get("platform_name", "")
 
     test_vector = await run_in_threadpool(emb.embed_query, "测试")
     dims = _validate_embedding_dimensions(
@@ -521,26 +495,19 @@ async def set_local_embedding(
     try:
         from agents.vector_index.local_embedding import (
             get_local_embedding_status,
-            mark_local_embedding_starting,
-            start_local_embedding_service,
+            start_local_embedding_service_background,
             stop_local_embedding_service,
         )
 
         if data.enabled:
             set_local_embedding_enabled(True)
-            mark_local_embedding_starting()
-            thread = threading.Thread(
-                target=start_local_embedding_service,
-                name="local-embedding-startup",
-                daemon=True,
-            )
-            thread.start()
+            start_local_embedding_service_background()
             status = await run_in_threadpool(get_local_embedding_status)
             enabled = True
         else:
+            set_local_embedding_enabled(False)
             status = await run_in_threadpool(stop_local_embedding_service)
             enabled = False
-            set_local_embedding_enabled(False)
         return {
             "success": True,
             "status": status,

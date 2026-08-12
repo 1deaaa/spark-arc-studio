@@ -211,8 +211,12 @@ export type EmbeddingSelectionCurrent = {
   api_key_set: boolean;
 };
 
+export type EmbeddingSelectionSource = 'selection' | 'default';
+
 export type EmbeddingSelectionResponse = {
   current: EmbeddingSelectionCurrent | null;
+  has_selection?: boolean;
+  source?: EmbeddingSelectionSource;
 };
 
 export type EmbeddingStatusResponse = {
@@ -224,6 +228,7 @@ export type EmbeddingStatusResponse = {
     model_id: ApiId;
     display_name: string;
   } | null;
+  source?: EmbeddingSelectionSource;
 };
 
 export type ApiMutationResult = {

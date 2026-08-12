@@ -25,6 +25,75 @@ from .config import DEFAULT_USAGE_KEY, BUILTIN_USAGE_SLOTS
 class UserServicesMixin:
     """用户服务配置功能"""
 
+    def _find_first_available_embedding(self, session, user_id: str):
+        """按系统排序找到第一个已配置有效密钥的 Embedding。"""
+        platforms = (
+            session.query(LLMPlatform)
+            .order_by(LLMPlatform.sort_order.asc(), LLMPlatform.id.asc())
+            .all()
+        )
+        for platform in platforms:
+            if not platform.is_sys and str(platform.user_id) != str(user_id):
+                continue
+            if self._is_platform_disabled(session, user_id, platform):
+                continue
+            models = sorted(
+                getattr(platform, "models", None) or [],
+                key=lambda item: (
+                    getattr(item, "sort_order", 0) or 0,
+                    getattr(item, "id", 0) or 0,
+                ),
+            )
+            for model in models:
+                if not is_embedding_model(model) or self._is_model_disabled(model):
+                    continue
+                api_key = self._get_effective_api_key(session, user_id, platform)
+                if api_key:
+                    return platform, model, api_key
+        return None
+
+    def _resolve_user_embedding_selection(self, session, user_id: str):
+        """解析用户显式选择；没有选择或选择已失效时使用默认 Embedding。"""
+        selection = session.query(UserEmbeddingSelection).filter_by(user_id=user_id).first()
+        if selection and selection.platform_id and selection.model_id:
+            platform = session.query(LLMPlatform).filter_by(id=selection.platform_id).first()
+            model = session.query(LLModels).filter_by(id=selection.model_id).first()
+            if (
+                platform
+                and model
+                and model.platform_id == platform.id
+                and is_embedding_model(model)
+                and not self._is_model_disabled(model)
+                and (platform.is_sys or str(platform.user_id) == str(user_id))
+                and not self._is_platform_disabled(session, user_id, platform)
+            ):
+                return {
+                    "platform": platform,
+                    "model": model,
+                    "api_key": self._get_effective_api_key(session, user_id, platform),
+                    "has_selection": True,
+                    "source": "selection",
+                }
+
+        resolved = self._find_first_available_embedding(session, user_id)
+        if not resolved:
+            return {
+                "platform": None,
+                "model": None,
+                "api_key": None,
+                "has_selection": bool(selection),
+                "source": "default",
+            }
+
+        platform, model, api_key = resolved
+        return {
+            "platform": platform,
+            "model": model,
+            "api_key": api_key,
+            "has_selection": False,
+            "source": "default",
+        }
+
     # ==================== 用途槽位管理 ====================
 
     def _build_usage_payload(self, resolved: Dict[str, Any], slot: UserModelUsage) -> Dict[str, Any]:
@@ -358,17 +427,19 @@ class UserServicesMixin:
     def get_user_embedding_detail(self, user_id: str) -> Dict[str, Any]:
         user_id = str(user_id)
         with self.Session() as session:
-            selection = session.query(UserEmbeddingSelection).filter_by(user_id=user_id).first()
-            current = None
-
-            if selection and selection.platform_id and selection.model_id:
-                plat = session.query(LLMPlatform).filter_by(id=selection.platform_id).first()
-                model = session.query(LLModels).filter_by(id=selection.model_id).first()
-                if plat and model and is_embedding_model(model) and not self._is_platform_disabled(session, user_id, plat):
-                    current = self._build_embedding_payload(session, user_id, plat, model)
+            resolved = self._resolve_user_embedding_selection(session, user_id)
+            platform = resolved["platform"]
+            model = resolved["model"]
+            current = (
+                self._build_embedding_payload(session, user_id, platform, model)
+                if platform and model
+                else None
+            )
 
             return {
                 "current": current,
+                "has_selection": bool(resolved["has_selection"]),
+                "source": resolved["source"],
             }
 
     # ==================== Agent 绑定管理 ====================
