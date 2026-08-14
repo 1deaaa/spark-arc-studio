@@ -88,7 +88,7 @@
         <div v-if="showSettings" class="drawer-overlay" @click="showSettings = false"></div>
       </transition>
 
-      <main class="reading-main" :style="panelStyle" @pointerdown="onSwipeStart" @pointerup="onSwipeEnd" @pointercancel="onSwipeCancel" @click="onReadingMainClick">
+      <main class="reading-main" :style="panelStyle" @pointerdown="onSwipeStart" @pointermove="onSwipeMove" @pointerup="onSwipeEnd" @pointercancel="onSwipeCancel" @click="onReadingMainClick">
         <!-- 非阻塞章节通知条 -->
         <transition name="notify-slide">
           <div v-if="chapterNotifyVisible" class="chapter-notify-bar" @click.stop="chapterNotifyVisible = false">
@@ -375,48 +375,67 @@ function onReaderPointerMove(e: MouseEvent) {
 const SWIPE_THRESHOLD = 40;
 let swipeStartX = 0;
 let swipeStartY = 0;
-let swipeActive = false;
-let swipeTarget: EventTarget | null = null;
+let swipePointerId: number | null = null;
+let swipeTriggered = false;
 let suppressClick = false;
-let suppressClickTimer: ReturnType<typeof setTimeout> | null = null;
+let restoreThemeColor: (() => void) | null = null;
 
 function onSwipeStart(e: PointerEvent) {
-  if (readingMode.value !== 'page') return;
+  if (readingMode.value !== 'page' || (e.pointerType === 'mouse' && e.button !== 0)) return;
   swipeStartX = e.clientX;
   swipeStartY = e.clientY;
-  swipeActive = true;
-  swipeTarget = e.target;
-  // 捕获指针，确保移出元素后仍能收到 pointerup
-  (e.target as HTMLElement).setPointerCapture?.(e.pointerId);
+  swipePointerId = e.pointerId;
+  swipeTriggered = false;
+  (e.currentTarget as HTMLElement).setPointerCapture?.(e.pointerId);
+}
+
+function suppressSyntheticClick() {
+  suppressClick = true;
+}
+
+function tryTriggerSwipe(e: PointerEvent) {
+  if (swipePointerId !== e.pointerId || swipeTriggered || readingMode.value !== 'page') return;
+  const dx = e.clientX - swipeStartX;
+  const dy = e.clientY - swipeStartY;
+  if (Math.abs(dx) < SWIPE_THRESHOLD || Math.abs(dx) <= Math.abs(dy)) return;
+
+  swipeTriggered = true;
+  suppressSyntheticClick();
+  if (dx < 0) goPrevPage();
+  else goNextPage();
+}
+
+function onSwipeMove(e: PointerEvent) {
+  tryTriggerSwipe(e);
 }
 
 function onSwipeEnd(e: PointerEvent) {
-  if (!swipeActive || readingMode.value !== 'page') return;
-  swipeActive = false;
-  // 释放捕获
-  (swipeTarget as HTMLElement)?.releasePointerCapture?.(e.pointerId);
-  swipeTarget = null;
-  const dx = e.clientX - swipeStartX;
-  const dy = e.clientY - swipeStartY;
-  if (Math.hypot(dx, dy) > 8) {
-    suppressClick = true;
-    if (suppressClickTimer) clearTimeout(suppressClickTimer);
-    suppressClickTimer = setTimeout(() => {
-      suppressClick = false;
-      suppressClickTimer = null;
-    }, 0);
-  }
-  // 水平位移必须大于垂直位移且超过阈值
-  if (Math.abs(dx) < SWIPE_THRESHOLD || Math.abs(dy) > Math.abs(dx)) return;
-  if (dx < 0) goNextPage();
-  else goPrevPage();
+  if (swipePointerId !== e.pointerId) return;
+  tryTriggerSwipe(e);
+  (e.currentTarget as HTMLElement).releasePointerCapture?.(e.pointerId);
+  swipePointerId = null;
+  swipeTriggered = false;
+  setTimeout(() => {
+    suppressClick = false;
+  }, 0);
 }
 
 function onSwipeCancel(e: PointerEvent) {
-  if (!swipeActive) return;
-  swipeActive = false;
-  (swipeTarget as HTMLElement)?.releasePointerCapture?.(e.pointerId);
-  swipeTarget = null;
+  if (swipePointerId !== e.pointerId) return;
+  (e.currentTarget as HTMLElement).releasePointerCapture?.(e.pointerId);
+  swipePointerId = null;
+  swipeTriggered = false;
+  suppressClick = false;
+}
+
+function applyReaderThemeColor() {
+  const themeMeta = document.querySelector<HTMLMetaElement>('meta[name="theme-color"]');
+  if (!themeMeta) return;
+  const previousColor = themeMeta.content;
+  themeMeta.content = '#0a0e1a';
+  restoreThemeColor = () => {
+    themeMeta.content = previousColor;
+  };
 }
 
 function onReadingMainClick(event: MouseEvent) {
@@ -923,6 +942,7 @@ watch(() => [route.params.shareId, route.path], (nextVal, prevVal) => {
 });
 
 onMounted(() => {
+  applyReaderThemeColor();
   loadNovel();
   window.addEventListener('keydown', onKeydown);
 });
@@ -931,8 +951,8 @@ onBeforeUnmount(() => {
   window.removeEventListener('keydown', onKeydown);
   if (topbarTimer) clearTimeout(topbarTimer);
   if (showTimer) clearTimeout(showTimer);
-  if (suppressClickTimer) clearTimeout(suppressClickTimer);
   if (chapterNotifyTimer) clearTimeout(chapterNotifyTimer);
+  restoreThemeColor?.();
 });
 </script>
 
@@ -1045,9 +1065,7 @@ onBeforeUnmount(() => {
 
 /* ====== 沉浸式阅读屏幕 ====== */
 .reading-screen {
-  --reader-topbar-gap: 12px;
-  --reader-topbar-height: calc(55px + var(--sat, 0px));
-  --reader-page-top-padding: calc(var(--reader-topbar-height) + var(--reader-topbar-gap));
+  --reader-page-top-padding: 64px;
   display: flex;
   flex-direction: column;
   width: 100%;
@@ -1332,6 +1350,7 @@ onBeforeUnmount(() => {
   padding: 0;
   position: relative;
   cursor: grab;
+  touch-action: pan-y;
 }
 
 .reading-main:active {
@@ -1482,29 +1501,23 @@ onBeforeUnmount(() => {
 }
 
 /* ====== 响应式 ====== */
-:global(html.viewport-tablet-down .novel-player .reading-screen) {
-  --reader-topbar-height: calc(51px + var(--sat, 0px));
-}
-
 :global(html.viewport-tablet-down .novel-player .page-inner) {
   max-width: none;
-  padding: var(--reader-page-top-padding) 32px 28px;
+  padding: calc(52px + var(--sat, 0px)) 32px 28px;
 }
 
 :global(html.viewport-tablet-down .novel-player .topbar-inner) {
   padding: 8px 16px;
+  padding-top: calc(8px + var(--sat, 0px));
 }
 
 :global(html.viewport-mobile .novel-player .page-inner) {
-  padding: var(--reader-page-top-padding) 16px calc(24px + var(--sab, env(safe-area-inset-bottom, 0px)));
-}
-
-:global(html.viewport-mobile .novel-player .reading-screen) {
-  --reader-topbar-height: calc(45px + var(--sat, 0px));
+  padding: calc(52px + var(--sat, 0px)) 16px calc(24px + var(--sab, env(safe-area-inset-bottom, 0px)));
 }
 
 :global(html.viewport-mobile .novel-player .topbar-inner) {
   padding: 8px 12px;
+  padding-top: calc(8px + var(--sat, 0px));
 }
 
 :global(html.viewport-mobile .novel-player .topbar-title) {

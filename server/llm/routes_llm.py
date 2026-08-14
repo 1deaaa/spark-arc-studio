@@ -387,9 +387,11 @@ async def get_embedding_status(user: dict = Depends(get_current_user)):
 
         user_id = str(user['user_id'])
 
-        platforms = matchbox().get_platforms_with_embeddings(user_id)
+        manager = matchbox()
+        platforms = manager.get_platforms_with_embeddings(user_id)
 
-        selection = matchbox().get_user_embedding_detail(user_id).get("current")
+        selection_detail = manager.get_user_embedding_detail(user_id)
+        selection = selection_detail.get("current")
 
 
 
@@ -421,9 +423,11 @@ async def get_embedding_status(user: dict = Depends(get_current_user)):
 
             "has_embeddings": any((p.get("embeddings") or []) for p in platforms),
 
-            "has_selection": bool(selection),
+            "has_selection": bool(selection_detail.get("has_selection", False)),
 
             "current": selection,
+
+            "source": selection_detail.get("source", "default"),
 
             "recommended": recommended,
 

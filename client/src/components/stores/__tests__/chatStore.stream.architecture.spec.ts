@@ -355,6 +355,138 @@ describe('chatStore NDJSON 消费契约', () => {
     vi.runOnlyPendingTimers();
   });
 
+  it('task_done 到达时立即撤销工具遮罩，不等待观察流关闭', async () => {
+    const store = useChatStore();
+    const session = store.primarySession;
+    session.sending = true;
+    session.backgroundTaskStatus = 'running';
+    session.streamEpoch = 1;
+    const loadingEvents: any[] = [];
+    const onLoading = (payload: any) => loadingEvents.push(payload);
+    bus.on('global-loading', onLoading);
+
+    let streamController: ReadableStreamDefaultController<Uint8Array> | null = null;
+    const reader = new ReadableStream<Uint8Array>({
+      start(controller) {
+        streamController = controller;
+      },
+    }).getReader();
+    const assistantMsg: any = {
+      clientId: 'assistant-tool-terminal',
+      role: 'assistant',
+      content: '',
+      reasoning: '',
+      tool_traces: [],
+      segments: [],
+      timestamp: 1,
+    };
+    const consumePromise = store._consumeStream(session, assistantMsg, false, reader, session.id, {
+      agentId: 'agent_director',
+      contextKey: 'global',
+      streamEpoch: 1,
+    });
+    const encoder = new TextEncoder();
+    streamController!.enqueue(encoder.encode(`${JSON.stringify({
+      event: 'tool_intent_started',
+      tool_name: 'rewrite_worldview',
+      tool_call_key: 'intent-key',
+      ui_scope: 'world',
+      ui_target: 'worldview',
+    })}\n`));
+    streamController!.enqueue(encoder.encode(`${JSON.stringify({
+      event: 'tool_exec_started',
+      tool_name: 'rewrite_worldview',
+      tool_call_key: 'exec-key',
+      ui_scope: 'world',
+      ui_target: 'worldview',
+    })}\n`));
+    streamController!.enqueue(encoder.encode(`${JSON.stringify({
+      event: 'task_done',
+      status: 'completed',
+    })}\n`));
+
+    await vi.waitFor(() => {
+      expect(loadingEvents).toContainEqual(expect.objectContaining({
+        show: false,
+        scope: 'world',
+        target: 'worldview',
+      }));
+    });
+    expect(session.toolCalling).toBe(false);
+    expect(session.sending).toBe(false);
+
+    streamController!.close();
+    await consumePromise;
+    bus.off('global-loading', onLoading);
+  });
+
+  it('tool_exec_failed 立即结束工具状态并撤销遮罩', async () => {
+    const store = useChatStore();
+    const session = store.primarySession;
+    session.sending = true;
+    session.backgroundTaskStatus = 'running';
+    session.streamEpoch = 1;
+    const loadingEvents: any[] = [];
+    const onLoading = (payload: any) => loadingEvents.push(payload);
+    bus.on('global-loading', onLoading);
+
+    let streamController: ReadableStreamDefaultController<Uint8Array> | null = null;
+    const reader = new ReadableStream<Uint8Array>({
+      start(controller) {
+        streamController = controller;
+      },
+    }).getReader();
+    const assistantMsg: any = {
+      clientId: 'assistant-tool-failed',
+      role: 'assistant',
+      content: '',
+      reasoning: '',
+      tool_traces: [],
+      segments: [],
+      timestamp: 1,
+    };
+    const consumePromise = store._consumeStream(session, assistantMsg, false, reader, session.id, {
+      agentId: 'agent_director',
+      contextKey: 'global',
+      streamEpoch: 1,
+    });
+    const encoder = new TextEncoder();
+    for (const event of [
+      {
+        event: 'tool_exec_started',
+        tool_name: 'patch_script',
+        tool_call_key: 'patch-call',
+        ui_scope: 'production',
+        ui_target: '',
+      },
+      {
+        event: 'tool_exec_failed',
+        tool_name: 'patch_script',
+        tool_call_key: 'patch-call',
+        ui_scope: 'production',
+        ui_target: '',
+        message: '局部修改失败：未找到片段',
+      },
+    ]) {
+      streamController!.enqueue(encoder.encode(`${JSON.stringify(event)}\n`));
+    }
+
+    await vi.waitFor(() => {
+      expect(assistantMsg.tool_traces.at(-1)).toMatchObject({
+        tool_name: 'patch_script',
+        status: 'failed',
+      });
+      expect(loadingEvents).toContainEqual(expect.objectContaining({
+        show: false,
+        scope: 'production',
+      }));
+    });
+
+    streamController!.close();
+    await consumePromise;
+    bus.off('global-loading', onLoading);
+  });
+
   it('替换工作中消息时先取消服务端旧任务并等待真实终态', async () => {
     const store = useChatStore();
     const session = store.primarySession;

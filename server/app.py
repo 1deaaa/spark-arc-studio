@@ -362,6 +362,15 @@ async def lifespan(app: FastAPI):
         except Exception as e:
             print(f"⚠️ Tokenizer warm-up submission failed (non-fatal): {e}", flush=True)
 
+        # 恢复上次已持久化的本地嵌入开关，避免每次重启都需要手动重新开启。
+        try:
+            from agents.vector_index.local_embedding import restore_local_embedding_service_from_settings
+
+            if restore_local_embedding_service_from_settings():
+                print("⚙️ 已根据持久化设置提交本地嵌入服务启动", flush=True)
+        except Exception as e:
+            print(f"⚠️ 本地嵌入服务持久化恢复失败（不影响主服务启动）：{e}", flush=True)
+
         # 应用启动后预热
         asyncio.create_task(warm_up())
         try:
@@ -382,6 +391,12 @@ async def lifespan(app: FastAPI):
         yield  # ========== 应用运行中 ==========
     
     # ========== 关闭阶段 ==========
+    try:
+        from agents.vector_index.local_embedding import stop_local_embedding_service
+
+        stop_local_embedding_service()
+    except Exception as e:
+        print(f"⚠️ Local embedding shutdown failed (non-fatal): {e}", flush=True)
     try:
         from llm.agen_matchbox import reset_matchbo
         reset_matchbo()

@@ -60,7 +60,10 @@ QWEN3_GGUF_MIN_BYTES = 600 * 1024 * 1024
 
 _process_lock = threading.Lock()
 _startup_lock = threading.Lock()
+_background_startup_lock = threading.Lock()
 _process: subprocess.Popen | None = None
+_background_startup_thread: threading.Thread | None = None
+_background_startup_cancel: threading.Event | None = None
 _alive_cache: tuple[float, bool] = (0.0, False)
 _hf_endpoint_cache: tuple[float, str | None] = (0.0, None)
 _startup_state: dict[str, Any] = {
@@ -103,6 +106,54 @@ def mark_local_embedding_starting() -> dict[str, Any]:
     """同步把本地嵌入启动态标记为进行中，避免外层瞬间读到空闲。"""
     _set_startup_state("starting", "开始加载本地嵌入服务", progress=1, error="")
     return _get_startup_state()
+
+
+def _run_background_startup(thread: threading.Thread, cancel_event: threading.Event) -> None:
+    """执行后台启动并清理线程引用。"""
+    global _background_startup_thread, _background_startup_cancel
+    try:
+        if cancel_event.is_set():
+            return
+        start_local_embedding_service(cancel_event=cancel_event)
+    except Exception:
+        # 具体错误已写入启动态，后台线程不能再向请求线程传播异常。
+        pass
+    finally:
+        with _background_startup_lock:
+            if _background_startup_thread is thread:
+                _background_startup_thread = None
+                _background_startup_cancel = None
+
+
+def start_local_embedding_service_background() -> bool:
+    """异步启动本地嵌入服务；已在启动或运行时不重复拉起。"""
+    global _background_startup_thread, _background_startup_cancel
+    with _background_startup_lock:
+        if _background_startup_thread is not None and _background_startup_thread.is_alive():
+            return False
+        with _process_lock:
+            if _process is not None and _process.poll() is None:
+                return False
+        mark_local_embedding_starting()
+        cancel_event = threading.Event()
+        thread = threading.Thread(
+            target=lambda: _run_background_startup(thread, cancel_event),
+            name="local-embedding-startup",
+            daemon=True,
+        )
+        _background_startup_thread = thread
+        _background_startup_cancel = cancel_event
+        thread.start()
+        return True
+
+
+def restore_local_embedding_service_from_settings() -> bool:
+    """按持久化开关恢复本地嵌入服务。"""
+    from core.system_settings import get_local_embedding_enabled
+
+    if not get_local_embedding_enabled():
+        return False
+    return start_local_embedding_service_background()
 
 
 def _download_file_with_progress(
@@ -589,11 +640,18 @@ def get_local_embedding_status() -> dict[str, Any]:
     }
 
 
-def start_local_embedding_service() -> dict[str, Any]:
+def start_local_embedding_service(
+    *,
+    cancel_event: threading.Event | None = None,
+) -> dict[str, Any]:
     """启动本地嵌入服务；若端口已有可用服务则只返回状态。"""
     global _process
     _set_startup_state("starting", "正在启动本地嵌入服务", progress=1, error="")
     try:
+        if cancel_event is not None and cancel_event.is_set():
+            _set_startup_state("idle", "本地嵌入服务已停止", progress=0, error="")
+            return get_local_embedding_status()
+
         with _process_lock:
             existing_process = _process
         if existing_process is not None and existing_process.poll() is None:
@@ -618,7 +676,9 @@ def start_local_embedding_service() -> dict[str, Any]:
 
         try:
             with _process_lock:
-                if _process is not None and _process.poll() is None:
+                if cancel_event is not None and cancel_event.is_set():
+                    started_process = None
+                elif _process is not None and _process.poll() is None:
                     started_process = _process
                 else:
                     _process = subprocess.Popen(command, **popen_kwargs)
@@ -626,10 +686,23 @@ def start_local_embedding_service() -> dict[str, Any]:
         finally:
             log_handle.close()
 
+        if started_process is None:
+            _set_startup_state("idle", "本地嵌入服务已停止", progress=0, error="")
+            return get_local_embedding_status()
+
         if started_process is not None:
             deadline = time.monotonic() + max(1.0, LOCAL_EMBEDDING_STARTUP_TIMEOUT)
             _set_startup_state("loading", "正在加载本地嵌入模型", progress=70)
             while time.monotonic() < deadline:
+                if cancel_event is not None and cancel_event.is_set():
+                    with _process_lock:
+                        is_owned_process = _process is started_process
+                        if is_owned_process:
+                            _process = None
+                    if is_owned_process and started_process.poll() is None:
+                        started_process.terminate()
+                    _set_startup_state("idle", "本地嵌入服务已停止", progress=0, error="")
+                    return get_local_embedding_status()
                 if started_process.poll() is not None:
                     break
                 if is_local_embedding_alive(timeout=2.0, ttl=0):
@@ -657,7 +730,11 @@ def start_local_embedding_service() -> dict[str, Any]:
 
 def stop_local_embedding_service() -> dict[str, Any]:
     """停止由当前后端进程拉起的本地嵌入服务。"""
-    global _process
+    global _process, _background_startup_cancel
+    with _background_startup_lock:
+        if _background_startup_cancel is not None:
+            _background_startup_cancel.set()
+        _background_startup_cancel = None
     with _process_lock:
         process = _process
         _process = None

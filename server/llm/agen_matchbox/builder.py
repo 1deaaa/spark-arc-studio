@@ -29,7 +29,6 @@ from .models import (
     LLModels,
     UserModelUsage,
     AgentModelBinding,
-    UserEmbeddingSelection,
     DEFAULT_MAX_CONTEXT_TOKENS,
     DEFAULT_MAX_OUTPUT_TOKENS,
     get_model_modalities,
@@ -448,36 +447,34 @@ class LLMBuilderMixin:
         effective_user_id = user_id if user_id is not None else SYSTEM_USER_ID
 
         with self.Session() as session:
-            selection = None
-            if platform_id is None or model_id is None:
-                selection = session.query(UserEmbeddingSelection).filter_by(user_id=effective_user_id).first()
-                if selection:
-                    platform_id = selection.platform_id
-                    model_id = selection.model_id
+            if platform_id is not None and model_id is not None:
+                plat = session.query(LLMPlatform).filter_by(id=platform_id).first()
+                model = session.query(LLModels).filter_by(id=model_id).first()
+                resolved = {
+                    "platform": plat,
+                    "model": model,
+                    "api_key": self._get_effective_api_key(session, effective_user_id, plat)
+                    if plat
+                    else None,
+                }
+            else:
+                resolved = self._resolve_user_embedding_selection(session, effective_user_id)
 
-            plat = session.query(LLMPlatform).filter_by(id=platform_id).first() if platform_id else None
-            model = session.query(LLModels).filter_by(id=model_id).first() if model_id else None
+            plat = resolved["platform"]
+            model = resolved["model"]
+            api_key = resolved["api_key"]
 
-            if not plat or not model or not is_embedding_model(model):
-                # 回退：找第一个可用的 embedding
-                plat = None
-                model = None
-                platforms = session.query(LLMPlatform).all()
-                for p in platforms:
-                    for m in p.models:
-                        if is_embedding_model(m) and not self._is_model_disabled(m):
-                            api_key = self._get_effective_api_key(session, effective_user_id, p)
-                            if api_key:
-                                plat = p
-                                model = m
-                                break
-                    if plat and model:
-                        break
-
-            if not plat or not model:
+            if (
+                not plat
+                or not model
+                or model.platform_id != plat.id
+                or not is_embedding_model(model)
+                or self._is_model_disabled(model)
+                or (not plat.is_sys and str(plat.user_id) != str(effective_user_id))
+                or self._is_platform_disabled(session, effective_user_id, plat)
+            ):
                 raise ValueError("未找到可用的 Embedding 模型或未配置 API Key")
 
-            api_key = self._get_effective_api_key(session, effective_user_id, plat)
             if not api_key:
                 raise ValueError(f"平台 '{plat.name}' 的 API Key 未设置。")
 

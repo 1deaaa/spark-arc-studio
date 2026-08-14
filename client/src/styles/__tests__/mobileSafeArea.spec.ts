@@ -104,4 +104,20 @@ describe('移动端弹层安全区', () => {
 
     expect(document.documentElement.style.getPropertyValue('--fallback-sat')).toBe('');
   });
+
+  it('Android Tauri 壳在 env 安全区为零时注入状态栏兜底高度', async () => {
+    Object.defineProperty(window, '__TAURI_INTERNALS__', {
+      configurable: true,
+      value: {},
+    });
+    Object.defineProperty(window.navigator, 'userAgent', {
+      configurable: true,
+      value: 'Mozilla/5.0 (Linux; Android 15) AppleWebKit/537.36',
+    });
+
+    const { ensureSafeAreaFallback } = await import('@/composables/useMobile');
+    ensureSafeAreaFallback();
+
+    expect(document.documentElement.style.getPropertyValue('--fallback-sat')).toBe('24px');
+  });
 });

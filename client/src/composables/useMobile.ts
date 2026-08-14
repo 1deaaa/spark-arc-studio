@@ -64,11 +64,14 @@ function ensureSafeAreaFallback() {
     // env() 正确上报了（iOS / 正常 Android），无需兜底
     if (satPx > 0) return;
 
-    // env() 返回 0：判断设备是否有状态栏需要避让
-    // Android 状态栏高度约 24~25dp，用 screenTop 检测更可靠
+    const isAndroid = navigator.userAgent.toLowerCase().includes('android');
+
+    // Android 全屏 WebView 的视口本身延伸到状态栏下方，screenTop 和外窗尺寸均可能为 0。
+    // Tauri Android 壳必须直接使用状态栏兜底；普通浏览器已在前面返回，不受影响。
     const hasStatusBar =
-        window.screenTop > 0 || // Chrome/WebView: 视口顶部偏移
-        (window.outerHeight > window.innerHeight + 40); // 视口比窗口小 → 有系统 UI
+        (isTauri && isAndroid) ||
+        window.screenTop > 0 ||
+        (window.outerHeight > window.innerHeight + 40);
 
     if (hasStatusBar) {
         // 注入 Android 状态栏高度兜底（24px ≈ 24dp @1x，大多数 Android 状态栏）

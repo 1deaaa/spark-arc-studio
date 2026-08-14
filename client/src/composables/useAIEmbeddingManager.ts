@@ -15,7 +15,6 @@ import type {
     AiEmbeddingItem,
     AiPlatform,
     ApiId,
-    EmbeddingSelectionCurrent,
 } from '../services/aiContracts';
 
 type EmbeddingSelectionState = { platform_id: ApiId | null; model_id: ApiId | null };
@@ -70,17 +69,21 @@ export function useAIEmbeddingManager(platforms: Ref<AiPlatform[]>, syncAiStoreS
         });
         platforms.value = Array.from(platformMap.values());
 
-        if (embeddingSelectionRes && embeddingSelectionRes.current) {
-            const current = embeddingSelectionRes.current as EmbeddingSelectionCurrent;
+        const current = embeddingSelectionRes?.current;
+        const hasExplicitSelection = embeddingSelectionRes?.has_selection !== false;
+
+        if (current && hasExplicitSelection) {
             embeddingSelection.value = {
                 platform_id: current.platform_id,
                 model_id: current.model_id
             };
-        } else if (embeddingStatus && embeddingStatus.recommended) {
+        } else if (current || (embeddingStatus && embeddingStatus.recommended)) {
             try {
+                const recommended = current || embeddingStatus?.recommended;
+                if (!recommended) return;
                 const res = await apiSaveUserEmbeddingSelection(
-                    embeddingStatus.recommended.platform_id,
-                    embeddingStatus.recommended.model_id
+                    recommended.platform_id,
+                    recommended.model_id
                 );
                 if (res) {
                     embeddingSelection.value = {
