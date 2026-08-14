@@ -19,7 +19,8 @@ from story.file_naming import (
     build_display_story_path,
     build_story_filename,
     make_temp_story_filename,
-    next_story_order,
+    next_story_order,
+    parse_chapter_identity_from_title,
     parse_story_filename,
     rebuild_story_filename,
     resolve_story_file_path,
@@ -137,13 +138,18 @@ async def get_story_files(
             except Exception:
                 order_map = {}
 
-        def _extract_chapter_num(folder_name: str) -> int:
+        def _extract_chapter_num(folder_name: str) -> int:
             """从文件夹名中提取章节号，支持多种格式：
             - '一 · 开端' -> 1, '二 · 相遇' -> 2（中文数字）
             - '第1章_开端' -> 1, '第02章_相遇' -> 2（第X章格式）
             - '01_开端' -> 1（纯数字开头）
             """
-            import re
+            # 统一解析器覆盖完整中文章号；后续逻辑仅保留历史宽松命名兼容。
+            chapter_num = parse_chapter_identity_from_title(folder_name)
+            if chapter_num is not None:
+                return chapter_num
+
+            import re
             # 中文数字映射
             cn_num_map = {
                 '一': 1, '二': 2, '三': 3, '四': 4, '五': 5,

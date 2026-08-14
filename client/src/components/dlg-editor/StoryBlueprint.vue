@@ -117,8 +117,7 @@ import { useFileStore } from '../stores/fileStore';
 import { useBlueprintStore } from '../stores/blueprintStore';
 import { useBlueprintCanvas } from '../../hooks/useBlueprintCanvas';
 import bus from '../../eventBus';
-import type { SceneWithClientId } from '../stores/sceneStore';
-import type { StoryFileTreeNode } from '@/services/aiContracts';
+import { selectBlueprintStoryFiles } from './storyBlueprintFiles';
 
 const props = defineProps({
   projectId: String,
@@ -383,7 +382,7 @@ async function initializeNodes() {
       return;
     }
     await fileStore.loadFileTree(props.projectId);
-    const storyFiles = flattenFileTree(fileStore.fileTree).filter((f) => f.type === 'story');
+    const storyFiles = selectBlueprintStoryFiles(fileStore.fileTree);
 
     nodes.value = storyFiles.map((file, index) => {
       const id = fileNodeId(file.path);
@@ -568,19 +567,6 @@ function handleKeyDown(event: KeyboardEvent) {
     deleteSelectedConnection();
   }
   if (event.key === 'Escape' && contextMenu.value.visible) hideContextMenu();
-}
-
-// --- Helpers ---
-function flattenFileTree(tree: StoryFileTreeNode[]) {
-  let files: StoryFileTreeNode[] = [];
-  for (const item of tree) {
-    if (item.type === 'folder' && item.children) {
-      files = files.concat(flattenFileTree(item.children));
-    } else {
-      files.push(item);
-    }
-  }
-  return files;
 }
 
 // calculateConnectionPath, sanitizeSvgId, gradientId, connectionStroke 已从 useBlueprintCanvas 导入

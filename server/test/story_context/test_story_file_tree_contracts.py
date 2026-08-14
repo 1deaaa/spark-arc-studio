@@ -35,6 +35,41 @@ def test_story_file_tree_keeps_empty_folder_when_format_filtered(monkeypatch, tm
     ]
 
 
+def test_story_file_tree_sorts_chinese_chapter_numbers_above_twenty(monkeypatch, tmp_path: Path) -> None:
+    """中文章号超过二十后仍应按数值排序，不能按汉字编码打散。"""
+    from story import routes_files
+
+    project_path = tmp_path / "project"
+    stories_path = project_path / "stories"
+    for folder_name in (
+        "七十一 · 终章",
+        "二十一 · 启程",
+        "七十 · 转折",
+        "二十 · 起点",
+        "六十九 · 前夜",
+    ):
+        (stories_path / folder_name).mkdir(parents=True)
+
+    monkeypatch.setattr(routes_files, "ensure_project_stories_directory", lambda *_args, **_kwargs: str(stories_path))
+    monkeypatch.setattr(routes_files, "get_project_path", lambda *_args, **_kwargs: str(project_path))
+
+    result = asyncio.run(
+        routes_files.get_story_files(
+            "demo",
+            format="arc",
+            user={"user_id": "user_1"},
+        )
+    )
+
+    assert [item["name"] for item in result] == [
+        "二十 · 起点",
+        "二十一 · 启程",
+        "六十九 · 前夜",
+        "七十 · 转折",
+        "七十一 · 终章",
+    ]
+
+
 def test_create_existing_folder_returns_conflict(monkeypatch, tmp_path: Path) -> None:
     """重复创建同名分卷应返回冲突，避免前端显示为静默成功。"""
     from story import routes_files
