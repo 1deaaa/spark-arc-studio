@@ -482,6 +482,54 @@ def test_full_script_write_requires_and_consumes_matching_receipt(monkeypatch, t
         current_user_id.reset(user_token)
 
 
+def test_full_script_write_rejects_metadata_only_zero_body(monkeypatch, tmp_path) -> None:
+    from agents.tools.scriptwriter import create_or_rewrite_script
+
+    monkeypatch.setattr("core.utils.USERDATA_ROOT", str(tmp_path))
+    user_token = current_user_id.set("u-empty")
+    project_token = current_project_name.set("p-empty")
+    agent_token = current_agent_id.set("agent_scriptwriter")
+    receipt_token = current_scriptwriter_prewrite_receipt.set({})
+    set_current_export_format("arc")
+    try:
+        set_scriptwriter_prewrite_receipt({
+            "receipt_id": "receipt-empty",
+            "user_id": "u-empty",
+            "project_name": "p-empty",
+            "chapter_name": "一 · 开端",
+            "scene_name": "1-1 空场景",
+            "chapter_num": 1,
+            "scene_num": 1,
+        })
+        result = create_or_rewrite_script.invoke({
+            "overwrite_content": "# 1-1 空场景\n<conception>只有构思，没有正文。</conception>",
+            "chapter_name": "一 · 开端",
+            "work_name": "1-1 空场景",
+        })
+    finally:
+        clear_scriptwriter_prewrite_receipt()
+        set_current_export_format(None)
+        current_scriptwriter_prewrite_receipt.reset(receipt_token)
+        current_agent_id.reset(agent_token)
+        current_project_name.reset(project_token)
+        current_user_id.reset(user_token)
+
+    assert "正文没有可见内容" in result
+    assert not list(tmp_path.rglob("*.arc"))
+
+
+def test_auto_write_completion_guard_rejects_zero_body_scene() -> None:
+    from agents.routes.auto_write import _require_nonempty_scene_body
+
+    with pytest.raises(RuntimeError, match="没有可见正文"):
+        _require_nonempty_scene_body(
+            "# 1-1 空场景\n<conception>只有构思，没有正文。</conception>",
+            "arc",
+        )
+
+    assert _require_nonempty_scene_body("# 1-1 正常场景\n[-1]\n雨落在旧站台上。", "arc") > 0
+
+
 def test_chat_background_preserves_receipt_across_separate_tool_contexts(monkeypatch, tmp_path) -> None:
     from agents.tools.scriptwriter import create_or_rewrite_script, prepare_script_creation
 
@@ -586,7 +634,7 @@ def test_auto_write_emits_prewrite_before_writing_scene(monkeypatch, tmp_path: P
             callback("story_memory_tool")
         scene_path.parent.mkdir(parents=True, exist_ok=True)
         scene_path.write_text(
-            "# 初遇\n<conception>\n本场建立雨夜悬念。\n</conception>\n[旁白] 已保存正文",
+            "# 初遇\n<conception>\n本场建立雨夜悬念。\n</conception>\n[旁白]\n已保存正文",
             encoding="utf-8",
         )
         return ScriptwriterPreWriteResult(
@@ -600,7 +648,7 @@ def test_auto_write_emits_prewrite_before_writing_scene(monkeypatch, tmp_path: P
                 "path": "一 · 开端/1-1 初遇.arc",
                 "written_chars": 12,
             },
-            written_content="[旁白] 已保存正文",
+            written_content="[旁白]\n已保存正文",
         )
 
     monkeypatch.setattr(auto_write, "run_autonomous_scriptwriter_creation", fake_prewrite)

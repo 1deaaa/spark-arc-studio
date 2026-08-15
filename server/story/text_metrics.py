@@ -40,12 +40,13 @@ def count_story_body_chars(content: str, export_format: str) -> int:
         from story.arc_parser import parse_arc
 
         parts: list[str] = []
-        for scene in parse_arc(text):
+        parsed_scenes = parse_arc(text)
+        for scene in parsed_scenes:
             intro = scene.get("intro")
             if intro:
                 parts.append(str(intro))
             parts.extend(_iter_dialogue_text(scene.get("dia") or []))
-        if parts:
+        if parsed_scenes:
             return _count_letters_and_numbers("\n".join(parts))
     except Exception:
         pass

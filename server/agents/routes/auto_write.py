@@ -144,6 +144,16 @@ def _resolve_export_format(user_id: str, project_name: str) -> str:
     return "novel" if get_workspace_mode(user_id, project_name) == "novel" else "arc"
 
 
+def _require_nonempty_scene_body(content: str, export_format: str) -> int:
+    """按最终正文口径校验落盘结果，拒绝只有元数据的空场景。"""
+    from story.text_metrics import count_story_body_chars
+
+    written_chars = count_story_body_chars(content, export_format)
+    if written_chars <= 0:
+        raise RuntimeError("编剧落盘结果没有可见正文，自动写作未完成当前场景。")
+    return written_chars
+
+
 async def generate_script_stream(
     user_id: str,
     project_name: str,
@@ -610,9 +620,10 @@ async def generate_script_stream(
                 filename = os.path.basename(filepath)
                 display_filename = strip_story_filename_meta(filename)
                 arc_text = prewrite_result.written_content.strip() or current_scene_full_text
-                total_chars = int(saved_payload.get("written_chars") or 0)
-                if total_chars <= 0:
-                    total_chars = len(arc_text)
+                total_chars = _require_nonempty_scene_body(
+                    current_scene_full_text,
+                    export_format,
+                )
                 elapsed = max(time.time() - scene_started_at, 0.0)
                 avg_speed = total_chars / elapsed if elapsed > 0 else 0
 

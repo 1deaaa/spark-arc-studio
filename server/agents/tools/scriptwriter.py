@@ -265,6 +265,13 @@ def create_or_rewrite_script(
     if not content:
         return "创建/重写剧本失败：overwrite_content 为空。"
 
+    # 仅有标题、格式标记或 <conception> 构思块时，不允许伪装成已保存正文。
+    # 这样模型消耗请求后没有可见产出时，会回到工具循环重试，而不是生成 0 字场景。
+    from story.text_metrics import count_story_body_chars
+
+    if count_story_body_chars(content, effective_format) <= 0:
+        return "创建/重写剧本失败：正文没有可见内容，不能落盘。请生成实际场景正文后重试。"
+
     stories_path = get_project_stories_path(user_id, project_name)
     os.makedirs(stories_path, exist_ok=True)
 

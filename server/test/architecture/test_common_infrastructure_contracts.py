@@ -61,6 +61,9 @@ def test_story_body_char_count_excludes_format_and_conception() -> None:
 """
     assert count_story_body_chars(arc, "arc") == len("雨落旧站台你来了")
 
+    metadata_only_arc = "# 1-2 空场景\n<conception>这里仍然不计入正文</conception>"
+    assert count_story_body_chars(metadata_only_arc, "arc") == 0
+
     novel = "# 标题\n<conception>隐藏构思</conception>雨落在旧站台。"
     assert count_story_body_chars(novel, "novel") == len("标题雨落在旧站台")
 
