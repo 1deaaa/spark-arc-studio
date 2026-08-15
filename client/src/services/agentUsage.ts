@@ -7,8 +7,8 @@ type AgentBindingRow = {
   agent_name: string;
   target_type: 'direct' | 'usage' | string;
   usage_key?: string | null;
-  platform_id?: string | null;
-  model_id?: string | null;
+  platform_id?: string | number | null;
+  model_id?: string | number | null;
 };
 
 type AgentBindingsMap = Record<string, string | {
@@ -20,8 +20,8 @@ type AgentBindingsMap = Record<string, string | {
 }>;
 
 type DirectBinding = {
-  platform_id?: string | null;
-  model_id?: string | null;
+  platform_id?: string | number | null;
+  model_id?: string | number | null;
 };
 
 type SaveBindingData = string | {
@@ -36,6 +36,10 @@ type SaveAgentPayload = {
   platform_id?: string | null;
   model_id?: string | null;
 };
+
+function normalizeBindingId(value: string | number | null | undefined): string | null {
+  return value == null ? null : String(value);
+}
 
 const DEFAULT_USAGE_KEY = 'main';
 const AGENT_DEFAULT_USAGE_KEYS: Readonly<Record<string, string>> = {
@@ -59,8 +63,8 @@ export async function fetchAgentUsageBindings(): Promise<AgentBindingsMap> {
       bindings[item.agent_name] = {
         binding: item.agent_name,
         direct: {
-          platform_id: item.platform_id ?? null,
-          model_id: item.model_id ?? null
+          platform_id: normalizeBindingId(item.platform_id),
+          model_id: normalizeBindingId(item.model_id)
         }
       };
     } else {
@@ -90,8 +94,8 @@ export async function saveAgentBinding(agentName: string, bindingData: SaveBindi
   } else if (typeof bindingData === 'object' && bindingData !== null) {
     if (bindingData.direct) {
       payload.target_type = 'direct';
-      payload.platform_id = bindingData.direct.platform_id ?? null;
-      payload.model_id = bindingData.direct.model_id ?? null;
+      payload.platform_id = normalizeBindingId(bindingData.direct.platform_id);
+      payload.model_id = normalizeBindingId(bindingData.direct.model_id);
     }
     payload.usage_key = bindingData.binding === agentName ? null : (bindingData.binding ?? null);
   }
