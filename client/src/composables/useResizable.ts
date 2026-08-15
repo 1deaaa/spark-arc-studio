@@ -157,12 +157,24 @@ export function useResizable(options: UseResizableOptions = {}) {
         }
     }
 
+    const DIRECTION_CURSORS: Record<string, string> = {
+        n: 'ns-resize',
+        s: 'ns-resize',
+        e: 'ew-resize',
+        w: 'ew-resize',
+        nw: 'nwse-resize',
+        se: 'nwse-resize',
+        ne: 'nesw-resize',
+        sw: 'nesw-resize',
+    };
+
     function startResize(e: MouseEvent, direction: string) {
         if (e.button !== 0) return;
         e.preventDefault();
         e.stopPropagation();
 
         resize.isResizing = true;
+        (resize as any).direction = direction || 'nw';
         resize.startX = e.clientX;
         resize.startY = e.clientY;
         resize.startWidth = panelSize.width;
@@ -172,40 +184,59 @@ export function useResizable(options: UseResizableOptions = {}) {
 
         document.addEventListener('mousemove', onResizeMove);
         document.addEventListener('mouseup', stopResize, { once: true });
-        document.body.style.cursor = 'nwse-resize';
+        document.body.style.cursor = DIRECTION_CURSORS[direction] || 'nwse-resize';
         document.body.style.userSelect = 'none';
     }
 
     function onResizeMove(e: MouseEvent) {
         if (!resize.isResizing) return;
 
+        const direction = (resize as any).direction || 'nw';
         const dx = e.clientX - resize.startX;
         const dy = e.clientY - resize.startY;
-
-        const newWidth = Math.min(MAX_PANEL_WIDTH, Math.max(MIN_PANEL_WIDTH, resize.startWidth - dx));
-        const newHeight = Math.min(MAX_PANEL_HEIGHT, Math.max(MIN_PANEL_HEIGHT, resize.startHeight - dy));
-
-        const widthDelta = newWidth - resize.startWidth;
-        const heightDelta = newHeight - resize.startHeight;
-        const newTop = resize.startTop - heightDelta;
-
         const viewportWidth = window.innerWidth;
         const viewportHeight = window.innerHeight;
         const minMargin = 0;
 
-        const leftEdge = viewportWidth - pos.right - newWidth;
-        if (leftEdge < minMargin) {
-            panelSize.width = viewportWidth - pos.right - minMargin;
-        } else {
-            panelSize.width = newWidth;
+        let nextWidth = resize.startWidth;
+        let nextHeight = resize.startHeight;
+        let nextRight = resize.startRight;
+        let nextTop = resize.startTop;
+
+        // 水平方向调整
+        if (direction.includes('w')) {
+            // 向左拖动增加宽度
+            const rawWidth = resize.startWidth - dx;
+            const maxAllowedWidth = Math.min(MAX_PANEL_WIDTH, viewportWidth - resize.startRight - minMargin);
+            nextWidth = Math.min(maxAllowedWidth, Math.max(MIN_PANEL_WIDTH, rawWidth));
+            nextRight = resize.startRight;
+        } else if (direction.includes('e')) {
+            // 向右拖动增加宽度，并反向调整 right 保持左侧固定
+            const rawWidth = resize.startWidth + dx;
+            const maxAllowedWidth = Math.min(MAX_PANEL_WIDTH, resize.startWidth + resize.startRight - minMargin);
+            nextWidth = Math.min(maxAllowedWidth, Math.max(MIN_PANEL_WIDTH, rawWidth));
+            nextRight = Math.max(minMargin, resize.startRight - (nextWidth - resize.startWidth));
         }
 
-        if (newTop < minMargin) {
-            panelSize.height = Math.max(MIN_PANEL_HEIGHT, resize.startHeight + resize.startTop - minMargin);
-        } else {
-            panelSize.height = newHeight;
-            pos.top = newTop;
+        // 垂直方向调整
+        if (direction.includes('n')) {
+            // 向上拖动增加高度，并反向调整 top 保持底部固定
+            const rawHeight = resize.startHeight - dy;
+            const maxAllowedHeight = Math.min(MAX_PANEL_HEIGHT, resize.startHeight + resize.startTop - minMargin);
+            nextHeight = Math.min(maxAllowedHeight, Math.max(MIN_PANEL_HEIGHT, rawHeight));
+            nextTop = Math.max(minMargin, resize.startTop - (nextHeight - resize.startHeight));
+        } else if (direction.includes('s')) {
+            // 向下拖动增加高度，top 保持不变
+            const rawHeight = resize.startHeight + dy;
+            const maxAllowedHeight = Math.min(MAX_PANEL_HEIGHT, viewportHeight - minMargin - resize.startTop);
+            nextHeight = Math.min(maxAllowedHeight, Math.max(MIN_PANEL_HEIGHT, rawHeight));
+            nextTop = resize.startTop;
         }
+
+        panelSize.width = nextWidth;
+        panelSize.height = nextHeight;
+        pos.right = nextRight;
+        pos.top = nextTop;
 
         ensurePanelFitsViewport();
     }

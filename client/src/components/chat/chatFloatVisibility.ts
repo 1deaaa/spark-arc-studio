@@ -14,9 +14,9 @@ export type FloatingChatPositionOptions = {
   margin?: number;
 };
 
-/** 悬浮聊天的唯一可见性规则：移动端始终显示；桌面端仅聊天工作区隐藏。 */
+/** 悬浮聊天的可见性规则：移动端始终显示；桌面端在聊天全屏页('chat')及编剧面板('production')停靠隐藏。 */
 export function resolveChatFloatSurface(options: ChatFloatSurfaceOptions) {
-  const rootVisible = options.isMobile || options.currentView !== 'chat';
+  const rootVisible = options.isMobile || (options.currentView !== 'chat' && options.currentView !== 'production');
   return {
     rootVisible,
     launchVisible: rootVisible && !options.expanded,

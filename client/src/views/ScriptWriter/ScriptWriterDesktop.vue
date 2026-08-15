@@ -1,4 +1,3 @@
-
 <template>
   <div class="container">
     <HeaderToolbar
@@ -92,14 +91,109 @@
                 <AiPanel />
               </div>
             </template>
+
+            <!-- 右侧 Docked 智能对话边栏（PC 编剧面板自动停靠） -->
+            <template v-if="chatSidebarVisible">
+              <div class="resizer" data-resize="chat-sidebar" @mousedown="handleMouseDown"></div>
+              <div class="panel chat-docked-sidebar" :style="{ width: chatSidebarWidth + 'px' }">
+                <ChatPanel
+                  ref="dockedChatPanelRef"
+                  :agent-id="chat.currentAgentId"
+                  :agent-options="agentOptions"
+                  :allow-agent-switch-while-sending="true"
+                  :history="chat.history"
+                  :loading="chat.loading"
+                  :last-error="chat.lastError"
+                  :sending="chat.sending"
+                  :thinking-seconds="thinkingSeconds"
+                  :tool-calling="chat.toolCalling"
+                  :tool-name="chat.toolName"
+                  :tool-progress-text="chat.toolProgressText"
+                  :retry-attempt="chat.retryAttempt"
+                  :retry-mode="chat.retryMode"
+                  :retry-max-retries="chat.retryMaxRetries"
+                  :retry-error-summary="chat.retryErrorSummary"
+                  :context-token-count="chat.contextTokenCount"
+                  :context-token-usage="chat.contextTokenUsage"
+                  :context-window-stats="chat.contextWindowStats"
+                  loading-target="chat-primary"
+                  :editing-message-id="editingMessageId"
+                  :editing-content="editingContent"
+                  :draft="draft"
+                  @update:agent-id="onAgentChanged"
+                  @update:draft="draft = $event"
+                  @update:editing-content="editingContent = $event"
+                  @clear="clear"
+                  @compact-context="compactContext"
+                  @send="send"
+                  @stop="stop"
+                  @draft-keydown="onDraftKeydown"
+                  @start-edit="startEdit"
+                  @cancel-edit="cancelEdit"
+                  @save-edit="saveEdit"
+                  @edit-keydown="onEditKeydown"
+                  @delete-msg="deleteMsg"
+                  @retry="retryMsg"
+                >
+                  <template #input-prefix>
+                    <ChatFileImportButton :session-id="primarySessionId" :agent-id="chat.currentAgentId" />
+                    <AiSettingsPanel :visible="true" :compact="true" :agent-name="chat.currentAgentId" placement="top-start" trigger="icon" />
+                  </template>
+                  <!-- 在工作区打开按钮 -->
+                  <template #header-actions>
+                    <n-tooltip trigger="hover">
+                      <template #trigger>
+                        <n-button size="tiny" @click="openInWorkspace" class="btn-action-clear" circle quaternary style="margin-left: 2px;">
+                          <template #icon>
+                            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                              <path d="M15 3h6v6M9 21H3v-6M21 3l-7 7M3 21l7-7"/>
+                            </svg>
+                          </template>
+                        </n-button>
+                      </template>
+                      {{ t('components.chatPanel.openInWorkspace') }}
+                    </n-tooltip>
+                  </template>
+                  <!-- 收起边栏按钮 -->
+                  <template #header-right>
+                    <n-tooltip trigger="hover">
+                      <template #trigger>
+                        <n-button quaternary circle size="small" @click="toggleChatSidebar">
+                          <template #icon>
+                            <n-icon :size="16"><PanelRightClose /></n-icon>
+                          </template>
+                        </n-button>
+                      </template>
+                      {{ t('views.scriptWriter.desktop.collapseChatSidebar') || '收起智能助手' }}
+                    </n-tooltip>
+                  </template>
+                </ChatPanel>
+              </div>
+            </template>
+
+            <!-- 边栏折叠时停靠在右侧边缘的微光条 -->
+            <div
+              v-else
+              class="chat-docked-collapsed-strip"
+              @click="toggleChatSidebar"
+              :title="t('views.scriptWriter.desktop.expandChatSidebar') || '展开智能助手'"
+            >
+              <div class="collapsed-strip-glow"></div>
+              <div class="collapsed-strip-icon">
+                <svg viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
+                  <path class="spark-main" d="M12 2L14.5 9.5L22 12L14.5 14.5L12 22L9.5 14.5L2 12L9.5 9.5L12 2Z" fill="currentColor" />
+                  <path class="spark-sub-1" d="M19 2L20 5L23 6L20 7L19 10L18 7L15 6L18 5L19 2Z" fill="currentColor" />
+                </svg>
+              </div>
+              <span class="collapsed-strip-text">{{ t('views.scriptWriter.desktop.aiAssistant') || '智能助手' }}</span>
+            </div>
           </div>
         </div>
       </div>
-  
 
-        <n-modal v-model:show="versionManagerVisible" preset="card" :title="t('views.scriptWriter.desktop.versionManager')" style="width: 800px; max-height: 90vh;">
-          <VersionManager :projectId="projectStore.currentProject || undefined" :content-format="workspaceMode" hide-title />
-        </n-modal>
+      <n-modal v-model:show="versionManagerVisible" preset="card" :title="t('views.scriptWriter.desktop.versionManager')" style="width: 800px; max-height: 90vh;">
+        <VersionManager :projectId="projectStore.currentProject || undefined" :content-format="workspaceMode" hide-title />
+      </n-modal>
 
       <GlobalChatFloat />
     </main>
@@ -108,7 +202,7 @@
 
 <script setup lang="ts">
 import { computed, h, nextTick, onMounted, onUnmounted, ref } from 'vue';
-import { NButton, NDropdown, NIcon, NModal, type DropdownOption } from 'naive-ui';
+import { NButton, NDropdown, NIcon, NModal, NTooltip, type DropdownOption } from 'naive-ui';
 import { useI18n } from 'vue-i18n';
 import { useOnboarding } from '../../onboarding';
 import VersionManager from '../../components/dlg-editor/VersionManager.vue';
@@ -124,6 +218,8 @@ import AiSettingsPanel from '../../components/lorebook/AiSettingsPanel.vue';
 import CharacterGeneratorPanel from '../../components/lorebook/CharacterGeneratorPanel.vue';
 import GlobalLoading from '../../components/share/GlobalLoading.vue';
 import GlobalChatFloat from '../../components/chat/GlobalChatFloat.vue';
+import ChatPanel from '../../components/chat/ChatPanel.vue';
+import ChatFileImportButton from '../../components/chat/ChatFileImportButton.vue';
 import ActivityBar from '../../components/layouts/desktop/ActivityBar.vue';
 import OnboardingHelpButton from '../../onboarding/components/OnboardingHelpButton.vue';
 
@@ -142,7 +238,10 @@ import bus from '../../eventBus';
 import { useResizer } from '../../hooks/useResizer';
 import { useScriptWriterLogic } from '../../composables/useScriptWriterLogic';
 import { useSceneStore } from '../../components/stores/sceneStore';
-import { Send } from '@lucide/vue';
+import { useChatStore } from '../../components/stores/chatStore';
+import { useChatActions } from '../../composables/useChatActions';
+import { useAgentRegistry } from '../../composables/useAgentRegistry';
+import { Send, PanelRightClose } from '@lucide/vue';
 import { shouldShowProductionInspector } from './productionInspector';
 import {
   NOVEL_SUBMISSION_PLATFORMS,
@@ -152,7 +251,7 @@ import {
 
 const { t } = useI18n();
 const sceneStore = useSceneStore();
-const { sidebarWidth, inspectorWidth, aiSidebarWidth, handleMouseDown } = useResizer();
+const { sidebarWidth, inspectorWidth, aiSidebarWidth, chatSidebarWidth, handleMouseDown } = useResizer();
 const {
   viewStore,
   projectStore,
@@ -164,12 +263,86 @@ const {
   onLogout
 } = useScriptWriterLogic();
 
+// ==================== 右侧智能编剧对话边栏 ====================
+const chat = useChatStore();
+const { registry: agentRegistry, load: loadAgentRegistry } = useAgentRegistry();
+const dockedChatPanelRef = ref<any>(null);
+const dockedListRef = computed(() => dockedChatPanelRef.value?.listRef);
+
+const chatActions = useChatActions({
+  getSending: () => chat.sending,
+  getHistory: () => chat.history,
+  send: (msg) => chat.send(msg),
+  stop: () => chat.cancel(),
+  clear: () => chat.clear(),
+  editMessage: (id, content) => chat.editMessage(id, content),
+  deleteMessage: (id) => chat.deleteMessage(id),
+}, {
+  listRef: dockedListRef,
+  getEditScopeKey: () => `${chat.currentAgentId || ''}::${chat.contextKey || ''}`,
+});
+
+const {
+  draft, editingMessageId, editingContent, thinkingSeconds,
+  onDraftKeydown, send, stop, startEdit, cancelEdit,
+  onEditKeydown, saveEdit, deleteMsg, retryMsg
+} = chatActions;
+
+async function clear() {
+  await chatActions.clear();
+}
+
+async function compactContext() {
+  if (chat.sending) return;
+  await chat.compactContext();
+}
+
+const primarySessionId = computed(() => chat.primarySession?.id ?? null);
+
+const agentOptions = computed(() =>
+  agentRegistry.value
+    .filter(a => a.visibleInChat !== false)
+    .map(a => ({
+      label: a.name || a.key,
+      value: a.key,
+    }))
+);
+
+function onAgentChanged(agentId: string) {
+  chat.setAgent(agentId);
+}
+
+function openInWorkspace() {
+  viewStore.openChatView(chat.currentAgentId);
+}
+
+const CHAT_SIDEBAR_STORAGE_KEY = 'spark_chat_sidebar_visible_v1';
+const chatSidebarVisible = ref(true);
+
+function loadChatSidebarVisible() {
+  try {
+    const saved = localStorage.getItem(CHAT_SIDEBAR_STORAGE_KEY);
+    if (saved !== null) {
+      chatSidebarVisible.value = saved === 'true';
+    }
+  } catch {}
+}
+
+function toggleChatSidebar() {
+  chatSidebarVisible.value = !chatSidebarVisible.value;
+  try {
+    localStorage.setItem(CHAT_SIDEBAR_STORAGE_KEY, String(chatSidebarVisible.value));
+  } catch {}
+}
+
 // 首次进入桌面工作台时触发引导（等待登录后检查完成）
 const { triggerIfFirst } = useOnboarding();
 const onPostLoginReady = () => {
   nextTick(() => triggerIfFirst('desktop-workspace'));
 };
 onMounted(() => {
+  loadChatSidebarVisible();
+  loadAgentRegistry();
   bus.on('post-login-ready', onPostLoginReady);
   // 如果 App.vue 已经发过 post-login-ready（竞态：子组件晚于 App mount），直接触发
   if ((bus as any).postLoginReadySent) onPostLoginReady();
@@ -398,6 +571,78 @@ main {
   border-left: 1px solid var(--n-border-color);
 }
 
+.chat-docked-sidebar {
+  width: 380px;
+  min-width: 0;
+  max-width: 800px;
+  flex: 0 0 auto;
+  min-height: 0;
+  height: 100%;
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+  background-color: var(--n-color-modal);
+  border-left: 1px solid var(--n-border-color);
+  position: relative;
+}
+
+.chat-docked-collapsed-strip {
+  width: 36px;
+  flex: 0 0 36px;
+  height: 100%;
+  background: var(--spark-panel-header-bg);
+  border-left: 1px solid var(--spark-border);
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  padding: 16px 0;
+  cursor: pointer;
+  position: relative;
+  overflow: hidden;
+  user-select: none;
+  transition: background 0.2s ease, border-color 0.2s ease, box-shadow 0.2s ease;
+}
+
+.chat-docked-collapsed-strip:hover {
+  background: color-mix(in srgb, var(--spark-panel-header-bg), var(--spark-primary) 8%);
+  border-left-color: var(--spark-primary-muted);
+  box-shadow: inset 2px 0 8px rgba(var(--spark-primary-rgb), 0.15);
+}
+
+.collapsed-strip-icon {
+  width: 24px;
+  height: 24px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  color: var(--spark-primary);
+  margin-bottom: 12px;
+  transition: transform 0.3s ease;
+}
+
+.chat-docked-collapsed-strip:hover .collapsed-strip-icon {
+  transform: scale(1.15) rotate(5deg);
+}
+
+.collapsed-strip-icon svg {
+  width: 100%;
+  height: 100%;
+}
+
+.collapsed-strip-text {
+  writing-mode: vertical-rl;
+  text-orientation: mixed;
+  letter-spacing: 3px;
+  font-size: var(--spark-fs-xs);
+  font-weight: 600;
+  color: var(--spark-text-muted);
+  transition: color 0.2s ease;
+}
+
+.chat-docked-collapsed-strip:hover .collapsed-strip-text {
+  color: var(--spark-primary);
+}
+
 .settings-right-panel {
   display: flex;
   flex-direction: column;
@@ -483,6 +728,10 @@ h2 {
 
   .ai-sidebar {
     max-width: 340px;
+  }
+
+  .chat-docked-sidebar {
+    max-width: 400px;
   }
 
   .settings-right-panel {

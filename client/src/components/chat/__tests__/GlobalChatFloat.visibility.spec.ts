@@ -151,6 +151,7 @@ describe('GlobalChatFloat 可见性同步', () => {
           NIcon: true,
           ChatPanel: true,
           ChatFileImportButton: true,
+          AiSettingsPanel: true,
           ExtraChatWindow: true,
           GlobalLoading: true,
           Teleport: true,
@@ -162,17 +163,25 @@ describe('GlobalChatFloat 可见性同步', () => {
     expect(wrapper.findComponent(NDrawer).props('show')).toBe(true);
     expect(wrapper.find('.chat-float-root').isVisible()).toBe(true);
 
+    // 桌面端普通工作区（如 world）展示悬浮窗
     controls.isMobile.value = false;
-    controls.view.currentView = 'production';
+    controls.view.currentView = 'world';
     await nextTick();
     expect(wrapper.findComponent(NDrawer).props('show')).toBe(false);
     expect(wrapper.find('.chat-float-panel').exists()).toBe(true);
     expect(wrapper.find('.chat-float-root').isVisible()).toBe(true);
 
+    // 桌面端编剧工作区(production)停靠隐藏浮窗
+    controls.view.currentView = 'production';
+    await nextTick();
+    expect(wrapper.find('.chat-float-root').attributes('style')).toContain('display: none');
+
+    // 桌面端全屏聊天页(chat)隐藏浮窗
     controls.view.currentView = 'chat';
     await nextTick();
     expect(wrapper.find('.chat-float-root').attributes('style')).toContain('display: none');
 
+    // 移动端始终展示
     controls.isMobile.value = true;
     await nextTick();
     expect(wrapper.findComponent(NDrawer).props('show')).toBe(true);

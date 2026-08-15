@@ -5,7 +5,7 @@ import {
 } from '../chatFloatVisibility';
 
 describe('悬浮聊天可见性策略', () => {
-  it('桌面端仅聊天工作区隐藏悬浮聊天', () => {
+  it('桌面端在全屏聊天页与编剧面板隐藏悬浮聊天（编剧面板已内嵌右侧边栏）', () => {
     expect(resolveChatFloatSurface({
       expanded: false,
       isMobile: false,
@@ -22,8 +22,8 @@ describe('悬浮聊天可见性策略', () => {
       isMobile: false,
       currentView: 'production',
     })).toEqual({
-      rootVisible: true,
-      launchVisible: true,
+      rootVisible: false,
+      launchVisible: false,
       desktopPanelVisible: false,
       mobileDrawerVisible: false,
     });

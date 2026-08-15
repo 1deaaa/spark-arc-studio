@@ -54,16 +54,37 @@
       </n-spin>
     </n-card>
 
-    <!-- 紧凑模式：用于各个视图的头部 / 工具栏，只保留一行选择 -->
+    <!-- 紧凑模式：用于各个视图的头部 / 工具栏 / 聊天输入栏，只保留一行选择 -->
     <div v-else class="compact-wrapper">
-      <n-popover trigger="click" placement="bottom-start" :show-arrow="false" style="padding: 0;">
+      <n-popover trigger="click" :placement="placement" :show-arrow="false" style="padding: 0;">
         <template #trigger>
-          <n-button size="small" quaternary class="model-selector-btn">
-            <template #icon>
-              <n-icon :component="Zap" />
-            </template>
-            {{ currentModelName || '选择模型' }}
-          </n-button>
+          <slot name="trigger" :current-model-name="currentModelName">
+            <!-- 图标按钮模式：专用于聊天输入栏等紧凑场景 -->
+            <n-tooltip v-if="trigger === 'icon'" trigger="hover">
+              <template #trigger>
+                <n-button
+                  size="small"
+                  quaternary
+                  circle
+                  class="model-config-icon-btn"
+                  :aria-label="computedTooltipText"
+                >
+                  <template #icon>
+                    <n-icon :component="Cpu" :size="16" />
+                  </template>
+                </n-button>
+              </template>
+              {{ computedTooltipText }}
+            </n-tooltip>
+
+            <!-- 默认按钮模式：用于各页面顶部工具栏 -->
+            <n-button v-else size="small" quaternary class="model-selector-btn">
+              <template #icon>
+                <n-icon :component="Zap" />
+              </template>
+              {{ currentModelName || '选择模型' }}
+            </n-button>
+          </slot>
         </template>
 
         <div class="compact-popover-content">
@@ -125,10 +146,10 @@
 </template>
 
 <script setup lang="ts">
-import { computed, ref, watch, onMounted, onBeforeUnmount, nextTick } from 'vue';
-import { NCard, NForm, NFormItem, NSelect, NIcon, NDivider, NSpin, useMessage, NPopover, NButton, NTabs, NTabPane } from 'naive-ui';
+import { computed, ref, watch, onMounted, onBeforeUnmount, nextTick, type PropType } from 'vue';
+import { NCard, NForm, NFormItem, NSelect, NIcon, NDivider, NSpin, useMessage, NPopover, NButton, NTabs, NTabPane, NTooltip } from 'naive-ui';
 import SparkAlert from '@/components/share/SparkAlert.vue';
-import { Info, Zap } from '@lucide/vue';
+import { Info, Zap, Cpu } from '@lucide/vue';
 import { useAiStore } from '@/components/stores/aiStore';
 import { useUsageDisplay } from '@/composables/useUsageDisplay';
 import { fetchAgentUsageBindings, getDefaultAgentUsageKey, saveAgentBinding } from '@/services/agentUsage';
@@ -138,6 +159,9 @@ const props = defineProps({
   visible: { type: Boolean, default: false },
   compact: { type: Boolean, default: false },
   agentName: { type: String, default: null },
+  placement: { type: String as PropType<any>, default: 'bottom-start' },
+  trigger: { type: String as PropType<'button' | 'icon'>, default: 'button' },
+  tooltipText: { type: String, default: '' },
 });
 const message = useMessage();
 const aiStore = useAiStore();
@@ -177,6 +201,12 @@ const currentModelName = computed(() => {
   if (!selectedModelId.value) return '';
   const m = aiStore.allModels.find(x => x.model_id === selectedModelId.value);
   return m ? (m.display_name || m.model_name) : '';
+});
+
+const computedTooltipText = computed(() => {
+  if (props.tooltipText) return props.tooltipText;
+  const name = currentModelName.value || '未指定模型';
+  return `配置模型 (当前: ${name})`;
 });
 
 const wrapperClass = computed(() =>
@@ -635,11 +665,18 @@ onBeforeUnmount(() => {
   border-color: var(--spark-border-hover);
 }
 
-.model-selector-btn:focus,
-.model-selector-btn:focus-visible {
-  outline: none;
-  box-shadow: none;
-  transform: none;
+.model-config-icon-btn {
+  width: 28px;
+  height: 28px;
+  color: var(--spark-primary);
+  transition: color 0.15s ease, background 0.15s ease, opacity 0.15s ease;
+  opacity: 0.9;
+}
+
+.model-config-icon-btn:hover {
+  color: var(--spark-primary);
+  background: var(--spark-primary-glow);
+  opacity: 1;
 }
 
 @media (max-width: 640px) {

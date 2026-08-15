@@ -956,6 +956,7 @@ const zhCN = {
       send: '发送',
       inputPlaceholder: '输入消息，Ctrl/Shift+Enter 发送...',
       attachFile: '上传文件作为聊天上下文',
+      modelConfig: '配置模型',
       removeImportedFile: '删除',
       replaceImportedFile: '更换',
       addMoreAttachment: '添加更多附件',
@@ -2334,6 +2335,9 @@ const zhCN = {
         noScenesHint: '暂无场景',
         novelMainText: '正文',
         untitledScene: '未命名场景',
+        collapseChatSidebar: '收起智能助手',
+        expandChatSidebar: '展开智能助手',
+        aiAssistant: '智能助手',
       },
     },
     style: {

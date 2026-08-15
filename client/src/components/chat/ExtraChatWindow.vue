@@ -8,22 +8,15 @@
         class="extra-chat-window"
         :style="windowStyle"
       >
-        <!-- 左上角调整尺寸手柄 -->
-        <n-tooltip trigger="hover">
-          <template #trigger>
-            <div
-              class="resize-handle resize-handle--nw"
-              @mousedown="startResize($event, 'nw')"
-            >
-              <svg viewBox="0 0 10 10" fill="currentColor">
-                <path d="M0 10L10 0L10 3L3 10z" opacity="0.4"/>
-                <path d="M0 10L6 4L6 6L2 10z" opacity="0.6"/>
-                <path d="M0 10L3 7L3 10z" opacity="0.8"/>
-              </svg>
-            </div>
-          </template>
-          {{ t('components.chatPanel.dragResize') }}
-        </n-tooltip>
+        <!-- 桌面级八向调整尺寸手柄 -->
+        <div class="resize-handle resize-handle--n" @mousedown="startResize($event, 'n')" />
+        <div class="resize-handle resize-handle--s" @mousedown="startResize($event, 's')" />
+        <div class="resize-handle resize-handle--w" @mousedown="startResize($event, 'w')" />
+        <div class="resize-handle resize-handle--e" @mousedown="startResize($event, 'e')" />
+        <div class="resize-handle resize-handle--nw" @mousedown="startResize($event, 'nw')" />
+        <div class="resize-handle resize-handle--ne" @mousedown="startResize($event, 'ne')" />
+        <div class="resize-handle resize-handle--sw" @mousedown="startResize($event, 'sw')" />
+        <div class="resize-handle resize-handle--se" @mousedown="startResize($event, 'se')" />
 
         <ChatPanel
           ref="panelRef"
@@ -67,6 +60,7 @@
         >
           <template #input-prefix>
             <ChatFileImportButton :session-id="session.id" :agent-id="session.agentId" />
+            <AiSettingsPanel :visible="true" :compact="true" :agent-name="session.agentId" placement="top-start" trigger="icon" />
           </template>
           <!-- 关闭按钮 -->
           <template #header-right>
@@ -103,6 +97,7 @@ import { useI18n } from 'vue-i18n';
 import { NButton, NCard, NTooltip } from 'naive-ui';
 import ChatPanel from '@/components/chat/ChatPanel.vue';
 import ChatFileImportButton from '@/components/chat/ChatFileImportButton.vue';
+import AiSettingsPanel from '@/components/lorebook/AiSettingsPanel.vue';
 import { useChatStore } from '@/components/stores/chatStore';
 import { useChatActions } from '@/composables/useChatActions';
 import { useResizable } from '@/composables/useResizable';
@@ -180,114 +175,156 @@ const windowStyle = computed(() => ({
   marginTop: `${resizable.fitOffset.value}px`,
 }));
 
-// ==================== 简化拖拽 ====================
-const dragState = reactive({
+// ==================== 拖拽功能 ====================
+const drag = reactive({
   isDragging: false,
   startX: 0,
   startY: 0,
-  origRight: 0,
-  origTop: 0,
+  startRight: 0,
+  startTop: 0,
 });
 
 function onHeaderDrag(e) {
-  if (e.type === 'mousedown' && e.button !== 0) return;
-  dragState.startX = e.clientX;
-  dragState.startY = e.clientY;
-  dragState.origRight = windowPos.right;
-  dragState.origTop = windowPos.top;
-  dragState.isDragging = true;
-  document.addEventListener('mousemove', onDragMove);
-  document.addEventListener('mouseup', stopDrag, { once: true });
+  if (e.target.closest('button, input, select, textarea, .n-base-select')) return;
+  const isTouch = e.type.startsWith('touch');
+  if (!isTouch && e.button !== 0) return;
+  e.preventDefault();
+  
+  drag.isDragging = true;
+  const clientX = isTouch ? e.touches[0].clientX : e.clientX;
+  const clientY = isTouch ? e.touches[0].clientY : e.clientY;
+  
+  drag.startX = clientX;
+  drag.startY = clientY;
+  drag.startRight = windowPos.right;
+  drag.startTop = windowPos.top;
+  
+  if (isTouch) {
+    document.addEventListener('touchmove', onDragMove, { passive: false });
+    document.addEventListener('touchend', stopDrag, { once: true });
+  } else {
+    document.addEventListener('mousemove', onDragMove);
+    document.addEventListener('mouseup', stopDrag, { once: true });
+  }
 }
 
 function onDragMove(e) {
-  if (!dragState.isDragging) return;
-  const dx = e.clientX - dragState.startX;
-  const dy = e.clientY - dragState.startY;
-  windowPos.right = Math.max(0, dragState.origRight - dx);
-  windowPos.top = Math.max(0, Math.min(window.innerHeight - 100, dragState.origTop + dy));
+  if (!drag.isDragging) return;
+  const isTouch = e.type.startsWith('touch');
+  const clientX = isTouch ? e.touches[0].clientX : e.clientX;
+  const clientY = isTouch ? e.touches[0].clientY : e.clientY;
+  
+  const dx = clientX - drag.startX;
+  const dy = clientY - drag.startY;
+  
+  windowPos.right = drag.startRight - dx;
+  windowPos.top = drag.startTop + dy;
 }
 
-function stopDrag() {
-  dragState.isDragging = false;
+function stopDrag(e) {
+  drag.isDragging = false;
   document.removeEventListener('mousemove', onDragMove);
+  document.removeEventListener('touchmove', onDragMove);
+}
+
+function onAgentChanged(agentId: string) {
+  emit('agent-changed', agentId);
 }
 
 onUnmounted(() => {
   document.removeEventListener('mousemove', onDragMove);
+  document.removeEventListener('touchmove', onDragMove);
 });
-
-// ==================== 其他 ====================
-watch(() => props.session.history, () => {
-  if (!props.session.expanded) return;
-  actions.scrollToBottom();
-});
-
-function onAgentChanged(agentId) {
-  emit('agent-changed', agentId);
-}
 </script>
 
 <style scoped>
 .extra-chat-window {
+  border-radius: var(--spark-radius-lg);
+  box-shadow: var(--spark-shadow-2xl);
+  backdrop-filter: blur(16px);
+  background: var(--spark-panel-bg);
+  border: 1px solid var(--spark-border-subtle);
+  overflow: hidden;
   display: flex;
   flex-direction: column;
-  border-radius: 16px;
-  box-shadow: 0 8px 32px rgba(0,0,0,0.2), 0 0 0 1px rgba(255,255,255,0.05);
-  backdrop-filter: blur(20px);
-  -webkit-backdrop-filter: blur(20px);
-  overflow: hidden;
 }
 
-.extra-chat-window :deep(.n-card-header) {
+.extra-chat-window :deep(.n-card__content) {
   padding: 0;
-  border-bottom: none;
-}
-
-.extra-chat-window :deep(.n-card-content) {
-  flex: 1;
-  overflow: hidden;
+  height: 100%;
   display: flex;
   flex-direction: column;
-  padding: 0 !important;
+  overflow: hidden;
 }
 
+/* 八向调整尺寸手柄样式 */
 .resize-handle {
   position: absolute;
-  width: 16px;
-  height: 16px;
-  z-index: 10;
-  cursor: nwse-resize;
-  color: var(--spark-text-muted);
-  opacity: 0.4;
-  transition: opacity 0.2s;
+  z-index: 15;
+  background: transparent;
 }
 
-.resize-handle:hover {
-  opacity: 0.8;
+.resize-handle--n {
+  top: -4px;
+  left: 8px;
+  right: 8px;
+  height: 8px;
+  cursor: ns-resize;
+}
+
+.resize-handle--s {
+  bottom: -4px;
+  left: 8px;
+  right: 8px;
+  height: 8px;
+  cursor: ns-resize;
+}
+
+.resize-handle--w {
+  left: -4px;
+  top: 8px;
+  bottom: 8px;
+  width: 8px;
+  cursor: ew-resize;
+}
+
+.resize-handle--e {
+  right: -4px;
+  top: 8px;
+  bottom: 8px;
+  width: 8px;
+  cursor: ew-resize;
 }
 
 .resize-handle--nw {
-  top: 0;
-  left: 0;
-  transform: rotate(90deg);
+  top: -4px;
+  left: -4px;
+  width: 12px;
+  height: 12px;
+  cursor: nwse-resize;
 }
 
-/* 动画 */
-.chat-float-panel-enter-active {
-  animation: panel-in 0.3s cubic-bezier(0.34, 1.56, 0.64, 1) forwards;
-}
-.chat-float-panel-leave-active {
-  animation: panel-out 0.2s ease forwards;
-}
-
-@keyframes panel-in {
-  from { opacity: 0; transform: scale(0.85) translateY(15px); }
-  to { opacity: 1; transform: scale(1) translateY(0); }
+.resize-handle--ne {
+  top: -4px;
+  right: -4px;
+  width: 12px;
+  height: 12px;
+  cursor: nesw-resize;
 }
 
-@keyframes panel-out {
-  from { opacity: 1; transform: scale(1) translateY(0); }
-  to { opacity: 0; transform: scale(0.85) translateY(15px); }
+.resize-handle--sw {
+  bottom: -4px;
+  left: -4px;
+  width: 12px;
+  height: 12px;
+  cursor: nesw-resize;
+}
+
+.resize-handle--se {
+  bottom: -4px;
+  right: -4px;
+  width: 12px;
+  height: 12px;
+  cursor: nwse-resize;
 }
 </style>

@@ -958,6 +958,7 @@ const jaJP = {
       send: '送信',
       inputPlaceholder: 'メッセージを入力、Ctrl/Shift+Enter で送信...',
       attachFile: 'ファイルをチャット文脈として添付',
+      modelConfig: 'モデル設定',
       removeImportedFile: '削除',
       replaceImportedFile: '差し替え',
       addMoreAttachment: '添付ファイルを追加',
@@ -2331,6 +2332,9 @@ const jaJP = {
         noScenesHint: 'シーンなし',
         novelMainText: '本文',
         untitledScene: '無題シーン',
+        collapseChatSidebar: 'AIサイドバーを閉じる',
+        expandChatSidebar: 'AIアシスタントを展開',
+        aiAssistant: 'AIアシスタント',
       },
     },
     style: {

@@ -958,6 +958,7 @@ const enUS = {
       send: 'Send',
       inputPlaceholder: 'Type a message, Ctrl/Shift+Enter to send...',
       attachFile: 'Attach a file as chat context',
+      modelConfig: 'Configure Model',
       removeImportedFile: 'Remove',
       replaceImportedFile: 'Replace',
       addMoreAttachment: 'Add more attachments',
@@ -2335,6 +2336,9 @@ const enUS = {
         noScenesHint: 'No scenes yet',
         novelMainText: 'Main Text',
         untitledScene: 'Untitled Scene',
+        collapseChatSidebar: 'Collapse AI Sidebar',
+        expandChatSidebar: 'Expand AI Assistant',
+        aiAssistant: 'AI Assistant',
       },
     },
     style: {

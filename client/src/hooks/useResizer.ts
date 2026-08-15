@@ -7,6 +7,8 @@ type PanelBounds = {
   inspectorMax: number;
   aiMin: number;
   aiMax: number;
+  chatMin: number;
+  chatMax: number;
 };
 
 function clamp(value: number, min: number, max: number) {
@@ -22,6 +24,8 @@ function getPanelBounds(viewportWidth: number): PanelBounds {
       inspectorMax: 320,
       aiMin: Math.max(280, Math.round(viewportWidth * 0.23)),
       aiMax: 360,
+      chatMin: 300,
+      chatMax: 420,
     };
   }
 
@@ -33,6 +37,8 @@ function getPanelBounds(viewportWidth: number): PanelBounds {
       inspectorMax: 420,
       aiMin: Math.round(viewportWidth * 0.22),
       aiMax: 460,
+      chatMin: 320,
+      chatMax: 560,
     };
   }
 
@@ -43,6 +49,8 @@ function getPanelBounds(viewportWidth: number): PanelBounds {
     inspectorMax: 600,
     aiMin: Math.min(800, Math.round(viewportWidth * 0.2)),
     aiMax: 800,
+    chatMin: 340,
+    chatMax: 720,
   };
 }
 
@@ -50,6 +58,7 @@ export function useResizer() {
   const sidebarWidth = ref(220);
   const inspectorWidth = ref(320);
   const aiSidebarWidth = ref(380);
+  const chatSidebarWidth = ref(380);
 
   const isResizing = ref(false);
   let currentResizer: HTMLElement | null = null;
@@ -63,9 +72,10 @@ export function useResizer() {
     sidebarWidth.value = clamp(sidebarWidth.value, bounds.sidebarMin, bounds.sidebarMax);
     inspectorWidth.value = clamp(inspectorWidth.value, bounds.inspectorMin, bounds.inspectorMax);
     aiSidebarWidth.value = clamp(aiSidebarWidth.value, bounds.aiMin, bounds.aiMax);
+    chatSidebarWidth.value = clamp(chatSidebarWidth.value, bounds.chatMin, bounds.chatMax);
 
-    const reservedSideWidths = sidebarWidth.value + inspectorWidth.value + aiSidebarWidth.value;
-    const maxSideWidthTotal = Math.max(760, viewportWidth - 420);
+    const reservedSideWidths = sidebarWidth.value + inspectorWidth.value + chatSidebarWidth.value;
+    const maxSideWidthTotal = Math.max(760, viewportWidth - 360);
 
     if (reservedSideWidths <= maxSideWidthTotal) return;
 
@@ -79,10 +89,9 @@ export function useResizer() {
       return current - reduced;
     };
 
-    // 空间不足时优先让节点树让位，保证两个编辑面板仍有可用宽度。
     sidebarWidth.value = shrinkFrom(sidebarWidth.value, bounds.sidebarMin);
     inspectorWidth.value = shrinkFrom(inspectorWidth.value, bounds.inspectorMin);
-    aiSidebarWidth.value = shrinkFrom(aiSidebarWidth.value, bounds.aiMin);
+    chatSidebarWidth.value = shrinkFrom(chatSidebarWidth.value, bounds.chatMin);
   }
 
   const savePanelSizes = () => {
@@ -92,6 +101,7 @@ export function useResizer() {
         sidebar: sidebarWidth.value,
         inspector: inspectorWidth.value,
         ai: aiSidebarWidth.value,
+        chat: chatSidebarWidth.value,
       }),
     );
   };
@@ -104,10 +114,11 @@ export function useResizer() {
     }
 
     try {
-      const cfg = JSON.parse(saved) as Partial<Record<'sidebar' | 'inspector' | 'ai', unknown>>;
+      const cfg = JSON.parse(saved) as Partial<Record<'sidebar' | 'inspector' | 'ai' | 'chat', unknown>>;
       if (typeof cfg.sidebar === 'number') sidebarWidth.value = cfg.sidebar;
       if (typeof cfg.inspector === 'number') inspectorWidth.value = cfg.inspector;
       if (typeof cfg.ai === 'number') aiSidebarWidth.value = cfg.ai;
+      if (typeof cfg.chat === 'number') chatSidebarWidth.value = cfg.chat;
     } catch {
       // ignore broken localStorage payload
     }
@@ -130,6 +141,8 @@ export function useResizer() {
       startWidth = inspectorWidth.value;
     } else if (type === 'inspector') {
       startWidth = aiSidebarWidth.value;
+    } else if (type === 'chat-sidebar') {
+      startWidth = chatSidebarWidth.value;
     }
 
     currentResizer.classList.add('active');
@@ -157,6 +170,9 @@ export function useResizer() {
     } else if (type === 'inspector') {
       newWidth = startWidth - deltaX;
       aiSidebarWidth.value = clamp(newWidth, bounds.aiMin, bounds.aiMax);
+    } else if (type === 'chat-sidebar') {
+      newWidth = startWidth - deltaX;
+      chatSidebarWidth.value = clamp(newWidth, bounds.chatMin, bounds.chatMax);
     }
   };
 
@@ -191,6 +207,7 @@ export function useResizer() {
     sidebarWidth,
     inspectorWidth,
     aiSidebarWidth,
+    chatSidebarWidth,
     handleMouseDown,
   };
 }

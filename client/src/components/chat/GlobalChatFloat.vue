@@ -30,38 +30,15 @@
     <!-- 桌面端: Expanded panel -->
     <transition name="chat-float-panel" @after-enter="onPanelEntered">
       <n-card v-if="chatFloatSurface.desktopPanelVisible" size="small" :bordered="true" class="chat-float-panel" :style="panelStyle">
-        <!-- 左上角调整尺寸手柄 -->
-        <n-tooltip trigger="hover">
-          <template #trigger>
-            <div
-              class="resize-handle resize-handle--nw"
-              @mousedown="startResize($event, 'nw')"
-            >
-              <svg viewBox="0 0 10 10" fill="currentColor">
-                <path d="M0 10L10 0L10 3L3 10z" opacity="0.4"/>
-                <path d="M0 10L6 4L6 6L2 10z" opacity="0.6"/>
-                <path d="M0 10L3 7L3 10z" opacity="0.8"/>
-              </svg>
-            </div>
-          </template>
-          {{ t('components.chatPanel.dragResize') }}
-        </n-tooltip>
-        <!-- 左下角调整尺寸手柄 -->
-        <n-tooltip trigger="hover">
-          <template #trigger>
-            <div
-              class="resize-handle resize-handle--sw"
-              @mousedown="startResize($event, 'sw')"
-            >
-              <svg viewBox="0 0 10 10" fill="currentColor">
-                <path d="M0 0L10 10L10 7L3 0z" opacity="0.4"/>
-                <path d="M0 0L6 6L6 4L2 0z" opacity="0.6"/>
-                <path d="M0 0L3 3L3 0z" opacity="0.8"/>
-              </svg>
-            </div>
-          </template>
-          {{ t('components.chatPanel.dragResize') }}
-        </n-tooltip>
+        <!-- 桌面级八向调整尺寸手柄（四边四角无缝微交互） -->
+        <div class="resize-handle resize-handle--n" @mousedown="startResize($event, 'n')" />
+        <div class="resize-handle resize-handle--s" @mousedown="startResize($event, 's')" />
+        <div class="resize-handle resize-handle--w" @mousedown="startResize($event, 'w')" />
+        <div class="resize-handle resize-handle--e" @mousedown="startResize($event, 'e')" />
+        <div class="resize-handle resize-handle--nw" @mousedown="startResize($event, 'nw')" />
+        <div class="resize-handle resize-handle--ne" @mousedown="startResize($event, 'ne')" />
+        <div class="resize-handle resize-handle--sw" @mousedown="startResize($event, 'sw')" />
+        <div class="resize-handle resize-handle--se" @mousedown="startResize($event, 'se')" />
         <!-- 内容延迟渲染占位：窗口动画优先，内容进场后再挂载 ChatPanel -->
         <div v-if="!contentReady" class="chat-float-panel-placeholder">
           <GlobalLoading scope="chat" target="chat-primary" variant="card" />
@@ -110,6 +87,7 @@
         >
           <template #input-prefix>
             <ChatFileImportButton :session-id="primarySessionId" :agent-id="chat.currentAgentId" />
+            <AiSettingsPanel :visible="true" :compact="true" :agent-name="chat.currentAgentId" placement="top-start" trigger="icon" />
           </template>
           <!-- 新建窗口按钮 -->
           <template #header-actions>
@@ -230,6 +208,7 @@
         >
           <template #input-prefix>
             <ChatFileImportButton :session-id="primarySessionId" :agent-id="chat.currentAgentId" />
+            <AiSettingsPanel :visible="true" :compact="true" :agent-name="chat.currentAgentId" placement="top-start" trigger="icon" />
           </template>
           <template #header-right>
             <n-tooltip trigger="hover">
@@ -268,6 +247,7 @@ import { CircleUser } from '@lucide/vue';
 
 import ChatPanel from '@/components/chat/ChatPanel.vue';
 import ChatFileImportButton from '@/components/chat/ChatFileImportButton.vue';
+import AiSettingsPanel from '@/components/lorebook/AiSettingsPanel.vue';
 import ChatMessageList from '@/components/chat/ChatMessageList.vue';
 import ExtraChatWindow from '@/components/chat/ExtraChatWindow.vue';
 import GlobalLoading from '@/components/share/GlobalLoading.vue';
@@ -1192,13 +1172,24 @@ function stopDrag(e) {
 }
 
 // ==================== 调整尺寸功能 ====================
+const DIRECTION_CURSORS: Record<string, string> = {
+  n: 'ns-resize',
+  s: 'ns-resize',
+  e: 'ew-resize',
+  w: 'ew-resize',
+  nw: 'nwse-resize',
+  se: 'nwse-resize',
+  ne: 'nesw-resize',
+  sw: 'nesw-resize',
+};
+
 function startResize(e, direction) {
   if (e.button !== 0) return; // 只响应左键
   e.preventDefault();
   e.stopPropagation();
   
   resize.isResizing = true;
-  resize.direction = direction;
+  resize.direction = direction || 'nw';
   resize.startX = e.clientX;
   resize.startY = e.clientY;
   resize.startWidth = panelSize.width;
@@ -1208,66 +1199,60 @@ function startResize(e, direction) {
   
   document.addEventListener('mousemove', onResizeMove);
   document.addEventListener('mouseup', stopResize, { once: true });
-  document.body.style.cursor = 'nwse-resize';
+  document.body.style.cursor = DIRECTION_CURSORS[direction] || 'nwse-resize';
   document.body.style.userSelect = 'none';
 }
 
 function onResizeMove(e) {
   if (!resize.isResizing) return;
   
+  const direction = resize.direction || 'nw';
   const dx = e.clientX - resize.startX;
   const dy = e.clientY - resize.startY;
-  const direction = resize.direction || 'nw';
-  
-  // 根据方向计算新尺寸
-  let newWidth, newHeight, newTop;
-  
-  if (direction === 'nw') {
-    // 左上角拖拽：dx 向左为负（宽度增加），dy 向上为负（高度增加）
-    newWidth = Math.min(MAX_PANEL_WIDTH, Math.max(MIN_PANEL_WIDTH, resize.startWidth - dx));
-    newHeight = Math.min(MAX_PANEL_HEIGHT, Math.max(MIN_PANEL_HEIGHT, resize.startHeight - dy));
-    const heightDelta = newHeight - resize.startHeight;
-    newTop = resize.startTop - heightDelta;
-  } else if (direction === 'sw') {
-    // 左下角拖拽：dx 向左为负（宽度增加），dy 向下为正（高度增加）
-    newWidth = Math.min(MAX_PANEL_WIDTH, Math.max(MIN_PANEL_WIDTH, resize.startWidth - dx));
-    newHeight = Math.min(MAX_PANEL_HEIGHT, Math.max(MIN_PANEL_HEIGHT, resize.startHeight + dy));
-    newTop = resize.startTop; // 下边界扩展，top 不变
-  } else {
-    return;
-  }
-  
-  // 确保不超出视口边界
   const viewportWidth = window.innerWidth;
   const viewportHeight = window.innerHeight;
   const minMargin = 0;
-  
-  // 检查左边界是否超出
-  const leftEdge = viewportWidth - pos.right - newWidth;
-  if (leftEdge < minMargin) {
-    panelSize.width = viewportWidth - pos.right - minMargin;
-  } else {
-    panelSize.width = newWidth;
+
+  let nextWidth = resize.startWidth;
+  let nextHeight = resize.startHeight;
+  let nextRight = resize.startRight;
+  let nextTop = resize.startTop;
+
+  // 水平方向调整
+  if (direction.includes('w')) {
+    // 向左拖动增加宽度
+    const rawWidth = resize.startWidth - dx;
+    const maxAllowedWidth = Math.min(MAX_PANEL_WIDTH, viewportWidth - resize.startRight - minMargin);
+    nextWidth = Math.min(maxAllowedWidth, Math.max(MIN_PANEL_WIDTH, rawWidth));
+    nextRight = resize.startRight;
+  } else if (direction.includes('e')) {
+    // 向右拖动增加宽度，并反向调整 right 保持左侧固定
+    const rawWidth = resize.startWidth + dx;
+    const maxAllowedWidth = Math.min(MAX_PANEL_WIDTH, resize.startWidth + resize.startRight - minMargin);
+    nextWidth = Math.min(maxAllowedWidth, Math.max(MIN_PANEL_WIDTH, rawWidth));
+    nextRight = Math.max(minMargin, resize.startRight - (nextWidth - resize.startWidth));
   }
-  
-  // 检查上边界是否超出（仅nw方向需要）
-  if (direction === 'nw') {
-    if (newTop < minMargin) {
-      panelSize.height = Math.max(MIN_PANEL_HEIGHT, resize.startHeight + resize.startTop - minMargin);
-    } else {
-      panelSize.height = newHeight;
-      pos.top = newTop;
-    }
-  } else if (direction === 'sw') {
-    // sw方向：检查下边界是否超出
-    const panelBottom = newTop + newHeight;
-    if (panelBottom > viewportHeight - minMargin) {
-      panelSize.height = Math.max(MIN_PANEL_HEIGHT, viewportHeight - minMargin - newTop);
-    } else {
-      panelSize.height = newHeight;
-    }
+
+  // 垂直方向调整
+  if (direction.includes('n')) {
+    // 向上拖动增加高度，并反向调整 top 保持底部固定
+    const rawHeight = resize.startHeight - dy;
+    const maxAllowedHeight = Math.min(MAX_PANEL_HEIGHT, resize.startHeight + resize.startTop - minMargin);
+    nextHeight = Math.min(maxAllowedHeight, Math.max(MIN_PANEL_HEIGHT, rawHeight));
+    nextTop = Math.max(minMargin, resize.startTop - (nextHeight - resize.startHeight));
+  } else if (direction.includes('s')) {
+    // 向下拖动增加高度，top 保持不变
+    const rawHeight = resize.startHeight + dy;
+    const maxAllowedHeight = Math.min(MAX_PANEL_HEIGHT, viewportHeight - minMargin - resize.startTop);
+    nextHeight = Math.min(maxAllowedHeight, Math.max(MIN_PANEL_HEIGHT, rawHeight));
+    nextTop = resize.startTop;
   }
-  
+
+  panelSize.width = nextWidth;
+  panelSize.height = nextHeight;
+  pos.right = nextRight;
+  pos.top = nextTop;
+
   // 确保面板不超出下边界
   ensurePanelFitsViewport();
 }

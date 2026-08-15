@@ -44,6 +44,7 @@
         </template>
         <template #input-prefix>
           <ChatFileImportButton :session-id="primarySessionId" :agent-id="chat.currentAgentId" />
+          <AiSettingsPanel :visible="true" :compact="true" :agent-name="chat.currentAgentId" placement="top-start" trigger="icon" />
         </template>
       </ChatPanel>
     </div>
@@ -55,6 +56,7 @@ import { ref, computed, onMounted, onActivated, nextTick, watch } from 'vue';
 import ChatPanel from '@/components/chat/ChatPanel.vue';
 import ChatWelcomeScreen from '@/components/chat/ChatWelcomeScreen.vue';
 import ChatFileImportButton from '@/components/chat/ChatFileImportButton.vue';
+import AiSettingsPanel from '@/components/lorebook/AiSettingsPanel.vue';
 import OnboardingHelpButton from '@/onboarding/components/OnboardingHelpButton.vue';
 
 import { useChatStore } from '@/components/stores/chatStore';
