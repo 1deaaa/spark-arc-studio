@@ -459,7 +459,7 @@ const usageOptions = computed(() =>
   }))
 );
 
-const platformOptions = computed(() => aiStore.platformOptions);
+const platformOptions = computed(() => aiStore.languageModelPlatformOptions);
 
 const getBindingMode = (agentKey: string) => {
   const bound = agentBindings.value[agentKey];
@@ -553,20 +553,23 @@ const getDirectModelId = (agentKey: string) => {
 
   const currentPlatformId = getDirectPlatformId(agentKey);
   if (currentPlatformId && savedModelId) {
-    const isValid = aiStore.allModels.some(m => m.platform_id === currentPlatformId && m.model_id === savedModelId);
+    const isValid = aiStore
+      .getLanguageModelsForPlatform(currentPlatformId)
+      .some(model => model.value === savedModelId);
     if (!isValid) return null;
   }
 
   return savedModelId;
 };
 
-const getDirectModelOptions = (agentKey: string) => aiStore.getModelsForPlatform(getDirectPlatformId(agentKey));
+const getDirectModelOptions = (agentKey: string) =>
+  aiStore.getLanguageModelsForPlatform(getDirectPlatformId(agentKey));
 
 const handleDirectPlatformChange = async (agentKey: string, platformId: string) => {
   if (!directSelections.value[agentKey]) directSelections.value[agentKey] = {};
   directSelections.value[agentKey].platformId = platformId;
 
-  const models = aiStore.getModelsForPlatform(platformId);
+  const models = aiStore.getLanguageModelsForPlatform(platformId);
   if (models && models.length > 0) {
     const firstModelId = models[0].value;
     directSelections.value[agentKey].modelId = firstModelId;

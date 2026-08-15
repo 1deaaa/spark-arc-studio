@@ -229,7 +229,7 @@ const usageOptions = computed(() =>
 );
 
 // 平台选项
-const platformOptions = computed(() => aiStore.platformOptions);
+const platformOptions = computed(() => aiStore.languageModelPlatformOptions);
 
 // 当前绑定模式
 const bindingMode = computed(() => {
@@ -271,16 +271,25 @@ const directModelId = computed(() => {
   if (directSelections.value[key]?.modelId) {
     return directSelections.value[key].modelId;
   }
+  let savedModelId: string | null = null;
   const binding = agentBindings.value[key];
   if (typeof binding === 'object' && binding?.direct?.model_id) {
-    return binding.direct.model_id;
+    savedModelId = binding.direct.model_id;
+  } else {
+    const slot = aiStore.usageSelections.find(s => s.usage_key === key);
+    savedModelId = slot?.model_id || null;
   }
-  const slot = aiStore.usageSelections.find(s => s.usage_key === key);
-  return slot?.model_id || null;
+  const platformId = directPlatformId.value;
+  if (!savedModelId || !platformId) return savedModelId;
+
+  const isAvailable = aiStore
+    .getLanguageModelsForPlatform(platformId)
+    .some(model => model.value === savedModelId);
+  return isAvailable ? savedModelId : null;
 });
 
 const directModelOptions = computed(() => {
-  return aiStore.getModelsForPlatform(directPlatformId.value);
+  return aiStore.getLanguageModelsForPlatform(directPlatformId.value);
 });
 
 // 获取用途的模型名称
@@ -344,7 +353,7 @@ const handlePlatformChange = async (platformId) => {
   }
   directSelections.value[key].platformId = platformId;
 
-  const models = aiStore.getModelsForPlatform(platformId);
+  const models = aiStore.getLanguageModelsForPlatform(platformId);
   if (models && models.length > 0) {
     const firstModelId = models[0].value;
     directSelections.value[key].modelId = firstModelId;

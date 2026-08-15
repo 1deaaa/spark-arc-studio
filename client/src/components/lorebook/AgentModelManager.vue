@@ -221,7 +221,7 @@ const usageOptions = computed(() =>
   }))
 );
 
-const platformOptions = computed(() => aiStore.platformOptions);
+const platformOptions = computed(() => aiStore.languageModelPlatformOptions);
 
 const getModelDisplayName = (platformId, modelId) => {
   const m = aiStore.allModels.find(m => m.platform_id === platformId && m.model_id === modelId);
@@ -338,7 +338,9 @@ const getDirectModelId = (agentKey) => {
   // This prevents showing an ID when switching platforms
   const currentPlatformId = getDirectPlatformId(agentKey);
   if (currentPlatformId && savedModelId) {
-      const isValid = aiStore.allModels.some(m => m.platform_id === currentPlatformId && m.model_id === savedModelId);
+      const isValid = aiStore
+        .getLanguageModelsForPlatform(currentPlatformId)
+        .some(model => model.value === savedModelId);
       if (!isValid) return null;
   }
 
@@ -346,7 +348,7 @@ const getDirectModelId = (agentKey) => {
 };
 
 const getDirectModelOptions = (agentKey) => {
-  return aiStore.getModelsForPlatform(getDirectPlatformId(agentKey));
+  return aiStore.getLanguageModelsForPlatform(getDirectPlatformId(agentKey));
 };
 
 const handleDirectPlatformChange = async (agentKey, platformId) => {
@@ -356,7 +358,7 @@ const handleDirectPlatformChange = async (agentKey, platformId) => {
   directSelections.value[agentKey].platformId = platformId;
   
   // 自动选择第一个模型并保存
-  const models = aiStore.getModelsForPlatform(platformId);
+  const models = aiStore.getLanguageModelsForPlatform(platformId);
   if (models && models.length > 0) {
     const firstModelId = models[0].value;
     directSelections.value[agentKey].modelId = firstModelId;
