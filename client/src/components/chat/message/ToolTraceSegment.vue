@@ -103,16 +103,22 @@ const expandable = computed(() => (
 }
 
 .tool-trace-chip {
+  -webkit-appearance: none;
+  appearance: none;
   display: inline-flex;
   align-items: center;
   gap: 4px;
   border: 0;
   color: inherit;
   background: transparent;
+  box-shadow: none;
   font: inherit;
   padding: 4px 8px;
   border-radius: 999px;
   font-size: var(--spark-fs-xs);
+  transform: none;
+  -webkit-user-select: none;
+  user-select: none;
 }
 
 .tool-trace-chip:disabled {
