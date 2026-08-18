@@ -21,6 +21,8 @@ from sqlalchemy.orm import (
     relationship,
 )
 
+from .platform_identity import generate_platform_key
+
 Base = declarative_base()
 
 
@@ -154,6 +156,8 @@ class LLMPlatform(Base):
     id = Column(Integer, primary_key=True)
     name = Column(String(80), default="未命名平台", index=True)
     user_id = Column(String(255), nullable=True, index=True)
+    # 平台身份与 base_url 解耦；base_url 可以被多个平台配置共享。
+    platform_key = Column(String(128), nullable=True, unique=True, default=generate_platform_key, index=True)
     base_url = Column(String(255), nullable=False)
     # 平台充值入口；为空时前端不显示低频充值按钮。
     recharge_url = Column(String(512), nullable=True)

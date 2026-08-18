@@ -2,7 +2,9 @@ from __future__ import annotations
 
 import os
 import re
+import shutil
 import uuid
+from collections.abc import Iterable, Mapping
 from typing import Any, Dict, Optional, Tuple
 
 
@@ -23,6 +25,14 @@ class DuplicateSceneIdentityError(ValueError):
         self.paths = paths
         joined = "、".join(paths)
         super().__init__(f"场景 {self.chapter_num}-{self.scene_num} 存在多个文件：{joined}")
+
+
+class StoryRenameConflictError(ValueError):
+    """故事文件批量重命名发生冲突，事务尚未开始写入。"""
+
+
+class StoryRenameTransactionError(RuntimeError):
+    """故事文件批量重命名过程中失败，事务已尝试回滚。"""
 
 
 def _parse_number_token(value: str) -> Optional[int]:
@@ -383,6 +393,7 @@ def rebuild_story_filename(
     display_name: Optional[str] = None,
     order: Optional[int] = None,
     chapter_num: Optional[int] = None,
+    scene_num: Optional[int] = None,
 ) -> str:
     parsed = parse_story_filename(filename)
     if not parsed:
@@ -390,11 +401,12 @@ def rebuild_story_filename(
         return f"{base}{os.path.splitext(filename)[1] or '.arc'}"
     effective_order = parsed["order"] if order is None else int(order)
     effective_chap = parsed["chapter_num"] if chapter_num is None else chapter_num
+    effective_scene = parsed["scene_num"] if scene_num is None else scene_num
     return build_story_filename(
         display_name or parsed["display_name"],
         file_format=parsed["format"],
         chapter_num=effective_chap,
-        scene_num=parsed["scene_num"],
+        scene_num=effective_scene,
         order=effective_order,
         group=parsed["group"],
         free=parsed["free"],
@@ -404,13 +416,25 @@ def rebuild_story_filename(
 def story_sort_key(rel_path: str) -> tuple:
     parsed = parse_story_filename(os.path.basename(rel_path))
     if not parsed:
-        return (999999, 999, 999, rel_path.lower())
+        return (999999, 999, 999, str(rel_path or "").lower(), str(rel_path or "").lower())
+
+    display_name = str(parsed.get("display_name") or "")
+    inferred_chapter = parsed.get("chapter_num")
+    inferred_scene = parsed.get("scene_num")
+    if inferred_chapter is None:
+        inferred_chapter = parse_chapter_identity_from_title(display_name)
+    if inferred_chapter is None or inferred_scene is None:
+        title_chapter, title_scene = parse_scene_identity_from_title(display_name)
+        if inferred_chapter is None:
+            inferred_chapter = title_chapter
+        if inferred_scene is None:
+            inferred_scene = title_scene
     return (
         parsed["order"] if parsed["order"] is not None else 999999,
-        parsed["chapter_num"] if parsed["chapter_num"] is not None else 999,
-        parsed["scene_num"] if parsed["scene_num"] is not None else 999,
-        str(parsed["display_name"] or "").lower(),
-        rel_path.lower(),
+        inferred_chapter if inferred_chapter is not None else 999,
+        inferred_scene if inferred_scene is not None else 999,
+        display_name.lower(),
+        str(rel_path or "").lower(),
     )
 
 
@@ -490,3 +514,285 @@ def resolve_story_file_path(stories_path: str, path: str) -> Tuple[Optional[str]
 def make_temp_story_filename(filename: str) -> str:
     stem, ext = os.path.splitext(filename)
     return f"{stem}.__tmp__{uuid.uuid4().hex}{ext}"
+
+
+def _absolute_story_path(stories_path: str, path: str, *, allow_missing: bool = False) -> str:
+    """解析并限制 stories 内的路径，拒绝目录穿越和 stories 本身。"""
+    root = os.path.abspath(os.path.normpath(os.fspath(stories_path)))
+    raw_path = os.fspath(path)
+    candidate = raw_path if os.path.isabs(raw_path) else os.path.join(root, raw_path)
+    candidate = os.path.abspath(os.path.normpath(candidate))
+    try:
+        inside = os.path.commonpath((root, candidate)) == root
+    except ValueError:
+        inside = False
+    if not inside or os.path.normcase(candidate) == os.path.normcase(root):
+        raise StoryRenameConflictError(f"故事路径必须位于 stories 目录内：{path}")
+    if not allow_missing and not os.path.exists(candidate):
+        raise StoryRenameConflictError(f"故事文件不存在：{path}")
+    return candidate
+
+
+def _normalize_rename_pairs(
+    rename_pairs: Iterable[tuple[str, str]],
+    *,
+    root_path: str | None = None,
+    expect_directory: bool = False,
+) -> list[tuple[str, str]]:
+    """预校验批量重命名计划，允许交换目标但禁止覆盖无关文件。"""
+    normalized: list[tuple[str, str]] = []
+    source_keys: set[str] = set()
+    target_keys: set[str] = set()
+    root = os.path.abspath(os.path.normpath(os.fspath(root_path))) if root_path else None
+    pairs = list(rename_pairs)
+
+    raw_sources: list[str] = []
+    for pair in pairs:
+        if not isinstance(pair, (tuple, list)) or len(pair) != 2:
+            raise StoryRenameConflictError("批量重命名项必须是 [源路径, 目标路径]。")
+        source_raw = pair[0]
+        source = _absolute_story_path(root, source_raw) if root else os.path.abspath(os.path.normpath(os.fspath(source_raw)))
+        raw_sources.append(source)
+    source_path_keys = {os.path.normcase(path) for path in raw_sources}
+
+    for index, pair in enumerate(pairs):
+        source_raw, target_raw = pair
+        source = raw_sources[index]
+        target = _absolute_story_path(root, target_raw, allow_missing=True) if root else os.path.abspath(os.path.normpath(os.fspath(target_raw)))
+        source_key = os.path.normcase(source)
+        target_key = os.path.normcase(target)
+        if source_key == target_key:
+            continue
+        if source_key in source_keys:
+            raise StoryRenameConflictError(f"同一源文件被重复重命名：{source}")
+        if target_key in target_keys:
+            raise StoryRenameConflictError(f"多个文件指向同一目标：{target}")
+        if not os.path.exists(source):
+            raise StoryRenameConflictError(f"源路径不存在：{source}")
+        if expect_directory:
+            if not os.path.isdir(source):
+                raise StoryRenameConflictError(f"源路径不是章节目录：{source}")
+        elif not os.path.isfile(source):
+            raise StoryRenameConflictError(f"源路径不是故事文件：{source}")
+        if os.path.exists(target) and target_key not in source_path_keys:
+            raise StoryRenameConflictError(f"目标路径已存在：{target}")
+        if expect_directory and os.path.dirname(target) != os.path.dirname(source):
+            raise StoryRenameConflictError("章节目录重命名只能在同一父目录内进行。")
+        source_keys.add(source_key)
+        target_keys.add(target_key)
+        normalized.append((source, target))
+
+    return normalized
+
+
+def _story_identity_from_path(path: str) -> tuple[str, int, int] | None:
+    """读取故事路径中的稳定场景身份。"""
+    parsed = parse_story_filename(os.path.basename(path))
+    if not parsed or parsed.get("free"):
+        return None
+    chapter_num = parsed.get("chapter_num")
+    scene_num = parsed.get("scene_num")
+    if chapter_num is None or scene_num is None:
+        chapter_num, scene_num = parse_scene_identity_from_title(parsed.get("display_name"))
+    if chapter_num is None or scene_num is None:
+        return None
+    return str(parsed.get("format") or "arc"), int(chapter_num), int(scene_num)
+
+
+def validate_story_identity_plan(
+    stories_path: str,
+    rename_pairs: list[tuple[str, str]],
+    *,
+    preserve_sources: bool = False,
+) -> None:
+    """校验批量计划不会产生重复的章节-场景身份。
+
+    重命名/移动时源文件会消失，因此可以把源路径排除在占用检查外；
+    复制时源文件仍然存在，必须把源路径继续视为占用者。
+    """
+    source_keys = {os.path.normcase(os.path.abspath(source)) for source, _ in rename_pairs}
+    seen_targets: dict[tuple[str, int, int], str] = {}
+    for _, target in rename_pairs:
+        identity = _story_identity_from_path(target)
+        if identity is None:
+            continue
+        previous = seen_targets.get(identity)
+        if previous:
+            raise StoryRenameConflictError(
+                f"批量操作会产生重复场景身份 {identity[1]}-{identity[2]}：{previous}、{target}"
+            )
+        seen_targets[identity] = target
+
+    for _, existing_path, _ in list_story_files(stories_path):
+        if not preserve_sources and os.path.normcase(os.path.abspath(existing_path)) in source_keys:
+            continue
+        identity = _story_identity_from_path(existing_path)
+        if identity is None:
+            continue
+        target = seen_targets.get(identity)
+        if target:
+            relative_existing = os.path.relpath(existing_path, stories_path).replace(os.sep, "/")
+            raise StoryRenameConflictError(
+                f"场景身份 {identity[1]}-{identity[2]} 已被文件占用：{relative_existing}"
+            )
+
+
+def _transactional_rename_paths(
+    rename_pairs: list[tuple[str, str]],
+    *,
+    expect_directory: bool,
+) -> list[tuple[str, str]]:
+    """以临时路径完成两阶段重命名，并在异常时尽力恢复原路径。"""
+    if not rename_pairs:
+        return []
+
+    staged: list[tuple[str, str, str]] = []
+    finalized: list[tuple[str, str, str]] = []
+    try:
+        for source, target in rename_pairs:
+            suffix = ".__tmp_dir__" if expect_directory else ""
+            temporary = os.path.join(
+                os.path.dirname(source),
+                f".{os.path.basename(source)}{suffix}.{uuid.uuid4().hex}",
+            )
+            while os.path.exists(temporary):
+                temporary = os.path.join(
+                    os.path.dirname(source),
+                    f".{os.path.basename(source)}{suffix}.{uuid.uuid4().hex}",
+                )
+            os.replace(source, temporary)
+            staged.append((source, target, temporary))
+
+        for source, target, temporary in staged:
+            os.makedirs(os.path.dirname(target), exist_ok=True)
+            os.replace(temporary, target)
+            finalized.append((source, target, temporary))
+    except Exception as exc:
+        rollback_errors: list[str] = []
+        for source, target, _ in reversed(finalized):
+            try:
+                if os.path.exists(target):
+                    os.replace(target, source)
+            except Exception as rollback_exc:
+                rollback_errors.append(str(rollback_exc))
+        for source, _, temporary in reversed(staged):
+            try:
+                if os.path.exists(temporary):
+                    os.replace(temporary, source)
+            except Exception as rollback_exc:
+                rollback_errors.append(str(rollback_exc))
+        detail = f"；回滚异常：{'；'.join(rollback_errors)}" if rollback_errors else ""
+        raise StoryRenameTransactionError(f"批量故事路径操作失败：{exc}{detail}") from exc
+
+    return [(source, target) for source, target, _ in finalized]
+
+
+def batch_rename_story_files(
+    rename_pairs: Iterable[tuple[str, str]],
+    *,
+    stories_path: str | None = None,
+    ensure_unique_identity: bool = False,
+) -> list[tuple[str, str]]:
+    """预校验并事务性重命名故事文件，支持跨章节目录移动。"""
+    normalized = _normalize_rename_pairs(rename_pairs, root_path=stories_path)
+    if stories_path and ensure_unique_identity:
+        validate_story_identity_plan(stories_path, normalized)
+    return _transactional_rename_paths(normalized, expect_directory=False)
+
+
+def batch_copy_story_files(
+    copy_pairs: Iterable[tuple[str, str]],
+    *,
+    stories_path: str | None = None,
+    ensure_unique_identity: bool = False,
+) -> list[tuple[str, str]]:
+    """预校验并批量复制故事文件，失败时删除本次已创建的副本。"""
+    normalized = _normalize_rename_pairs(copy_pairs, root_path=stories_path)
+    if stories_path and ensure_unique_identity:
+        validate_story_identity_plan(stories_path, normalized, preserve_sources=True)
+    created: list[str] = []
+    try:
+        for source, target in normalized:
+            os.makedirs(os.path.dirname(target), exist_ok=True)
+            shutil.copy2(source, target)
+            created.append(target)
+    except Exception as exc:
+        for target in reversed(created):
+            try:
+                if os.path.exists(target):
+                    os.remove(target)
+            except Exception:
+                pass
+        raise StoryRenameTransactionError(f"批量复制故事文件失败：{exc}") from exc
+    return normalized
+
+
+def batch_rename_story_directories(
+    rename_pairs: Iterable[tuple[str, str]],
+    *,
+    stories_path: str,
+) -> list[tuple[str, str]]:
+    """在 stories 同一层级内事务性重命名章节目录。"""
+    normalized = _normalize_rename_pairs(
+        rename_pairs,
+        root_path=stories_path,
+        expect_directory=True,
+    )
+    return _transactional_rename_paths(normalized, expect_directory=True)
+
+
+def batch_update_story_file_metadata(
+    stories_path: str,
+    updates: Iterable[Mapping[str, Any]],
+) -> list[tuple[str, str]]:
+    """批量更新故事文件名元数据，并以事务方式完成显示名和排序字段改写。"""
+    normalized_updates = list(updates)
+    rename_pairs: list[tuple[str, str]] = []
+    for update in normalized_updates:
+        if not isinstance(update, Mapping):
+            raise StoryRenameConflictError("故事元数据更新项必须是对象。")
+        source_value = update.get("path") or update.get("relative_path") or update.get("filename")
+        if not source_value:
+            raise StoryRenameConflictError("故事元数据更新缺少 path。")
+        source_candidate = _absolute_story_path(stories_path, str(source_value), allow_missing=True)
+        source = source_candidate
+        if not os.path.exists(source_candidate):
+            resolved_source, _, _ = resolve_story_file_path(stories_path, str(source_value))
+            if not resolved_source:
+                raise StoryRenameConflictError(f"故事文件不存在：{source_value}")
+            source = _absolute_story_path(stories_path, resolved_source)
+        if not os.path.isfile(source):
+            raise StoryRenameConflictError(f"故事路径不是文件：{source_value}")
+        parsed = parse_story_filename(os.path.basename(source))
+        if not parsed:
+            raise StoryRenameConflictError(f"无法解析故事文件名元数据：{source_value}")
+
+        values: dict[str, Any] = {
+            "display_name": parsed.get("display_name"),
+            "order": parsed.get("order"),
+            "chapter_num": parsed.get("chapter_num"),
+            "scene_num": parsed.get("scene_num"),
+        }
+        for key in values:
+            if key in update and update[key] is not None:
+                values[key] = update[key]
+        for key in ("order", "chapter_num", "scene_num"):
+            if values[key] is not None:
+                try:
+                    values[key] = int(values[key])
+                except (TypeError, ValueError) as exc:
+                    raise StoryRenameConflictError(f"{key} 必须是整数：{source_value}") from exc
+                if values[key] <= 0:
+                    raise StoryRenameConflictError(f"{key} 必须是大于 0 的整数：{source_value}")
+        target_name = rebuild_story_filename(
+            os.path.basename(source),
+            display_name=str(values["display_name"] or ""),
+            order=values["order"],
+            chapter_num=values["chapter_num"],
+            scene_num=values["scene_num"],
+        )
+        rename_pairs.append((source, os.path.join(os.path.dirname(source), target_name)))
+
+    normalized = _normalize_rename_pairs(rename_pairs, root_path=stories_path)
+    validate_story_identity_plan(stories_path, normalized)
+    return _transactional_rename_paths(normalized, expect_directory=False)

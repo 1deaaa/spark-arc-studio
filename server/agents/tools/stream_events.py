@@ -1,4 +1,193 @@
+import json
+import re
+from copy import deepcopy
 from typing import Any, Dict
+
+
+_DETAIL_MAX_STRING = 2000
+_DETAIL_MAX_RESULT = 4000
+_DETAIL_MAX_ITEMS = 24
+_DETAIL_MAX_KEYS = 40
+_SENSITIVE_KEY_NAMES = {
+    "apikey",
+    "authorization",
+    "accesstoken",
+    "clientsecret",
+    "cookie",
+    "credential",
+    "password",
+    "privatekey",
+    "secret",
+    "token",
+}
+_SENSITIVE_TEXT_RE = re.compile(
+    r"(?i)(api[_-]?key|authorization|bearer|access[_-]?token|token|password|secret|cookie)\s*[:=]\s*([^\s,;]+)"
+)
+_SENSITIVE_STRUCTURED_TEXT_RE = re.compile(
+    r"(?i)([\"']?(?:api[_-]?key|authorization|bearer|access[_-]?token|token|password|secret|cookie)[\"']?\s*:\s*[\"']?)([^,\"'\s}]+)"
+)
+
+
+# 仅这些工具允许在聊天轨迹中展示经过筛选的输入和返回内容。
+TOOL_DETAIL_POLICIES: Dict[str, tuple[str, ...]] = {
+    "delegate_task": (
+        "target_agent", "task_description", "completion_mode", "chapter_name",
+        "scene_name", "scene_file_path", "scene_guidance", "scene_characters",
+    ),
+    "replace_from_search": ("indices", "replacement"),
+    "patch_script": ("search_text", "replace_text"),
+    "patch_worldview": ("search_text", "replace_text"),
+    "patch_synopsis": ("search_text", "replace_text"),
+    "patch_beat_sheet": ("search_text", "replace_text"),
+    "patch_outline": ("search_text", "replace_text"),
+    "web_search": ("provider", "query", "num_results", "exa_options", "tavily_options"),
+    "work_tracker": ("overwrite", "items", "operations", "summary", "contract"),
+    "rewrite_inspiration": ("content", "title", "tags"),
+    "rewrite_worldview": ("content",),
+    "rewrite_all_characters": ("characters",),
+    "rewrite_outline": ("outline",),
+    "rewrite_synopsis": ("synopsis",),
+    "rewrite_beat_sheet": ("beat_sheet",),
+    "update_character": ("character_id", "name", "content"),
+    "create_character_relation": ("source_character", "target_character", "relation", "description"),
+    "update_project_story_tags": (
+        "workspace_mode", "style", "genres", "tones", "worldviews", "pov",
+        "length_hint", "scene_length_hint", "scene_target_chars", "active_inspiration_id",
+    ),
+    "create_or_rewrite_script": ("chapter_name", "scene_name", "content", "file_path"),
+    "create_chapter": ("chapter_name", "scene_name", "content"),
+    "organize_scenes_to_chapter": ("chapter_name", "scene_names", "scene_files"),
+    "rename_chapter": ("chapter_path", "new_chapter_name"),
+    "rename_scene": ("scene_path", "new_scene_name"),
+    "reorder_chapters": ("chapter_paths",),
+    "reorder_scenes": ("chapter_path", "scene_paths"),
+}
+
+
+def _normalized_key(value: Any) -> str:
+    return re.sub(r"[^a-z0-9]", "", str(value or "").lower())
+
+
+def _is_sensitive_key(value: Any) -> bool:
+    """识别常见密钥字段的变体，避免仅依赖精确字段名。"""
+    normalized = _normalized_key(value)
+    if normalized in _SENSITIVE_KEY_NAMES:
+        return True
+    return normalized.endswith((
+        "apikey",
+        "accesstoken",
+        "refreshtoken",
+        "token",
+        "secret",
+        "password",
+        "privatekey",
+        "credential",
+        "authorization",
+        "cookie",
+    ))
+
+
+def _redact_text(value: str, limit: int) -> str:
+    text = str(value or "")
+    text = _SENSITIVE_TEXT_RE.sub(lambda match: f"{match.group(1)}=[已隐藏]", text)
+    text = _SENSITIVE_STRUCTURED_TEXT_RE.sub(lambda match: f"{match.group(1)}[已隐藏]", text)
+    if len(text) > limit:
+        return text[:limit] + "…"
+    return text
+
+
+def _safe_detail(value: Any, *, limit: int = _DETAIL_MAX_STRING, depth: int = 0) -> Any:
+    """递归脱敏并限制事件详情大小，避免把密钥或超长正文发到前端。"""
+    if depth > 5:
+        return "[嵌套层级过深]"
+    if value is None or isinstance(value, (bool, int, float)):
+        return value
+    if isinstance(value, str):
+        return _redact_text(value, limit)
+    if isinstance(value, dict):
+        result: Dict[str, Any] = {}
+        for index, (key, item) in enumerate(value.items()):
+            if index >= _DETAIL_MAX_KEYS:
+                result["…"] = "其余字段已省略"
+                break
+            key_text = str(key)
+            if _is_sensitive_key(key_text):
+                result[key_text] = "[已隐藏]"
+                continue
+            result[key_text] = _safe_detail(item, limit=limit, depth=depth + 1)
+        return result
+    if isinstance(value, (list, tuple, set)):
+        items = list(value)
+        result = [_safe_detail(item, limit=limit, depth=depth + 1) for item in items[:_DETAIL_MAX_ITEMS]]
+        if len(items) > _DETAIL_MAX_ITEMS:
+            result.append("其余项目已省略")
+        return result
+    return _redact_text(value, limit)
+
+
+def _clip_detail_payload(value: Any, *, limit: int) -> Any:
+    """对复杂对象再做一次整体长度限制，保留合法 JSON 结构。"""
+    safe = _safe_detail(value, limit=_DETAIL_MAX_STRING)
+    try:
+        encoded = json.dumps(safe, ensure_ascii=False, separators=(",", ":"))
+    except Exception:
+        return _redact_text(safe, limit)
+    if len(encoded) <= limit:
+        return safe
+    if isinstance(safe, str):
+        return _redact_text(safe, limit)
+    if isinstance(safe, dict):
+        compact: Dict[str, Any] = {}
+        for key, item in safe.items():
+            candidate = dict(compact)
+            candidate[key] = item
+            try:
+                candidate_length = len(json.dumps(candidate, ensure_ascii=False, separators=(",", ":")))
+            except Exception:
+                candidate_length = limit + 1
+            if candidate_length > limit:
+                compact["…"] = "其余字段已省略"
+                break
+            compact = candidate
+        return compact
+    if isinstance(safe, list):
+        compact_list: list[Any] = []
+        for item in safe:
+            candidate = compact_list + [item]
+            try:
+                candidate_length = len(json.dumps(candidate, ensure_ascii=False, separators=(",", ":")))
+            except Exception:
+                candidate_length = limit + 1
+            if candidate_length > limit:
+                compact_list.append("其余项目已省略")
+                break
+            compact_list = candidate
+        return compact_list
+    return _redact_text(encoded, limit)
+
+
+def build_tool_display_details(
+    tool_name: str,
+    *,
+    tool_input: Any = None,
+    tool_result: Any = None,
+    tool_error: Any = None,
+) -> Dict[str, Any]:
+    """生成前端可展开的受控工具详情，不改变模型请求参数。"""
+    normalized = normalize_tool_name(tool_name)
+    fields = TOOL_DETAIL_POLICIES.get(normalized)
+    details: Dict[str, Any] = {}
+    if fields is not None and tool_input is not None:
+        if isinstance(tool_input, dict):
+            selected = {field: deepcopy(tool_input[field]) for field in fields if field in tool_input}
+            details["tool_input"] = _clip_detail_payload(selected, limit=_DETAIL_MAX_RESULT)
+        else:
+            details["tool_input"] = _clip_detail_payload(tool_input, limit=_DETAIL_MAX_RESULT)
+    if fields is not None and tool_result is not None:
+        details["tool_result"] = _clip_detail_payload(tool_result, limit=_DETAIL_MAX_RESULT)
+    if tool_error is not None:
+        details["tool_error"] = _clip_detail_payload(tool_error, limit=_DETAIL_MAX_RESULT)
+    return details
 
 
 def normalize_tool_name(raw_tool_name: str = "") -> str:
@@ -33,6 +222,7 @@ def is_tool_result_failure(tool_name: str, result: Any) -> bool:
         "create_or_rewrite_script": ("创建/重写剧本失败",),
         "create_chapter": ("创建章节失败",),
         "create_character_relation": ("创建角色关系失败",),
+        "work_tracker": ("任务板更新失败", "读取任务板失败"),
     }
     if stripped.startswith(domain_failure_prefixes.get(normalized, ())):
         return True
@@ -53,7 +243,10 @@ def get_tool_result_failure_message(tool_name: str, result: Any) -> str:
         if text.startswith(("联网搜索当前不可用", "联网搜索暂时不可用")):
             return "联网搜索上游暂不可用，AI 将基于失败状态继续回应"
         return "联网搜索未能完成，AI 将基于失败状态继续回应"
-    if text.strip().startswith(("PreWrite 失败", "创建/重写剧本失败", "创建章节失败", "创建角色关系失败")):
+    if text.strip().startswith((
+        "PreWrite 失败", "创建/重写剧本失败", "创建章节失败", "创建角色关系失败",
+        "任务板更新失败", "读取任务板失败",
+    )):
         return text.strip().splitlines()[0][:200]
     return "模型使用了错误的调用格式，正在尝试修正"
 
@@ -149,6 +342,9 @@ def build_tool_stream_event(
     source_agent: str = "",
     message: str = "",
     tool_call_key: str = "",
+    tool_input: Any = None,
+    tool_result: Any = None,
+    tool_error: Any = None,
     **extra: Any,
 ) -> Dict[str, Any]:
     normalized_tool_name = normalize_tool_name(tool_name)
@@ -171,5 +367,16 @@ def build_tool_stream_event(
     if binding.get("refresh_events"):
         payload["ui_refresh_events"] = list(binding["refresh_events"])
 
-    payload.update(extra)
+    # 调用方附加元数据不能覆盖受控详情，避免误把原始参数绕过脱敏层发给前端。
+    payload.update({
+        key: value
+        for key, value in extra.items()
+        if key not in {"tool_input", "tool_result", "tool_error"}
+    })
+    payload.update(build_tool_display_details(
+        normalized_tool_name,
+        tool_input=tool_input,
+        tool_result=tool_result,
+        tool_error=tool_error,
+    ))
     return payload

@@ -234,6 +234,7 @@ describe('chatStore NDJSON 消费契约', () => {
         seq: 4,
         tool_name: 'rewrite_worldview',
         tool_call_key: 'call-1',
+        tool_input: { content: '新的世界观' },
         message: '准备修改世界观',
         ui_scope: 'world',
         ui_target: 'worldview',
@@ -324,6 +325,7 @@ describe('chatStore NDJSON 消费契约', () => {
       tool_name: 'rewrite_worldview',
       status: 'finished',
       tool_call_key: 'call-1',
+      tool_input: { content: '新的世界观' },
     });
     expect(assistantMsg.segments.map((segment: any) => segment.type)).toEqual([
       'text',
@@ -334,6 +336,7 @@ describe('chatStore NDJSON 消费契约', () => {
     expect(assistantMsg.segments[3]).toMatchObject({
       tool_name: 'rewrite_worldview',
       status: 'finished',
+      tool_input: { content: '新的世界观' },
       tool_result: '完成',
     });
     expect(session.sending).toBe(false);
@@ -465,6 +468,8 @@ describe('chatStore NDJSON 消费契约', () => {
         tool_call_key: 'patch-call',
         ui_scope: 'production',
         ui_target: '',
+        tool_input: { search_text: '旧片段', replace_text: '新片段' },
+        tool_error: '局部修改失败：未找到片段',
         message: '局部修改失败：未找到片段',
       },
     ]) {
@@ -475,6 +480,8 @@ describe('chatStore NDJSON 消费契约', () => {
       expect(assistantMsg.tool_traces.at(-1)).toMatchObject({
         tool_name: 'patch_script',
         status: 'failed',
+        tool_input: { search_text: '旧片段', replace_text: '新片段' },
+        tool_error: '局部修改失败：未找到片段',
       });
       expect(loadingEvents).toContainEqual(expect.objectContaining({
         show: false,

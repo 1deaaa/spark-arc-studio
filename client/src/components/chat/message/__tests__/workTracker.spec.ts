@@ -53,6 +53,27 @@ describe('Agent 最新进度板聚合', () => {
     });
   });
 
+  it('从历史 tool_traces 回退时保留工具输入、返回和错误详情', () => {
+    const segments = getMessageSegments({
+      role: 'assistant',
+      content: '',
+      tool_traces: [{
+        tool_name: 'delegate_task',
+        status: 'failed',
+        tool_input: { target_agent: 'agent_scriptwriter' },
+        tool_result: '旧客户端兼容摘要',
+        tool_error: '委派失败',
+      }],
+    });
+
+    expect(segments[0]).toMatchObject({
+      tool_name: 'delegate_task',
+      tool_input: { target_agent: 'agent_scriptwriter' },
+      tool_result: '旧客户端兼容摘要',
+      tool_error: '委派失败',
+    });
+  });
+
   it('聚合完整历史时不读取普通聊天正文', () => {
     let contentReads = 0;
     const ordinaryMessage = {

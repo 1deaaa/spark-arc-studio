@@ -544,6 +544,7 @@ def director_node(state: DirectorState) -> Dict[str, Any]:
                     source_agent="agent_director",
                     message=progress,
                     tool_call_key=tool_call_key,
+                    tool_input=_spec_args,
                     **_extra_start,
                 )
                 if writer: writer(evt_start)
@@ -563,6 +564,8 @@ def director_node(state: DirectorState) -> Dict[str, Any]:
                             source_agent="agent_director",
                             message=protocol_error,
                             tool_call_key=tool_call_key,
+                            tool_input=_spec_args,
+                            tool_error=protocol_error,
                         ))
                     continue
                 
@@ -603,6 +606,8 @@ def director_node(state: DirectorState) -> Dict[str, Any]:
                                 source_agent="agent_director",
                                 message=transfer_result.get("message", "Delegation failed"),
                                 tool_call_key=tool_call_key,
+                                tool_input=_spec_args,
+                                tool_error=transfer_result.get("message", "Delegation failed"),
                             ))
                         continue
                     updates["baton_holder"] = transfer_result.get("baton_holder") or grant_baton_to
@@ -613,6 +618,8 @@ def director_node(state: DirectorState) -> Dict[str, Any]:
                             source_agent="agent_director",
                             tool_call_key=tool_call_key,
                             target_agent=target_agent,
+                            tool_input=_spec_args,
+                            tool_result=delegate_data,
                         ))
                     break  # 停止后续工具调用，交给子图处理
                 
@@ -625,17 +632,17 @@ def director_node(state: DirectorState) -> Dict[str, Any]:
                         source_agent="agent_director",
                         tool_call_key=tool_call_key,
                         message=get_tool_result_failure_message(tool_name, tool_result),
+                        tool_input=_spec_args,
+                        tool_error=tool_result,
                     )
                 else:
-                    _extra_done_director: dict = {}
-                    if tool_name == "work_tracker" and isinstance(tool_result, str) and tool_result.strip():
-                        _extra_done_director["tool_result"] = tool_result
                     evt_done = build_tool_stream_event(
                         "tool_exec_finished",
                         tool_name,
                         source_agent="agent_director",
                         tool_call_key=tool_call_key,
-                        **_extra_done_director,
+                        tool_input=_spec_args,
+                        tool_result=tool_result,
                     )
                 if writer: writer(evt_done)
 

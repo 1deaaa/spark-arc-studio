@@ -154,6 +154,10 @@ def _collect_tool_trace_from_event(tool_trace_map: Dict[str, Dict[str, Any]], de
         if delta.get("message"):
             trace["message"] = delta["message"]
 
+    for detail_key in ("tool_input", "tool_result", "tool_error"):
+        if detail_key in delta and delta.get(detail_key) is not None:
+            trace[detail_key] = deepcopy(delta[detail_key])
+
     started_at = trace.get("started_at")
     finished_at = trace.get("finished_at")
     if isinstance(started_at, (int, float)) and isinstance(finished_at, (int, float)) and finished_at >= started_at:
@@ -200,6 +204,9 @@ def _append_or_upgrade_tool_segment(
     tool_call_key: str = "",
     parent_tool: str = "",
     tool_provider: str = "",
+    tool_input: Any = None,
+    tool_result: Any = None,
+    tool_error: Any = None,
 ) -> None:
     fallback_seg = None
     for seg in reversed(segments):
@@ -221,6 +228,13 @@ def _append_or_upgrade_tool_segment(
                 seg["parent_tool"] = parent_tool
             if tool_provider:
                 seg["tool_provider"] = tool_provider
+            for detail_key, detail_value in (
+                ("tool_input", tool_input),
+                ("tool_result", tool_result),
+                ("tool_error", tool_error),
+            ):
+                if detail_value is not None:
+                    seg[detail_key] = deepcopy(detail_value)
             if status == "running" and seg.get("status") == "started":
                 seg["status"] = "running"
                 seg["exec_started_at"] = ts
@@ -235,6 +249,13 @@ def _append_or_upgrade_tool_segment(
             fallback_seg["parent_tool"] = parent_tool
         if tool_provider:
             fallback_seg["tool_provider"] = tool_provider
+        for detail_key, detail_value in (
+            ("tool_input", tool_input),
+            ("tool_result", tool_result),
+            ("tool_error", tool_error),
+        ):
+            if detail_value is not None:
+                fallback_seg[detail_key] = deepcopy(detail_value)
         if status == "running" and fallback_seg.get("status") == "started":
             fallback_seg["status"] = "running"
             fallback_seg["exec_started_at"] = ts
@@ -260,6 +281,9 @@ def _append_or_upgrade_tool_segment(
         **({"tool_call_key": tool_call_key} if tool_call_key else {}),
         **({"parent_tool": parent_tool} if parent_tool else {}),
         **({"tool_provider": tool_provider} if tool_provider else {}),
+        **({"tool_input": deepcopy(tool_input)} if tool_input is not None else {}),
+        **({"tool_result": deepcopy(tool_result)} if tool_result is not None else {}),
+        **({"tool_error": deepcopy(tool_error)} if tool_error is not None else {}),
     })
 
 
@@ -395,6 +419,7 @@ def _collect_segment_from_event(
             tool_call_key=tool_call_key,
             parent_tool=parent_tool,
             tool_provider=tool_provider,
+            tool_input=delta.get("tool_input"),
         )
         return
 
@@ -412,12 +437,14 @@ def _collect_segment_from_event(
             tool_call_key=tool_call_key,
             parent_tool=parent_tool,
             tool_provider=tool_provider,
+            tool_input=delta.get("tool_input"),
         )
         return
 
     if event_type in {"tool_exec_finished", "tool_exec_failed"}:
         final_status = "finished" if event_type == "tool_exec_finished" else "failed"
-        tool_result = str(delta.get("tool_result") or "").strip()
+        tool_result = delta.get("tool_result")
+        tool_error = delta.get("tool_error")
         fallback_seg = None
         for seg in reversed(segments):
             if (
@@ -436,7 +463,11 @@ def _collect_segment_from_event(
                 if isinstance(started, (int, float)):
                     seg["duration"] = round(ts - started, 2)
                 if tool_result:
-                    seg["tool_result"] = tool_result
+                    seg["tool_result"] = deepcopy(tool_result)
+                if tool_error is not None:
+                    seg["tool_error"] = deepcopy(tool_error)
+                if delta.get("tool_input") is not None:
+                    seg["tool_input"] = deepcopy(delta["tool_input"])
                 if tool_call_key:
                     seg["tool_call_key"] = tool_call_key
                 if parent_tool:
@@ -454,13 +485,43 @@ def _collect_segment_from_event(
                 if isinstance(started, (int, float)):
                     fallback_seg["duration"] = round(ts - started, 2)
                 if tool_result:
-                    fallback_seg["tool_result"] = tool_result
+                    fallback_seg["tool_result"] = deepcopy(tool_result)
+                if tool_error is not None:
+                    fallback_seg["tool_error"] = deepcopy(tool_error)
+                if delta.get("tool_input") is not None:
+                    fallback_seg["tool_input"] = deepcopy(delta["tool_input"])
                 if tool_call_key:
                     fallback_seg["tool_call_key"] = tool_call_key
                 if parent_tool:
                     fallback_seg["parent_tool"] = parent_tool
                 if final_status == "failed" and delta.get("message"):
                     fallback_seg["message"] = delta["message"]
+            else:
+                segment = {
+                    "type": "tool_trace",
+                    "tool_name": tool_name,
+                    "status": final_status,
+                    "started_at": ts,
+                    "finished_at": ts,
+                    "duration": 0.0,
+                    "source_agent": source_agent,
+                    "nested": is_nested,
+                }
+                if tool_call_key:
+                    segment["tool_call_key"] = tool_call_key
+                if parent_tool:
+                    segment["parent_tool"] = parent_tool
+                if tool_provider:
+                    segment["tool_provider"] = tool_provider
+                if delta.get("tool_input") is not None:
+                    segment["tool_input"] = deepcopy(delta["tool_input"])
+                if tool_result:
+                    segment["tool_result"] = deepcopy(tool_result)
+                if tool_error is not None:
+                    segment["tool_error"] = deepcopy(tool_error)
+                if final_status == "failed" and delta.get("message"):
+                    segment["message"] = delta["message"]
+                segments.append(segment)
         return
 
 

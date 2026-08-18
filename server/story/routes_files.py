@@ -18,7 +18,7 @@ from story.arc_parser import serialize_to_arc
 from story.file_naming import (
     build_display_story_path,
     build_story_filename,
-    make_temp_story_filename,
+    batch_rename_story_files,
     next_story_order,
     parse_chapter_identity_from_title,
     parse_story_filename,
@@ -52,19 +52,9 @@ def _resolve_story_file_path(stories_path: str, path: str) -> tuple[Optional[str
     return resolved_path, file_format
 
 
-def _batch_story_renames(rename_pairs: list[tuple[str, str]]) -> None:
-    prepared = [(src, dst) for src, dst in rename_pairs if src != dst]
-    if not prepared:
-        return
-
-    staged: dict[str, str] = {}
-    for src, _ in prepared:
-        temp_path = os.path.join(os.path.dirname(src), make_temp_story_filename(os.path.basename(src)))
-        os.rename(src, temp_path)
-        staged[src] = temp_path
-
-    for src, dst in prepared:
-        os.rename(staged[src], dst)
+def _batch_story_renames(rename_pairs: list[tuple[str, str]]) -> None:
+    """兼容旧路由入口，统一复用故事文件事务层。"""
+    batch_rename_story_files(rename_pairs)
 
 def _record_story_memory_after_story_save(
     *,

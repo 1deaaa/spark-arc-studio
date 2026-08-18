@@ -14,6 +14,8 @@ from typing import Dict, Any, Optional
 from .env_utils import load_env, get_env_var, get_env_path
 from .paths import get_config_file_path, get_key_file_path, get_packaged_config_template_path, ensure_mgr_home_exists
 from .security import SecurityManager
+from .platform_identity import legacy_config_platform_key, normalize_platform_key
+from .utils import normalize_base_url
 
 
 _API_KEY_PLACEHOLDER_RE = re.compile(r"^\{\s*([A-Za-z_][A-Za-z0-9_]*)\s*\}$")
@@ -134,9 +136,11 @@ def load_default_platform_configs_raw() -> Dict[str, Any]:
 def load_key_yaml_raw() -> Dict[str, Any]:
     """从 matchbox_key.yaml 加载原始密钥配置。
 
-    结构示例（使用 base_url 作为唯一键）：
-        https://api.example.com/v1:
+    新结构使用 platform_key 作为唯一键：
+        platform-0123456789abcdef:
           api_key: sk-xxx
+
+    旧结构仍可读取（使用 base_url 作为键）：
         https://other.example.com/v1:
           api_key: ENC:...
 
@@ -174,10 +178,29 @@ def _extract_api_key_from_key_entry(key_entry: Any) -> Optional[str]:
 def merge_key_yaml_into_configs(configs: Dict[str, Any]) -> Dict[str, Any]:
     """将 matchbox_key.yaml 中的 api_key 合并到平台配置字典中（原地修改）。
 
-    匹配逻辑：使用平台的 base_url 作为唯一键从 matchbox_key.yaml 中查找密钥。
-    合并后会清除平台配置中内嵌的 api_key，确保运行时密钥唯一来源是 matchbox_key.yaml。
+    匹配逻辑优先使用 platform_key；旧版 URL 键只在同一 URL 只对应一个
+    配置时回退，避免两个相同 URL 的平台互相覆盖密钥。
     """
     key_data = load_key_yaml_raw()
+    normalized_url_configs: Dict[str, list[tuple[str, Dict[str, Any]]]] = {}
+    seen_platform_keys: set[str] = set()
+
+    for name, cfg in configs.items():
+        if not isinstance(cfg, dict):
+            continue
+        base_url = cfg.get("base_url")
+        if not base_url:
+            continue
+        normalized_url = normalize_base_url(str(base_url))
+        normalized_url_configs.setdefault(normalized_url, []).append((name, cfg))
+        platform_key = normalize_platform_key(cfg.get("platform_key"))
+        if platform_key is None:
+            platform_key = legacy_config_platform_key(name, normalized_url)
+            cfg["platform_key"] = platform_key
+        if platform_key in seen_platform_keys:
+            raise ValueError(f"配置中存在重复 platform_key: {platform_key}")
+        seen_platform_keys.add(platform_key)
+
     for name, cfg in configs.items():
         if not isinstance(cfg, dict):
             continue
@@ -186,7 +209,22 @@ def merge_key_yaml_into_configs(configs: Dict[str, Any]) -> Dict[str, Any]:
         base_url = cfg.get("base_url")
         if not base_url:
             continue
-        key_entry = key_data.get(base_url)
+        platform_key = cfg.get("platform_key")
+        key_entry = key_data.get(platform_key)
+        if key_entry is None:
+            normalized_url = normalize_base_url(str(base_url))
+            candidates = normalized_url_configs.get(normalized_url, [])
+            if len(candidates) == 1:
+                # 兼容旧版以 URL 为键的密钥文件；重复 URL 时不做猜测。
+                for legacy_key, legacy_entry in key_data.items():
+                    if not isinstance(legacy_key, str):
+                        continue
+                    try:
+                        if normalize_base_url(legacy_key) == normalized_url:
+                            key_entry = legacy_entry
+                            break
+                    except (AttributeError, TypeError):
+                        continue
         key_val = _extract_api_key_from_key_entry(key_entry)
         if key_val is not None:
             cfg["api_key"] = key_val
@@ -206,7 +244,7 @@ def save_key_yaml_raw(key_data: Dict[str, Any]) -> str:
 def load_default_platform_configs() -> Dict[str, Any]:
     """从配置文件加载并解析平台配置（缺少 LLM_KEY 也不中断）。
 
-    密钥唯一来源：matchbox_key.yaml 中对应平台 base_url 的 api_key。
+    密钥唯一来源：matchbox_key.yaml 中对应平台 platform_key 的 api_key。
     matchbox_cfg.yaml 中内嵌的 api_key 已被废弃，不再读取。
     """
     configs = deepcopy(load_default_platform_configs_raw())
@@ -270,17 +308,33 @@ def _ensure_env_setup():
         return
 
 
-def get_decrypted_api_key(platform_name: str = None, base_url: str = None):
+def get_decrypted_api_key(
+    platform_name: str = None,
+    base_url: str = None,
+    platform_key: str = None,
+):
     """
     获取系统平台配置中的 API Key（已解密）。
-    支持通过 平台名称 或 Base URL 查找。
+    支持通过 platform_key、平台名称或 Base URL 查找。
     供外部工具或 Agent 脚本直接获取特定平台的 Key，也供 AIManager 内部使用。
     """
-    # 优先匹配 Base URL (因为 URL 更具体)
-    if base_url:
+    if platform_key:
+        normalized_key = normalize_platform_key(platform_key)
         for cfg in DEFAULT_PLATFORM_CONFIGS.values():
-            if cfg.get("base_url") == base_url:
+            if cfg.get("platform_key") == normalized_key:
                 return cfg.get("api_key")
+
+    # Base URL 仅在匹配不歧义时使用，避免重复 URL 平台取错密钥。
+    if base_url:
+        normalized_url = normalize_base_url(base_url)
+        matches = [
+            cfg for cfg in DEFAULT_PLATFORM_CONFIGS.values()
+            if isinstance(cfg, dict) and cfg.get("base_url")
+            and normalize_base_url(str(cfg.get("base_url"))) == normalized_url
+        ]
+        if len(matches) == 1:
+            return matches[0].get("api_key")
+        return None
     
     # 其次匹配名称
     if platform_name:

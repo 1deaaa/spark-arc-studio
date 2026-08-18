@@ -1,43 +1,50 @@
 <template>
   <div class="chat-bubble tool-trace-bubble" :class="{ 'is-expandable': expandable }">
     <div class="tool-trace-list">
-      <span
+      <button
+        type="button"
         class="tool-trace-chip"
         :class="[`is-${status}`, { 'is-expandable': expandable, 'is-expanded': expandable && expanded }]"
-        @click="expandable && $emit('toggle')"
+        :disabled="!expandable"
+        :aria-expanded="expandable ? expanded : undefined"
+        :aria-label="expandable ? (expanded ? t('components.chatMessageList.toolDetails.collapse') : t('components.chatMessageList.toolDetails.expand')) : undefined"
+        @click="expandable && emit('toggle')"
       >
-        <svg v-if="expandable && status === 'finished'" class="tool-trace-icon is-worktracker" viewBox="0 0 16 16" fill="none" xmlns="http://www.w3.org/2000/svg">
-          <rect x="3" y="2" width="10" height="12" rx="1.5" stroke="currentColor" stroke-width="1.3" />
-          <line x1="5.5" y1="5.5" x2="10.5" y2="5.5" stroke="currentColor" stroke-width="1.2" stroke-linecap="round" />
-          <line x1="5.5" y1="8" x2="10.5" y2="8" stroke="currentColor" stroke-width="1.2" stroke-linecap="round" />
-          <line x1="5.5" y1="10.5" x2="8.5" y2="10.5" stroke="currentColor" stroke-width="1.2" stroke-linecap="round" />
-        </svg>
-        <svg v-else-if="status === 'finished'" class="tool-trace-icon is-success" viewBox="0 0 16 16" fill="none" xmlns="http://www.w3.org/2000/svg">
-          <circle cx="8" cy="8" r="7" stroke="currentColor" stroke-width="1.5" />
-          <path d="M4.5 8.5L7 11L11.5 5.5" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" />
-        </svg>
-        <svg v-else-if="status === 'failed'" class="tool-trace-icon is-failed" viewBox="0 0 16 16" fill="none" xmlns="http://www.w3.org/2000/svg">
-          <circle cx="8" cy="8" r="7" stroke="currentColor" stroke-width="1.5" />
-          <path d="M5.5 5.5L10.5 10.5M10.5 5.5L5.5 10.5" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" />
-        </svg>
-        <svg v-else class="tool-trace-icon is-running" viewBox="0 0 16 16" fill="none" xmlns="http://www.w3.org/2000/svg">
-          <circle cx="8" cy="8" r="7" stroke="currentColor" stroke-width="1.5" stroke-dasharray="8 6" class="spinner-ring" />
-        </svg>
+        <ClipboardList v-if="isWorkTracker" class="tool-trace-icon is-worktracker" :size="13" />
+        <CircleCheck v-else-if="status === 'finished'" class="tool-trace-icon is-success" :size="13" />
+        <CircleX v-else-if="status === 'failed'" class="tool-trace-icon is-failed" :size="13" />
+        <LoaderCircle v-else class="tool-trace-icon is-running" :size="13" />
         {{ label }}
-        <svg v-if="expandable" class="tool-trace-expand-icon" :class="{ 'is-expanded': expanded }" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5"><polyline points="4 6 8 10 12 6"></polyline></svg>
-      </span>
+        <ChevronDown v-if="expandable" class="tool-trace-expand-icon" :class="{ 'is-expanded': expanded }" :size="13" />
+      </button>
     </div>
     <SparkCollapseTransition v-if="expandable" :show="expanded" no-opacity duration="0.2s">
-      <WorkTrackerBoard class="tool-trace-detail" :result="segment.tool_result" />
+      <WorkTrackerBoard
+        v-if="isWorkTracker"
+        class="tool-trace-detail"
+        :result="segment.tool_result"
+      />
+      <div v-else class="tool-trace-detail tool-detail-sections">
+        <section v-for="section in details.sections" :key="section.key" class="tool-detail-section">
+          <h4 class="tool-detail-section-title">{{ t(section.labelKey) }}</h4>
+          <div v-for="entry in section.entries" :key="`${section.key}-${entry.key}`" class="tool-detail-entry">
+            <div class="tool-detail-field-label">{{ t(entry.labelKey) }}</div>
+            <pre class="tool-detail-value">{{ entry.text }}</pre>
+          </div>
+        </section>
+      </div>
     </SparkCollapseTransition>
   </div>
 </template>
 
 <script setup lang="ts">
 import { computed, type PropType } from 'vue';
+import { useI18n } from 'vue-i18n';
+import { ChevronDown, CircleCheck, CircleX, ClipboardList, LoaderCircle } from '@lucide/vue';
 import SparkCollapseTransition from '@/components/share/SparkCollapseTransition.vue';
 import WorkTrackerBoard from './WorkTrackerBoard.vue';
 import type { MessageSegment } from './render';
+import { adaptToolDetails } from './toolDetails';
 
 const props = defineProps({
   segment: { type: Object as PropType<MessageSegment>, required: true },
@@ -46,9 +53,28 @@ const props = defineProps({
   expanded: { type: Boolean, default: false },
 });
 
-defineEmits(['toggle']);
-
-const expandable = computed(() => String(props.segment.tool_name || '').trim() === 'work_tracker' && !!props.segment.tool_result);
+const emit = defineEmits<{ toggle: [] }>();
+const { t } = useI18n();
+const toolName = computed(() => String(props.segment.tool_name || props.segment.toolName || '').trim());
+const details = computed(() => adaptToolDetails(toolName.value, props.segment));
+const hasError = computed(() => (
+  props.segment.tool_error !== undefined
+  && props.segment.tool_error !== null
+  && String(props.segment.tool_error).trim() !== ''
+));
+const isWorkTracker = computed(() => (
+  toolName.value === 'work_tracker'
+  && props.status === 'finished'
+  && props.segment.tool_result !== undefined
+  && props.segment.tool_result !== null
+  && props.segment.tool_result !== ''
+  && !hasError.value
+));
+const expandable = computed(() => (
+  toolName.value === 'work_tracker'
+    ? isWorkTracker.value || hasError.value
+    : details.value.expandable
+));
 </script>
 
 <style scoped>
@@ -80,20 +106,32 @@ const expandable = computed(() => String(props.segment.tool_name || '').trim() =
   display: inline-flex;
   align-items: center;
   gap: 4px;
+  border: 0;
+  color: inherit;
+  background: transparent;
+  font: inherit;
   padding: 4px 8px;
   border-radius: 999px;
   font-size: var(--spark-fs-xs);
 }
 
+.tool-trace-chip:disabled {
+  cursor: default;
+}
+
 .tool-trace-icon {
-  width: 12px;
-  height: 12px;
+  width: 13px;
+  height: 13px;
   flex-shrink: 0;
 }
 
 .tool-trace-icon.is-worktracker,
 .tool-trace-icon.is-running {
   color: var(--spark-primary);
+}
+
+.tool-trace-icon.is-success {
+  color: var(--spark-success, #52c41a);
 }
 
 .tool-trace-icon.is-failed {
@@ -121,8 +159,8 @@ const expandable = computed(() => String(props.segment.tool_name || '').trim() =
 }
 
 .tool-trace-expand-icon {
-  width: 12px;
-  height: 12px;
+  width: 13px;
+  height: 13px;
   flex-shrink: 0;
   transition: transform 0.2s ease;
   opacity: 0.6;
@@ -135,6 +173,62 @@ const expandable = computed(() => String(props.segment.tool_name || '').trim() =
 
 .tool-trace-detail {
   overflow: hidden;
+}
+
+.tool-detail-sections {
+  display: grid;
+  gap: 10px;
+  padding: 8px 10px 4px;
+  min-width: 0;
+}
+
+.tool-detail-section {
+  min-width: 0;
+}
+
+.tool-detail-section + .tool-detail-section {
+  border-top: 1px solid var(--spark-border);
+  padding-top: 8px;
+}
+
+.tool-detail-section-title,
+.tool-detail-field-label {
+  margin: 0 0 4px;
+  color: var(--spark-text-secondary);
+  font-size: var(--spark-fs-2xs);
+  font-weight: 600;
+}
+
+.tool-detail-field-label {
+  color: var(--spark-primary);
+  font-weight: 500;
+}
+
+.tool-detail-entry + .tool-detail-entry {
+  margin-top: 8px;
+}
+
+.tool-detail-value {
+  max-width: 100%;
+  margin: 0;
+  padding: 7px 8px;
+  border: 1px solid var(--spark-border);
+  border-radius: 6px;
+  color: var(--spark-text);
+  background: var(--spark-bg-alt);
+  font: inherit;
+  font-size: var(--spark-fs-2xs);
+  line-height: 1.45;
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+  word-break: break-word;
+  overflow-x: auto;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .tool-trace-icon.is-running {
+    animation: none;
+  }
 }
 
 @keyframes spin {

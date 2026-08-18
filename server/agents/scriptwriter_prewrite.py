@@ -370,6 +370,7 @@ def _run_prewrite_tool_loop(
             tool_specs = prepare_tool_specs_for_execution(
                 extract_tool_specs_from_message(response),
                 normalize_name=normalize_tool_name,
+                tool_lookup=allowed_tools,
             )
             if not tool_specs:
                 response_text = clean(extract_text_content_from_message(response)).strip()

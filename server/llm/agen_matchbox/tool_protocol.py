@@ -80,6 +80,170 @@ def _parse_args(value: Any) -> Dict[str, Any]:
     return {}
 
 
+def _schema_ref(schema: Any, definitions: Dict[str, Any]) -> Any:
+    """解析 Pydantic JSON Schema 中的本地引用。"""
+    if not isinstance(schema, dict):
+        return schema
+    ref = schema.get("$ref")
+    if not isinstance(ref, str) or not (
+        ref.startswith("#/$defs/") or ref.startswith("#/definitions/")
+    ):
+        return schema
+    return definitions.get(ref.rsplit("/", 1)[-1], schema)
+
+
+def _schema_variants(schema: Any, definitions: Dict[str, Any]) -> list[Dict[str, Any]]:
+    """展开联合类型，保留所有可能的结构分支。"""
+    resolved = _schema_ref(schema, definitions)
+    if not isinstance(resolved, dict):
+        return []
+    variants: list[Dict[str, Any]] = []
+    for key in ("anyOf", "oneOf"):
+        values = resolved.get(key)
+        if isinstance(values, list):
+            for value in values:
+                variants.extend(_schema_variants(value, definitions) or ([value] if isinstance(value, dict) else []))
+            return variants
+    return [resolved]
+
+
+def _schema_has_type(schema: Any, expected: str, definitions: Dict[str, Any]) -> bool:
+    """判断 Schema 是否允许指定结构类型。"""
+    for variant in _schema_variants(schema, definitions):
+        schema_type = variant.get("type")
+        if schema_type == expected or (isinstance(schema_type, list) and expected in schema_type):
+            return True
+        if expected == "object" and isinstance(variant.get("properties"), dict):
+            return True
+        if expected == "object" and isinstance(variant.get("additionalProperties"), (dict, bool)):
+            return True
+        if expected == "array" and isinstance(variant.get("items"), dict):
+            return True
+    return False
+
+
+def _select_schema_for_value(schema: Any, value: Any, definitions: Dict[str, Any]) -> Dict[str, Any]:
+    """从联合类型中选择与当前值形状最匹配的分支。"""
+    variants = _schema_variants(schema, definitions)
+    if not variants:
+        return {}
+    wanted = "array" if isinstance(value, list) else "object" if isinstance(value, dict) else None
+    if wanted:
+        for variant in variants:
+            if variant.get("type") == wanted or (
+                wanted == "object" and isinstance(variant.get("properties"), dict)
+            ) or (
+                wanted == "array" and isinstance(variant.get("items"), dict)
+            ):
+                return variant
+    for variant in variants:
+        if variant.get("type") != "null":
+            return variant
+    return variants[0]
+
+
+def _try_parse_structured_value(value: Any) -> Any:
+    """仅尝试把字符串解码为 JSON 值，失败时返回原值。"""
+    if not isinstance(value, str) or not value.strip():
+        return value
+    text = value.strip()
+    try:
+        return json.loads(text)
+    except (TypeError, ValueError, json.JSONDecodeError):
+        return value
+
+
+def _normalize_value_by_schema(value: Any, schema: Any, definitions: Dict[str, Any]) -> Any:
+    """按照 Schema 递归解包模型错误地二次序列化的对象和数组。"""
+    variants = _schema_variants(schema, definitions)
+    if not variants:
+        return value
+
+    if isinstance(value, str) and _schema_has_type(schema, "object", definitions):
+        value = _try_parse_structured_value(value)
+    elif isinstance(value, str) and _schema_has_type(schema, "array", definitions):
+        value = _try_parse_structured_value(value)
+
+    selected = _select_schema_for_value(schema, value, definitions)
+    selected = _schema_ref(selected, definitions)
+    if not isinstance(selected, dict):
+        return value
+    selected_type = selected.get("type")
+    is_object = selected_type == "object" or (isinstance(selected_type, list) and "object" in selected_type)
+    is_array = selected_type == "array" or (isinstance(selected_type, list) and "array" in selected_type)
+
+    if isinstance(value, dict) and (
+        is_object
+        or isinstance(selected.get("properties"), dict)
+        or "additionalProperties" in selected
+    ):
+        properties = selected.get("properties") if isinstance(selected.get("properties"), dict) else {}
+        additional = selected.get("additionalProperties")
+        normalized = dict(value)
+        for key, item in value.items():
+            child_schema = properties.get(key)
+            if child_schema is None and isinstance(additional, dict):
+                child_schema = additional
+            if child_schema is not None:
+                normalized[key] = _normalize_value_by_schema(item, child_schema, definitions)
+        return normalized
+
+    if isinstance(value, list) and (
+        is_array or isinstance(selected.get("items"), dict)
+    ):
+        item_schema = selected.get("items")
+        if isinstance(item_schema, dict):
+            return [_normalize_value_by_schema(item, item_schema, definitions) for item in value]
+    return value
+
+
+def _args_schema_json(schema: Any) -> Dict[str, Any]:
+    """读取 LangChain/Pydantic 参数模型的 JSON Schema。"""
+    if schema is None:
+        return {}
+    if isinstance(schema, dict):
+        return schema
+    model_json_schema = getattr(schema, "model_json_schema", None)
+    if callable(model_json_schema):
+        try:
+            payload = model_json_schema()
+            return payload if isinstance(payload, dict) else {}
+        except Exception:
+            pass
+    schema_method = getattr(schema, "schema", None)
+    if callable(schema_method):
+        try:
+            payload = schema_method()
+            return payload if isinstance(payload, dict) else {}
+        except Exception:
+            pass
+    return {}
+
+
+def normalize_tool_args(
+    tool_args: Any,
+    *,
+    tool: Any = None,
+    args_schema: Any = None,
+) -> Dict[str, Any]:
+    """按工具参数 Schema 解包结构字段，普通字符串字段保持原样。"""
+    if isinstance(tool_args, dict):
+        normalized = dict(tool_args)
+    else:
+        normalized = _parse_args(tool_args)
+    if not isinstance(normalized, dict):
+        return {}
+
+    schema_model = args_schema
+    if schema_model is None and tool is not None:
+        schema_model = getattr(tool, "args_schema", None)
+    schema = _args_schema_json(schema_model)
+    if not schema:
+        return normalized
+    definitions = schema.get("$defs") or schema.get("definitions") or {}
+    return _normalize_value_by_schema(normalized, schema, definitions)
+
+
 def extract_tool_args(tool_call: Any) -> Dict[str, Any]:
     call = tool_call_as_dict(tool_call)
     function_obj = call.get("function") or getattr(tool_call, "function", None)
@@ -160,6 +324,7 @@ def prepare_tool_specs_for_execution(
     tool_specs: Sequence[Dict[str, Any]],
     *,
     normalize_name: Callable[[str], str] | None = None,
+    tool_lookup: Callable[[str], Any] | Dict[str, Any] | None = None,
 ) -> list[Dict[str, Any]]:
     """为工具执行与消息历史生成同一组稳定、唯一的调用 ID。"""
     normalize = normalize_name or (lambda value: value)
@@ -175,6 +340,15 @@ def prepare_tool_specs_for_execution(
             tool_args = extract_tool_args(item.get("raw"))
         if not isinstance(tool_args, dict):
             tool_args = {}
+        tool = None
+        if callable(tool_lookup):
+            try:
+                tool = tool_lookup(tool_name)
+            except Exception:
+                tool = None
+        elif isinstance(tool_lookup, dict):
+            tool = tool_lookup.get(tool_name)
+        tool_args = normalize_tool_args(tool_args, tool=tool)
 
         call_id = extract_tool_call_id(item.get("raw")).strip()
         if not call_id or call_id in used_call_ids:
@@ -298,4 +472,3 @@ def validate_tool_message_history(messages: Sequence[Any]) -> None:
         raise ToolMessageProtocolError(
             f"第 {declared_at + 1} 条 assistant 工具调用在消息结尾仍缺少响应：{missing}。"
         )
-

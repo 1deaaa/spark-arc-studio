@@ -21,6 +21,7 @@ import os
 import json
 import threading
 import time
+from copy import deepcopy
 from collections import Counter
 from typing import Dict, Any, Optional, List
 
@@ -58,9 +59,15 @@ from .image_adapters import (
 )
 from .paths import get_db_file_path, get_state_file_path, get_config_file_path, get_key_file_path, get_mgr_home
 from .security import SecurityManager
-from .utils import normalize_recharge_url
+from .utils import normalize_base_url, normalize_recharge_url
 from .database import create_configured_engine, normalize_database_url
 from .integrations import MatchboxIntegrations
+from .platform_identity import (
+    generate_platform_key,
+    legacy_config_platform_key,
+    legacy_database_platform_key,
+    normalize_platform_key,
+)
 
 from .admin import AdminMixin
 from .user_services import UserServicesMixin
@@ -143,6 +150,37 @@ class AIManagerBase:
     def ensure_schema(self) -> None:
         """在没有独立迁移系统的环境中创建 Matchbox 自有表。"""
         Base.metadata.create_all(self.engine)
+        self.ensure_platform_identity()
+
+    def ensure_platform_identity(self) -> None:
+        """为历史平台补齐稳定身份，供迁移后及轻量初始化链路复用。"""
+        with self.Session() as session:
+            self._ensure_platform_keys(session)
+            session.commit()
+
+    @staticmethod
+    def _ensure_platform_keys(session) -> None:
+        """为历史平台补齐身份标识，并修复意外的重复值。"""
+        platforms = session.query(LLMPlatform).order_by(LLMPlatform.id).all()
+        seen: set[str] = set()
+        changed = False
+        for platform in platforms:
+            try:
+                platform_key = normalize_platform_key(platform.platform_key)
+            except ValueError:
+                platform_key = None
+            if platform_key is None or platform_key in seen:
+                platform_key = legacy_database_platform_key(platform.id)
+                suffix = 1
+                while platform_key in seen:
+                    platform_key = f"{legacy_database_platform_key(platform.id)}-{suffix}"
+                    suffix += 1
+            if platform.platform_key != platform_key:
+                platform.platform_key = platform_key
+                changed = True
+            seen.add(platform_key)
+        if changed:
+            session.flush()
 
     def _load_state(self):
         """加载运行时状态"""
@@ -204,6 +242,9 @@ class AIManagerBase:
 
     def initialize_defaults(self):
         """同步默认平台并初始化默认ID"""
+        with self.Session() as session:
+            self._ensure_platform_keys(session)
+            session.commit()
         self._sync_default_platforms()
 
         with self.Session() as session:
@@ -453,6 +494,41 @@ class AIManagerBase:
                     session.delete(db_model)
                     print(f"[yaml-reset] Platform {platform_name} removed deprecated model: {db_model.display_name}")
 
+    @staticmethod
+    def _resolve_seed_platform_key(platform_name: str, cfg: Dict[str, Any]) -> str:
+        """解析 YAML 平台身份；旧配置按名称和规范化 URL 确定性兼容。"""
+        platform_key = normalize_platform_key(cfg.get("platform_key"))
+        if platform_key is None:
+            platform_key = legacy_config_platform_key(
+                platform_name,
+                normalize_base_url(str(cfg.get("base_url") or "")),
+            )
+            cfg["platform_key"] = platform_key
+        return platform_key
+
+    @staticmethod
+    def _find_seed_platform(
+        session,
+        *,
+        platform_key: str,
+        platform_name: str,
+        base_url: str,
+    ) -> Optional[LLMPlatform]:
+        """按平台 key 查找平台，旧 YAML 仅回退到唯一名称与 URL。"""
+        platform = (
+            session.query(LLMPlatform)
+            .filter_by(platform_key=platform_key, is_sys=1)
+            .first()
+        )
+        if platform is not None:
+            return platform
+        return (
+            session.query(LLMPlatform)
+            .filter_by(name=platform_name, base_url=normalize_base_url(base_url), is_sys=1)
+            .order_by(LLMPlatform.id)
+            .first()
+        )
+
     def _sync_default_platforms(
         self,
         force_reset: bool = False,
@@ -520,34 +596,46 @@ class AIManagerBase:
             merge_key_yaml_into_configs(raw_platform_configs)
 
         with self.Session() as session:
-            config_base_urls = {cfg["base_url"] for cfg in raw_platform_configs.values() if isinstance(cfg, dict) and "base_url" in cfg}
+            self._ensure_platform_keys(session)
+            config_platform_keys = set()
+            for name, cfg in raw_platform_configs.items():
+                if isinstance(cfg, dict) and cfg.get("base_url"):
+                    platform_key = self._resolve_seed_platform_key(name, cfg)
+                    if platform_key in config_platform_keys:
+                        raise ValueError(f"配置中存在重复 platform_key: {platform_key}")
+                    config_platform_keys.add(platform_key)
             all_sys_platforms = session.query(LLMPlatform).filter_by(is_sys=1).all()
-            # 已被管理员禁用的平台 base_url 集合（增量同步时跳过）
-            disabled_base_urls = {p.base_url for p in all_sys_platforms if p.disable}
-
+            # 已被管理员禁用的平台 key 集合；相同 URL 的其他平台不受影响。
             # 检查是否为首次初始化（数据库中没有任何系统平台）
             is_first_init = len(all_sys_platforms) == 0
 
             if force_reset:
                 # 强制重置模式：禁用所有不在 YAML 中的平台（软禁用，不硬删除）
                 for plat in all_sys_platforms:
-                    if plat.base_url not in config_base_urls:
-                        print(f"[yaml-reset] Disabling removed system platform: {plat.name} ({plat.base_url})")
+                    if plat.platform_key not in config_platform_keys:
+                        print(f"[yaml-reset] Disabling removed system platform: {plat.name} ({plat.platform_key})")
                         plat.disable = 1
                 session.flush()
             
             for plat_idx, (name, cfg) in enumerate(raw_platform_configs.items()):
                 if not isinstance(cfg, dict) or "base_url" not in cfg:
                     continue
-                base_url = cfg["base_url"]
+                base_url = normalize_base_url(str(cfg["base_url"]))
+                platform_key = self._resolve_seed_platform_key(name, cfg)
                 recharge_url = normalize_recharge_url(cfg.get("recharge_url"))
-                plat = session.query(LLMPlatform).filter_by(base_url=base_url, is_sys=1).first()
+                plat = self._find_seed_platform(
+                    session,
+                    platform_key=platform_key,
+                    platform_name=name,
+                    base_url=base_url,
+                )
 
-                if not plat and base_url not in disabled_base_urls:
-                    # 新平台：添加到数据库（跳过已被管理员禁用的）
+                if not plat:
+                    # 新平台：添加到数据库；同 URL 的其他平台不会被复用。
                     encrypted_key = _prepare_seed_api_key(cfg.get("api_key"))
                     plat = LLMPlatform(
                         name=name,
+                        platform_key=platform_key,
                         base_url=base_url,
                         recharge_url=recharge_url,
                         api_key=encrypted_key,  # matchbox_key.yaml 中若有密钥则加密写入
@@ -558,7 +646,6 @@ class AIManagerBase:
                     session.add(plat)
                     session.flush()
                     print(f"[init] Adding new system platform: {name}")
-
                     self._sync_seed_models_for_platform(session, plat, name, cfg, reset_mode=True)
 
                 elif force_reset or is_first_init:
@@ -566,6 +653,9 @@ class AIManagerBase:
                     if plat.name != name:
                         print(f"[yaml-reset] Restoring system platform name: {plat.name} -> {name}")
                         plat.name = name
+
+                    # YAML 明确保留该身份时允许复活该平台；不会按 URL 复活其他平台。
+                    plat.disable = 0
 
                     # 按 YAML 顺序同步 sort_order
                     plat.sort_order = plat_idx
@@ -577,10 +667,9 @@ class AIManagerBase:
                         plat.api_key = encrypted_key
 
                     self._sync_seed_models_for_platform(session, plat, name, cfg, reset_mode=True)
-                
+
                 else:
-                    # 正常启动增量更新模式：
-                    # 自动同步平台名称（若有变动）
+                    # 正常启动增量更新模式：自动同步平台名称（若有变动）。
                     if plat.name != name:
                         print(f"[incremental-sync] Updating system platform name: {plat.name} -> {name}")
                         plat.name = name
@@ -782,7 +871,7 @@ class AIManagerBase:
                     ),
                 )
 
-            for base_url, key_entry in key_yaml_data.items():
+            for platform_key, key_entry in key_yaml_data.items():
                 if isinstance(key_entry, dict):
                     key_val = key_entry.get("api_key")
                 elif isinstance(key_entry, str):
@@ -796,10 +885,10 @@ class AIManagerBase:
                     allow_clear_unrecoverable=allow_clear_unrecoverable,
                 )
                 if plan["action"] == "unresolved":
-                    unresolved_labels.append(f"KEY平台:{base_url}")
+                    unresolved_labels.append(f"KEY平台:{platform_key}")
                     continue
                 if plan["action"] == "write":
-                    rewrite_jobs.append(("key_yaml", (base_url, key_yaml_data), plan))
+                    rewrite_jobs.append(("key_yaml", (platform_key, key_yaml_data), plan))
 
             if unresolved_labels:
                 raise MasterKeyMigrationRequiredError(len(unresolved_labels), unresolved_labels[:3])
@@ -820,18 +909,18 @@ class AIManagerBase:
                 elif job_type == "external":
                     target()
                 elif job_type == "key_yaml":
-                    base_url, key_data = target
-                    key_entry = key_data.get(base_url)
+                    platform_key, key_data = target
+                    key_entry = key_data.get(platform_key)
                     if plan["value"]:
                         if isinstance(key_entry, dict):
                             key_entry["api_key"] = plan["value"]
                         else:
-                            key_data[base_url] = {"api_key": plan["value"]}
+                            key_data[platform_key] = {"api_key": plan["value"]}
                     else:
                         if isinstance(key_entry, dict):
                             key_entry.pop("api_key", None)
-                        elif base_url in key_data:
-                            del key_data[base_url]
+                        elif platform_key in key_data:
+                            del key_data[platform_key]
                     key_yaml_changed = True
 
             if key_yaml_changed:
@@ -907,6 +996,7 @@ class AIManagerBase:
                     continue
 
                 plat_config: Dict[str, Any] = {
+                    "platform_key": plat.platform_key,
                     "base_url": plat.base_url,
                     "models": {}
                 }
@@ -970,8 +1060,8 @@ class AIManagerBase:
         """
         管理员：从数据库提取当前系统平台的 API Key，返回可序列化的字典。
 
-        结构（使用 base_url 作为唯一键）：
-            https://api.example.com/v1:
+        结构（使用 platform_key 作为唯一键）：
+            platform-0123456789abcdef:
               api_key: ENC:...
 
         只导出存在且为加密字符串的系统平台默认 Key；空 Key 不导出。
@@ -990,7 +1080,7 @@ class AIManagerBase:
                 if bool(plat.disable):
                     continue
                 if plat.api_key and isinstance(plat.api_key, str) and plat.api_key.startswith("ENC:"):
-                    export_data[plat.base_url] = {"api_key": plat.api_key}
+                    export_data[plat.platform_key] = {"api_key": plat.api_key}
 
         return export_data
 
@@ -1065,6 +1155,11 @@ class AIManagerBase:
             sec_mgr = SecurityManager.get_instance()
             merged_count = 0
             skipped_count = 0
+            url_counts: Counter[str] = Counter(
+                normalize_base_url(str(cfg.get("base_url")))
+                for cfg in raw_platform_configs.values()
+                if isinstance(cfg, dict) and cfg.get("base_url")
+            )
             for name, cfg in raw_platform_configs.items():
                 if not isinstance(cfg, dict):
                     continue
@@ -1072,7 +1167,19 @@ class AIManagerBase:
                 base_url = cfg.get("base_url")
                 if not base_url:
                     continue
-                key_entry = uploaded_key_data.get(base_url)
+                platform_key = self._resolve_seed_platform_key(name, cfg)
+                key_entry = uploaded_key_data.get(platform_key)
+                if key_entry is None and url_counts[normalize_base_url(str(base_url))] == 1:
+                    normalized_url = normalize_base_url(str(base_url))
+                    for legacy_key, legacy_entry in uploaded_key_data.items():
+                        if not isinstance(legacy_key, str):
+                            continue
+                        try:
+                            if normalize_base_url(legacy_key) == normalized_url:
+                                key_entry = legacy_entry
+                                break
+                        except (AttributeError, TypeError):
+                            continue
                 if not key_entry:
                     continue
                 raw_key = None
@@ -1092,7 +1199,7 @@ class AIManagerBase:
                         cfg["api_key"] = sec_mgr.encrypt(result.value)
                         merged_count += 1
                     else:
-                        print(f"[import] 密钥解密失败，已跳过: {base_url}")
+                        print(f"[import] 密钥解密失败，已跳过: {platform_key}")
                         skipped_count += 1
                 else:
                     # 明文或 ENV 占位符

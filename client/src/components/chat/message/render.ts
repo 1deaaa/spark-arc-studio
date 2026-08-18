@@ -5,6 +5,9 @@ export type MessageId = string | number;
 export type MessageToolTrace = {
   tool_name?: string;
   toolName?: string;
+  tool_input?: unknown;
+  tool_result?: unknown;
+  tool_error?: unknown;
   status?: string;
   duration?: number;
   started_at?: number;
@@ -19,7 +22,9 @@ export type MessageSegment = {
   type?: string;
   text?: string;
   tool_name?: string;
+  tool_input?: unknown;
   tool_result?: unknown;
+  tool_error?: unknown;
   status?: string;
   duration?: number;
   source_agent?: string;
@@ -244,7 +249,9 @@ export function getMessageSegments(message: ChatMessageItem | null | undefined):
       status: trace.status || 'finished',
       duration: trace.duration || 0,
       source_agent: String(trace.source_agent || ''),
+      tool_input: trace.tool_input,
       tool_result: trace.tool_result,
+      tool_error: trace.tool_error,
       tool_action: trace.tool_action,
       tool_provider: trace.tool_provider,
     });

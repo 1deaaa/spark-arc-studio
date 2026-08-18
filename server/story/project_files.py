@@ -23,6 +23,7 @@ from core.utils import (
     is_system_character_id,
 )
 from story.arc_safety import sanitize_arc_for_ai_context
+from story.file_naming import list_story_files
 from story.outline_parser import parse_outline_markup
 
 
@@ -340,11 +341,9 @@ def collect_project_files(
 
     stories_dir = get_project_stories_path(user_id, project_name)
     if os.path.isdir(stories_dir):
-        for root, dirs, files in os.walk(stories_dir):
-            dirs.sort()
-            for name in sorted(files):
-                if name.endswith((".arc", ".md")):
-                    append_physical_file(os.path.join(root, name))
+        # 所有故事正文统一复用文件名元数据排序，不能退回目录/文件名字符串排序。
+        for _, file_path, _ in list_story_files(stories_dir):
+            append_physical_file(file_path)
 
     return results
 

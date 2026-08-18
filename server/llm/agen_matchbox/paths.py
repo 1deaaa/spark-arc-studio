@@ -93,7 +93,7 @@ def get_key_file_path() -> Path:
 
     设计原则：
     - matchbox_cfg.yaml 只描述平台结构（base_url、models 等），可进入版本控制。
-    - matchbox_key.yaml 只存放各平台 api_key（明文、ENV 占位符或 ENC 密文），使用 base_url 作为唯一键，应被 git 忽略。
+    - matchbox_key.yaml 只存放各平台 api_key（明文、ENV 占位符或 ENC 密文），使用 platform_key 作为唯一键，应被 git 忽略。
     """
     return get_mgr_home() / "matchbox_key.yaml"
 

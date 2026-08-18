@@ -83,6 +83,43 @@ class OrganizeScenesToChapterInput(BaseModel):
     )
 
 
+class RenameChapterInput(BaseModel):
+    chapter_path: str = Field(
+        description="要重命名的章节目录相对路径（相对于 stories 目录），例如「一 · 开端」。"
+    )
+    new_chapter_name: str = Field(
+        min_length=1,
+        description="新的可读章节标题；章节编号由现有 chap 元数据保留并自动补到目录名。",
+    )
+
+
+class RenameSceneInput(BaseModel):
+    scene_path: str = Field(
+        description="要重命名的场景文件相对路径（相对于 stories 目录），可使用文件树中显示的 .arc/.md 路径。"
+    )
+    new_scene_name: str = Field(
+        min_length=1,
+        description="新的可读场景标题；原有章节号、场景号和排序身份会保留。",
+    )
+
+
+class ReorderChaptersInput(BaseModel):
+    chapter_paths: list[str] = Field(
+        min_length=1,
+        description="按目标顺序排列的章节目录相对路径列表；应包含 stories 根目录下的全部章节目录。只更新章节显示顺序，不改目录名、正文元数据或逻辑路径。",
+    )
+
+
+class ReorderScenesInput(BaseModel):
+    chapter_path: str = Field(
+        description="目标章节目录相对路径（相对于 stories 目录）。",
+    )
+    scene_paths: list[str] = Field(
+        min_length=1,
+        description="按目标顺序排列的场景文件相对路径列表；应包含目标章节内的全部场景。只更新 order 元数据，保留 chap、scene、显示名和逻辑路径。",
+    )
+
+
 def _ensure_chapter_dir(stories_path: str, chapter_name: str) -> str:
     name = (chapter_name or "").strip()
     if not name:
@@ -96,6 +133,185 @@ def _ensure_chapter_dir(stories_path: str, chapter_name: str) -> str:
     )
     os.makedirs(chapter_dir, exist_ok=True)
     return chapter_dir
+
+
+def _resolve_story_child_path(stories_path: str, relative_path: str, *, directory: bool | None = None) -> str:
+    """解析 stories 子路径并拒绝绝对路径与目录穿越。"""
+    raw = str(relative_path or "").replace("\\", "/").strip("/")
+    if not raw or os.path.isabs(str(relative_path or "")):
+        raise ValueError("路径必须是 stories 目录内的相对路径。")
+    root = os.path.abspath(os.path.normpath(stories_path))
+    candidate = os.path.abspath(os.path.normpath(os.path.join(root, raw.replace("/", os.sep))))
+    try:
+        if os.path.commonpath((root, candidate)) != root or os.path.normcase(candidate) == os.path.normcase(root):
+            raise ValueError("路径必须位于 stories 目录内。")
+    except ValueError:
+        raise ValueError("路径必须位于 stories 目录内。") from None
+    if not os.path.exists(candidate):
+        raise ValueError(f"路径不存在：{relative_path}")
+    if directory is True and not os.path.isdir(candidate):
+        raise ValueError(f"目标不是章节目录：{relative_path}")
+    if directory is False and not os.path.isfile(candidate):
+        raise ValueError(f"目标不是故事文件：{relative_path}")
+    return candidate
+
+
+def _assert_story_path_inside(stories_path: str, path: str) -> str:
+    """确认解析后的故事文件仍位于 stories 目录内。"""
+    root = os.path.abspath(os.path.normpath(stories_path))
+    candidate = os.path.abspath(os.path.normpath(path))
+    try:
+        inside = os.path.commonpath((root, candidate)) == root
+    except ValueError:
+        inside = False
+    if not inside or os.path.normcase(candidate) == os.path.normcase(root):
+        raise ValueError("故事文件必须位于 stories 目录内。")
+    return candidate
+
+
+def _chapter_number_for_directory(chapter_dir: str) -> int | None:
+    """从章节目录名或正文文件元数据中确定稳定章节号。"""
+    from story.file_naming import list_story_files, parse_chapter_identity_from_title
+
+    number = parse_chapter_identity_from_title(os.path.basename(os.path.normpath(chapter_dir)))
+    if number is not None:
+        return number
+    numbers: set[int] = set()
+    for _, path, parsed in list_story_files(chapter_dir):
+        current = (parsed or {}).get("chapter_num") if parsed else None
+        if current is not None:
+            numbers.add(int(current))
+            continue
+        fallback = parse_chapter_identity_from_title(os.path.basename(path))
+        if fallback is not None:
+            numbers.add(fallback)
+    return numbers.pop() if len(numbers) == 1 else None
+
+
+def _chapter_scene_entries(chapter_dir: str) -> list[tuple[str, str, dict]]:
+    """列出章节目录内的故事文件及其解析元数据。"""
+    from story.file_naming import list_story_files
+
+    entries: list[tuple[str, str, dict]] = []
+    for relative_path, absolute_path, parsed in list_story_files(chapter_dir):
+        if parsed:
+            entries.append((relative_path, absolute_path, parsed))
+    return entries
+
+
+def _load_stories_order(order_path: str) -> dict:
+    """读取章节目录顺序文件，损坏时返回空对象。"""
+    import json
+
+    if not os.path.exists(order_path):
+        return {}
+    try:
+        with open(order_path, "r", encoding="utf-8") as handle:
+            data = json.load(handle)
+        return data if isinstance(data, dict) else {}
+    except Exception:
+        return {}
+
+
+def _rewrite_order_names(value: object, rename_map: dict[str, str]) -> object:
+    """递归替换 stories_order.json 中受目录改名影响的名称。"""
+    if isinstance(value, list):
+        return [_rewrite_order_names(item, rename_map) for item in value]
+    if isinstance(value, dict):
+        return {
+            rename_map.get(str(key), key): _rewrite_order_names(item, rename_map)
+            for key, item in value.items()
+        }
+    if isinstance(value, str):
+        return rename_map.get(value, value)
+    return value
+
+
+def _story_order_value(parsed: dict) -> int | None:
+    """读取可参与全局排序的 order，缺失或非法值返回 None。"""
+    value = parsed.get("order")
+    try:
+        value = int(value) if value is not None else None
+    except (TypeError, ValueError):
+        return None
+    return value if value is not None and value > 0 else None
+
+
+def _scene_order_updates(
+    stories_path: str,
+    resolved: list[tuple[str, dict]],
+) -> list[dict]:
+    """为场景重排分配全局唯一 order，同时不触碰稳定身份与展示字段。
+
+    现有 order 没有冲突时复用目标章节原有的全局排序槽位，只交换槽位归属，
+    因而不会让无关文件发生物理改名。历史数据若存在缺失或重复 order，则按
+    当前 story_sort_key 顺序为全部正文重新编号；重编号仍只改变 order 元数据。
+    """
+    from story.file_naming import list_story_files, story_sort_key
+
+    all_entries = [
+        (absolute_path, parsed)
+        for _, absolute_path, parsed in list_story_files(stories_path)
+        if parsed
+    ]
+    target_keys = {os.path.normcase(os.path.abspath(path)) for path, _ in resolved}
+    if not target_keys or not all_entries:
+        return []
+
+    order_values = [_story_order_value(parsed) for _, parsed in all_entries]
+    globally_unique = (
+        all(value is not None for value in order_values)
+        and len({value for value in order_values if value is not None}) == len(order_values)
+    )
+    ordered_entries = sorted(
+        all_entries,
+        key=lambda item: story_sort_key(os.path.relpath(item[0], stories_path).replace(os.sep, "/")),
+    )
+    ordered_target = [
+        item for item in ordered_entries
+        if os.path.normcase(os.path.abspath(item[0])) in target_keys
+    ]
+    if len(ordered_target) != len(resolved):
+        raise ValueError("目标场景不在 stories 文件清单中。")
+
+    # 只要原有 order 是全局唯一的，目标场景就可以复用它们原来的排序槽位。
+    # 这对章节号不连续的作品也成立，因为槽位来自全局 story_sort_key，而非
+    # chapter_num * 常量这种会产生碰撞的局部公式。
+    if globally_unique:
+        target_slots = sorted(
+            _story_order_value(parsed) for _, parsed in ordered_target
+        )
+        if len(target_slots) == len(resolved):
+            return [
+                {"path": path, "order": order}
+                for (path, _), order in zip(resolved, target_slots)
+            ]
+
+    # 历史文件可能没有 order 或已有碰撞。保留目标章节在当前全局序列中的
+    # 位置，仅将它们按调用方顺序放回，再用连续正整数建立唯一排序。
+    target_start = min(
+        index
+        for index, (path, _) in enumerate(ordered_entries)
+        if os.path.normcase(os.path.abspath(path)) in target_keys
+    )
+    without_target = [
+        item for item in ordered_entries
+        if os.path.normcase(os.path.abspath(item[0])) not in target_keys
+    ]
+    insertion_index = sum(
+        1
+        for path, _ in ordered_entries[:target_start]
+        if os.path.normcase(os.path.abspath(path)) not in target_keys
+    )
+    reordered_entries = (
+        without_target[:insertion_index]
+        + resolved
+        + without_target[insertion_index:]
+    )
+    return [
+        {"path": path, "order": index}
+        for index, (path, _) in enumerate(reordered_entries, start=1)
+    ]
 
 
 @tool
@@ -415,6 +631,218 @@ def create_chapter(chapter_name: str) -> str:
     return f"章节已创建：{name}（路径：{chapter_dir}）"
 
 
+@tool(args_schema=RenameChapterInput)
+def rename_chapter(chapter_path: str, new_chapter_name: str) -> str:
+    """只改章节目录的可读标题，保留正文文件中的章节身份。"""
+    from core.utils import get_project_path, get_project_stories_path
+    from story.file_naming import (
+        batch_rename_story_directories,
+        canonical_chapter_display_name,
+        make_temp_story_filename,
+    )
+    import json
+
+    user_id, project_name = ToolExecutionContext.get_context()
+    stories_path = get_project_stories_path(user_id, project_name)
+    try:
+        source_dir = _resolve_story_child_path(stories_path, chapter_path, directory=True)
+        chapter_num = _chapter_number_for_directory(source_dir)
+        if chapter_num is None:
+            return "重命名章节失败：无法从目录或正文元数据确定稳定章节号。"
+        target_name = canonical_chapter_display_name(new_chapter_name, chapter_num)
+        target_dir = os.path.join(os.path.dirname(source_dir), target_name)
+        order_path = os.path.join(get_project_path(user_id, project_name), "stories_order.json")
+        order_data = _load_stories_order(order_path)
+        order_data = _rewrite_order_names(order_data, {os.path.basename(source_dir): target_name})
+        temporary_order_path = os.path.join(
+            os.path.dirname(order_path),
+            make_temp_story_filename(os.path.basename(order_path)),
+        )
+        os.makedirs(os.path.dirname(order_path), exist_ok=True)
+        with open(temporary_order_path, "w", encoding="utf-8") as handle:
+            json.dump(order_data, handle, ensure_ascii=False, indent=2)
+        directory_renamed = False
+        try:
+            batch_rename_story_directories(
+                [(source_dir, target_dir)],
+                stories_path=stories_path,
+            )
+            directory_renamed = True
+            os.replace(temporary_order_path, order_path)
+        except Exception:
+            if os.path.exists(temporary_order_path):
+                try:
+                    os.remove(temporary_order_path)
+                except OSError:
+                    pass
+            if directory_renamed:
+                batch_rename_story_directories(
+                    [(target_dir, source_dir)],
+                    stories_path=stories_path,
+                )
+            raise
+    except Exception as exc:
+        return f"重命名章节失败：{exc}"
+    return f"章节已重命名：{chapter_path} → {target_name}（chap={chapter_num} 保留）"
+
+
+@tool(args_schema=RenameSceneInput)
+def rename_scene(scene_path: str, new_scene_name: str) -> str:
+    """只改场景文件的可读标题，保留章节号、场景号和排序元数据。"""
+    from core.utils import get_project_stories_path
+    from story.file_naming import (
+        batch_update_story_file_metadata,
+        canonical_scene_display_name,
+        parse_scene_identity_from_title,
+        resolve_story_file_path,
+    )
+
+    user_id, project_name = ToolExecutionContext.get_context()
+    stories_path = get_project_stories_path(user_id, project_name)
+    try:
+        resolved_path, _, parsed = resolve_story_file_path(stories_path, scene_path)
+        if not resolved_path or not parsed:
+            return f"重命名场景失败：文件不存在或无法解析：{scene_path}"
+        resolved_path = _assert_story_path_inside(stories_path, resolved_path)
+        chapter_num = parsed.get("chapter_num")
+        scene_num = parsed.get("scene_num")
+        if chapter_num is None or scene_num is None:
+            chapter_num, scene_num = parse_scene_identity_from_title(parsed.get("display_name"))
+        if chapter_num is None or scene_num is None or chapter_num <= 0 or scene_num <= 0:
+            return "重命名场景失败：无法从文件名元数据确定稳定的章节号和场景号。"
+        display_name = canonical_scene_display_name(new_scene_name, chapter_num, scene_num)
+        pairs = batch_update_story_file_metadata(
+            stories_path,
+            [{
+                "path": resolved_path,
+                "display_name": display_name,
+                "chapter_num": chapter_num,
+                "scene_num": scene_num,
+                "order": parsed.get("order"),
+            }],
+        )
+    except Exception as exc:
+        return f"重命名场景失败：{exc}"
+    target_path = pairs[0][1] if pairs else resolved_path
+    relative_target = os.path.relpath(target_path, stories_path).replace(os.sep, "/")
+    return f"场景已重命名：{scene_path} → {relative_target}（chap={chapter_num}, scene={scene_num} 保留）"
+
+
+@tool(args_schema=ReorderScenesInput)
+def reorder_scenes(chapter_path: str, scene_paths: list[str]) -> str:
+    """按给定顺序重排场景，只更新全局唯一的 order 元数据。
+
+    场景的 chap、scene、显示名和逻辑相对路径都是稳定身份，不会因重排改变。
+    """
+    from core.utils import get_project_stories_path
+    from story.file_naming import (
+        batch_update_story_file_metadata,
+        resolve_story_file_path,
+    )
+
+    user_id, project_name = ToolExecutionContext.get_context()
+    stories_path = get_project_stories_path(user_id, project_name)
+    try:
+        chapter_dir = _resolve_story_child_path(stories_path, chapter_path, directory=True)
+        chapter_num = _chapter_number_for_directory(chapter_dir)
+        if chapter_num is None or chapter_num <= 0:
+            return "重排场景失败：无法从章节目录或正文元数据确定稳定章节号。"
+        resolved: list[tuple[str, dict]] = []
+        seen: set[str] = set()
+        chapter_root = os.path.normcase(os.path.abspath(chapter_dir))
+        for scene_path in scene_paths:
+            actual_path, _, parsed = resolve_story_file_path(stories_path, scene_path)
+            if not actual_path or not parsed:
+                raise ValueError(f"文件不存在或无法解析：{scene_path}")
+            actual_path = _assert_story_path_inside(stories_path, actual_path)
+            actual_key = os.path.normcase(os.path.abspath(actual_path))
+            if actual_key in seen:
+                raise ValueError(f"场景路径重复：{scene_path}")
+            seen.add(actual_key)
+            try:
+                if os.path.commonpath((chapter_root, actual_key)) != chapter_root:
+                    raise ValueError(f"场景不属于目标章节：{scene_path}")
+            except ValueError:
+                raise ValueError(f"场景不属于目标章节：{scene_path}") from None
+            resolved.append((actual_path, parsed))
+
+        all_scene_keys = {
+            os.path.normcase(os.path.abspath(actual_path))
+            for _, actual_path, _ in _chapter_scene_entries(chapter_dir)
+        }
+        if not all_scene_keys:
+            raise ValueError("目标章节没有可重排的故事文件。")
+        if all_scene_keys != seen:
+            raise ValueError("scene_paths 必须包含目标章节内的全部故事文件，避免遗漏场景后产生身份冲突。")
+
+        updates = _scene_order_updates(stories_path, resolved)
+        batch_update_story_file_metadata(stories_path, updates)
+    except Exception as exc:
+        return f"重排场景失败：{exc}"
+    return f"场景重排完成：章节「{chapter_path}」已按给定顺序更新 {len(scene_paths)} 个场景的 order，章节号、场景号、显示名和路径均保持不变。"
+
+
+@tool(args_schema=ReorderChaptersInput)
+def reorder_chapters(chapter_paths: list[str]) -> str:
+    """按给定顺序更新章节目录显示顺序，只写入 stories_order.json。
+
+    章节目录名、正文文件的 chap/scene/order、显示名和逻辑相对路径都保持不变。
+    """
+    from core.utils import get_project_path, get_project_stories_path
+    from story.file_naming import make_temp_story_filename
+
+    user_id, project_name = ToolExecutionContext.get_context()
+    stories_path = get_project_stories_path(user_id, project_name)
+    temporary_order_path: str | None = None
+
+    try:
+        resolved_dirs: list[str] = []
+        seen_dirs: set[str] = set()
+        for chapter_path in chapter_paths:
+            source_dir = _resolve_story_child_path(stories_path, chapter_path, directory=True)
+            if os.path.normcase(os.path.dirname(os.path.normpath(source_dir))) != os.path.normcase(
+                os.path.abspath(os.path.normpath(stories_path))
+            ):
+                raise ValueError("章节重排只支持 stories 根目录下的章节目录。")
+            key = os.path.normcase(os.path.abspath(source_dir))
+            if key in seen_dirs:
+                raise ValueError(f"章节路径重复：{chapter_path}")
+            seen_dirs.add(key)
+            resolved_dirs.append(source_dir)
+
+        existing_dirs = []
+        for item in os.listdir(stories_path) if os.path.isdir(stories_path) else []:
+            candidate = os.path.join(stories_path, item)
+            if item.startswith("."):
+                continue
+            if os.path.isdir(candidate) and _chapter_number_for_directory(candidate) is not None:
+                existing_dirs.append(os.path.normcase(os.path.abspath(candidate)))
+        if set(existing_dirs) != seen_dirs:
+            raise ValueError("chapter_paths 必须包含 stories 根目录下全部已有章节目录，避免未列出的章节发生身份冲突。")
+
+        order_path = os.path.join(get_project_path(user_id, project_name), "stories_order.json")
+        order_data = _load_stories_order(order_path)
+        order_data[""] = [os.path.basename(os.path.normpath(path)) for path in resolved_dirs]
+        import json
+
+        temporary_order_name = make_temp_story_filename(os.path.basename(order_path))
+        temporary_order_path = os.path.join(os.path.dirname(order_path), temporary_order_name)
+        os.makedirs(os.path.dirname(order_path), exist_ok=True)
+        with open(temporary_order_path, "w", encoding="utf-8") as handle:
+            json.dump(order_data, handle, ensure_ascii=False, indent=2)
+        os.replace(temporary_order_path, order_path)
+        temporary_order_path = None
+    except Exception as exc:
+        if temporary_order_path and os.path.exists(temporary_order_path):
+            try:
+                os.remove(temporary_order_path)
+            except Exception:
+                pass
+        return f"重排章节失败：{exc}"
+
+    return f"章节重排完成：已按给定顺序更新 {len(resolved_dirs)} 个章节的显示顺序；目录名、正文元数据和逻辑路径均保持不变。"
+
+
 @tool(args_schema=PatchScriptInput)
 def patch_script(search_text: str, replace_text: str) -> str:
     """局部修改剧本内容；匹配失败时应重新读取原文并缩短定位片段，不要直接完整重写。"""
@@ -497,24 +925,18 @@ def organize_scenes_to_chapter(
     chapter_num: int | None = None,
     preserve_originals: bool = False,
 ) -> str:
-    """将指定的场景文件归纳到目标章节目录下。
-
-    适用场景：
-    - 整理散落在 stories 根目录的孤儿场景文件
-    - 将多个相关场景合并到新章节
-    - 重新组织章节结构
-
-    核心操作：
-    1. 更新文件名中的元数据（chap=xxx, order=xxx）
-    2. 可选：移动文件到章节文件夹（自动创建）
-    """
+    """将指定场景事务性归纳到目标章节并同步 chap、scene、order 元数据。"""
     from core.utils import get_project_stories_path
     from story.file_naming import (
-        parse_story_filename,
-        rebuild_story_filename,
-        next_story_order,
+        batch_copy_story_files,
+        batch_rename_story_files,
+        canonical_chapter_display_name,
+        canonical_scene_display_name,
+        list_story_files,
+        parse_scene_identity_from_title,
+        resolve_chapter_directory,
+        resolve_story_file_path,
     )
-    import shutil
 
     user_id, project_name = ToolExecutionContext.get_context()
     stories_path = get_project_stories_path(user_id, project_name)
@@ -522,65 +944,122 @@ def organize_scenes_to_chapter(
     if not scene_paths:
         return "整理失败：scene_paths 不能为空。"
 
-    # 1. 验证所有源文件存在
-    source_files = []
+    # 预解析全部源文件，任何错误都在写入前返回。
+    source_files: list[tuple[str, str, dict]] = []
+    source_keys: set[str] = set()
     for rel_path in scene_paths:
-        full_path = os.path.join(stories_path, rel_path.replace("/", os.sep))
-        if not os.path.exists(full_path):
-            return f"整理失败：文件不存在 - {rel_path}"
-        parsed = parse_story_filename(os.path.basename(full_path))
-        if not parsed:
-            return f"整理失败：无法解析文件名元数据 - {rel_path}"
+        full_path, _, parsed = resolve_story_file_path(stories_path, rel_path)
+        if not full_path or not parsed:
+            return f"整理失败：文件不存在或无法解析 - {rel_path}"
+        try:
+            full_path = _assert_story_path_inside(stories_path, full_path)
+        except ValueError as exc:
+            return f"整理失败：{exc}"
+        source_key = os.path.normcase(os.path.abspath(full_path))
+        if source_key in source_keys:
+            return f"整理失败：场景路径重复 - {rel_path}"
+        source_keys.add(source_key)
         source_files.append((rel_path, full_path, parsed))
 
-    # 2. 创建目标章节目录
     target_chapter_name = (new_chapter_name or "").strip()
     if not target_chapter_name:
         return "整理失败：new_chapter_name 不能为空。"
-    target_dir = _ensure_chapter_dir(stories_path, target_chapter_name)
 
-    # 3. 确定章节编号
     effective_chap = chapter_num
     if effective_chap is None:
-        # 自动推算：扫描现有章节目录，取最大编号 +1
-        existing_chaps = []
-        for root, dirs, files in os.walk(stories_path):
-            for f in files:
-                p = parse_story_filename(f)
-                if p and p["chapter_num"] is not None:
-                    existing_chaps.append(p["chapter_num"])
+        existing_chaps = [
+            int((parsed or {}).get("chapter_num"))
+            for _, _, parsed in list_story_files(stories_path)
+            if parsed and (parsed.get("chapter_num") or 0) > 0
+        ]
         effective_chap = max(existing_chaps, default=0) + 1
+    try:
+        effective_chap = int(effective_chap)
+    except (TypeError, ValueError):
+        return "整理失败：chapter_num 必须是大于 0 的整数。"
+    if effective_chap <= 0:
+        return "整理失败：chapter_num 必须是大于 0 的整数。"
 
-    # 4. 获取目标目录的下一个可用 order
-    current_order = next_story_order(stories_path, target_chapter_name)
+    try:
+        target_chapter_name = canonical_chapter_display_name(target_chapter_name, effective_chap)
+        target_dir = resolve_chapter_directory(
+            stories_path,
+            target_chapter_name,
+            chapter_num=effective_chap,
+        )
+    except Exception as exc:
+        return f"整理失败：{exc}"
 
-    # 5. 逐个处理文件
-    moved_files = []
-    errors = []
-    for rel_path, full_path, parsed in source_files:
-        try:
-            # 构建新文件名（更新 chap 和 order）
-            new_filename = rebuild_story_filename(
-                os.path.basename(full_path),
-                chapter_num=effective_chap,
-                order=current_order,
+    source_identity_keys = {
+        os.path.normcase(os.path.abspath(path))
+        for _, path, _ in source_files
+    }
+    used_scene_numbers: set[int] = set()
+    for _, path, parsed in list_story_files(stories_path):
+        if os.path.normcase(os.path.abspath(path)) in source_identity_keys:
+            continue
+        if not parsed or parsed.get("free") or parsed.get("chapter_num") != effective_chap:
+            continue
+        scene_num = parsed.get("scene_num")
+        if scene_num is not None:
+            used_scene_numbers.add(int(scene_num))
+
+    rename_pairs: list[tuple[str, str]] = []
+    moved_files: list[str] = []
+    for source_label, source_path, parsed in source_files:
+        scene_num = parsed.get("scene_num")
+        if scene_num is None:
+            _, scene_num = parse_scene_identity_from_title(
+                parsed.get("display_name")
             )
-            target_path = os.path.join(target_dir, new_filename)
+        if scene_num is None or int(scene_num) <= 0 or int(scene_num) in used_scene_numbers:
+            scene_num = max(used_scene_numbers, default=0) + 1
+            while scene_num in used_scene_numbers:
+                scene_num += 1
+        scene_num = int(scene_num)
+        used_scene_numbers.add(scene_num)
+        display_name = canonical_scene_display_name(
+            parsed.get("display_name"),
+            effective_chap,
+            scene_num,
+        )
+        from story.file_naming import rebuild_story_filename
 
-            # 移动或复制
-            if preserve_originals:
-                shutil.copy2(full_path, target_path)
-            else:
-                shutil.move(full_path, target_path)
+        new_filename = rebuild_story_filename(
+            os.path.basename(source_path),
+            display_name=display_name,
+            chapter_num=effective_chap,
+            scene_num=scene_num,
+            order=effective_chap * 1000 + scene_num,
+        )
+        target_path = os.path.join(target_dir, new_filename)
+        rename_pairs.append((source_path, target_path))
+        moved_files.append(f"{source_label} → {target_chapter_name}/{new_filename}")
 
-            moved_files.append(f"{rel_path} → {target_chapter_name}/{new_filename}")
-            current_order += 1
-        except Exception as e:
-            errors.append(f"{rel_path}: {e}")
-
-    # 6. 返回结果
-    if errors:
-        return f"部分完成：\n成功：{moved_files}\n失败：{errors}"
+    target_created = False
+    try:
+        if not os.path.isdir(target_dir):
+            os.makedirs(target_dir, exist_ok=True)
+            target_created = True
+        if preserve_originals:
+            batch_copy_story_files(
+                rename_pairs,
+                stories_path=stories_path,
+                ensure_unique_identity=True,
+            )
+        else:
+            batch_rename_story_files(
+                rename_pairs,
+                stories_path=stories_path,
+                ensure_unique_identity=True,
+            )
+    except Exception as exc:
+        if target_created and os.path.isdir(target_dir) and not os.listdir(target_dir):
+            try:
+                os.rmdir(target_dir)
+            except OSError:
+                pass
+        return f"整理失败：{exc}"
 
     action = "复制" if preserve_originals else "移动"
     return f"已成功{action} {len(moved_files)} 个场景到章节「{target_chapter_name}」：\n" + "\n".join(moved_files)

@@ -20,6 +20,7 @@ from typing import Any
 from core.request_context import set_agent_context
 from core.utils import validate_project_name
 from mcp_server.spark_inspiration.logic import current_user_id as mcp_inspiration_uid_var
+from llm.agen_matchbox.tool_protocol import normalize_tool_args
 
 
 def ensure_query_context(user_id: str, project_name: str) -> None:
@@ -65,7 +66,8 @@ def invoke_langchain_tool(
 
     ensure_query_context(str(user_id), safe_project_name)
     try:
-        result = tool.invoke(args or {})
+        normalized_args = normalize_tool_args(args or {}, tool=tool)
+        result = tool.invoke(normalized_args)
     except RuntimeError as e:
         if "缺少用户或项目上下文" in str(e):
             return f"错误：项目 '{project_name}' 无效或未找到。"

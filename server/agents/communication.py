@@ -58,6 +58,7 @@ from llm.agen_matchbox.tool_protocol import (
     build_tool_result_messages,
     dedupe_tool_specs,
     extract_tool_call_id,
+    normalize_tool_args,
     prepare_tool_specs_for_execution,
 )
 
@@ -802,6 +803,15 @@ class SparkBaseAgent:
                 tool_args = self._extract_tool_args(raw_tool_call)
 
             tool_name = normalize_tool_name(tool_name)
+            tool = TOOLS_BY_NAME.get(tool_name)
+            tool_args = normalize_tool_args(tool_args, tool=tool)
+            if isinstance(tool_call, dict):
+                tool_call["name"] = tool_name
+                tool_call["args"] = tool_args
+                raw = tool_call.get("raw")
+                if isinstance(raw, dict):
+                    raw["name"] = tool_name
+                    raw["args"] = tool_args
             tool_call_key = self._extract_tool_call_id(raw_tool_call) or f"{self.agent_id}:{tool_name}:{uuid.uuid4().hex}"
 
             self._debug_tool_event(
@@ -820,10 +830,10 @@ class SparkBaseAgent:
                     tool_name,
                     source_agent=self.agent_id,
                     tool_call_key=tool_call_key,
+                    tool_input=tool_args,
                     **_extra_exec,
                 ))
-            
-            tool = TOOLS_BY_NAME.get(tool_name)
+
             if tool:
                 try:
                     agent_token = current_agent_id.set(self.agent_id)
@@ -834,15 +844,13 @@ class SparkBaseAgent:
                         current_agent_id.reset(agent_token)
                     tool_failed = is_tool_result_failure(tool_name, tool_result_text)
                     if sink is not None and not tool_failed:
-                        _extra_done: dict = {}
-                        if tool_name == "work_tracker" and isinstance(tool_result_text, str) and tool_result_text.strip():
-                            _extra_done["tool_result"] = tool_result_text
                         sink.put(build_tool_stream_event(
                             "tool_exec_finished",
                             tool_name,
                             source_agent=self.agent_id,
                             tool_call_key=tool_call_key,
-                            **_extra_done,
+                            tool_input=tool_args,
+                            tool_result=tool_result_text,
                         ))
                     elif sink is not None:
                         sink.put(build_tool_stream_event(
@@ -851,6 +859,8 @@ class SparkBaseAgent:
                             source_agent=self.agent_id,
                             tool_call_key=tool_call_key,
                             message=get_tool_result_failure_message(tool_name, tool_result_text),
+                            tool_input=tool_args,
+                            tool_error=tool_result_text,
                         ))
                 except Exception as e:
                     tb = traceback.format_exc()
@@ -868,6 +878,8 @@ class SparkBaseAgent:
                             source_agent=self.agent_id,
                             tool_call_key=tool_call_key,
                             message="模型使用了错误的调用格式，正在尝试修正",
+                            tool_input=tool_args,
+                            tool_error=str(e),
                         ))
             else:
                 results.append(f"未知工具: {tool_name}")
@@ -878,6 +890,8 @@ class SparkBaseAgent:
                         source_agent=self.agent_id,
                         tool_call_key=tool_call_key,
                         message="模型调用了不存在的工具，正在尝试修正",
+                        tool_input=tool_args,
+                        tool_error=f"未知工具: {tool_name}",
                     ))
         
         return "\n".join(results)
@@ -972,9 +986,12 @@ class SparkBaseAgent:
 
     def _prepare_tool_specs_for_execution(self, tool_specs: List[Dict[str, Any]]) -> List[Dict[str, Any]]:
         """为工具执行和下一轮消息历史建立同一份规范调用。"""
+        from agents.tools.registry import TOOLS_BY_NAME
+
         return prepare_tool_specs_for_execution(
             tool_specs,
             normalize_name=normalize_tool_name,
+            tool_lookup=TOOLS_BY_NAME,
         )
 
     @staticmethod
@@ -1771,6 +1788,7 @@ class SparkBaseAgent:
                                 source_agent=self.agent_id,
                                 message=progress_text,
                                 tool_call_key=tool_call_key,
+                                tool_input=tool_spec.get("args"),
                                 **tool_event_metadata,
                             )
                             if is_stop_event_set(stop_event):
@@ -1785,6 +1803,7 @@ class SparkBaseAgent:
                                 source_agent=self.agent_id,
                                 message=progress_text,
                                 tool_call_key=tool_call_key,
+                                tool_input=tool_spec.get("args"),
                                 **tool_event_metadata,
                             )
                         if is_stop_event_set(stop_event):
@@ -1816,6 +1835,8 @@ class SparkBaseAgent:
                                 source_agent=self.agent_id,
                                 tool_call_key=tool_call_key,
                                 message=get_tool_result_failure_message(tool_name, tool_result),
+                                tool_input=tool_spec.get("args"),
+                                tool_error=tool_result,
                                 **tool_event_metadata,
                             )
                         elif not is_pipeline_control:
@@ -1824,6 +1845,8 @@ class SparkBaseAgent:
                                 tool_name,
                                 source_agent=self.agent_id,
                                 tool_call_key=tool_call_key,
+                                tool_input=tool_spec.get("args"),
+                                tool_result=tool_result,
                                 **tool_event_metadata,
                             )
 

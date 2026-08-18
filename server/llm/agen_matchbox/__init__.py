@@ -104,6 +104,10 @@ def initialize_matchbox(
         manager = create_matchbox(db_name=db_name, **kwargs)
         if ensure_schema:
             manager.ensure_schema()
+        else:
+            # SparkArc 主启动链路先执行统一 Alembic 迁移；仍需在轻量初始化
+            # 中补齐历史平台身份，避免 ensure_defaults=False 的调用拿到空 key。
+            manager.ensure_platform_identity()
         if ensure_defaults:
             manager.initialize_defaults()
         _manager_instance = manager

@@ -11,7 +11,12 @@ from typing import Optional, List, Dict, Any
 from core.utils import get_project_path, get_project_stories_path
 from agents.routes.context_builder import build_story_tags_hint, load_project_context_bundle
 from core.project_settings import get_project_story_tags
-from story.file_naming import resolve_story_file_path
+from story.file_naming import (
+    parse_chapter_identity_from_title,
+    parse_story_filename,
+    resolve_story_file_path,
+    story_sort_key,
+)
 
 
 class AgentContextProvider:
@@ -167,18 +172,36 @@ class AgentContextProvider:
             
             lines = ["### 当前场景文件"]
             
-            def scan_dir(path, prefix=""):
-                items = []
-                for item in sorted(os.listdir(path)):
+            def scan_dir(path, prefix="", relative_path=""):
+                folders = []
+                files = []
+                for item in os.listdir(path):
                     if item.startswith("."):
                         continue
                     item_path = os.path.join(path, item)
                     if os.path.isdir(item_path):
-                        items.append(f"{prefix}📁 {item}/")
-                        items.extend(scan_dir(item_path, prefix + "  "))
+                        folders.append(item)
                     elif item.lower().endswith((".arc", ".md")):
-                        display_name, _ = os.path.splitext(item)
-                        items.append(f"{prefix}📄 {display_name}")
+                        parsed = parse_story_filename(item)
+                        if parsed:
+                            relative_file = os.path.join(relative_path, item).replace(os.sep, "/")
+                            files.append((story_sort_key(relative_file), item, parsed))
+
+                def folder_sort_key(name: str) -> tuple:
+                    chapter_num = parse_chapter_identity_from_title(name)
+                    return (
+                        chapter_num if chapter_num is not None else 999999,
+                        name.casefold(),
+                    )
+
+                items = []
+                for item in sorted(folders, key=folder_sort_key):
+                    item_path = os.path.join(path, item)
+                    child_relative_path = os.path.join(relative_path, item)
+                    items.append(f"{prefix}📁 {item}/")
+                    items.extend(scan_dir(item_path, prefix + "  ", child_relative_path))
+                for _, item, parsed in sorted(files, key=lambda entry: (entry[0], entry[1].casefold())):
+                    items.append(f"{prefix}📄 {parsed['display_name']}")
                 return items
             
             file_list = scan_dir(stories_path)
