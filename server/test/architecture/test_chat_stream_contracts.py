@@ -10,6 +10,7 @@ import pytest
 from langchain_core.messages import HumanMessage, ToolMessage
 
 from agents.communication import (
+    ModelStreamIdleTimeoutError,
     ModelStreamRetryExhaustedError,
     ModelTurnRetryNotice,
     SparkBaseAgent,
@@ -17,6 +18,7 @@ from agents.communication import (
 )
 
 from agents.routes.chat import (
+    _finalize_chat_task,
     _merge_context_window_stats_with_usage,
     _observe_chat_task_events,
     _run_chat_background_context,
@@ -419,6 +421,176 @@ def test_model_turn_retry_exhaustion_blocks_whole_task_replay() -> None:
         assert "持续截断" in str(exc)
     else:
         raise AssertionError("应在当前轮次续跑耗尽后终止")
+
+
+def test_model_stream_stop_event_interrupts_blocking_upstream() -> None:
+    started = threading.Event()
+    release = threading.Event()
+    stop_event = threading.Event()
+
+    class BlockingLlm:
+        def stream(self, _messages):
+            started.set()
+            release.wait()
+            yield "迟到正文"
+
+    result = []
+
+    def consume() -> None:
+        result.extend(list(stream_model_turn_with_retry(
+            BlockingLlm(),
+            [],
+            stop_event=stop_event,
+            max_attempts=1,
+            idle_timeout=60,
+        )))
+
+    thread = threading.Thread(target=consume)
+    thread.start()
+    assert started.wait(1)
+    stop_event.set()
+    thread.join(1)
+    release.set()
+
+    assert not thread.is_alive()
+    assert result == []
+
+
+def test_model_stream_idle_timeout_is_wrapped_after_configurable_short_window() -> None:
+    release = threading.Event()
+
+    class SilentLlm:
+        def stream(self, _messages):
+            release.wait()
+            yield "迟到正文"
+
+    with pytest.raises(ModelStreamRetryExhaustedError) as raised:
+        list(stream_model_turn_with_retry(
+            SilentLlm(),
+            [],
+            max_attempts=1,
+            retry_delay=0,
+            idle_timeout=0.03,
+        ))
+    release.set()
+
+    assert isinstance(raised.value.__cause__, ModelStreamIdleTimeoutError)
+    assert "0.03 秒" in str(raised.value)
+
+
+def test_model_stream_reasoning_and_text_activity_reset_idle_deadline() -> None:
+    def stream():
+        yield {"additional_kwargs": {"reasoning_content": "思考"}}
+        time.sleep(0.03)
+        yield {"content": "正文"}
+        time.sleep(0.03)
+
+    chunks = list(stream_model_turn_with_retry(
+        type("Llm", (), {"stream": lambda self, _messages: stream()})(),
+        [],
+        max_attempts=1,
+        idle_timeout=0.05,
+    ))
+
+    assert chunks == [
+        {"additional_kwargs": {"reasoning_content": "思考"}},
+        {"content": "正文"},
+    ]
+
+
+def test_model_stream_empty_chunk_does_not_reset_idle_deadline() -> None:
+    def stream():
+        yield {"content": "正文"}
+        time.sleep(0.03)
+        yield {"content": ""}
+        time.sleep(0.04)
+
+    with pytest.raises(ModelStreamRetryExhaustedError) as raised:
+        list(stream_model_turn_with_retry(
+            type("Llm", (), {"stream": lambda self, _messages: stream()})(),
+            [],
+            max_attempts=1,
+            idle_timeout=0.05,
+        ))
+
+    assert isinstance(raised.value.__cause__, ModelStreamIdleTimeoutError)
+
+
+def test_model_stream_plain_string_counts_as_visible_activity() -> None:
+    def stream():
+        yield "第一段"
+        time.sleep(0.03)
+        yield "第二段"
+        time.sleep(0.03)
+
+    chunks = list(stream_model_turn_with_retry(
+        type("Llm", (), {"stream": lambda self, _messages: stream()})(),
+        [],
+        max_attempts=1,
+        idle_timeout=0.05,
+    ))
+
+    assert chunks == ["第一段", "第二段"]
+
+
+def test_model_stream_worker_preserves_contextvars() -> None:
+    marker = contextvars.ContextVar("model_stream_marker", default=None)
+    token = marker.set("当前聊天任务")
+    seen = []
+    try:
+        class ContextAwareLlm:
+            def stream(self, _messages):
+                seen.append(marker.get())
+                yield "正文"
+
+        list(stream_model_turn_with_retry(
+            ContextAwareLlm(),
+            [],
+            max_attempts=1,
+            idle_timeout=0.1,
+        ))
+    finally:
+        marker.reset(token)
+
+    assert seen == ["当前聊天任务"]
+
+
+def test_chat_task_terminal_claim_publishes_task_done_once(monkeypatch) -> None:
+    task_key = f"u:p:agent_director:terminal-{time.time_ns()}"
+    entry = make_entry()
+    entry.task_key = task_key
+    register_task(entry)
+    monkeypatch.setattr("agents.routes.chat.cleanup_task", lambda *args, **kwargs: None)
+
+    class FakeChatManager:
+        def update_message_content_metadata(self, *args, **kwargs):
+            return True
+
+    assert cancel_task(task_key) is True
+    assert entry.stop_event.is_set()
+    assert _finalize_chat_task(
+        FakeChatManager(),
+        entry,
+        task_key,
+        final_status="cancelled",
+        collect_usage=False,
+    ) is True
+    assert _finalize_chat_task(
+        FakeChatManager(),
+        entry,
+        task_key,
+        final_status="completed",
+        collect_usage=False,
+    ) is False
+    ignored = entry.append_event({"event": "assistant_delta", "text": "迟到正文"})
+    assert ignored["ignored_after_terminal"] is True
+
+    done_events = [event for event in entry.event_log if event.get("event") == "task_done"]
+    assert len(done_events) == 1
+    assert done_events[0]["status"] == "cancelled"
+    assert entry.status == "cancelled"
+    assert entry.finished_event.is_set()
+    cleanup_task(task_key, delay=0, task_id=entry.task_id)
 
 
 def test_context_window_stats_merges_agent_cache_usage() -> None:

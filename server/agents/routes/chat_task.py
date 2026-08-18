@@ -51,10 +51,14 @@ class ChatTaskEntry:
     assistant_message_id: Optional[int] = None
     finished_event: threading.Event = field(default_factory=threading.Event)
     cancel_requested: bool = False
+    # 终态声明与事件日志写入分离，防止取消接口和后台 finally 重复收尾。
+    terminalized: bool = False
+    terminal_status: Optional[str] = None
     event_log: List[Dict[str, Any]] = field(default_factory=list)
     next_seq: int = 0
     accumulator: Optional[ChatStreamAccumulator] = None
     log_lock: threading.RLock = field(default_factory=threading.RLock)
+    checkpoint_lock: threading.RLock = field(default_factory=threading.RLock)
     last_checkpoint_seq: int = 0
     last_checkpoint_at: float = 0.0
     observer_signals: set[tuple[asyncio.AbstractEventLoop, asyncio.Event]] = field(default_factory=set)
@@ -63,7 +67,13 @@ class ChatTaskEntry:
         if self.accumulator is None:
             self.accumulator = ChatStreamAccumulator(channel=self.channel, task_id=self.task_id)
 
-    def append_event(self, event: Any, *, accumulate: bool = True) -> Dict[str, Any]:
+    def append_event(
+        self,
+        event: Any,
+        *,
+        accumulate: bool = True,
+        allow_terminal: bool = False,
+    ) -> Dict[str, Any]:
         """Append one NDJSON event to the replay log and update the accumulator."""
         if isinstance(event, dict):
             payload = dict(event)
@@ -73,6 +83,13 @@ class ChatTaskEntry:
             payload = {"event": "assistant_delta", "text": str(event)}
 
         with self.log_lock:
+            if self.terminalized and not allow_terminal:
+                return {
+                    "event": payload.get("event") or "ignored",
+                    "task_id": self.task_id,
+                    "seq": self.next_seq,
+                    "ignored_after_terminal": True,
+                }
             self.next_seq += 1
             payload["seq"] = self.next_seq
             payload["task_id"] = self.task_id
@@ -85,12 +102,19 @@ class ChatTaskEntry:
         self.notify_observers()
         return result
 
-    def append_control_event(self, event: Dict[str, Any]) -> Dict[str, Any]:
-        return self.append_event(event, accumulate=False)
+    def append_control_event(
+        self,
+        event: Dict[str, Any],
+        *,
+        allow_terminal: bool = False,
+    ) -> Dict[str, Any]:
+        return self.append_event(event, accumulate=False, allow_terminal=allow_terminal)
 
     def record_llm_usage(self, usage: Dict[str, Any]) -> Dict[str, Any]:
         """累加一次已落库的 LLM 用量，并返回当前任务快照。"""
         with self.log_lock:
+            if self.terminalized:
+                return dict(self.llm_usage or {})
             current = dict(self.llm_usage or {})
             by_agent = {
                 str(key): dict(value)
@@ -183,9 +207,26 @@ class ChatTaskEntry:
 
     def reset_for_retry(self) -> None:
         with self.log_lock:
+            if self.terminalized:
+                return
             if self.accumulator is None:
                 self.accumulator = ChatStreamAccumulator(channel=self.channel, task_id=self.task_id)
             self.accumulator.reset_for_retry()
+
+    def is_terminalized(self) -> bool:
+        """返回任务是否已经被某个线程抢先声明终态。"""
+        with self.log_lock:
+            return self.terminalized
+
+    def claim_terminal_status(self, status: str) -> bool:
+        """原子声明一次终态；成功后迟到的后台事件将被丢弃。"""
+        with self.log_lock:
+            if self.terminalized or self.finished_event.is_set():
+                return False
+            self.terminalized = True
+            self.terminal_status = str(status)
+            self.status = str(status)
+            return True
 
     def subscribe(self, loop: asyncio.AbstractEventLoop, signal: asyncio.Event) -> None:
         with self.log_lock:
@@ -239,23 +280,35 @@ def get_task_by_parts(user_id: str, project_name: str, agent_id: str, context_ke
 
 
 def cancel_task(task_key: str) -> bool:
-    """请求取消指定任务；最终状态由后台线程在真实退出时写入。"""
+    """请求取消指定任务，并由调用方在必要时强制收口终态。"""
     with _registry_lock:
         entry = _active_chat_tasks.get(task_key)
-    if not entry or entry.finished_event.is_set() or entry.status != 'running':
+    if not entry:
         return False
-    entry.stop_event.set()
-    entry.cancel_requested = True
+    with entry.log_lock:
+        if entry.finished_event.is_set() or entry.terminalized or entry.status != 'running':
+            return False
+        entry.stop_event.set()
+        entry.cancel_requested = True
     entry.append_control_event({"event": "task_cancel_requested", "status": "cancelled"})
     return True
 
 
-def update_task_status(task_key: str, status: str, *, expected_task_id: str | None = None, **fields: Any) -> None:
+def update_task_status(
+    task_key: str,
+    status: str,
+    *,
+    expected_task_id: str | None = None,
+    allow_terminal: bool = False,
+    **fields: Any,
+) -> None:
     """更新任务状态和字段。"""
     with _registry_lock:
         entry = _active_chat_tasks.get(task_key)
     if entry and (expected_task_id is None or entry.task_id == expected_task_id):
         with entry.log_lock:
+            if entry.terminalized and not allow_terminal:
+                return
             entry.status = status
             for k, v in fields.items():
                 if hasattr(entry, k):
@@ -302,7 +355,7 @@ def build_task_status_payload(entry: ChatTaskEntry) -> Dict[str, Any]:
     """构建 task-status API 的返回载荷。"""
     payload: Dict[str, Any] = {
         'hasTask': True,
-        'status': entry.status,
+        'status': entry.terminal_status if entry.terminalized else entry.status,
         'agentId': entry.agent_id,
         'contextKey': entry.context_key,
         'channel': entry.channel,

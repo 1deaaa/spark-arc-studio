@@ -211,6 +211,8 @@ def _mark_chat_task_error(
     retry_count: int = 0,
 ) -> str:
     error_message = _coerce_stream_error_text(error_payload) or '聊天生成失败'
+    if entry.is_terminalized():
+        return entry.error_message
     entry.error_message = error_message
     update_task_status(
         task_key,
@@ -296,11 +298,17 @@ def _run_chat_stream_with_retry(
     checkpoint_candidate: Dict[str, Any] | None = None
 
     for attempt in range(1, max_retries + 1):
+        if stop_event.is_set() or entry.is_terminalized():
+            terminated_early = True
+            break
         # 重试前清空上一轮残留：accumulator 重置 + 推 snapshot 让前端 UI 复位
         if attempt > 1:
             entry.reset_for_retry()
             _checkpoint_chat_task(cm, entry, force=True, stream_status='running')
             entry.append_control_event(entry.build_snapshot())
+        if stop_event.is_set() or entry.is_terminalized():
+            terminated_early = True
+            break
 
         last_error_summary = ''
         encountered_error = False
@@ -312,7 +320,7 @@ def _run_chat_stream_with_retry(
                 active_context=active_context,
                 stop_event=stop_event,
             ):
-                if stop_event.is_set():
+                if stop_event.is_set() or entry.is_terminalized():
                     terminated_early = True
                     break
                 if not delta:
@@ -343,6 +351,9 @@ def _run_chat_stream_with_retry(
                     break
 
                 event = entry.append_event(delta)
+                if event.get('ignored_after_terminal'):
+                    terminated_early = True
+                    break
                 event_type = event.get('event')
                 _checkpoint_chat_task(
                     cm,
@@ -356,7 +367,7 @@ def _run_chat_stream_with_retry(
                     stream_status='running',
                 )
 
-            if stop_event.is_set():
+            if stop_event.is_set() or entry.is_terminalized():
                 terminated_early = True
                 break
 
@@ -376,7 +387,7 @@ def _run_chat_stream_with_retry(
                 return terminated_early, final_error_message, retry_count
 
         except Exception as e:
-            if stop_event.is_set():
+            if stop_event.is_set() or entry.is_terminalized():
                 terminated_early = True
                 break
             if isinstance(e, NonRetryableChatError):
@@ -393,6 +404,10 @@ def _run_chat_stream_with_retry(
             last_error_summary = format_ai_error(e)
             encountered_error = True
 
+        if entry.is_terminalized():
+            terminated_early = True
+            break
+
         # 走到这里说明该 attempt 触发了错误：要么走重试，要么落盘最终错误
         retry_count = attempt
         if attempt < max_retries:
@@ -408,11 +423,14 @@ def _run_chat_stream_with_retry(
                 expected_task_id=entry.task_id,
                 retry_count=attempt,
             )
-            if stop_event.wait(retry_delay):
+            if stop_event.wait(retry_delay) or entry.is_terminalized():
                 terminated_early = True
                 break
         else:
             # 最后一次失败：正式落盘 error 事件 + 标记任务为 error
+            if entry.is_terminalized():
+                terminated_early = True
+                break
             entry.append_event({'event': 'error', 'message': last_error_summary})
             final_error_message = _mark_chat_task_error(
                 cm,
@@ -459,7 +477,11 @@ def _make_llm_usage_context(task_id: str) -> str:
 
 def _publish_chat_task_llm_usage(entry: ChatTaskEntry, usage: Dict[str, Any]) -> None:
     """把单次真实用量累加到任务，并写入可重放 NDJSON 事件。"""
+    if entry.is_terminalized():
+        return
     snapshot = entry.record_llm_usage(usage)
+    if entry.is_terminalized():
+        return
     entry.append_control_event({
         "event": "llm_usage",
         "llm_usage": snapshot,
@@ -706,40 +728,14 @@ def _start_chat_stream_task(
                     if final_error_message
                     else 'completed'
                 )
-                collected_usage = _collect_chat_task_llm_usage(entry)
-                if collected_usage is not None:
-                    entry.llm_usage = collected_usage
-                if entry.accumulator is not None:
-                    entry.accumulator.context_window_stats = _merge_context_window_stats_with_usage(
-                        entry.accumulator.context_window_stats,
-                        entry.llm_usage,
-                    )
-                reply = entry.accumulator.content if entry.accumulator is not None else ''
-                metadata = entry.build_metadata(stream_status=final_status)
-                _checkpoint_chat_task(cm, entry, force=True, stream_status=final_status)
-                entry.append_control_event({
-                    'event': 'task_done',
-                    'status': final_status,
-                    'assistant_message_id': entry.assistant_message_id,
-                    'result_message_id': entry.assistant_message_id,
-                    **({'llm_usage': entry.llm_usage} if entry.llm_usage else {}),
-                    **({
-                        'context_window_stats': entry.accumulator.context_window_stats,
-                    } if entry.accumulator is not None and entry.accumulator.context_window_stats else {}),
-                    **({'error': final_error_message} if final_error_message else {}),
-                })
-                update_task_status(
+                _finalize_chat_task(
+                    cm,
+                    entry,
                     task_key,
-                    final_status,
-                    expected_task_id=entry.task_id,
-                    result_message_id=entry.assistant_message_id,
-                    result_content=reply,
-                    result_metadata=metadata,
-                    error_message=final_error_message,
+                    final_status=final_status,
+                    final_error_message=final_error_message,
                     retry_count=retry_count,
                 )
-                entry.finished_event.set()
-                cleanup_task(task_key, task_id=entry.task_id)
 
         ctx.run(
             _run_chat_background_context,
@@ -802,23 +798,120 @@ def _context_summary_plain_text(summary: Dict[str, Any]) -> str:
     return "\n".join(lines).strip()
 
 
-def _checkpoint_chat_task(cm: ChatManager, entry: ChatTaskEntry, *, force: bool = False, stream_status: str | None = None) -> None:
-    """Persist the current running assistant snapshot into its placeholder row."""
+def _checkpoint_chat_task(
+    cm: ChatManager,
+    entry: ChatTaskEntry,
+    *,
+    force: bool = False,
+    stream_status: str | None = None,
+) -> None:
+    """把当前助手快照持久化到占位消息；已终态任务不再写入运行中快照。"""
     if entry.assistant_message_id is None:
         return
-    now = time.time()
-    if not force:
-        if entry.last_checkpoint_seq == entry.next_seq:
+    with entry.checkpoint_lock:
+        if entry.is_terminalized() and stream_status != entry.terminal_status:
             return
-        if now - float(entry.last_checkpoint_at or 0) < _CHAT_CHECKPOINT_INTERVAL:
-            return
+        now = time.time()
+        if not force:
+            if entry.last_checkpoint_seq == entry.next_seq:
+                return
+            if now - float(entry.last_checkpoint_at or 0) < _CHAT_CHECKPOINT_INTERVAL:
+                return
 
-    status = stream_status or entry.status or 'running'
-    metadata = entry.build_metadata(stream_status=status)
-    content = entry.accumulator.content if entry.accumulator is not None else ''
-    cm.update_message_content_metadata(entry.assistant_message_id, content, metadata)
-    entry.last_checkpoint_seq = entry.next_seq
-    entry.last_checkpoint_at = now
+        status = stream_status or entry.status or 'running'
+        metadata = entry.build_metadata(stream_status=status)
+        content = entry.accumulator.content if entry.accumulator is not None else ''
+        cm.update_message_content_metadata(entry.assistant_message_id, content, metadata)
+        entry.last_checkpoint_seq = entry.next_seq
+        entry.last_checkpoint_at = now
+
+
+def _finalize_chat_task(
+    cm: ChatManager,
+    entry: ChatTaskEntry,
+    task_key: str,
+    *,
+    final_status: str,
+    final_error_message: str = '',
+    retry_count: int = 0,
+    collect_usage: bool = True,
+) -> bool:
+    """一次性收口聊天任务，并发布唯一的 ``task_done`` 终态事件。"""
+    if not entry.claim_terminal_status(final_status):
+        return False
+    import logging
+
+    logger = logging.getLogger(__name__)
+    reply = ''
+    metadata: Dict[str, Any] = {}
+    try:
+        if collect_usage:
+            collected_usage = _collect_chat_task_llm_usage(entry)
+            if collected_usage is not None:
+                entry.llm_usage = collected_usage
+        if entry.accumulator is not None:
+            entry.accumulator.context_window_stats = _merge_context_window_stats_with_usage(
+                entry.accumulator.context_window_stats,
+                entry.llm_usage,
+            )
+        reply = entry.accumulator.content if entry.accumulator is not None else ''
+        try:
+            metadata = entry.build_metadata(stream_status=final_status)
+        except Exception:
+            logger.exception("构建聊天终态元数据失败: task=%s", entry.task_id)
+            metadata = {}
+
+        try:
+            _checkpoint_chat_task(cm, entry, force=True, stream_status=final_status)
+        except Exception:
+            # 上游卡住时取消不能再被历史落盘故障拖住；终态事件仍需发布。
+            logger.exception("写入聊天终态 checkpoint 失败: task=%s", entry.task_id)
+
+        try:
+            entry.append_control_event(
+                {
+                    'event': 'task_done',
+                    'status': final_status,
+                    'assistant_message_id': entry.assistant_message_id,
+                    'result_message_id': entry.assistant_message_id,
+                    **({'llm_usage': entry.llm_usage} if entry.llm_usage else {}),
+                    **({
+                        'context_window_stats': entry.accumulator.context_window_stats,
+                    } if entry.accumulator is not None and entry.accumulator.context_window_stats else {}),
+                    **({'error': final_error_message} if final_error_message else {}),
+                },
+                allow_terminal=True,
+            )
+        except Exception:
+            logger.exception("发布聊天 task_done 事件失败: task=%s", entry.task_id)
+
+        try:
+            update_task_status(
+                task_key,
+                final_status,
+                expected_task_id=entry.task_id,
+                allow_terminal=True,
+                result_message_id=entry.assistant_message_id,
+                result_content=reply,
+                result_metadata=metadata,
+                error_message=final_error_message,
+                retry_count=retry_count,
+            )
+        except Exception:
+            logger.exception("更新聊天终态状态失败: task=%s", entry.task_id)
+    finally:
+        with entry.log_lock:
+            # 任一步持久化失败都不能把任务留在 running 假死态。
+            entry.status = final_status
+            entry.result_message_id = entry.assistant_message_id
+            entry.result_content = reply
+            entry.result_metadata = metadata
+            entry.error_message = final_error_message
+            entry.retry_count = retry_count
+        entry.finished_event.set()
+        entry.notify_observers()
+        cleanup_task(task_key, task_id=entry.task_id)
+    return True
 
 
 async def _observe_chat_task_events(request: Request, entry: ChatTaskEntry, *, after_seq: int = 0, include_snapshot: bool = True):
@@ -1614,6 +1707,18 @@ async def cancel_chat_task(request: Request, data: ChatTaskCancelRequest, user: 
     ok = cancel_task(task_key)
     if not ok:
         return {'success': False, 'reason': '任务不存在或已结束'}
+    entry = get_task_by_parts(user_id, project_name, agent_id, context_key)
+    if entry is not None and not await asyncio.to_thread(wait_for_task_exit, task_key, 0.75):
+        # 上游 SDK 可能卡在不可中断的 next()；先发布权威取消终态，
+        # 迟到的后台 finally 会因终态声明失败而静默退出。
+        await asyncio.to_thread(
+            _finalize_chat_task,
+            ChatManager(user_id=user_id, project_name=project_name),
+            entry,
+            task_key,
+            final_status='cancelled',
+            collect_usage=False,
+        )
     return {'success': True}
 
 

@@ -182,8 +182,29 @@ def resolve_pipeline_completion(
     return None
 
 
+from llm.agen_matchbox.reasoning_compat import (
+    extract_reasoning_text_from_message,
+    extract_reasoning_text_from_plain_text,
+    extract_text_content_from_message,
+    extract_visible_text_from_plain_text,
+    MessageEventStreamReasoningAdapter,
+)
+
+
 class ModelStreamRetryExhaustedError(RuntimeError):
     """当前模型轮次已完成内部续跑尝试，不允许再从用户消息重放整项任务。"""
+
+
+class ModelStreamIdleTimeoutError(TimeoutError):
+    """模型流在指定时间内没有收到推理或正文内容。"""
+
+    def __init__(self, timeout: float) -> None:
+        self.timeout = float(timeout)
+        super().__init__(f"模型流连续 {self.timeout:g} 秒未收到推理或正文内容")
+
+
+MODEL_STREAM_IDLE_TIMEOUT_SECONDS = 60.0
+_MODEL_STREAM_POLL_INTERVAL_SECONDS = 0.05
 
 
 @dataclasses.dataclass(frozen=True)
@@ -195,6 +216,115 @@ class ModelTurnRetryNotice:
     error: str
 
 
+def _model_chunk_has_content(chunk: Any) -> bool:
+    """判断模型增量是否包含会刷新空闲计时的推理或正文文本。"""
+    try:
+        reasoning = extract_reasoning_text_from_message(chunk)
+    except Exception:
+        reasoning = ""
+    try:
+        content = extract_text_content_from_message(chunk)
+    except Exception:
+        content = ""
+
+    if str(reasoning or "").strip() or str(content or "").strip():
+        return True
+    if isinstance(chunk, str):
+        try:
+            return bool(
+                extract_reasoning_text_from_plain_text(chunk).strip()
+                or extract_visible_text_from_plain_text(chunk).strip()
+            )
+        except Exception:
+            return bool(chunk.strip())
+    return False
+
+
+def _stream_model_turn_with_idle_watchdog(
+    llm: Any,
+    messages: List[Any],
+    *,
+    stop_event: Any = None,
+    idle_timeout: float | None = MODEL_STREAM_IDLE_TIMEOUT_SECONDS,
+):
+    """在守护线程里读取同步模型流，使取消和内容空闲超时不被上游阻塞。"""
+    events: queue.Queue[tuple[str, Any]] = queue.Queue()
+    accept_results = threading.Event()
+    accept_results.set()
+
+    def _consume_upstream() -> None:
+        def _publish(event_type: str, payload: Any) -> None:
+            if accept_results.is_set():
+                events.put((event_type, (time.monotonic(), payload)))
+
+        try:
+            iterator = iter(llm.stream(messages))
+            while accept_results.is_set() and not is_stop_event_set(stop_event):
+                try:
+                    item = next(iterator)
+                except StopIteration:
+                    _publish("done", None)
+                    return
+                except Exception as exc:
+                    _publish("error", exc)
+                    return
+                _publish("item", item)
+        except Exception as exc:
+            _publish("error", exc)
+
+    worker_context = contextvars.copy_context()
+    worker = threading.Thread(
+        target=worker_context.run,
+        args=(_consume_upstream,),
+        daemon=True,
+        name="model_stream_watchdog",
+    )
+    worker.start()
+
+    timeout_value = None if idle_timeout is None else max(float(idle_timeout), 0.0)
+    deadline = (
+        None
+        if timeout_value is None
+        else time.monotonic() + timeout_value
+    )
+    try:
+        while True:
+            if is_stop_event_set(stop_event):
+                return
+
+            wait_timeout = _MODEL_STREAM_POLL_INTERVAL_SECONDS
+            if deadline is not None:
+                remaining = deadline - time.monotonic()
+                wait_timeout = min(wait_timeout, max(remaining, 0.0))
+
+            try:
+                event_type, payload = events.get(timeout=wait_timeout)
+            except queue.Empty:
+                if deadline is not None and time.monotonic() >= deadline:
+                    raise ModelStreamIdleTimeoutError(timeout_value or 0.0)
+                continue
+
+            event_at, payload = payload
+            if deadline is not None and event_at > deadline:
+                raise ModelStreamIdleTimeoutError(timeout_value or 0.0)
+
+            if event_type == "done":
+                return
+            if event_type == "error":
+                raise payload
+            if event_type != "item":
+                continue
+            if is_stop_event_set(stop_event):
+                return
+            if _model_chunk_has_content(payload) and deadline is not None:
+                deadline = event_at + timeout_value
+            yield payload
+    finally:
+        # 超时或取消后不再接收这个轮次的迟到结果；上游 SDK 若仍阻塞，
+        # 守护线程会随进程退出，不得把结果转入后续聊天轮次。
+        accept_results.clear()
+
+
 def stream_model_turn_with_retry(
     llm: Any,
     messages: List[Any],
@@ -202,12 +332,18 @@ def stream_model_turn_with_retry(
     stop_event: Any = None,
     max_attempts: int = 3,
     retry_delay: float = 1.0,
+    idle_timeout: float | None = MODEL_STREAM_IDLE_TIMEOUT_SECONDS,
 ):
-    """只重试当前尚未完成的模型轮次，保留调用方已经提交的消息与工具结果。"""
+    """只重试当前模型轮次，并按内容空闲时间保护同步上游流。"""
     last_error: Exception | None = None
     for attempt in range(1, max_attempts + 1):
         try:
-            yield from llm.stream(messages)
+            yield from _stream_model_turn_with_idle_watchdog(
+                llm,
+                messages,
+                stop_event=stop_event,
+                idle_timeout=idle_timeout,
+            )
             return
         except Exception as exc:
             if is_stop_event_set(stop_event):
@@ -224,14 +360,6 @@ def stream_model_turn_with_retry(
                 else:
                     threading.Event().wait(retry_delay)
     raise ModelStreamRetryExhaustedError(str(last_error or "模型流异常中断")) from last_error
-
-
-from llm.agen_matchbox.reasoning_compat import (
-    extract_reasoning_text_from_message,
-    extract_text_content_from_message,
-    extract_visible_text_from_plain_text,
-    MessageEventStreamReasoningAdapter,
-)
 
 @dataclasses.dataclass
 class AgentMessage:

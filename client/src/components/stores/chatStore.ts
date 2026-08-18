@@ -283,6 +283,7 @@ function _localizedStreamError(evt: AnyRecord) {
 
 const CHAT_TRANSPORT_RECONNECT_BASE_DELAY_MS = 800;
 const CHAT_TRANSPORT_RECONNECT_MAX_DELAY_MS = 5000;
+const CHAT_CANCEL_STATUS_POLL_DELAYS_MS = [250, 500, 750, 1000, 1500, 2000, 3000, 5000];
 
 function _clearRetryState(session: ChatSession) {
   session.retryAttempt = null;
@@ -826,11 +827,24 @@ export const useChatStore = defineStore('chat', {
 
       session.sending = true;
       session.backgroundTaskStatus = 'running';
+      let cancelStreamEpoch = session.streamEpoch;
       if (!session.abortController || session.abortController.signal.aborted) {
-        void this._reconnectTaskStream(session, session.agentId, session.contextKey).catch(error => {
+        const reconnectPromise = this._reconnectTaskStream(session, session.agentId, session.contextKey);
+        cancelStreamEpoch = session.streamEpoch;
+        void reconnectPromise.catch(error => {
           console.warn('恢复取消中的聊天任务观察流失败', error);
         });
       }
+      // 观察流可能卡在上游读取；用权威状态查询兜底，但仍等待服务端真实终态。
+      void this._waitForChatTaskCancellation(
+        session,
+        session.agentId,
+        session.contextKey,
+        projectName,
+        cancelStreamEpoch,
+      ).catch(error => {
+        console.warn('等待聊天任务取消终态失败', error);
+      });
     },
 
     // ==================== 统一的会话操作 ====================
@@ -1246,6 +1260,65 @@ export const useChatStore = defineStore('chat', {
       session.sending = keepLocked;
       session.backgroundTaskStatus = keepLocked ? 'running' : null;
       return keepLocked;
+    },
+
+    async _waitForChatTaskCancellation(
+      session: ChatSession,
+      agentId: string,
+      contextKey: string,
+      projectName: string,
+      streamEpoch: number,
+    ): Promise<void> {
+      for (const delayMs of CHAT_CANCEL_STATUS_POLL_DELAYS_MS) {
+        await _delay(delayMs);
+
+        // 会话已切换或已经收到终态时，旧取消请求不得触碰当前状态。
+        if (
+          session.projectName !== projectName
+          || session.agentId !== agentId
+          || session.contextKey !== contextKey
+          || session.streamEpoch !== streamEpoch
+          || (!session.sending && session.backgroundTaskStatus !== 'running')
+        ) {
+          return;
+        }
+
+        let status: AnyRecord | null = null;
+        try {
+          status = await getChatTaskStatus(projectName, agentId, contextKey) as AnyRecord;
+        } catch {
+          // 查询失败不代表任务已结束，保留锁定并等待观察流或下一轮查询。
+          continue;
+        }
+
+        if (
+          session.projectName !== projectName
+          || session.agentId !== agentId
+          || session.contextKey !== contextKey
+          || session.streamEpoch !== streamEpoch
+          || (!session.sending && session.backgroundTaskStatus !== 'running')
+        ) {
+          return;
+        }
+
+        if (!status || typeof status !== 'object') continue;
+
+        const terminal = status.hasTask === false
+          || status.status === 'completed'
+          || status.status === 'cancelled'
+          || status.status === 'error';
+        if (!terminal) continue;
+
+        session.backgroundTaskStatus = null;
+        session.sending = false;
+        applyPersistedTokenStats(session, status);
+        if (status.status === 'error') {
+          session.lastError = String(status.error || _defaultBackgroundTaskError());
+        }
+        _clearRetryState(session);
+        await this.refreshSessionHistory(session.id, 80, { silent: true, authoritative: true });
+        return;
+      }
     },
 
     async _isChatTaskStillRunning(agentId: string, contextKey: string, projectName?: string): Promise<boolean> {

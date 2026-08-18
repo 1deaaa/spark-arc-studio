@@ -91,6 +91,7 @@ describe('chatStore NDJSON 消费契约', () => {
 
   it('显式取消成功后保持锁定直到服务端终态', async () => {
     vi.mocked(cancelChatTask).mockResolvedValueOnce({ success: true });
+    vi.mocked(getChatTaskStatus).mockResolvedValueOnce({ hasTask: true, status: 'cancelled' });
     const store = useChatStore();
     const session = store.primarySession;
     session.sending = true;
@@ -103,6 +104,93 @@ describe('chatStore NDJSON 消费契约', () => {
     expect(session.abortController.signal.aborted).toBe(false);
     expect(session.sending).toBe(true);
     expect(session.backgroundTaskStatus).toBe('running');
+
+    await vi.advanceTimersByTimeAsync(250);
+    expect(session.sending).toBe(false);
+    expect(session.backgroundTaskStatus).toBeNull();
+  });
+
+  it('取消成功后观察流无终态时以权威状态查询收口', async () => {
+    vi.mocked(cancelChatTask).mockResolvedValueOnce({ success: true });
+    vi.mocked(getChatTaskStatus)
+      .mockResolvedValueOnce({ hasTask: true, status: 'running' })
+      .mockResolvedValueOnce({ hasTask: true, status: 'cancelled' });
+    const store = useChatStore();
+    const session = store.primarySession;
+    session.sending = true;
+    session.backgroundTaskStatus = 'running';
+    session.streamEpoch = 1;
+    session.abortController = new AbortController();
+
+    await store.cancelSessionRequest(session.id);
+    expect(session.sending).toBe(true);
+    expect(session.backgroundTaskStatus).toBe('running');
+
+    await vi.advanceTimersByTimeAsync(250);
+    expect(session.sending).toBe(true);
+    expect(session.backgroundTaskStatus).toBe('running');
+
+    await vi.advanceTimersByTimeAsync(500);
+    expect(session.sending).toBe(false);
+    expect(session.backgroundTaskStatus).toBeNull();
+    expect(getChatHistory).toHaveBeenCalledWith('测试项目', 'agent_director', 'global', 80);
+  });
+
+  it('取消后观察流稍晚收到 task_done cancelled 时可靠收口', async () => {
+    vi.mocked(cancelChatTask).mockResolvedValueOnce({ success: true });
+    const store = useChatStore();
+    const session = store.primarySession;
+    session.projectName = '测试项目';
+    session.sending = true;
+    session.backgroundTaskStatus = 'running';
+    session.streamEpoch = 1;
+    session.abortController = new AbortController();
+
+    let streamController: ReadableStreamDefaultController<Uint8Array> | null = null;
+    const reader = new ReadableStream<Uint8Array>({
+      start(controller) {
+        streamController = controller;
+      },
+    }).getReader();
+    const consumePromise = store._consumeStream(
+      session,
+      {
+        clientId: 'assistant-late-cancel',
+        role: 'assistant',
+        content: '',
+        reasoning: '',
+        tool_traces: [],
+        segments: [],
+        timestamp: 1,
+      },
+      false,
+      reader,
+      session.id,
+      {
+        projectName: '测试项目',
+        agentId: 'agent_director',
+        contextKey: 'global',
+        streamEpoch: 1,
+      },
+    );
+
+    await store.cancelSessionRequest(session.id);
+    expect(session.sending).toBe(true);
+    expect(session.backgroundTaskStatus).toBe('running');
+
+    streamController!.enqueue(new TextEncoder().encode(`${JSON.stringify({
+      event: 'task_done',
+      seq: 1,
+      status: 'cancelled',
+    })}\n`));
+    await vi.waitFor(() => {
+      expect(session.sending).toBe(false);
+      expect(session.backgroundTaskStatus).toBeNull();
+    });
+
+    streamController!.close();
+    await consumePromise;
+    await vi.advanceTimersByTimeAsync(250);
   });
 
   it('取消请求失败时保持运行锁并提示错误', async () => {
@@ -356,6 +444,41 @@ describe('chatStore NDJSON 消费契约', () => {
     });
 
     vi.runOnlyPendingTimers();
+  });
+
+  it('task_done 为 cancelled 时立即清除发送锁并记录真实终态', async () => {
+    const store = useChatStore();
+    const session = store.primarySession;
+    session.sending = true;
+    session.backgroundTaskStatus = 'running';
+    session.streamEpoch = 1;
+    const assistantMsg: any = {
+      clientId: 'assistant-cancelled',
+      role: 'assistant',
+      content: '',
+      reasoning: '',
+      tool_traces: [],
+      segments: [],
+      timestamp: 1,
+    };
+    const streamState: ConsumeStreamState = {
+      agentId: 'agent_director',
+      contextKey: 'global',
+      streamEpoch: 1,
+    };
+
+    await store._consumeStream(
+      session,
+      assistantMsg,
+      false,
+      readerFromEvents([{ event: 'task_done', seq: 1, status: 'cancelled' }]),
+      session.id,
+      streamState,
+    );
+
+    expect(streamState.receivedTaskDone).toBe(true);
+    expect(session.sending).toBe(false);
+    expect(session.backgroundTaskStatus).toBeNull();
   });
 
   it('task_done 到达时立即撤销工具遮罩，不等待观察流关闭', async () => {
@@ -739,6 +862,28 @@ describe('chatStore NDJSON 消费契约', () => {
     expect(stillRunning).toBe(true);
     expect(session.sending).toBe(true);
     expect(session.backgroundTaskStatus).toBe('running');
+  });
+
+  it('观察流重连发现 cancelled 终态时清锁并刷新权威历史', async () => {
+    vi.mocked(getChatTaskStatus).mockResolvedValueOnce({
+      hasTask: true,
+      status: 'cancelled',
+      agentId: 'agent_director',
+      contextKey: 'global',
+    });
+    const store = useChatStore();
+    const session = store.primarySession;
+    session.sending = true;
+    session.backgroundTaskStatus = 'running';
+    session.streamEpoch = 1;
+
+    await expect(
+      store._recoverChatStreamObserver(session, 'agent_director', 'global', 4, 1),
+    ).resolves.toBe(true);
+
+    expect(session.sending).toBe(false);
+    expect(session.backgroundTaskStatus).toBeNull();
+    expect(getChatHistory).toHaveBeenCalledWith('测试项目', 'agent_director', 'global', 80);
   });
 
   it('任务状态查询失败时返回未知态而不是误判为结束', async () => {
