@@ -54,11 +54,14 @@ TOOL_DETAIL_POLICIES: Dict[str, tuple[str, ...]] = {
         "workspace_mode", "style", "genres", "tones", "worldviews", "pov",
         "length_hint", "scene_length_hint", "scene_target_chars", "active_inspiration_id",
     ),
-    "create_or_rewrite_script": ("chapter_name", "scene_name", "content", "file_path"),
-    "create_chapter": ("chapter_name", "scene_name", "content"),
-    "organize_scenes_to_chapter": ("chapter_name", "scene_names", "scene_files"),
+    "create_or_rewrite_script": ("chapter_name", "work_name", "file_path"),
+    "create_chapter": ("chapter_name",),
+    "organize_scenes_to_chapter": ("scene_paths", "new_chapter_name", "chapter_num", "preserve_originals"),
     "rename_chapter": ("chapter_path", "new_chapter_name"),
     "rename_scene": ("scene_path", "new_scene_name"),
+    "batch_rename_chapters": ("renames",),
+    "batch_rename_scenes": ("renames",),
+    "batch_update_story_metadata": ("updates",),
     "reorder_chapters": ("chapter_paths",),
     "reorder_scenes": ("chapter_path", "scene_paths"),
 }
@@ -221,6 +224,15 @@ def is_tool_result_failure(tool_name: str, result: Any) -> bool:
         "prepare_script_creation": ("PreWrite 失败",),
         "create_or_rewrite_script": ("创建/重写剧本失败",),
         "create_chapter": ("创建章节失败",),
+        "organize_scenes_to_chapter": ("整理失败",),
+        "rename_chapter": ("重命名章节失败",),
+        "rename_scene": ("重命名场景失败",),
+        "reorder_chapters": ("重排章节失败",),
+        "reorder_scenes": ("重排场景失败",),
+        "batch_rename_chapters": ("批量重命名章节失败", "批量结构更新失败"),
+        "batch_rename_scenes": ("批量重命名场景失败", "批量结构更新失败"),
+        "batch_update_story_metadata": ("批量更新故事元数据失败", "批量结构更新失败"),
+        "batch_update_story_structure": ("批量结构更新失败",),
         "create_character_relation": ("创建角色关系失败",),
         "work_tracker": ("任务板更新失败", "读取任务板失败"),
     }
@@ -244,9 +256,13 @@ def get_tool_result_failure_message(tool_name: str, result: Any) -> str:
             return "联网搜索上游暂不可用，AI 将基于失败状态继续回应"
         return "联网搜索未能完成，AI 将基于失败状态继续回应"
     if text.strip().startswith((
-        "PreWrite 失败", "创建/重写剧本失败", "创建章节失败", "创建角色关系失败",
-        "任务板更新失败", "读取任务板失败",
+        "PreWrite 失败", "创建/重写剧本失败", "创建章节失败", "整理失败",
+        "重命名章节失败", "重命名场景失败", "重排章节失败", "重排场景失败",
+        "批量重命名章节失败", "批量重命名场景失败", "批量更新故事元数据失败",
+        "批量结构更新失败", "创建角色关系失败", "任务板更新失败", "读取任务板失败",
     )):
+        return text.strip().splitlines()[0][:200]
+    if normalized == "work_tracker" and "operations[" in text:
         return text.strip().splitlines()[0][:200]
     return "模型使用了错误的调用格式，正在尝试修正"
 

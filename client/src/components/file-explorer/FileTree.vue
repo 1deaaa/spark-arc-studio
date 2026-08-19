@@ -23,10 +23,10 @@
       <div class="file-tree-empty__hint">{{ isNovelMode ? $t('components.fileExplorer.emptyHintNovel') : $t('components.fileExplorer.emptyHintScript') }}</div>
       <div class="file-tree-empty__actions">
         <button class="file-tree-empty__btn" type="button" @click.stop="handleCreate('story')">
-          <n-icon :component="Plus" :size="13" style="margin-right:4px;" />{{ isNovelMode ? $t('components.fileExplorer.newSceneNovel') : $t('components.fileExplorer.newSceneScript') }}
+          <n-icon :component="Plus" :size="13" style="margin-right:4px;" />{{ t(storyTerminologyKey(workspaceMode, 'story', 'create')) }}
         </button>
         <button class="file-tree-empty__btn file-tree-empty__btn--ghost" type="button" @click.stop="handleCreate('folder')">
-          <n-icon :component="SquarePen" :size="13" style="margin-right:4px;" />{{ isNovelMode ? $t('components.fileExplorer.newVolume') : $t('components.fileExplorer.newChapter') }}
+          <n-icon :component="SquarePen" :size="13" style="margin-right:4px;" />{{ t(storyTerminologyKey(workspaceMode, 'folder', 'create')) }}
         </button>
       </div>
     </div>
@@ -57,6 +57,7 @@ import { useProjectStore } from '@/components/stores/projectStore';
 import { useSceneStore } from '@/components/stores/sceneStore';
 import { saveStoriesOrder, moveFileOrFolder } from '@/services/api';
 import bus from '@/eventBus';
+import { storyTerminologyKey } from '@/utils/storyTerminology';
 
 const { t } = useI18n();
 const fileStore = useFileStore();
@@ -70,6 +71,7 @@ const rootList = computed({
 });
 
 const isNovelMode = computed(() => sceneStore.workspaceMode === 'novel');
+const workspaceMode = computed(() => sceneStore.workspaceMode || 'script');
 const emptyIcon = computed(() => isNovelMode.value ? BookOpen : Clapperboard);
 
 const blankMenu = reactive({ visible: false, x: 0, y: 0 });
@@ -79,12 +81,12 @@ const _menuIcon = (comp: Component) => () => h(NIcon, { component: comp, size: 1
 // Naive UI 下拉菜单选项
 const blankMenuOptions = computed(() => [
   {
-    label: isNovelMode.value ? t('components.fileExplorer.newSceneNovel') : t('components.fileExplorer.newSceneScript'),
+    label: t(storyTerminologyKey(workspaceMode.value, 'story', 'create')),
     key: 'new-story',
     icon: _menuIcon(Plus)
   },
   {
-    label: isNovelMode.value ? t('components.fileExplorer.newVolume') : t('components.fileExplorer.newChapter'),
+    label: t(storyTerminologyKey(workspaceMode.value, 'folder', 'create')),
     key: 'new-folder',
     icon: _menuIcon(SquarePen)
   }
@@ -133,12 +135,9 @@ function handleBlankMenuSelect(key) {
 
 function handleCreate(type: 'folder' | 'story', parentDir = '', pos: { x: number; y: number } = { x: 0, y: 0 }) {
   const isFolder = type === 'folder';
-  const title = isFolder
-    ? (isNovelMode.value ? t('components.fileExplorer.promptTitleFolder') : t('components.fileExplorer.newChapter'))
-    : (isNovelMode.value ? t('components.fileExplorer.promptTitleStoryNovel') : t('components.fileExplorer.promptTitleStoryScript'));
-  const message = isFolder
-    ? (isNovelMode.value ? t('components.fileExplorer.promptMessageFolder') : t('components.fileExplorer.promptMessageChapterFolder'))
-    : (isNovelMode.value ? t('components.fileExplorer.promptMessageStoryNovel') : t('components.fileExplorer.promptMessageStoryScript'));
+  const nodeType = isFolder ? 'folder' : 'story';
+  const title = t(storyTerminologyKey(workspaceMode.value, nodeType, 'promptTitle'));
+  const message = t(storyTerminologyKey(workspaceMode.value, nodeType, 'promptMessage'));
   fileStore.createFile(type, parentDir, { x: pos.x, y: pos.y, title, message });
 }
 

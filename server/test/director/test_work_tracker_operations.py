@@ -2,13 +2,18 @@ from __future__ import annotations
 
 import asyncio
 import json
+import queue
+import sys
+import types
 
 from langchain_core.utils.function_calling import convert_to_openai_tool
 
 from agents.routes.runtime import get_work_trackers_api
 from agents.tools.automation import work_tracker
+from agents.tools.stream_events import is_tool_result_failure
 from agents.prompt_layout import build_current_user_message
 from agents.agent_director import DirectorAgent
+from agents.communication import SparkBaseAgent, get_tool_event_sink, set_tool_event_sink
 from agents.work_tracker import (
     build_work_tracker_prompt_context,
     list_work_trackers,
@@ -214,6 +219,61 @@ def test_openai_tool_schema_preserves_work_tracker_field_guidance() -> None:
     assert item["properties"]["notes"]["description"]
     assert "set_status" in operations["properties"]["status"]["description"]
     assert "item.notes" in operations["properties"]["item"]["description"]
+
+
+def test_work_tracker_schema_shows_independent_complete_status_operations() -> None:
+    schema = work_tracker.args_schema.model_json_schema()
+    operation_ref = schema["$defs"]["WorkTrackerOperationInput"]
+    operation_description = operation_ref["properties"]["operation"]["description"]
+    status_description = operation_ref["properties"]["status"]["description"]
+    operations_description = schema["properties"]["operations"]["description"]
+
+    assert "每一项都必须独立完整" in operation_description
+    assert "每个 set_status 都必须同时提供 item_id 或 item_ids" in status_description
+    assert "字段不会从其他元素继承" in operations_description
+    assert schema["properties"]["operations"]["examples"] == [[
+        {"operation": "set_status", "item_id": "task_x", "status": "completed"},
+        {"operation": "set_status", "item_id": "task_y", "status": "in_progress"},
+    ]]
+
+
+def test_work_tracker_validation_error_identifies_operation_index(monkeypatch) -> None:
+    agent = SparkBaseAgent("agent_director", user_id="validation-test")
+    events = queue.Queue()
+    previous_sink = get_tool_event_sink()
+    set_tool_event_sink(events)
+    # 该测试只验证统一执行器的错误回执；避免加载其他正在独立注册的工具模块。
+    registry_stub = types.SimpleNamespace(TOOLS_BY_NAME={"work_tracker": work_tracker})
+    monkeypatch.setitem(sys.modules, "agents.tools.registry", registry_stub)
+    args = {
+        "operations": [
+            {"operation": "set_status", "status": "completed"},
+            {"operation": "set_status", "item_id": "task_11dbca6903", "status": "in_progress"},
+        ],
+    }
+
+    try:
+        result = agent._execute_tool_calls([{
+            "raw": {
+                "id": "call_tracker_validation",
+                "name": "work_tracker",
+                "args": args,
+            },
+            "name": "work_tracker",
+            "args": args,
+            "call_id": "call_tracker_validation",
+        }])
+    finally:
+        set_tool_event_sink(previous_sink)
+
+    assert "operations[0]" in result
+    assert "缺少 item_id 或 item_ids" in result
+    assert "不能继承其他元素" in result
+    assert result.startswith("任务板更新失败：")
+    assert is_tool_result_failure("work_tracker", result) is True
+    failure_event = next(event for event in list(events.queue) if event.get("event") == "tool_exec_failed")
+    assert failure_event["tool_error"] == result
+    assert failure_event["message"].startswith("任务板更新失败：")
 
 
 def test_work_tracker_snapshot_is_appended_to_user_message_tail(monkeypatch, tmp_path) -> None:

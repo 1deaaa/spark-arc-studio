@@ -13,6 +13,7 @@
         <ClipboardList v-if="isWorkTracker" class="tool-trace-icon is-worktracker" :size="13" />
         <CircleCheck v-else-if="status === 'finished'" class="tool-trace-icon is-success" :size="13" />
         <CircleX v-else-if="status === 'failed'" class="tool-trace-icon is-failed" :size="13" />
+        <CircleStop v-else-if="status === 'cancelled'" class="tool-trace-icon is-cancelled" :size="13" />
         <LoaderCircle v-else class="tool-trace-icon is-running" :size="13" />
         {{ label }}
         <ChevronDown v-if="expandable" class="tool-trace-expand-icon" :class="{ 'is-expanded': expanded }" :size="13" />
@@ -40,7 +41,7 @@
 <script setup lang="ts">
 import { computed, type PropType } from 'vue';
 import { useI18n } from 'vue-i18n';
-import { ChevronDown, CircleCheck, CircleX, ClipboardList, LoaderCircle } from '@lucide/vue';
+import { ChevronDown, CircleCheck, CircleStop, CircleX, ClipboardList, LoaderCircle } from '@lucide/vue';
 import SparkCollapseTransition from '@/components/share/SparkCollapseTransition.vue';
 import WorkTrackerBoard from './WorkTrackerBoard.vue';
 import type { MessageSegment } from './render';
@@ -57,11 +58,7 @@ const emit = defineEmits<{ toggle: [] }>();
 const { t } = useI18n();
 const toolName = computed(() => String(props.segment.tool_name || props.segment.toolName || '').trim());
 const details = computed(() => adaptToolDetails(toolName.value, props.segment));
-const hasError = computed(() => (
-  props.segment.tool_error !== undefined
-  && props.segment.tool_error !== null
-  && String(props.segment.tool_error).trim() !== ''
-));
+const hasError = computed(() => details.value.sections.some(section => section.key === 'error'));
 const isWorkTracker = computed(() => (
   toolName.value === 'work_tracker'
   && props.status === 'finished'
@@ -70,11 +67,7 @@ const isWorkTracker = computed(() => (
   && props.segment.tool_result !== ''
   && !hasError.value
 ));
-const expandable = computed(() => (
-  toolName.value === 'work_tracker'
-    ? isWorkTracker.value || hasError.value
-    : details.value.expandable
-));
+const expandable = computed(() => isWorkTracker.value || details.value.expandable);
 </script>
 
 <style scoped>
@@ -142,6 +135,10 @@ const expandable = computed(() => (
 
 .tool-trace-icon.is-failed {
   color: var(--spark-danger, #d03050);
+}
+
+.tool-trace-icon.is-cancelled {
+  color: var(--spark-text-muted);
 }
 
 .tool-trace-icon.is-running {

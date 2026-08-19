@@ -99,7 +99,7 @@ Agent Matchbox 面向 Agent 开发而生，是一个可独立运行、可嵌入�
 
 ## 🛠️ 第一次配置流程 (新手必读)
 
-**注意：** 包内提供的配置文件 (`matchbox_cfg.yaml`) 适用于快速迁移或者分享模型配置。API Key 单独存放在 `matchbox_key.yaml` 中（使用 `base_url` 作为唯一键，比显示名称更稳定），被 `.gitignore` 忽略，禁止提交到版本库。仓库分发的 `matchbox_key.yaml` 中的加密 Key 仅用于占位，通常无法在你的部署环境解密。
+**注意：** 包内提供的配置文件 (`matchbox_cfg.yaml`) 适用于快速迁移或者分享模型配置。`platform_key` 是平台配置和密钥映射的稳定身份，数据库运行时引用使用 `platform_id`；`base_url` 仅是允许重复的上游连接地址。API Key 单独存放在 `matchbox_key.yaml` 中并按 `platform_key` 索引；旧版按 URL 索引的密钥只会在该 URL 唯一时兼容读取。该文件被 `.gitignore` 忽略，禁止提交到版本库。
 
 首次使用时，你需要运行配置工具，填入你自己的 API Key。
 

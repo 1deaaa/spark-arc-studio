@@ -11,6 +11,7 @@ from typing import Optional, List, Dict, Any
 from core.utils import get_project_path, get_project_stories_path
 from agents.routes.context_builder import build_story_tags_hint, load_project_context_bundle
 from core.project_settings import get_project_story_tags
+from agents.story_terminology import get_story_terminology
 from story.file_naming import (
     parse_chapter_identity_from_title,
     parse_story_filename,
@@ -37,6 +38,15 @@ class AgentContextProvider:
             else:
                 self._bundle_cache = load_project_context_bundle(self.user_id, self.project_name)
         return self._bundle_cache or {}
+
+    def _story_terms(self) -> dict[str, str]:
+        """返回当前项目的用户术语；内部字段仍按历史兼容协议读取。"""
+
+        try:
+            tags = get_project_story_tags(self.user_id, self.project_name)
+            return get_story_terminology((tags or {}).get("workspace_mode"))
+        except Exception:
+            return get_story_terminology("script")
 
     # ==================== Muse Agent ====================
 
@@ -129,23 +139,26 @@ class AgentContextProvider:
         return "\n".join(lines)
 
     def get_outline_summary(self) -> str:
-        """获取大纲摘要（章节 + 场景层级，与 list_chapters 工具输出格式一致）"""
+        """获取逻辑大纲摘要；不把逻辑索引误当成物理文件夹或文件术语。"""
         data = self._bundle().get("outline_data") or {}
         nodes = data.get("nodes", []) if isinstance(data, dict) else []
         if not nodes:
             return ""
 
-        lines = [f"【大纲】共 {len(nodes)} 个章节"]
+        terms = self._story_terms()
+        lines = [
+            f"【大纲】共 {len(nodes)} 个逻辑故事分组（落盘文件夹称{terms['group']}，正文文件称{terms['unit']}）",
+        ]
         for i, node in enumerate(nodes):
-            title = node.get("title") or node.get("name") or f"章节{i+1}"
+            title = node.get("title") or node.get("name") or f"逻辑分组{i+1}"
             children = node.get("children", [])
             desc = node.get("description") or ""
-            lines.append(f"  [{i}] {title}  ({len(children)} 个场景)")
+            lines.append(f"  逻辑分组 [{i}] {title}  ({len(children)} 个逻辑故事单元)")
             if desc:
                 lines.append(f"    摘要: {desc}")
             for j, scene in enumerate(children):
-                scene_title = scene.get("title") or scene.get("name") or f"场景{j+1}"
-                lines.append(f"    - [{i}-{j}] {scene_title}")
+                scene_title = scene.get("title") or scene.get("name") or f"逻辑单元{j+1}"
+                lines.append(f"    - 逻辑单元 [{i}-{j}] {scene_title}")
 
         return "\n".join(lines)
 
@@ -162,7 +175,7 @@ class AgentContextProvider:
     # ==================== Scriptwriter Agent ====================
 
     def get_scene_list(self) -> str:
-        """获取场景列表概览"""
+        """获取当前模式下的 story_unit 正文文件列表概览。"""
         if not self.project_path:
             return ""
         try:
@@ -170,7 +183,12 @@ class AgentContextProvider:
             if not os.path.exists(stories_path):
                 return ""
             
-            lines = ["### 当前场景文件"]
+            terms = self._story_terms()
+            lines = [
+                f"### 当前已落盘{terms['unit']}正文文件",
+                f"（物理结构：story_group 文件夹= {terms['group']}；story_unit 文件= {terms['unit']}。"
+                "chapter/scene 等字段名是历史兼容字段，不能按字面理解。）",
+            ]
             
             def scan_dir(path, prefix="", relative_path=""):
                 folders = []
@@ -216,7 +234,7 @@ class AgentContextProvider:
             return ""
 
     def get_scene_content(self, file_path: str) -> str:
-        """获取指定场景文件内容"""
+        """获取指定 story_unit 正文文件内容。"""
         if not self.project_path or not file_path:
             return ""
         try:
@@ -229,7 +247,8 @@ class AgentContextProvider:
                 content = f.read()
 
             code_language = "markdown" if file_format == "novel" else "arc"
-            return f"### 场景内容: {file_path}\n```{code_language}\n{content}\n```"
+            terms = self._story_terms()
+            return f"### {terms['unit']}正文内容: {file_path}\n```{code_language}\n{content}\n```"
         except Exception as e:
             print(f"[ContextProvider] Error loading scene: {e}")
             return ""
@@ -343,7 +362,7 @@ class AgentContextProvider:
                     parts.append(f"### 全局大纲\n{full_outline}")
                 if narrative_memory:
                     parts.append(f"### 叙事记忆（梗概 + 节拍表）\n{narrative_memory}")
-                # 场景文件列表仍保留（供导演了解当前写作进度）
+                # story_unit 正文文件列表仍保留，供导演了解当前写作进度。
                 scenes = self.get_scene_list()
                 if scenes:
                     parts.append(scenes)

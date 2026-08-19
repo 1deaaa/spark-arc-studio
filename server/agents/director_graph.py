@@ -99,10 +99,24 @@ def _ensure_graph_agent_registered(agent_id: str, user_id: str, project_name: st
 
 
 def _is_scriptwriter_persist_tool(tool_name: str) -> bool:
-    """判断 Scriptwriter 是否真的执行了正文落盘类工具。"""
+    """判断 Scriptwriter 是否执行了会改变项目结构或正文的落盘工具。
+
+    委派模式下结构维护同样是有效交付；不能只把正文重写工具当作成功，
+    否则 rename/reorder 成功后会被导演误报为“未完成落盘”。
+    """
     return normalize_tool_name(tool_name) in {
+        "create_chapter",
         "create_or_rewrite_script",
         "patch_script",
+        "organize_scenes_to_chapter",
+        "rename_chapter",
+        "rename_scene",
+        "reorder_chapters",
+        "reorder_scenes",
+        "batch_rename_chapters",
+        "batch_rename_scenes",
+        "batch_update_story_metadata",
+        "update_project_story_tags",
     }
 
 

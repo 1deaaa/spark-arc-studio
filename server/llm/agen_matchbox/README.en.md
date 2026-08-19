@@ -97,7 +97,7 @@ Although specialized external gateways (such as NewAPI, LiteLLM, etc.) are power
 
 ## 🛠️ First-Time Configuration Flow (Newbies Must Read)
 
-**Note:** The default configuration file (`matchbox_cfg.yaml`) is suitable for quick migration or sharing your model configurations. API keys are stored separately in `matchbox_key.yaml` (using `base_url` as the unique key, which is more stable than display names), which is ignored by `.gitignore` and must not be committed to version control. The encrypted keys distributed in the repository's `matchbox_key.yaml` are placeholder keys and generally cannot be decrypted on your site.
+**Note:** The default configuration file (`matchbox_cfg.yaml`) is suitable for quick migration or sharing model configurations. `platform_key` is the stable identity for configuration and key mapping, while runtime database references use `platform_id`; `base_url` is only an upstream endpoint and may be shared by multiple platforms. API keys are stored separately in `matchbox_key.yaml` and indexed by `platform_key`. Legacy URL-indexed keys are read only when that URL identifies exactly one platform. This file is ignored by `.gitignore` and must not be committed to version control.
 
 When using the manager for the first time, you need to run the configuration tool and fill in your own API keys.
 

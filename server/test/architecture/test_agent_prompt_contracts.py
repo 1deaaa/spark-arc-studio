@@ -55,6 +55,21 @@ def test_core_agent_prompts_keep_three_runtime_modes(prompt_name: str) -> None:
     assert not any(token in pipeline for token in forbidden_refs)
 
 
+def test_scriptwriter_pipeline_separates_writing_and_structure_maintenance() -> None:
+    pipeline = load_prompt("scriptwriter")["pipeline_system"]
+
+    for token in (
+        "正文创作分支",
+        "结构维护分支",
+        "跳过 PreWrite",
+        "batch_rename_chapters",
+        "batch_rename_scenes",
+        "完整目录或正文文件列表",
+        "complete_pipeline_step",
+    ):
+        assert token in pipeline
+
+
 @pytest.mark.parametrize("prompt_name", CORE_AGENT_PROMPTS)
 def test_core_agent_prompts_use_base_for_shared_material(prompt_name: str) -> None:
     prompts = load_prompt(prompt_name)
@@ -65,7 +80,7 @@ def test_core_agent_prompts_use_base_for_shared_material(prompt_name: str) -> No
 
 def test_director_distinguishes_unattended_and_interactive_scriptwriting() -> None:
     prompt = load_prompt("director")["chat_system"]
-    for token in ("无人值守", "全部剩余章节", "某一章", "delegate_task", "意图不清楚"):
+    for token in ("无人值守", "全部剩余正文单元", "某个小说章节", "delegate_task", "意图不清楚"):
         assert token in prompt
 
 
@@ -74,7 +89,37 @@ def test_scriptwriter_scene_titles_are_reader_facing_in_both_modes() -> None:
     combined = "\n".join(str(prompts.get(key) or "") for key in ("pipeline_system", "chat_system", "tool_rules"))
     for token in ("面向读者", "1-2 标题", "剧本模式与小说模式"):
         assert token in combined
-    assert "禁止使用「场景 1-2」" in combined
+    assert "不要自行编造 chap-scene 编号" in combined
+
+
+def test_scriptwriter_explains_story_group_and_story_file_boundaries() -> None:
+    prompts = load_prompt("scriptwriter")
+    combined = "\n".join(
+        str(prompts.get(key) or "")
+        for key in ("pipeline_system", "chat_system", "tool_rules")
+    )
+    for token in (
+        "story_group",
+        "story_unit",
+        "剧幕（文件夹）",
+        "场景（正文文件）",
+        "分卷（文件夹）",
+        "章节（正文文件）",
+        "历史兼容字段警告",
+        "可能造成语义混乱",
+        "stories_order.json",
+        "order",
+    ):
+        assert token in combined
+
+    tools = {tool.name: tool for tool in get_tools_for_agent("agent_scriptwriter")}
+    for tool_name in ("rename_chapter", "rename_scene", "reorder_chapters", "reorder_scenes"):
+        assert tool_name in tools
+        assert "stories_order.json" in (
+            tools[tool_name].description
+            + "\n"
+            + str(tools[tool_name].args_schema.model_json_schema())
+        ) or tool_name in {"rename_scene", "reorder_scenes"}
 
 
 @pytest.mark.parametrize(("agent_id", "agent_cls"), AGENTS_WITH_PERSIST_TOOLS)

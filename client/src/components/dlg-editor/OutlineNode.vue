@@ -28,8 +28,8 @@
             ref="titleInput"
           />
           <span v-else class="node-title">{{ node.title }}</span>
-          <!-- 章节序号标识 -->
-          <SparkTag v-if="node.type === 'chapter' && node.chapter" type="primary" size="tiny">Ch.{{ node.chapter }}</SparkTag>
+          <!-- chapter 是历史兼容字段；用户界面按模式显示剧幕或分卷序号。 -->
+          <SparkTag v-if="node.type === 'chapter' && node.chapter" type="primary" size="tiny">{{ groupIndexLabel }} {{ node.chapter }}</SparkTag>
 
           <!-- 节拍映射标识 -->
           <SparkTag v-if="node.mapped_beats?.length" type="info" size="tiny">{{ t('components.outlineNode.linkedBeats') }}: {{ node.mapped_beats.join(', ') }}</SparkTag>
@@ -58,8 +58,8 @@
         
         <!-- 扩展编辑字段 -->
         <div v-if="isEditing" class="edit-extras">
-          <n-form-item v-if="node.type === 'chapter'" :label="t('components.outlineNode.chapterNumber')" label-placement="left" size="small">
-            <n-input-number v-model:value="editingNode.chapter" :min="1" size="small" :placeholder="t('components.outlineNode.chapterNumberPlaceholder')"/>
+          <n-form-item v-if="node.type === 'chapter'" :label="groupNumberLabel" label-placement="left" size="small">
+            <n-input-number v-model:value="editingNode.chapter" :min="1" size="small" :placeholder="groupNumberPlaceholder"/>
           </n-form-item>
           <n-form-item :label="t('components.outlineNode.linkedBeats')" label-placement="left" size="small" v-if="node.type === 'chapter'">
             <n-dynamic-tags v-model:value="editingMappedBeats" />
@@ -123,6 +123,7 @@
           :depth="depth + 1"
           :index="Number(idx)"
           :parent-array="node.children || []"
+          :workspace-mode="workspaceMode"
           @update="$emit('update', $event)"
           @delete="$emit('delete', $event, node.children || [])"
           @add-child="$emit('add-child', $event)"
@@ -184,9 +185,11 @@ const props = withDefaults(defineProps<{
   depth?: number;
   index?: number;
   parentArray: OutlineTreeNode[];
+  workspaceMode?: 'script' | 'novel';
 }>(), {
   depth: 0,
   index: 0,
+  workspaceMode: 'script',
 });
 
 const emit = defineEmits<{
@@ -225,14 +228,21 @@ const { t } = useI18n();
 
 const hasChildren = computed(() => Array.isArray(props.node.children) && props.node.children.length > 0);
 const canHaveChildren = computed(() => props.node.type === 'chapter');
+const workspaceMode = computed(() => props.workspaceMode === 'novel' ? 'novel' : 'script');
+const groupIndexLabel = computed(() => t(workspaceMode.value === 'novel' ? 'components.outlineNode.groupIndexNovel' : 'components.outlineNode.groupIndexScript'));
+const groupNumberLabel = computed(() => t(workspaceMode.value === 'novel' ? 'components.outlineNode.groupNumberNovel' : 'components.outlineNode.groupNumberScript'));
+const groupNumberPlaceholder = computed(() => t('components.outlineNode.groupNumberPlaceholder'));
 
 const typeLabel = computed(() => {
-  const labels: Record<OutlineTreeNode['type'], string> = { chapter: t('components.outlineNode.typeChapter'), scene: t('components.outlineNode.typeScene') };
+  const labels: Record<OutlineTreeNode['type'], string> = {
+    chapter: t(workspaceMode.value === 'novel' ? 'components.outlineNode.typeGroupNovel' : 'components.outlineNode.typeGroupScript'),
+    scene: t(workspaceMode.value === 'novel' ? 'components.outlineNode.typeUnitNovel' : 'components.outlineNode.typeUnitScript'),
+  };
   return labels[props.node.type] || '?';
 });
 
 const childTypeLabel = computed(() => {
-  if (props.node.type === 'chapter') return t('components.outlineNode.typeScene');
+  if (props.node.type === 'chapter') return t(workspaceMode.value === 'novel' ? 'components.outlineNode.typeUnitNovel' : 'components.outlineNode.typeUnitScript');
   return t('components.outlineNode.typeNode');
 });
 
@@ -264,7 +274,7 @@ const tensionLabel = computed(() => {
 
 const actionOptions = computed<DropdownOption[]>(() => [
   { 
-    label: t('components.outlineNode.addScene'), 
+    label: t(workspaceMode.value === 'novel' ? 'components.outlineNode.addUnitNovel' : 'components.outlineNode.addUnitScript'),
     key: 'add-child', 
     icon: () => h(NIcon, null, { default: () => h(Plus) }),
     disabled: !canHaveChildren.value

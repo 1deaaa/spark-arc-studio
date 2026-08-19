@@ -34,6 +34,7 @@ from typing import Optional, Union, Dict, Any
 from collections.abc import Iterable
 from core.request_context import current_user_id
 from .language_policy import prepend_prompt_language_policy
+from .story_terminology import normalize_workspace_mode
 
 
 class SparkAgentExecutor:
@@ -110,23 +111,35 @@ def collect_text_output(result: Any) -> str:
 # 缓存已加载的提示词
 _prompt_cache = {}
 
-# 作品规模枚举描述（供各 Agent 共用）
+# 作品规模枚举描述（供各 Agent 共用）。描述必须按创作模式解释，不能把
+# 历史兼容字段或“章节”一词硬套到剧本模式；调用方没有传模式时默认剧本，
+# 以兼容旧入口仍能得到确定结果。
 _LENGTH_HINT_MAP = {
-    "短篇": "约1-3章节，聚焦单一事件或情感弧线，适合短篇小说或Demo级游戏剧情",
-    "中篇": "约5-10章节，可以有多条主线交织，适合中篇小说或标准独立游戏流程",
-    "长篇": "10+章节，允许更长范围的结构展开、题材深化与节奏变化；作品尺度和关系复杂度仍由用户意图决定",
+    "script": {
+        "短篇": "约1个剧幕，聚焦单一事件或情感弧线；剧幕内场景数量按剧情需要安排，适合短篇剧本或Demo级互动剧情",
+        "中篇": "约3个剧幕，可以有多条主线交织；每幕场景数量按剧情需要安排，适合标准独立剧本流程",
+        "长篇": "约5个剧幕或更多，允许更长范围的结构展开、题材深化与节奏变化；每幕场景数量由剧情功能决定",
+    },
+    "novel": {
+        "短篇": "约1个分卷，聚焦单一事件或情感弧线；分卷内章节数量按叙事需要安排，适合短篇小说",
+        "中篇": "约3个分卷，可以有多条主线交织；每卷章节数量按叙事需要安排，适合中篇小说",
+        "长篇": "约5个分卷或更多，允许更长范围的结构展开、题材深化与节奏变化；每卷章节数量由叙事功能决定",
+    },
 }
 
 
-def build_length_hint_str(length_hint: str) -> str:
-    """
-    将作品规模枚举（短篇/中篇/长篇）转为注入 prompt 的软提示字符串。
-    未选择时返回空字符串，不影响创作自由度。
+def build_length_hint_str(length_hint: str, workspace_mode: str | None = None) -> str:
+    """把作品规模转为按模式解释的软提示。
+
+    ``workspace_mode`` 是新增的可选参数；省略时沿用旧入口的默认行为并按
+    剧本模式解释。作品规模只提供结构参考，不是硬性的生成数量验收条件。
     """
     if not length_hint:
         return ""
-    hint_text = _LENGTH_HINT_MAP.get(length_hint, length_hint)
-    return f"作品规模参考（仅供参考，创作自由度优先）：{length_hint}——{hint_text}。"
+    mode = normalize_workspace_mode(workspace_mode)
+    hint_text = _LENGTH_HINT_MAP[mode].get(length_hint, length_hint)
+    mode_label = "小说模式" if mode == "novel" else "剧本模式"
+    return f"作品规模参考（{mode_label}，仅供参考，创作自由度优先）：{length_hint}——{hint_text}。"
 
 
 

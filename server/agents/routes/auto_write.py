@@ -33,6 +33,7 @@ from fastapi.responses import StreamingResponse
 from core.auth import get_current_user
 from core.utils import get_project_path
 from core.project_settings import get_project_story_tags, get_workspace_mode
+from agents.story_terminology import get_story_terminology
 from agents.agent_scriptwriter import ScriptwriterAgent
 from agents.scriptwriter_prewrite import (
     PREWRITE_STATUS_MESSAGE,
@@ -152,6 +153,11 @@ def _require_nonempty_scene_body(content: str, export_format: str) -> int:
     if written_chars <= 0:
         raise RuntimeError("编剧落盘结果没有可见正文，自动写作未完成当前场景。")
     return written_chars
+
+
+def _auto_write_terms(user_id: str, project_name: str) -> dict[str, str]:
+    """返回自动写作状态和任务提示使用的模式化结构术语。"""
+    return get_story_terminology(get_workspace_mode(user_id, project_name))
 
 
 async def generate_script_stream(
@@ -280,11 +286,12 @@ async def generate_script_stream(
             critic = None
             print(f"[AutoWrite] Critic 初始化失败，自动审稿降级跳过：{e}")
 
+    terms = _auto_write_terms(user_id, project_name)
     yield semantic_sse_data(
         "started",
         **merge_semantics(
             on_start("自动撰写任务已启动"),
-            on_progress("正在准备章节任务...", stage="prepare"),
+            on_progress(f"正在准备{terms['group']}任务...", stage="prepare"),
         ),
     )
 
@@ -488,11 +495,11 @@ async def generate_script_stream(
                 scene_meta_parts.append(f"登场：{', '.join(scene_characters)}")
             scene_meta_str = (" | " + " | ".join(scene_meta_parts)) if scene_meta_parts else ""
 
-            scene_goal = f"""【当前场景任务】
-场景名：{scene_title}{scene_meta_str}
-场景描述：{scene_desc}{dialogues_str}
-当前章节目标：{chapter_title} — {chapter.get('description', '')}
-请撰写本场景的完整剧本内容。
+            scene_goal = f"""【当前{terms['unit']}任务】
+{terms['unit']}名：{scene_title}{scene_meta_str}
+{terms['unit']}描述：{scene_desc}{dialogues_str}
+当前{terms['group']}目标：{chapter_title} — {chapter.get('description', '')}
+请撰写本{terms['unit']}的完整正文。
 """
 
             update_state(
@@ -601,17 +608,17 @@ async def generate_script_stream(
                 saved_payload = prewrite_result.saved_payload or {}
                 saved_relative_path = str(saved_payload.get("path") or "").strip()
                 if not saved_relative_path:
-                    raise RuntimeError("编剧已返回落盘成功，但没有提供场景文件路径。")
+                    raise RuntimeError(f"编剧已返回落盘成功，但没有提供{terms['unit']}文件路径。")
 
                 stories_root = os.path.abspath(stories_path)
                 saved_absolute_path = os.path.abspath(
                     os.path.join(stories_root, saved_relative_path)
                 )
                 if os.path.commonpath((stories_root, saved_absolute_path)) != stories_root:
-                    raise RuntimeError("编剧返回的场景文件路径超出项目故事目录。")
+                    raise RuntimeError(f"编剧返回的{terms['unit']}文件路径超出项目故事目录。")
                 if not os.path.isfile(saved_absolute_path):
                     raise RuntimeError(
-                        f"编剧报告已落盘，但找不到场景文件：{saved_relative_path}"
+                        f"编剧报告已落盘，但找不到{terms['unit']}文件：{saved_relative_path}"
                     )
                 with open(saved_absolute_path, "r", encoding="utf-8") as saved_file:
                     current_scene_full_text = saved_file.read().strip()

@@ -43,7 +43,9 @@
 
     <div class="scene-length-hint" aria-live="polite">
       <span>{{ rangeHint }}</span>
-      <span>{{ targetChars ? t('components.storyTagsPanel.sceneLength.targetNote') : t('components.storyTagsPanel.sceneLength.rhythmNote') }}</span>
+      <span>{{ targetChars
+        ? t(`components.storyTagsPanel.sceneLength.targetNote${props.workspaceMode === 'novel' ? 'Novel' : 'Script'}`)
+        : t(`components.storyTagsPanel.sceneLength.rhythmNote${props.workspaceMode === 'novel' ? 'Novel' : 'Script'}`) }}</span>
     </div>
   </section>
 </template>
@@ -77,7 +79,7 @@ const targetChars = computed(() => props.targetChars ?? null);
 const titleText = computed(() => props.workspaceMode === 'novel'
   ? t('components.storyTagsPanel.sceneLength.titleNovel')
   : t('components.storyTagsPanel.sceneLength.titleScript'));
-const tooltipText = computed(() => t('components.storyTagsPanel.sceneLength.tooltip'));
+const tooltipText = computed(() => t(`components.storyTagsPanel.sceneLength.tooltip${props.workspaceMode === 'novel' ? 'Novel' : 'Script'}`));
 
 const options = computed(() => [
   { value: 'concise' as const, label: t('components.storyTagsPanel.sceneLength.concise') },
@@ -87,7 +89,7 @@ const options = computed(() => [
 
 const rangeHint = computed(() => {
   if (targetChars.value) {
-    return t('components.storyTagsPanel.sceneLength.targetHint', { count: targetChars.value });
+    return t(`components.storyTagsPanel.sceneLength.targetHint${props.workspaceMode === 'novel' ? 'Novel' : 'Script'}`, { count: targetChars.value });
   }
   const mode = props.workspaceMode === 'novel' ? 'novel' : 'script';
   return t(`components.storyTagsPanel.sceneLength.ranges.${mode}.${props.modelValue}`);

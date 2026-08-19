@@ -166,7 +166,7 @@ def test_scriptwriter_rename_and_reorder_chapters_updates_order_file(monkeypatch
             "chapter_path": "一 · 开端",
             "new_chapter_name": "新的开端",
         })
-        assert "章节已重命名" in renamed
+        assert "剧幕已重命名" in renamed
         assert (stories / "一 · 新的开端").is_dir()
         renamed_order = json.loads((project / "stories_order.json").read_text(encoding="utf-8"))
         assert renamed_order[""] == ["一 · 新的开端", "二 · 转折"]
@@ -174,7 +174,7 @@ def test_scriptwriter_rename_and_reorder_chapters_updates_order_file(monkeypatch
         reordered = reorder_chapters.invoke({
             "chapter_paths": ["二 · 转折", "一 · 新的开端"],
         })
-        assert "章节重排完成" in reordered
+        assert "剧幕重排完成" in reordered
     finally:
         current_project_name.reset(project_token)
         current_user_id.reset(user_token)
@@ -213,3 +213,167 @@ def test_organize_scenes_updates_scene_identity_and_rejects_conflict(monkeypatch
     assert len(target_files) == 1
     assert "chap=001" in target_files[0].name
     assert "scene=001" in target_files[0].name
+
+
+def test_batch_rename_chapters_updates_order_file_atomically(monkeypatch, tmp_path: Path) -> None:
+    from agents.tools.scriptwriter import batch_rename_chapters
+    from core.request_context import current_project_name, current_user_id
+
+    monkeypatch.setattr("core.utils.USERDATA_ROOT", str(tmp_path))
+    project = tmp_path / "uid_10" / "projects" / "demo"
+    stories = project / "stories"
+    first = stories / "一 · 开端"
+    second = stories / "二 · 转折"
+    first.mkdir(parents=True)
+    second.mkdir(parents=True)
+    _story_path(first, "1-1 初遇", chapter=1, scene=1)
+    _story_path(second, "2-1 转折", chapter=2, scene=1)
+    (project / "stories_order.json").write_text(
+        json.dumps({"": ["一 · 开端", "二 · 转折"]}, ensure_ascii=False),
+        encoding="utf-8",
+    )
+
+    user_token = current_user_id.set("10")
+    project_token = current_project_name.set("demo")
+    try:
+        result = batch_rename_chapters.invoke({
+            "renames": [
+                {"path": "一 · 开端", "new_name": "初始冲突"},
+                {"path": "二 · 转折", "new_name": "关键转折"},
+            ],
+        })
+    finally:
+        current_project_name.reset(project_token)
+        current_user_id.reset(user_token)
+
+    assert result.startswith("批量重命名剧幕完成")
+    assert (stories / "一 · 初始冲突").is_dir()
+    assert (stories / "二 · 关键转折").is_dir()
+    order_data = json.loads((project / "stories_order.json").read_text(encoding="utf-8"))
+    assert order_data[""] == ["一 · 初始冲突", "二 · 关键转折"]
+    assert any("chap=001" in path.name for path in (stories / "一 · 初始冲突").glob("*.arc"))
+
+
+def test_batch_rename_scenes_preserves_identity_and_order(monkeypatch, tmp_path: Path) -> None:
+    from agents.tools.scriptwriter import batch_rename_scenes
+    from core.request_context import current_project_name, current_user_id
+    from story.file_naming import parse_story_filename
+
+    monkeypatch.setattr("core.utils.USERDATA_ROOT", str(tmp_path))
+    stories = tmp_path / "uid_11" / "projects" / "demo" / "stories" / "一 · 开端"
+    stories.mkdir(parents=True)
+    first = _story_path(stories, "1-1 初遇", chapter=1, scene=1, order=1001)
+    second = _story_path(stories, "1-2 余波", chapter=1, scene=2, order=1002)
+
+    user_token = current_user_id.set("11")
+    project_token = current_project_name.set("demo")
+    try:
+        result = batch_rename_scenes.invoke({
+            "renames": [
+                {"path": f"一 · 开端/{first.name}", "new_name": "新的初遇"},
+                {"path": f"一 · 开端/{second.name}", "new_name": "新的余波"},
+            ],
+        })
+    finally:
+        current_project_name.reset(project_token)
+        current_user_id.reset(user_token)
+
+    assert result.startswith("批量重命名场景完成")
+    renamed = sorted(stories.glob("*.arc"))
+    assert len(renamed) == 2
+    parsed = {path.name: parse_story_filename(path.name) for path in renamed}
+    assert any("新的初遇" in name and meta["chapter_num"] == 1 and meta["scene_num"] == 1 and meta["order"] == 1001 for name, meta in parsed.items())
+    assert any("新的余波" in name and meta["chapter_num"] == 1 and meta["scene_num"] == 2 and meta["order"] == 1002 for name, meta in parsed.items())
+
+
+def test_batch_rename_scenes_conflict_writes_nothing(monkeypatch, tmp_path: Path) -> None:
+    from agents.tools.scriptwriter import batch_rename_scenes
+    from core.request_context import current_project_name, current_user_id
+
+    monkeypatch.setattr("core.utils.USERDATA_ROOT", str(tmp_path))
+    stories = tmp_path / "uid_12" / "projects" / "demo" / "stories" / "一 · 开端"
+    stories.mkdir(parents=True)
+    first = _story_path(stories, "1-1 初遇", chapter=1, scene=1)
+    second = _story_path(stories, "1-2 余波", chapter=1, scene=2)
+
+    user_token = current_user_id.set("12")
+    project_token = current_project_name.set("demo")
+    try:
+        result = batch_rename_scenes.invoke({
+            "renames": [
+                {"path": f"一 · 开端/{first.name}", "new_name": "第一次"},
+                {"path": f"一 · 开端/{first.name}", "new_name": "第二次"},
+            ],
+        })
+    finally:
+        current_project_name.reset(project_token)
+        current_user_id.reset(user_token)
+
+    assert result.startswith("批量重命名场景失败")
+    assert first.exists()
+    assert second.exists()
+    assert not list(stories.glob("*第一次*"))
+    assert not list(stories.glob("*第二次*"))
+
+
+def test_batch_metadata_update_rejects_duplicate_order(monkeypatch, tmp_path: Path) -> None:
+    from agents.tools.scriptwriter import batch_update_story_metadata
+    from core.request_context import current_project_name, current_user_id
+
+    monkeypatch.setattr("core.utils.USERDATA_ROOT", str(tmp_path))
+    stories = tmp_path / "uid_14" / "projects" / "demo" / "stories" / "一 · 开端"
+    stories.mkdir(parents=True)
+    first = _story_path(stories, "1-1 初遇", chapter=1, scene=1, order=1001)
+    second = _story_path(stories, "1-2 余波", chapter=1, scene=2, order=1002)
+
+    user_token = current_user_id.set("14")
+    project_token = current_project_name.set("demo")
+    try:
+        result = batch_update_story_metadata.invoke({
+            "updates": [
+                {"path": f"一 · 开端/{first.name}", "order": 2001},
+                {"path": f"一 · 开端/{second.name}", "order": 2001},
+            ],
+        })
+    finally:
+        current_project_name.reset(project_token)
+        current_user_id.reset(user_token)
+
+    assert result.startswith("批量更新故事元数据失败")
+    assert first.exists()
+    assert second.exists()
+
+
+def test_batch_chapter_rename_rolls_back_when_order_write_fails(monkeypatch, tmp_path: Path) -> None:
+    import story.file_naming as file_naming
+    from agents.tools.scriptwriter import batch_rename_chapters
+    from core.request_context import current_project_name, current_user_id
+
+    monkeypatch.setattr("core.utils.USERDATA_ROOT", str(tmp_path))
+    project = tmp_path / "uid_13" / "projects" / "demo"
+    stories = project / "stories"
+    source = stories / "一 · 开端"
+    source.mkdir(parents=True)
+    _story_path(source, "1-1 初遇", chapter=1, scene=1)
+    order_path = project / "stories_order.json"
+    order_path.write_text(json.dumps({"": ["一 · 开端"]}, ensure_ascii=False), encoding="utf-8")
+
+    monkeypatch.setattr(
+        file_naming,
+        "write_stories_order_atomic",
+        lambda *_args, **_kwargs: (_ for _ in ()).throw(OSError("模拟顺序文件写入失败")),
+    )
+    user_token = current_user_id.set("13")
+    project_token = current_project_name.set("demo")
+    try:
+        result = batch_rename_chapters.invoke({
+            "renames": [{"path": "一 · 开端", "new_name": "新开端"}],
+        })
+    finally:
+        current_project_name.reset(project_token)
+        current_user_id.reset(user_token)
+
+    assert result.startswith("批量重命名剧幕失败")
+    assert source.is_dir()
+    assert not (stories / "一 · 新开端").exists()
+    assert json.loads(order_path.read_text(encoding="utf-8"))[""] == ["一 · 开端"]

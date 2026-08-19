@@ -7,7 +7,7 @@ import threading
 import time
 
 import pytest
-from langchain_core.messages import HumanMessage, ToolMessage
+from langchain_core.messages import AIMessageChunk, HumanMessage, ToolMessage
 
 from agents.communication import (
     ModelStreamIdleTimeoutError,
@@ -257,6 +257,7 @@ def test_observer_replays_snapshot_then_events_after_cursor() -> None:
     entry.append_event({"event": "assistant_delta", "text": "一"})
     entry.append_event({"event": "assistant_delta", "text": "二"})
     entry.status = "completed"
+    entry.finished_event.set()
 
     class Request:
         async def is_disconnected(self) -> bool:
@@ -290,6 +291,7 @@ def test_observer_is_woken_by_background_event_without_polling() -> None:
             entry.append_event({"event": "assistant_delta", "text": "即时事件"})
             entry.append_control_event({"event": "task_done", "status": "completed"})
             entry.status = "completed"
+            entry.finished_event.set()
             entry.notify_observers()
 
         producer = asyncio.create_task(produce())
@@ -302,6 +304,40 @@ def test_observer_is_woken_by_background_event_without_polling() -> None:
 
     assert [row["event"] for row in rows] == ["assistant_delta", "task_done"]
     assert rows[0]["text"] == "即时事件"
+
+
+def test_observer_waits_for_task_done_after_terminal_claim() -> None:
+    entry = make_entry()
+
+    class Request:
+        async def is_disconnected(self) -> bool:
+            return False
+
+    async def collect_rows():
+        rows = []
+
+        async def produce() -> None:
+            await asyncio.sleep(0.01)
+            assert entry.claim_terminal_status("cancelled") is True
+            entry.notify_observers()
+            await asyncio.sleep(0.01)
+            entry.append_control_event(
+                {"event": "task_done", "status": "cancelled"},
+                allow_terminal=True,
+            )
+            entry.finished_event.set()
+            entry.notify_observers()
+
+        producer = asyncio.create_task(produce())
+        async for line in _observe_chat_task_events(Request(), entry, include_snapshot=False):
+            rows.append(json.loads(line))
+        await producer
+        return rows
+
+    rows = asyncio.run(collect_rows())
+
+    assert [row["event"] for row in rows] == ["task_done"]
+    assert rows[0]["status"] == "cancelled"
 
 
 def test_stale_running_chat_metadata_becomes_interrupted_without_losing_progress() -> None:
@@ -478,18 +514,17 @@ def test_model_stream_idle_timeout_is_wrapped_after_configurable_short_window() 
     assert "0.03 秒" in str(raised.value)
 
 
-def test_model_stream_reasoning_and_text_activity_reset_idle_deadline() -> None:
+def test_model_stream_first_activity_disables_idle_deadline() -> None:
     def stream():
         yield {"additional_kwargs": {"reasoning_content": "思考"}}
-        time.sleep(0.03)
+        time.sleep(0.08)
         yield {"content": "正文"}
-        time.sleep(0.03)
 
     chunks = list(stream_model_turn_with_retry(
         type("Llm", (), {"stream": lambda self, _messages: stream()})(),
         [],
         max_attempts=1,
-        idle_timeout=0.05,
+        idle_timeout=0.02,
     ))
 
     assert chunks == [
@@ -498,21 +533,96 @@ def test_model_stream_reasoning_and_text_activity_reset_idle_deadline() -> None:
     ]
 
 
-def test_model_stream_empty_chunk_does_not_reset_idle_deadline() -> None:
+def test_model_stream_empty_chunk_after_activity_does_not_rearm_idle_deadline() -> None:
     def stream():
         yield {"content": "正文"}
-        time.sleep(0.03)
         yield {"content": ""}
-        time.sleep(0.04)
+        time.sleep(0.08)
+
+    chunks = list(stream_model_turn_with_retry(
+        type("Llm", (), {"stream": lambda self, _messages: stream()})(),
+        [],
+        max_attempts=1,
+        idle_timeout=0.02,
+    ))
+
+    assert chunks == [{"content": "正文"}, {"content": ""}]
+
+
+def test_model_stream_tool_call_chunk_does_not_replace_reasoning_or_content_activity() -> None:
+    tool_chunk = AIMessageChunk(
+        content="",
+        tool_call_chunks=[{
+            "name": "work_tracker",
+            "args": "{\"operation\":",
+            "id": "call-1",
+            "index": 0,
+        }],
+    )
+
+    def stream():
+        yield tool_chunk
+        time.sleep(0.08)
+        second_tool_chunk = AIMessageChunk(
+            content="",
+            tool_call_chunks=[{
+                "args": "\"set_status\"}",
+                "index": 0,
+            }],
+        )
+        yield second_tool_chunk
 
     with pytest.raises(ModelStreamRetryExhaustedError) as raised:
         list(stream_model_turn_with_retry(
             type("Llm", (), {"stream": lambda self, _messages: stream()})(),
             [],
             max_attempts=1,
-            idle_timeout=0.05,
+            idle_timeout=0.02,
         ))
 
+    assert isinstance(raised.value.__cause__, ModelStreamIdleTimeoutError)
+
+
+def test_model_stream_non_streaming_fallback_still_obeys_first_activity_timeout() -> None:
+    class NonStreamingLlm:
+        def _should_stream(self, **_kwargs):
+            return False
+
+        def stream(self, _messages):
+            time.sleep(0.08)
+            yield "非流式工具调用结果"
+
+    with pytest.raises(ModelStreamRetryExhaustedError) as raised:
+        list(stream_model_turn_with_retry(
+            NonStreamingLlm(),
+            [],
+            max_attempts=1,
+            idle_timeout=0.02,
+        ))
+
+    assert isinstance(raised.value.__cause__, ModelStreamIdleTimeoutError)
+
+
+def test_model_stream_first_activity_timeout_does_not_retry() -> None:
+    attempts = 0
+
+    class SilentLlm:
+        def stream(self, _messages):
+            nonlocal attempts
+            attempts += 1
+            threading.Event().wait(0.08)
+            yield "迟到正文"
+
+    with pytest.raises(ModelStreamRetryExhaustedError) as raised:
+        list(stream_model_turn_with_retry(
+            SilentLlm(),
+            [],
+            max_attempts=3,
+            retry_delay=0,
+            idle_timeout=0.02,
+        ))
+
+    assert attempts == 1
     assert isinstance(raised.value.__cause__, ModelStreamIdleTimeoutError)
 
 

@@ -1,14 +1,15 @@
 """
-执笔编剧 - 剧本编写
+执笔编剧 - 剧本/小说正文写作
 
-根据上下文与指导生成实际的剧本内容（对话、旁白、选择分支）
+根据项目 ``workspace_mode`` 生成 ARC 剧本场景或 Markdown 小说章节正文。
+模块内保留的 scene/chapter 命名属于历史兼容协议，不能据此推断用户术语。
 
  ### 格式规范 (.arc)：
   你必须严格遵守以下 .arc 语法规范：
   - **旁白**：使用 `[旁白]` 标记，后接描述文本。
     - **对话**：使用 `[角色名]` 标记，后接对话内容。
     - **分支选项**：使用 `<choice>` 包裹，内部使用 `<opt text="选项文本">` 定义分支。
-    - **场景设计说明**：在生成剧本正文前，使用 `<conception>` 标签记录简短、可执行的场景设计与连续性约束；不要记录内部推理过程。
+    - **正文单元设计说明**：生成剧本场景或小说章节前，使用 `<conception>` 标签记录简短、可执行的设计与连续性约束；不要记录内部推理过程。
     - **标签闭合**：所有标签（<choice>, <opt>）必须严格成对闭合，严禁交叉嵌套。
 """
 
@@ -351,6 +352,32 @@ class ScriptwriterAgent(SparkBaseAgent, SparkAgentExecutor):
             **kwargs,
         )
 
+    @staticmethod
+    def _build_length_instruction(segment_count: int | None, export_format: str) -> str:
+        """按创作模式解释历史 ``segment_count`` 参数，避免小说套用剧本话术。"""
+        is_novel = str(export_format or "").strip().lower() == "novel"
+        if segment_count is None or segment_count <= 0:
+            if is_novel:
+                return (
+                    "撰写完整的章节正文，直到当前叙事自然收束或形成必要转折；"
+                    "优先遵守 story tags 注入的章节字符软目标，不要人为缩短或硬截断。"
+                )
+            return (
+                "撰写完整的场景正文，直到当前戏剧行动自然收束或形成必要转折；"
+                "优先保证有效叙事单元和场景完整性，不要人为缩短或硬截断。"
+            )
+
+        if is_novel:
+            return (
+                f"本轮约写 {segment_count} 个叙事段落或推进段落，"
+                "这里的数量只是历史兼容参数的范围参考，不是对话轮数；"
+                "仍以章节完整性和 story tags 注入的章节篇幅软目标为准。"
+            )
+        return (
+            f"本轮约写 {segment_count} 个有效叙事单元（对白、动作、旁白或明确转折），"
+            "这里的数量只是范围参考，不等同于固定对话轮数；仍以场景完整性和戏剧节奏为准。"
+        )
+
     def write_script(
         self,
         context: str,
@@ -381,12 +408,7 @@ class ScriptwriterAgent(SparkBaseAgent, SparkAgentExecutor):
 
         style_profile_text = format_style_profile_for_prompt(style_profile)
 
-        if segment_count is None or segment_count <= 0:
-            length_instruction = (
-                "撰写完整的场景后续，直到达成逻辑上的结论或转折。不要人为地缩短内容。"
-            )
-        else:
-            length_instruction = f"生成大约 {segment_count} 轮对话。"
+        length_instruction = self._build_length_instruction(segment_count, export_format)
 
         anchor_instruction = ""
         if last_node_text:
@@ -482,12 +504,7 @@ class ScriptwriterAgent(SparkBaseAgent, SparkAgentExecutor):
 
         style_profile_text = format_style_profile_for_prompt(style_profile)
 
-        if segment_count is None or segment_count <= 0:
-            length_instruction = (
-                "撰写完整的场景后续，直到达成逻辑上的结论或转折。不要人为地缩短内容。"
-            )
-        else:
-            length_instruction = f"生成大约 {segment_count} 轮对话。"
+        length_instruction = self._build_length_instruction(segment_count, export_format)
 
         anchor_instruction = ""
         if last_node_text:

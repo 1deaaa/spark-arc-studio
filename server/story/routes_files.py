@@ -17,8 +17,9 @@ from core.utils import (
 from story.arc_parser import serialize_to_arc
 from story.file_naming import (
     build_display_story_path,
-    build_story_filename,
+    build_story_filename,
     batch_rename_story_files,
+    batch_rename_story_directories_with_order,
     next_story_order,
     parse_chapter_identity_from_title,
     parse_story_filename,
@@ -55,6 +56,8 @@ def _resolve_story_file_path(stories_path: str, path: str) -> tuple[Optional[str
 def _batch_story_renames(rename_pairs: list[tuple[str, str]]) -> None:
     """兼容旧路由入口，统一复用故事文件事务层。"""
     batch_rename_story_files(rename_pairs)
+
+
 
 def _record_story_memory_after_story_save(
     *,
@@ -549,20 +552,36 @@ async def rename_file_or_folder(data: FileOperation, user: dict = Depends(get_cu
     try:
         user_id = str(user['user_id'])
         project_name = normalize_project_name(data.projectName)
-        old_path = data.sourcePath or data.oldPath or data.path or getattr(data, 'source', None)
-        new_path = data.targetPath or data.newPath or getattr(data, 'target', None)
+        old_path = data.sourcePath or data.oldPath or data.path or getattr(data, 'source', None)
+        new_path = data.targetPath or data.newPath or getattr(data, 'target', None)
         if not project_name or not old_path or not new_path:
             return JSONResponse(status_code=400, content={"success": False, "message": "缺少参数"})
 
         stories_path = ensure_project_stories_directory(user_id, project_name)
         source_path = os.path.join(stories_path, old_path)
         target_path = os.path.join(stories_path, new_path)
-        if os.path.isdir(source_path):
-            target_dir = os.path.dirname(target_path)
-            if target_dir:
-                os.makedirs(target_dir, exist_ok=True)
-            shutil.move(source_path, target_path)
-            return {"success": True, "message": "重命名成功"}
+        if os.path.isdir(source_path):
+            # 根目录下的章节/分卷目录名称会被 stories_order.json 引用，
+            # 必须和目录重命名放在同一条可回滚链路中。
+            if os.path.normcase(os.path.dirname(os.path.normpath(source_path))) == os.path.normcase(
+                os.path.abspath(os.path.normpath(stories_path))
+            ):
+                order_path = os.path.join(get_project_path(user_id, project_name), 'stories_order.json')
+                batch_rename_story_directories_with_order(
+                    [(source_path, target_path)],
+                    stories_path=stories_path,
+                    order_path=order_path,
+                    order_rename_map={
+                        os.path.basename(os.path.normpath(source_path)):
+                        os.path.basename(os.path.normpath(target_path)),
+                    },
+                )
+            else:
+                target_dir = os.path.dirname(target_path)
+                if target_dir:
+                    os.makedirs(target_dir, exist_ok=True)
+                shutil.move(source_path, target_path)
+            return {"success": True, "message": "重命名成功"}
 
         resolved_source_path, _, parsed = resolve_story_file_path(stories_path, old_path)
         if resolved_source_path and parsed:

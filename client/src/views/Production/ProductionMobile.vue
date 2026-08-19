@@ -234,6 +234,7 @@ import ConditionsEditor from '../../components/dlg-editor/ConditionsEditor.vue';
 import EffectsEditor from '../../components/dlg-editor/EffectsEditor.vue';
 import { useStoryFileOptions } from '../../composables/useStoryFileOptions';
 import { getSceneRuntimeSummary, type SceneContentKind } from '../../utils/sceneContentRuntime';
+import { storyTerminologyKey } from '../../utils/storyTerminology';
 import {
   NOVEL_SUBMISSION_PLATFORMS,
   downloadNovelSubmissionExport,
@@ -272,19 +273,19 @@ const createOptions = computed<DropdownOption[]>(() => {
   if (isNovelMode.value) {
     return [{
       key: 'chapter',
-      label: t('views.production.mobile.createChapter'),
+      label: t(storyTerminologyKey(workspaceMode.value, 'story', 'create')),
       icon: () => h(NIcon, null, { default: () => h(FilePlus2) }),
     }];
   }
   return [
     {
       key: 'scene',
-      label: t('views.production.mobile.createScene'),
+      label: t(storyTerminologyKey(workspaceMode.value, 'story', 'create')),
       icon: () => h(NIcon, null, { default: () => h(FilePlus2) }),
     },
     {
       key: 'chapter',
-      label: t('views.production.mobile.createChapter'),
+      label: t(storyTerminologyKey(workspaceMode.value, 'folder', 'create')),
       icon: () => h(NIcon, null, { default: () => h(FolderPlus) }),
     },
   ];
@@ -415,16 +416,9 @@ async function handleCreate(key: string | number) {
     const isChapterFolder = key === 'chapter' && !isNovelMode.value;
     const type = isChapterFolder ? 'folder' : 'story';
     const parentDir = isChapterFolder ? '' : currentParentDir();
-    const title = isChapterFolder
-      ? t('views.production.mobile.createChapter')
-      : isNovelMode.value
-        ? t('views.production.mobile.createChapter')
-        : t('views.production.mobile.createScene');
-    const promptMessage = isChapterFolder
-      ? t('views.production.mobile.createChapterPrompt')
-      : isNovelMode.value
-        ? t('components.fileExplorer.promptMessageStoryNovel')
-        : t('views.production.mobile.createScenePrompt');
+    const nodeType = isChapterFolder ? 'folder' : 'story';
+    const title = t(storyTerminologyKey(workspaceMode.value, nodeType, 'promptTitle'));
+    const promptMessage = t(storyTerminologyKey(workspaceMode.value, nodeType, 'promptMessage'));
     const createdPath = await fileStore.createFile(type, parentDir, { title, message: promptMessage });
     if (createdPath && type === 'story') {
       await fileStore.setCurrentFile(projectId.value, createdPath);

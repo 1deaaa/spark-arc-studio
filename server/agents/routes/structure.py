@@ -126,6 +126,7 @@ async def generate_synopsis_stream_ai(
         style_profile=data.style_profile if data.style_profile is not None else project_style_profile,
         length_hint=length_hint,
         story_tags=story_tags_hint,
+        workspace_mode=story_tags.get("workspace_mode"),
     )
     stop_event = threading.Event()
 
@@ -228,6 +229,7 @@ async def generate_beat_sheet_stream_ai(
         style_profile=project_style_profile,
         length_hint=length_hint,
         story_tags=story_tags_hint,
+        workspace_mode=story_tags.get("workspace_mode"),
     )
     stop_event = threading.Event()
 
@@ -295,6 +297,7 @@ async def generate_outline_stream_ai(
         beat_sheet=beat_sheet,
         style_profile=style_profile if style_profile is not None else project_style_profile,
         story_tags=story_tags_hint,
+        workspace_mode=story_tags.get("workspace_mode"),
     )
     stop_event = threading.Event()
 

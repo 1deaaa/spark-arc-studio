@@ -565,9 +565,14 @@ function formatToolTraceLabel(trace: any, resolvedStatus?: string) {
   const status = resolvedStatus ?? String(trace?.status || 'finished').trim();
   const isRunning = status === 'running' || status === 'started';
   const isFailed = status === 'failed';
+  const isCancelled = status === 'cancelled';
   const prefix = isRunning
     ? t('components.chatMessageList.toolStatus.running')
-    : (isFailed ? (trace?.message || t('components.chatMessageList.toolStatus.failed')) : t('components.chatMessageList.toolStatus.finished'));
+    : isFailed
+      ? (trace?.message || t('components.chatMessageList.toolStatus.failed'))
+      : isCancelled
+        ? t('components.chatMessageList.toolStatus.cancelled')
+        : t('components.chatMessageList.toolStatus.finished');
 
   let label: string;
   if (toolName === 'delegate_task' && trace?.target_agent) {

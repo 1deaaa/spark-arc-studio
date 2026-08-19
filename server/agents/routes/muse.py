@@ -253,10 +253,11 @@ async def muse_expand(request: Request, data: MuseRequest, user: dict = Depends(
     """
     raw_input = (data.inspiration or "").strip()
     user_id = str(user['user_id'])
+
     inspiration_id = data.inspirationId
 
-    # 读取项目级故事主题参数，注入灵感扩展上下文
-    story_tags = get_project_story_tags(user_id, data.projectName or "")
+    # 有项目时按项目模式解释作品规模；无项目入口保留剧本模式兼容默认值。
+    story_tags = get_project_story_tags(user_id, data.projectName or "") if data.projectName else {}
     story_tags_hint = build_story_tags_hint(story_tags)
 
     try:
@@ -276,6 +277,7 @@ async def muse_expand(request: Request, data: MuseRequest, user: dict = Depends(
         tones=data.tones,
         worldviews=data.worldviews,
         length_hint=data.lengthHint,
+        workspace_mode=story_tags.get("workspace_mode"),
         story_tags=story_tags_hint,
     )
     stop_event = threading.Event()
@@ -328,6 +330,10 @@ async def muse_generate_and_save(request: Request, data: MuseRequest, user: dict
     raw_input = (data.inspiration or "").strip()
     user_id = str(user['user_id'])
 
+    # 该入口允许没有项目上下文；有项目时仍按项目模式解释作品规模。
+    story_tags = get_project_story_tags(user_id, data.projectName or "") if data.projectName else {}
+    story_tags_hint = build_story_tags_hint(story_tags)
+
     try:
         muse = MuseAgent(user_id)
     except ValueError as e:
@@ -343,6 +349,8 @@ async def muse_generate_and_save(request: Request, data: MuseRequest, user: dict
         tones=data.tones,
         worldviews=data.worldviews,
         length_hint=data.lengthHint,
+        workspace_mode=story_tags.get("workspace_mode"),
+        story_tags=story_tags_hint,
     )
     stop_event = threading.Event()
 

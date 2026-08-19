@@ -12,6 +12,7 @@ import { getStyleProfile } from '../services/storyService';
 import { fetchBeatSheet } from '../services/aiService';
 import { parseOutlineMarkup, parseSynopsisMarkup } from '../utils/markupSerializer';
 import { useProjectStore } from '../components/stores/projectStore';
+import { useSceneStore } from '../components/stores/sceneStore';
 import bus from '../eventBus';
 import { i18n } from '@/i18n';
 import { createStreamingTask, isAbortLikeError } from '@/utils/streamingRuntime';
@@ -32,7 +33,9 @@ type StructureAdoptionPayload = {
 type StructureCacheSnapshot = {
     context: string;
     guidance: string;
+    // 兼容旧缓存/API：chapterCount 实际表示当前模式下的故事分组数（剧幕数/分卷数）。
     chapterCount: number;
+    // 兼容旧缓存/API：sceneCount 实际表示每个故事分组的正文单元数（场景数/章节数）。
     sceneCount: number;
     lengthType: string;
     currentOutline: OutlineData | null;
@@ -43,9 +46,24 @@ function getErrorMessage(error: unknown): string {
     return String(error || '未知错误');
 }
 
-const DEFAULT_CHAPTER_COUNT = 5;
-const DEFAULT_SCENE_COUNT = 3;
 const DEFAULT_LENGTH_TYPE = 'short';
+
+/**
+ * 预设值按模式表达不同层级：剧本是“剧幕 × 每幕场景”，小说是“分卷 × 每卷章节”。
+ * 请求仍使用 chapterCount/sceneCountPerChapter 这两个历史字段，不能据字段名推断界面语义。
+ */
+const PRESET_COUNTS = {
+    script: {
+        short: { group: 1, unit: 5 },
+        medium: { group: 3, unit: 8 },
+        long: { group: 5, unit: 12 },
+    },
+    novel: {
+        short: { group: 1, unit: 8 },
+        medium: { group: 3, unit: 12 },
+        long: { group: 5, unit: 20 },
+    },
+} as const;
 
 function resolveLengthTypeFromHint(raw: unknown): string | null {
     const value = String(raw || '').trim();
@@ -71,6 +89,7 @@ function resolveEstimatedChapterCount(raw: unknown): number | null {
 
 export function useStructureLogic() {
     const projectStore = useProjectStore();
+    const sceneStore = useSceneStore();
     const message = useMessage();
     const dialog = useDialog();
 
@@ -78,18 +97,23 @@ export function useStructureLogic() {
     const context = ref('');
     const guidance = ref('');
     const isLoading = ref(false);
+    const workspaceMode = computed(() => sceneStore.workspaceMode === 'novel' ? 'novel' : 'script');
+    const defaultPresetCounts = () => PRESET_COUNTS[workspaceMode.value].short;
+    const currentDefaults = defaultPresetCounts();
     const currentOutline = ref<OutlineData | null>(null);
     const outlineHistoryRef = ref<{ refresh?: () => void } | null>(null);
-    const chapterCount = ref(DEFAULT_CHAPTER_COUNT);
-    const sceneCount = ref(DEFAULT_SCENE_COUNT);
+    // 兼容旧请求字段 chapterCount；剧本模式显示为剧幕数，小说模式显示为分卷数。
+    const chapterCount = ref<number>(currentDefaults.group);
+    // 兼容旧请求字段 sceneCountPerChapter；剧本模式显示为每幕场景数，小说模式显示为每卷章节数。
+    const sceneCount = ref<number>(currentDefaults.unit);
     const lengthType = ref(DEFAULT_LENGTH_TYPE);
 
     const lengthOptions = computed(() => [
-        { label: i18n.global.t('views.structure.lengthOptions.short'), value: 'short' },
-        { label: i18n.global.t('views.structure.lengthOptions.medium'), value: 'medium' },
-        { label: i18n.global.t('views.structure.lengthOptions.long'), value: 'long' },
-        { label: i18n.global.t('views.structure.lengthOptions.unlimited'), value: 'unlimited' },
-        { label: i18n.global.t('views.structure.lengthOptions.custom'), value: 'custom' }
+        { label: i18n.global.t(`views.structure.lengthOptions.${workspaceMode.value}.short`), value: 'short' },
+        { label: i18n.global.t(`views.structure.lengthOptions.${workspaceMode.value}.medium`), value: 'medium' },
+        { label: i18n.global.t(`views.structure.lengthOptions.${workspaceMode.value}.long`), value: 'long' },
+        { label: i18n.global.t(`views.structure.lengthOptions.${workspaceMode.value}.unlimited`), value: 'unlimited' },
+        { label: i18n.global.t(`views.structure.lengthOptions.${workspaceMode.value}.custom`), value: 'custom' }
     ]);
 
     function buildStructureCacheKey() {
@@ -111,8 +135,9 @@ export function useStructureLogic() {
         if (!snapshot) return;
         context.value = snapshot.context || '';
         guidance.value = snapshot.guidance || '';
-        chapterCount.value = Number.isFinite(Number(snapshot.chapterCount)) ? Number(snapshot.chapterCount) : DEFAULT_CHAPTER_COUNT;
-        sceneCount.value = Number.isFinite(Number(snapshot.sceneCount)) ? Number(snapshot.sceneCount) : DEFAULT_SCENE_COUNT;
+        const defaults = defaultPresetCounts();
+        chapterCount.value = Number.isFinite(Number(snapshot.chapterCount)) ? Number(snapshot.chapterCount) : defaults.group;
+        sceneCount.value = Number.isFinite(Number(snapshot.sceneCount)) ? Number(snapshot.sceneCount) : defaults.unit;
         lengthType.value = snapshot.lengthType || DEFAULT_LENGTH_TYPE;
         currentOutline.value = snapshot.currentOutline ? JSON.parse(JSON.stringify(snapshot.currentOutline)) as OutlineData : null;
     }
@@ -125,8 +150,8 @@ export function useStructureLogic() {
     function isStructureLengthPristine() {
         return (
             lengthType.value === DEFAULT_LENGTH_TYPE
-            && chapterCount.value === DEFAULT_CHAPTER_COUNT
-            && sceneCount.value === DEFAULT_SCENE_COUNT
+            && chapterCount.value === defaultPresetCounts().group
+            && sceneCount.value === defaultPresetCounts().unit
         );
     }
 
@@ -148,19 +173,16 @@ export function useStructureLogic() {
         }
     }
 
-    watch(lengthType, (newVal) => {
-        if (newVal === 'short') {
-            chapterCount.value = DEFAULT_CHAPTER_COUNT;
-            sceneCount.value = DEFAULT_SCENE_COUNT;
-        } else if (newVal === 'medium') {
-            chapterCount.value = 10;
-            sceneCount.value = 4;
-        } else if (newVal === 'long') {
-            chapterCount.value = 20;
-            sceneCount.value = 5;
-        } else if (newVal === 'unlimited') {
+    watch([lengthType, workspaceMode], ([newVal, mode]) => {
+        if (newVal === 'unlimited') {
             chapterCount.value = 0;
             sceneCount.value = 0;
+            return;
+        }
+        if (newVal === 'short' || newVal === 'medium' || newVal === 'long') {
+            const preset = PRESET_COUNTS[mode][newVal];
+            chapterCount.value = preset.group;
+            sceneCount.value = preset.unit;
         }
     });
 
@@ -234,6 +256,7 @@ export function useStructureLogic() {
                     sceneCountPerChapter: lengthType.value === 'unlimited' ? "不限" : sceneCount.value,
                     beatSheet: beatSheet,
                     styleProfile,
+                    // 后端字段名保持兼容；具体语义由 workspaceMode 解释为剧幕/场景或分卷/章节。
                     signal: task.signal,
                     onChunk: (chunk) => task.push(chunk, '文案策划 正在规划故事结构...')
                 }
@@ -327,8 +350,9 @@ export function useStructureLogic() {
         guidance.value = '';
         currentOutline.value = null;
         lengthType.value = DEFAULT_LENGTH_TYPE;
-        chapterCount.value = DEFAULT_CHAPTER_COUNT;
-        sceneCount.value = DEFAULT_SCENE_COUNT;
+        const defaults = defaultPresetCounts();
+        chapterCount.value = defaults.group;
+        sceneCount.value = defaults.unit;
 
         if (newProject) {
             applyStructureSnapshot(loadCreativeCache<StructureCacheSnapshot>(buildStructureCacheKey()));
@@ -424,6 +448,7 @@ export function useStructureLogic() {
         chapterCount,
         sceneCount,
         lengthType,
+        workspaceMode,
         lengthOptions,
         handleGenerateOutline,
         handleOutlineUpdate,

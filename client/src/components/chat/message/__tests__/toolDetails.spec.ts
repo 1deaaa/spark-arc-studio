@@ -53,4 +53,20 @@ describe('工具详情展示适配', () => {
     expect(patch.sections[0].entries.map(item => item.key)).toEqual(['search_text', 'replace_text']);
     expect(search.sections[0].entries.map(item => item.key)).toEqual(['provider', 'query']);
   });
+
+  it('批量故事工具允许展开操作清单和结果', () => {
+    const details = adaptToolDetails('batch_rename_chapters', {
+      tool_input: {
+        renames: [{ path: '一 · 开端', new_name: '序幕' }],
+        internal_state: '不能展示',
+      },
+      tool_result: '已同步 stories_order.json',
+    });
+
+    expect(details.expandable).toBe(true);
+    expect(details.sections.map(section => section.key)).toEqual(['input', 'result']);
+    expect(details.sections[0].entries.map(item => item.key)).toEqual(['renames']);
+    expect(details.sections[0].entries[0].text).toContain('一 · 开端');
+    expect(details.sections[0].entries[0].text).not.toContain('不能展示');
+  });
 });

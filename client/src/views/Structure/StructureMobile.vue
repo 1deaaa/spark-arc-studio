@@ -26,7 +26,7 @@
       />
     </div>
     
-    <!-- 章节数量 + 生成 -->
+    <!-- 故事分组数量 + 生成；chapterCount/sceneCount 是历史兼容字段，界面按模式显示正式术语。 -->
     <div class="flow-section control-section">
       <div class="length-preset-group">
         <div class="setting-label-row">
@@ -61,12 +61,12 @@
 
       <div class="custom-setting-grid" v-if="lengthType === 'custom'">
         <label class="custom-setting-card">
-          <span class="custom-setting-label">{{ t('views.structure.mobile.plannedChapterCount') }}</span>
+          <span class="custom-setting-label">{{ t(`views.structure.mobile.${workspaceMode}.plannedGroupCount`) }}</span>
           <n-input-number v-model:value="chapterCount" :min="1" :max="50" size="small" class="compact-number-input" />
         </label>
         <label class="custom-setting-card">
-          <span class="custom-setting-label">{{ t('views.structure.mobile.scenesPerChapter') }}</span>
-          <n-input-number v-model:value="sceneCount" :min="1" :max="10" size="small" class="compact-number-input" />
+          <span class="custom-setting-label">{{ t(`views.structure.mobile.${workspaceMode}.unitsPerGroup`) }}</span>
+          <n-input-number v-model:value="sceneCount" :min="1" :max="30" size="small" class="compact-number-input" />
         </label>
       </div>
       
@@ -88,12 +88,12 @@
     <div class="flow-section" v-if="outlineChapters.length > 0">
       <div class="section-header">
         <n-icon :component="Files" size="18" />
-        <span>{{ t('views.structure.mobile.chapterOutline') }}</span>
-        <SparkTag type="info" size="small">{{ t('views.structure.mobile.chapterCountLabel', { count: outlineChapters.length }) }}</SparkTag>
+        <span>{{ t(`views.structure.mobile.${workspaceMode}.groupOutline`) }}</span>
+        <SparkTag type="info" size="small">{{ t(`views.structure.mobile.${workspaceMode}.groupCountLabel`, { count: outlineChapters.length }) }}</SparkTag>
         <div class="header-actions">
           <n-button size="tiny" type="primary" secondary @click="openAutoWrite">
             <template #icon><n-icon :component="ArrowRight" /></template>
-            {{ t('views.structure.desktop.startAutoWrite') }}
+            {{ t(structureKey('startAutoWrite')) }}
           </n-button>
         </div>
       </div>
@@ -106,14 +106,14 @@
           @click="editChapter(chapter, idx)"
         >
           <div class="chapter-header">
-            <SparkTag type="primary" size="small">Ch.{{ chapter.chapter || (Number(idx) + 1) }}</SparkTag>
+            <SparkTag type="primary" size="small">{{ t(`views.structure.mobile.${workspaceMode}.groupIndexLabel`) }} {{ chapter.chapter || (Number(idx) + 1) }}</SparkTag>
             <span class="chapter-title">{{ chapter.title || t('views.structure.mobile.untitled') }}</span>
           </div>
           <div class="chapter-summary">{{ chapter.description || '' }}</div>
         </div>
         
         <div v-if="outlineChapters.length > 5" class="more-hint" @click="showFullList = true">
-          {{ t('views.structure.mobile.viewAllChapters', { count: outlineChapters.length }) }}
+          {{ t(`views.structure.mobile.${workspaceMode}.viewAllGroups`, { count: outlineChapters.length }) }}
         </div>
       </div>
       
@@ -135,7 +135,7 @@
     
     <!-- 完整列表抽屉 -->
     <n-drawer v-model:show="showFullList" placement="bottom" height="85%">
-      <n-drawer-content :title="t('views.structure.mobile.allChapters')" closable>
+      <n-drawer-content :title="t(`views.structure.mobile.${workspaceMode}.allGroups`)" closable>
         <div class="full-chapter-list">
           <div 
             v-for="(chapter, idx) in outlineChapters" 
@@ -143,13 +143,13 @@
             class="chapter-card"
           >
             <div class="chapter-header">
-              <SparkTag type="primary" size="small">Ch.{{ chapter.chapter || (Number(idx) + 1) }}</SparkTag>
+              <SparkTag type="primary" size="small">{{ t(`views.structure.mobile.${workspaceMode}.groupIndexLabel`) }} {{ chapter.chapter || (Number(idx) + 1) }}</SparkTag>
               <span class="chapter-title">{{ chapter.title || t('views.structure.mobile.untitled') }}</span>
             </div>
             <MobileTextArea 
               v-model:value="chapter.description" 
               customClass="chapter-input"
-              :title="t('views.structure.mobile.chapterOutline')"
+              :title="t(`views.structure.mobile.${workspaceMode}.groupOutline`)"
               :autosize="{ minRows: 6, maxRows: 25 }"
             />
           </div>
@@ -200,38 +200,42 @@ const {
   lengthType,
   handleGenerateOutline,
   handleOutlineHistorySelect,
-  handleOutlineRestore
+  handleOutlineRestore,
+  workspaceMode,
 } = useStructureLogic();
 
 const outlineChapters = computed(() => {
   return currentOutline?.value?.nodes || [];
 });
 
+// outlineChapters 是大纲数据中的历史变量名；用户界面按模式显示为剧幕或分卷。
+const structureKey = (variant: string) => `views.structure.mobile.${workspaceMode.value}.${variant}`;
+
 const mobileLengthOptions = computed(() => [
   {
     value: 'short',
     label: t('views.structure.mobile.lengthPresetOptions.short'),
-    description: t('views.structure.mobile.lengthPresetDescriptions.short'),
+    description: t(structureKey('lengthPresetDescriptions.short')),
   },
   {
     value: 'medium',
     label: t('views.structure.mobile.lengthPresetOptions.medium'),
-    description: t('views.structure.mobile.lengthPresetDescriptions.medium'),
+    description: t(structureKey('lengthPresetDescriptions.medium')),
   },
   {
     value: 'long',
     label: t('views.structure.mobile.lengthPresetOptions.long'),
-    description: t('views.structure.mobile.lengthPresetDescriptions.long'),
+    description: t(structureKey('lengthPresetDescriptions.long')),
   },
   {
     value: 'unlimited',
     label: t('views.structure.mobile.lengthPresetOptions.unlimited'),
-    description: t('views.structure.mobile.lengthPresetDescriptions.unlimited'),
+    description: t(structureKey('lengthPresetDescriptions.unlimited')),
   },
   {
     value: 'custom',
     label: t('views.structure.mobile.lengthPresetOptions.custom'),
-    description: t('views.structure.mobile.lengthPresetDescriptions.custom'),
+    description: t(structureKey('lengthPresetDescriptions.custom')),
   },
 ]);
 

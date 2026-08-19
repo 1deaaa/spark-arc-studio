@@ -26,6 +26,9 @@ from agents.tools.muse import (
 from agents.tools.pipeline import complete_pipeline_step
 from agents.tools.research import graph_rag_tool
 from agents.tools.scriptwriter import (
+    batch_rename_chapters,
+    batch_rename_scenes,
+    batch_update_story_metadata,
     create_chapter,
     create_or_rewrite_script,
     organize_scenes_to_chapter,
@@ -117,6 +120,9 @@ SCRIPTWRITER_BASE_TOOLS = [
     prepare_script_creation,
     create_chapter,
     create_or_rewrite_script,
+    batch_rename_chapters,
+    batch_rename_scenes,
+    batch_update_story_metadata,
     rename_chapter,
     rename_scene,
     reorder_chapters,
@@ -220,8 +226,18 @@ PIPELINE_PERSIST_TOOLS = [
     patch_synopsis,
     patch_beat_sheet,
     patch_outline,
+    update_project_story_tags,
+    create_chapter,
     create_or_rewrite_script,
     patch_script,
+    organize_scenes_to_chapter,
+    rename_chapter,
+    rename_scene,
+    reorder_chapters,
+    reorder_scenes,
+    batch_rename_chapters,
+    batch_rename_scenes,
+    batch_update_story_metadata,
 ]
 PIPELINE_PERSIST_TOOL_NAMES = frozenset(tool.name for tool in PIPELINE_PERSIST_TOOLS)
 ALL_TOOLS = (

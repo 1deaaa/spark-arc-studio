@@ -88,7 +88,7 @@ def test_reorder_chapters_includes_empty_numbered_chapter(monkeypatch, tmp_path:
         current_project_name.reset(project_token)
         current_user_id.reset(user_token)
 
-    assert "章节重排完成" in result
+    assert "剧幕重排完成" in result
     assert empty_chapter.is_dir()
     assert written_chapter.is_dir()
     order_data = json.loads((project / "stories_order.json").read_text(encoding="utf-8"))

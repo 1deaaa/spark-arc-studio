@@ -8,7 +8,7 @@
   graphrag_enabled: false
   attachment_index_enabled: true
   attachment_chunk_tokens: 64000  (附件分片 token 上限，等价于"按需读取"滑动窗口的窗口大小)
-  story_tags: {}  (项目级故事主题参数：创作模式/风格/题材/基调/世界观/人称/全书篇幅/单场篇幅)
+  story_tags: {}  (项目级故事主题参数：创作模式/风格/题材/基调/世界观/人称/全书篇幅/单个正文单元篇幅)
   active_inspiration_id: null  (当前生效的灵感 ID，用于追溯来源)
 """
 
@@ -46,8 +46,10 @@ _DEFAULT_SETTINGS: Dict[str, Any] = {
         "worldviews": [],        # 世界观（多选，如["修真"]）
         "pov": None,             # 人称视角（单选，如"第一人称"）
         "length_hint": None,     # 篇幅（单选，如"中篇"）
-        "scene_length_hint": "standard",  # 单场篇幅软目标（concise / standard / expanded）
-        "scene_target_chars": None,  # 单场目标正文字符数；None 表示仅使用档位
+        # 以下 scene_* 键是历史兼容字段：按 workspace_mode 解释为剧本场景或小说章节，
+        # 不要按字段名把小说章节误解成剧本场景；改名会破坏已有设置文件。
+        "scene_length_hint": "standard",  # story_unit 篇幅软目标（concise / standard / expanded）
+        "scene_target_chars": None,  # story_unit 目标正文字符数；None 表示仅使用档位
     },
     # 当前生效的灵感 ID（可选，用于追溯项目参数的来源灵感）
     "active_inspiration_id": None,
@@ -94,7 +96,7 @@ _SCENE_LENGTH_HINT_ALIASES = {
 
 
 def normalize_scene_length_hint(value: Any) -> str:
-    """把界面或模型传入的单场篇幅表达规范为稳定枚举。"""
+    """把兼容的 scene_length_hint 值规范为稳定的 story_unit 篇幅枚举。"""
     key = str(value or "standard").strip().lower()
     return _SCENE_LENGTH_HINT_ALIASES.get(key, "standard")
 
@@ -104,7 +106,7 @@ SCENE_TARGET_CHARS_MAX = 100000
 
 
 def normalize_scene_target_chars(value: Any) -> Optional[int]:
-    """规范化单场目标正文字符数；空值表示关闭具体字数目标。"""
+    """规范化兼容的 story_unit 目标正文字符数；空值表示关闭具体目标。"""
     if value is None or str(value).strip() == "":
         return None
     try:
@@ -520,6 +522,7 @@ def get_project_story_tags(user_id: str, project_name: str) -> Dict[str, Any]:
         "worldviews": list[str],
         "pov": str | None,
         "length_hint": str | None,
+        # scene_* 为历史兼容字段，按 workspace_mode 表示剧本场景或小说章节。
         "scene_length_hint": "concise" | "standard" | "expanded",
         "scene_target_chars": int | None,
     }
@@ -569,8 +572,9 @@ def set_project_story_tags(
         worldviews: 世界观（多选，如["修真"]）
         pov: 人称视角（单选，如"第一人称"）
         length_hint: 篇幅（单选，如"中篇"）
-        scene_length_hint: 单场篇幅软目标（concise / standard / expanded）
-        scene_target_chars: 单场目标正文字符数；传入 None 可清除具体目标
+        scene_length_hint: 历史兼容的 story_unit 篇幅软目标（concise / standard / expanded）；
+            按 workspace_mode 解释为剧本场景或小说章节
+        scene_target_chars: 历史兼容的 story_unit 目标正文字符数；传入 None 可清除具体目标
         workspace_mode: 创作模式只读兼容参数；创建项目后会被忽略
         active_inspiration_id: 当前生效的灵感 ID（可选）
     

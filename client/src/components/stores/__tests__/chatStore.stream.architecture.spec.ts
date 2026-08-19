@@ -89,7 +89,7 @@ describe('chatStore NDJSON 消费契约', () => {
     expect(session.backgroundTaskStatus).toBeNull();
   });
 
-  it('显式取消成功后保持锁定直到服务端终态', async () => {
+  it('显式取消成功后立即中断本地流并解除发送锁', async () => {
     vi.mocked(cancelChatTask).mockResolvedValueOnce({ success: true });
     vi.mocked(getChatTaskStatus).mockResolvedValueOnce({ hasTask: true, status: 'cancelled' });
     const store = useChatStore();
@@ -101,9 +101,9 @@ describe('chatStore NDJSON 消费契约', () => {
     await store.cancelSessionRequest(session.id);
 
     expect(cancelChatTask).toHaveBeenCalledWith('测试项目', 'agent_director', 'global');
-    expect(session.abortController.signal.aborted).toBe(false);
-    expect(session.sending).toBe(true);
-    expect(session.backgroundTaskStatus).toBe('running');
+    expect(session.abortController.signal.aborted).toBe(true);
+    expect(session.sending).toBe(false);
+    expect(session.backgroundTaskStatus).toBeNull();
 
     await vi.advanceTimersByTimeAsync(250);
     expect(session.sending).toBe(false);
@@ -123,12 +123,12 @@ describe('chatStore NDJSON 消费契约', () => {
     session.abortController = new AbortController();
 
     await store.cancelSessionRequest(session.id);
-    expect(session.sending).toBe(true);
-    expect(session.backgroundTaskStatus).toBe('running');
+    expect(session.sending).toBe(false);
+    expect(session.backgroundTaskStatus).toBeNull();
 
     await vi.advanceTimersByTimeAsync(250);
-    expect(session.sending).toBe(true);
-    expect(session.backgroundTaskStatus).toBe('running');
+    expect(session.sending).toBe(false);
+    expect(session.backgroundTaskStatus).toBeNull();
 
     await vi.advanceTimersByTimeAsync(500);
     expect(session.sending).toBe(false);
@@ -136,7 +136,7 @@ describe('chatStore NDJSON 消费契约', () => {
     expect(getChatHistory).toHaveBeenCalledWith('测试项目', 'agent_director', 'global', 80);
   });
 
-  it('取消后观察流稍晚收到 task_done cancelled 时可靠收口', async () => {
+  it('取消后立即收口本地状态且迟到 task_done 不会重新进入运行态', async () => {
     vi.mocked(cancelChatTask).mockResolvedValueOnce({ success: true });
     const store = useChatStore();
     const session = store.primarySession;
@@ -175,8 +175,8 @@ describe('chatStore NDJSON 消费契约', () => {
     );
 
     await store.cancelSessionRequest(session.id);
-    expect(session.sending).toBe(true);
-    expect(session.backgroundTaskStatus).toBe('running');
+    expect(session.sending).toBe(false);
+    expect(session.backgroundTaskStatus).toBeNull();
 
     streamController!.enqueue(new TextEncoder().encode(`${JSON.stringify({
       event: 'task_done',
@@ -188,7 +188,6 @@ describe('chatStore NDJSON 消费契约', () => {
       expect(session.backgroundTaskStatus).toBeNull();
     });
 
-    streamController!.close();
     await consumePromise;
     await vi.advanceTimersByTimeAsync(250);
   });
@@ -206,8 +205,8 @@ describe('chatStore NDJSON 消费契约', () => {
     await store.cancelSessionRequest(session.id);
 
     bus.off('toast', onToast);
-    expect(session.sending).toBe(true);
-    expect(session.backgroundTaskStatus).toBe('running');
+    expect(session.sending).toBe(false);
+    expect(session.backgroundTaskStatus).toBeNull();
     expect(toasts.at(-1)?.type).toBe('error');
   });
 

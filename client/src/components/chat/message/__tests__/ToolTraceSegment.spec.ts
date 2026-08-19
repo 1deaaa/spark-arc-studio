@@ -70,4 +70,44 @@ describe('工具调用详情组件', () => {
     expect(wrapper.find('.tool-detail-sections').text()).toContain('参数校验失败');
     expect(wrapper.find('.tool-detail-sections').text()).not.toContain('不应展示');
   });
+
+  it('旧任务板失败结果展示错误详情而不是空任务板', () => {
+    const wrapper = mount(ToolTraceSegment, {
+      props: {
+        segment: {
+          type: 'tool_trace',
+          tool_name: 'work_tracker',
+          status: 'failed',
+          tool_result: '任务板更新失败：operations[0] 缺少 item_id',
+        },
+        status: 'failed',
+        label: '任务板更新失败',
+        expanded: true,
+      },
+      global: {
+        plugins: [i18n],
+        stubs: { SparkCollapseTransition: CollapseStub, WorkTrackerBoard: true },
+      },
+    });
+
+    expect(wrapper.find('.tool-detail-sections').text()).toContain('operations[0] 缺少 item_id');
+    expect(wrapper.find('work-tracker-board-stub').exists()).toBe(false);
+  });
+
+  it('取消状态显示静止的取消图标', () => {
+    const wrapper = mount(ToolTraceSegment, {
+      props: {
+        segment: { type: 'tool_trace', tool_name: 'web_search', status: 'cancelled' },
+        status: 'cancelled',
+        label: '已取消联网搜索',
+      },
+      global: {
+        plugins: [i18n],
+        stubs: { SparkCollapseTransition: CollapseStub, WorkTrackerBoard: true },
+      },
+    });
+
+    expect(wrapper.find('.tool-trace-icon.is-cancelled').exists()).toBe(true);
+    expect(wrapper.find('.tool-trace-icon.is-running').exists()).toBe(false);
+  });
 });

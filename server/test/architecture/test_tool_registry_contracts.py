@@ -45,12 +45,42 @@ def test_core_agent_tool_boundaries() -> None:
         "prepare_script_creation",
         "create_chapter",
         "create_or_rewrite_script",
+        "batch_rename_chapters",
+        "batch_rename_scenes",
+        "batch_update_story_metadata",
         "patch_script",
         "update_project_story_tags",
     } <= tool_names("agent_scriptwriter")
     assert "delegate_task" not in tool_names("agent_scriptwriter")
     assert "delegate_task" not in tool_names("agent_critic")
     assert tool_names("agent_style") == set()
+
+
+def test_story_batch_tools_expose_single_purpose_schemas() -> None:
+    expected_fields = {
+        "batch_rename_chapters": {"renames"},
+        "batch_rename_scenes": {"renames"},
+        "batch_update_story_metadata": {"updates"},
+    }
+    for tool_name, fields in expected_fields.items():
+        tool = TOOLS_BY_NAME[tool_name]
+        assert set(tool.args_schema.model_fields) == fields
+
+
+def test_pipeline_persist_registry_includes_all_scriptwriter_writes() -> None:
+    from agents.tools.registry import PIPELINE_PERSIST_TOOL_NAMES
+
+    assert {
+        "create_chapter",
+        "organize_scenes_to_chapter",
+        "rename_chapter",
+        "rename_scene",
+        "reorder_chapters",
+        "reorder_scenes",
+        "batch_rename_chapters",
+        "batch_rename_scenes",
+        "batch_update_story_metadata",
+    } <= PIPELINE_PERSIST_TOOL_NAMES
 
 
 def test_showrunner_only_binds_continuity_tools_when_story_exists(monkeypatch, tmp_path) -> None:

@@ -939,7 +939,13 @@ async def create_platform(
             recharge_url=data.recharge_url,
         )
 
-        return {"success": True, "id": plat.id}
+        # 同时返回旧版 id 与明确的 platform_id，避免前端把 Base URL 当作身份。
+        return {
+            "success": True,
+            "id": plat.id,
+            "platform_id": plat.id,
+            "platform_key": plat.platform_key,
+        }
 
     except Exception as e:
 
@@ -2205,7 +2211,11 @@ async def admin_create_sys_platform(
 
         )
 
-        return {"success": True, "platform_id": plat.id}
+        return {
+            "success": True,
+            "platform_id": plat.id,
+            "platform_key": plat.platform_key,
+        }
 
     except Exception as e:
 

@@ -80,6 +80,7 @@ class WorldviewAgent(SparkBaseAgent, SparkAgentExecutor):
                 seed=context.get("seed", ""),
                 style_profile=context.get("style_profile"),
                 length_hint=context.get("length_hint"),
+                workspace_mode=context.get("workspace_mode"),
                 story_tags=context.get("story_tags", ""),
             )
         if operation == "character":
@@ -156,7 +157,12 @@ class WorldviewAgent(SparkBaseAgent, SparkAgentExecutor):
         }
 
     def build_worldview(
-        self, seed: str, style_profile: object = None, length_hint: str = None, story_tags: str = ""
+        self,
+        seed: str,
+        style_profile: object = None,
+        length_hint: str = None,
+        story_tags: str = "",
+        workspace_mode: str | None = None,
     ):
         """基于创意种子流式生成世界观文本。"""
         style_profile_text = "用户未提供参考风格档案。请根据世界观设定主题和氛围，自行选择最合适的文笔风格进行创作。"
@@ -172,7 +178,7 @@ class WorldviewAgent(SparkBaseAgent, SparkAgentExecutor):
             "lorebook",
             seed=seed,
             style_profile=style_profile_text,
-            length_hint=build_length_hint_str(length_hint),
+            length_hint=build_length_hint_str(length_hint, workspace_mode),
             story_tags=story_tags or "",
         )
 

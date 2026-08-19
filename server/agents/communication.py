@@ -240,6 +240,13 @@ def _model_chunk_has_content(chunk: Any) -> bool:
     return False
 
 
+def _model_chunk_has_activity(chunk: Any) -> bool:
+    """判断模型增量是否已经离开前端的“思考中”占位阶段。"""
+    # 用户约定只以 reasoning/content 文本作为首个有效活动。工具参数碎片可能
+    # 在上游半途卡死，不能借此永久解除 60 秒截止时间。
+    return _model_chunk_has_content(chunk)
+
+
 def _stream_model_turn_with_idle_watchdog(
     llm: Any,
     messages: List[Any],
@@ -287,6 +294,7 @@ def _stream_model_turn_with_idle_watchdog(
         if timeout_value is None
         else time.monotonic() + timeout_value
     )
+    first_activity_received = False
     try:
         while True:
             if is_stop_event_set(stop_event):
@@ -316,8 +324,11 @@ def _stream_model_turn_with_idle_watchdog(
                 continue
             if is_stop_event_set(stop_event):
                 return
-            if _model_chunk_has_content(payload) and deadline is not None:
-                deadline = event_at + timeout_value
+            if not first_activity_received and _model_chunk_has_activity(payload):
+                first_activity_received = True
+                # 60 秒只保护前端“思考中”占位阶段。首个有效事件到达后，
+                # 后续正文间隔、工具参数生成和工具执行时长均不由此 watchdog 限制。
+                deadline = None
             yield payload
     finally:
         # 超时或取消后不再接收这个轮次的迟到结果；上游 SDK 若仍阻塞，
@@ -345,6 +356,11 @@ def stream_model_turn_with_retry(
                 idle_timeout=idle_timeout,
             )
             return
+        except ModelStreamIdleTimeoutError as exc:
+            # 首次有效活动超时代表本次上游请求已经失去响应。继续自动重试会把
+            # 用户指定的 60 秒请求上限放大为多轮等待，因此直接结束当前轮次。
+            last_error = exc
+            break
         except Exception as exc:
             if is_stop_event_set(stop_event):
                 return
@@ -998,16 +1014,22 @@ class SparkBaseAgent:
                         has_args=bool(tool_args),
                         error=str(e),
                     )
-                    results.append(f"工具 {tool_name} 执行失败: {e}\n请检查参数格式后重新调用。")
+                    if tool_name == "work_tracker":
+                        from agents.tools.automation import format_work_tracker_validation_error
+
+                        tool_error_text = format_work_tracker_validation_error(tool_args, e)
+                    else:
+                        tool_error_text = f"工具 {tool_name} 执行失败: {e}\n请检查参数格式后重新调用。"
+                    results.append(tool_error_text)
                     if sink is not None:
                         sink.put(build_tool_stream_event(
                             "tool_exec_failed",
                             tool_name,
                             source_agent=self.agent_id,
                             tool_call_key=tool_call_key,
-                            message="模型使用了错误的调用格式，正在尝试修正",
+                            message=get_tool_result_failure_message(tool_name, tool_error_text),
                             tool_input=tool_args,
-                            tool_error=str(e),
+                            tool_error=tool_error_text,
                         ))
             else:
                 results.append(f"未知工具: {tool_name}")

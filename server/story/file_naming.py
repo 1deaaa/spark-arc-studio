@@ -8,6 +8,10 @@ from collections.abc import Iterable, Mapping
 from typing import Any, Dict, Optional, Tuple
 
 
+# 兼容协议：chap/scene 是历史文件名元数据键，分别保存 story_group（外层
+# 物理文件夹）和 story_unit（内层正文文件）的稳定身份。它们不是用户业务
+# 术语；剧本模式的业务称谓是“剧幕/场景”，小说模式是“分卷/章节”。
+# 不要按键名推断层级，也不要为了调整显示称谓而改名，否则历史文件将无法解析。
 STORY_META_MARKER = ".__spark__"
 
 _CHINESE_DIGIT_VALUES = {
@@ -101,6 +105,12 @@ def _meta_int(meta: Dict[str, Any], key: str) -> Optional[int]:
 
 
 def parse_story_filename(filename: str) -> Optional[Dict[str, Any]]:
+    """解析正文文件名。
+
+    返回的 ``chapter_num``/``scene_num`` 字段沿用历史接口命名：它们只是
+    story_group/story_unit 的稳定元数据，不等同于当前模式下用户看到的
+    “剧幕/场景”或“分卷/章节”术语。
+    """
     ext = os.path.splitext(filename)[1].lower()
     if ext not in {".arc", ".md"}:
         return None
@@ -146,6 +156,7 @@ def build_story_filename(
     group: Optional[str] = None,
     free: bool = False,
 ) -> str:
+    """构造正文文件名，并保留历史 chap/scene/order 元数据键。"""
     safe_display_name = sanitize_story_display_name(display_name)
     tokens: list[str] = []
     if chapter_num is not None:
@@ -304,13 +315,14 @@ def resolve_chapter_directory(
     *,
     chapter_num: Optional[int] = None,
 ) -> str:
-    """优先复用同编号章节目录，避免标题变化后生成重复文件夹。"""
+    """解析并复用 story_group 物理文件夹，兼容历史 chapter 命名。"""
     safe_name = str(chapter_dir_name or "").strip().replace("\\", "_").replace("/", "_")
     exact_path = os.path.join(stories_path, safe_name) if safe_name else stories_path
     if os.path.isdir(exact_path):
         return exact_path
 
-    # 章节目录本身没有稳定元数据；只有目录内正文文件的 chap 元数据可用于复用。
+    # story_group 文件夹本身没有稳定元数据；只有目录内正文文件的历史 chap
+    # 元数据可用于复用。chapter_dir_name 只是旧接口名，不代表用户术语。
     if chapter_num is not None and os.path.isdir(stories_path):
         matches: list[str] = []
         for item in os.listdir(stories_path):
@@ -516,6 +528,56 @@ def make_temp_story_filename(filename: str) -> str:
     return f"{stem}.__tmp__{uuid.uuid4().hex}{ext}"
 
 
+def load_stories_order(order_path: str) -> dict:
+    """读取章节/分卷显示顺序清单；文件不存在或损坏时返回空对象。"""
+    import json
+
+    if not os.path.exists(order_path):
+        return {}
+    try:
+        with open(order_path, "r", encoding="utf-8") as handle:
+            data = json.load(handle)
+        return data if isinstance(data, dict) else {}
+    except Exception:
+        return {}
+
+
+def rewrite_stories_order_names(value: object, rename_map: dict[str, str]) -> object:
+    """递归同步目录重命名对 stories_order.json 中名称引用的影响。"""
+    if isinstance(value, list):
+        return [rewrite_stories_order_names(item, rename_map) for item in value]
+    if isinstance(value, dict):
+        return {
+            rename_map.get(str(key), key): rewrite_stories_order_names(item, rename_map)
+            for key, item in value.items()
+        }
+    if isinstance(value, str):
+        return rename_map.get(value, value)
+    return value
+
+
+def write_stories_order_atomic(order_path: str, data: dict) -> None:
+    """以临时文件原子替换章节/分卷显示顺序清单。"""
+    import json
+
+    order_directory = os.path.dirname(os.path.abspath(order_path))
+    temporary_path = os.path.join(
+        order_directory,
+        make_temp_story_filename(os.path.basename(order_path)),
+    )
+    os.makedirs(order_directory, exist_ok=True)
+    try:
+        with open(temporary_path, "w", encoding="utf-8") as handle:
+            json.dump(data, handle, ensure_ascii=False, indent=2)
+        os.replace(temporary_path, order_path)
+    finally:
+        if os.path.exists(temporary_path):
+            try:
+                os.remove(temporary_path)
+            except OSError:
+                pass
+
+
 def _absolute_story_path(stories_path: str, path: str, *, allow_missing: bool = False) -> str:
     """解析并限制 stories 内的路径，拒绝目录穿越和 stories 本身。"""
     root = os.path.abspath(os.path.normpath(os.fspath(stories_path)))
@@ -637,6 +699,34 @@ def validate_story_identity_plan(
             )
 
 
+def validate_story_order_plan(
+    stories_path: str,
+    rename_pairs: list[tuple[str, str]],
+) -> None:
+    """校验批量元数据更新后的非空 order 在整个 stories 中保持唯一。"""
+    source_keys = {os.path.normcase(os.path.abspath(source)) for source, _ in rename_pairs}
+    occupied: dict[int, str] = {}
+
+    def _record(path: str) -> None:
+        parsed = parse_story_filename(os.path.basename(path))
+        order = (parsed or {}).get("order")
+        if order is None:
+            return
+        order = int(order)
+        previous = occupied.get(order)
+        if previous:
+            raise StoryRenameConflictError(
+                f"正文排序 order={order} 重复：{previous}、{path}"
+            )
+        occupied[order] = path
+
+    for _, existing_path, _ in list_story_files(stories_path):
+        if os.path.normcase(os.path.abspath(existing_path)) not in source_keys:
+            _record(existing_path)
+    for _, target in rename_pairs:
+        _record(target)
+
+
 def _transactional_rename_paths(
     rename_pairs: list[tuple[str, str]],
     *,
@@ -741,6 +831,37 @@ def batch_rename_story_directories(
     return _transactional_rename_paths(normalized, expect_directory=True)
 
 
+def batch_rename_story_directories_with_order(
+    rename_pairs: Iterable[tuple[str, str]],
+    *,
+    stories_path: str,
+    order_path: str,
+    order_rename_map: dict[str, str],
+) -> list[tuple[str, str]]:
+    """事务性重命名章节/分卷目录并同步 stories_order.json。"""
+    order_data = rewrite_stories_order_names(
+        load_stories_order(order_path),
+        order_rename_map,
+    )
+    renamed: list[tuple[str, str]] = []
+    try:
+        renamed = batch_rename_story_directories(rename_pairs, stories_path=stories_path)
+        write_stories_order_atomic(order_path, order_data)
+    except Exception:
+        if renamed:
+            try:
+                batch_rename_story_directories(
+                    [(target, source) for source, target in reversed(renamed)],
+                    stories_path=stories_path,
+                )
+            except Exception as rollback_exc:
+                raise StoryRenameTransactionError(
+                    f"章节目录与顺序清单操作失败，且回滚失败：{rollback_exc}"
+                ) from rollback_exc
+        raise
+    return renamed
+
+
 def batch_update_story_file_metadata(
     stories_path: str,
     updates: Iterable[Mapping[str, Any]],
@@ -795,4 +916,5 @@ def batch_update_story_file_metadata(
 
     normalized = _normalize_rename_pairs(rename_pairs, root_path=stories_path)
     validate_story_identity_plan(stories_path, normalized)
+    validate_story_order_plan(stories_path, normalized)
     return _transactional_rename_paths(normalized, expect_directory=False)

@@ -3,6 +3,12 @@ Outline Markup Parser (Server-side)
 
 将轻量级的 Outline Markup (大纲标记文本) 解析为结构化的字典/JSON树。
 支持纯粹的长文本散文推演，不强制 JSON 格式。
+
+兼容说明：本模块的 ``chapter``/``scene`` 节点类型、Chapter 标题和场景
+Markup 都是历史大纲协议名，不是用户界面的固定术语。项目为 script 时，
+物理落盘层映射为“剧幕/场景”；项目为 novel 时映射为“分卷/章节”。
+不要据内部字段名推断 UI 语义，也不要改这些协议键，否则历史大纲和前端
+解析将失去兼容。
 """
 
 import re
@@ -11,6 +17,9 @@ from typing import Dict, Any, List
 def parse_outline_markup(text: str) -> Dict[str, Any]:
     """
     解析大纲 Markup 文本。
+
+    返回的节点类型 ``chapter``/``scene`` 是历史逻辑索引协议；它们不直接
+    表示物理文件夹/文件，物理称谓由项目 ``workspace_mode`` 决定。
     
     格式规范：
     @title 故事标题
@@ -32,7 +41,9 @@ def parse_outline_markup(text: str) -> Dict[str, Any]:
         "title": "未命名故事",
         "summary": "",
         "mainTheme": "",
-        "nodes": []  # 章节节点
+        # 历史协议字段：chapter 节点是逻辑 story_group，scene 子节点是逻辑
+        # story_unit；不要把它们直接当成用户可见的文件夹/文件称谓。
+        "nodes": []
     }
     
     # 全局信息区
@@ -61,15 +72,15 @@ def parse_outline_markup(text: str) -> Dict[str, Any]:
             i += 1
             continue
             
-        # 章节处理 (##)
+        # 历史协议中的 chapter 逻辑分组处理 (##)，不是固定的“章节”UI 称谓。
         chapter_match = re.match(
             r'^##\s+(?:Chapter\s*(\d+)\s*[:：]?\s*)?(.+)$',
             line,
             re.IGNORECASE,
         )
         if chapter_match:
-            # 如果有前一个章节且没保存过场景，说明只有章节概述。但在我们业务里通常会带着场景一起保存
-            # 无论如何，开启新章
+            # 如果有前一个逻辑分组且没保存 story_unit，说明只有分组概述。
+            # 无论如何，开启新的历史 chapter 节点。
             chapter_number = int(chapter_match.group(1)) if chapter_match.group(1) else len(outline_data["nodes"]) + 1
             title = chapter_match.group(2).strip()
             current_chapter = {
@@ -86,7 +97,7 @@ def parse_outline_markup(text: str) -> Dict[str, Any]:
             i += 1
             continue
             
-        # 场景处理 (###)
+        # 历史协议中的 scene 逻辑单元处理 (###)，不是固定的“场景”UI 称谓。
         scene_match = re.match(
             r'^###\s+(?:(?:场景|Scene)\s*)?(?:(\d+)\s*[-－—_]\s*(\d+)\s*[:：]?\s*)?(.+)$',
             line,
@@ -96,7 +107,7 @@ def parse_outline_markup(text: str) -> Dict[str, Any]:
         if scene_match:
             title = scene_match.group(3).strip()
             
-            # 如果找不到挂载的章节，就建一个虚拟章节（错误兜底）
+            # 如果找不到挂载的逻辑分组，就建一个虚拟 chapter 节点（错误兜底）。
             if not current_chapter:
                 current_chapter = {
                     "id": _generate_id("chap"),
@@ -427,6 +438,10 @@ def serialize_outline_to_markup(outline: Dict[str, Any]) -> str:
     """
     将大纲字典序列化为 Outline Markup 文本。
     供前端编辑保存时使用。
+
+    ``## Chapter``、``chapter``、``scene`` 和 ``###`` 必须保留为历史协议
+    格式；它们只表示逻辑 story_group/story_unit，不代表剧本模式或小说模式
+    的用户称谓。
     """
     lines: List[str] = []
 
@@ -445,6 +460,7 @@ def serialize_outline_to_markup(outline: Dict[str, Any]) -> str:
     if any(l for l in lines):
         lines.append('')
 
+    # 这里的变量名和 type 判断沿用历史协议，不能按字面改成用户术语。
     for ci, chapter in enumerate(outline.get('nodes', [])):
         if chapter.get('type') != 'chapter':
             continue

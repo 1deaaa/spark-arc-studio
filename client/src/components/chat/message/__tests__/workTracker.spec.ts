@@ -74,6 +74,22 @@ describe('Agent 最新进度板聚合', () => {
     });
   });
 
+  it('显式历史和快照 segments 统一归一工具终态', () => {
+    const direct = getMessageSegments({
+      role: 'assistant',
+      segments: [{ type: 'tool_trace', tool_name: 'web_search', status: 'error' }],
+    });
+    const snapshot = getMessageSegments({
+      role: 'assistant',
+      metadata: {
+        segments: [{ type: 'tool_trace', tool_name: 'web_search', status: 'cancel' }],
+      },
+    });
+
+    expect(direct[0].status).toBe('failed');
+    expect(snapshot[0].status).toBe('cancelled');
+  });
+
   it('聚合完整历史时不读取普通聊天正文', () => {
     let contentReads = 0;
     const ordinaryMessage = {

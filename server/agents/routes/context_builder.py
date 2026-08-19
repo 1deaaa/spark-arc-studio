@@ -42,6 +42,7 @@ from core.utils import (
     get_project_stories_path,
 )
 from story.file_naming import list_story_files
+from agents.story_terminology import get_story_terminology
 
 
 MAX_CURRENT_CHAPTER_FULL_SCENES = 3
@@ -69,13 +70,21 @@ def build_story_tags_hint(story_tags: dict) -> str:
     parts = []
 
     workspace_mode = story_tags.get("workspace_mode")
-    if workspace_mode == "novel":
+    terms = get_story_terminology(workspace_mode)
+    if terms["workspace_mode"] == "novel":
         parts.append("【创作格式】小说模式（纯文学小说，输出 Markdown 小说正文，避免使用 ARC 剧本语法）。")
     else:
         parts.append("【创作格式】剧本模式（ARC 互动剧本，输出 .arc 剧本正文，遵守 ARC 语法规范）。")
 
+    parts.append(
+        f"【结构术语】{terms['mode_label']}中，故事文件夹/故事分组称为“{terms['group']}”，"
+        f"单个正文文件称为“{terms['unit']}”。内部 chapter_count 与 scene_count_per_chapter "
+        f"是历史兼容参数，当前分别表示{terms['group_count']}与{terms['density']}；"
+        "字段名可能造成语义混乱，不能按字段名推断用户可见层级。"
+    )
+
     scene_length_hint = normalize_scene_length_hint(story_tags.get("scene_length_hint"))
-    if workspace_mode == "novel":
+    if terms["workspace_mode"] == "novel":
         scene_targets = {
             "concise": ("精简", "约 600-1000 个中文字符"),
             "standard": ("标准", "约 1000-1800 个中文字符"),
@@ -88,29 +97,30 @@ def build_story_tags_hint(story_tags: dict) -> str:
             "expanded": ("充实", "约 35-55 个有效叙事单元"),
         }
     scene_label, scene_target = scene_targets[scene_length_hint]
-    target_scope = "当前章节正文" if workspace_mode == "novel" else "当前场景正文"
+    target_scope = f"当前{terms['unit']}正文"
     flexibility_note = (
         "可按章节功能、高潮位置和叙事节奏在目标附近约 ±30% 浮动；"
-        if workspace_mode == "novel"
+        if terms["workspace_mode"] == "novel"
         else "可按过场、高潮、纯动作等实际节奏在目标附近约 ±30% 浮动；"
     )
     scene_target_chars = story_tags.get("scene_target_chars")
     if isinstance(scene_target_chars, int) and scene_target_chars > 0:
         parts.append(
             f"【{target_scope}软目标】目标约 {scene_target_chars} 个可见正文字符。"
-            f"{scene_label}档仅用于表达内容密度与节奏倾向，不再提供竞争性的字数区间。"
-            "具体字数不是硬性验收条件；优先保证场景任务、情绪转折和叙事完整性，"
+            f"{terms['unit_length']}的{scene_label}档仅用于表达内容密度与节奏倾向，"
+            "不再提供竞争性的字数区间。"
+            f"具体字数不是硬性验收条件；优先保证{terms['unit']}任务、情绪转折和叙事完整性，"
             "由你根据成稿质量自行判断是否需要补写或压缩，严禁为凑字数注水或机械截断。"
             "若本轮用户或导演明确给出不同的目标字数，以本轮要求为准。"
         )
     else:
         unit_note = (
             ""
-            if workspace_mode == "novel"
+            if terms["workspace_mode"] == "novel"
             else "剧本中的有效叙事单元包括对白、动作、旁白和明确转折，不只计算对白句。"
         )
         parts.append(
-            f"【{target_scope}软目标】{scene_label}档，{scene_target}。"
+            f"【{target_scope}软目标】{terms['unit_length']}的{scene_label}档，{scene_target}。"
             f"{unit_note}"
             f"{flexibility_note}"
             "不得为凑数量注水，也不得在必要的动作或情绪转折中途硬截断。"

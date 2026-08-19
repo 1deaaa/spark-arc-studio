@@ -803,13 +803,29 @@ export const useChatStore = defineStore('chat', {
       const projectName = this._resolveSessionProjectName(session);
       if (!projectName) return;
 
-      // “已请求取消”不等于“任务已退出”。保留观察流和发送锁，直到后端发出 task_done。
+      const cancelStreamEpoch = session.streamEpoch;
+      const cancelAgentId = session.agentId;
+      const cancelContextKey = session.contextKey;
+      // 先中止当前浏览器读取并解除思考锁；网络请求只负责通知后端，不应阻塞按钮反馈。
+      session.abortRequested = true;
+      if (session.abortController && !session.abortController.signal.aborted) {
+        try {
+          session.abortController.abort('user_cancelled');
+        } catch {}
+      }
+      session.sending = false;
+      session.backgroundTaskStatus = null;
+      session.toolCalling = false;
+      session.toolName = '';
+      session.toolProgressText = '';
+      _clearRetryState(session);
+
       let result;
       try {
-        result = await cancelChatTask(projectName, session.agentId, session.contextKey);
+        result = await cancelChatTask(projectName, cancelAgentId, cancelContextKey);
       } catch (error) {
-        session.sending = true;
-        session.backgroundTaskStatus = 'running';
+        const state = await this._getChatTaskAuthorityState(cancelAgentId, cancelContextKey, projectName);
+        this._applyChatTaskAuthorityState(session, state);
         bus.emit('toast', {
           type: 'error',
           message: _getErrorMessage(error, i18n.global.t('components.chatMessageList.cancelFailed')),
@@ -817,7 +833,7 @@ export const useChatStore = defineStore('chat', {
         return;
       }
       if (!result.success) {
-        const state = await this._getChatTaskAuthorityState(session.agentId, session.contextKey, projectName);
+        const state = await this._getChatTaskAuthorityState(cancelAgentId, cancelContextKey, projectName);
         this._applyChatTaskAuthorityState(session, state);
         if (state === 'terminal' || state === 'missing') {
           await this.refreshSessionHistory(sessionId, 80, { silent: true, authoritative: true });
@@ -825,21 +841,11 @@ export const useChatStore = defineStore('chat', {
         return;
       }
 
-      session.sending = true;
-      session.backgroundTaskStatus = 'running';
-      let cancelStreamEpoch = session.streamEpoch;
-      if (!session.abortController || session.abortController.signal.aborted) {
-        const reconnectPromise = this._reconnectTaskStream(session, session.agentId, session.contextKey);
-        cancelStreamEpoch = session.streamEpoch;
-        void reconnectPromise.catch(error => {
-          console.warn('恢复取消中的聊天任务观察流失败', error);
-        });
-      }
-      // 观察流可能卡在上游读取；用权威状态查询兜底，但仍等待服务端真实终态。
+      // 前端立即退出“思考中”；后台只负责在服务端终态落盘后刷新权威历史。
       void this._waitForChatTaskCancellation(
         session,
-        session.agentId,
-        session.contextKey,
+        cancelAgentId,
+        cancelContextKey,
         projectName,
         cancelStreamEpoch,
       ).catch(error => {
@@ -1278,7 +1284,6 @@ export const useChatStore = defineStore('chat', {
           || session.agentId !== agentId
           || session.contextKey !== contextKey
           || session.streamEpoch !== streamEpoch
-          || (!session.sending && session.backgroundTaskStatus !== 'running')
         ) {
           return;
         }
@@ -1296,7 +1301,6 @@ export const useChatStore = defineStore('chat', {
           || session.agentId !== agentId
           || session.contextKey !== contextKey
           || session.streamEpoch !== streamEpoch
-          || (!session.sending && session.backgroundTaskStatus !== 'running')
         ) {
           return;
         }

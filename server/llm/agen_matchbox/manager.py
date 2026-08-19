@@ -513,6 +513,7 @@ class AIManagerBase:
         platform_key: str,
         platform_name: str,
         base_url: str,
+        allow_legacy_fallback: bool,
     ) -> Optional[LLMPlatform]:
         """按平台 key 查找平台，旧 YAML 仅回退到唯一名称与 URL。"""
         platform = (
@@ -522,12 +523,20 @@ class AIManagerBase:
         )
         if platform is not None:
             return platform
-        return (
+        if not allow_legacy_fallback:
+            return None
+        candidates = (
             session.query(LLMPlatform)
             .filter_by(name=platform_name, base_url=normalize_base_url(base_url), is_sys=1)
             .order_by(LLMPlatform.id)
-            .first()
+            .limit(2)
+            .all()
         )
+        if len(candidates) > 1:
+            raise ValueError(
+                f"旧 YAML 平台身份不唯一，请为 {platform_name} 配置明确的 platform_key"
+            )
+        return candidates[0] if candidates else None
 
     def _sync_default_platforms(
         self,
@@ -598,8 +607,10 @@ class AIManagerBase:
         with self.Session() as session:
             self._ensure_platform_keys(session)
             config_platform_keys = set()
+            explicit_platform_keys: Dict[str, bool] = {}
             for name, cfg in raw_platform_configs.items():
                 if isinstance(cfg, dict) and cfg.get("base_url"):
+                    explicit_platform_keys[name] = normalize_platform_key(cfg.get("platform_key")) is not None
                     platform_key = self._resolve_seed_platform_key(name, cfg)
                     if platform_key in config_platform_keys:
                         raise ValueError(f"配置中存在重复 platform_key: {platform_key}")
@@ -621,6 +632,7 @@ class AIManagerBase:
                 if not isinstance(cfg, dict) or "base_url" not in cfg:
                     continue
                 base_url = normalize_base_url(str(cfg["base_url"]))
+                has_explicit_platform_key = explicit_platform_keys.get(name, False)
                 platform_key = self._resolve_seed_platform_key(name, cfg)
                 recharge_url = normalize_recharge_url(cfg.get("recharge_url"))
                 plat = self._find_seed_platform(
@@ -628,6 +640,7 @@ class AIManagerBase:
                     platform_key=platform_key,
                     platform_name=name,
                     base_url=base_url,
+                    allow_legacy_fallback=not has_explicit_platform_key,
                 )
 
                 if not plat:

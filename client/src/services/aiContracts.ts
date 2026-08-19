@@ -128,6 +128,8 @@ export type InspirationBindChangedPayload = {
 
 export type AiPlatform = {
   platform_id: ApiId;
+  /** 平台配置的稳定身份；与可重复的 Base URL 解耦。 */
+  platform_key?: string | null;
   name: string;
   base_url: string;
   recharge_url?: string | null;
@@ -150,6 +152,8 @@ export type AiPlatform = {
 
 export type AiFlattenedModelItem = {
   platform_id: ApiId;
+  /** 平台配置的稳定身份；与可重复的 Base URL 解耦。 */
+  platform_key?: string | null;
   platform_name: string;
   platform_is_sys: boolean;
   platform_disabled?: boolean;
@@ -234,6 +238,8 @@ export type EmbeddingStatusResponse = {
 export type ApiMutationResult = {
   success: boolean;
   id?: ApiId;
+  platform_id?: ApiId;
+  platform_key?: string | null;
   message?: string;
   error?: string;
   detail?: string;

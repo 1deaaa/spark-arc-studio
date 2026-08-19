@@ -65,6 +65,7 @@ class MuseAgent(SparkBaseAgent, SparkAgentExecutor):
             tones=context.get("tones"),
             worldviews=context.get("worldviews"),
             length_hint=context.get("length_hint"),
+            workspace_mode=context.get("workspace_mode"),
             story_tags=context.get("story_tags", ""),
         )
 
@@ -118,7 +119,7 @@ class MuseAgent(SparkBaseAgent, SparkAgentExecutor):
 
     def expand_inspiration(self, raw_input: str = "", style: str = None,
                            genres: list = None, tones: list = None, worldviews: list = None, length_hint: str = None,
-                           story_tags: str = ""):
+                           story_tags: str = "", workspace_mode: str | None = None):
         """将灵感碎片扩展为创意种子。raw_input 为空时 AI 自由创作。"""
         effective_input = (raw_input or "").strip() or (
             "请从空白开始创作一个原创灵感种子。"
@@ -141,7 +142,7 @@ class MuseAgent(SparkBaseAgent, SparkAgentExecutor):
         if worldviews and len(worldviews) > 0:
             worldview_hint = f"8.  **世界规则**：请基于「{'、'.join(worldviews)}」的世界规则构建背景。"
 
-        length_hint_str = build_length_hint_str(length_hint)
+        length_hint_str = build_length_hint_str(length_hint, workspace_mode)
 
         prompts = load_prompt('muse', raw_input=effective_input,
                               style_hint=style_hint,

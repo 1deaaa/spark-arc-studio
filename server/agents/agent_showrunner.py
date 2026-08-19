@@ -16,6 +16,9 @@ from llm.agen_matchbox.reasoning_compat import (
 from agents.agent_utils import load_prompt, build_length_hint_str, SparkAgentExecutor
 from agents.agent_style.utils import format_style_profile_for_prompt
 from agents.prompt_layout import build_prompt_messages
+from agents.story_terminology import (
+    build_story_structure_quantity_guidance,
+)
 from story.outline_parser import parse_beat_sheet_markup, parse_outline_markup
 from .communication import SparkBaseAgent
 
@@ -102,7 +105,7 @@ class ShowrunnerAgent(SparkBaseAgent, SparkAgentExecutor):
 
         return None
 
-    def generate_synopsis(self, logline: str, worldview: str, roles: str, guidance: str, style_profile: object = None, length_hint: str = None, story_tags: str = "") -> str:
+    def generate_synopsis(self, logline: str, worldview: str, roles: str, guidance: str, style_profile: object = None, length_hint: str = None, story_tags: str = "", workspace_mode: str | None = None) -> str:
         """
         生成故事梗概 (Synopsis)，返回 Synopsis Markup 文本。
         """
@@ -116,7 +119,7 @@ class ShowrunnerAgent(SparkBaseAgent, SparkAgentExecutor):
             roles=roles or "（未提供）",
             guidance=guidance or "请生成一个吸引人的故事梗概",
             style_profile=style_profile_text,
-            length_hint=build_length_hint_str(length_hint),
+            length_hint=build_length_hint_str(length_hint, workspace_mode),
             story_tags=story_tags or "",
         )
 
@@ -128,7 +131,7 @@ class ShowrunnerAgent(SparkBaseAgent, SparkAgentExecutor):
         except Exception as e:
             raise RuntimeError(f"[Showrunner] 生成梗概失败: {e}")
 
-    def generate_synopsis_stream(self, logline: str, worldview: str, roles: str, guidance: str, style_profile: object = None, length_hint: str = None, story_tags: str = ""):
+    def generate_synopsis_stream(self, logline: str, worldview: str, roles: str, guidance: str, style_profile: object = None, length_hint: str = None, story_tags: str = "", workspace_mode: str | None = None):
         """
         流式生成故事梗概 (Synopsis)
         """
@@ -142,7 +145,7 @@ class ShowrunnerAgent(SparkBaseAgent, SparkAgentExecutor):
             roles=roles or "（未提供）",
             guidance=guidance or "请生成一个吸引人的故事梗概",
             style_profile=style_profile_text,
-            length_hint=build_length_hint_str(length_hint),
+            length_hint=build_length_hint_str(length_hint, workspace_mode),
             story_tags=story_tags or "",
         )
 
@@ -178,7 +181,7 @@ class ShowrunnerAgent(SparkBaseAgent, SparkAgentExecutor):
             'total_chars': len(full_content)
         }
 
-    def generate_beat_sheet(self, synopsis: str, worldview: str, roles: str, guidance: str, style_profile: object = None, length_hint: str = None, story_tags: str = "") -> dict:
+    def generate_beat_sheet(self, synopsis: str, worldview: str, roles: str, guidance: str, style_profile: object = None, length_hint: str = None, story_tags: str = "", workspace_mode: str | None = None) -> dict:
         """
         生成节拍表 (Beat Sheet)
         """
@@ -192,7 +195,7 @@ class ShowrunnerAgent(SparkBaseAgent, SparkAgentExecutor):
             roles=roles or "（未提供）",
             guidance=guidance or "请先识别作品的推进机制，再将梗概拆解为关键叙事节拍",
             style_profile=style_profile_text,
-            length_hint=build_length_hint_str(length_hint),
+            length_hint=build_length_hint_str(length_hint, workspace_mode),
             story_tags=story_tags or "",
         )
 
@@ -204,7 +207,7 @@ class ShowrunnerAgent(SparkBaseAgent, SparkAgentExecutor):
         except Exception as e:
             raise RuntimeError(f"[Showrunner] 生成节拍表失败: {e}")
 
-    def generate_outline(self, context: str, worldview: str, roles: str, guidance: str, chapter_count: int = 5, scene_count_per_chapter: int = 3, beat_sheet: any = "", style_profile: object = None, story_tags: str = "") -> dict:
+    def generate_outline(self, context: str, worldview: str, roles: str, guidance: str, chapter_count: int = 5, scene_count_per_chapter: int = 3, beat_sheet: any = "", style_profile: object = None, story_tags: str = "", workspace_mode: str | None = None) -> dict:
         """
         生成可视化剧情大纲（树状结构）
         
@@ -213,7 +216,8 @@ class ShowrunnerAgent(SparkBaseAgent, SparkAgentExecutor):
             worldview: 世界观设定
             roles: 角色设定
             guidance: 用户指导意图
-            chapter_count: 章节数量，默认5章
+            chapter_count: 历史兼容数量字段；当前模式下表示故事分组数量，默认5个
+            scene_count_per_chapter: 历史兼容数量字段；当前模式下表示每个故事分组的正文单元密度，默认3个
             beat_sheet: 节拍表内容 (JSON 对象或字符串)
             style_profile: 风格档案
         
@@ -231,6 +235,11 @@ class ShowrunnerAgent(SparkBaseAgent, SparkAgentExecutor):
             beat_sheet_str = json.dumps(beat_sheet, ensure_ascii=False, indent=2)
 
         style_profile_text = self._stringify_style_profile(style_profile)
+        structure_terms = build_story_structure_quantity_guidance(
+            workspace_mode,
+            chapter_count,
+            scene_count_per_chapter,
+        )
 
         # 从 YAML 加载提示词（generate_outline 子模板）
         prompts = load_prompt(
@@ -240,9 +249,10 @@ class ShowrunnerAgent(SparkBaseAgent, SparkAgentExecutor):
             roles=roles if roles else "（未提供，请创建合适的角色）",
             context=context if context else "这是一个全新的故事",
             beat_sheet=beat_sheet_str if beat_sheet_str else "（未提供）",
-            guidance=guidance if guidance else f"请生成一个章节数尽量贴合 {chapter_count} 章目标的大纲；场景数量按剧情节奏弹性安排",
+            guidance=guidance if guidance else structure_terms,
             chapter_count=chapter_count,
             scene_count_per_chapter=scene_count_per_chapter,
+            structure_terms=structure_terms,
             style_profile=style_profile_text,
             story_tags=story_tags or "",
         )
@@ -265,7 +275,7 @@ class ShowrunnerAgent(SparkBaseAgent, SparkAgentExecutor):
         except Exception as e:
             raise RuntimeError(f"[Showrunner] 生成大纲失败: {e}")
 
-    def generate_beat_sheet_stream(self, synopsis: str, worldview: str, roles: str, guidance: str, style_profile: object = None, length_hint: str = None, story_tags: str = ""):
+    def generate_beat_sheet_stream(self, synopsis: str, worldview: str, roles: str, guidance: str, style_profile: object = None, length_hint: str = None, story_tags: str = "", workspace_mode: str | None = None):
         """
         流式生成节拍表 (Beat Sheet)
         """
@@ -279,7 +289,7 @@ class ShowrunnerAgent(SparkBaseAgent, SparkAgentExecutor):
             roles=roles or "（未提供）",
             guidance=guidance or "请先识别作品的推进机制，再将梗概拆解为关键叙事节拍",
             style_profile=style_profile_text,
-            length_hint=build_length_hint_str(length_hint),
+            length_hint=build_length_hint_str(length_hint, workspace_mode),
             story_tags=story_tags or "",
         )
 
@@ -322,7 +332,7 @@ class ShowrunnerAgent(SparkBaseAgent, SparkAgentExecutor):
                 'message': f"解析节拍表 Markup 失败: {e}"
             }
 
-    def generate_outline_stream(self, context: str, worldview: str, roles: str, guidance: str, chapter_count: int = 5, scene_count_per_chapter: int = 3, beat_sheet: any = "", style_profile: object = None, story_tags: str = ""):
+    def generate_outline_stream(self, context: str, worldview: str, roles: str, guidance: str, chapter_count: int = 5, scene_count_per_chapter: int = 3, beat_sheet: any = "", style_profile: object = None, story_tags: str = "", workspace_mode: str | None = None):
         """
         流式生成可视化剧情大纲（树状结构）
         """
@@ -331,6 +341,11 @@ class ShowrunnerAgent(SparkBaseAgent, SparkAgentExecutor):
             beat_sheet_str = json.dumps(beat_sheet, ensure_ascii=False, indent=2)
 
         style_profile_text = self._stringify_style_profile(style_profile)
+        structure_terms = build_story_structure_quantity_guidance(
+            workspace_mode,
+            chapter_count,
+            scene_count_per_chapter,
+        )
 
         prompts = load_prompt(
             'showrunner',
@@ -339,9 +354,10 @@ class ShowrunnerAgent(SparkBaseAgent, SparkAgentExecutor):
             roles=roles if roles else "（未提供，请创建合适的角色）",
             context=context if context else "这是一个全新的故事",
             beat_sheet=beat_sheet_str if beat_sheet_str else "（未提供）",
-            guidance=guidance if guidance else f"请生成一个章节数尽量贴合 {chapter_count} 章目标的大纲；场景数量按剧情节奏弹性安排",
+            guidance=guidance if guidance else structure_terms,
             chapter_count=chapter_count,
             scene_count_per_chapter=scene_count_per_chapter,
+            structure_terms=structure_terms,
             style_profile=style_profile_text,
             story_tags=story_tags or "",
         )
@@ -440,8 +456,12 @@ class ShowrunnerAgent(SparkBaseAgent, SparkAgentExecutor):
                 "beat_sheet": "（由当前项目与上下文提供）",
                 "guidance": "（由用户当前修改要求决定）",
                 "style_profile": "（未提供）",
-                "chapter_count": "按实际任务决定，尽量贴合章节目标",
-                "scene_count_per_chapter": "按实际任务决定，仅作为场景密度参考",
+                "chapter_count": "按实际任务决定，表示当前模式的故事分组数量",
+                "scene_count_per_chapter": "按实际任务决定，表示当前模式的每组正文单元密度",
+                "structure_terms": (
+                    "当前模式的故事结构术语由项目上下文决定；chapter_count 和 "
+                    "scene_count_per_chapter 是历史兼容字段，不能按字面推断层级。"
+                ),
             },
         }
 

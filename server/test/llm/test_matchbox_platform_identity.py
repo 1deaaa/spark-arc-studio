@@ -103,6 +103,30 @@ def test_legacy_yaml_without_platform_key_keeps_duplicate_urls_separate(manager:
         }
 
 
+def test_explicit_changed_platform_key_does_not_reuse_name_and_url(manager: AIManager) -> None:
+    """显式平台 key 变化代表新身份，不得按同名同 URL 静默复用旧行。"""
+    url = "https://identity-change.example/v1"
+    manager._sync_default_platforms(
+        force_reset=True,
+        raw_platform_configs={
+            "稳定名称": {"platform_key": "identity-old", "base_url": url, "models": {}},
+        },
+    )
+    manager._sync_default_platforms(
+        force_reset=True,
+        raw_platform_configs={
+            "稳定名称": {"platform_key": "identity-new", "base_url": url, "models": {}},
+        },
+    )
+
+    with manager.Session() as session:
+        old_row = session.query(LLMPlatform).filter_by(platform_key="identity-old").one()
+        new_row = session.query(LLMPlatform).filter_by(platform_key="identity-new").one()
+        assert old_row.id != new_row.id
+        assert old_row.disable == 1
+        assert new_row.disable == 0
+
+
 def test_export_keys_are_indexed_by_platform_key(manager: AIManager) -> None:
     """两个同 URL 平台的结构和密钥导出不能互相覆盖。"""
     manager.set_llm_key("platform-test-master", persist=False)

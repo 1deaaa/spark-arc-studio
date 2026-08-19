@@ -107,6 +107,7 @@ def capture_spark(
             tones=tones,
             worldviews=worldviews,
             length_hint=length_hint,
+            workspace_mode=(tags or {}).get("workspace_mode"),
         )
         generated_content = collect_text_output(muse.execute(context)).strip()
         if not generated_content:

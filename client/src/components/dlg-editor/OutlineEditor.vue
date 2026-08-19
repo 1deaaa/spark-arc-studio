@@ -3,23 +3,23 @@
     <!-- 大纲头部信息 -->
     <div class="outline-header">
       <div class="header-row">
-        <div class="title-display">{{ localOutline.title || '未命名故事' }}</div>
+        <div class="title-display">{{ localOutline.title || t('components.outlineEditor.untitledStory') }}</div>
         <div class="header-actions">
           <n-button @click="saveToHistory" secondary>
             <template #icon><n-icon :component="Clock" /></template>
-            存档
+            {{ t('components.outlineEditor.saveToHistory') }}
           </n-button>
           <n-button @click="handleExportToFiles" tertiary :loading="exporting">
             <template #icon><n-icon :component="FileText" /></template>
-            导出到文件
+            {{ t('components.outlineEditor.exportToFiles') }}
           </n-button>
         </div>
       </div>
       
       <div class="meta-tags" v-if="localOutline.mainTheme || localOutline.totalChapters">
         <SparkTag v-if="localOutline.mainTheme" type="info">主题：{{ localOutline.mainTheme }}</SparkTag>
-        <SparkTag v-if="localOutline.totalChapters" type="success">{{ localOutline.totalChapters }} 章节</SparkTag>
-        <SparkTag v-if="localOutline.estimatedScenes" type="warning">~{{ localOutline.estimatedScenes }} 场景</SparkTag>
+        <SparkTag v-if="localOutline.totalChapters" type="success">{{ localOutline.totalChapters }} {{ groupLabel }}</SparkTag>
+        <SparkTag v-if="localOutline.estimatedScenes" type="warning">~{{ localOutline.estimatedScenes }} {{ unitLabel }}</SparkTag>
       </div>
     </div>
 
@@ -27,10 +27,10 @@
     <div class="outline-tree">
       <div v-if="!localOutline.nodes || localOutline.nodes.length === 0" class="empty-state">
         <n-icon size="48" :component="Workflow" />
-        <p>暂无大纲节点</p>
+        <p>{{ t('components.outlineEditor.noOutlineNodes') }}</p>
         <n-button type="primary" @click="addRootNode">
           <template #icon><n-icon :component="Plus" /></template>
-          添加第一章
+          {{ t('components.outlineEditor.addFirstGroup', { label: groupLabel }) }}
         </n-button>
       </div>
       
@@ -42,13 +42,14 @@
           :depth="0"
           :index="Number(index)"
           :parent-array="localOutline.nodes"
+          :workspace-mode="workspaceMode"
           @update="handleNodeUpdate"
           @delete="handleNodeDelete"
           @add-child="handleAddChild"
           @add-sibling="handleAddSibling"
         />
         
-        <!-- 添加新章节按钮 -->
+        <!-- 添加新的故事分组；node.type='chapter' 是历史兼容类型名。 -->
         <n-button 
           class="add-chapter-btn" 
           dashed 
@@ -56,7 +57,7 @@
           @click="addRootNode"
         >
           <template #icon><n-icon :component="Plus" /></template>
-          添加新章节
+          {{ t('components.outlineEditor.addNewGroup', { label: groupLabel }) }}
         </n-button>
       </div>
     </div>
@@ -69,31 +70,35 @@
 <script setup lang="ts">
 import { ref, watch, computed } from 'vue';
 import { NButton, NIcon, useMessage, useDialog } from 'naive-ui';
+import { useI18n } from 'vue-i18n';
 import SparkTag from '../share/SparkTag.vue';
 import { Clock, FileText, Plus, Sparkles, Workflow } from '@lucide/vue';
 import OutlineNode from './OutlineNode.vue';
 // Auto Write 统一由 DirectorAutoWriteOverlay 承载
 import { exportOutlineToFiles } from '@/services/api';
 import { useProjectStore } from '@/components/stores/projectStore';
+import { useSceneStore } from '@/components/stores/sceneStore';
 import bus from '@/eventBus';
 
-const props = defineProps({
-  outline: {
-    type: Object,
-    default: () => ({
-      title: '',
-      summary: '',
-      nodes: []
-    })
-  }
+const props = withDefaults(defineProps<{
+  outline?: Record<string, any>;
+  workspaceMode?: 'script' | 'novel';
+}>(), {
+  outline: () => ({ title: '', summary: '', nodes: [] }),
+  workspaceMode: 'script',
 });
 
 const emit = defineEmits(['update:outline', 'save-history']);
 
 const projectStore = useProjectStore();
+const sceneStore = useSceneStore();
+const { t } = useI18n();
 const message = useMessage();
 const dialog = useDialog();
 const exporting = ref(false);
+const workspaceMode = computed(() => props.workspaceMode || sceneStore.workspaceMode || 'script');
+const groupLabel = computed(() => t(workspaceMode.value === 'novel' ? 'components.outlineNode.typeGroupNovel' : 'components.outlineNode.typeGroupScript'));
+const unitLabel = computed(() => t(workspaceMode.value === 'novel' ? 'components.outlineNode.typeUnitNovel' : 'components.outlineNode.typeUnitScript'));
 
 // 本地副本用于编辑
 const localOutline = ref(JSON.parse(JSON.stringify(props.outline)));
@@ -123,12 +128,12 @@ function saveToHistory() {
 // 导出大纲到文件
 async function handleExportToFiles() {
   if (!projectStore.currentProject) {
-    message.warning('请先选择项目');
+    message.warning(t('components.outlineEditor.selectProject'));
     return;
   }
   
   if (!localOutline.value.nodes || localOutline.value.nodes.length === 0) {
-    message.warning('大纲为空，无法导出');
+    message.warning(t('components.outlineEditor.emptyOutlineExport'));
     return;
   }
   
@@ -139,23 +144,23 @@ async function handleExportToFiles() {
     if (result.success === false && result.error === 'CONFLICT') {
       const existingFiles = result.existing || [];
       dialog.warning({
-        title: '文件已存在',
-        content: `检测到以下文件已存在：\n${existingFiles.join('\n')}\n\n是否覆盖？`,
-        positiveText: '覆盖',
-        negativeText: '取消',
+        title: t('components.outlineEditor.filesExistTitle'),
+        content: t('components.outlineEditor.filesExistContent', { files: existingFiles.join('\n') }),
+        positiveText: t('components.outlineEditor.overwrite'),
+        negativeText: t('common.cancel'),
         onPositiveClick: async () => {
           try {
             exporting.value = true;
             const retryResult = await exportOutlineToFiles(projectStore.currentProject, { overwrite: true });
             if (retryResult.success) {
-              message.success(retryResult.message || '导出成功');
+              message.success(retryResult.message || t('components.outlineEditor.exportSuccess'));
               bus.emit('refresh-file-tree');
             } else {
-              message.error('导出失败: ' + (retryResult.error || retryResult.message));
+              message.error(`${t('components.outlineEditor.exportFailed')}: ${retryResult.error || retryResult.message}`);
             }
           } catch (e: unknown) {
             const errorMessage = e instanceof Error ? e.message : String(e || '未知错误');
-            message.error('导出失败: ' + errorMessage);
+            message.error(`${t('components.outlineEditor.exportFailed')}: ${errorMessage}`);
           } finally {
             exporting.value = false;
           }
@@ -164,25 +169,25 @@ async function handleExportToFiles() {
       return;
     }
 
-    message.success(result.message || '导出成功');
+    message.success(result.message || t('components.outlineEditor.exportSuccess'));
     // 通知文件树刷新
     bus.emit('refresh-file-tree');
   } catch (e: unknown) {
     const errorMessage = e instanceof Error ? e.message : String(e || '未知错误');
-    message.error('导出失败: ' + errorMessage);
+    message.error(`${t('components.outlineEditor.exportFailed')}: ${errorMessage}`);
   } finally {
     exporting.value = false;
   }
 }
 
-// 添加根节点（新章节）
+// 添加根节点。chapter/type 字段是历史兼容结构名，界面按模式显示为剧幕或分卷。
 function addRootNode() {
-  const chapterNum = localOutline.value.nodes.length + 1;
+  const groupNum = localOutline.value.nodes.length + 1;
   const newNode = {
     id: generateId('chapter'),
-    title: `第${chapterNum}章`,
+    title: t('components.outlineEditor.defaultGroupTitle', { number: groupNum, label: groupLabel.value }),
     type: 'chapter',
-    chapter: chapterNum,
+    chapter: groupNum,
     description: '',
     mood: '',
     tension: 'medium',
@@ -227,14 +232,13 @@ function handleAddChild(parentNode) {
     parentNode.children = [];
   }
   
-  // 根据父节点类型决定子节点类型（章节下只能添加场景）
-  let childType = 'scene';
-  let titlePrefix = '场景';
+  // 根据父节点类型决定子节点类型；scene 是正文单元的历史兼容类型名。
+  const childType = 'scene';
   
   const childNum = parentNode.children.length + 1;
   const newChild = {
     id: generateId(childType),
-    title: `${titlePrefix} ${childNum}`,
+    title: t('components.outlineEditor.defaultUnitTitle', { number: childNum, label: unitLabel.value }),
     type: childType,
     description: '',
     mood: '',
@@ -248,13 +252,15 @@ function handleAddChild(parentNode) {
 
 // 添加兄弟节点
 function handleAddSibling(node, parentArray, index) {
-  // 如果是章节，需要计算新的章节序号
-  const newChapterNum = node.type === 'chapter' ? parentArray.length + 1 : undefined;
+  // chapter 是历史兼容类型名；它表示当前模式下的故事分组。
+  const newGroupNum = node.type === 'chapter' ? parentArray.length + 1 : undefined;
   const newNode = {
     id: generateId(node.type),
-    title: `新${node.type === 'chapter' ? '章节' : '场景'}`,
+    title: node.type === 'chapter'
+      ? t('components.outlineEditor.newGroupTitle', { label: groupLabel.value })
+      : t('components.outlineEditor.newUnitTitle', { label: unitLabel.value }),
     type: node.type,
-    chapter: newChapterNum,
+    chapter: newGroupNum,
     description: '',
     mood: '',
     tension: 'medium',
@@ -267,7 +273,7 @@ function handleAddSibling(node, parentArray, index) {
 
 function openAutoWriteModal() {
   if (!localOutline.value.nodes || localOutline.value.nodes.length === 0) {
-    message.warning('大纲为空，请先规划章节');
+    message.warning(t('components.outlineEditor.emptyOutlineForAutoWrite', { label: groupLabel.value }));
     return;
   }
   // 通过 event bus 通知 DirectorAutoWriteOverlay 打开 setup 面板

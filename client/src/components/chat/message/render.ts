@@ -33,6 +33,16 @@ export type MessageSegment = {
   [key: string]: unknown;
 };
 
+/** 将后端/历史版本的工具终态归一为前端可渲染的三态。 */
+export function normalizeToolTraceStatus(value: unknown): string {
+  const status = String(value || '').trim().toLowerCase();
+  if (['error', 'failure', 'tool_error', 'failed'].includes(status)) return 'failed';
+  if (['done', 'success', 'completed', 'complete'].includes(status)) return 'finished';
+  if (['executing', 'in_progress', 'in-progress'].includes(status)) return 'running';
+  if (['cancel', 'canceled', 'cancelled'].includes(status)) return 'cancelled';
+  return status || 'finished';
+}
+
 export type LlmUsageMeta = {
   prompt_tokens?: number;
   promptTokens?: number;
@@ -204,7 +214,7 @@ export function normalizeToolTraceList(value: unknown): MessageToolTrace[] {
       return {
         ...(item as Record<string, unknown>),
         tool_name: toolName,
-        status: String((item as any).status || (finishedAt ? 'finished' : 'started') || 'finished').trim() || 'finished',
+        status: normalizeToolTraceStatus((item as any).status || (finishedAt ? 'finished' : 'started')),
         duration,
       };
     })
@@ -223,8 +233,13 @@ export function getReasoningSegmentText(segment: MessageSegment | null | undefin
 }
 
 export function getMessageSegments(message: ChatMessageItem | null | undefined): MessageSegment[] {
+  const normalizeSegment = (segment: MessageSegment): MessageSegment => (
+    segment?.type === 'tool_trace'
+      ? { ...segment, status: normalizeToolTraceStatus(segment.status) }
+      : { ...segment }
+  );
   if (Array.isArray(message?.segments) && message.segments.length > 0) {
-    const existingSegments: MessageSegment[] = message.segments.map((s: MessageSegment) => ({ ...s }));
+    const existingSegments: MessageSegment[] = message.segments.map(normalizeSegment);
     if (!existingSegments.some(s => s?.type === 'reasoning')) {
       const reasoning = getReasoningText(message);
       if (reasoning) {
@@ -234,7 +249,7 @@ export function getMessageSegments(message: ChatMessageItem | null | undefined):
     return existingSegments;
   }
   if (Array.isArray(message?.metadata?.segments) && message.metadata.segments.length > 0) {
-    return message.metadata.segments.map((s: MessageSegment) => ({ ...s }));
+    return message.metadata.segments.map(normalizeSegment);
   }
   const segments: MessageSegment[] = [];
   const reasoning = getReasoningText(message);
@@ -246,7 +261,7 @@ export function getMessageSegments(message: ChatMessageItem | null | undefined):
     segments.push({
       type: 'tool_trace',
       tool_name: trace.tool_name,
-      status: trace.status || 'finished',
+      status: normalizeToolTraceStatus(trace.status || 'finished'),
       duration: trace.duration || 0,
       source_agent: String(trace.source_agent || ''),
       tool_input: trace.tool_input,

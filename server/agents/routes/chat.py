@@ -214,14 +214,8 @@ def _mark_chat_task_error(
     if entry.is_terminalized():
         return entry.error_message
     entry.error_message = error_message
-    update_task_status(
-        task_key,
-        'error',
-        expected_task_id=entry.task_id,
-        error_message=error_message,
-        retry_count=retry_count,
-    )
-    _checkpoint_chat_task(cm, entry, force=True, stream_status='error')
+    # 终态只能由 _finalize_chat_task 发布。若先把 status 改为 error，观察器会
+    # 在 task_done 写入事件日志前退出，前端无法可靠收口。
     return error_message
 
 
@@ -862,12 +856,6 @@ def _finalize_chat_task(
             metadata = {}
 
         try:
-            _checkpoint_chat_task(cm, entry, force=True, stream_status=final_status)
-        except Exception:
-            # 上游卡住时取消不能再被历史落盘故障拖住；终态事件仍需发布。
-            logger.exception("写入聊天终态 checkpoint 失败: task=%s", entry.task_id)
-
-        try:
             entry.append_control_event(
                 {
                     'event': 'task_done',
@@ -885,6 +873,23 @@ def _finalize_chat_task(
         except Exception:
             logger.exception("发布聊天 task_done 事件失败: task=%s", entry.task_id)
 
+        with entry.log_lock:
+            entry.status = final_status
+            entry.result_message_id = entry.assistant_message_id
+            entry.result_content = reply
+            entry.result_metadata = metadata
+            entry.error_message = final_error_message
+            entry.retry_count = retry_count
+        # 内存终态与前端停止按钮不能等待数据库；持久化在此后尽力完成。
+        entry.finished_event.set()
+        entry.notify_observers()
+        cleanup_task(task_key, task_id=entry.task_id)
+
+        try:
+            _checkpoint_chat_task(cm, entry, force=True, stream_status=final_status)
+        except Exception:
+            logger.exception("写入聊天终态 checkpoint 失败: task=%s", entry.task_id)
+
         try:
             update_task_status(
                 task_key,
@@ -901,7 +906,6 @@ def _finalize_chat_task(
             logger.exception("更新聊天终态状态失败: task=%s", entry.task_id)
     finally:
         with entry.log_lock:
-            # 任一步持久化失败都不能把任务留在 running 假死态。
             entry.status = final_status
             entry.result_message_id = entry.assistant_message_id
             entry.result_content = reply
@@ -912,6 +916,45 @@ def _finalize_chat_task(
         entry.notify_observers()
         cleanup_task(task_key, task_id=entry.task_id)
     return True
+
+
+def _schedule_chat_task_finalization(
+    cm: ChatManager,
+    entry: ChatTaskEntry,
+    task_key: str,
+    *,
+    final_status: str,
+    collect_usage: bool = True,
+) -> threading.Thread:
+    """在独立守护线程中执行聊天终态收尾。
+
+    取消接口不能等待同步数据库写入或上游相关收尾。终态声明本身由
+    ``_finalize_chat_task`` 原子完成，迟到的后台线程会自动跳过重复收尾。
+    """
+    import logging
+
+    logger = logging.getLogger(__name__)
+
+    def _finalize() -> None:
+        try:
+            _finalize_chat_task(
+                cm,
+                entry,
+                task_key,
+                final_status=final_status,
+                collect_usage=collect_usage,
+            )
+        except Exception:
+            # 取消请求已经返回，后台收尾异常不能重新污染请求线程。
+            logger.exception("聊天任务后台收尾失败: task=%s", entry.task_id)
+
+    thread = threading.Thread(
+        target=_finalize,
+        daemon=True,
+        name=f"chat_finalize_{entry.task_id}",
+    )
+    thread.start()
+    return thread
 
 
 async def _observe_chat_task_events(request: Request, entry: ChatTaskEntry, *, after_seq: int = 0, include_snapshot: bool = True):
@@ -936,14 +979,16 @@ async def _observe_chat_task_events(request: Request, entry: ChatTaskEntry, *, a
                     yield _serialize_stream_event(event)
                 continue
 
-            if entry.status != 'running':
+            # claim_terminal_status 会先阻止迟到事件，但观察器必须等到 task_done
+            # 已写入日志且 finished_event 置位后才能退出。
+            if entry.finished_event.is_set():
                 break
             if request and await request.is_disconnected():
                 break
 
             signal.clear()
             # 清除信号后重新检查，避免事件恰好落在查询与 clear 之间造成漏唤醒。
-            if entry.get_events_after(cursor) or entry.status != 'running':
+            if entry.get_events_after(cursor) or entry.finished_event.is_set():
                 continue
 
             remaining = max(0.05, heartbeat_interval - (time.time() - last_heartbeat))
@@ -1708,11 +1753,10 @@ async def cancel_chat_task(request: Request, data: ChatTaskCancelRequest, user: 
     if not ok:
         return {'success': False, 'reason': '任务不存在或已结束'}
     entry = get_task_by_parts(user_id, project_name, agent_id, context_key)
-    if entry is not None and not await asyncio.to_thread(wait_for_task_exit, task_key, 0.75):
-        # 上游 SDK 可能卡在不可中断的 next()；先发布权威取消终态，
-        # 迟到的后台 finally 会因终态声明失败而静默退出。
-        await asyncio.to_thread(
-            _finalize_chat_task,
+    if entry is not None and not entry.finished_event.is_set():
+        # 上游 SDK 可能卡在不可中断的 next()。取消接口只负责设置停止信号，
+        # 终态收尾在独立守护线程中执行，不能把数据库 checkpoint 的等待传回前端。
+        _schedule_chat_task_finalization(
             ChatManager(user_id=user_id, project_name=project_name),
             entry,
             task_key,

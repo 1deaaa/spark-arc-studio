@@ -67,6 +67,7 @@ import { useProjectStore } from '@/components/stores/projectStore';
 import bus from '@/eventBus';
 import { saveStoriesOrder, moveFileOrFolder } from '@/services/api';
 import type { StoryFileTreeNode } from '@/services/aiContracts';
+import { storyTerminologyKey } from '@/utils/storyTerminology';
 
 const { t } = useI18n();
 
@@ -80,6 +81,7 @@ const isOpen = ref(true);
 const menu = reactive({ visible: false, x: 0, y: 0 });
 
 const isNovelMode = computed(() => sceneStore.workspaceMode === 'novel');
+const workspaceMode = computed(() => sceneStore.workspaceMode || 'script');
 
 const isSelected = computed(() => fileStore.selectedFile === props.item);
 // 多选状态
@@ -110,7 +112,7 @@ const fileMenuOptions = computed(() => {
       type: 'divider'
     },
     {
-      label: isNovelMode.value ? t('components.fileExplorer.deleteChapter') : t('components.fileExplorer.deleteScene'),
+      label: t(storyTerminologyKey(workspaceMode.value, 'story', 'delete')),
       key: 'delete',
       icon: _iconDanger(Trash),
       props: { style: 'color: #e74c3c;' }
@@ -134,12 +136,12 @@ const fileMenuOptions = computed(() => {
 const folderMenuOptions = computed(() => {
   const base = [
     {
-      label: isNovelMode.value ? t('components.fileExplorer.newSceneNovel') : t('components.fileExplorer.newSceneScript'),
+      label: t(storyTerminologyKey(workspaceMode.value, 'story', 'create')),
       key: 'new-story',
       icon: _icon(Plus)
     },
     {
-      label: isNovelMode.value ? t('components.fileExplorer.newVolume') : t('components.fileExplorer.newChapter'),
+      label: t(storyTerminologyKey(workspaceMode.value, 'folder', 'create')),
       key: 'new-folder',
       icon: _icon(SquarePen)
     },
@@ -155,7 +157,7 @@ const folderMenuOptions = computed(() => {
       type: 'divider'
     },
     {
-      label: isNovelMode.value ? t('components.fileExplorer.deleteVolume') : t('components.fileExplorer.deleteChapter'),
+      label: t(storyTerminologyKey(workspaceMode.value, 'folder', 'delete')),
       key: 'delete',
       icon: _iconDanger(Trash),
       props: { style: 'color: #e74c3c;' }
@@ -242,15 +244,20 @@ function handleMenuSelect(key) {
     case 'new-story':
       {
         const dir = props.item.path || props.item.name || '';
-        const title = isNovelMode.value ? t('components.fileExplorer.promptTitleStoryNovel') : t('components.fileExplorer.promptTitleStoryScript');
-        const message = isNovelMode.value ? t('components.fileExplorer.promptMessageStoryNovel') : t('components.fileExplorer.promptMessageStoryScript');
+        const title = t(storyTerminologyKey(workspaceMode.value, 'story', 'promptTitle'));
+        const message = t(storyTerminologyKey(workspaceMode.value, 'story', 'promptMessage'));
         fileStore.createFile('story', dir, { x: pos.x, y: pos.y, title, message });
       }
       break;
     case 'new-folder':
       {
         const dir = props.item.path || props.item.name || '';
-        fileStore.createFile('folder', dir, { x: pos.x, y: pos.y, title: t('components.fileExplorer.promptTitleFolder'), message: t('components.fileExplorer.promptMessageFolder') });
+        fileStore.createFile('folder', dir, {
+          x: pos.x,
+          y: pos.y,
+          title: t(storyTerminologyKey(workspaceMode.value, 'folder', 'promptTitle')),
+          message: t(storyTerminologyKey(workspaceMode.value, 'folder', 'promptMessage')),
+        });
       }
       break;
   }

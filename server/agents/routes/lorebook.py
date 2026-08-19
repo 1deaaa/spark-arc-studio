@@ -242,6 +242,7 @@ async def generate_worldview(
         seed=seed_text,
         style_profile=style_profile,
         length_hint=length_hint,
+        workspace_mode=story_tags.get("workspace_mode"),
         story_tags=story_tags_hint,
     )
     stop_event = threading.Event()

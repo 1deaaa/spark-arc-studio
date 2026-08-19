@@ -2,7 +2,7 @@ from __future__ import annotations
 
 import json
 import os
-from typing import Literal
+from typing import Any, Literal
 
 from langchain.tools import tool
 from pydantic import AliasChoices, BaseModel, ConfigDict, Field, field_validator, model_validator
@@ -10,8 +10,70 @@ from pydantic import AliasChoices, BaseModel, ConfigDict, Field, field_validator
 from agents.auto_write_service import load_auto_write_status, start_auto_write_background
 from core.utils import get_project_path
 from core.project_settings import STORY_TAG_VALUE_UNSET, get_project_story_tags, get_workspace_mode, set_project_story_tags
+from agents.story_terminology import get_story_terminology
 
 from .common import ToolExecutionContext
+
+
+def format_work_tracker_validation_error(tool_args: Any, error: Exception) -> str:
+    """把任务板参数校验错误转换为可直接修正的工具回执。"""
+    operations = tool_args.get("operations") if isinstance(tool_args, dict) else None
+    findings: list[str] = []
+
+    if isinstance(operations, list):
+        for index, raw_operation in enumerate(operations):
+            if not isinstance(raw_operation, dict):
+                continue
+
+            operation = str(raw_operation.get("operation") or "").strip().lower()
+            single_id = str(raw_operation.get("item_id") or "").strip()
+            batch_ids = raw_operation.get("item_ids")
+            has_batch_ids = isinstance(batch_ids, list) and any(
+                str(value or "").strip() for value in batch_ids
+            )
+            has_target = bool(single_id or has_batch_ids)
+
+            if operation == "set_status":
+                if not has_target:
+                    findings.append(
+                        f"operations[{index}] 的 set_status 缺少 item_id 或 item_ids"
+                    )
+                status = str(raw_operation.get("status") or "").strip().lower()
+                if status not in {"pending", "in_progress", "completed", "blocked"}:
+                    findings.append(
+                        f"operations[{index}] 的 set_status 缺少有效 status"
+                    )
+            elif operation == "delete" and not has_target:
+                findings.append(
+                    f"operations[{index}] 的 delete 缺少 item_id 或 item_ids"
+                )
+            elif operation == "edit":
+                if not single_id and not has_batch_ids:
+                    findings.append(f"operations[{index}] 的 edit 缺少唯一 item_id")
+                if not isinstance(raw_operation.get("item"), dict):
+                    findings.append(f"operations[{index}] 的 edit 缺少 item")
+            elif operation in {"add", "insert"}:
+                item = raw_operation.get("item")
+                if not isinstance(item, dict) or not str(item.get("task") or "").strip():
+                    findings.append(
+                        f"operations[{index}] 的 {operation} 缺少 item.task"
+                    )
+                if operation == "insert" and raw_operation.get("position") is None:
+                    findings.append(f"operations[{index}] 的 insert 缺少 position")
+
+    if findings:
+        return (
+            "任务板更新失败："
+            + "；".join(findings)
+            + "。每个 operations 元素都是独立对象，不能继承其他元素的 item_id、item_ids 或 status；"
+            "请从当前进度板复制真实 id 后重新调用。"
+        )
+
+    detail = str(error).strip() or "参数校验失败"
+    return (
+        f"任务板更新失败：{detail}。"
+        "每个 operations 元素都是独立对象，请完整填写该操作需要的字段后重新调用。"
+    )
 
 
 class TriggerAutoWriteInput(BaseModel):
@@ -40,14 +102,54 @@ class WorkTrackerOperationItemInput(BaseModel):
 
 
 class WorkTrackerOperationInput(BaseModel):
-    model_config = ConfigDict(extra="forbid")
+    model_config = ConfigDict(
+        extra="forbid",
+        json_schema_extra={
+            "examples": [
+                {
+                    "operation": "set_status",
+                    "item_id": "task_x",
+                    "status": "completed",
+                },
+                {
+                    "operation": "set_status",
+                    "item_id": "task_y",
+                    "status": "in_progress",
+                },
+            ],
+        },
+    )
 
-    operation: Literal["add", "insert", "edit", "delete", "set_status"] = Field(description="条目操作：add=末尾新增；insert=指定位置插入；edit=修改内容/优先级/备注；delete=彻底删除；set_status=只修改状态。")
-    item_id: str | None = Field(default=None, description="单个目标任务 ID，适用于 edit/delete/set_status。")
-    item_ids: list[str] | None = Field(default=None, description="批量目标任务 ID，适用于 delete/set_status。")
+    operation: Literal["add", "insert", "edit", "delete", "set_status"] = Field(
+        description=(
+            "条目操作：add=末尾新增；insert=指定位置插入；edit=修改内容/优先级/备注；"
+            "delete=彻底删除；set_status=只修改状态。operations 数组中的每一项都必须独立完整，"
+            "不能继承相邻项的字段。"
+        ),
+    )
+    item_id: str | None = Field(
+        default=None,
+        description=(
+            "单个目标任务 ID，适用于 edit/delete/set_status；set_status 使用单个目标时必须提供。"
+            "必须逐字复制当前进度板中的 id，不要使用任务名称、数组下标或自行编造。"
+        ),
+    )
+    item_ids: list[str] | None = Field(
+        default=None,
+        description=(
+            "批量目标任务 ID，适用于 delete/set_status；使用批量目标时必须传非空数组。"
+            "数组中的每个 ID 都必须逐字复制当前进度板中的 id。"
+        ),
+    )
     item: WorkTrackerOperationItemInput | None = Field(default=None, description="add/insert 时传任务内容；edit 时只传需要修改的字段，禁止传 ID。set_status 不使用 item。备注只能通过 edit 的 item.notes 修改。")
     position: int | None = Field(default=None, ge=1, description="insert 的 1 基位置。")
-    status: Literal["pending", "in_progress", "completed", "blocked"] | None = Field(default=None, description="仅供 set_status 使用的目标状态。标记完成请传 completed；删除任务必须使用 delete。")
+    status: Literal["pending", "in_progress", "completed", "blocked"] | None = Field(
+        default=None,
+        description=(
+            "仅供 set_status 使用的目标状态；每个 set_status 都必须同时提供 item_id 或 item_ids。"
+            "标记完成请传 completed；删除任务必须使用 delete。"
+        ),
+    )
 
     @model_validator(mode="before")
     @classmethod
@@ -89,7 +191,22 @@ class WorkTrackerInput(BaseModel):
 
     overwrite: bool = Field(default=False, description="仅在创建全新计划或用户明确要求重建任务板时设为 true；已有任务板的日常推进必须保持 false。")
     items: list[WorkTrackerItemInput] | None = Field(default=None, validation_alias=AliasChoices("items", "tasks", "todo_items"), description="仅 overwrite=true 时有效，用于提供新的完整任务列表。")
-    operations: list[WorkTrackerOperationInput] | None = Field(default=None, description="增量操作列表，可批量执行。set_status 只传目标 ID 和 status；edit 使用 item 包裹待修改字段（备注放在 item.notes）。")
+    operations: list[WorkTrackerOperationInput] | None = Field(
+        default=None,
+        description=(
+            "增量操作列表，可批量执行。每个数组元素独立校验，字段不会从其他元素继承。"
+            "set_status 必须在同一个元素中同时填写 item_id 或 item_ids，以及 status；"
+            "edit 使用 item 包裹待修改字段（备注放在 item.notes）。"
+        ),
+        json_schema_extra={
+            "examples": [
+                [
+                    {"operation": "set_status", "item_id": "task_x", "status": "completed"},
+                    {"operation": "set_status", "item_id": "task_y", "status": "in_progress"},
+                ],
+            ],
+        },
+    )
     summary: str | None = Field(default=None, validation_alias=AliasChoices("summary", "goal", "objective"), description="任务板总目标；不传则保持原值。")
     contract: dict | None = Field(default=None, description="结构化创作契约；不传则保持原值。")
 
@@ -121,8 +238,8 @@ class UpdateProjectStoryTagsInput(BaseModel):
     worldviews: list[str] | None = Field(default=None, description="世界观，多选字符串数组，如 ['修真']；即使只有一个也必须传数组。")
     pov: str | None = Field(default=None, validation_alias=AliasChoices("pov", "point_of_view", "pointOfView"), description="人称视角，单选字符串，如 '第一人称'、'第三人称全知'。")
     length_hint: str | None = Field(default=None, validation_alias=AliasChoices("length_hint", "lengthHint", "length"), description="作品规模，单选字符串，如 '短篇'、'中篇'、'长篇'；不要填写单章或单场目标。")
-    scene_length_hint: str | None = Field(default=None, validation_alias=AliasChoices("scene_length_hint", "sceneLengthHint", "scene_length"), description="单次正文软目标：concise=精简、standard=标准、expanded=充实。用户要求今后的章节/场景正文整体变短或变长时使用。")
-    scene_target_chars: int | None = Field(default=None, ge=100, le=100000, validation_alias=AliasChoices("scene_target_chars", "sceneTargetChars", "target_chars"), description="单次章节/场景正文目标字符数，作为软目标；具体值存在时优先于三档区间。")
+    scene_length_hint: str | None = Field(default=None, validation_alias=AliasChoices("scene_length_hint", "sceneLengthHint", "scene_length"), description="历史兼容字段 scene_length_hint：表示当前 story_unit 的正文篇幅软目标；剧本模式解释为场景，小说模式解释为章节。concise=精简、standard=标准、expanded=充实。不要按字段名猜测层级。")
+    scene_target_chars: int | None = Field(default=None, ge=100, le=100000, validation_alias=AliasChoices("scene_target_chars", "sceneTargetChars", "target_chars"), description="历史兼容字段 scene_target_chars：当前 story_unit（剧本场景/小说章节）的正文目标字符数，作为软目标；具体值存在时优先于三档区间。不要将其理解为固定的场景字数。")
     clear_scene_target_chars: bool = Field(default=False, validation_alias=AliasChoices("clear_scene_target_chars", "clearSceneTargetChars"), description="是否清除项目级具体字数目标，恢复仅按三档控制。")
     active_inspiration_id: str | None = Field(default=None, validation_alias=AliasChoices("active_inspiration_id", "activeInspirationId"), description="当前生效的灵感 ID，可选字符串，用于追溯来源。")
 
@@ -165,6 +282,7 @@ def trigger_auto_write(
 
     user_id, project_name = ToolExecutionContext.get_context()
     workspace_mode = get_workspace_mode(str(user_id), project_name)
+    terms = get_story_terminology(workspace_mode)
     export_format = "novel" if workspace_mode == "novel" else "arc"
     project_path = get_project_path(user_id, project_name)
     from story.outline_parser import parse_outline_markup
@@ -183,10 +301,10 @@ def trigger_auto_write(
     chapter_nodes = [n for n in (outline.get("nodes") or []) if n.get("type") == "chapter"]
     total_chapters = len(chapter_nodes)
     if total_chapters == 0:
-        return "触发写作失败：大纲中未找到任何章节，请检查大纲.txt格式。"
+        return f"触发写作失败：大纲中未找到任何{terms['group']}，请检查大纲.txt 格式。"
 
     if start_chapter_index >= total_chapters:
-        return f"触发写作失败：start_chapter_index={start_chapter_index} 超出章节范围（共 {total_chapters} 章）。"
+        return f"触发写作失败：start_chapter_index={start_chapter_index} 超出{terms['group']}范围（共 {total_chapters} 个{terms['group']}）。"
 
     total_scenes = sum(len(ch.get("children") or []) for ch in chapter_nodes[start_chapter_index:])
 
@@ -225,7 +343,8 @@ def trigger_auto_write(
         f"__director_auto_write_started__:{side_band_meta}\n"
         f"自动写作任务已在后台启动。\n"
         f"- 项目：{project_name}\n"
-        f"- 从第 {start_chapter_index + 1} 章第 {start_scene_index + 1} 场景开始，共 {remaining_chapters} 章，{total_scenes} 个场景\n"
+        f"- 从第 {start_chapter_index + 1} 个{terms['group']}的第 {start_scene_index + 1} 个{terms['unit']}开始，"
+        f"共 {remaining_chapters} 个{terms['group']}，{total_scenes} 个{terms['unit']}\n"
         f"- 输出格式：{export_format}（由项目 story tags 创作模式决定）\n"
         f"- 模式：{mode}\n"
         f"- 自动审稿：{'开启' if auto_review else '关闭'}\n"
@@ -237,6 +356,7 @@ def trigger_auto_write(
 def check_scriptwriter_status() -> str:
     """查询自动写作状态与编剧任务板。"""
     user_id, project_name = ToolExecutionContext.get_context()
+    terms = get_story_terminology(get_workspace_mode(str(user_id), project_name))
 
     try:
         aw_state = load_auto_write_status(user_id, project_name)
@@ -247,7 +367,7 @@ def check_scriptwriter_status() -> str:
     status_labels = {
         "idle": "待机（尚未启动任何写作任务）",
         "running": "✅ 正在写作中",
-        "chapter_paused": "⏸️  章节暂停（写完一章后暂停，等待指令）",
+        "chapter_paused": f"⏸️  {terms['group']}暂停（写完一个{terms['group']}后暂停，等待指令）",
         "interrupted": "⚠️  被中断（客户端断开连接或手动停止）",
         "error": "❌ 写作异常（发生错误）",
         "complete": "🎉 已全部完成",
@@ -262,16 +382,16 @@ def check_scriptwriter_status() -> str:
         ch_title = aw_state.get("currentChapterTitle", "")
         sc_title = aw_state.get("currentSceneTitle", "")
         if ch_idx is not None:
-            lines.append(f"当前章节：第 {ch_idx + 1} 章 · {ch_title}")
+            lines.append(f"当前{terms['group']}：第 {ch_idx + 1} 个 · {ch_title}")
         if sc_title:
-            lines.append(f"当前场景：{sc_title}")
+            lines.append(f"当前{terms['unit']}：{sc_title}")
         started = aw_state.get("startedAt", "")
         if started:
             lines.append(f"启动时间：{started}")
     elif status in ("chapter_paused", "interrupted"):
         next_idx = aw_state.get("nextChapterIndex")
         if next_idx is not None:
-            lines.append(f"下一章索引：{next_idx}（可从此处继续）")
+            lines.append(f"下一{terms['group']}索引：{next_idx}（可从此处继续）")
         last_error = aw_state.get("lastError", "")
         if last_error:
             lines.append(f"中断原因：{last_error}")
@@ -280,13 +400,13 @@ def check_scriptwriter_status() -> str:
         lines.append(f"错误详情：{last_error}")
         resume_idx = aw_state.get("availableResumeChapterIndex")
         if resume_idx is not None:
-            lines.append(f"可从第 {resume_idx + 1} 章重试（start_chapter_index={resume_idx}）")
+            lines.append(f"可从第 {resume_idx + 1} 个{terms['group']}重试（start_chapter_index={resume_idx}）")
     elif status == "complete":
         completed_at = aw_state.get("completedAt", "")
         if completed_at:
             lines.append(f"完成时间：{completed_at}")
         scene_files = aw_state.get("generatedSceneFiles", [])
-        lines.append(f"共生成场景文件：{len(scene_files)} 个")
+        lines.append(f"共生成{terms['unit']}正文文件：{len(scene_files)} 个")
 
     lines.append("")
 
@@ -429,13 +549,18 @@ def read_project_story_tags() -> str:
     lines.append(f"作品规模：{length_hint or '未设置'}")
 
     scene_length_labels = {"concise": "精简", "standard": "标准", "expanded": "充实"}
+    terms = get_story_terminology(workspace_mode)
     scene_length_hint = tags.get("scene_length_hint", "standard")
-    lines.append(f"单次正文目标：{scene_length_labels.get(scene_length_hint, '标准')}（软目标）")
+    lines.append(
+        f"{terms['unit_body']}目标：{scene_length_labels.get(scene_length_hint, '标准')}（软目标；"
+        f"scene_length_hint 为历史兼容字段，按当前模式表示{terms['unit']}）"
+    )
     scene_target_chars = tags.get("scene_target_chars")
     lines.append(
-        f"单次正文目标字数：约 {scene_target_chars} 个可见正文字符（软目标，优先于档位区间）"
+        f"{terms['unit_body']}目标字数：约 {scene_target_chars} 个可见正文字符（软目标，优先于档位区间；"
+        f"scene_target_chars 为历史兼容字段，表示{terms['unit']}正文）"
         if scene_target_chars
-        else "单次正文目标字数：自动（使用档位区间）"
+        else f"{terms['unit_body']}目标字数：自动（使用档位区间；scene_target_chars 为历史兼容字段）"
     )
     
     return "\n".join(lines)
@@ -500,14 +625,21 @@ def update_project_story_tags(
         updated_fields.append(f"人称视角={pov}")
     if length_hint is not None:
         updated_fields.append(f"作品规模={length_hint}")
+    terms = get_story_terminology(tags.get("workspace_mode"))
     if scene_length_hint is not None:
         scene_length_labels = {"concise": "精简", "standard": "标准", "expanded": "充实"}
         normalized_scene_length = tags.get("scene_length_hint", "standard")
-        updated_fields.append(f"单次正文目标={scene_length_labels.get(normalized_scene_length, '标准')}")
+        updated_fields.append(
+            f"{terms['unit_body']}目标={scene_length_labels.get(normalized_scene_length, '标准')}"
+            "（scene_length_hint 为历史兼容字段）"
+        )
     if clear_scene_target_chars:
-        updated_fields.append("单次正文目标字数=自动")
+        updated_fields.append(f"{terms['unit_body']}目标字数=自动（scene_target_chars 为历史兼容字段）")
     elif scene_target_chars is not None:
-        updated_fields.append(f"单次正文目标字数≈{tags.get('scene_target_chars')}字")
+        updated_fields.append(
+            f"{terms['unit_body']}目标字数≈{tags.get('scene_target_chars')}字"
+            "（scene_target_chars 为历史兼容字段）"
+        )
     if active_inspiration_id is not None:
         updated_fields.append(f"灵感ID={active_inspiration_id}")
     

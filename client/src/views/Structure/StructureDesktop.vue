@@ -7,7 +7,7 @@
           <h2 class="spark-desktop-title">{{ t('views.structure.desktop.title') }}</h2>
           <OnboardingHelpButton scene-id="page-structure" />
           <AiSettingsPanel :visible="true" compact agent-name="agent_showrunner" />
-          <span class="spark-desktop-subtitle">{{ t('views.structure.desktop.subtitle') }}</span>
+          <span class="spark-desktop-subtitle">{{ t(`views.structure.desktop.${workspaceMode}.subtitle`) }}</span>
         </div>
       </div>
       <div class="toolbar spark-desktop-header__actions">
@@ -41,10 +41,10 @@
               </circle>
             </svg>
            </template>
-             {{ t('views.structure.desktop.startAutoWrite') }}
+             {{ t(structureKey('startAutoWrite')) }}
         </n-button>
         <n-button :disabled="!currentOutline || isLoading" size="small" secondary type="primary" @click="goToScriptWriter">
-            {{ t('views.structure.desktop.nextStep') }}
+            {{ t(structureKey('nextStep')) }}
           <template #icon><n-icon :component="ArrowRight" /></template>
         </n-button>
       </div>
@@ -60,13 +60,14 @@
           <n-icon size="48" :component="Workflow" />
           <p>{{ t('views.structure.desktop.emptyMain') }}</p>
           <p class="hint">{{ t('views.structure.desktop.emptyHintHistory') }}</p>
-          <p class="hint">{{ t('views.structure.desktop.emptyHintChapter') }}</p>
+          <p class="hint">{{ t(`views.structure.desktop.${workspaceMode}.emptyHint`) }}</p>
         </div>
 
         <OutlineEditor 
           v-if="currentOutline"
           ref="outlineEditorRef"
           :outline="currentOutline"
+          :workspace-mode="workspaceMode"
           @update:outline="handleOutlineUpdate"
           @save-history="handleSaveToHistory"
         />
@@ -125,15 +126,15 @@
                       size="small"
                       class="ctrl-num"
                     >
-                      <template #prefix>{{ t('views.structure.desktop.chapterCountPrefix') }}</template>
+                          <template #prefix>{{ t(`views.structure.desktop.${workspaceMode}.groupCountPrefix`) }}</template>
                     </n-input-number>
                     <n-input-number
                       v-model:value="sceneCount"
-                      :min="1" :max="10"
+                      :min="1" :max="30"
                       size="small"
                       class="ctrl-num"
                     >
-                      <template #prefix>{{ t('views.structure.desktop.scenePerChapterPrefix') }}</template>
+                          <template #prefix>{{ t(`views.structure.desktop.${workspaceMode}.unitPerGroupPrefix`) }}</template>
                     </n-input-number>
                   </template>
                   <n-button
@@ -192,7 +193,8 @@ const {
   handleSaveToHistory,
   handleOutlineHistorySelect,
   handleOutlineRestore,
-  projectStore
+  projectStore,
+  workspaceMode,
 } = useStructureLogic();
 
 import { useRouter } from 'vue-router';
@@ -201,6 +203,7 @@ const { t } = useI18n();
 const router = useRouter();
 const viewStore = useViewStore();
 const outlineEditorRef = ref(null);
+const structureKey = (variant: string) => `views.structure.desktop.${workspaceMode.value}.${variant}`;
 
 function openAutoWrite() {
   outlineEditorRef.value?.openAutoWriteModal();

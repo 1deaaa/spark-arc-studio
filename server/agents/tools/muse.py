@@ -11,6 +11,7 @@ from core.request_context import (
     current_user_id,
     get_current_project_name,
 )
+from core.project_settings import get_project_story_tags
 
 
 class CaptureInspirationInput(BaseModel):
@@ -19,7 +20,7 @@ class CaptureInspirationInput(BaseModel):
     genres: list[str] | None = Field(default=None, description="可选题材标签列表")
     tones: list[str] | None = Field(default=None, description="可选基调标签列表")
     worldviews: list[str] | None = Field(default=None, description="可选世界观标签列表")
-    length_hint: str | None = Field(default=None, description="可选作品规模，如短篇、中篇、长篇")
+    length_hint: str | None = Field(default=None, description="可选作品规模，如短篇、中篇、长篇；有项目上下文时按项目的剧本/小说模式解释")
 
 
 class RewriteInspirationInput(BaseModel):
@@ -84,6 +85,8 @@ def capture_inspiration(
     user_id = current_user_id.get()
     if not user_id:
         return "捕获灵感失败：缺少用户上下文。"
+    project_name = get_current_project_name()
+    story_tags = get_project_story_tags(str(user_id), project_name) if project_name else {}
     agent = MuseAgent(user_id)
     context = agent.build_context(
         operation="expand_inspiration",
@@ -93,6 +96,7 @@ def capture_inspiration(
         tones=tones,
         worldviews=worldviews,
         length_hint=length_hint,
+        workspace_mode=story_tags.get("workspace_mode"),
     )
     result = collect_text_output(agent.execute(context))
     if not result:

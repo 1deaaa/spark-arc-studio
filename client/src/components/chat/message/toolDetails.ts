@@ -21,6 +21,7 @@ export type ToolDisplayDetails = {
 };
 
 const PATCH_FIELDS = ['search_text', 'replace_text'] as const;
+const WORK_TRACKER_FAILURE_PREFIXES = ['任务板更新失败', '读取任务板失败'] as const;
 
 /** 只列出适合展示给用户的参数；工具请求本身不会使用这份映射。 */
 export const TOOL_DETAIL_FIELD_POLICIES: Readonly<Record<string, readonly string[]>> = {
@@ -48,13 +49,16 @@ export const TOOL_DETAIL_FIELD_POLICIES: Readonly<Record<string, readonly string
     'workspace_mode', 'style', 'genres', 'tones', 'worldviews', 'pov',
     'length_hint', 'scene_length_hint', 'scene_target_chars', 'active_inspiration_id',
   ],
-  create_or_rewrite_script: ['chapter_name', 'scene_name', 'content', 'file_path'],
-  create_chapter: ['chapter_name', 'scene_name', 'content'],
-  organize_scenes_to_chapter: ['chapter_name', 'scene_names', 'scene_files'],
+  create_or_rewrite_script: ['chapter_name', 'work_name', 'scene_name', 'content', 'file_path'],
+  create_chapter: ['chapter_name'],
+  organize_scenes_to_chapter: ['scene_paths', 'new_chapter_name', 'chapter_num', 'preserve_originals'],
 
-  // 章节/场景元数据工具的名称由后端工具注册表统一决定；这里集中兼容候选名称。
+  // 后端继续使用 chapter/scene 兼容字段；这里仅控制适合用户查看的参数白名单。
   rename_chapter: ['chapter_path', 'new_chapter_name', 'old_name', 'new_name', 'chapter_name', 'path', 'file_path'],
   rename_scene: ['scene_path', 'new_scene_name', 'old_name', 'new_name', 'scene_name', 'path', 'file_path'],
+  batch_rename_chapters: ['renames'],
+  batch_rename_scenes: ['renames'],
+  batch_update_story_metadata: ['updates'],
   rename_chapter_folder: ['chapter_path', 'new_chapter_name', 'old_name', 'new_name', 'chapter_name', 'path', 'file_path'],
   rename_scene_file: ['scene_path', 'new_scene_name', 'old_name', 'new_name', 'scene_name', 'path', 'file_path'],
   rename_chapter_metadata: ['old_name', 'new_name', 'chapter_name', 'path', 'file_path'],
@@ -78,6 +82,7 @@ const FIELD_LABEL_KEYS: Readonly<Record<string, string>> = {
   completion_mode: 'components.chatMessageList.toolDetails.fields.completionMode',
   chapter_name: 'components.chatMessageList.toolDetails.fields.chapterName',
   scene_name: 'components.chatMessageList.toolDetails.fields.sceneName',
+  work_name: 'components.chatMessageList.toolDetails.fields.workName',
   scene_file_path: 'components.chatMessageList.toolDetails.fields.sceneFilePath',
   scene_guidance: 'components.chatMessageList.toolDetails.fields.sceneGuidance',
   scene_characters: 'components.chatMessageList.toolDetails.fields.sceneCharacters',
@@ -136,6 +141,8 @@ const FIELD_LABEL_KEYS: Readonly<Record<string, string>> = {
   to_index: 'components.chatMessageList.toolDetails.fields.toIndex',
   order: 'components.chatMessageList.toolDetails.fields.order',
   metadata: 'components.chatMessageList.toolDetails.fields.metadata',
+  renames: 'components.chatMessageList.toolDetails.fields.renames',
+  updates: 'components.chatMessageList.toolDetails.fields.updates',
 };
 
 const SECTION_LABEL_KEYS: Readonly<Record<ToolDetailSectionKey, string>> = {
@@ -199,24 +206,44 @@ function makeSection(key: ToolDetailSectionKey, value: unknown, allowedFields?: 
   } satisfies ToolDetailSection;
 }
 
+function getEffectiveToolError(toolName: string, segment: Record<string, unknown>) {
+  if (hasOwn(segment, 'tool_error') && hasValue(segment.tool_error)) {
+    return segment.tool_error;
+  }
+
+  // 兼容旧事件：部分链路曾把任务板校验失败文本放在 tool_result 中。
+  if (
+    toolName === 'work_tracker'
+    && typeof segment.tool_result === 'string'
+  ) {
+    const toolResult = segment.tool_result;
+    if (WORK_TRACKER_FAILURE_PREFIXES.some(prefix => toolResult.trimStart().startsWith(prefix))) {
+      return toolResult;
+    }
+  }
+
+  return undefined;
+}
+
 export function adaptToolDetails(toolName: unknown, segment: Record<string, unknown> = {}): ToolDisplayDetails {
   const normalizedToolName = normalizeToolName(toolName);
   const policy = getPolicy(normalizedToolName);
   const sections: ToolDetailSection[] = [];
-  const hasError = hasOwn(segment, 'tool_error') && hasValue(segment.tool_error);
+  const effectiveError = getEffectiveToolError(normalizedToolName, segment);
+  const hasError = hasValue(effectiveError);
 
   // 输入只从已知工具的字段白名单取值，避免未知工具把完整参数回显给用户。
   if (policy && hasOwn(segment, 'tool_input')) {
     const section = makeSection('input', segment.tool_input, policy);
     if (section) sections.push(section);
   }
-  if (policy && hasOwn(segment, 'tool_result')) {
+  if (policy && hasOwn(segment, 'tool_result') && !hasError) {
     const section = makeSection('result', segment.tool_result);
     if (section) sections.push(section);
   }
   // 失败详情是诊断信息，即使工具不在成功展示白名单中也允许展示。
   if (hasError) {
-    const section = makeSection('error', segment.tool_error);
+    const section = makeSection('error', effectiveError);
     if (section) sections.push(section);
   }
 
