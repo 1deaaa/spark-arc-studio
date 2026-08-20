@@ -79,6 +79,8 @@ export function useChatActions(adapter: ChatActionsAdapter, options: UseChatActi
     let scrollBindingActive = false;
     let scrollListeners: Array<{ el: HTMLElement; handler: () => void }> = [];
     let intentListeners: Array<{ el: HTMLElement; type: 'wheel' | 'touchstart' | 'pointerdown'; handler: (event: Event) => void }> = [];
+    let contentResizeObservers: ResizeObserver[] = [];
+    let resizeScrollFrame: number | null = null;
     const lastKnownScrollTop = new WeakMap<HTMLElement, number>();
 
     /** 判断元素是否滚动到接近底部 */
@@ -166,6 +168,30 @@ export function useChatActions(adapter: ChatActionsAdapter, options: UseChatActi
                 { el, type: 'touchstart', handler: intentHandler },
                 { el, type: 'pointerdown', handler: intentHandler },
             );
+
+            // 消息内容的高度变化不一定伴随 history 变化（例如思考块首次展开、延迟 Markdown
+            // 渲染或工具详情展开），因此观察内容层并在布局稳定后继续跟随底部。
+            if (typeof ResizeObserver !== 'undefined') {
+                const content = el.querySelector?.('.chat-list-content') as HTMLElement | null;
+                if (content) {
+                    const observer = new ResizeObserver(() => {
+                        if (
+                            currentResponseInterrupted
+                            || !autoScrollEnabled.value
+                        ) return;
+                        if (resizeScrollFrame !== null) return;
+                        const schedule = typeof requestAnimationFrame === 'function'
+                            ? requestAnimationFrame
+                            : (callback: FrameRequestCallback) => window.setTimeout(() => callback(Date.now()), 0);
+                        resizeScrollFrame = schedule(() => {
+                            resizeScrollFrame = null;
+                            scrollToBottom();
+                        });
+                    });
+                    observer.observe(content);
+                    contentResizeObservers.push(observer);
+                }
+            }
         }
     }
 
@@ -179,18 +205,32 @@ export function useChatActions(adapter: ChatActionsAdapter, options: UseChatActi
             el.removeEventListener(type, handler);
         }
         intentListeners = [];
+        for (const observer of contentResizeObservers) observer.disconnect();
+        contentResizeObservers = [];
+        if (resizeScrollFrame !== null) {
+            if (typeof cancelAnimationFrame === 'function') cancelAnimationFrame(resizeScrollFrame);
+            else clearTimeout(resizeScrollFrame);
+            resizeScrollFrame = null;
+        }
     }
 
     // 延迟绑定：等 listRef 对应的 DOM 挂载后再绑定
     onMounted(() => {
         scrollBindingActive = true;
-        nextTick(() => bindScrollListeners());
+        nextTick(() => {
+            bindScrollListeners();
+            scrollToBottom(true);
+        });
     });
 
     // 浮窗和移动抽屉会延迟挂载消息列表；流可能早于列表出现，必须在真实 DOM 就绪后补绑。
     watch(
         () => [resolveEl(listRef), resolveEl(mobileListRef)],
-        () => nextTick(() => bindScrollListeners()),
+        (elements, previousElements) => nextTick(() => {
+            bindScrollListeners();
+            const hasNewList = elements.some((el, index) => el && el !== previousElements?.[index]);
+            if (hasNewList) scrollToBottom(true);
+        }),
         { flush: 'post' },
     );
 
@@ -208,9 +248,13 @@ export function useChatActions(adapter: ChatActionsAdapter, options: UseChatActi
     }
 
     function scrollToBottom(force = false) {
-        nextTick(() => {
+        if (force) {
+            currentResponseInterrupted = false;
+            autoScrollEnabled.value = true;
+        }
+        const apply = () => {
             if (adapter.getSending() && currentResponseInterrupted) return;
-            if (!force && !autoScrollEnabled.value) return;
+            if (!autoScrollEnabled.value) return;
             markProgrammaticScroll();
             const desktopEl = resolveEl(listRef);
             if (desktopEl && desktopEl.scrollHeight !== undefined && desktopEl.scrollTop !== undefined) {
@@ -222,6 +266,12 @@ export function useChatActions(adapter: ChatActionsAdapter, options: UseChatActi
                 mobileEl.scrollTop = mobileEl.scrollHeight;
                 if (mobileEl instanceof HTMLElement) lastKnownScrollTop.set(mobileEl, mobileEl.scrollTop);
             }
+        };
+        nextTick(() => {
+            apply();
+            // 面板进入、思考块展开等场景可能在当前 tick 之后才完成布局，再补一帧。
+            if (typeof requestAnimationFrame === 'function') requestAnimationFrame(apply);
+            else window.setTimeout(apply, 0);
         });
     }
 
@@ -353,7 +403,7 @@ export function useChatActions(adapter: ChatActionsAdapter, options: UseChatActi
         editingContent.value = '';
 
         try {
-            await adapter.editMessage(id, content);
+            await runEditedMessage(id, content);
         } catch (error: unknown) {
             editingMessageId.value = id;
             editingContent.value = content;
@@ -380,8 +430,16 @@ export function useChatActions(adapter: ChatActionsAdapter, options: UseChatActi
             return;
         }
         if (!content?.trim()) return;
-        // 通过 editMessage 触发重新生成（保持原内容不变）
-        await adapter.editMessage(id, content);
+        // 通过 editMessage 触发重新生成（保持原内容不变），并立即恢复自动跟随。
+        await runEditedMessage(id, content);
+    }
+
+    async function runEditedMessage(id: MessageId, content: string) {
+        const request = adapter.editMessage(id, content);
+        // editMessage 会在 Promise 完成前删除旧回复并创建新回复占位，
+        // 请求启动后立即恢复本轮自动跟随，不能等整段重新生成结束。
+        scrollToBottom(true);
+        await request;
     }
 
     onUnmounted(() => {

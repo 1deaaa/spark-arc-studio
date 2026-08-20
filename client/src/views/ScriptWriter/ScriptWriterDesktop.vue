@@ -285,7 +285,7 @@ const chatActions = useChatActions({
 const {
   draft, editingMessageId, editingContent, thinkingSeconds,
   onDraftKeydown, send, stop, startEdit, cancelEdit,
-  onEditKeydown, saveEdit, deleteMsg, retryMsg
+  onEditKeydown, saveEdit, deleteMsg, retryMsg, scrollToBottom
 } = chatActions;
 
 async function clear() {
@@ -330,6 +330,10 @@ function loadChatSidebarVisible() {
 
 function toggleChatSidebar() {
   chatSidebarVisible.value = !chatSidebarVisible.value;
+  if (chatSidebarVisible.value) {
+    // 停靠面板重新显示时，确保历史消息从最新内容开始展示。
+    nextTick(() => scrollToBottom(true));
+  }
   try {
     localStorage.setItem(CHAT_SIDEBAR_STORAGE_KEY, String(chatSidebarVisible.value));
   } catch {}
