@@ -59,7 +59,7 @@
 import { ref, computed, reactive, onMounted, onBeforeUnmount, watch, h, type Component } from 'vue';
 import { NDropdown, NIcon } from 'naive-ui';
 import draggable from 'vuedraggable';
-import { BookOpen, ChevronDown, ChevronRight, Clapperboard, Folder, FolderOpen, Pencil, Plus, SquarePen, Trash } from '@lucide/vue';
+import { BookOpen, ChevronDown, ChevronRight, Clapperboard, Folder, FolderOpen, FolderPlus, Pencil, Plus, Trash } from '@lucide/vue';
 import { useI18n } from 'vue-i18n';
 import { useSceneStore } from '@/components/stores/sceneStore';
 import { useFileStore, flattenFileTree } from '@/components/stores/fileStore';
@@ -143,7 +143,7 @@ const folderMenuOptions = computed(() => {
     {
       label: t(storyTerminologyKey(workspaceMode.value, 'folder', 'create')),
       key: 'new-folder',
-      icon: _icon(SquarePen)
+      icon: _icon(FolderPlus)
     },
     {
       type: 'divider'

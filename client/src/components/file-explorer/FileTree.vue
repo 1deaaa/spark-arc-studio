@@ -26,7 +26,7 @@
           <n-icon :component="Plus" :size="13" style="margin-right:4px;" />{{ t(storyTerminologyKey(workspaceMode, 'story', 'create')) }}
         </button>
         <button class="file-tree-empty__btn file-tree-empty__btn--ghost" type="button" @click.stop="handleCreate('folder')">
-          <n-icon :component="SquarePen" :size="13" style="margin-right:4px;" />{{ t(storyTerminologyKey(workspaceMode, 'folder', 'create')) }}
+          <n-icon :component="FolderPlus" :size="13" style="margin-right:4px;" />{{ t(storyTerminologyKey(workspaceMode, 'folder', 'create')) }}
         </button>
       </div>
     </div>
@@ -49,7 +49,7 @@
 import { computed, reactive, onMounted, onBeforeUnmount, h, type Component } from 'vue';
 import { NDropdown, NIcon } from 'naive-ui';
 import draggable from 'vuedraggable';
-import { BookOpen, Clapperboard, Plus, SquarePen } from '@lucide/vue';
+import { BookOpen, Clapperboard, FolderPlus, Plus } from '@lucide/vue';
 import { useI18n } from 'vue-i18n';
 import FileItem from './FileItem.vue';
 import { useFileStore } from '@/components/stores/fileStore';
@@ -88,7 +88,7 @@ const blankMenuOptions = computed(() => [
   {
     label: t(storyTerminologyKey(workspaceMode.value, 'folder', 'create')),
     key: 'new-folder',
-    icon: _menuIcon(SquarePen)
+    icon: _menuIcon(FolderPlus)
   }
 ]);
 

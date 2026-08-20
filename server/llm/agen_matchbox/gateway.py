@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+from copy import deepcopy
 from typing import Any, Dict, Mapping, Optional
 
 from langchain_core.outputs import ChatGenerationChunk
@@ -16,17 +17,39 @@ from .reasoning_compat import (
 from .tool_protocol import validate_tool_message_history
 
 
-def _normalize_json_schema_required(schema: Any) -> Any:
-    """递归补齐对象 Schema 的 ``required`` 数组。"""
-    if isinstance(schema, list):
-        return [_normalize_json_schema_required(item) for item in schema]
-    if not isinstance(schema, dict):
-        return schema
+def _normalize_openai_compat_json_schema(schema: Any) -> Any:
+    """递归收敛工具 Schema，并补齐对象的 ``required`` 数组。
 
-    normalized = {
-        key: _normalize_json_schema_required(value)
-        for key, value in schema.items()
-    }
+    ``examples`` 是标准 JSON Schema 注释，但不属于 Gemini
+    ``FunctionDeclaration.parameters`` 接受的 Schema 字段。部分 OpenAI 兼容
+    代理会把工具声明直接转换成 Gemini Schema，因而会让整个请求在生成前以
+    ``INVALID_ARGUMENT`` 失败。单数 ``example`` 属于 Gemini Schema，继续保留。
+    """
+    if not isinstance(schema, dict):
+        return deepcopy(schema)
+
+    normalized = {}
+    schema_maps = {"properties", "patternProperties", "$defs", "definitions", "dependentSchemas"}
+    schema_values = {"items", "contains", "additionalProperties", "propertyNames", "not", "if", "then", "else"}
+    schema_lists = {"anyOf", "oneOf", "allOf", "prefixItems"}
+    for key, value in schema.items():
+        if key == "examples":
+            continue
+        if key in schema_maps and isinstance(value, dict):
+            # 映射键是参数名或定义名，必须原样保留，即使恰好叫 examples。
+            normalized[key] = {
+                name: _normalize_openai_compat_json_schema(child)
+                for name, child in value.items()
+            }
+        elif key in schema_values and isinstance(value, dict):
+            normalized[key] = _normalize_openai_compat_json_schema(value)
+        elif key in schema_lists and isinstance(value, list):
+            normalized[key] = [
+                _normalize_openai_compat_json_schema(child)
+                for child in value
+            ]
+        else:
+            normalized[key] = deepcopy(value)
     is_object_schema = (
         normalized.get("type") == "object"
         or isinstance(normalized.get("properties"), dict)
@@ -41,7 +64,8 @@ def normalize_openai_tool_schemas(tools: Any) -> Any:
 
     OpenAI 兼容实现通常允许对象 Schema 省略 ``required``，但部分提供商会把
     缺失值按 ``null`` 校验并拒绝请求。空数组仍属于标准 JSON Schema，因此可在
-    统一协议层安全补齐，无需按模型名称或端点域名建立供应商分支。
+    统一协议层安全补齐。纯注释字段 ``examples`` 会被部分 Gemini 代理当作未知
+    字段拒绝，统一移除也不会改变参数校验语义。这里不按模型名称或端点域名分支。
     """
     if not isinstance(tools, list):
         return tools
@@ -58,7 +82,7 @@ def normalize_openai_tool_schemas(tools: Any) -> Any:
             normalized_function = dict(function)
             parameters = function.get("parameters")
             if isinstance(parameters, dict):
-                normalized_function["parameters"] = _normalize_json_schema_required(parameters)
+                normalized_function["parameters"] = _normalize_openai_compat_json_schema(parameters)
             normalized_tool["function"] = normalized_function
         normalized_tools.append(normalized_tool)
     return normalized_tools

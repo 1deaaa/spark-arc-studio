@@ -86,6 +86,71 @@ def test_tool_schema_required_is_completed_recursively_without_mutating_input() 
     assert parameters["properties"]["filters"]["required"] == []
 
 
+def test_tool_schema_removes_plural_examples_for_gemini_compatibility() -> None:
+    from llm.agen_matchbox.gateway import normalize_openai_tool_schemas
+
+    tools = [
+        {
+            "type": "function",
+            "function": {
+                "name": "update_tasks",
+                "parameters": {
+                    "type": "object",
+                    "properties": {
+                        "operations": {
+                            "type": "array",
+                            "examples": [[{"operation": "complete"}]],
+                            "items": {
+                                "type": "object",
+                                "example": {"operation": "complete"},
+                                "examples": [{"operation": "complete"}],
+                                "properties": {
+                                    "operation": {"type": "string"},
+                                },
+                            },
+                        },
+                        "examples": {
+                            "type": "string",
+                            "description": "名为 examples 的真实工具参数",
+                        },
+                    },
+                },
+            },
+        }
+    ]
+
+    normalized = normalize_openai_tool_schemas(tools)
+    operations = normalized[0]["function"]["parameters"]["properties"]["operations"]
+
+    assert "examples" in tools[0]["function"]["parameters"]["properties"]["operations"]
+    assert "examples" not in operations
+    assert "examples" not in operations["items"]
+    assert operations["items"]["example"] == {"operation": "complete"}
+    assert normalized[0]["function"]["parameters"]["properties"]["examples"] == {
+        "type": "string",
+        "description": "名为 examples 的真实工具参数",
+    }
+
+
+def test_work_tracker_schema_sent_upstream_excludes_plural_examples() -> None:
+    from agents.tools.automation import work_tracker
+    from llm.agen_matchbox.gateway import ChatUniversal
+
+    llm = ChatUniversal(
+        model="offline-gemini-schema-check",
+        api_key="offline-key",
+        base_url="https://example.invalid/v1",
+    )
+    bound = llm.bind_tools([work_tracker])
+    payload = llm._get_request_payload(
+        [HumanMessage(content="离线检查")],
+        **bound.kwargs,
+    )
+
+    serialized_schema = str(payload["tools"][0]["function"]["parameters"])
+    assert "'examples':" not in serialized_schema
+
+
 def test_schema_validation_400_is_not_reported_as_content_moderation(monkeypatch) -> None:
     from agents.routes.schemas import format_ai_error
 
