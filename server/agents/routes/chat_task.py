@@ -197,12 +197,18 @@ class ChatTaskEntry:
         with self.log_lock:
             if self.accumulator is None:
                 self.accumulator = ChatStreamAccumulator(channel=self.channel, task_id=self.task_id)
+            resolved_status = stream_status or self.status
             metadata = self.accumulator.build_metadata(
-                stream_status=stream_status or self.status,
+                stream_status=resolved_status,
                 assistant_message_id=self.assistant_message_id,
             )
             if self.llm_usage:
                 metadata["llm_usage"] = dict(self.llm_usage)
+            if resolved_status == 'error':
+                error_message = str(self.error_message or '').strip()
+                if error_message:
+                    metadata['error'] = error_message
+                metadata['retry_count'] = max(int(self.retry_count or 0), 0)
             return metadata
 
     def reset_for_retry(self) -> None:

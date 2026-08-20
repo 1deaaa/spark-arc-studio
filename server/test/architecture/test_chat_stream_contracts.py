@@ -703,6 +703,38 @@ def test_chat_task_terminal_claim_publishes_task_done_once(monkeypatch) -> None:
     cleanup_task(task_key, delay=0, task_id=entry.task_id)
 
 
+def test_chat_task_terminal_error_is_persisted_in_assistant_metadata(monkeypatch) -> None:
+    entry = make_entry()
+    entry.append_event({"event": "assistant_delta", "text": "已生成部分内容"})
+    monkeypatch.setattr("agents.routes.chat.cleanup_task", lambda *args, **kwargs: None)
+
+    class FakeChatManager:
+        def __init__(self) -> None:
+            self.checkpoints = []
+
+        def update_message_content_metadata(self, message_id, content, metadata):
+            self.checkpoints.append((message_id, content, metadata))
+            return True
+
+    manager = FakeChatManager()
+
+    assert _finalize_chat_task(
+        manager,
+        entry,
+        entry.task_key,
+        final_status="error",
+        final_error_message="Director 图达到递归步数上限",
+        retry_count=2,
+        collect_usage=False,
+    ) is True
+
+    assert entry.result_metadata["stream_status"] == "error"
+    assert entry.result_metadata["error"] == "Director 图达到递归步数上限"
+    assert entry.result_metadata["retry_count"] == 2
+    assert manager.checkpoints[-1][2]["error"] == "Director 图达到递归步数上限"
+    assert manager.checkpoints[-1][2]["retry_count"] == 2
+
+
 def test_context_window_stats_merges_agent_cache_usage() -> None:
     stats = {
         "agent_id": "agent_lorebook",

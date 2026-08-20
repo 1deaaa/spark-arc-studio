@@ -34,6 +34,7 @@ import { createStreamingTask } from '@/utils/streamingRuntime';
 import {
   consumeThinkStreamChunk,
   flushThinkStreamState,
+  getLatestHistoryTerminalError,
   mergeToolTrace,
   normalizeToolName,
   reconcileSessionHistory,
@@ -882,6 +883,10 @@ export const useChatStore = defineStore('chat', {
         const fallbackAssistant = authoritative ? null : preserveLocalTail;
         const localHistory = authoritative ? [] : session.history;
         session.history = reconcileSessionHistory(rawHistory || [], fallbackAssistant, localHistory);
+        session.lastError = getLatestHistoryTerminalError(
+          session.history,
+          _defaultBackgroundTaskError(),
+        );
         restoreHistoryTokenStats(session, session.history, {
           preserveLive: session.sending || session.backgroundTaskStatus === 'running',
         });

@@ -282,6 +282,49 @@ describe('chatStore NDJSON 消费契约', () => {
     expect(getChatHistory).toHaveBeenLastCalledWith('huang', 'agent_director', 'global', 80);
   });
 
+  it('历史刷新从最终失败助手消息恢复后台错误展示', async () => {
+    vi.mocked(getChatHistory).mockResolvedValueOnce([
+      { id: 1, role: 'user', content: '继续执行' },
+      {
+        id: 2,
+        role: 'assistant',
+        content: '已生成部分内容',
+        metadata: {
+          stream_status: 'error',
+          error: 'Director 图达到递归步数上限',
+          retry_count: 2,
+        },
+      },
+    ] as any);
+    const store = useChatStore();
+    const session = store.primarySession;
+
+    await store.refreshSessionHistory(session.id, 80, { authoritative: true });
+
+    expect(session.lastError).toBe('Director 图达到递归步数上限');
+  });
+
+  it('历史刷新不会重新展示已被后续用户消息覆盖的旧错误', async () => {
+    vi.mocked(getChatHistory).mockResolvedValueOnce([
+      {
+        id: 1,
+        role: 'assistant',
+        content: '上次部分内容',
+        metadata: {
+          stream_status: 'error',
+          error: '上次请求失败',
+        },
+      },
+      { id: 2, role: 'user', content: '请重新开始' },
+    ] as any);
+    const store = useChatStore();
+    const session = store.primarySession;
+
+    await store.refreshSessionHistory(session.id, 80, { authoritative: true });
+
+    expect(session.lastError).toBe('');
+  });
+
   it('消费 task_snapshot / delta / tool 事件并维护 segments 与 tool_traces', async () => {
     const store = useChatStore();
     const session = store.primarySession;

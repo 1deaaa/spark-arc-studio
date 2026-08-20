@@ -1067,7 +1067,8 @@ const imageAdapterOptions = computed(() => [
 ]);
 
 function modelCapabilityBadges(model: AiModelItem): CapabilityBadgeMeta[] {
-    if (isEmbeddingModel(model)) {
+    const type = modalitiesToModelType(model);
+    if (type === 'embedding') {
         return [{
             key: 'embedding',
             text: 'E',
@@ -1075,33 +1076,23 @@ function modelCapabilityBadges(model: AiModelItem): CapabilityBadgeMeta[] {
             type: 'error',
         }];
     }
-
-    const badges: CapabilityBadgeMeta[] = [];
-    if (isTextModel(model)) {
-        badges.push({
-            key: 'text',
-            text: 'T',
-            title: t('components.aiManager.modelTypes.text'),
-            type: 'default',
-        });
-    }
-    if (isImageModel(model)) {
-        badges.push({
+    if (type === 'image_generation') {
+        return [{
             key: 'image',
             text: 'I',
             title: t('components.aiManager.modelTypes.imageGeneration'),
             type: 'success',
-        });
+        }];
     }
-    if (supportsImageInput(model)) {
-        badges.push({
+    if (type === 'vision_text') {
+        return [{
             key: 'vision',
             text: 'V',
             title: t('components.aiManager.modelTypes.visionText'),
             type: 'info',
-        });
+        }];
     }
-    return badges.length > 0 ? badges : [{
+    return [{
         key: 'text',
         text: 'T',
         title: t('components.aiManager.modelTypes.text'),

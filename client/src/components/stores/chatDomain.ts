@@ -356,6 +356,36 @@ export function normalizeHistoryList(history: AnyRecord[] = []): AnyRecord[] {
   return Array.isArray(history) ? history.map(item => normalizeHistoryMessage(item)) : [];
 }
 
+/** 从最后一条用户可见消息恢复其终态错误，避免旧失败污染后续轮次。 */
+export function getLatestHistoryTerminalError(history: AnyRecord[] = [], fallback = ''): string {
+  const messages = Array.isArray(history) ? history : [];
+  for (let index = messages.length - 1; index >= 0; index -= 1) {
+    const message = messages[index];
+    const role = String(message?.role || '').trim();
+    if (role === 'system') continue;
+    if (role !== 'assistant') return '';
+
+    const metadata = message?.metadata && typeof message.metadata === 'object'
+      ? message.metadata as AnyRecord
+      : {};
+    const streamStatus = String(
+      metadata.stream_status ?? metadata.streamStatus ?? message?.stream_status ?? message?.streamStatus ?? '',
+    ).trim().toLowerCase();
+    if (streamStatus !== 'error') return '';
+
+    for (const value of [
+      metadata.error,
+      metadata.final_error_message,
+      metadata.finalErrorMessage,
+      message?.error,
+    ]) {
+      if (typeof value === 'string' && value.trim()) return value.trim();
+    }
+    return String(fallback || '').trim();
+  }
+  return '';
+}
+
 function messageHasAssistantPayload(message: AnyRecord | null | undefined = {}) {
   if (!message || message.role !== 'assistant') return false;
   return Boolean(

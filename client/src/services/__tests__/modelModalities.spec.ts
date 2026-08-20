@@ -7,6 +7,7 @@ import {
   isImageModel,
   isLanguageModel,
   isTextModel,
+  modalitiesToModelType,
   normalizeModelModalities,
   supportsImageInput,
 } from '@/services/modelModalities';
@@ -33,6 +34,22 @@ describe('模型输入输出模态', () => {
     expect(supportsImageInput(apiModel)).toBe(true);
     expect(isImageModel(apiModel)).toBe(true);
     expect(isTextModel(apiModel)).toBe(true);
+  });
+
+  it('将模型映射为互斥的主模态类型', () => {
+    expect(modalitiesToModelType({ output_modalities: ['text'] })).toBe('text');
+    expect(modalitiesToModelType({
+      input_modalities: ['text', 'image'],
+      output_modalities: ['text'],
+    })).toBe('vision_text');
+    expect(modalitiesToModelType({
+      input_modalities: ['text', 'image'],
+      output_modalities: ['text', 'image'],
+    })).toBe('image_generation');
+    expect(modalitiesToModelType({
+      input_modalities: ['text'],
+      output_modalities: ['embedding'],
+    })).toBe('embedding');
   });
 
   it('向量输出排除文本和图片输出及图片输入', () => {

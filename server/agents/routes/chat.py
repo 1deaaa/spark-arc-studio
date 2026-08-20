@@ -838,7 +838,17 @@ def _finalize_chat_task(
     logger = logging.getLogger(__name__)
     reply = ''
     metadata: Dict[str, Any] = {}
+    terminal_error_message = _coerce_stream_error_text(final_error_message)
+    if final_status == 'error' and not terminal_error_message:
+        terminal_error_message = '聊天生成失败'
+    elif final_status != 'error':
+        terminal_error_message = ''
     try:
+        # 先固定终态诊断，再构建并持久化助手消息 metadata。
+        # 这样任务内存注册表清理后，历史恢复仍能展示同一条最终错误。
+        with entry.log_lock:
+            entry.error_message = terminal_error_message
+            entry.retry_count = retry_count
         if collect_usage:
             collected_usage = _collect_chat_task_llm_usage(entry)
             if collected_usage is not None:
@@ -866,7 +876,7 @@ def _finalize_chat_task(
                     **({
                         'context_window_stats': entry.accumulator.context_window_stats,
                     } if entry.accumulator is not None and entry.accumulator.context_window_stats else {}),
-                    **({'error': final_error_message} if final_error_message else {}),
+                    **({'error': terminal_error_message} if terminal_error_message else {}),
                 },
                 allow_terminal=True,
             )
@@ -878,7 +888,7 @@ def _finalize_chat_task(
             entry.result_message_id = entry.assistant_message_id
             entry.result_content = reply
             entry.result_metadata = metadata
-            entry.error_message = final_error_message
+            entry.error_message = terminal_error_message
             entry.retry_count = retry_count
         # 内存终态与前端停止按钮不能等待数据库；持久化在此后尽力完成。
         entry.finished_event.set()
@@ -899,7 +909,7 @@ def _finalize_chat_task(
                 result_message_id=entry.assistant_message_id,
                 result_content=reply,
                 result_metadata=metadata,
-                error_message=final_error_message,
+                error_message=terminal_error_message,
                 retry_count=retry_count,
             )
         except Exception:
@@ -910,7 +920,7 @@ def _finalize_chat_task(
             entry.result_message_id = entry.assistant_message_id
             entry.result_content = reply
             entry.result_metadata = metadata
-            entry.error_message = final_error_message
+            entry.error_message = terminal_error_message
             entry.retry_count = retry_count
         entry.finished_event.set()
         entry.notify_observers()
