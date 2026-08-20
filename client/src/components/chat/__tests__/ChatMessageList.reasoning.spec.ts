@@ -6,6 +6,7 @@ import { mount } from '@vue/test-utils';
 import { defineComponent, nextTick } from 'vue';
 import ChatMessageList from '../ChatMessageList.vue';
 import { i18n } from '@/i18n';
+import { CHAT_LAYOUT_FOLLOW_EVENT } from '@/components/chat/chatScrollEvents';
 
 vi.mock('naive-ui', async () => {
   const actual = await vi.importActual<typeof import('naive-ui')>('naive-ui');
@@ -225,8 +226,11 @@ describe('ChatMessageList 深度思考块展开性能契约', () => {
       text: '第一段流式推理\n第二段流式推理',
       source_agent: 'agent_director',
     };
+    const layoutFollowListener = vi.fn();
+    document.addEventListener(CHAT_LAYOUT_FOLLOW_EVENT, layoutFollowListener, { once: true });
 
     const wrapper = mount(ChatMessageList, {
+      attachTo: document.body,
       props: {
         history: [
           {
@@ -259,6 +263,11 @@ describe('ChatMessageList 深度思考块展开性能契约', () => {
     await nextTick();
 
     expect(wrapper.find('.reasoning-content-wrapper').classes()).toContain('is-expanded');
+    expect(layoutFollowListener).toHaveBeenCalledTimes(1);
+    expect((layoutFollowListener.mock.calls[0]?.[0] as CustomEvent).detail.durationMs).toBe(360);
+
+    const closeFollowListener = vi.fn();
+    document.addEventListener(CHAT_LAYOUT_FOLLOW_EVENT, closeFollowListener, { once: true });
 
     await wrapper.setProps({
       history: [
@@ -284,6 +293,9 @@ describe('ChatMessageList 深度思考块展开性能契约', () => {
 
     expect(wrapper.find('.reasoning-content-wrapper').classes()).not.toContain('is-expanded');
     expect(wrapper.find('.reasoning-bubble .mock-markdown').exists()).toBe(false);
+    expect(closeFollowListener).toHaveBeenCalledTimes(1);
+    expect((closeFollowListener.mock.calls[0]?.[0] as CustomEvent).detail.durationMs).toBe(360);
+    wrapper.unmount();
   });
 
   it('密集思考 chunk 在同一帧只安排一次布局测量', async () => {

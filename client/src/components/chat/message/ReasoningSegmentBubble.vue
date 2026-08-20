@@ -60,6 +60,7 @@ import { computed, nextTick, onBeforeUnmount, onMounted, ref, watch } from 'vue'
 import { useI18n } from 'vue-i18n';
 import AgentAvatar from '@/components/share/AgentAvatar.vue';
 import MarkdownRenderer from '@/components/share/MarkdownRenderer.vue';
+import { CHAT_LAYOUT_FOLLOW_EVENT } from '@/components/chat/chatScrollEvents';
 
 type RevealPhase = '' | 'opening' | 'closing';
 
@@ -294,15 +295,27 @@ function scrollToBottom() {
   content.scrollTop = content.scrollHeight;
 }
 
+/** 通知外层聊天列表在高度动画期间持续跟随底部。 */
+function requestOuterLayoutFollow(durationMs = 0) {
+  const content = contentRef.value;
+  if (!content || typeof CustomEvent === 'undefined') return;
+  content.dispatchEvent(new CustomEvent(CHAT_LAYOUT_FOLLOW_EVENT, {
+    bubbles: true,
+    detail: { durationMs },
+  }));
+}
+
 function syncStreamingHeight() {
   const content = contentRef.value;
   if (!content) return;
   const contentHeight = Math.ceil(content.scrollHeight || 0);
   const nextHeight = Math.min(contentHeight, measureStreamingContentMaxHeight(content));
   if (nextHeight <= 0) return;
+  const heightChanged = Math.abs(nextHeight - panelHeight.value) > 1;
   panelHeight.value = nextHeight;
   measuredHeight.value = nextHeight;
   content.scrollTop = contentHeight;
+  if (heightChanged) requestOuterLayoutFollow(REASONING_REVEAL_TIMER_MS);
 }
 
 function cancelStreamingLayout() {
@@ -379,7 +392,9 @@ function openPanel(streaming = props.streaming) {
       const nextMeasuredHeight = measurePanelHeight(streaming) || targetHeight;
       measuredHeight.value = nextMeasuredHeight;
       finishRevealAnimation(nextMeasuredHeight);
+      requestOuterLayoutFollow();
     });
+    requestOuterLayoutFollow(REASONING_REVEAL_TIMER_MS);
     scrollToBottom();
   });
 }
@@ -396,7 +411,11 @@ function closePanel() {
   animateReveal('closing', 0, () => {
     expanded.value = false;
     finishRevealAnimation(0);
+    // 收起完成后 content-visibility 和正文布局可能再次改变，继续通知外层跟随最终底部。
+    requestOuterLayoutFollow();
   });
+  // 收起动画期间列表高度持续变化，外层必须逐帧跟随，避免滚动位置停在旧底部。
+  requestOuterLayoutFollow(REASONING_REVEAL_TIMER_MS);
 }
 
 function toggleReasoning() {

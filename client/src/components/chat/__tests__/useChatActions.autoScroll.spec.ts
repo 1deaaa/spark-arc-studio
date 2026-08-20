@@ -2,6 +2,7 @@ import { afterEach, describe, expect, it, vi } from 'vitest';
 import { mount } from '@vue/test-utils';
 import { defineComponent, nextTick, ref } from 'vue';
 import { useChatActions } from '@/composables/useChatActions';
+import { CHAT_LAYOUT_FOLLOW_EVENT } from '@/components/chat/chatScrollEvents';
 
 function setScrollMetrics(el: HTMLElement, metrics: { scrollTop: number; scrollHeight: number; clientHeight: number }) {
   let scrollTop = metrics.scrollTop;
@@ -168,6 +169,31 @@ describe('useChatActions 聊天自动滚动开关', () => {
     expect(el.scrollTop).toBe(1000);
   });
 
+  it('用户从底部轻微上滚时，即使仍在阈值内也不会被拉回底部', async () => {
+    const wrapper = mountHarness();
+    await nextTick();
+    await nextTick();
+    // 等待挂载时的初始到底补帧完成，避免它与本用例的用户滚轮竞争。
+    await new Promise(resolve => setTimeout(resolve, 0));
+
+    const exposed = wrapper.vm as any;
+    const el = exposed.listEl as HTMLElement;
+    setScrollMetrics(el, { scrollTop: 1000, scrollHeight: 1000, clientHeight: 320 });
+    // 让监听器记录当前确实位于底部，再模拟用户向上滚动。
+    el.dispatchEvent(new Event('scroll'));
+
+    // 向上 20px，仍落在 60px 的“接近底部”阈值内。
+    el.dispatchEvent(new WheelEvent('wheel', { deltaY: -20 }));
+    setScrollMetrics(el, { scrollTop: 980, scrollHeight: 1000, clientHeight: 320 });
+    el.dispatchEvent(new Event('scroll'));
+
+    // 非强制滚动请求（例如 history/ResizeObserver 更新）不得覆盖用户位置。
+    exposed.actions.scrollToBottom();
+    await nextTick();
+
+    expect(el.scrollTop).toBe(980);
+  });
+
   it('用户在程序滚动保护窗口内主动上滚，也会暂停后续非强制自动下滑', async () => {
     vi.useFakeTimers();
     vi.setSystemTime(0);
@@ -308,5 +334,27 @@ describe('useChatActions 聊天自动滚动开关', () => {
     await nextTick();
     await nextTick();
     expect(el.scrollTop).toBe(500);
+  });
+
+  it('深度思考块开始高度动画时立即跟随外层列表底部', async () => {
+    installResizeObserverMock();
+    const wrapper = mountHarness();
+    await nextTick();
+    await nextTick();
+
+    const exposed = wrapper.vm as any;
+    const el = exposed.listEl as HTMLElement;
+    const content = el.querySelector('.chat-list-content') as HTMLElement;
+    exposed.sending = true;
+    await nextTick();
+
+    setScrollMetrics(el, { scrollTop: 680, scrollHeight: 1260, clientHeight: 320 });
+    content.dispatchEvent(new CustomEvent(CHAT_LAYOUT_FOLLOW_EVENT, {
+      bubbles: true,
+      detail: { durationMs: 0 },
+    }));
+    await Promise.resolve();
+
+    expect(el.scrollTop).toBe(1260);
   });
 });

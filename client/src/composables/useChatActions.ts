@@ -15,6 +15,10 @@
  */
 import { ref, computed, watch, nextTick, onUnmounted, onMounted } from 'vue';
 import bus from '@/eventBus';
+import {
+    CHAT_LAYOUT_FOLLOW_EVENT,
+    type ChatLayoutFollowDetail,
+} from '@/components/chat/chatScrollEvents';
 
 type MessageId = string | number;
 
@@ -78,9 +82,12 @@ export function useChatActions(adapter: ChatActionsAdapter, options: UseChatActi
     let currentResponseInterrupted = false;
     let scrollBindingActive = false;
     let scrollListeners: Array<{ el: HTMLElement; handler: () => void }> = [];
-    let intentListeners: Array<{ el: HTMLElement; type: 'wheel' | 'touchstart' | 'pointerdown'; handler: (event: Event) => void }> = [];
+    let intentListeners: Array<{ el: HTMLElement; type: 'wheel' | 'touchmove' | 'pointermove'; handler: (event: Event) => void }> = [];
     let contentResizeObservers: ResizeObserver[] = [];
     let resizeScrollFrame: number | null = null;
+    let layoutFollowFrame: number | null = null;
+    let layoutFollowUntil = 0;
+    let layoutFollowListeners: Array<{ el: HTMLElement; handler: EventListener }> = [];
     const lastKnownScrollTop = new WeakMap<HTMLElement, number>();
 
     /** 判断元素是否滚动到接近底部 */
@@ -111,6 +118,43 @@ export function useChatActions(adapter: ChatActionsAdapter, options: UseChatActi
         if (!adapter.getSending()) return;
         currentResponseInterrupted = true;
         autoScrollEnabled.value = false;
+        stopLayoutFollow();
+    }
+
+    function nowMs() {
+        return typeof performance !== 'undefined' ? performance.now() : Date.now();
+    }
+
+    function stopLayoutFollow() {
+        layoutFollowUntil = 0;
+        if (layoutFollowFrame === null) return;
+        if (typeof cancelAnimationFrame === 'function') cancelAnimationFrame(layoutFollowFrame);
+        else clearTimeout(layoutFollowFrame);
+        layoutFollowFrame = null;
+    }
+
+    function scheduleLayoutFollow(durationMs = 0) {
+        if (!adapter.getSending() || currentResponseInterrupted || !autoScrollEnabled.value) return;
+        layoutFollowUntil = Math.max(layoutFollowUntil, nowMs() + Math.max(0, durationMs));
+        if (layoutFollowFrame !== null) return;
+
+        const schedule = typeof requestAnimationFrame === 'function'
+            ? requestAnimationFrame
+            : (callback: FrameRequestCallback) => window.setTimeout(() => callback(nowMs()), 16);
+        const follow = () => {
+            layoutFollowFrame = null;
+            if (!adapter.getSending() || currentResponseInterrupted || !autoScrollEnabled.value) {
+                layoutFollowUntil = 0;
+                return;
+            }
+            applyScrollToBottom();
+            if (nowMs() < layoutFollowUntil) {
+                layoutFollowFrame = schedule(follow);
+            } else {
+                layoutFollowUntil = 0;
+            }
+        };
+        layoutFollowFrame = schedule(follow);
     }
 
     /** 为滚动容器绑定 scroll 事件，检测用户上滚 */
@@ -133,10 +177,21 @@ export function useChatActions(adapter: ChatActionsAdapter, options: UseChatActi
                 const programmaticScrollActive = isProgrammaticScrollActive();
                 lastKnownScrollTop.set(el, currentScrollTop);
 
+                // 明确的向上滚动优先于“接近底部”阈值：即使只离底部几像素，
+                // 也必须尊重用户的阅读位置，不能被后续布局更新拉回底部。
+                if (userIntentActive && movedUp) {
+                    if (adapter.getSending()) {
+                        interruptCurrentResponse();
+                    } else {
+                        autoScrollEnabled.value = false;
+                    }
+                    return;
+                }
+
                 if (
                     adapter.getSending()
-                    && (userIntentActive || !programmaticScrollActive)
-                    && (movedUp || !isNearBottom(el))
+                    && userIntentActive
+                    && !isNearBottom(el)
                 ) {
                     interruptCurrentResponse();
                     return;
@@ -147,7 +202,9 @@ export function useChatActions(adapter: ChatActionsAdapter, options: UseChatActi
                     autoScrollEnabled.value = true;
                     return;
                 }
-                if (adapter.getSending() && currentResponseInterrupted) return;
+                // 流式期间，编辑截断和推理块展开等布局变化也会触发 scroll；
+                // 没有明确滚动手势时不能把它们当成用户上滚。
+                if (adapter.getSending()) return;
                 if (!autoScrollEnabled.value) return;
                 autoScrollEnabled.value = false;
             };
@@ -155,19 +212,32 @@ export function useChatActions(adapter: ChatActionsAdapter, options: UseChatActi
             scrollListeners.push({ el, handler });
 
             const intentHandler = (event: Event) => {
+                if (event.type === 'pointermove' && Number((event as PointerEvent).buttons || 0) === 0) return;
                 markUserScrollIntent();
-                if ('deltaY' in event && Number(event.deltaY) < 0) {
-                    interruptCurrentResponse();
+                if (event.type === 'wheel' && Number((event as WheelEvent).deltaY) < 0) {
+                    // wheel 事件先于 scroll 事件到达；先关闭自动跟随，避免小幅上滚
+                    // 仍落在底部阈值内时被后续 ResizeObserver/history watcher 拉回。
+                    autoScrollEnabled.value = false;
+                    if (adapter.getSending()) {
+                        interruptCurrentResponse();
+                    }
                 }
             };
             el.addEventListener('wheel', intentHandler, { passive: true });
-            el.addEventListener('touchstart', intentHandler, { passive: true });
-            el.addEventListener('pointerdown', intentHandler, { passive: true });
+            el.addEventListener('touchmove', intentHandler, { passive: true });
+            el.addEventListener('pointermove', intentHandler, { passive: true });
             intentListeners.push(
                 { el, type: 'wheel', handler: intentHandler },
-                { el, type: 'touchstart', handler: intentHandler },
-                { el, type: 'pointerdown', handler: intentHandler },
+                { el, type: 'touchmove', handler: intentHandler },
+                { el, type: 'pointermove', handler: intentHandler },
             );
+
+            const layoutFollowHandler: EventListener = (event) => {
+                const detail = (event as CustomEvent<ChatLayoutFollowDetail>).detail;
+                scheduleLayoutFollow(Number(detail?.durationMs || 0));
+            };
+            el.addEventListener(CHAT_LAYOUT_FOLLOW_EVENT, layoutFollowHandler);
+            layoutFollowListeners.push({ el, handler: layoutFollowHandler });
 
             // 消息内容的高度变化不一定伴随 history 变化（例如思考块首次展开、延迟 Markdown
             // 渲染或工具详情展开），因此观察内容层并在布局稳定后继续跟随底部。
@@ -205,6 +275,11 @@ export function useChatActions(adapter: ChatActionsAdapter, options: UseChatActi
             el.removeEventListener(type, handler);
         }
         intentListeners = [];
+        for (const { el, handler } of layoutFollowListeners) {
+            el.removeEventListener(CHAT_LAYOUT_FOLLOW_EVENT, handler);
+        }
+        layoutFollowListeners = [];
+        stopLayoutFollow();
         for (const observer of contentResizeObservers) observer.disconnect();
         contentResizeObservers = [];
         if (resizeScrollFrame !== null) {
@@ -247,31 +322,32 @@ export function useChatActions(adapter: ChatActionsAdapter, options: UseChatActi
         return el;
     }
 
+    function applyScrollToBottom() {
+        if (adapter.getSending() && currentResponseInterrupted) return;
+        if (!autoScrollEnabled.value) return;
+        markProgrammaticScroll();
+        const desktopEl = resolveEl(listRef);
+        if (desktopEl && desktopEl.scrollHeight !== undefined && desktopEl.scrollTop !== undefined) {
+            desktopEl.scrollTop = desktopEl.scrollHeight;
+            if (desktopEl instanceof HTMLElement) lastKnownScrollTop.set(desktopEl, desktopEl.scrollTop);
+        }
+        const mobileEl = resolveEl(mobileListRef);
+        if (mobileEl && mobileEl.scrollHeight !== undefined && mobileEl.scrollTop !== undefined) {
+            mobileEl.scrollTop = mobileEl.scrollHeight;
+            if (mobileEl instanceof HTMLElement) lastKnownScrollTop.set(mobileEl, mobileEl.scrollTop);
+        }
+    }
+
     function scrollToBottom(force = false) {
         if (force) {
             currentResponseInterrupted = false;
             autoScrollEnabled.value = true;
         }
-        const apply = () => {
-            if (adapter.getSending() && currentResponseInterrupted) return;
-            if (!autoScrollEnabled.value) return;
-            markProgrammaticScroll();
-            const desktopEl = resolveEl(listRef);
-            if (desktopEl && desktopEl.scrollHeight !== undefined && desktopEl.scrollTop !== undefined) {
-                desktopEl.scrollTop = desktopEl.scrollHeight;
-                if (desktopEl instanceof HTMLElement) lastKnownScrollTop.set(desktopEl, desktopEl.scrollTop);
-            }
-            const mobileEl = resolveEl(mobileListRef);
-            if (mobileEl && mobileEl.scrollHeight !== undefined && mobileEl.scrollTop !== undefined) {
-                mobileEl.scrollTop = mobileEl.scrollHeight;
-                if (mobileEl instanceof HTMLElement) lastKnownScrollTop.set(mobileEl, mobileEl.scrollTop);
-            }
-        };
         nextTick(() => {
-            apply();
+            applyScrollToBottom();
             // 面板进入、思考块展开等场景可能在当前 tick 之后才完成布局，再补一帧。
-            if (typeof requestAnimationFrame === 'function') requestAnimationFrame(apply);
-            else window.setTimeout(apply, 0);
+            if (typeof requestAnimationFrame === 'function') requestAnimationFrame(applyScrollToBottom);
+            else window.setTimeout(applyScrollToBottom, 0);
         });
     }
 
