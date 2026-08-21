@@ -9,7 +9,7 @@
 
 ### 0.1 最重要的结论
 
-1. **训练精度采用分层决策，而不是把 Q4/Q8/FP8 混为一谈。**ArcPen 的论文主线仍以 **BF16/16-bit LoRA** 为质量真相源；本地约 15GB 上的 Qwen3.5-9B 使用 BitsAndBytes `load_in_8bit=True` 做短序列资格试验，云端双 4080 Super 补齐 9B 的 BF16/INT8/FP8 对照。27B 的 INT8/FP8 在双 16GB 上只获得生存性试验资格，Q4 QLoRA 是更现实的正式候选。GGUF `Q8_0`/`Q4_K_M` 是合并后的部署格式，不是训练加载格式；`adamw_8bit` 又只是优化器状态压缩。
+1. **训练精度采用分层决策，而不是把 Q4/Q8/FP8 混为一谈。**ArcPen 的论文主线仍以 **BF16/16-bit LoRA** 为质量真相源；本地约 15GB 上的 Qwen3.5-9B 使用 BitsAndBytes `load_in_8bit=True` 做短序列资格试验。已核验的云端单 vGPU 32GB（报告为 RTX 4080 SUPER、32,760MiB）足以系统比较 9B BF16/INT8/FP8，并让 27B INT8/FP8 进入正式资格试验；是否能扩展到长上下文仍必须由峰值显存和生命周期验收决定。GGUF `Q8_0`/`Q4_K_M` 是合并后的部署格式，不是训练加载格式；`adamw_8bit` 又只是优化器状态压缩。
 2. **先做 SFT，再按证据决定是否做偏好优化或在线 RL。**Scriptwriter 的主要困难中，格式、工具调用、证据边界、长度分桶和大部分文风行为都可由高质量 SFT 学会。创意写作的奖励主观且容易被长度、华丽辞藻和模板化结构欺骗，未经 SFT 基线和可靠评测就直接做 GRPO，产生奖励投机的概率很高。
 3. **SFT 后的第一升级项应是长度匹配的成对偏好优化，而非直接在线 RL。**建议先做 DPO，并把 SimPO 作为长度偏差消融组。只有在 SFT+DPO 后仍存在稳定的长程缺陷，且奖励模型在人类盲评上的成对准确率达到门槛，才进入小规模 GRPO/GSPO 试验。
 4. **ArcPen 不是“文学续写模型”，而是 SparkArc Scriptwriter harness 的策略模型。**训练必须同时覆盖 ARC/小说双格式、三模态、PreWrite、只读补查、工具顺序、局部 Patch、StoryMemory/GraphRAG 证据边界、长度软目标和真实保存回执。
@@ -126,7 +126,7 @@ StoryMemory 是已保存正文的事实与证据层，不提供剧情方案；Gr
 
 AgentMatchbox 默认记录 256K 上下文和 64K 单次输出上限；实际预算使用所选模型上报值。`context_budget.py` 最多预留 20K 输出 token，并另留安全余量；专有模式保护当前任务、场景事实、大纲契约和修正意见，优先裁剪世界观、大纲、角色、前文等可恢复动态材料。
 
-训练不需要也不应该一开始就覆盖 256K。ArcPen v1 的目标是学会 harness 中信息的优先级与使用方式，而不是用极少超长样本宣称“训练了 256K”。8K/16K/32K 是数据课程目标，不是当前硬件的开跑配置：本地 15GB 的 9B INT8 LoRA 和云端双 16GB 的 27B 生存性试验都从 2K、batch 1 开始，再按峰值显存升到 4K/8K；16K/32K 需要更大显存、成熟的分片方案或后续专项训练。4B BF16 仍是低成本方法验证和代码排错基座。
+训练不需要也不应该一开始就覆盖 256K。ArcPen v1 的目标是学会 harness 中信息的优先级与使用方式，而不是用极少超长样本宣称“训练了 256K”。8K/16K/32K 是数据课程目标，不是当前硬件的开跑配置：本地 15GB 的 9B INT8 LoRA 和云端单 vGPU 32GB 的 27B INT8/FP8 资格试验都从 2K、batch 1 开始，再按峰值显存升到 4K/8K；16K/32K 需要更大显存或后续专项训练。4B BF16 仍是低成本方法验证和代码排错基座。
 
 ## 3. 最新基座与 Unsloth 可行性
 
@@ -166,11 +166,11 @@ Unsloth 另有真正的 FP8 LoRA 路径：`load_in_fp8=True`，冻结基座和�
 | GPU 可用显存 | 9B 建议 | 27B 建议 |
 |---:|---|---|
 | 本地约 15GB | 9B INT8 LoRA 从 2K 开始资格试验；同步跑能容纳的 BF16 短序列质量锚点；Q4 仅消融 | 不做单卡训练 |
-| 双 RTX 4080 Super，2×16GB | 9B BF16/INT8/FP8 均可系统验证，长序列仍按峰值扩展 | 不是统一 32GB 池；INT8/FP8 只做 2K、batch 1、model-parallel 生存性试验，不能预设可正式训练；未通过则转 Q4 QLoRA 或租 48GB 单卡 |
+| 云端单 vGPU 32GB（已核验） | 9B BF16/INT8/FP8 均可系统验证，长序列仍按峰值扩展 | 可进行 INT8/FP8 的 2K、batch 1 正式资格试验；通过每项生命周期和显存余量门槛后再扩展长度，否则转 Q4 QLoRA |
 | 约 48GB | BF16 长度课程更可控 | 可探索 INT8/FP8 LoRA，但必须完整验收训练和导出链路 |
 | 约 56-80GB | BF16 主线 | BF16 LoRA 正式主线；实际余量随序列长度和 checkpointing 变化 |
 
-RTX 4080 Super 是 Ada、计算能力 8.9，具备 FP8 硬件条件，但每卡只有 16GB 且没有 NVLink。双卡必须使用模型分片（例如受支持时的 `device_map="balanced"`），不能使用会在每卡复制完整模型的普通 DDP。FP8 仅在原生支持的 GPU 上考虑，例如 L4、H100/H200/B200 与 RTX 40/50 系列；T4 不支持这条原生 FP8 路径。实验记录必须写明准确型号、拓扑、P2P 状态、CUDA、PyTorch、Transformers、PEFT、TRL、Unsloth 和 `unsloth_zoo` 版本。
+已核验的 AutoDL 实例向容器暴露 1 个 CUDA 设备：RTX 4080 SUPER、计算能力 8.9、32,760MiB 显存，驱动 580.105.08；它是单 vGPU 32GB，不需要模型分片或跨卡通信。FP8 具备硬件条件，但仍须验证 Unsloth/Qwen3.5 的具体训练路径。FP8 仅在原生支持的 GPU 上考虑，例如 L4、H100/H200/B200 与 RTX 40/50 系列；T4 不支持这条原生 FP8 路径。实验记录必须写明准确型号、可见 GPU 数、CUDA、PyTorch、Transformers、PEFT、TRL、Unsloth 和 `unsloth_zoo` 版本。
 
 ### 3.3 初始 LoRA 配方
 
@@ -461,4 +461,4 @@ SFT v1 进入偏好阶段前，至少满足：
 - [instruction.md](instruction.md)：文学数据合成 Agent 的完整生产规范。
 - [workflows.md](workflows.md)：低成本稳定执行 Agent 的逐步训练、评测、迭代与停止流程。
 - [sources.md](sources.md)：项目证据和学术/官方一手来源台账。
-- [autodl.md](autodl.md)：双 RTX 4080 Super 的 AutoDL 镜像、学术加速、目录与环境固化手册。
+- [autodl.md](autodl.md)：单 vGPU 32GB 的 AutoDL 镜像、学术加速、目录与环境固化手册。

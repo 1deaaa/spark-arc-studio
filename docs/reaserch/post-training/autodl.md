@@ -1,6 +1,6 @@
 # ArcPen AutoDL 环境与镜像手册
 
-> 目标机器：双 NVIDIA GeForce RTX 4080 Super，每卡 16GB  
+> 目标机器：AutoDL 单 vGPU 32GB；已核验为 1 个 CUDA 设备，报告名称为 NVIDIA GeForce RTX 4080 SUPER、32,760MiB
 > 目标任务：9B 精度资格试验；27B INT8/FP8/Q4 生存性试验与后续可行训练
 
 ## 1. 基础镜像选择
@@ -33,7 +33,7 @@ for i in range(torch.cuda.device_count()):
 PY
 ```
 
-预期为两张 4080 Super、约 16GiB/卡、计算能力 8.9。若只识别一张卡，停止安装和训练，先检查实例租用数量。
+预期为一张可见的 RTX 4080 SUPER、约 31.47GiB、计算能力 8.9。此实例是单 vGPU 32GB，不能将物理卡命名或常见零售规格当成容器实际可用显存；始终以 `torch.cuda.device_count()` 与 `nvidia-smi` 为准。
 
 ## 3. 开启 AutoDL 学术资源加速
 
@@ -79,7 +79,7 @@ for line in result.stdout.splitlines():
 AutoDL 镜像只保存系统盘，`/root/autodl-tmp` 是数据盘且不会进入镜像。模型、数据、输出、Hugging Face/Torch/Triton 缓存统一放数据盘：
 
 ```bash
-mkdir -p /root/autodl-tmp/arcpen/{models,data,outputs,logs}
+mkdir -p /root/autodl-tmp/unsloth/{models,datasets,outputs,logs}
 mkdir -p /root/autodl-tmp/cache/{huggingface,torch,triton}
 
 cat >> /root/.bashrc <<'EOF'
@@ -87,7 +87,7 @@ export HF_HOME=/root/autodl-tmp/cache/huggingface
 export HF_HUB_CACHE=/root/autodl-tmp/cache/huggingface/hub
 export TORCH_HOME=/root/autodl-tmp/cache/torch
 export TRITON_CACHE_DIR=/root/autodl-tmp/cache/triton
-export ARCPEN_ROOT=/root/autodl-tmp/arcpen
+export UNSLOTH_WORKSPACE=/root/autodl-tmp/unsloth
 EOF
 
 source /root/.bashrc
@@ -95,46 +95,39 @@ source /root/.bashrc
 
 这里追加的是普通环境变量，不包含 token。Hugging Face token 使用登录工具或临时环境变量，保存镜像前确认没有把明文密钥写进 shell 历史、`.bashrc`、Notebook 或配置文件。
 
-## 5. 安装最新版 Unsloth
+## 5. 已安装的通用 Unsloth Studio
 
-先使用官方检测脚本确认安装变体。当前基础镜像应对应 `cu128-torch280`，但以脚本实际输出为准：
+官方安装器在 `/root/.unsloth/studio/unsloth_studio` 创建了隔离环境，不污染基础镜像自带的 PyTorch 2.8.0+cu128。2026-08-22 实际验证栈为：
 
-```bash
-python - <<'PY'
-import re
-import torch
-from packaging.version import Version as V
-
-v = V(re.match(r"[0-9.]{3,}", torch.__version__).group(0))
-cuda = str(torch.version.cuda)
-print("torch=", v, "cuda=", cuda)
-assert cuda == "12.8", (v, cuda)
-assert V("2.8.0") <= v < V("2.8.9"), v
-print("Unsloth variant: cu128-torch280")
-PY
+```text
+Unsloth Studio / Core 2026.8.19
+Python 3.12.3
+PyTorch 2.11.0+cu130
+CUDA runtime 13.0
+FlashAttention 2.8.1
+Transformers 5.x 兼容栈
+预编译 llama.cpp 与 whisper.cpp
 ```
 
-开启学术加速后安装，并记录精确版本：
+GPU 导入、FP16 CUDA 矩阵乘和 Studio 健康接口均已通过。镜像内未下载任何 Hugging Face 模型。
+
+维护脚本：
 
 ```bash
-source /etc/network_turbo
-python -m pip install --upgrade pip
-python -m pip install --no-deps git+https://github.com/unslothai/unsloth-zoo.git
-python -m pip install "unsloth[cu128-torch280] @ git+https://github.com/unslothai/unsloth.git" --no-build-isolation
-unset http_proxy https_proxy HTTP_PROXY HTTPS_PROXY
-
-python -m pip freeze > /root/arcpen-environment.lock.txt
+/root/start-unsloth-studio.sh
+/root/stop-unsloth-studio.sh
+/root/update-unsloth-studio.sh
 ```
 
-不要在同一环境中随意再次安装另一套 PyTorch、CUDA wheel 或 vLLM。需要 vLLM 时明确选择 `cu128` backend，并在安装后重新运行导入与 GPU 烟雾测试。
+升级脚本会停止 Studio、调用官方最新版安装器、通过 AutoDL 学术代理下载 GitHub/Hugging Face 资源、让 npm 域名绕过代理，最后重新启动 Studio。不要在 Studio 隔离环境里手工升级 PyTorch、FlashAttention 或 Transformers；统一使用该脚本升级，避免 ABI 漂移。
 
 ## 6. 保存“黄金环境镜像”
 
 建议保存，但只保存**干净、验证过的环境**：
 
-1. 完成双卡识别、Unsloth/Transformers/PEFT/TRL 导入测试；
+1. 完成单 vGPU 识别、Unsloth/Transformers/PEFT/TRL 导入测试；
 2. 完成一个不下载 27B 的最小前向/反向烟雾测试；
-3. 保存 `/root/arcpen-environment.lock.txt` 和环境检查脚本；
+3. 确认启动、停止和一键升级脚本通过 `bash -n`；
 4. 清理系统盘中的 pip/conda 临时包、错误下载和 Hugging Face 大缓存；
 5. 确认模型、数据和 checkpoint 均位于 `/root/autodl-tmp`；
 6. 清除 token 和敏感 shell history；
@@ -143,7 +136,7 @@ python -m pip freeze > /root/arcpen-environment.lock.txt
 建议名称：
 
 ```text
-arcpen-unsloth-torch280-cu128-py312-202608
+unsloth-studio-sft-rl-vgpu32-202608
 ```
 
 以后租其他机器时选择“我的镜像”即可恢复系统盘环境。首次跨地区创建可能需要传输镜像；这不包含数据盘内容。
@@ -154,17 +147,17 @@ arcpen-unsloth-torch280-cu128-py312-202608
 |---|---|---|
 | Unsloth、Python 包、环境锁文件 | 系统盘 `/root/...` | 是 |
 | Hugging Face 模型缓存 | `/root/autodl-tmp/cache/huggingface` | 否 |
-| 数据集、manifest、评测集 | `/root/autodl-tmp/arcpen/data` | 否 |
-| adapter、checkpoint、日志 | `/root/autodl-tmp/arcpen/outputs` | 否 |
+| 数据集、manifest、评测集 | `/root/autodl-tmp/unsloth/datasets` | 否 |
+| adapter、checkpoint、日志 | `/root/autodl-tmp/unsloth/outputs` | 否 |
 | 长期重要产物 | AutoDL 文件存储、对象存储或本地至少一份 | 独立备份 |
 
 同地区换实例可使用跨实例拷贝数据盘；跨地区使用 AutoDL 文件存储、公网网盘或对象存储。系统盘和数据盘都是本地盘，不能把实例持续存在当成备份。
 
-## 8. 双卡训练的硬约束
+## 8. 单 vGPU 32GB 的训练边界
 
-- 双 4080 Super 是两个独立 16GB 地址空间，不是单张 32GB。
-- 27B INT8/FP8 必须采用模型分片；普通 DDP 会在每张卡复制完整模型并直接 OOM。
-- 4080 Super 没有 NVLink，必须记录 `nvidia-smi topo -m`、跨卡通信和实际 tokens/s。
+- 容器只有一个约 31.47GiB 的 CUDA 设备，不启用 DDP、模型分片或 CPU offload。
+- 27B INT8/FP8 可以先做正式资格试验，但不能据此假设 8K/16K 一定放得下。
+- 记录实际 tokens/s、峰值显存、可见 GPU 数和设备名称；vGPU 显存配额是唯一有效硬件约束。
 - 第一次只跑 2K、batch 1、rank 16、3 step，不直接下载数据后开始全量训练。
-- 任一卡没有至少 1GiB 安全余量、出现 CPU offload 或不能保存/恢复/合并，即判 INT8/FP8 不适合作为正式 27B 路线。
-- 27B Q4 QLoRA 是双 16GB 更现实的训练候选，但仍必须与 9B INT8/BF16 锚点比较质量，不能因“能跑”就宣称更优。
+- 峰值显存不能留出至少 2GiB 安全余量、出现 CPU offload 或不能保存/恢复/合并，即判 INT8/FP8 不适合作为正式 27B 路线。
+- 27B INT8/FP8 先走完整资格试验；若显存余量或生命周期不通过，再使用 Q4 QLoRA，并与 9B INT8/BF16 锚点比较质量。

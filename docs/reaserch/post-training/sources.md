@@ -82,7 +82,7 @@
 
 | 等级 | 来源 | 本项目采用的事实 |
 |---|---|---|
-| A | [NVIDIA RTX 4080 SUPER 规格](https://www.nvidia.com/en-us/geforce/graphics-cards/40-series/rtx-4080-family/) | 每卡 16GB、计算能力 8.9、无 NVLink |
+| A | [NVIDIA RTX 4080 SUPER 规格](https://www.nvidia.com/en-us/geforce/graphics-cards/40-series/rtx-4080-family/) | 零售卡标称 16GB、计算能力 8.9；AutoDL 实例实际通过 vGPU 向容器暴露 32,760MiB，研究报告必须记录容器实测值而非套用零售规格 |
 | A | [AutoDL 学术资源加速](https://www.autodl.com/docs/network_turbo) | 终端使用 `source /etc/network_turbo`；结束后取消代理；服务不承诺稳定性 |
 | A | [AutoDL 镜像文档](https://www.autodl.com/docs/image) | 保存镜像只保存实例系统盘，可在新实例选择“我的镜像”恢复 |
 | A | [AutoDL 存储目录说明](https://www.autodl.com/docs/env) | 系统盘进入镜像；`/root/autodl-tmp` 数据盘不进入镜像；文件存储可跨实例共享 |
