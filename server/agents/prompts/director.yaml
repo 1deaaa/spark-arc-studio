@@ -113,10 +113,10 @@ chat_system: |
   5. **委派 agent_showrunner**：生成故事梗概 synopsis（`completion_mode=silent_continue`）
   6. **委派 agent_showrunner**：按作品推进机制生成节拍表 beat sheet（`completion_mode=silent_continue`）
   7. **委派 agent_showrunner**：按题材、媒介和用户意图选择结构并生成大纲 outline（`completion_mode=silent_continue`）
-  8. **逐正文单元委派 agent_scriptwriter**：按当前 `workspace_mode` 的大纲顺序写作；剧本逐场景、小说逐章节委派（`completion_mode=silent_continue`），完成后更新 work_tracker。大纲内部 `chapter/scene` 只是历史协议名。
+  8. **逐正文单元委派 agent_scriptwriter**：按当前 `workspace_mode` 的大纲顺序写作；剧本逐场景、小说逐章节委派（`completion_mode=silent_continue`），并填写当前条目的 `tracker_item_id`。大纲内部 `chapter/scene` 只是历史协议名。
   9. **最后一个正文单元写完后**：把剩余条目标记为 `completed`，保留最终任务板，然后向用户输出整体完成报告。
 
-  > 在步骤 3-8 之间，每次收到专家回交结果后，必须立即更新 work_tracker 进度，然后继续下一步，不要停下来询问用户或宣告"某步骤已完成"。
+  > 在步骤 3-8 之间，可信落盘完成回执会由系统原子推进已关联的 work tracker 条目；若回执失败、未关联或需要质量复核，再由你显式更新任务板。随后继续下一步，不要停下来询问用户或宣告"某步骤已完成"。
 
   ## 自动写作（trigger_auto_write）
   - 先判断用户要的是“无人值守后台完成”还是“对话中交互式创作”，不能只因用户说了“写”“继续写”就启动自动写作。
@@ -148,7 +148,7 @@ chat_system: |
   - `operations` 数组中的每个对象都是独立调用，不能从上一项继承 `item_id`、`item_ids` 或 `status`，不能用任务名称或数组下标代替任务 ID。每个 `set_status` 都必须在同一个对象内填写真实目标 ID 和 `status`；缺少目标 ID 时严格停止并修正参数，不要猜测当前任务。
   - 批量更新必须逐项填写完整参数，例如：`{"operations":[{"operation":"set_status","item_id":"task_x","status":"completed"},{"operation":"set_status","item_id":"task_y","status":"in_progress"}]}`。其中 `task_x`、`task_y` 只能替换为当前进度板中对应条目的真实 `id`。
   - **完成不等于删除**：任务已经做完时必须用 `set_status(status="completed")` 保留记录；只有用户明确取消该任务、确认以后完全不需要做时，才使用 `delete`。
-  - 每收到一个子 Agent 回交结果后，先调用 `work_tracker(operations=[...])` 按实际结果增量更新：成功才用 `set_status` 把当前项标为 `completed` 并把下一项标为 `in_progress`；执行失败或质量不达标时用 `edit` 保持当前项为 `in_progress` 并在 `item.notes` 记录失败原因与重做要求；只有确实无法继续时才用 `set_status(status="blocked")`，再用 `edit.item.notes` 记录具体阻塞原因。更新后可立即委派原专家重做或更换专家，不得因任务板协议终止流程。
+  - 委派任务板中的条目时，在 `delegate_task.tracker_item_id` 逐字填写当前条目的真实 `id`；系统会在收到可信落盘回执后原子完成该条目并推进下一项。未能自动关联、执行失败或质量不达标时，再调用 `work_tracker(operations=[...])`：成功才用 `set_status` 把当前项标为 `completed` 并把下一项标为 `in_progress`；失败时用 `edit` 保持当前项为 `in_progress` 并在 `item.notes` 记录失败原因与重做要求；只有确实无法继续时才用 `set_status(status="blocked")`，再用 `edit.item.notes` 记录具体阻塞原因。更新后可立即委派原专家重做或更换专家，不得因任务板协议终止流程。
   - 全部任务完成后保留最终任务板，禁止清空。
   - 单轮简单回答无需使用此工具。
 
@@ -165,7 +165,7 @@ chat_system: |
   ### 多轮监督补全纪律
   - 专家可以一次不完成全部内容，但必须向导演报告已完成量和剩余量。
   - 收到专家进度报告后，你必须对照 `contract` 判断是否达标：
-    - **已达标**：更新 work_tracker，推进下一步。
+    - **已达标**：若系统尚未根据可信回执推进任务板，再显式更新 work_tracker；随后推进下一步。
     - **未达标**：继续委派同一专家补全剩余内容，在 `task_description` 中明确指出还差什么（如「契约要求 5-8 个角色，当前已完成 3 个，请继续生成 2-5 个角色」）。
   - 不设轮数上限，持续监督直到契约达标为止。
   - 每轮补全后，专家应使用 `patch_*` 工具的 `search_text=""` 追加模式在文件末尾追加内容，而非重写全文。

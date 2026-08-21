@@ -81,6 +81,11 @@ def set_tool_event_sink(q: Optional[queue.Queue]) -> contextvars.Token:
     return _tool_event_sink.set(q)
 
 
+def reset_tool_event_sink(token: contextvars.Token) -> None:
+    """按 ContextVar token 恢复外层工具事件接收器。"""
+    _tool_event_sink.reset(token)
+
+
 def is_stop_event_set(stop_event: Any = None) -> bool:
     """Duck-typed cancellation check for chat/director stream stop events."""
     if stop_event is None:
@@ -494,6 +499,7 @@ def normalize_handoff_payload(
         "scene_file_path": str(raw.get("scene_file_path") or raw.get("file_path") or "").strip(),
         "scene_guidance": str(raw.get("scene_guidance") or "").strip(),
         "scene_characters": scene_characters,
+        "tracker_item_id": str(raw.get("tracker_item_id") or "").strip(),
     }
 
 
@@ -1711,7 +1717,7 @@ class SparkBaseAgent:
             from agents.context_budget import NonRetryableChatError
             if isinstance(e, NonRetryableChatError):
                 raise
-            return f"[Agent Error] 对话失败: {e}"
+            raise
 
     def chat_stream(
         self,
@@ -1777,6 +1783,7 @@ class SparkBaseAgent:
         base_stream_llm = stream_llm
         budget_result = yield from stream_context_budget_events(
             prepare_chat_messages_with_budget,
+            stop_event=stop_event,
             user_id=self.user_id,
             project_name=self.project_name,
             agent_id=self.agent_id,
@@ -2019,7 +2026,7 @@ class SparkBaseAgent:
                         tool_call_id = tool_spec["call_id"]
                         tool_results.append((tool_call_id, tool_name, tool_result))
                 finally:
-                    set_tool_event_sink(None)
+                    reset_tool_event_sink(sink_token)
 
                 if cancelled_during_tools or is_stop_event_set(stop_event):
                     return
@@ -2050,6 +2057,7 @@ class SparkBaseAgent:
                 collapse_attachment_chunk_history(messages, fresh_call_ids=fresh_call_ids)
                 tool_budget_result = yield from stream_context_budget_events(
                     rebudget_existing_messages,
+                    stop_event=stop_event,
                     user_id=self.user_id,
                     project_name=self.project_name,
                     agent_id=self.agent_id,
@@ -2060,10 +2068,12 @@ class SparkBaseAgent:
                 messages = tool_budget_result.messages
 
         except Exception as e:
+            if is_stop_event_set(stop_event):
+                return
             import traceback
             traceback.print_exc()
             from agents.context_budget import NonRetryableChatError
-            from agents.routes.schemas import format_ai_error
+            from agents.error_formatting import format_ai_error
             if isinstance(e, NonRetryableChatError):
                 yield e.to_event()
                 return

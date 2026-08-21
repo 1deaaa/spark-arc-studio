@@ -25,7 +25,7 @@ def test_auto_write_tasks_are_isolated_by_user_and_stop_target_only(monkeypatch)
             await asyncio.sleep(0.005)
         yield 'data: {"status":"cancelled"}\n\n'
 
-    monkeypatch.setattr("agents.routes.auto_write.generate_script_stream", fake_stream)
+    service.configure_auto_write_runner(fake_stream)
 
     first = _start(service, "u-auto-1", "同名项目")
     second = _start(service, "u-auto-2", "同名项目")
@@ -50,7 +50,8 @@ def test_auto_write_completed_task_can_restart_and_replay_progress(monkeypatch) 
         yield 'data: {"status":"started"}\n\n'
         yield 'data: {"status":"complete"}\n\n'
 
-    monkeypatch.setattr("agents.routes.auto_write.generate_script_stream", fake_stream)
+    service.configure_auto_write_runner(fake_stream)
+
 
     first = _start(service, "u-auto-3", "可重启项目")
     first.entry.thread.join(timeout=2)
@@ -71,3 +72,15 @@ def test_auto_write_completed_task_can_restart_and_replay_progress(monkeypatch) 
     restarted.entry.thread.join(timeout=2)
     assert restarted.started is True
     assert restarted.entry is not first.entry
+
+
+def test_auto_write_start_fails_cleanly_before_runner_registration(monkeypatch) -> None:
+    from agents import auto_write_service as service
+
+    monkeypatch.setattr(service, "_AUTO_WRITE_RUNNER", None)
+
+    result = _start(service, "u-auto-4", "未初始化项目")
+
+    assert result.started is False
+    assert result.entry is None
+    assert result.error == "自动写作执行器尚未初始化"

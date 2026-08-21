@@ -12,7 +12,11 @@ from typing import List, Dict, Any
 from core.auth import get_current_user
 from core.utils import get_project_path, get_project_stories_path
 
-from .schemas import _get_history_dir, _save_outline_to_history, _save_project_outline
+from agents.structure_artifacts import (
+    get_outline_history_dir,
+    save_outline_to_history,
+    save_project_outline,
+)
 from story.outline_parser import parse_outline_markup
 
 outline_router = APIRouter()
@@ -74,9 +78,9 @@ async def save_outline(project_name: str, request: Request, user: dict = Depends
     save_to_history = data.get('saveToHistory', False)
 
     try:
-        _save_project_outline(user_id, project_name, markup)
+        save_project_outline(user_id, project_name, markup)
         if save_to_history:
-            _save_outline_to_history(user_id, project_name, markup)
+            save_outline_to_history(user_id, project_name, markup)
         return {'success': True, 'message': '大纲已保存'}
     except Exception as exc:
         return JSONResponse(status_code=500, content={'success': False, 'error': str(exc)})
@@ -85,7 +89,7 @@ async def save_outline(project_name: str, request: Request, user: dict = Depends
 @outline_router.get('/api/history/outline/{project_name}')
 async def get_outline_history(project_name: str, user: dict = Depends(get_current_user)):
     user_id = str(user['user_id'])
-    history_file = os.path.join(_get_history_dir(user_id, project_name), 'outline_history.json')
+    history_file = os.path.join(get_outline_history_dir(user_id, project_name), 'outline_history.json')
     if os.path.exists(history_file):
         with open(history_file, 'r', encoding='utf-8') as f:
             history = json.load(f)
@@ -99,14 +103,14 @@ async def save_outline_history_endpoint(project_name: str, request: Request, use
     user_id = str(user['user_id'])
     data = await request.json()
     markup = data.get('markup', '')
-    _save_outline_to_history(user_id, project_name, markup)
+    save_outline_to_history(user_id, project_name, markup)
     return {'success': True}
 
 
 @outline_router.delete('/api/history/outline/{project_name}/{entry_id}')
 async def delete_outline_history(project_name: str, entry_id: int, user: dict = Depends(get_current_user)):
     user_id = str(user['user_id'])
-    history_file = os.path.join(_get_history_dir(user_id, project_name), 'outline_history.json')
+    history_file = os.path.join(get_outline_history_dir(user_id, project_name), 'outline_history.json')
     if not os.path.exists(history_file):
         return JSONResponse(status_code=404, content={'success': False, 'error': '历史记录不存在'})
     with open(history_file, 'r', encoding='utf-8') as f:
@@ -120,7 +124,7 @@ async def delete_outline_history(project_name: str, entry_id: int, user: dict = 
 @outline_router.post('/api/history/outline/{project_name}/{entry_id}/restore')
 async def restore_outline_from_history(project_name: str, entry_id: int, user: dict = Depends(get_current_user)):
     user_id = str(user['user_id'])
-    history_file = os.path.join(_get_history_dir(user_id, project_name), 'outline_history.json')
+    history_file = os.path.join(get_outline_history_dir(user_id, project_name), 'outline_history.json')
     if not os.path.exists(history_file):
         return JSONResponse(status_code=404, content={'success': False, 'error': '历史记录不存在'})
     with open(history_file, 'r', encoding='utf-8') as f:
@@ -129,7 +133,7 @@ async def restore_outline_from_history(project_name: str, entry_id: int, user: d
     if not entry:
         return JSONResponse(status_code=404, content={'success': False, 'error': '记录不存在'})
     markup = entry.get('markup', '')
-    _save_project_outline(user_id, project_name, markup)
+    save_project_outline(user_id, project_name, markup)
     return {'success': True, 'markup': markup}
 
 

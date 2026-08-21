@@ -111,31 +111,12 @@ def _run_startup_migrations() -> None:
 
 
 def _repair_stale_auto_write_states() -> None:
-    """
-    启动时扫描所有项目的 auto_write_state.json。
-    若 status 为 running/chapter_paused，说明上次进程被强制终止，
-    此时不存在任何存活的写作线程，将状态修正为 interrupted。
-    """
-    import glob
-    server_root = os.path.dirname(os.path.abspath(__file__))
-    data_root = os.path.join(server_root, "_userdata")
-    pattern = os.path.join(data_root, "**", "auto_write_state.json")
-    stale_statuses = {"running", "chapter_paused"}
+    """启动时修复上次进程退出遗留的自动写作运行态。"""
+    from agents.auto_write_state import repair_stale_auto_write_states
 
-    for state_path in glob.glob(pattern, recursive=True):
-        try:
-            with open(state_path, "r", encoding="utf-8") as f:
-                state = json.load(f)
-            if state.get("status") in stale_statuses:
-                state["status"] = "interrupted"
-                state["lastError"] = "Process exited unexpectedly (server restart), writing thread terminated"
-                import datetime
-                state["updatedAt"] = datetime.datetime.now(datetime.timezone.utc).isoformat()
-                with open(state_path, "w", encoding="utf-8") as f:
-                    json.dump(state, f, ensure_ascii=False, indent=2)
-                print(f"  [auto-write] Corrected stale state: {state_path}", flush=True)
-        except Exception as e:
-            print(f"  [auto-write] Failed to correct state {state_path}: {e}", flush=True)
+    repaired = repair_stale_auto_write_states()
+    if repaired:
+        print(f"  [auto-write] 已修复 {repaired} 个中断任务状态", flush=True)
 
 
 

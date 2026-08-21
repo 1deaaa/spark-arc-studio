@@ -9,7 +9,7 @@
 
 ### 0.1 最重要的结论
 
-1. **不要用 4-bit QLoRA 训练 Qwen3.5。**截至调研日，Unsloth 官方明确警告：Qwen3.5 无论 dense 还是 MoE，4-bit QLoRA 都因量化差异偏大而不被推荐。ArcPen v1 应以 **BF16/16-bit LoRA 训练，合并后再导出 Q4_K_M**。用户所说的“9B Q4”应被解释为部署形态，而不是训练形态。
+1. **训练精度采用分层决策，而不是把 Q4/Q8/FP8 混为一谈。**ArcPen 的论文主线仍以 **BF16/16-bit LoRA** 为质量真相源；本地约 15GB 上的 Qwen3.5-9B 使用 BitsAndBytes `load_in_8bit=True` 做短序列资格试验，云端双 4080 Super 补齐 9B 的 BF16/INT8/FP8 对照。27B 的 INT8/FP8 在双 16GB 上只获得生存性试验资格，Q4 QLoRA 是更现实的正式候选。GGUF `Q8_0`/`Q4_K_M` 是合并后的部署格式，不是训练加载格式；`adamw_8bit` 又只是优化器状态压缩。
 2. **先做 SFT，再按证据决定是否做偏好优化或在线 RL。**Scriptwriter 的主要困难中，格式、工具调用、证据边界、长度分桶和大部分文风行为都可由高质量 SFT 学会。创意写作的奖励主观且容易被长度、华丽辞藻和模板化结构欺骗，未经 SFT 基线和可靠评测就直接做 GRPO，产生奖励投机的概率很高。
 3. **SFT 后的第一升级项应是长度匹配的成对偏好优化，而非直接在线 RL。**建议先做 DPO，并把 SimPO 作为长度偏差消融组。只有在 SFT+DPO 后仍存在稳定的长程缺陷，且奖励模型在人类盲评上的成对准确率达到门槛，才进入小规模 GRPO/GSPO 试验。
 4. **ArcPen 不是“文学续写模型”，而是 SparkArc Scriptwriter harness 的策略模型。**训练必须同时覆盖 ARC/小说双格式、三模态、PreWrite、只读补查、工具顺序、局部 Patch、StoryMemory/GraphRAG 证据边界、长度软目标和真实保存回执。
@@ -126,7 +126,7 @@ StoryMemory 是已保存正文的事实与证据层，不提供剧情方案；Gr
 
 AgentMatchbox 默认记录 256K 上下文和 64K 单次输出上限；实际预算使用所选模型上报值。`context_budget.py` 最多预留 20K 输出 token，并另留安全余量；专有模式保护当前任务、场景事实、大纲契约和修正意见，优先裁剪世界观、大纲、角色、前文等可恢复动态材料。
 
-训练不需要也不应该一开始就覆盖 256K。ArcPen v1 的目标是学会 harness 中信息的优先级与使用方式，而不是用极少超长样本宣称“训练了 256K”。建议训练长度课程为 8K 主体、16K 难例、32K 小比例压力样本，另用原生基座评测 64K/128K 输入退化。
+训练不需要也不应该一开始就覆盖 256K。ArcPen v1 的目标是学会 harness 中信息的优先级与使用方式，而不是用极少超长样本宣称“训练了 256K”。8K/16K/32K 是数据课程目标，不是当前硬件的开跑配置：本地 15GB 的 9B INT8 LoRA 和云端双 16GB 的 27B 生存性试验都从 2K、batch 1 开始，再按峰值显存升到 4K/8K；16K/32K 需要更大显存、成熟的分片方案或后续专项训练。4B BF16 仍是低成本方法验证和代码排错基座。
 
 ## 3. 最新基座与 Unsloth 可行性
 
@@ -141,12 +141,36 @@ AgentMatchbox 默认记录 256K 上下文和 64K 单次输出上限；实际预�
 
 | 阶段 | 推荐精度 | 原因 |
 |---|---|---|
-| SFT/DPO/RL | BF16/16-bit LoRA | Unsloth 对 Qwen3.5 的官方推荐；避免 4-bit 训练量化差异 |
+| SFT/DPO | BF16/16-bit LoRA 主线；INT8 LoRA 条件备选 | BF16 提供质量真相源；INT8 只有通过同条件资格试验才可扩大训练 |
+| 在线 RL | BF16 LoRA 主线；Unsloth FP8 LoRA 专项探索 | FP8 RL 已有官方实现和 loss 曲线，但 Qwen3.5 仍需验证完整生命周期 |
 | 合并基准 | BF16 或 F16 | 测得训练方法本身的真实收益 |
 | 中间质量参照 | Q8_0 | 区分普通量化损失与 Q4 特有损失 |
 | 最终部署 | Q4_K_M | 与用户本地部署目标一致；必须重新跑全套 harness 回归 |
 
 不能只在 BF16 上选出最好 checkpoint 后直接宣称 Q4 有效。每个晋级模型都必须经过 BF16、Q8、Q4 三点量化曲线。
+
+#### 3.2.1 INT8 LoRA 的证据边界
+
+BitsAndBytes `LLM.int8()` 把**冻结的基座权重**保存为 INT8，普通通道执行 INT8 矩阵乘，异常值通道走 FP16/BF16 旁路；LoRA adapter、其梯度和训练更新仍为高精度。因此它不是“用 INT8 更新全部参数”，也不同于 GGUF `Q8_0`。
+
+QLoRA 论文表 3 是目前最可靠的通用对照：GLUE 上 BF16 LoRA 与 INT8 LoRA 均为 88.8；Super-NaturalInstructions 的 T5-11B 上二者 Rouge-L 均为 60.7。该结果说明 INT8 冻结基座 LoRA **可能**复现 BF16 LoRA，却不能直接外推到 Qwen3.5 的 Gated DeltaNet 混合架构、长篇文学任务和长工具轨迹。截至调研日，未找到 Qwen3.5-9B/27B 在相同数据、超参和种子下的 BF16 对 INT8 LoRA 严格公开基准，ArcPen 必须自己补齐这一实验。
+
+#### 3.2.2 FP8 checkpoint 不等于 FP8 可训练路径
+
+Qwen 官方 Qwen3.5 集合中有 FP8 的型号为 27B、35B-A3B、122B-A10B、397B-A17B；0.8B、2B、4B、9B 没有官方 FP8 checkpoint。社区存在 4B/9B FP8 转换，但主要面向 vLLM/SGLang 推理，不能作为训练真相源。官方 27B-FP8 是 block size 128 的细粒度推理量化发布物，其“指标接近原模型”不等于 Transformers/PEFT 能直接对该 checkpoint 完成 LoRA 训练、合并和再导出。
+
+Unsloth 另有真正的 FP8 LoRA 路径：`load_in_fp8=True`，冻结基座和输入激活用于 FP8 计算，LoRA adapter 与反向梯度保持 BF16。其官方页面展示多个 Qwen3/Llama 模型的 BF16/FP8 SFT loss 曲线接近，并报告 Qwen3-8B 相比 BF16 LoRA 节省约 8GB；但页面主流程聚焦 GRPO/RL，尚不能替代 Qwen3.5-9B Scriptwriter 的端到端质量验证。FP8 也不天然比 `LLM.int8()` 更稳定：INT8 有异常值高精度旁路，FP8 的结果更依赖缩放策略、GPU Tensor Core、模型层映射与框架版本。
+
+#### 3.2.3 ArcPen 当前硬件路线
+
+| GPU 可用显存 | 9B 建议 | 27B 建议 |
+|---:|---|---|
+| 本地约 15GB | 9B INT8 LoRA 从 2K 开始资格试验；同步跑能容纳的 BF16 短序列质量锚点；Q4 仅消融 | 不做单卡训练 |
+| 双 RTX 4080 Super，2×16GB | 9B BF16/INT8/FP8 均可系统验证，长序列仍按峰值扩展 | 不是统一 32GB 池；INT8/FP8 只做 2K、batch 1、model-parallel 生存性试验，不能预设可正式训练；未通过则转 Q4 QLoRA 或租 48GB 单卡 |
+| 约 48GB | BF16 长度课程更可控 | 可探索 INT8/FP8 LoRA，但必须完整验收训练和导出链路 |
+| 约 56-80GB | BF16 主线 | BF16 LoRA 正式主线；实际余量随序列长度和 checkpointing 变化 |
+
+RTX 4080 Super 是 Ada、计算能力 8.9，具备 FP8 硬件条件，但每卡只有 16GB 且没有 NVLink。双卡必须使用模型分片（例如受支持时的 `device_map="balanced"`），不能使用会在每卡复制完整模型的普通 DDP。FP8 仅在原生支持的 GPU 上考虑，例如 L4、H100/H200/B200 与 RTX 40/50 系列；T4 不支持这条原生 FP8 路径。实验记录必须写明准确型号、拓扑、P2P 状态、CUDA、PyTorch、Transformers、PEFT、TRL、Unsloth 和 `unsloth_zoo` 版本。
 
 ### 3.3 初始 LoRA 配方
 
@@ -437,4 +461,4 @@ SFT v1 进入偏好阶段前，至少满足：
 - [instruction.md](instruction.md)：文学数据合成 Agent 的完整生产规范。
 - [workflows.md](workflows.md)：低成本稳定执行 Agent 的逐步训练、评测、迭代与停止流程。
 - [sources.md](sources.md)：项目证据和学术/官方一手来源台账。
-
+- [autodl.md](autodl.md)：双 RTX 4080 Super 的 AutoDL 镜像、学术加速、目录与环境固化手册。

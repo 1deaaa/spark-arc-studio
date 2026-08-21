@@ -24,9 +24,9 @@ from .schemas import (
     BeatSheetSaveRequest,
     format_ai_error,
 )
-from .context_builder import load_project_context_bundle, build_story_tags_hint
+from agents.project_context import load_project_context_bundle, build_story_tags_hint
 from .streaming_utils import iterate_sync_iterable_in_thread
-from .stream_semantics import semantic_sse_data, on_cancelled
+from agents.stream_semantics import semantic_sse_data, on_cancelled
 
 structure_router = APIRouter()
 
@@ -160,8 +160,9 @@ async def save_synopsis(
     user_id = str(user["user_id"])
     project_name = resolve_project_name(get_current_project_name(), data.projectName)
     try:
-        from .schemas import _save_project_synopsis
-        _save_project_synopsis(user_id, project_name, data.markup)
+        from agents.structure_artifacts import save_project_synopsis
+
+        save_project_synopsis(user_id, project_name, data.markup)
         return {"success": True}
     except Exception as exc:
         return JSONResponse(status_code=500, content={"error": str(exc)})
@@ -184,8 +185,9 @@ async def save_beat_sheet(
     user_id = str(user["user_id"])
     project_name = resolve_project_name(get_current_project_name(), data.projectName)
     try:
-        from .schemas import _save_project_beat_sheet
-        _save_project_beat_sheet(user_id, project_name, data.markup)
+        from agents.structure_artifacts import save_project_beat_sheet
+
+        save_project_beat_sheet(user_id, project_name, data.markup)
         return {"success": True}
     except Exception as exc:
         return JSONResponse(status_code=500, content={"error": str(exc)})

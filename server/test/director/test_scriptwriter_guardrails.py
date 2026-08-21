@@ -1,12 +1,17 @@
 from __future__ import annotations
 
 import json
+import queue
 import threading
 
 from langchain_core.messages import HumanMessage
+import pytest
 
 from agents.communication import (
     HANDOFF_CONFIRMATION_NOT_REQUIRED,
+    get_tool_event_sink,
+    reset_tool_event_sink,
+    set_tool_event_sink,
 )
 from agents.director_graph import route_after_sub_agent, sub_agent_node
 from agents.routes.auto_write_state import begin_auto_write_run
@@ -79,6 +84,50 @@ def test_sub_agent_node_hides_scriptwriter_draft_without_persist(monkeypatch) ->
 
     assert "未完成落盘" in result["sub_agent_result"]
     assert result["baton_holder"] == "agent_director"
+
+
+@pytest.mark.parametrize("fail", [False, True])
+def test_sub_agent_node_restores_outer_tool_event_sink(monkeypatch, fail: bool) -> None:
+    class FakeSubAgent:
+        def chat_stream(self, *args, **kwargs):
+            if fail:
+                raise RuntimeError("子 Agent 执行失败")
+            yield {"event": "assistant_delta", "text": "已完成"}
+
+    monkeypatch.setattr("agents.director_graph._ensure_graph_agent_registered", lambda *args, **kwargs: FakeSubAgent())
+    monkeypatch.setattr("agents.context_provider.get_agent_context", lambda *args, **kwargs: "")
+    monkeypatch.setattr("agents.director_graph.get_stream_writer", lambda: None)
+    monkeypatch.setattr("agents.director_graph.transfer_baton", lambda *args, **kwargs: {"status": "ok", "baton_holder": "agent_director"})
+    state = {
+        "user_id": "u1",
+        "project_name": "p1",
+        "pending_delegate": {
+            "target_agent": "agent_lorebook",
+            "task_description": "生成世界观",
+            "delivery_mode": "return_to_director",
+            "completion_mode": "return_to_director",
+            "return_to": "agent_director",
+            "grant_baton_to": "agent_lorebook",
+            "user_confirmation_state": HANDOFF_CONFIRMATION_NOT_REQUIRED,
+            "skip_tool_confirmation": True,
+        },
+        "baton_holder": "agent_lorebook",
+        "active_context": "",
+        "messages": [HumanMessage(content="开始")],
+        "stop_event": threading.Event(),
+    }
+    outer_sink = queue.Queue()
+    outer_token = set_tool_event_sink(outer_sink)
+
+    try:
+        if fail:
+            with pytest.raises(RuntimeError, match="子 Agent 执行失败"):
+                sub_agent_node(state)
+        else:
+            sub_agent_node(state)
+        assert get_tool_event_sink() is outer_sink
+    finally:
+        reset_tool_event_sink(outer_token)
 
 
 def test_sub_agent_returns_to_director_when_tracker_has_open_items(monkeypatch, tmp_path) -> None:

@@ -60,9 +60,15 @@ class ContextCompactionFailedError(NonRetryableChatError):
     code = "context_compaction_failed"
 
 
+class ContextBudgetCancelledError(RuntimeError):
+    """聊天任务取消后停止等待后台预算操作。"""
+
+
 def stream_context_budget_events(
     operation: Callable[..., "ContextBudgetResult"],
     /,
+    *,
+    stop_event: Any = None,
     **kwargs: Any,
 ) -> Generator[Dict[str, Any], None, "ContextBudgetResult"]:
     """在独立线程执行预算操作，让压缩事件能覆盖真实等待时间。"""
@@ -87,7 +93,12 @@ def stream_context_budget_events(
     worker.start()
 
     while True:
-        item = event_queue.get()
+        if stop_event is not None and stop_event.is_set():
+            raise ContextBudgetCancelledError("聊天上下文预算已取消")
+        try:
+            item = event_queue.get(timeout=0.05)
+        except queue.Empty:
+            continue
         if item is done_marker:
             break
         if isinstance(item, dict):

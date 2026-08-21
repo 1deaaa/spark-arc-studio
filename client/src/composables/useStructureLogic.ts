@@ -41,6 +41,13 @@ type StructureCacheSnapshot = {
     currentOutline: OutlineData | null;
 };
 
+type OutlineGenerationRequest = {
+    projectName: string;
+    epoch: number;
+    task: ReturnType<typeof createStreamingTask> | null;
+    active: boolean;
+};
+
 function getErrorMessage(error: unknown): string {
     if (error instanceof Error) return error.message;
     return String(error || '未知错误');
@@ -102,11 +109,50 @@ export function useStructureLogic() {
     const currentDefaults = defaultPresetCounts();
     const currentOutline = ref<OutlineData | null>(null);
     const outlineHistoryRef = ref<{ refresh?: () => void } | null>(null);
+    let structureRequestEpoch = 0;
+    let observedProjectName = projectStore.currentProject;
+    let activeOutlineGeneration: OutlineGenerationRequest | null = null;
     // 兼容旧请求字段 chapterCount；剧本模式显示为剧幕数，小说模式显示为分卷数。
     const chapterCount = ref<number>(currentDefaults.group);
     // 兼容旧请求字段 sceneCountPerChapter；剧本模式显示为每幕场景数，小说模式显示为每卷章节数。
     const sceneCount = ref<number>(currentDefaults.unit);
     const lengthType = ref(DEFAULT_LENGTH_TYPE);
+
+    function invalidateActiveOutlineGeneration() {
+        const request = activeOutlineGeneration;
+        if (!request) return;
+
+        activeOutlineGeneration = null;
+        request.active = false;
+        request.task?.cancel('project_changed');
+        request.task?.dispose();
+        isLoading.value = false;
+    }
+
+    function synchronizeProjectEpoch(projectName = projectStore.currentProject) {
+        const normalizedProjectName = projectName || '';
+        if (normalizedProjectName === observedProjectName) return structureRequestEpoch;
+
+        observedProjectName = normalizedProjectName;
+        structureRequestEpoch += 1;
+        invalidateActiveOutlineGeneration();
+        return structureRequestEpoch;
+    }
+
+    function isProjectCurrent(projectName: string, epoch: number) {
+        return (
+            projectStore.currentProject === projectName
+            && structureRequestEpoch === epoch
+        );
+    }
+
+    function isOutlineGenerationCurrent(request: OutlineGenerationRequest) {
+        return (
+            request.active
+            && activeOutlineGeneration === request
+            && isProjectCurrent(request.projectName, request.epoch)
+        );
+    }
 
     const lengthOptions = computed(() => [
         { label: i18n.global.t(`views.structure.lengthOptions.${workspaceMode.value}.short`), value: 'short' },
@@ -186,14 +232,19 @@ export function useStructureLogic() {
         }
     });
 
-    async function loadCurrentOutline() {
-        if (!projectStore.currentProject) return;
+    async function loadCurrentOutline(
+        projectName = projectStore.currentProject,
+        requestEpoch = structureRequestEpoch,
+    ) {
+        if (!projectName || !isProjectCurrent(projectName, requestEpoch)) return;
 
         try {
-            const outline = await getOutline(projectStore.currentProject);
+            const outline = await getOutline(projectName);
+            if (!isProjectCurrent(projectName, requestEpoch)) return;
             if (outline && !isCreativeCacheEqual(currentOutline.value, outline)) {
                 currentOutline.value = outline;
             }
+            if (!isProjectCurrent(projectName, requestEpoch)) return;
             saveStructureSnapshot();
         } catch (e) {
             console.log('No existing outline found');
@@ -201,54 +252,80 @@ export function useStructureLogic() {
     }
 
     async function handleGenerateOutline(options: { skipOverwriteConfirm?: boolean } = {}) {
-        if (!projectStore.currentProject) return false;
+        synchronizeProjectEpoch();
+        if (activeOutlineGeneration) return false;
 
-        if (!context.value && !guidance.value) {
-            message.warning('请提供剧情上下文或导演意图');
-            return false;
-        }
+        const projectName = projectStore.currentProject;
+        if (!projectName) return false;
 
-        if (
-            currentOutline.value
-            && Array.isArray(currentOutline.value.nodes)
-            && currentOutline.value.nodes.length > 0
-            && !options.skipOverwriteConfirm
-        ) {
-            const shouldOverwrite = await new Promise<boolean>((resolve) => {
-                dialog.warning({
-                    title: '确认覆盖',
-                    content: '当前大纲已有内容，继续生成将覆盖现有大纲。是否继续？',
-                    positiveText: '覆盖并生成',
-                    negativeText: '取消',
-                    onPositiveClick: () => resolve(true),
-                    onNegativeClick: () => resolve(false),
-                    onClose: () => resolve(false),
-                });
-            });
-            if (!shouldOverwrite) return false;
-        }
+        const request: OutlineGenerationRequest = {
+            projectName,
+            epoch: structureRequestEpoch,
+            task: null,
+            active: true,
+        };
+        activeOutlineGeneration = request;
 
-        isLoading.value = true;
-        const task = createStreamingTask('outline', {
-            text: '文案策划 正在规划故事结构...',
-            canCancel: true,
-        });
         try {
-            // Fetch beat sheet from server (returns Markup text)
+            if (!context.value && !guidance.value) {
+                if (isOutlineGenerationCurrent(request)) {
+                    message.warning('请提供剧情上下文或导演意图');
+                }
+                return false;
+            }
+
+            if (
+                currentOutline.value
+                && Array.isArray(currentOutline.value.nodes)
+                && currentOutline.value.nodes.length > 0
+                && !options.skipOverwriteConfirm
+            ) {
+                const shouldOverwrite = await new Promise<boolean>((resolve) => {
+                    dialog.warning({
+                        title: '确认覆盖',
+                        content: '当前大纲已有内容，继续生成将覆盖现有大纲。是否继续？',
+                        positiveText: '覆盖并生成',
+                        negativeText: '取消',
+                        onPositiveClick: () => resolve(true),
+                        onNegativeClick: () => resolve(false),
+                        onClose: () => resolve(false),
+                    });
+                });
+                if (!shouldOverwrite || !isOutlineGenerationCurrent(request)) return false;
+            }
+
+            if (!isOutlineGenerationCurrent(request)) return false;
+
+            isLoading.value = true;
+            const task = createStreamingTask('outline', {
+                text: '文案策划 正在规划故事结构...',
+                canCancel: true,
+            });
+            request.task = task;
+
+            if (!isOutlineGenerationCurrent(request)) {
+                task.cancel('project_changed');
+                return false;
+            }
+
             let beatSheet: string | null = null;
             try {
-                const bMarkup = await fetchBeatSheet(projectStore.currentProject);
+                const bMarkup = await fetchBeatSheet(projectName);
+                if (!isOutlineGenerationCurrent(request)) return false;
                 if (bMarkup && bMarkup.trim()) {
                     beatSheet = bMarkup;
                 }
             } catch (e: unknown) {
+                if (!isOutlineGenerationCurrent(request)) return false;
                 console.warn('Failed to fetch beat sheet', e);
             }
 
-            const styleProfile = await getStyleProfile(projectStore.currentProject, null);
+            if (!isOutlineGenerationCurrent(request)) return false;
+            const styleProfile = await getStyleProfile(projectName, null);
+            if (!isOutlineGenerationCurrent(request)) return false;
 
             const outline = await generateOutline(
-                projectStore.currentProject,
+                projectName,
                 context.value,
                 guidance.value,
                 {
@@ -258,17 +335,25 @@ export function useStructureLogic() {
                     styleProfile,
                     // 后端字段名保持兼容；具体语义由 workspaceMode 解释为剧幕/场景或分卷/章节。
                     signal: task.signal,
-                    onChunk: (chunk) => task.push(chunk, '文案策划 正在规划故事结构...')
+                    onChunk: (chunk) => {
+                        if (isOutlineGenerationCurrent(request)) {
+                            task.push(chunk, '文案策划 正在规划故事结构...');
+                        }
+                    }
                 }
             );
 
-            if (task.aborted) return false;
+            if (task.aborted || !isOutlineGenerationCurrent(request)) return false;
             currentOutline.value = outline;
+            if (!isOutlineGenerationCurrent(request)) return false;
             saveStructureSnapshot();
+            if (!isOutlineGenerationCurrent(request)) return false;
             message.success('大纲生成成功');
+            if (!isOutlineGenerationCurrent(request)) return false;
             outlineHistoryRef.value?.refresh?.();
             return true;
         } catch (e: unknown) {
+            if (!isOutlineGenerationCurrent(request)) return false;
             if (isAbortLikeError(e)) {
                 message.info('已取消生成');
                 return false;
@@ -276,8 +361,12 @@ export function useStructureLogic() {
             message.error('生成大纲失败: ' + getErrorMessage(e));
             return false;
         } finally {
-            task.dispose();
-            isLoading.value = false;
+            request.task?.dispose();
+            if (activeOutlineGeneration === request) {
+                activeOutlineGeneration = null;
+                request.active = false;
+                isLoading.value = false;
+            }
         }
     }
 
@@ -339,12 +428,22 @@ export function useStructureLogic() {
     }
 
     async function handleOutlineRefresh() {
-        await loadCurrentOutline();
+        synchronizeProjectEpoch();
+        const projectName = projectStore.currentProject;
+        const projectEpoch = structureRequestEpoch;
+        await loadCurrentOutline(projectName, projectEpoch);
+        if (!isProjectCurrent(projectName, projectEpoch)) return;
         outlineHistoryRef.value?.refresh?.();
     }
 
     // --- 自动读取梗概到上下文 ---
+    watch(() => projectStore.currentProject, (newProject) => {
+        synchronizeProjectEpoch(newProject);
+    }, { flush: 'sync' });
+
     watch(() => projectStore.currentProject, async (newProject) => {
+        const projectEpoch = structureRequestEpoch;
+
         // 切换项目时先清空所有旧状态，防止残留
         context.value = '';
         guidance.value = '';
@@ -356,12 +455,16 @@ export function useStructureLogic() {
 
         if (newProject) {
             applyStructureSnapshot(loadCreativeCache<StructureCacheSnapshot>(buildStructureCacheKey()));
-            applyLengthHintIfPristine(await loadProjectLengthHint(newProject));
-            await loadCurrentOutline();
+            const lengthHint = await loadProjectLengthHint(newProject);
+            if (!isProjectCurrent(newProject, projectEpoch)) return;
+            applyLengthHintIfPristine(lengthHint);
+            await loadCurrentOutline(newProject, projectEpoch);
+            if (!isProjectCurrent(newProject, projectEpoch)) return;
 
             // 仅加载“详细梗概”为上下文，不再回退灵感
             try {
                 const synMarkup = await fetchSynopsis(newProject);
+                if (!isProjectCurrent(newProject, projectEpoch)) return;
                 if (synMarkup && synMarkup.trim() && !context.value.trim()) {
                     // fetchSynopsis 现在返回 Markup 文本，直接用作上下文
                     context.value = synMarkup;
@@ -375,8 +478,10 @@ export function useStructureLogic() {
                     }
                 }
             } catch (e) {
+                if (!isProjectCurrent(newProject, projectEpoch)) return;
                 console.warn('Failed to pre-load synopsis', e);
             }
+            if (!isProjectCurrent(newProject, projectEpoch)) return;
             saveStructureSnapshot();
             void consumePendingStructureAdoption();
         }
@@ -422,6 +527,7 @@ export function useStructureLogic() {
     });
 
     onBeforeUnmount(() => {
+        invalidateActiveOutlineGeneration();
         bus.off('adopt-synopsis', handleAdoptSynopsis);
         bus.off('outline-refresh', handleOutlineRefresh);
         void outlineSaveScheduler.flush();

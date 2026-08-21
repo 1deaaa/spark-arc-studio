@@ -41,7 +41,7 @@ from agents.scriptwriter_prewrite import (
     run_autonomous_scriptwriter_creation,
 )
 from agents.agent_critic import CriticAgent
-from .stream_semantics import (
+from agents.stream_semantics import (
     semantic_sse_data,
     merge_semantics,
     on_cancelled,
@@ -51,7 +51,7 @@ from .stream_semantics import (
     on_start,
     on_stats,
 )
-from .auto_write_state import (
+from agents.auto_write_state import (
     begin_auto_write_run,
     build_auto_write_state_payload,
     build_scene_output_filename,
@@ -64,7 +64,7 @@ from story.file_naming import (
     resolve_planned_scene_file_path,
     strip_story_filename_meta,
 )
-from .context_builder import (
+from agents.project_context import (
     load_worldview,
     load_all_roles,
     load_full_outline,
@@ -832,6 +832,11 @@ async def generate_script_stream(
         totalScenes=total_scenes_count,
         **on_done("全部自动撰写任务已完成"),
     )
+
+
+from agents.auto_write_service import configure_auto_write_runner
+
+configure_auto_write_runner(generate_script_stream)
 
 
 @auto_write_router.post("/api/outline/{project_name}/auto-write-start")

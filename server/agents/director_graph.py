@@ -31,6 +31,7 @@ from agents.communication import (
     stream_model_turn_with_retry,
     normalize_handoff_payload,
     normalize_tool_name,
+    reset_tool_event_sink,
     set_tool_event_sink,
     transfer_baton,
 )
@@ -56,6 +57,7 @@ class DirectorState(TypedDict):
     sub_agent_result: Optional[str]
     baton_holder: Optional[str]
     force_return_to_director: Optional[bool]
+    handoff_tracker_reconciled: Optional[bool]
     stop_event: Any
     
     stream_events: Annotated[list, operator.add]
@@ -137,6 +139,20 @@ def _director_tracker_has_open_items(user_id: str, project_name: str) -> bool:
         )
     except Exception:
         return False
+
+
+def _director_tracker_update_required(
+    user_id: str,
+    project_name: str,
+    sub_agent_result: Any,
+    handoff_tracker_reconciled: bool,
+) -> bool:
+    """判断专家回交后是否仍需由导演显式修正任务板。"""
+    return (
+        bool(sub_agent_result)
+        and not handoff_tracker_reconciled
+        and _director_tracker_has_open_items(user_id, project_name)
+    )
 
 
 def _is_tracker_progress_update(tool_name: str, tool_args: Any, tool_result: Any) -> bool:
@@ -270,9 +286,11 @@ def director_node(state: DirectorState) -> Dict[str, Any]:
     project_name = state["project_name"]
     messages = state.get("messages", [])
     sub_agent_result = state.get("sub_agent_result")
-    tracker_update_required = bool(sub_agent_result) and _director_tracker_has_open_items(
+    tracker_update_required = _director_tracker_update_required(
         user_id,
         project_name,
+        sub_agent_result,
+        bool(state.get("handoff_tracker_reconciled")),
     )
     baton_holder = state.get("baton_holder") or "agent_director"
     stop_event = state.get("stop_event")
@@ -510,6 +528,7 @@ def director_node(state: DirectorState) -> Dict[str, Any]:
         "sub_agent_result": None,
         "baton_holder": baton_holder,
         "force_return_to_director": False,
+        "handoff_tracker_reconciled": False,
     }
     
     pending_delegate = None
@@ -518,7 +537,7 @@ def director_node(state: DirectorState) -> Dict[str, Any]:
     if tool_specs:
         tool_results = []
         event_sink = queue.Queue()
-        set_tool_event_sink(event_sink)
+        sink_token = set_tool_event_sink(event_sink)
         
         try:
             for spec in tool_specs:
@@ -594,6 +613,32 @@ def director_node(state: DirectorState) -> Dict[str, Any]:
                     delegate_data = json.loads(tool_result.split("__DELEGATE__:", 1)[1])
                     pending_delegate = normalize_handoff_payload(delegate_data, sender_id="agent_director")
                     pending_delegate["call_id"] = call_id
+                    try:
+                        from agents.work_tracker import bind_work_tracker_item_for_delegate
+
+                        bound_item = bind_work_tracker_item_for_delegate(
+                            user_id,
+                            project_name,
+                            "agent_director",
+                            requested_item_id=str(pending_delegate.get("tracker_item_id") or ""),
+                        )
+                    except ValueError as exc:
+                        pending_delegate = None
+                        protocol_error = f"委派任务失败：{exc}"
+                        tool_results.append((call_id, tool_name, protocol_error))
+                        if writer:
+                            writer(build_tool_stream_event(
+                                "tool_exec_failed",
+                                tool_name,
+                                source_agent="agent_director",
+                                message=protocol_error,
+                                tool_call_key=tool_call_key,
+                                tool_input=_spec_args,
+                                tool_error=protocol_error,
+                            ))
+                        continue
+                    if bound_item:
+                        pending_delegate["tracker_item_id"] = str(bound_item.get("id") or "")
                     updates["messages"] = _build_director_message_update(
                         persisted_prefix=persisted_prefix,
                         director=director,
@@ -689,7 +734,7 @@ def director_node(state: DirectorState) -> Dict[str, Any]:
                 tool_results.append((call_id, tool_name, tool_result))
 
         finally:
-            set_tool_event_sink(None)
+            reset_tool_event_sink(sink_token)
             
         if not pending_delegate:
             completed_call_ids = {cid for cid, _, _ in tool_results}
@@ -778,7 +823,7 @@ def sub_agent_node(state: DirectorState) -> Dict[str, Any]:
     handoff_context = ""
     if target_agent == "agent_scriptwriter" and project_name:
         try:
-            from agents.routes.context_builder import build_scriptwriter_handoff_context
+            from agents.project_context import build_scriptwriter_handoff_context
 
             handoff_context = build_scriptwriter_handoff_context(
                 user_id,
@@ -809,7 +854,7 @@ def sub_agent_node(state: DirectorState) -> Dict[str, Any]:
     
     buf = []
     event_sink = queue.Queue()
-    set_tool_event_sink(event_sink)
+    sink_token = set_tool_event_sink(event_sink)
     cancelled = False
     suppress_scriptwriter_draft = target_agent == "agent_scriptwriter" and skip_tool_confirmation
     scriptwriter_saved = False
@@ -898,7 +943,7 @@ def sub_agent_node(state: DirectorState) -> Dict[str, Any]:
                 tagged_evt = {**evt, "source_agent": target_agent, "nested": True}
                 writer(tagged_evt)
     finally:
-        set_tool_event_sink(None)
+        reset_tool_event_sink(sink_token)
 
     if is_stop_event_set(stop_event):
         cancelled = True
@@ -927,6 +972,63 @@ def sub_agent_node(state: DirectorState) -> Dict[str, Any]:
     if writer:
         writer({"event": "agent_turn_finished", "source_agent": target_agent})
 
+    handoff_tracker_reconciled = False
+    tracker_item_id = str(delegate.get("tracker_item_id") or "").strip()
+    if (
+        completion_mode == HANDOFF_COMPLETION_SILENT_CONTINUE
+        and pipeline_completion_receipt
+        and tracker_item_id
+    ):
+        tracker_tool_key = f"handoff_tracker_{delegate.get('task_id') or tracker_item_id}"
+        if writer:
+            writer(build_tool_stream_event(
+                "tool_exec_started",
+                "work_tracker",
+                source_agent="agent_director",
+                message="正在根据专家落盘回执推进任务板",
+                tool_call_key=tracker_tool_key,
+                tool_input={"tracker_item_id": tracker_item_id},
+                nested=True,
+                parent_tool="delegate_task",
+            ))
+        try:
+            from agents.work_tracker import complete_bound_work_tracker_item
+
+            tracker_update = complete_bound_work_tracker_item(
+                user_id,
+                project_name,
+                "agent_director",
+                tracker_item_id,
+            )
+        except Exception as exc:
+            tracker_update = {
+                "reconciled": False,
+                "reason": str(exc) or "任务板自动推进失败",
+            }
+        handoff_tracker_reconciled = bool(tracker_update.get("reconciled"))
+        if writer:
+            event_name = "tool_exec_finished" if handoff_tracker_reconciled else "tool_exec_failed"
+            event_kwargs = {
+                "source_agent": "agent_director",
+                "message": (
+                    "已根据专家落盘回执推进任务板"
+                    if handoff_tracker_reconciled
+                    else str(tracker_update.get("reason") or "任务板自动推进失败")
+                ),
+                "tool_call_key": tracker_tool_key,
+                "tool_input": {"tracker_item_id": tracker_item_id},
+                "nested": True,
+                "parent_tool": "delegate_task",
+            }
+            if handoff_tracker_reconciled:
+                event_kwargs["tool_result"] = json.dumps(
+                    tracker_update.get("tracker") or {},
+                    ensure_ascii=False,
+                )
+            else:
+                event_kwargs["tool_error"] = event_kwargs["message"]
+            writer(build_tool_stream_event(event_name, "work_tracker", **event_kwargs))
+
     if suppress_scriptwriter_draft and not scriptwriter_saved:
         sub_agent_result = f"[{target_agent}] Execution failed:\n{result}"
     elif completion_mode == HANDOFF_COMPLETION_REPORT_TO_USER:
@@ -949,6 +1051,7 @@ def sub_agent_node(state: DirectorState) -> Dict[str, Any]:
         }],
         "baton_holder": target_agent,
         "force_return_to_director": False,
+        "handoff_tracker_reconciled": handoff_tracker_reconciled,
     }
 
     tracker_requires_director = (
@@ -1093,6 +1196,7 @@ def run_director_stream(
 
         budget_stream = stream_context_budget_events(
             prepare_chat_messages_with_budget,
+            stop_event=stop_event,
             user_id=user_id,
             project_name=project_name,
             agent_id="agent_director",
@@ -1120,6 +1224,7 @@ def run_director_stream(
             "sub_agent_result": None,
             "baton_holder": "agent_director",
             "force_return_to_director": False,
+            "handoff_tracker_reconciled": False,
             "stream_events": [],
             "stop_event": stop_event,
         }
@@ -1148,7 +1253,7 @@ def run_director_stream(
             return
         import traceback
         traceback.print_exc()
-        from agents.routes.schemas import format_ai_error
+        from agents.error_formatting import format_ai_error
         yield {
             "event": "error",
             "data": format_ai_error(e),

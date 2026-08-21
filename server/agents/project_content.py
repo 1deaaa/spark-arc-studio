@@ -35,3 +35,18 @@ def load_worldview(user_id: str, project_name: str) -> str:
         return ""
     with open(path, "r", encoding="utf-8") as f:
         return f.read()
+
+
+def write_worldview(user_id: str, project_name: str, content: str) -> None:
+    """通过统一项目路径写入世界观正文。"""
+    from core.utils import (
+        ensure_project_directory,
+        ensure_project_worldview_and_character_settings,
+        get_project_worldview_path,
+    )
+
+    ensure_project_worldview_and_character_settings(user_id, project_name)
+    worldview_path = get_project_worldview_path(user_id, project_name)
+    ensure_project_directory(user_id, project_name)
+    with open(worldview_path, "w", encoding="utf-8") as file:
+        file.write(content)

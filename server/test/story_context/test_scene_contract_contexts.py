@@ -228,6 +228,7 @@ def test_handoff_payload_preserves_scriptwriter_scene_fields() -> None:
         {
             "target_agent": "agent_scriptwriter",
             "task_description": "写钟楼交易。",
+            "tracker_item_id": "task_clocktower",
             "export_format": "novel",
             "chapter_name": "一 · 开端",
             "scene_name": "1-1 钟楼交易",
@@ -244,6 +245,7 @@ def test_handoff_payload_preserves_scriptwriter_scene_fields() -> None:
     assert payload["scene_file_path"] == "一 · 开端/1-1 钟楼交易.md"
     assert payload["scene_guidance"] == "对白必须像互相试探。"
     assert payload["scene_characters"] == ["沈棠", "林烬"]
+    assert payload["tracker_item_id"] == "task_clocktower"
 
 
 def test_scriptwriter_handoff_context_resolves_outline_contract_from_task(monkeypatch, tmp_path: Path) -> None:

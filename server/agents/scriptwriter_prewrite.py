@@ -83,7 +83,7 @@ def _resolve_request_scene_identity(request: ScriptwriterPreWriteRequest) -> tup
     """由大纲或现有文件元数据签发身份，禁止从模型标题编号推断。"""
     import os
 
-    from agents.routes.context_builder import (
+    from agents.project_context import (
         load_project_context_bundle,
         resolve_outline_scene_contract_for_task,
     )
@@ -189,7 +189,7 @@ def has_matching_prewrite_receipt(
 
 
 def _build_prewrite_brief(request: ScriptwriterPreWriteRequest) -> str:
-    from agents.routes.context_builder import build_scriptwriter_handoff_context
+    from agents.project_context import build_scriptwriter_handoff_context
 
     return build_scriptwriter_handoff_context(
         request.user_id,

@@ -2,7 +2,20 @@ from __future__ import annotations
 
 from typing import Any
 
+from core.request_context import normalize_project_name
+
 from .communication import SparkBaseAgent
+
+
+# 这些 Agent 的现有构造器明确支持 project_name；其他专家构造器必须保持旧签名。
+_AGENT_CONSTRUCTOR_PROJECT_NAME_SUPPORT: dict[str, bool] = {
+    "agent_showrunner": False,
+    "agent_scriptwriter": False,
+    "agent_critic": False,
+    "agent_lorebook": False,
+    "agent_muse": True,
+    "agent_style": True,
+}
 
 
 class DirectorGraphWrapper:
@@ -67,18 +80,41 @@ def get_agent_class_map() -> dict[str, type[Any]]:
     }
 
 
-def create_agent_instance(agent_id: str, user_id: str, project_name: str):
-    if agent_id == "agent_director":
-        return DirectorGraphWrapper(user_id, project_name)
+def _normalize_factory_project_name(project_name: str | None) -> str:
+    """把工厂入口的项目名固定为实例与工具共用的规范值。"""
+    return normalize_project_name(project_name) or ""
 
-    from agents.agent_style_chat import StyleChatAgent
+
+def _bind_agent_project_name(agent: Any, project_name: str) -> Any:
+    """把规范化项目名绑定到实例，不改变调用者的请求上下文。"""
+    if hasattr(agent, "project_name"):
+        agent.project_name = project_name
+    return agent
+
+
+def create_agent_instance(agent_id: str, user_id: str, project_name: str | None = ""):
+    """按固定构造契约创建 Agent，并绑定显式项目身份。"""
+    normalized_project_name = _normalize_factory_project_name(project_name)
+
+    if agent_id == "agent_director":
+        return _bind_agent_project_name(
+            DirectorGraphWrapper(user_id, normalized_project_name),
+            normalized_project_name,
+        )
 
     agent_class_map = get_agent_class_map()
     cls = agent_class_map.get(agent_id, SparkBaseAgent)
     if cls == SparkBaseAgent:
-        return cls(agent_id=agent_id, user_id=user_id)
-    if cls is StyleChatAgent:
-        return cls(user_id=user_id, project_name=project_name)
-    if agent_id == "agent_muse":
-        return cls(user_id=user_id, project_name=project_name)
-    return cls(user_id=user_id)
+        # SparkBaseAgent 的构造器支持 project_name，兜底 Agent 也必须保持项目隔离。
+        agent = cls(
+            agent_id=agent_id,
+            user_id=user_id,
+            project_name=normalized_project_name,
+        )
+    elif _AGENT_CONSTRUCTOR_PROJECT_NAME_SUPPORT.get(agent_id, False):
+        agent = cls(user_id=user_id, project_name=normalized_project_name)
+    else:
+        # Showrunner、Scriptwriter、Critic、Worldview 的旧构造器不接受 project_name。
+        agent = cls(user_id=user_id)
+
+    return _bind_agent_project_name(agent, normalized_project_name)

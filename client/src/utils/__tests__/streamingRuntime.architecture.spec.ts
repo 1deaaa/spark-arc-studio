@@ -24,6 +24,52 @@ function readerFromChunks(chunks: string[]): ReadableStreamDefaultReader<Uint8Ar
   }).getReader();
 }
 
+type ReaderConsumer = (
+  reader: ReadableStreamDefaultReader<Uint8Array>,
+  signal: AbortSignal,
+) => Promise<unknown>;
+
+type FakeReader = {
+  reader: ReadableStreamDefaultReader<Uint8Array>;
+  read: ReturnType<typeof vi.fn>;
+  cancel: ReturnType<typeof vi.fn>;
+};
+
+function fakeReaderFromChunks(chunks: string[]): FakeReader {
+  const encoder = new TextEncoder();
+  const values = chunks.map(chunk => encoder.encode(chunk));
+  let index = 0;
+  const read = vi.fn(async (): Promise<ReadableStreamReadResult<Uint8Array>> => {
+    const value = values[index++];
+    return value ? { done: false, value } : { done: true, value: undefined };
+  });
+  const cancel = vi.fn(async () => undefined);
+  const reader = { read, cancel } as unknown as ReadableStreamDefaultReader<Uint8Array>;
+  return { reader, read, cancel };
+}
+
+function pendingFakeReader(): FakeReader {
+  const read = vi.fn(() => new Promise<ReadableStreamReadResult<Uint8Array>>(() => undefined));
+  const cancel = vi.fn(async () => undefined);
+  const reader = { read, cancel } as unknown as ReadableStreamDefaultReader<Uint8Array>;
+  return { reader, read, cancel };
+}
+
+const readerConsumers: Array<{ name: string; consume: ReaderConsumer }> = [
+  {
+    name: '文本',
+    consume: (reader, signal) => consumeTextReader(reader, { signal }),
+  },
+  {
+    name: 'NDJSON',
+    consume: (reader, signal) => consumeNdjsonReader(reader, { signal }),
+  },
+  {
+    name: 'SSE',
+    consume: (reader, signal) => consumeSSEReader(reader, { signal }),
+  },
+];
+
 describe('streamingRuntime 架构契约', () => {
   it('跨 chunk 解析 think 标签，正文和推理不串流', () => {
     const parser = createThinkStreamParser();
@@ -84,6 +130,29 @@ describe('streamingRuntime 架构契约', () => {
     expect(fullText).toBe('甲乙');
     expect(chunks).toEqual(['甲', '乙']);
     expect(doneText).toBe('甲乙');
+  });
+
+  it.each(readerConsumers)('$name reader 在 pending read 时响应 AbortSignal', async ({ consume }) => {
+    const { reader, read, cancel } = pendingFakeReader();
+    const controller = new AbortController();
+    const removeListener = vi.spyOn(controller.signal, 'removeEventListener');
+    const consumption = consume(reader, controller.signal);
+
+    expect(read).toHaveBeenCalledTimes(1);
+    controller.abort('test_abort');
+
+    await expect(consumption).rejects.toMatchObject({ name: 'AbortError' });
+    expect(cancel).toHaveBeenCalledTimes(1);
+    expect(removeListener).toHaveBeenCalledTimes(1);
+  });
+
+  it.each(readerConsumers)('$name reader 正常完成时只取消一次', async ({ consume }) => {
+    const { reader, cancel } = fakeReaderFromChunks(['完成']);
+    const controller = new AbortController();
+
+    await consume(reader, controller.signal);
+
+    expect(cancel).toHaveBeenCalledTimes(1);
   });
 
   it('createStreamingTask 只响应匹配 scope/target 的取消事件', () => {

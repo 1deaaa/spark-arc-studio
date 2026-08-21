@@ -269,6 +269,20 @@ def _persist_context_checkpoint_safely(
 _CHAT_MAX_RETRIES = 3
 _CHAT_RETRY_DELAY = 5.0
 
+_TOOL_EXECUTION_EVENTS = {
+    'tool_exec_started',
+    'tool_exec_finished',
+    'tool_exec_failed',
+}
+
+
+def _attempt_has_tool_execution(entry: ChatTaskEntry, after_seq: int) -> bool:
+    """判断本次尝试是否已进入可能产生副作用的工具执行阶段。"""
+    return any(
+        event.get('event') in _TOOL_EXECUTION_EVENTS
+        for event in entry.get_events_after(after_seq)
+    )
+
 
 def _run_chat_stream_with_retry(
     *,
@@ -313,6 +327,7 @@ def _run_chat_stream_with_retry(
 
         last_error_summary = ''
         encountered_error = False
+        attempt_start_seq = entry.next_seq
 
         try:
             for delta in agent_inst.chat_stream(
@@ -407,6 +422,19 @@ def _run_chat_stream_with_retry(
 
         if entry.is_terminalized():
             terminated_early = True
+            break
+
+        # 工具一旦开始执行，其文件写入等副作用无法由 accumulator.reset_for_retry
+        # 回滚。此时禁止整轮重放，避免同一工具被重复执行。
+        if encountered_error and _attempt_has_tool_execution(entry, attempt_start_seq):
+            entry.append_event({'event': 'error', 'message': last_error_summary})
+            final_error_message = _mark_chat_task_error(
+                cm,
+                entry,
+                task_key,
+                last_error_summary,
+                retry_count=retry_count,
+            )
             break
 
         # 走到这里说明该 attempt 触发了错误：要么走重试，要么落盘最终错误
@@ -694,10 +722,17 @@ def _start_chat_stream_task(
         entry.result_message_id = assistant_msg.id
         _checkpoint_chat_task(cm, entry, force=True, stream_status='running')
         agent_inst = create_agent_instance(agent_id, user_id, project_name)
-    except Exception:
-        update_task_status(task_key, 'error', expected_task_id=entry.task_id)
-        entry.finished_event.set()
-        cleanup_task(task_key, delay=0, task_id=entry.task_id)
+    except Exception as exc:
+        from agents.error_formatting import format_ai_error
+
+        _finalize_chat_task(
+            cm,
+            entry,
+            task_key,
+            final_status='error',
+            final_error_message=format_ai_error(exc),
+            collect_usage=False,
+        )
         raise
     request_locale = get_current_locale()
     request_export_format = get_current_export_format()
@@ -935,45 +970,6 @@ def _finalize_chat_task(
         entry.notify_observers()
         cleanup_task(task_key, task_id=entry.task_id)
     return True
-
-
-def _schedule_chat_task_finalization(
-    cm: ChatManager,
-    entry: ChatTaskEntry,
-    task_key: str,
-    *,
-    final_status: str,
-    collect_usage: bool = True,
-) -> threading.Thread:
-    """在独立守护线程中执行聊天终态收尾。
-
-    取消接口不能等待同步数据库写入或上游相关收尾。终态声明本身由
-    ``_finalize_chat_task`` 原子完成，迟到的后台线程会自动跳过重复收尾。
-    """
-    import logging
-
-    logger = logging.getLogger(__name__)
-
-    def _finalize() -> None:
-        try:
-            _finalize_chat_task(
-                cm,
-                entry,
-                task_key,
-                final_status=final_status,
-                collect_usage=collect_usage,
-            )
-        except Exception:
-            # 取消请求已经返回，后台收尾异常不能重新污染请求线程。
-            logger.exception("聊天任务后台收尾失败: task=%s", entry.task_id)
-
-    thread = threading.Thread(
-        target=_finalize,
-        daemon=True,
-        name=f"chat_finalize_{entry.task_id}",
-    )
-    thread.start()
-    return thread
 
 
 async def _observe_chat_task_events(request: Request, entry: ChatTaskEntry, *, after_seq: int = 0, include_snapshot: bool = True):
@@ -1771,17 +1767,8 @@ async def cancel_chat_task(request: Request, data: ChatTaskCancelRequest, user: 
     ok = cancel_task(task_key)
     if not ok:
         return {'success': False, 'reason': '任务不存在或已结束'}
-    entry = get_task_by_parts(user_id, project_name, agent_id, context_key)
-    if entry is not None and not entry.finished_event.is_set():
-        # 上游 SDK 可能卡在不可中断的 next()。取消接口只负责设置停止信号，
-        # 终态收尾在独立守护线程中执行，不能把数据库 checkpoint 的等待传回前端。
-        _schedule_chat_task_finalization(
-            ChatManager(user_id=user_id, project_name=project_name),
-            entry,
-            task_key,
-            final_status='cancelled',
-            collect_usage=False,
-        )
+    # 取消接口只负责请求停止。task_done 与 finished_event 必须由真正运行聊天
+    # 后台逻辑的线程在退出后发布，避免旧工具尚未结束时新任务抢占同一会话。
     return {'success': True}
 
 

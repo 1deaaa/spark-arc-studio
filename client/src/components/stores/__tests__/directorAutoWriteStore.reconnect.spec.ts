@@ -25,10 +25,9 @@ function sseResponse(events: Array<Record<string, unknown>>): Response {
 }
 
 async function flushAsyncWork(): Promise<void> {
-  await Promise.resolve();
-  await Promise.resolve();
-  await Promise.resolve();
-  await Promise.resolve();
+  for (let index = 0; index < 12; index += 1) {
+    await Promise.resolve();
+  }
 }
 
 describe('directorAutoWriteStore SSE 恢复契约', () => {

@@ -6,11 +6,13 @@ from langchain_core.messages import AIMessage, ToolMessage
 
 from agents.director_graph import (
     _build_director_message_update,
+    _director_tracker_update_required,
     _is_tracker_progress_update,
     _tracker_update_required_message,
     route_after_director,
     run_director_stream,
 )
+from agents.work_tracker import update_work_tracker
 from agents.communication import SparkBaseAgent
 from llm.agen_matchbox.tool_protocol import validate_tool_message_history
 
@@ -79,6 +81,33 @@ def test_tracker_protocol_keeps_failed_or_unsatisfactory_task_retryable() -> Non
     assert "notes 记录失败原因和重做要求" in message
     assert "重新委派原专家重做" in message
     assert "不会终止当前流程" in message
+
+
+def test_reconciled_handoff_does_not_require_duplicate_tracker_tool_call(monkeypatch, tmp_path) -> None:
+    monkeypatch.setattr("core.utils.USERDATA_ROOT", str(tmp_path))
+    update_work_tracker(
+        "u-reconciled",
+        "demo",
+        "agent_director",
+        overwrite=True,
+        items=[
+            {"task": "已完成步骤", "status": "completed"},
+            {"task": "后续步骤", "status": "in_progress"},
+        ],
+    )
+
+    assert _director_tracker_update_required(
+        "u-reconciled",
+        "demo",
+        "专家已回交",
+        True,
+    ) is False
+    assert _director_tracker_update_required(
+        "u-reconciled",
+        "demo",
+        "专家已回交",
+        False,
+    ) is True
 
 
 def test_sub_agent_result_is_persisted_before_tracker_turn() -> None:

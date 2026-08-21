@@ -24,7 +24,7 @@ import threading
 from collections.abc import Awaitable, Callable
 from typing import Any
 
-from .stream_semantics import (
+from agents.stream_semantics import (
     merge_semantics,
     on_cancelled,
     on_done,

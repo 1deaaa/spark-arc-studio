@@ -31,18 +31,18 @@ from agents.agent_lorebook import WorldviewAgent
 from agents.agent_utils import iter_text_output
 from agents.agent_style.utils import load_project_style_profile
 
-from .context_builder import build_story_tags_hint
+from agents.project_context import build_story_tags_hint
 
 from .schemas import (
     WorldviewRequest,
     LorebookRequest,
     WorldviewGenerateRequest,
     LorebookResetRequest,
-    _write_worldview,
     format_ai_error,
 )
+from agents.project_content import write_worldview
 from .streaming_utils import iterate_sync_iterable_in_thread
-from .stream_semantics import on_cancelled
+from agents.stream_semantics import on_cancelled
 
 lorebook_router = APIRouter()
 
@@ -170,7 +170,7 @@ async def reset_lorebook(
         project_name = resolve_project_name(get_current_project_name(), data.projectName)
 
         # 1. 重置世界观
-        _write_worldview(user_id, project_name, "")
+        write_worldview(user_id, project_name, "")
 
         # 2. 删除所有普通角色，系统角色由仓库统一保留
         reset_regular_characters(user_id, project_name)
@@ -196,7 +196,7 @@ async def generate_worldview(
         return JSONResponse(status_code=400, content={"error": "缺少项目名称"})
 
     if data.reset:
-        _write_worldview(user_id, project_name, "")
+        write_worldview(user_id, project_name, "")
 
     base_worldview = ""
     if not data.reset:

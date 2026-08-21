@@ -37,9 +37,10 @@ def test_tool_schema_required_is_always_an_array() -> None:
     ]
     delegate_properties = parameters_by_name["delegate_task"]["properties"]
     assert set(delegate_properties) == {
-        "target_agent",
-        "task_description",
-        "completion_mode",
+            "target_agent",
+            "task_description",
+            "tracker_item_id",
+            "completion_mode",
         "chapter_name",
         "scene_name",
         "scene_file_path",

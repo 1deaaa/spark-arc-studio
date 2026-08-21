@@ -8,7 +8,7 @@
 
 1. **没有冻结基线，不开始训练。**
 2. **没有数据 manifest 和泄漏报告，不加载训练集。**
-3. **Qwen3.5 不做 4-bit QLoRA；BF16/16-bit LoRA 训练，合并后再量化。**
+3. **BF16/16-bit LoRA 是质量主线；INT8 必须先通过配对资格试验；Q4 QLoRA 只允许作为明确标记的显存极限消融。**
 4. **一次迭代只验证一个主要假设。**补数据、改 LoRA、改训练长度、换偏好算法不能同时做。
 5. **评测分下降或奖励异常时立即停止，不用更多 step 赌反弹。**
 
@@ -96,16 +96,40 @@ bf16 = true（硬件支持时）
 
 ### 2.4 显存探测
 
-固定 rank 16、batch 1、gradient checkpointing，依次试 4K、8K、16K、32K。每档只跑 3 个 step，记录峰值。若 OOM，按顺序：
+固定 rank 16、batch 1、gradient checkpointing。本地 15GB 的 9B INT8 与云端双 16GB 的 27B 分片试验均从 2K 开始，再依次试 4K、8K；只有仍有明确余量才试 16K/32K。每档跑 3 个 step 并记录前向、反向和每张卡的峰值显存。若 OOM，按顺序：
 
-1. 保持 BF16 base，不切 4-bit；
+1. 先保持 BF16 base；
 2. batch 保持 1；
 3. 减少该阶段 max sequence；
 4. 使用梯度累积；
 5. 使用多卡/FSDP/更大显存机器；
-6. 仍不够则上报硬件阻塞。
+6. 若当前精度的目标长度仍放不下，进入 2.5 节的精度配对资格试验；
+7. 仍不够则上报硬件阻塞，Q4 不得被静默替换成主线。
 
-禁止为了跑通偷偷截断样本或切换 QLoRA。
+禁止为了跑通偷偷截断样本或切换 QLoRA。日志必须区分：`load_in_8bit=True` 是冻结基座的 BitsAndBytes `LLM.int8()`；`optim="adamw_8bit"` 只压缩优化器状态；GGUF `Q8_0` 只用于部署评测，三者不得混写成“Q8 训练”。
+
+### 2.5 INT8/FP8 精度资格试验
+
+使用同一份 1,000 条训练子集、同一初始权重、seed、rank、alpha、学习率、有效 batch、更新 token 数和代表性序列长度，运行：
+
+- `P0`：BF16/16-bit LoRA；
+- `P1`：BitsAndBytes INT8 LoRA；
+- `P2`：Unsloth FP8 LoRA，仅在 GPU 原生支持且当前版本能加载 Qwen3.5 时运行；
+- `P3`：Q4 QLoRA，仅作消融，不因显存更低自动晋级。
+
+每个候选必须完成加载、固定输入前向、至少 50 个训练 step、验证 loss、adapter 保存/恢复、继续训练、合并、导出、独立进程重载和固定集生成。FP8 checkpoint 若只能推理、不能合并，记为“不具备训练生命周期”，不能靠手工绕过后晋级。
+
+在同一 `dev_fast` 上报告协议成功率、长度命中率、事实冲突率、文学成对盲评、通用能力护栏、峰值显存和 tokens/s。资格门槛：相对 BF16 的协议成功率下降不超过 1 个百分点，文学长度匹配胜率的 95% 置信区间不得显示实质劣势，事实冲突率不得增加超过 2 个百分点，且所有生命周期步骤通过。未过门槛就回到 BF16 或缩小模型，不用更长训练掩盖精度问题。
+
+FP8 还要额外记录 GPU 型号与计算能力，并检查 checkpoint 中 scale tensor 在保存、恢复和合并前后未丢失。T4 不运行 FP8。社区 FP8 推理 checkpoint 不直接进入本试验，除非框架明确声明可训练并通过上述生命周期。
+
+### 2.6 当前两套硬件的分工
+
+**本地约 15GB 可用显存：**运行 Qwen3.5-9B INT8 LoRA，初始 `max_seq_length=2048`、batch 1、rank 16。先完成 8 条烟雾测试，再运行 200 条微型配对；只有峰值显存至少保留 1GiB 才升到 4K。相同短序列尽可能补一个 BF16 LoRA 质量锚点；若 BF16 OOM，不得把 INT8 自身训练前后的比较写成 BF16 非劣结论。
+
+**云端双 RTX 4080 Super（2×16GB）：**先执行 `nvidia-smi topo -m` 与 P2P 检查。27B 的 INT8/FP8 只能使用模型分片，禁止普通 DDP 复制完整模型。按 `INT8 2K -> FP8 2K -> Q4 2K` 的顺序分别执行 8 条、3 step 生存性测试；任一卡峰值超过 15GiB、发生 CPU offload、生命周期失败或吞吐低于预设经济门槛，立即判该精度不适合正式训练。只有 INT8/FP8 留出至少每卡 1GiB 余量并通过 2.5 节，才允许扩大到 50 step；否则 27B 正式实验使用 Q4 QLoRA，并把 9B INT8 作为量化质量参照。
+
+双 4080 Super 没有 NVLink，报告必须给出跨卡链路、tokens/s 和 GPU 利用率。CPU/RAM offload 仅允许定位兼容性问题，不允许作为论文主实验或正式数据生产配置。
 
 ## 3. 阶段 1：冻结评测与基线
 
@@ -150,7 +174,7 @@ bf16 = true（硬件支持时）
 
 ### 4.1 只用训练集的 10% 做 screening
 
-保持项目级分层，选 1,000 条，不得从 dev/test 抽样。固定 max sequence 8K、单种子、最多 300 step。
+保持项目级分层，选 1,000 条，不得从 dev/test 抽样。max sequence 使用 2.4/2.5 节在当前硬件通过的代表长度，不预设 8K；单种子、最多 300 step。
 
 运行四格：
 
@@ -161,7 +185,7 @@ bf16 = true（硬件支持时）
 | S3 | 32 | 32 | 5e-5 |
 | S4 | 32 | 32 | 1e-4 |
 
-共同配置：LoRA 目标为 q/k/v/o/gate/up/down，dropout 0，bias none，BF16，adamw_8bit，warmup ratio 0.03，cosine，gradient checkpointing `unsloth`。
+共同配置：LoRA 目标为 q/k/v/o/gate/up/down，dropout 0，bias none，默认 BF16，`adamw_8bit`，warmup ratio 0.03，cosine，gradient checkpointing `unsloth`。只有 2.5 节已证明 INT8/FP8 非劣时，才可用对应精度重复同一四格。
 
 ### 4.2 screening 选择规则
 
@@ -389,6 +413,8 @@ test 只在下列里程碑运行：基线冻结、SFT v1、最终偏好模型、
 6. 重做 BF16/Q8/Q4 回归和 2×2 消融；
 7. 比较每单位训练 token 的边际收益，而不只比较绝对分。
 
+硬件边界：27B 的 INT8/FP8 权重本体约 26-28GiB。双 16GB 虽能分摊权重，却不是统一 32GB 池，每卡剩余空间不足且没有 NVLink，因此只获得“允许生存性试验”的资格，不等于正式训练可行。48GB 单卡可做 INT8/FP8 LoRA 探索；正式 BF16 LoRA 预算按约 56-80GB 起步，并由目标序列长度实测修正。官方 `Qwen3.5-27B-FP8` 默认视为推理发布物，除非当前训练栈通过 2.5 节全部生命周期验收。
+
 若 27B 基线已经达到 9B ArcPen 水平，仍要比较 27B ArcPen 的增益；不能把规模提升冒充后训练收益。
 
 ## 14. 决策表
@@ -439,4 +465,3 @@ ArcPen-9B 候选发布前必须包含：
 - 论文复现实验索引。
 
 只有 Q4 在完整 SparkArc harness 中通过最终门槛，才能命名为 `ArcPen-9B-v1`。BF16 表现好但 Q4 未通过的模型只能标记为研究 checkpoint。
-

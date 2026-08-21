@@ -13,7 +13,7 @@ import threading
 from core.auth import get_current_user
 from core.request_context import normalize_project_name
 from core.project_settings import get_project_story_tags
-from agents.routes.context_builder import build_story_tags_hint
+from agents.project_context import build_story_tags_hint
 
 from agents.setup_agents import MuseAgent
 from llm.agen_matchbox.reasoning_compat import extract_text_content_from_message

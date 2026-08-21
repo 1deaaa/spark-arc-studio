@@ -4,7 +4,7 @@ import asyncio
 import json
 import threading
 from dataclasses import dataclass, field
-from typing import Any, Dict
+from typing import Any, Callable, Dict
 
 from core.request_context import (
     current_project_name,
@@ -59,6 +59,7 @@ class AutoWriteStartResult:
 
 _TASKS: dict[AutoWriteTaskKey, AutoWriteTaskEntry] = {}
 _TASKS_LOCK = threading.RLock()
+_AUTO_WRITE_RUNNER: Callable[..., Any] | None = None
 
 
 def _task_key(user_id: str, project_name: str) -> AutoWriteTaskKey:
@@ -73,6 +74,15 @@ def get_auto_write_task(user_id: str, project_name: str) -> AutoWriteTaskEntry |
 def is_auto_write_running(user_id: str, project_name: str) -> bool:
     entry = get_auto_write_task(user_id, project_name)
     return bool(entry and not entry.done and entry.thread and entry.thread.is_alive())
+
+
+def configure_auto_write_runner(runner: Callable[..., Any]) -> None:
+    """由应用层注册自动写作执行器，避免后台服务反向依赖 HTTP 路由。"""
+    if not callable(runner):
+        raise TypeError("自动写作执行器必须可调用")
+    global _AUTO_WRITE_RUNNER
+    with _TASKS_LOCK:
+        _AUTO_WRITE_RUNNER = runner
 
 
 def start_auto_write_background(
@@ -91,6 +101,12 @@ def start_auto_write_background(
     """通过唯一后台任务服务启动自动写作。"""
     key = _task_key(user_id, project_name)
     with _TASKS_LOCK:
+        runner = _AUTO_WRITE_RUNNER
+        if runner is None:
+            return AutoWriteStartResult(
+                started=False,
+                error="自动写作执行器尚未初始化",
+            )
         existing = _TASKS.get(key)
         if existing and not existing.done and existing.thread and existing.thread.is_alive():
             return AutoWriteStartResult(started=False, entry=existing, error="该项目已有自动撰写任务正在运行")
@@ -102,6 +118,7 @@ def start_auto_write_background(
             target=_run_auto_write,
             kwargs={
                 "entry": entry,
+                "runner": runner,
                 "outline": outline,
                 "mode": mode,
                 "start_chapter_index": start_chapter_index,
@@ -122,6 +139,7 @@ def start_auto_write_background(
 def _run_auto_write(
     *,
     entry: AutoWriteTaskEntry,
+    runner: Callable[..., Any],
     outline: Dict[str, Any],
     mode: str,
     start_chapter_index: int,
@@ -131,15 +149,13 @@ def _run_auto_write(
     auto_review: bool,
     from_director: bool,
 ) -> None:
-    from agents.routes.auto_write import generate_script_stream
-
     current_user_id.set(entry.user_id)
     current_project_name.set(entry.project_name)
     set_current_export_format(export_format)
 
     async def _drain() -> None:
         try:
-            async for event in generate_script_stream(
+            async for event in runner(
                 user_id=entry.user_id,
                 project_name=entry.project_name,
                 outline=outline,
@@ -159,8 +175,8 @@ def _run_auto_write(
                 if not event.lstrip().startswith(":"):
                     entry.append(event)
         except Exception as exc:
-            from agents.routes.schemas import format_ai_error
-            from agents.routes.stream_semantics import on_error, semantic_sse_data
+            from agents.error_formatting import format_ai_error
+            from agents.stream_semantics import on_error, semantic_sse_data
 
             friendly = format_ai_error(exc)
             entry.append(semantic_sse_data("error", message=friendly, **on_error(friendly)))
@@ -172,7 +188,7 @@ def _run_auto_write(
 
 def _prewrite_tool_event(payload: dict[str, Any]) -> str:
     """把写前调研工具调用转换为可回放的业务语义帧。"""
-    from agents.routes.stream_semantics import semantic_sse_data
+    from agents.stream_semantics import semantic_sse_data
 
     return semantic_sse_data(
         "prewrite_tool",
@@ -213,7 +229,7 @@ async def observe_auto_write_progress(user_id: str, project_name: str, after_seq
     """从追加式事件日志观察进度；断线重连可以按序号续读。"""
     entry = get_auto_write_task(user_id, project_name)
     if entry is None:
-        from agents.routes.stream_semantics import semantic_sse_data
+        from agents.stream_semantics import semantic_sse_data
 
         yield semantic_sse_data("idle", message="没有正在运行的自动撰写任务")
         return
@@ -247,6 +263,6 @@ def _with_stream_seq(event: str, seq: int) -> str:
 
 
 def load_auto_write_status(user_id: str, project_name: str) -> Dict[str, Any]:
-    from agents.routes.auto_write_state import load_auto_write_state
+    from agents.auto_write_state import load_auto_write_state
 
     return load_auto_write_state(user_id, project_name)

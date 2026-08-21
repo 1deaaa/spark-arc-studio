@@ -256,7 +256,7 @@ class StyleChatAgent(SparkBaseAgent):
             import traceback
             traceback.print_exc()
             from agents.context_budget import NonRetryableChatError
-            from agents.routes.schemas import format_ai_error
+            from agents.error_formatting import format_ai_error
             if isinstance(e, NonRetryableChatError):
                 yield e.to_event()
                 return

@@ -32,6 +32,13 @@ class DelegateTaskInput(BaseModel):
         min_length=1,
         description="专家可独立执行的完整任务说明，写清目标、范围、已有事实和交付要求；不要在这里重复工具参数。",
     )
+    tracker_item_id: str | None = Field(
+        default=None,
+        description=(
+            "当前委派对应的导演进度板条目 ID。存在进度板时优先逐字复制当前条目的真实 id；"
+            "省略时系统仅会在唯一进行中条目等无歧义场景自动绑定。"
+        ),
+    )
     completion_mode: Literal[
         "report_to_user",
         "return_to_director",
@@ -54,6 +61,7 @@ class DelegateTaskInput(BaseModel):
 def delegate_task(
     target_agent: str,
     task_description: str,
+    tracker_item_id: str | None = None,
     delivery_mode: str = HANDOFF_DELIVERY_DIRECT_TO_USER,
     completion_mode: str = HANDOFF_COMPLETION_REPORT_TO_USER,
     return_to: str = "agent_director",
@@ -70,7 +78,8 @@ def delegate_task(
 
     最小调用只传 target_agent 和 task_description。单步交付可省略
     completion_mode；多步骤流水线的中间委派将其设为 silent_continue。
-    chapter_name 等场景字段只属于 agent_scriptwriter，其他专家不要传。
+    存在导演任务板时传 tracker_item_id 关联当前条目。chapter_name 等场景字段
+    只属于 agent_scriptwriter，其他专家不要传。
     """
     from agents.agent_factory import create_agent_instance
 
@@ -99,6 +108,7 @@ def delegate_task(
             "task_id": uuid.uuid4().hex,
             "target_agent": target_agent,
             "task_description": task_description,
+            "tracker_item_id": tracker_item_id or "",
             "delivery_mode": delivery_mode,
             "completion_mode": completion_mode,
             "return_to": return_to,

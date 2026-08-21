@@ -92,6 +92,120 @@ def load_work_tracker(user_id: str, project_name: str, agent_id: str) -> dict[st
             return empty_work_tracker()
 
 
+def bind_work_tracker_item_for_delegate(
+    user_id: str,
+    project_name: str,
+    agent_id: str,
+    *,
+    requested_item_id: str = "",
+) -> dict[str, Any] | None:
+    """把一次委派绑定到明确的任务板条目，并在需要时将其置为进行中。"""
+    path = get_work_tracker_path(user_id, project_name, agent_id)
+    with json_state_lock(path):
+        data = load_work_tracker(user_id, project_name, agent_id)
+        items = data.get("items") or []
+        requested = str(requested_item_id or "").strip()
+
+        selected: dict[str, Any] | None = None
+        if requested:
+            selected = next(
+                (item for item in items if str(item.get("id") or "").strip() == requested),
+                None,
+            )
+            if selected is None:
+                raise ValueError(f"进度板中不存在任务条目：{requested}")
+            status = str(selected.get("status") or "pending").strip()
+            if status == "completed":
+                raise ValueError(f"任务条目 {requested} 已完成，不能重复委派")
+            if status == "blocked":
+                raise ValueError(f"任务条目 {requested} 已阻塞，请先解除阻塞再委派")
+        else:
+            in_progress = [
+                item for item in items
+                if str(item.get("status") or "pending").strip() == "in_progress"
+            ]
+            if len(in_progress) == 1:
+                selected = in_progress[0]
+            elif not in_progress:
+                open_items = [
+                    item for item in items
+                    if str(item.get("status") or "pending").strip() == "pending"
+                ]
+                if len(open_items) == 1:
+                    selected = open_items[0]
+
+        if selected is None:
+            return None
+
+        if str(selected.get("status") or "pending").strip() != "in_progress":
+            selected["status"] = "in_progress"
+            data["updated_at"] = datetime.datetime.now(datetime.timezone.utc).isoformat()
+            save_json_file_atomic(path, data)
+        return dict(selected)
+
+
+def complete_bound_work_tracker_item(
+    user_id: str,
+    project_name: str,
+    agent_id: str,
+    item_id: str,
+) -> dict[str, Any]:
+    """根据可信委派回执完成绑定条目，并原子推进下一个待办条目。"""
+    path = get_work_tracker_path(user_id, project_name, agent_id)
+    with json_state_lock(path):
+        data = load_work_tracker(user_id, project_name, agent_id)
+        items = data.get("items") or []
+        target_id = str(item_id or "").strip()
+        target_index = next(
+            (
+                index for index, item in enumerate(items)
+                if str(item.get("id") or "").strip() == target_id
+            ),
+            None,
+        )
+        if target_index is None:
+            return {
+                "reconciled": False,
+                "reason": f"进度板中不存在任务条目：{target_id}",
+                "tracker": data,
+            }
+
+        target = items[target_index]
+        if str(target.get("status") or "pending").strip() == "blocked":
+            return {
+                "reconciled": False,
+                "reason": f"任务条目 {target_id} 仍处于阻塞状态",
+                "tracker": data,
+            }
+
+        changed = str(target.get("status") or "pending").strip() != "completed"
+        target["status"] = "completed"
+
+        next_item_id = ""
+        has_other_in_progress = any(
+            index != target_index
+            and str(item.get("status") or "pending").strip() == "in_progress"
+            for index, item in enumerate(items)
+        )
+        if not has_other_in_progress:
+            for item in items[target_index + 1:]:
+                if str(item.get("status") or "pending").strip() == "pending":
+                    item["status"] = "in_progress"
+                    next_item_id = str(item.get("id") or "").strip()
+                    changed = True
+                    break
+
+        if changed:
+            data["updated_at"] = datetime.datetime.now(datetime.timezone.utc).isoformat()
+            save_json_file_atomic(path, data)
+        return {
+            "reconciled": True,
+            "completed_item_id": target_id,
+            "next_item_id": next_item_id,
+            "tracker": data,
+        }
+
+
 def build_work_tracker_prompt_context(
     user_id: str,
     project_name: str,

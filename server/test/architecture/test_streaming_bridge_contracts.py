@@ -7,7 +7,7 @@ import threading
 import pytest
 
 from agents.routes.streaming_utils import iterate_sync_iterable_in_thread
-from agents.routes.stream_semantics import (
+from agents.stream_semantics import (
     merge_semantics,
     on_delta,
     on_done,
@@ -17,6 +17,7 @@ from agents.routes.stream_semantics import (
     semantic_event_data,
     semantic_sse_data,
 )
+from agents.routes import stream_semantics as legacy_stream_semantics
 
 
 def test_iterate_sync_iterable_in_thread_preserves_contextvars() -> None:
@@ -97,3 +98,8 @@ def test_stream_semantics_payload_shapes_are_stable() -> None:
     assert event["event"] == "progress"
     assert '"onProgress"' in event["data"]
     assert on_error("坏了") == {"onError": {"message": "坏了"}}
+
+
+def test_route_stream_semantics_is_only_a_compatibility_export() -> None:
+    assert legacy_stream_semantics.semantic_sse_data is semantic_sse_data
+    assert legacy_stream_semantics.merge_semantics is merge_semantics

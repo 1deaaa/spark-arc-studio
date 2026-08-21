@@ -8,6 +8,7 @@ from agents.communication import SparkBaseAgent, is_pipeline_tool_result_failure
 from agents.director_graph import sub_agent_node
 from agents.tools.pipeline import PIPELINE_COMPLETION_MARKER
 from agents.tools.registry import TOOLS_BY_NAME, get_tools_for_agent
+from agents.work_tracker import load_work_tracker, update_work_tracker
 
 
 def _tool_turn(*tool_names: str) -> AIMessage:
@@ -314,3 +315,128 @@ def test_director_consumes_internal_pipeline_receipt(monkeypatch) -> None:
         event.get("event") == "pipeline_step_completed"
         for event in streamed_events
     )
+
+
+def test_trusted_pipeline_receipt_atomically_advances_bound_tracker(monkeypatch, tmp_path) -> None:
+    monkeypatch.setattr("core.utils.USERDATA_ROOT", str(tmp_path))
+    tracker = update_work_tracker(
+        "u1",
+        "p1",
+        "agent_director",
+        overwrite=True,
+        items=[
+            {"task": "生成世界观", "status": "in_progress"},
+            {"task": "生成角色", "status": "pending"},
+        ],
+    )
+    current_id = tracker["items"][0]["id"]
+
+    class FakeSubAgent:
+        def chat_stream(self, *args, **kwargs):
+            yield {
+                "event": "pipeline_step_completed",
+                "source_agent": "agent_lorebook",
+                "receipt": "[agent_lorebook] 流水线步骤已完成，项目真相源已更新。",
+            }
+
+    streamed_events = []
+    monkeypatch.setattr(
+        "agents.director_graph._ensure_graph_agent_registered",
+        lambda *args, **kwargs: FakeSubAgent(),
+    )
+    monkeypatch.setattr("agents.context_provider.get_agent_context", lambda *args, **kwargs: "")
+    monkeypatch.setattr("agents.director_graph.get_stream_writer", lambda: streamed_events.append)
+    monkeypatch.setattr(
+        "agents.director_graph.transfer_baton",
+        lambda *args, **kwargs: {"status": "ok", "baton_holder": "agent_director"},
+    )
+
+    result = sub_agent_node({
+        "user_id": "u1",
+        "project_name": "p1",
+        "pending_delegate": {
+            "task_id": "handoff-1",
+            "target_agent": "agent_lorebook",
+            "task_description": "生成世界观",
+            "completion_mode": "silent_continue",
+            "return_to": "agent_director",
+            "grant_baton_to": "agent_lorebook",
+            "user_confirmation_state": "not_required",
+            "skip_tool_confirmation": True,
+            "tracker_item_id": current_id,
+        },
+        "baton_holder": "agent_lorebook",
+        "active_context": "",
+        "messages": [HumanMessage(content="开始")],
+        "stop_event": None,
+    })
+
+    persisted = load_work_tracker("u1", "p1", "agent_director")
+    assert result["handoff_tracker_reconciled"] is True
+    assert [item["status"] for item in persisted["items"]] == [
+        "completed",
+        "in_progress",
+    ]
+    assert any(
+        event.get("event") == "tool_exec_finished"
+        and event.get("tool_name") == "work_tracker"
+        and event.get("nested") is True
+        for event in streamed_events
+    )
+
+
+def test_unverified_sub_agent_output_never_advances_bound_tracker(monkeypatch, tmp_path) -> None:
+    monkeypatch.setattr("core.utils.USERDATA_ROOT", str(tmp_path))
+    tracker = update_work_tracker(
+        "u-unverified",
+        "p1",
+        "agent_director",
+        overwrite=True,
+        items=[
+            {"task": "生成世界观", "status": "in_progress"},
+            {"task": "生成角色", "status": "pending"},
+        ],
+    )
+    current_id = tracker["items"][0]["id"]
+
+    class FakeSubAgent:
+        def chat_stream(self, *args, **kwargs):
+            yield {"event": "assistant_delta", "text": "已经写好了。"}
+
+    monkeypatch.setattr(
+        "agents.director_graph._ensure_graph_agent_registered",
+        lambda *args, **kwargs: FakeSubAgent(),
+    )
+    monkeypatch.setattr("agents.context_provider.get_agent_context", lambda *args, **kwargs: "")
+    monkeypatch.setattr("agents.director_graph.get_stream_writer", lambda: None)
+    monkeypatch.setattr(
+        "agents.director_graph.transfer_baton",
+        lambda *args, **kwargs: {"status": "ok", "baton_holder": "agent_director"},
+    )
+
+    result = sub_agent_node({
+        "user_id": "u-unverified",
+        "project_name": "p1",
+        "pending_delegate": {
+            "task_id": "handoff-unverified",
+            "target_agent": "agent_lorebook",
+            "task_description": "生成世界观",
+            "completion_mode": "silent_continue",
+            "return_to": "agent_director",
+            "grant_baton_to": "agent_lorebook",
+            "user_confirmation_state": "not_required",
+            "skip_tool_confirmation": True,
+            "tracker_item_id": current_id,
+        },
+        "baton_holder": "agent_lorebook",
+        "active_context": "",
+        "messages": [HumanMessage(content="开始")],
+        "stop_event": None,
+    })
+
+    persisted = load_work_tracker("u-unverified", "p1", "agent_director")
+    assert result["handoff_tracker_reconciled"] is False
+    assert [item["status"] for item in persisted["items"]] == [
+        "in_progress",
+        "pending",
+    ]

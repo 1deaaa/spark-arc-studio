@@ -40,7 +40,7 @@ from agents.agent_style.utils import (
 )
 
 from .schemas import StyleApplyRequest
-from .stream_semantics import (
+from agents.stream_semantics import (
     merge_semantics,
     on_cancelled,
     on_done,

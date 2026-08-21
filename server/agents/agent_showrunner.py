@@ -62,9 +62,12 @@ class ShowrunnerAgent(SparkBaseAgent, SparkAgentExecutor):
 
     def write_result(self, result: Any, *args, **kwargs) -> None:
         """把梗概、节拍或大纲写回项目文件与历史记录（Markup 纯文本）。"""
-        from core.utils import get_project_path
-        from agents.routes.schemas import _save_outline_to_history, _save_project_outline
-        from agents.routes.schemas import _save_project_synopsis, _save_project_beat_sheet
+        from agents.structure_artifacts import (
+            save_outline_to_history,
+            save_project_beat_sheet,
+            save_project_outline,
+            save_project_synopsis,
+        )
 
         operation = kwargs.get("operation")
         user_id = str(kwargs.get("user_id") or self.user_id)
@@ -79,7 +82,7 @@ class ShowrunnerAgent(SparkBaseAgent, SparkAgentExecutor):
             else:
                 from story.outline_parser import serialize_synopsis_to_markup
                 markup_text = serialize_synopsis_to_markup(result)
-            _save_project_synopsis(user_id, project_name, markup_text)
+            save_project_synopsis(user_id, project_name, markup_text)
             return None
 
         if operation == "beat_sheet" and result is not None:
@@ -88,7 +91,7 @@ class ShowrunnerAgent(SparkBaseAgent, SparkAgentExecutor):
             else:
                 from story.outline_parser import serialize_beat_sheet_to_markup
                 markup_text = serialize_beat_sheet_to_markup(result)
-            _save_project_beat_sheet(user_id, project_name, markup_text)
+            save_project_beat_sheet(user_id, project_name, markup_text)
             return None
 
         if operation == "outline" and result is not None:
@@ -98,9 +101,9 @@ class ShowrunnerAgent(SparkBaseAgent, SparkAgentExecutor):
                 from story.outline_parser import serialize_outline_to_markup
                 markup_text = serialize_outline_to_markup(result)
             if kwargs.get("save_to_project", True):
-                _save_project_outline(user_id, project_name, markup_text)
+                save_project_outline(user_id, project_name, markup_text)
             if kwargs.get("save_to_history", False):
-                _save_outline_to_history(user_id, project_name, markup_text)
+                save_outline_to_history(user_id, project_name, markup_text)
             return None
 
         return None

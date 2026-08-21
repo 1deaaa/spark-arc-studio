@@ -56,7 +56,7 @@ from .schemas import (
     ScriptwriterComposeRequest,
     ScriptwriterFeedbackRequest,
 )
-from .context_builder import (
+from agents.project_context import (
     build_scriptwriter_context,
     build_story_tags_hint,
     format_outline_scene_contract,
@@ -66,7 +66,7 @@ from .context_builder import (
     resolve_outline_scene_contract,
 )
 from .streaming_utils import iterate_sync_iterable_in_thread
-from .stream_semantics import (
+from agents.stream_semantics import (
     semantic_event_data,
     merge_semantics,
     on_delta,
@@ -110,7 +110,7 @@ def build_scriptwriter_context_pack(
         return sanitize_arc_for_project_ai_context(value, user_id, project_name)
 
     # ── 全量加载：世界观 / 所有角色 / 完整大纲 / 叙事记忆 ──────────────
-    from .context_builder import load_worldview, load_all_roles, load_full_outline, load_narrative_memory
+    from agents.project_context import load_worldview, load_all_roles, load_full_outline, load_narrative_memory
 
     worldview = load_worldview(user_id, project_name)
     roles, chr_map = load_all_roles(user_id, project_name)

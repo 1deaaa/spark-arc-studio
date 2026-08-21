@@ -400,6 +400,74 @@ export function createStreamingTask(scope: string, options: StreamingTaskOptions
   return api;
 }
 
+type AbortableReaderController = {
+  read: () => Promise<ReadableStreamReadResult<Uint8Array>>;
+  cancel: () => Promise<void>;
+  cleanup: () => void;
+};
+
+function createAbortableReaderController(
+  reader: ReadableStreamDefaultReader<Uint8Array>,
+  signal?: AbortSignal,
+): AbortableReaderController {
+  let cancelPromise: Promise<void> | null = null;
+  let abortError: Error | null = null;
+  let rejectAbort: ((error: Error) => void) | null = null;
+  const abortPromise = signal
+    ? new Promise<never>((_, reject) => {
+      rejectAbort = reject;
+    })
+    : null;
+
+  abortPromise?.catch(() => undefined);
+
+  const cancel = () => {
+    if (cancelPromise) return cancelPromise;
+
+    try {
+      cancelPromise = Promise.resolve(reader.cancel?.()).then(
+        () => undefined,
+        () => undefined,
+      );
+    } catch {
+      cancelPromise = Promise.resolve();
+    }
+    return cancelPromise;
+  };
+
+  const handleAbort = () => {
+    if (abortError) return;
+    abortError = toAbortError(signal?.reason);
+    rejectAbort?.(abortError);
+    void cancel();
+  };
+
+  if (signal) {
+    if (signal.aborted) {
+      handleAbort();
+    } else {
+      signal.addEventListener('abort', handleAbort, { once: true });
+    }
+  }
+
+  return {
+    async read() {
+      if (abortError || signal?.aborted) {
+        handleAbort();
+        throw abortError ?? toAbortError(signal?.reason);
+      }
+
+      const readPromise = reader.read();
+      if (!abortPromise) return readPromise;
+      return Promise.race([readPromise, abortPromise]);
+    },
+    cancel,
+    cleanup() {
+      signal?.removeEventListener('abort', handleAbort);
+    },
+  };
+}
+
 export async function consumeTextReader(
   reader: ReadableStreamDefaultReader<Uint8Array>,
   options: TextReaderOptions = {},
@@ -411,11 +479,11 @@ export async function consumeTextReader(
     onDone,
   } = options;
 
+  const readerController = createAbortableReaderController(reader, signal);
   let fullText = '';
   try {
     while (true) {
-      if (signal?.aborted) throw toAbortError(signal.reason);
-      const { done, value } = await reader.read();
+      const { done, value } = await readerController.read();
       if (done) break;
       const chunk = decoder.decode(value, { stream: true });
       if (!chunk) continue;
@@ -432,9 +500,8 @@ export async function consumeTextReader(
     await onDone?.(fullText);
     return fullText;
   } finally {
-    try {
-      await reader.cancel?.();
-    } catch { }
+    readerController.cleanup();
+    await readerController.cancel();
   }
 }
 
@@ -451,6 +518,7 @@ export async function consumeNdjsonReader(
     onDone,
   } = options;
 
+  const readerController = createAbortableReaderController(reader, signal);
   let buffer = '';
   const flushLine = async (line: string) => {
     const raw = String(line || '').trim();
@@ -466,8 +534,7 @@ export async function consumeNdjsonReader(
 
   try {
     while (true) {
-      if (signal?.aborted) throw toAbortError(signal.reason);
-      const { done, value } = await reader.read();
+      const { done, value } = await readerController.read();
       if (done) break;
       const chunk = decoder.decode(value, { stream: true });
       if (!chunk) continue;
@@ -487,9 +554,8 @@ export async function consumeNdjsonReader(
     if (buffer.trim()) await flushLine(buffer);
     await onDone?.();
   } finally {
-    try {
-      await reader.cancel?.();
-    } catch { }
+    readerController.cleanup();
+    await readerController.cancel();
   }
 }
 
@@ -504,6 +570,7 @@ export async function consumeSSEReader(
     onDone,
   } = options;
 
+  const readerController = createAbortableReaderController(reader, signal);
   let buffer = '';
   let eventName = '';
   let dataLines: string[] = [];
@@ -521,8 +588,7 @@ export async function consumeSSEReader(
 
   try {
     while (true) {
-      if (signal?.aborted) throw toAbortError(signal.reason);
-      const { done, value } = await reader.read();
+      const { done, value } = await readerController.read();
       if (done) break;
       const chunk = decoder.decode(value, { stream: true });
       if (!chunk) continue;
@@ -559,9 +625,8 @@ export async function consumeSSEReader(
     await flushEvent();
     await onDone?.();
   } finally {
-    try {
-      await reader.cancel?.();
-    } catch { }
+    readerController.cleanup();
+    await readerController.cancel();
   }
 }
 

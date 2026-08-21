@@ -15,7 +15,9 @@ from agents.prompt_layout import build_current_user_message
 from agents.agent_director import DirectorAgent
 from agents.communication import SparkBaseAgent, get_tool_event_sink, set_tool_event_sink
 from agents.work_tracker import (
+    bind_work_tracker_item_for_delegate,
     build_work_tracker_prompt_context,
+    complete_bound_work_tracker_item,
     list_work_trackers,
     load_work_tracker,
     update_work_tracker,
@@ -64,6 +66,97 @@ def test_work_tracker_supports_incremental_batch_operations(monkeypatch, tmp_pat
     assert updated["items"][0]["id"] == world_id
     assert updated["items"][0]["notes"] == "已通过审核"
     assert updated["items"][2]["status"] == "completed"
+
+
+def test_delegate_binding_and_completion_advance_tracker_atomically(monkeypatch, tmp_path) -> None:
+    monkeypatch.setattr("core.utils.USERDATA_ROOT", str(tmp_path))
+    tracker = update_work_tracker(
+        "u-handoff",
+        "demo",
+        "agent_director",
+        overwrite=True,
+        items=[
+            {"task": "写第一章", "status": "pending"},
+            {"task": "写第二章", "status": "pending"},
+        ],
+    )
+    first_id = tracker["items"][0]["id"]
+    second_id = tracker["items"][1]["id"]
+
+    bound = bind_work_tracker_item_for_delegate(
+        "u-handoff",
+        "demo",
+        "agent_director",
+        requested_item_id=first_id,
+    )
+    assert bound is not None
+    assert bound["id"] == first_id
+    assert bound["status"] == "in_progress"
+
+    result = complete_bound_work_tracker_item(
+        "u-handoff",
+        "demo",
+        "agent_director",
+        first_id,
+    )
+    assert result["reconciled"] is True
+    assert result["completed_item_id"] == first_id
+    assert result["next_item_id"] == second_id
+    assert [item["status"] for item in result["tracker"]["items"]] == [
+        "completed",
+        "in_progress",
+    ]
+
+    repeated = complete_bound_work_tracker_item(
+        "u-handoff",
+        "demo",
+        "agent_director",
+        first_id,
+    )
+    assert repeated["reconciled"] is True
+    assert [item["status"] for item in repeated["tracker"]["items"]] == [
+        "completed",
+        "in_progress",
+    ]
+
+
+def test_delegate_binding_only_infers_unambiguous_tracker_item(monkeypatch, tmp_path) -> None:
+    monkeypatch.setattr("core.utils.USERDATA_ROOT", str(tmp_path))
+    tracker = update_work_tracker(
+        "u-infer",
+        "demo",
+        "agent_director",
+        overwrite=True,
+        items=[
+            {"task": "当前任务", "status": "in_progress"},
+            {"task": "后续任务", "status": "pending"},
+        ],
+    )
+    current_id = tracker["items"][0]["id"]
+
+    inferred = bind_work_tracker_item_for_delegate(
+        "u-infer",
+        "demo",
+        "agent_director",
+    )
+    assert inferred is not None
+    assert inferred["id"] == current_id
+
+    update_work_tracker(
+        "u-infer",
+        "demo",
+        "agent_director",
+        operations=[{
+            "operation": "set_status",
+            "item_id": tracker["items"][1]["id"],
+            "status": "in_progress",
+        }],
+    )
+    assert bind_work_tracker_item_for_delegate(
+        "u-infer",
+        "demo",
+        "agent_director",
+    ) is None
 
 
 def test_delete_is_distinct_from_completed_and_persists_board(monkeypatch, tmp_path) -> None:

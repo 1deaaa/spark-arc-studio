@@ -3,8 +3,10 @@ from __future__ import annotations
 import asyncio
 import contextvars
 import json
+import queue
 import threading
 import time
+from types import SimpleNamespace
 
 import pytest
 from langchain_core.messages import AIMessageChunk, HumanMessage, ToolMessage
@@ -14,6 +16,8 @@ from agents.communication import (
     ModelStreamRetryExhaustedError,
     ModelTurnRetryNotice,
     SparkBaseAgent,
+    get_tool_event_sink,
+    set_tool_event_sink,
     stream_model_turn_with_retry,
 )
 
@@ -673,6 +677,106 @@ def test_model_stream_worker_preserves_contextvars() -> None:
     assert seen == ["当前聊天任务"]
 
 
+def _configure_tool_event_sink_chat_stream(monkeypatch, execute_tool):
+    agent = object.__new__(SparkBaseAgent)
+    agent.agent_id = "agent_director"
+    agent.user_id = "u"
+    agent.project_name = "p"
+    agent.name = "导演"
+    agent.intro = ""
+
+    turns = {"count": 0}
+    tool_spec = {
+        "name": "nested_tool",
+        "args": {},
+        "call_id": "call-nested",
+        "raw": {"id": "call-nested", "name": "nested_tool", "args": {}},
+    }
+
+    monkeypatch.setattr(agent, "_set_context_checkpoint_candidate", lambda _checkpoint: None)
+    monkeypatch.setattr(agent, "_build_tool_system_prompt", lambda *_args, **_kwargs: "系统提示")
+    monkeypatch.setattr(agent, "_build_runtime_tail", lambda: "")
+    monkeypatch.setattr(
+        agent,
+        "_extract_tool_call_specs_from_message",
+        lambda _message: [tool_spec] if turns["count"] == 1 else [],
+    )
+    monkeypatch.setattr(agent, "_hydrate_tool_specs_from_chunk_buffers", lambda specs, _buffers: specs)
+    monkeypatch.setattr(agent, "_prepare_tool_specs_for_execution", lambda specs: specs)
+    monkeypatch.setattr(agent, "_tool_call_event_key", lambda *_args: "call-key")
+    monkeypatch.setattr(agent, "_tool_progress_text", lambda _tool_name: "正在执行工具")
+    monkeypatch.setattr(agent, "_tool_event_metadata", lambda *_args: {})
+    monkeypatch.setattr(agent, "_execute_tool_calls", execute_tool)
+
+    monkeypatch.setattr("agents.agent_utils.load_prompt", lambda *_args, **_kwargs: {"chat_system": "对话提示"})
+    monkeypatch.setattr("agents.tools.registry.get_tools_for_agent", lambda *_args, **_kwargs: [])
+    monkeypatch.setattr(
+        "agents.prompt_layout.build_chat_prompt_layout",
+        lambda **_kwargs: SimpleNamespace(system_instruction="系统提示", user_message="用户请求"),
+    )
+    monkeypatch.setattr("llm.agen_matchbox.matchbox", lambda: SimpleNamespace(
+        get_user_llm=lambda *_args, **_kwargs: object(),
+    ))
+
+    def fake_budget_events(*_args, **_kwargs):
+        if False:
+            yield {}
+        return SimpleNamespace(checkpoint=None, messages=[])
+
+    def fake_model_stream(*_args, **_kwargs):
+        turns["count"] += 1
+        yield AIMessageChunk(content="")
+
+    monkeypatch.setattr("agents.context_budget.stream_context_budget_events", fake_budget_events)
+    monkeypatch.setattr("agents.communication.stream_model_turn_with_retry", fake_model_stream)
+    monkeypatch.setattr("agents.communication.is_pipeline_tool_result_failure", lambda *_args: False)
+    return agent
+
+
+def test_chat_stream_restores_outer_tool_event_sink_after_nested_tools(monkeypatch) -> None:
+    seen_sinks = []
+
+    def execute_tool(_tool_calls):
+        seen_sinks.append(get_tool_event_sink())
+        return "工具完成"
+
+    agent = _configure_tool_event_sink_chat_stream(monkeypatch, execute_tool)
+
+    def run_in_isolated_context() -> None:
+        outer_sink = queue.Queue()
+        set_tool_event_sink(outer_sink)
+        events = list(agent.chat_stream("测试请求", active_context="测试上下文"))
+
+        assert seen_sinks and seen_sinks[0] is not outer_sink
+        assert get_tool_event_sink() is outer_sink
+        assert [event["event"] for event in events] == [
+            "tool_intent_started",
+            "tool_exec_started",
+            "tool_exec_finished",
+        ]
+
+    contextvars.Context().run(run_in_isolated_context)
+
+
+def test_chat_stream_restores_outer_tool_event_sink_after_tool_exception(monkeypatch) -> None:
+    def execute_tool(_tool_calls):
+        raise RuntimeError("工具执行异常")
+
+    agent = _configure_tool_event_sink_chat_stream(monkeypatch, execute_tool)
+    monkeypatch.setattr("traceback.print_exc", lambda: None)
+
+    def run_in_isolated_context() -> None:
+        outer_sink = queue.Queue()
+        set_tool_event_sink(outer_sink)
+
+        events = list(agent.chat_stream("测试请求", active_context="测试上下文"))
+
+        assert events[-1]["event"] == "error"
+        assert get_tool_event_sink() is outer_sink
+
+    contextvars.Context().run(run_in_isolated_context)
+
+
 def test_chat_task_terminal_claim_publishes_task_done_once(monkeypatch) -> None:
     task_key = f"u:p:agent_director:terminal-{time.time_ns()}"
     entry = make_entry()
@@ -708,6 +812,59 @@ def test_chat_task_terminal_claim_publishes_task_done_once(monkeypatch) -> None:
     assert done_events[0]["status"] == "cancelled"
     assert entry.status == "cancelled"
     assert entry.finished_event.is_set()
+    cleanup_task(task_key, delay=0, task_id=entry.task_id)
+
+
+def test_chat_task_startup_failure_uses_standard_terminal_path(monkeypatch) -> None:
+    from types import SimpleNamespace
+
+    from agents.routes import chat
+
+    context_key = f"startup-{time.time_ns()}"
+    task_key = chat._make_task_key("u", "p", "agent_director", context_key)
+
+    class FakeChatManager:
+        def __init__(self) -> None:
+            self.checkpoints = []
+
+        def append_message(self, **kwargs):
+            return SimpleNamespace(id=88)
+
+        def update_message_content_metadata(self, message_id, content, metadata):
+            self.checkpoints.append((message_id, content, metadata))
+            return True
+
+    manager = FakeChatManager()
+    monkeypatch.setattr(chat, "cleanup_task", lambda *args, **kwargs: None)
+    monkeypatch.setattr(
+        chat,
+        "create_agent_instance",
+        lambda *args, **kwargs: (_ for _ in ()).throw(RuntimeError("Agent 初始化失败")),
+    )
+
+    with pytest.raises(RuntimeError, match="Agent 初始化失败"):
+        chat._start_chat_stream_task(
+            user={"user_id": "u"},
+            user_id="u",
+            project_name="p",
+            agent_id="agent_director",
+            context_key=context_key,
+            channel="direct_reply_stream",
+            message="测试",
+            active_context="",
+            cm=manager,
+            prepare_history=lambda: ([], 77),
+        )
+
+    entry = get_task(task_key)
+    assert entry is not None
+    assert entry.status == "error"
+    assert entry.finished_event.is_set()
+    done_events = [event for event in entry.event_log if event.get("event") == "task_done"]
+    assert len(done_events) == 1
+    assert done_events[0]["status"] == "error"
+    assert "Agent 初始化失败" in entry.error_message
+    assert manager.checkpoints[-1][2]["stream_status"] == "error"
     cleanup_task(task_key, delay=0, task_id=entry.task_id)
 
 

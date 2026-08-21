@@ -9,7 +9,7 @@ import json
 from typing import Optional, List, Dict, Any
 
 from core.utils import get_project_path, get_project_stories_path
-from agents.routes.context_builder import build_story_tags_hint, load_project_context_bundle
+from agents.project_context import build_story_tags_hint, load_project_context_bundle
 from core.project_settings import get_project_story_tags
 from agents.story_terminology import get_story_terminology
 from story.file_naming import (
