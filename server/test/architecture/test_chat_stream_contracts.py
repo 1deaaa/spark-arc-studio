@@ -33,8 +33,10 @@ from agents.routes.chat_task import (
 )
 from agents.chat_manager import mark_stream_metadata_interrupted
 from core.request_context import (
+    current_export_format,
     current_llm_usage_reporter,
     current_scriptwriter_prewrite_receipt,
+    get_current_export_format,
     get_scriptwriter_prewrite_receipt,
     set_scriptwriter_prewrite_receipt,
 )
@@ -84,8 +86,10 @@ def test_chat_task_replacement_waits_for_real_exit_and_cleanup_is_generation_saf
 def test_chat_background_context_shares_prewrite_receipt_with_tool_subcontexts() -> None:
     outer_state = {"receipt": {"receipt_id": "outer"}}
     outer_token = current_scriptwriter_prewrite_receipt.set(outer_state)
+    outer_format_token = current_export_format.set("arc")
 
     def callback() -> None:
+        assert get_current_export_format() == "novel"
         tool_context = contextvars.copy_context()
         tool_context.run(set_scriptwriter_prewrite_receipt, {"receipt_id": "prewrite-ready"})
 
@@ -100,12 +104,15 @@ def test_chat_background_context_shares_prewrite_receipt_with_tool_subcontexts()
             llm_usage_context="task:test",
             chat_agent_id="agent_director",
             chat_context_key="global",
+            export_format="novel",
             callback=callback,
         )
 
         assert current_scriptwriter_prewrite_receipt.get() is outer_state
         assert get_scriptwriter_prewrite_receipt() == {"receipt_id": "outer"}
+        assert get_current_export_format() == "arc"
     finally:
+        current_export_format.reset(outer_format_token)
         current_scriptwriter_prewrite_receipt.reset(outer_token)
 
 
@@ -129,6 +136,7 @@ def test_chat_background_context_routes_committed_usage_and_restores_reporter() 
             llm_usage_reporter=captured.append,
             chat_agent_id="agent_director",
             chat_context_key="global",
+            export_format="arc",
             callback=callback,
         )
         assert captured == [{"agent_name": "agent_director", "prompt_tokens": 120}]

@@ -59,6 +59,8 @@ from sqlalchemy import func
 from core.auth import get_current_user
 from core.models import UserInfoSession, ChatMessage
 from core.request_context import (
+    current_export_format,
+    get_current_export_format,
     get_current_project_name,
     get_current_locale,
     resolve_project_name,
@@ -139,6 +141,7 @@ def _run_chat_background_context(
     llm_usage_reporter: Callable[[Dict[str, Any]], None] | None = None,
     chat_agent_id: str,
     chat_context_key: str,
+    export_format: str,
     callback: Any,
 ) -> Any:
     """在聊天后台线程中恢复请求级上下文。"""
@@ -154,6 +157,9 @@ def _run_chat_background_context(
     # 取决于这个标记。漏掉它会让站长在关闭共享后被误判为普通用户。
     current_user_is_admin.set(bool(is_admin))
     current_project_name.set(project_name)
+    export_format_token = current_export_format.set(
+        "novel" if str(export_format or "").strip().lower() == "novel" else "arc"
+    )
     prewrite_receipt_token = current_scriptwriter_prewrite_receipt.set({})
     locale_token = set_current_locale(locale)
     usage_token = current_llm_usage_context.set(llm_usage_context)
@@ -167,6 +173,7 @@ def _run_chat_background_context(
         current_llm_usage_context.reset(usage_token)
         reset_current_locale(locale_token)
         current_scriptwriter_prewrite_receipt.reset(prewrite_receipt_token)
+        current_export_format.reset(export_format_token)
 
 
 def _as_stream_event(delta) -> dict:
@@ -693,6 +700,7 @@ def _start_chat_stream_task(
         cleanup_task(task_key, delay=0, task_id=entry.task_id)
         raise
     request_locale = get_current_locale()
+    request_export_format = get_current_export_format()
 
     def _run_chat_background() -> None:
         import contextvars
@@ -741,6 +749,7 @@ def _start_chat_stream_task(
             llm_usage_reporter=lambda usage: _publish_chat_task_llm_usage(entry, usage),
             chat_agent_id=agent_id,
             chat_context_key=context_key,
+            export_format=request_export_format,
             callback=_in_context,
         )
 

@@ -530,8 +530,8 @@ def test_auto_write_completion_guard_rejects_zero_body_scene() -> None:
     assert _require_nonempty_scene_body("# 1-1 正常场景\n[-1]\n雨落在旧站台上。", "arc") > 0
 
 
-def test_chat_background_preserves_receipt_across_separate_tool_contexts(monkeypatch, tmp_path) -> None:
-    from agents.tools.scriptwriter import create_or_rewrite_script, prepare_script_creation
+def test_chat_background_preserves_receipt_and_format_across_tool_contexts(monkeypatch, tmp_path) -> None:
+    from agents.tools.scriptwriter import create_chapter, create_or_rewrite_script, prepare_script_creation
 
     monkeypatch.setattr("core.utils.USERDATA_ROOT", str(tmp_path))
     monkeypatch.setattr("agents.scriptwriter_prewrite._build_prewrite_brief", lambda _request: "确定性任务包")
@@ -542,7 +542,6 @@ def test_chat_background_preserves_receipt_across_separate_tool_contexts(monkeyp
     def callback() -> None:
         nonlocal saved_result
         agent_token = current_agent_id.set("agent_scriptwriter")
-        set_current_export_format("novel")
         try:
             prepare_context = contextvars.copy_context()
             prepare_payload = json.loads(prepare_context.run(
@@ -554,6 +553,11 @@ def test_chat_background_preserves_receipt_across_separate_tool_contexts(monkeyp
                 },
             ))
             assert prepare_payload["status"] == "ready"
+            create_context = contextvars.copy_context()
+            assert "已创建" in create_context.run(
+                create_chapter.invoke,
+                {"chapter_name": "一 · 开端"},
+            )
 
             write_context = contextvars.copy_context()
             saved_result = write_context.run(
@@ -565,7 +569,6 @@ def test_chat_background_preserves_receipt_across_separate_tool_contexts(monkeyp
                 },
             )
         finally:
-            set_current_export_format(None)
             current_agent_id.reset(agent_token)
 
     _run_chat_background_context(
@@ -576,6 +579,7 @@ def test_chat_background_preserves_receipt_across_separate_tool_contexts(monkeyp
         llm_usage_context="task:prewrite-regression",
         chat_agent_id="agent_director",
         chat_context_key="global",
+        export_format="novel",
         callback=callback,
     )
 
@@ -585,7 +589,25 @@ def test_chat_background_preserves_receipt_across_separate_tool_contexts(monkeyp
 
     saved_relative_path = saved_payload["path"]
     saved_path = Path(get_project_stories_path("u-chat", "p-chat")) / saved_relative_path
+    assert saved_path.suffix == ".md"
     assert saved_path.read_text(encoding="utf-8") == "雨落在旧站台上。"
+
+    from story import routes_files
+
+    stories_path = Path(get_project_stories_path("u-chat", "p-chat"))
+    project_path = stories_path.parent
+    monkeypatch.setattr(routes_files, "ensure_project_stories_directory", lambda *_args, **_kwargs: str(stories_path))
+    monkeypatch.setattr(routes_files, "get_project_path", lambda *_args, **_kwargs: str(project_path))
+    file_tree = asyncio.run(routes_files.get_story_files(
+        "p-chat",
+        format="novel",
+        user={"user_id": "u-chat"},
+    ))
+    children = file_tree[0]["children"]
+    assert len(children) == 1
+    assert children[0]["path"] == "一 · 开端/1-1 初遇.md"
+    assert children[0]["format"] == "novel"
+    assert children[0]["meta"] == {"chap": "001", "scene": "001", "order": "001001"}
 
 
 def test_auto_write_emits_prewrite_before_writing_scene(monkeypatch, tmp_path: Path) -> None:
