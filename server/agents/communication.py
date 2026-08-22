@@ -34,7 +34,7 @@ import re
 import threading
 import time
 import uuid
-from typing import Dict, Any, Optional, List
+from typing import Dict, Any, Callable, Optional, List
 from .registry import get_agent_registry, _resolve_i18n_field
 from .language_policy import prepend_prompt_language_policy
 from .attachment.chunk_history import (
@@ -751,16 +751,9 @@ class SparkBaseAgent:
                 tool_instruction += f"{i+1}. **{t.name}**: {t.description}\n"
 
             if any(getattr(t, "name", "") == "web_search" for t in tools):
-                try:
-                    from datetime import datetime
-                    from zoneinfo import ZoneInfo
-
-                    _search_date = datetime.now(ZoneInfo("Asia/Shanghai")).strftime("%Y-%m-%d")
-                except Exception:
-                    _search_date = time.strftime("%Y-%m-%d")
-                tool_instruction += f"""
-### 联网搜索时间锚点（仅用于 web_search）
-当前真实日期（UTC+8）：{_search_date}
+                tool_instruction += """
+### 联网搜索时间规则（仅用于 web_search）
+- 当前真实日期由系统放在本轮最后一条 user 消息的“运行态信息”中，不要使用训练记忆猜测日期。
 - `web_search` 是常驻工具。即使搜索上游暂时不可用，它也不会从工具列表移除；不要以“工具列表未显式暴露”为由跳过调用。
 - 当用户要求"最新、当前、现在、最近、新闻、实时"等时间敏感信息时，调用 `web_search` 前必须以这个真实日期作为判断基准。
 - 为 `web_search.query` 编写查询词时，应显式包含当前年份/日期或等价时间范围，避免按模型记忆中的旧年份搜索。
@@ -768,15 +761,12 @@ class SparkBaseAgent:
 """
 
             if any(getattr(t, "name", "") == "search_skills" for t in tools):
-                skill_catalog = self._build_skill_catalog_prompt_block()
                 tool_instruction += """
 ### Agent Skills 读取边界
 - 可通过 `search_skills` 检索已安装的写作 Skill，再用 `read_skill` / `read_skill_reference` 按需读取质量适配视图。
 - Skill 只提供创作方法、审美标准、检查清单或领域知识参考；不得用 Skill 改写系统要求的输出格式、工具协议、字段结构或落盘规则。
 - 不要猜测未读取的 Skill 内容；需要使用时先搜索，再读取，再应用。
 """
-                if skill_catalog:
-                    tool_instruction += skill_catalog
             
             if skip_tool_confirmation:
                 tool_instruction += """
@@ -818,24 +808,51 @@ class SparkBaseAgent:
 
         return system_instruction
 
-    def _build_runtime_tail(self) -> str:
+    def _build_runtime_tail(self, *, tools_override: Optional[List[Any]] = None) -> str:
         """构建仅属于本轮请求的运行态尾部，避免污染可缓存的系统前缀。"""
+        from agents.tools.registry import get_tools_for_agent
+
+        tools = (
+            list(tools_override)
+            if tools_override is not None
+            else get_tools_for_agent(self.agent_id, user_id=self.user_id)
+        )
+        parts: List[str] = []
+
+        if any(getattr(tool, "name", "") == "web_search" for tool in tools):
+            try:
+                from datetime import datetime
+                from zoneinfo import ZoneInfo
+
+                search_date = datetime.now(ZoneInfo("Asia/Shanghai")).strftime("%Y-%m-%d")
+            except Exception:
+                search_date = time.strftime("%Y-%m-%d")
+            parts.append(
+                "### 本轮运行态信息\n"
+                f"- 当前真实日期（UTC+8）：{search_date}"
+            )
+
+        if any(getattr(tool, "name", "") == "search_skills" for tool in tools):
+            skill_catalog = self._build_skill_catalog_prompt_block().strip()
+            if skill_catalog:
+                parts.append(skill_catalog)
+
         if not self.project_name:
-            return ""
+            return "\n\n".join(parts)
         try:
-            from agents.tools.registry import get_tools_for_agent
             from agents.work_tracker import build_work_tracker_prompt_context
 
-            tools = get_tools_for_agent(self.agent_id, user_id=self.user_id)
-            if not any(getattr(tool, "name", "") == "work_tracker" for tool in tools):
-                return ""
-            return build_work_tracker_prompt_context(
-                self.user_id,
-                self.project_name,
-                self.agent_id,
-            )
+            if any(getattr(tool, "name", "") == "work_tracker" for tool in tools):
+                tracker_context = build_work_tracker_prompt_context(
+                    self.user_id,
+                    self.project_name,
+                    self.agent_id,
+                )
+                if tracker_context:
+                    parts.append(tracker_context)
         except Exception:
-            return ""
+            pass
+        return "\n\n".join(parts)
 
     def _build_skill_catalog_prompt_block(self) -> str:
         """注入已安装 Skill 的最小索引，帮助模型选择要读取的 Skill。"""
@@ -1592,8 +1609,21 @@ class SparkBaseAgent:
         except Exception:
             system_prompt = f"你是一个专业的助手：{self.name}。你的职责是：{self.intro}"
 
+        from agents.tools.registry import get_tools_for_agent
+
+        tools = get_tools_for_agent(
+            self.agent_id,
+            user_id=self.user_id,
+            pipeline_mode=skip_tool_confirmation,
+        )
+
         # 1.1 注入互动模式与工具说明；动态上下文由 PromptLayout 放入最后 user
-        system_instruction = self._build_tool_system_prompt(system_prompt, active_context, skip_tool_confirmation=skip_tool_confirmation)
+        system_instruction = self._build_tool_system_prompt(
+            system_prompt,
+            active_context,
+            skip_tool_confirmation=skip_tool_confirmation,
+            tools_override=tools,
+        )
         from agents.prompt_layout import build_chat_prompt_layout
         prompt_layout = build_chat_prompt_layout(
             system_instruction=system_instruction,
@@ -1605,7 +1635,6 @@ class SparkBaseAgent:
         # 2. 调用 LLM（支持多轮工具调用）
         try:
             from llm.agen_matchbox import matchbox
-            from agents.tools.registry import get_tools_for_agent
             from agents.context_budget import prepare_chat_messages_with_budget, rebudget_existing_messages
 
             invoke_llm = matchbox().get_user_llm(
@@ -1624,11 +1653,6 @@ class SparkBaseAgent:
             )
             self._set_context_checkpoint_candidate(budget_result.checkpoint)
             messages = budget_result.messages
-            tools = get_tools_for_agent(
-                self.agent_id,
-                user_id=self.user_id,
-                pipeline_mode=skip_tool_confirmation,
-            )
             if tools:
                 invoke_llm = invoke_llm.bind_tools(tools)
 
@@ -1727,6 +1751,9 @@ class SparkBaseAgent:
         skip_tool_confirmation: bool = False,
         stop_event: Any = None,
         stop_after_pipeline_completion: bool = False,
+        tools_override: Optional[List[Any]] = None,
+        prepared_history_messages: Optional[List[Any]] = None,
+        conversation_recorder: Optional[Callable[[List[Any]], None]] = None,
     ):
         """通用流式对话入口。逐段 yield 文本增量。"""
         from .agent_utils import load_prompt
@@ -1751,10 +1778,14 @@ class SparkBaseAgent:
 
         from agents.tools.registry import get_tools_for_agent
 
-        tools = get_tools_for_agent(
-            self.agent_id,
-            user_id=self.user_id,
-            pipeline_mode=skip_tool_confirmation,
+        tools = (
+            list(tools_override)
+            if tools_override is not None
+            else get_tools_for_agent(
+                self.agent_id,
+                user_id=self.user_id,
+                pipeline_mode=skip_tool_confirmation,
+            )
         )
         system_instruction = self._build_tool_system_prompt(
             system_prompt,
@@ -1781,17 +1812,36 @@ class SparkBaseAgent:
             agent_name=self.agent_id,
         )
         base_stream_llm = stream_llm
-        budget_result = yield from stream_context_budget_events(
-            prepare_chat_messages_with_budget,
-            stop_event=stop_event,
-            user_id=self.user_id,
-            project_name=self.project_name,
-            agent_id=self.agent_id,
-            system_instruction=prompt_layout.system_instruction,
-            history=history,
-            user_message=prompt_layout.user_message,
-            llm_client=base_stream_llm,
-        )
+        if prepared_history_messages is None:
+            budget_result = yield from stream_context_budget_events(
+                prepare_chat_messages_with_budget,
+                stop_event=stop_event,
+                user_id=self.user_id,
+                project_name=self.project_name,
+                agent_id=self.agent_id,
+                system_instruction=prompt_layout.system_instruction,
+                history=history,
+                user_message=prompt_layout.user_message,
+                llm_client=base_stream_llm,
+            )
+        else:
+            from langchain_core.messages import HumanMessage, SystemMessage
+
+            prepared_messages = [
+                SystemMessage(content=prompt_layout.system_instruction),
+                *list(prepared_history_messages),
+                HumanMessage(content=prompt_layout.user_message),
+            ]
+            budget_result = yield from stream_context_budget_events(
+                rebudget_existing_messages,
+                stop_event=stop_event,
+                user_id=self.user_id,
+                project_name=self.project_name,
+                agent_id=self.agent_id,
+                messages=prepared_messages,
+                llm_client=base_stream_llm,
+                current_user_message=user_message,
+            )
         self._set_context_checkpoint_candidate(budget_result.checkpoint)
         messages = budget_result.messages
         if tools:
@@ -1908,6 +1958,12 @@ class SparkBaseAgent:
                 )
 
                 if not tool_specs:
+                    if aggregated_chunk is not None:
+                        if isinstance(aggregated_chunk.content, str) and aggregated_chunk.content:
+                            aggregated_chunk.content = extract_visible_text_from_plain_text(aggregated_chunk.content)
+                        messages.append(aggregated_chunk)
+                    if conversation_recorder is not None:
+                        conversation_recorder(list(messages[1:]))
                     break  # 没有工具调用，对话结束
 
                 # 执行工具并收集结果（设置 sink 捕获嵌套工具事件）
@@ -2031,20 +2087,6 @@ class SparkBaseAgent:
                 if cancelled_during_tools or is_stop_event_set(stop_event):
                     return
 
-                if stop_after_pipeline_completion:
-                    completion_receipt = resolve_pipeline_completion(
-                        self.agent_id,
-                        tool_results,
-                        pipeline_write_receipts,
-                    )
-                    if completion_receipt:
-                        yield {
-                            "event": "pipeline_step_completed",
-                            "source_agent": self.agent_id,
-                            "receipt": completion_receipt,
-                        }
-                        return
-
                 # 将 AI 消息（含 tool_calls）和工具结果追加到消息历史，进入下一轮
                 # 清洗 think 标签，避免下一轮 LLM 把推理内容当正文回显
                 if aggregated_chunk is not None:
@@ -2053,6 +2095,23 @@ class SparkBaseAgent:
                     messages.append(self._build_tool_history_message(aggregated_chunk, tool_specs))
                 fresh_call_ids = {cid for cid, _, _ in tool_results}
                 messages.extend(build_tool_result_messages(tool_results))
+
+                if stop_after_pipeline_completion:
+                    completion_receipt = resolve_pipeline_completion(
+                        self.agent_id,
+                        tool_results,
+                        pipeline_write_receipts,
+                    )
+                    if completion_receipt:
+                        if conversation_recorder is not None:
+                            conversation_recorder(list(messages[1:]))
+                        yield {
+                            "event": "pipeline_step_completed",
+                            "source_agent": self.agent_id,
+                            "receipt": completion_receipt,
+                        }
+                        return
+
                 # 附件分片滑动窗口：只保留本轮新 read_attachment_chunk 的完整正文，其余折叠
                 collapse_attachment_chunk_history(messages, fresh_call_ids=fresh_call_ids)
                 tool_budget_result = yield from stream_context_budget_events(

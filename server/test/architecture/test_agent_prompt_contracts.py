@@ -169,7 +169,7 @@ def test_lorebook_requires_web_verification_for_external_canon() -> None:
     agent.agent_id = "agent_lorebook"
     agent.user_id = ""
     runtime_prompt = agent._build_tool_system_prompt(prompts["chat_system"])
-    assert "联网搜索时间锚点" in runtime_prompt
+    assert "联网搜索时间规则" in runtime_prompt
     assert "`web_search` 是常驻工具" in runtime_prompt
     assert "工具列表未显式暴露" in runtime_prompt
     assert "禁止编造结果或声称已完成查证" in runtime_prompt
@@ -307,7 +307,7 @@ def test_scriptwriter_binds_fact_research_tools() -> None:
         "search_project",
         "semantic_search",
     ):
-        assert tool_name not in showrunner_tools
+        assert tool_name in showrunner_tools
 
     for tool_name in ("search_project", "semantic_search"):
         assert tool_name in scriptwriter_tools

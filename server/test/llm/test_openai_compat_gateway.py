@@ -3,7 +3,72 @@
 from __future__ import annotations
 
 import pytest
+from langchain_core.callbacks import BaseCallbackHandler
 from langchain_core.messages import AIMessage, HumanMessage, ToolMessage
+
+
+def test_gpt56_prompt_cache_key_is_stable_and_session_isolated() -> None:
+    from core.request_context import (
+        current_project_name,
+        current_user_id,
+        reset_current_chat_session,
+        set_current_chat_session,
+    )
+    from llm.agen_matchbox.gateway import ChatUniversal
+
+    class AgentCallback(BaseCallbackHandler):
+        agent_name = "agent_director"
+
+    user_token = current_user_id.set("user-1")
+    project_token = current_project_name.set("project-1")
+    chat_tokens = set_current_chat_session("agent_director", "room-a")
+    try:
+        llm = ChatUniversal(
+            model="gpt-5.6-luna",
+            api_key="offline-key",
+            base_url="https://example.invalid/v1",
+            callbacks=[AgentCallback()],
+        )
+        first = llm._get_request_payload([HumanMessage(content="第一次")])
+        second = llm._get_request_payload([HumanMessage(content="第二次")])
+        assert first["prompt_cache_key"] == second["prompt_cache_key"]
+        assert first["prompt_cache_key"].startswith("sparkarc:v1:")
+        assert "user-1" not in first["prompt_cache_key"]
+        assert "project-1" not in first["prompt_cache_key"]
+    finally:
+        reset_current_chat_session(chat_tokens)
+
+    other_chat_tokens = set_current_chat_session("agent_director", "room-b")
+    try:
+        isolated = llm._get_request_payload([HumanMessage(content="第三次")])
+        assert isolated["prompt_cache_key"] != first["prompt_cache_key"]
+    finally:
+        reset_current_chat_session(other_chat_tokens)
+        current_project_name.reset(project_token)
+        current_user_id.reset(user_token)
+
+
+def test_prompt_cache_key_is_not_injected_into_other_compatible_models() -> None:
+    from core.request_context import current_project_name, current_user_id
+    from llm.agen_matchbox.gateway import ChatUniversal
+
+    class AgentCallback(BaseCallbackHandler):
+        agent_name = "agent_director"
+
+    user_token = current_user_id.set("user-1")
+    project_token = current_project_name.set("project-1")
+    try:
+        llm = ChatUniversal(
+            model="deepseek-chat",
+            api_key="offline-key",
+            base_url="https://example.invalid/v1",
+            callbacks=[AgentCallback()],
+        )
+        payload = llm._get_request_payload([HumanMessage(content="测试")])
+        assert "prompt_cache_key" not in payload
+    finally:
+        current_project_name.reset(project_token)
+        current_user_id.reset(user_token)
 
 
 def test_tool_schema_required_is_always_an_array() -> None:

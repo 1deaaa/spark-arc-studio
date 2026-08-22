@@ -73,6 +73,23 @@ def test_progress_protocol_error_returns_to_director() -> None:
     assert route_after_director(state) == "director"
 
 
+def test_director_stops_model_loop_after_background_auto_write_starts() -> None:
+    state = {
+        "pending_delegate": None,
+        "force_return_to_director": False,
+        "background_task_started": True,
+        "messages": [
+            ToolMessage(
+                content="自动写作任务已在后台启动",
+                tool_call_id="call_auto_write",
+                name="trigger_auto_write",
+            )
+        ],
+    }
+
+    assert route_after_director(state) == "__end__"
+
+
 def test_tracker_protocol_keeps_failed_or_unsatisfactory_task_retryable() -> None:
     message = _tracker_update_required_message()
 
@@ -212,8 +229,9 @@ def test_director_uses_full_history_budget_pipeline_and_emits_checkpoint(monkeyp
         and "完整早期历史摘要" in str(message.content)
         for message in state["messages"]
     )
-    assert any(
+    assert not any(
         getattr(message, "type", "") == "human"
         and "继续创作" in str(message.content)
         for message in state["messages"]
     )
+    assert state["director_runtime_message"] == ""

@@ -10,6 +10,8 @@ from typing import Any, Optional
 
 _EXECUTOR: ThreadPoolExecutor | None = None
 _EXECUTOR_LOCK = threading.Lock()
+_PROJECT_TAILS: dict[tuple[str, str], Future] = {}
+_PROJECT_TAILS_LOCK = threading.Lock()
 
 
 def _worker_count() -> int:
@@ -34,6 +36,16 @@ def _executor() -> ThreadPoolExecutor:
 
 
 def _submit(label: str, fn, *args, **kwargs) -> Future:
+    function_name = str(getattr(fn, "__name__", ""))
+    project_key = None
+    if function_name in {
+        "_record_scene_write_job",
+        "_record_story_file_job",
+        "_record_story_content_job",
+    } and len(args) >= 2:
+        project_key = (str(args[0]), str(args[1]))
+    if project_key is not None:
+        return _submit_project_serial(project_key, label, fn, *args, **kwargs)
     try:
         worker_context = contextvars.copy_context()
         return _executor().submit(worker_context.run, fn, *args, **kwargs)
@@ -42,6 +54,50 @@ def _submit(label: str, fn, *args, **kwargs) -> Future:
         failed.set_exception(exc)
         print(f"[StoryMemory] {label} 提交失败（不影响主流程）：{exc}")
         return failed
+
+
+def _submit_project_serial(
+    project_key: tuple[str, str],
+    label: str,
+    fn,
+    *args,
+    **kwargs,
+) -> Future:
+    """同项目后台任务按提交顺序串行，不阻塞其他项目或请求主线程。"""
+    result: Future = Future()
+    worker_context = contextvars.copy_context()
+
+    def start_after_previous(_previous: Future | None = None) -> None:
+        try:
+            inner = _executor().submit(worker_context.run, fn, *args, **kwargs)
+        except Exception as exc:
+            result.set_exception(exc)
+            print(f"[StoryMemory] {label} 提交失败（不影响主流程）：{exc}")
+            return
+
+        def transfer(done: Future) -> None:
+            try:
+                result.set_result(done.result())
+            except Exception as exc:
+                result.set_exception(exc)
+
+        inner.add_done_callback(transfer)
+
+    with _PROJECT_TAILS_LOCK:
+        previous = _PROJECT_TAILS.get(project_key)
+        _PROJECT_TAILS[project_key] = result
+    if previous is None or previous.done():
+        start_after_previous(previous)
+    else:
+        previous.add_done_callback(start_after_previous)
+
+    def cleanup(_done: Future) -> None:
+        with _PROJECT_TAILS_LOCK:
+            if _PROJECT_TAILS.get(project_key) is result:
+                _PROJECT_TAILS.pop(project_key, None)
+
+    result.add_done_callback(cleanup)
+    return result
 
 
 def _copy_payload(payload: dict[str, Any]) -> dict[str, Any]:

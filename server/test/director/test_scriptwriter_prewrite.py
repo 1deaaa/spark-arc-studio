@@ -6,7 +6,7 @@ import contextvars
 from pathlib import Path
 
 import pytest
-from langchain_core.messages import AIMessage
+from langchain_core.messages import AIMessage, HumanMessage, SystemMessage, ToolMessage
 from langchain_core.tools import tool
 from pydantic import ValidationError
 
@@ -336,6 +336,113 @@ def test_autonomous_creation_batches_research_and_saves_without_summary_request(
     ]
     assert llm.bound.invoke_count == 1
     assert llm.final_invoke_count == 0
+
+
+def test_autonomous_creation_appends_completed_scene_before_current_scene(monkeypatch) -> None:
+    @tool
+    def create_chapter(chapter_name: str) -> str:
+        """创建章节。"""
+        return f"章节可用：{chapter_name}"
+
+    @tool
+    def create_or_rewrite_script(
+        overwrite_content: str,
+        chapter_name: str,
+        work_name: str,
+    ) -> str:
+        """保存正文。"""
+        return json.dumps({
+            "status": "saved",
+            "path": f"{chapter_name}/{work_name}.arc",
+            "written_chars": len(overwrite_content),
+        }, ensure_ascii=False)
+
+    def saved_response(scene_name: str) -> AIMessage:
+        return AIMessage(content="", tool_calls=[
+            {
+                "name": "create_chapter",
+                "args": {"chapter_name": "一 · 开端"},
+                "id": f"chapter-{scene_name}",
+                "type": "tool_call",
+            },
+            {
+                "name": "create_or_rewrite_script",
+                "args": {
+                    "overwrite_content": f"<conception>{scene_name}连续性</conception>\n[旁白] {scene_name}正文。",
+                    "chapter_name": "一 · 开端",
+                    "work_name": scene_name,
+                },
+                "id": f"write-{scene_name}",
+                "type": "tool_call",
+            },
+        ])
+
+    llm = _FakeLlm([saved_response("1-1 初遇"), saved_response("1-2 追踪")])
+
+    class FakeAgent:
+        def __init__(self):
+            self.llm = llm
+
+        @staticmethod
+        def _clean_model_visible_arc_text(value) -> str:
+            return str(value or "")
+
+        @staticmethod
+        def _build_tool_system_prompt(*_args, **_kwargs) -> str:
+            return "固定系统提示"
+
+    monkeypatch.setattr(
+        "agents.scriptwriter_prewrite._build_prewrite_brief",
+        lambda request: f"完整任务包：{request.scene_name}",
+    )
+    monkeypatch.setattr(
+        "agents.scriptwriter_prewrite._autonomous_creation_tools",
+        lambda: [create_chapter, create_or_rewrite_script],
+    )
+    monkeypatch.setattr("agents.scriptwriter_prewrite._issue_receipt", lambda *_args, **_kwargs: "receipt")
+    agent = FakeAgent()
+    first = run_autonomous_scriptwriter_creation(
+        ScriptwriterPreWriteRequest(
+            user_id="u-cache",
+            project_name="p-cache",
+            task_description="写第一场",
+            chapter_name="一 · 开端",
+            scene_name="1-1 初遇",
+            available_context="第一场完整动态上下文",
+        ),
+        agent=agent,
+    )
+    second = run_autonomous_scriptwriter_creation(
+        ScriptwriterPreWriteRequest(
+            user_id="u-cache",
+            project_name="p-cache",
+            task_description="写第二场",
+            chapter_name="一 · 开端",
+            scene_name="1-2 追踪",
+            available_context="第二场完整动态上下文",
+        ),
+        agent=agent,
+        completed_turns=(first.continuity_turn,),
+    )
+
+    first_messages, second_messages = llm.bound.message_snapshots
+    assert len(first_messages) == 2
+    assert len(second_messages) == 6
+    assert isinstance(second_messages[0], SystemMessage)
+    assert isinstance(second_messages[1], HumanMessage)
+    assert isinstance(second_messages[2], AIMessage)
+    assert isinstance(second_messages[3], ToolMessage)
+    assert isinstance(second_messages[4], AIMessage)
+    assert isinstance(second_messages[5], HumanMessage)
+    assert second_messages[0].content == first_messages[0].content
+    assert second_messages[1].content == first_messages[1].content
+    assert second_messages[2].tool_calls[0]["name"] == "create_chapter"
+    assert second_messages[3].tool_call_id == second_messages[2].tool_calls[0]["id"]
+    assert "1-1 初遇连续性" in second_messages[4].content
+    assert "第一场正文" not in str(second_messages[2].tool_calls)
+    assert "第二场完整动态上下文" in second_messages[5].content
+    validate_tool_message_history(second_messages[:4])
+    assert second.continuity_turn is not None
 
 
 def test_prepare_tool_issues_matching_receipt(monkeypatch) -> None:

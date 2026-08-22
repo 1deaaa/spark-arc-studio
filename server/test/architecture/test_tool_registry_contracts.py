@@ -83,7 +83,7 @@ def test_pipeline_persist_registry_includes_all_scriptwriter_writes() -> None:
     } <= PIPELINE_PERSIST_TOOL_NAMES
 
 
-def test_showrunner_only_binds_continuity_tools_when_story_exists(monkeypatch, tmp_path) -> None:
+def test_showrunner_keeps_continuity_tool_schema_stable_when_story_appears(monkeypatch, tmp_path) -> None:
     monkeypatch.setattr("core.utils.USERDATA_ROOT", str(tmp_path))
     user_token = current_user_id.set("88")
     project_token = current_project_name.set("demo")
@@ -98,7 +98,7 @@ def test_showrunner_only_binds_continuity_tools_when_story_exists(monkeypatch, t
     }
     try:
         fresh_tools = tool_names("agent_showrunner", user_id="88")
-        assert continuity_tools.isdisjoint(fresh_tools)
+        assert continuity_tools <= fresh_tools
         assert {"rewrite_synopsis", "rewrite_beat_sheet", "rewrite_outline"} <= fresh_tools
 
         story_path = tmp_path / "uid_88" / "projects" / "demo" / "stories" / "一 · 开端" / "1.1.arc"
@@ -107,6 +107,7 @@ def test_showrunner_only_binds_continuity_tools_when_story_exists(monkeypatch, t
 
         existing_tools = tool_names("agent_showrunner", user_id="88")
         assert continuity_tools <= existing_tools
+        assert existing_tools == fresh_tools
     finally:
         current_project_name.reset(project_token)
         current_user_id.reset(user_token)

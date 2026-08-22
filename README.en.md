@@ -235,7 +235,7 @@ cd spark-arc-studio
 - Windows: double-click `start.bat`
 - macOS / Linux: run `bash start.sh`
 
-The scripts reuse their deployment marker on later launches. You own branch selection and `git pull` timing on this path. See the [managed Launcher deployment design](docs/local-deployment-manager.zh-CN.md) for the ownership and update boundaries.
+The scripts reuse their deployment marker on later launches. You own branch selection and `git pull` timing on this path. See the [managed Launcher deployment design](docs/project/local-deployment-manager.zh-CN.md) for the ownership and update boundaries.
 For mobile devices, simply access **<http://192.168.x.x(your_lan_ip):6688>**.
 If you want remote access, you can learn about intranet penetration (if you have a server, you probably won't use this method anyway ~~~).
 
@@ -357,7 +357,7 @@ If you want to access your private instance on phones, tablets, or other remote 
 
 #### MCP Client Integration
 
-After signing in, open **MCP Connection Service** from the desktop dashboard or mobile AI management page. The shared configuration card generates the inspiration endpoint `/api/mcp/` and control endpoint `/api/mcp/control/`; both use the same user MCP API key and Streamable HTTP (`"type": "http"`). See the [MCP Integration Guide](docs/mcp-integration.zh-CN.md) for the complete configuration, tool list, and Director task workflow.
+After signing in, open **MCP Connection Service** from the desktop dashboard or mobile AI management page. The shared configuration card generates the inspiration endpoint `/api/mcp/` and control endpoint `/api/mcp/control/`; both use the same user MCP API key and Streamable HTTP (`"type": "http"`). See the [MCP Integration Guide](docs/project/mcp-integration.zh-CN.md) for the complete configuration, tool list, and Director task workflow.
 
 ---
 
@@ -405,7 +405,7 @@ SparkArc does not rely on a single large model, but builds an agent cluster with
 
 The Critic does not answer "is this written by AI?", but rather "**where in this text will the reader feel like a model is completing a task**". It outputs `S/A/B/C/D` grades + source text evidence + `fix_ticket` revision sheets, and by default, does not modify the text directly, preserving the creator's autonomy.
 
-> 📗 For the complete four core mechanisms and the rationale for using LLM over ML models, please refer to [Architecture Document §6](file:///d:/Desktop/sparkarc/docs/architecture.md#6-critic-审核机制完整版).
+> 📗 For the complete four core mechanisms and the rationale for using LLM over ML models, please refer to [Architecture Document §6](file:///d:/Desktop/sparkarc/docs/project/architecture.md#6-critic-审核机制完整版).
 
 #### Collaborative Data Flow
 
@@ -459,7 +459,7 @@ Each expert Agent's prompt strictly distinguishes three calling modes, carried b
 | **User Interaction** | `chat_system` | Natural conversation, open-ended, format not forced. |
 | **Director Delegation** | `pipeline_system` | Strictly structured + tool saving + briefing the Director. |
 
-> 📗 For complete runtime logic, `pipeline_system` writing constraints, tool reference mechanisms, and new Agent self-checklists, please refer to [Architecture Document §2](file:///d:/Desktop/sparkarc/docs/architecture.md#2-agent-三模态调用协议完整版) and [AGENTS.md §4.5](file:///d:/Desktop/sparkarc/AGENTS.md).
+> 📗 For complete runtime logic, `pipeline_system` writing constraints, tool reference mechanisms, and new Agent self-checklists, please refer to [Architecture Document §2](file:///d:/Desktop/sparkarc/docs/project/architecture.md#2-agent-三模态调用协议完整版) and [AGENTS.md §4.5](file:///d:/Desktop/sparkarc/AGENTS.md).
 
 #### Style Cloning Cluster
 
@@ -500,7 +500,7 @@ graph TD
     end
 ```
 
-> 📗 For full descriptions of serial analysis details and negative constraint mechanisms, please refer to [Architecture Document §7](file:///d:/Desktop/sparkarc/docs/architecture.md#7-风格克隆集群完整版).
+> 📗 For full descriptions of serial analysis details and negative constraint mechanisms, please refer to [Architecture Document §7](file:///d:/Desktop/sparkarc/docs/project/architecture.md#7-风格克隆集群完整版).
 
 ---
 
@@ -522,7 +522,7 @@ flowchart LR
 
 When a complete request approaches the configured context limit of the current model, SparkArc automatically starts a creation-oriented compaction and reports its live state in the chat UI. Compaction only replaces the runtime history view used by subsequent model requests: the original user and assistant messages remain intact within the current user, project, Agent, and chat room. When the summary is insufficient, the Agent can retrieve original excerpts on demand through the server-scoped `search_chat_history` tool. If the stable system prompt and current request cannot fit into a shorter model by themselves, SparkArc explicitly asks the user to choose a larger-context model instead of silently dropping constraints.
 
-This is **persisted short-term chat context**, not a cross-project user profile and not StoryMemory, which records story-domain facts. See [Chat Context Management](docs/context-management.zh-CN.md) for the complete budget, checkpoint transaction, edit invalidation, retrieval authorization, and frontend event protocols.
+This is **persisted short-term chat context**, not a cross-project user profile and not StoryMemory, which records story-domain facts. See [Chat Context Management](docs/project/context-management.zh-CN.md) for the complete budget, checkpoint transaction, edit invalidation, retrieval authorization, and frontend event protocols.
 
 > ⚠️ **Cache Invalidation Reminder**: Changing models or platforms, modifying expert prompts / `pipeline_system` / `tool_rules`, adjusting tool bindings, changing language strategies, or changing some global parameters will alter the stable prefix and cause the upstream cache to rebuild.
 > 
@@ -534,7 +534,7 @@ This is **persisted short-term chat context**, not a cross-project user profile 
 * **AgentSkills & MCP**: AgentSkills are read on demand through `search_skills` / `read_skill` / `read_skill_reference` and do not automatically pollute the system prefix. MCP is split into the inspiration service at `/api/mcp/` and the control service at `/api/mcp/control/`. The latter directly exposes only project queries and Director work orders; writes still run through the existing Agent tool pipeline.
 * **Frontend Mapping**: Agent names, descriptions, icons, and theme colors use [registry.py](file:///d:/Desktop/sparkarc/server/agents/registry.py) as the source of truth; tool-calling UI metadata is injected by the backend's `build_tool_stream_event` and consumed and rendered uniformly by the frontend's `chatStore`.
 
-> 📗 For more complete details on context structure, cache hit displays, Agent responsibility tables, AgentSkills/MCP boundaries, and tool registration, please refer to [Architecture Document §2-§3](file:///d:/Desktop/sparkarc/docs/architecture.md#2-agent-统一调用管线).
+> 📗 For more complete details on context structure, cache hit displays, Agent responsibility tables, AgentSkills/MCP boundaries, and tool registration, please refer to [Architecture Document §2-§3](file:///d:/Desktop/sparkarc/docs/project/architecture.md#2-agent-统一调用管线).
 
 ### 3. Beacon Bus Communication Mechanism
 
@@ -573,7 +573,7 @@ graph TB
     AgentB -- No Horn: Cannot initiate --x Bus
 ```
 
-> 📗 For complete triad definitions and application scenarios, please refer to [Architecture Document §8](file:///d:/Desktop/sparkarc/docs/architecture.md#8-信标总线核心机制完整版).
+> 📗 For complete triad definitions and application scenarios, please refer to [Architecture Document §8](file:///d:/Desktop/sparkarc/docs/project/architecture.md#8-信标总线核心机制完整版).
 
 #### Director Orchestration vs Beacon Collaboration (Vertical & Horizontal Collaboration)
 
@@ -581,7 +581,7 @@ SparkArc contains **two independent communication mechanisms with different resp
 * **Director Orchestration** (Vertical): The Director autonomously dispatches tasks based on LangGraph multi-turn tool calling. It is not limited by beacons and can directly instantiate and call Agents.
 * **Beacon Collaboration** (Horizontal): Autonomous communication between Agents is constrained by beacons, horns, and batons to prevent broadcast storms and infinite loops.
 
-> 📗 For comparison tables, interaction mode diagrams, and design rationales, please refer to [Architecture Document §1](file:///d:/Desktop/sparkarc/docs/architecture.md#1-导演调度-vs-信标协作双系统对比).
+> 📗 For comparison tables, interaction mode diagrams, and design rationales, please refer to [Architecture Document §1](file:///d:/Desktop/sparkarc/docs/project/architecture.md#1-导演调度-vs-信标协作双系统对比).
 
 ---
 
@@ -625,7 +625,7 @@ Grandpa... Candy...
 This format is eventually compiled into a high-performance, zero-error database to drive performances.
 By default, we do not give AI the permission to write function nodes, ensuring AI focuses on creation. **Once model capabilities improve, we will gradually open this up.**
 
-> 📗 For parsing strategy details, please refer to [Architecture Document §9](file:///d:/Desktop/sparkarc/docs/architecture.md#9-arc-格式解析策略).
+> 📗 For parsing strategy details, please refer to [Architecture Document §9](file:///d:/Desktop/sparkarc/docs/project/architecture.md#9-arc-格式解析策略).
 
 ### Story Memory Pool
 
@@ -695,7 +695,7 @@ Please copy out the models defining the table structures and the erroneous datab
 6. **Legacy Version Self-Healing**: When the migration chain is broken, it conservatively patches missing tables/columns and aligns version numbers, defaulting not to delete extra structures.
 7. **Version Drift Protection**: Throws errors when the version number is already head but fields are missing, preventing silent swallowing of migrations that should be submitted.
 
-> 📗 For the developer workflow, migration integration guide, and instructions for clearing historical risks, please refer to the [Database Auto-Migration Guide](file:///d:/Desktop/sparkarc/docs/database-migration.md).
+> 📗 For the developer workflow, migration integration guide, and instructions for clearing historical risks, please refer to the [Database Auto-Migration Guide](file:///d:/Desktop/sparkarc/docs/project/database-migration.md).
 
 ### 3. Multi-Tenant SaaS
 
@@ -735,7 +735,7 @@ SparkArc has a built-in CI/CD pipeline, supporting **fully automated image build
 It supports Gitea Actions and GitLab CI, and Gitea Actions workflows can be migrated to GitHub Actions at low cost.
 Pipeline Stages: **Checkout Code → Build Image → Test (Reserved) → Deploy → Cleanup**
 
-> 📗 For complete Runner configurations, CI Secrets, and GitHub Actions migration instructions, please refer to the [CI/CD Automated Deployment Guide](file:///d:/Desktop/sparkarc/docs/cicd-deployment.md).
+> 📗 For complete Runner configurations, CI Secrets, and GitHub Actions migration instructions, please refer to the [CI/CD Automated Deployment Guide](file:///d:/Desktop/sparkarc/docs/project/cicd-deployment.md).
 
 ---
 
@@ -813,11 +813,11 @@ Frontend Contribution Specification: Avoid hardcoding user-visible text; use Vue
 
 | Document | Content |
 | :--- | :--- |
-| [Architecture Deep Dive](file:///d:/Desktop/sparkarc/docs/architecture.md) | Director Orchestration vs Beacon Collaboration, Agent Three-Mode Protocol, Critic Review Mechanism, Style Cloning Sub-Cluster, Beacon Bus, ARC Parsing Strategy, Tool Registry, Streaming Infrastructure. |
-| [Chat Context Management](docs/context-management.zh-CN.md) | Adaptive budgets, automatic compaction, original-history persistence, checkpoint transactions, on-demand retrieval, and the StoryMemory boundary. |
+| [Architecture Deep Dive](file:///d:/Desktop/sparkarc/docs/project/architecture.md) | Director Orchestration vs Beacon Collaboration, Agent Three-Mode Protocol, Critic Review Mechanism, Style Cloning Sub-Cluster, Beacon Bus, ARC Parsing Strategy, Tool Registry, Streaming Infrastructure. |
+| [Chat Context Management](docs/project/context-management.zh-CN.md) | Adaptive budgets, automatic compaction, original-history persistence, checkpoint transactions, on-demand retrieval, and the StoryMemory boundary. |
 | [Matchbox Agent Gateway Guide](file:///d:/Desktop/sparkarc/server/llm/agen_matchbox/README.md) | Dual-channel design, access links, slot configurations, reasoning stream compatibility. |
-| [Database Auto-Migration Guide](file:///d:/Desktop/sparkarc/docs/database-migration.md) | Developer workflow, migration integration, historical risk cleanup. |
-| [CI/CD Deployment Guide](file:///d:/Desktop/sparkarc/docs/cicd-deployment.md) | Runner configurations, CI Secrets, GitHub Actions migration. |
+| [Database Auto-Migration Guide](file:///d:/Desktop/sparkarc/docs/project/database-migration.md) | Developer workflow, migration integration, historical risk cleanup. |
+| [CI/CD Deployment Guide](file:///d:/Desktop/sparkarc/docs/project/cicd-deployment.md) | Runner configurations, CI Secrets, GitHub Actions migration. |
 | [AGENTS.md](file:///d:/Desktop/sparkarc/AGENTS.md) | Agent development specifications, new Agent self-checklists, prompt protocols. |
 | [Semantic Search Engine](#4-semantic-search-engine) | Dual-mode retrieval, project-level toggles, lazy builds + hash increments, LanceDB vector storage. |
 | [LEGAL/README.md](file:///d:/Desktop/sparkarc/LEGAL/README.md) | Unified entry for legal and operational policies. |

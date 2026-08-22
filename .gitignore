@@ -31,6 +31,9 @@ client/src-tauri/target/
 client/src-tauri/gen/
 /.tmp/
 
+# 本地研究资料（原目录拼写已更正为 research）
+/docs/research/
+
 # Tauri icon 构建产物（由 tauri icon 从 app-icon-source.png 生成）
 # 保留: app-icon-source.png, icon.icns, icon.png, icon.ico（tauri.conf.json 引用）
 client/src-tauri/icons/128x128*.png

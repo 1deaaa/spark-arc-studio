@@ -242,9 +242,192 @@ def test_story_memory_schema_is_in_stable_system_prefix(monkeypatch, tmp_path: P
     assert isinstance(captured_messages[0], SystemMessage)
     assert isinstance(captured_messages[1], HumanMessage)
     assert "【输出 JSON schema】" in captured_messages[0].content
+    assert "【抽取判定协议】" in captured_messages[0].content
     assert "【输出 JSON schema】" not in captured_messages[1].content
+    assert "【抽取判定协议】" not in captured_messages[1].content
     assert "MARK_DYNAMIC_SCENE_TEXT" not in captured_messages[0].content
     assert "MARK_DYNAMIC_SCENE_TEXT" in captured_messages[1].content
+
+
+def test_story_memory_extraction_keeps_each_scene_independent(monkeypatch, tmp_path: Path) -> None:
+    monkeypatch.setattr("core.utils.USERDATA_ROOT", str(tmp_path))
+    snapshots = []
+    responses = [
+        '{"summary":"第一场事实"}',
+        '{"summary":"第二场事实"}',
+    ]
+
+    class FakeLlm:
+        def invoke(self, messages):
+            snapshots.append(list(messages))
+            return type("Response", (), {"content": responses.pop(0)})()
+
+    class FakeMatchbox:
+        @staticmethod
+        def get_user_llm(*_args, **_kwargs):
+            return FakeLlm()
+
+    monkeypatch.setattr("llm.agen_matchbox.matchbox", lambda: FakeMatchbox())
+    facade = StoryMemoryFacade("cache-history-user", "cache-history-project")
+    first = facade._extract_state_delta_with_llm(
+        scene_text="第一场完整正文标记",
+        scene_card={"scene_id": "scene-1", "scene_title": "第一场"},
+        characters=["林烬"],
+    )
+    second = facade._extract_state_delta_with_llm(
+        scene_text="第二场完整正文标记",
+        scene_card={"scene_id": "scene-2", "scene_title": "第二场"},
+        characters=["林烬"],
+    )
+
+    assert first["summary"] == "第一场事实"
+    assert second["summary"] == "第二场事实"
+    assert len(snapshots[0]) == 2
+    assert len(snapshots[1]) == 2
+    assert snapshots[1][0].content == snapshots[0][0].content
+    assert "第二场完整正文标记" in snapshots[1][1].content
+    assert "第一场完整正文标记" not in snapshots[1][1].content
+    assert '{"summary":"第一场事实"}' not in snapshots[1][1].content
+
+
+def test_story_memory_extraction_includes_only_compact_relevant_prior_state(
+    monkeypatch,
+    tmp_path: Path,
+) -> None:
+    monkeypatch.setattr("core.utils.USERDATA_ROOT", str(tmp_path))
+    captured_messages = []
+
+    class FakeLlm:
+        def invoke(self, messages):
+            captured_messages.extend(messages)
+            return type("Response", (), {"content": "{}"})()
+
+    class FakeMatchbox:
+        @staticmethod
+        def get_user_llm(*_args, **_kwargs):
+            return FakeLlm()
+
+    monkeypatch.setattr("llm.agen_matchbox.matchbox", lambda: FakeMatchbox())
+    facade = StoryMemoryFacade("compact-history-user", "compact-history-project")
+    facade.record_scene_write(
+        scene_text="# 1-1 钟楼\n[-1] 林烬拿到旧钥匙。完整旧正文不应重放。",
+        chapter_index=0,
+        scene_index=0,
+        scene_title="1-1 钟楼",
+        scene_characters=["林烬"],
+        precomputed_delta={
+            "source": "llm",
+            "summary": "林烬拿到旧钥匙。",
+            "events": [{"summary": "林烬拿到旧钥匙", "participants": ["林烬"], "evidence": "拿到旧钥匙"}],
+            "character_updates": [{"character": "林烬", "status": "持有旧钥匙", "evidence": "拿到旧钥匙"}],
+            "relationship_changes": [],
+            "foreshadows": [{
+                "description": "旧钥匙能打开档案室",
+                "status": "open",
+                "related_characters": ["林烬"],
+                "evidence": "旧钥匙",
+            }],
+            "fact_claims": [{"claim": "林烬持有旧钥匙", "entities": ["林烬"], "evidence": "拿到旧钥匙"}],
+            "conflict_risks": [],
+        },
+    )
+
+    facade._extract_state_delta_with_llm(
+        scene_text="# 1-2 档案室\n[-1] 林烬用旧钥匙开门。",
+        scene_card={
+            "scene_id": "ch001-sc002",
+            "chapter_index": 0,
+            "scene_index": 1,
+            "scene_title": "1-2 档案室",
+        },
+        characters=["林烬"],
+    )
+
+    user_prompt = captured_messages[1].content
+    assert "【相关历史状态】" in user_prompt
+    assert "林烬持有旧钥匙" in user_prompt
+    assert "旧钥匙能打开档案室" in user_prompt
+    assert "完整旧正文不应重放" not in user_prompt
+    assert "它不是本场原文，禁止把它写入 evidence" in user_prompt
+
+
+def test_story_memory_extraction_history_excludes_future_scene_state(monkeypatch, tmp_path: Path) -> None:
+    monkeypatch.setattr("core.utils.USERDATA_ROOT", str(tmp_path))
+    facade = StoryMemoryFacade("future-filter-user", "future-filter-project")
+    facade.record_scene_write(
+        scene_text="# 1-2 未来场景\n[-1] 林烬已经销毁旧钥匙。",
+        chapter_index=0,
+        scene_index=1,
+        scene_title="1-2 未来场景",
+        scene_characters=["林烬"],
+        precomputed_delta={
+            "source": "llm",
+            "summary": "林烬已经销毁旧钥匙。",
+            "events": [{"summary": "林烬销毁旧钥匙", "participants": ["林烬"], "evidence": "销毁旧钥匙"}],
+            "character_updates": [{"character": "林烬", "status": "旧钥匙已销毁", "evidence": "销毁旧钥匙"}],
+            "relationship_changes": [],
+            "foreshadows": [],
+            "fact_claims": [{"claim": "旧钥匙已被销毁", "entities": ["林烬"], "evidence": "销毁旧钥匙"}],
+            "conflict_risks": [],
+        },
+    )
+
+    context = facade._build_extraction_history_context(
+        scene_card={
+            "scene_id": "ch001-sc001",
+            "chapter_index": 0,
+            "scene_index": 0,
+            "scene_title": "1-1 较早场景",
+        },
+        characters=["林烬"],
+    )
+
+    assert context == ""
+
+
+def test_story_memory_enrichment_jobs_are_fifo_within_project(monkeypatch) -> None:
+    from agents.story_memory import jobs
+
+    first_started = threading.Event()
+    release_first = threading.Event()
+    second_started = threading.Event()
+    order: list[str] = []
+
+    def fake_record_scene_write_job(_user_id, _project_name, payload, _label):
+        order.append(f"start-{payload['index']}")
+        if payload["index"] == 1:
+            first_started.set()
+            assert release_first.wait(timeout=2)
+        else:
+            second_started.set()
+        order.append(f"end-{payload['index']}")
+
+    fake_record_scene_write_job.__name__ = "_record_scene_write_job"
+    with ThreadPoolExecutor(max_workers=2) as executor:
+        monkeypatch.setattr(jobs, "_executor", lambda: executor)
+        first_future = jobs._submit(
+            "第一场",
+            fake_record_scene_write_job,
+            "fifo-user",
+            "fifo-project",
+            {"index": 1},
+            "第一场",
+        )
+        assert first_started.wait(timeout=1)
+        second_future = jobs._submit(
+            "第二场",
+            fake_record_scene_write_job,
+            "fifo-user",
+            "fifo-project",
+            {"index": 2},
+            "第二场",
+        )
+        assert not second_started.wait(timeout=0.1)
+        release_first.set()
+        first_future.result(timeout=2)
+        second_future.result(timeout=2)
+
+    assert order == ["start-1", "end-1", "start-2", "end-2"]
 
 
 def test_scriptwriter_receives_story_memory_read_tool() -> None:

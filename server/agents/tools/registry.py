@@ -56,7 +56,7 @@ from agents.tools.showrunner import (
 )
 from agents.tools.story_memory import story_memory_tool
 from agents.tools.web_search import web_search
-from core.request_context import current_user_id, get_current_chat_session, get_current_project_name
+from core.request_context import current_user_id, get_current_chat_session
 
 MCP_ONLY_TOOLS = [capture_inspiration]
 EXTERNAL_SEARCH_TOOLS = [web_search]
@@ -192,19 +192,8 @@ def _with_contextual_tools(agent_id: str, base_tools: list, user_id: str | int |
 
 
 def _showrunner_runtime_tools(user_id: str | int | None = None) -> list:
-    """新项目只提供结构工具；已有正文时再开放连续性研究工具。"""
-    resolved_user_id = _resolve_user_id(user_id)
-    project_name = get_current_project_name()
-    if not resolved_user_id or not project_name:
-        return list(SHOWRUNNER_STRUCTURE_TOOLS)
-    try:
-        from agents.project_content import project_has_written_story_content
-
-        if project_has_written_story_content(resolved_user_id, project_name):
-            return list(SHOWRUNNER_BASE_TOOLS)
-    except Exception:
-        pass
-    return list(SHOWRUNNER_STRUCTURE_TOOLS)
+    """返回固定的 Showrunner 工具集合，避免项目状态改变请求前缀。"""
+    return list(SHOWRUNNER_BASE_TOOLS)
 
 
 MUSE_TOOLS = MUSE_BASE_TOOLS + SHARED_SKILL_TOOLS

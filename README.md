@@ -255,7 +255,7 @@ cd spark-arc-studio
 > 💡 **零污染设计**：脚本启动时，便携 Python 和依赖产物均在 `server/.runtime/python/` 内；launcher 自动下载时，后端副本位于 `~/.sparkarc/sparkarc-server`。删除对应目录即可还原。
 > 💡 **幂等安全**：脚本内置版本检测与部署标记，重复运行不会重复下载或安装。
 > 💡 **pip 缓存唯一例外**：pip 下载缓存默认写入用户级缓存目录（Windows 通常为 `%LOCALAPPDATA%\pip\Cache\`），不影响系统。如需清理可执行 `pip cache purge`。
-> 💡 **更新边界**：Launcher 受管部署固定跟踪 `main`；源码路径由你自己决定分支和 `git pull` 时机。完整的受管部署与网络回退说明见 [Launcher 本地部署管理器](docs/local-deployment-manager.zh-CN.md)。
+> 💡 **更新边界**：Launcher 受管部署固定跟踪 `main`；源码路径由你自己决定分支和 `git pull` 时机。完整的受管部署与网络回退说明见 [Launcher 本地部署管理器](docs/project/local-deployment-manager.zh-CN.md)。
 
 
 ### 方式二：Docker 一键部署（推荐）
@@ -381,7 +381,7 @@ GitHub Release 中提供的桌面客户端会优先探测本机后端（`6688` /
 
 #### MCP 客户端接入
 
-登录后可在桌面仪表盘或移动端 AI 管理页面打开「MCP 连接服务」。同一张配置卡会生成灵感端点 `/api/mcp/` 与控制端点 `/api/mcp/control/`，二者共用用户 MCP API Key，客户端传输类型应选择 Streamable HTTP（`"type": "http"`）。完整配置、工具清单与 Director 工单流程见 [MCP 接入指南](docs/mcp-integration.zh-CN.md)。
+登录后可在桌面仪表盘或移动端 AI 管理页面打开「MCP 连接服务」。同一张配置卡会生成灵感端点 `/api/mcp/` 与控制端点 `/api/mcp/control/`，二者共用用户 MCP API Key，客户端传输类型应选择 Streamable HTTP（`"type": "http"`）。完整配置、工具清单与 Director 工单流程见 [MCP 接入指南](docs/project/mcp-integration.zh-CN.md)。
 
 ---
 
@@ -430,7 +430,7 @@ GitHub Release 中提供的桌面客户端会优先探测本机后端（`6688` /
 
 Critic 回答的不是"这段是不是 AI 写的"，而是"**这段文字哪里会让读者觉得像模型在完成任务**"。它输出 `S/A/B/C/D` 五档等级 + 原文证据 + `fix_ticket` 修改单，默认不直接改写正文，保留创作者主导权。
 
-> 📗 完整的四条核心机制与"为什么用 LLM 而非 ML 模型"论证，请参阅 [架构深度文档 §6](docs/architecture.md#6-critic-审核机制完整版)
+> 📗 完整的四条核心机制与"为什么用 LLM 而非 ML 模型"论证，请参阅 [架构深度文档 §6](docs/project/architecture.md#6-critic-审核机制完整版)
 
 #### 协作数据流
 
@@ -484,7 +484,7 @@ graph TD
 | **用户交互模式** | `chat_system` | 自然对话、可发散、不强制格式 |
 | **导演委派模式** | `pipeline_system` | 严格结构化 + 工具落盘 + 向导演简报 |
 
-> 📗 完整的运行态逻辑、`pipeline_system` 写法硬约束、工具 reference 机制与新增 Agent 自检清单，请参阅 [架构深度文档 §2](docs/architecture.md#2-agent-三模态调用协议完整版) 及 [AGENTS.md §4.5](AGENTS.md)
+> 📗 完整的运行态逻辑、`pipeline_system` 写法硬约束、工具 reference 机制与新增 Agent 自检清单，请参阅 [架构深度文档 §2](docs/project/architecture.md#2-agent-三模态调用协议完整版) 及 [AGENTS.md §4.5](AGENTS.md)
 
 
 #### 风格克隆集群
@@ -526,7 +526,7 @@ graph TD
     end
 ```
 
-> 📗 串行分析细节与负向约束机制的完整说明，请参阅 [架构深度文档 §7](docs/architecture.md#7-风格克隆集群完整版)
+> 📗 串行分析细节与负向约束机制的完整说明，请参阅 [架构深度文档 §7](docs/project/architecture.md#7-风格克隆集群完整版)
 
 
 ---
@@ -549,7 +549,7 @@ flowchart LR
 
 当完整请求接近当前模型配置的上下文上限时，系统会自动触发创作型压缩，并在聊天界面实时显示压缩状态。压缩只替换后续模型请求使用的运行时历史视图：用户与助手的原始消息仍完整保存在当前用户、项目、Agent 与聊天房间内；摘要证据不足时，Agent 可通过受服务端房间边界约束的 `search_chat_history` 工具按需回查原文。若稳定 system 与当前请求本身已经放不进短窗口，系统会明确提示更换上下文更大的模型，不会静默裁掉用户约束。
 
-这套机制属于**持久化的聊天短期上下文**，不构造跨项目用户画像，也不等同于记录剧情事实的 StoryMemory。完整预算、checkpoint 事务、编辑失效、检索权限及前端事件协议见[聊天上下文管理](docs/context-management.zh-CN.md)。
+这套机制属于**持久化的聊天短期上下文**，不构造跨项目用户画像，也不等同于记录剧情事实的 StoryMemory。完整预算、checkpoint 事务、编辑失效、检索权限及前端事件协议见[聊天上下文管理](docs/project/context-management.zh-CN.md)。
 
 > ⚠️ **缓存失效提醒**：更换模型或平台、修改专家提示词 / `pipeline_system` / `tool_rules`、调整工具绑定、改变语言策略或部分全局参数，都会改变稳定前缀并导致上游缓存重新建立。
 > 
@@ -561,7 +561,7 @@ flowchart LR
 * **AgentSkills 与 MCP**：AgentSkills 通过 `search_skills` / `read_skill` / `read_skill_reference` 作为写作质量参考按需读取，不自动污染 system 前缀；MCP 分为 `/api/mcp/` 灵感服务和 `/api/mcp/control/` 控制服务。前者保持灵感来源语义隔离，后者只直接暴露项目查询与 Director 工单入口，写盘仍经既有 Agent 工具管线执行。
 * **前端映射**：Agent 名称、描述、徽标和主题色以 `server/agents/registry.py` 为真相源；工具调用 UI 元数据由后端 `build_tool_stream_event` 注入，前端 `chatStore` 统一消费并渲染。
 
-> 📗 更完整的上下文结构、缓存命中显示、Agent 职责表、AgentSkills/MCP 边界与工具注册细节，请参阅 [架构深度文档 §2-§3](docs/architecture.md#2-agent-统一调用管线)。
+> 📗 更完整的上下文结构、缓存命中显示、Agent 职责表、AgentSkills/MCP 边界与工具注册细节，请参阅 [架构深度文档 §2-§3](docs/project/architecture.md#2-agent-统一调用管线)。
 
 ### 3. 信标总线通信机制
 
@@ -600,7 +600,7 @@ graph TB
     AgentB -- 无号角不可主动发起 --x Bus
 ```
 
-> 📗 完整的三件套定义与应用场景，请参阅 [架构深度文档 §8](docs/architecture.md#8-信标总线核心机制完整版)
+> 📗 完整的三件套定义与应用场景，请参阅 [架构深度文档 §8](docs/project/architecture.md#8-信标总线核心机制完整版)
 
 #### 导演调度 vs 信标协作（垂直与水平协作）
 
@@ -609,7 +609,7 @@ graph TB
 - **导演调度**（垂直）：Director 基于 LangGraph 多轮工具调用自主调度，不受信标限制，可直接实例化 Agent 并调用。
 - **信标协作**（水平）：Agent 间自主通信受信标/号角/旗帜共同约束，防止广播风暴与死循环。
 
-> 📗 完整的对比表、交互模式示意图及设计理由，请参阅 [架构深度文档 §1](docs/architecture.md#1-导演调度-vs-信标协作双系统对比)
+> 📗 完整的对比表、交互模式示意图及设计理由，请参阅 [架构深度文档 §1](docs/project/architecture.md#1-导演调度-vs-信标协作双系统对比)
 
 
 ---
@@ -652,7 +652,7 @@ graph TB
 此格式最终会编译为高性能、零错误的数据库，驱动演出。
 我们默认不给AI撰写函数节点的权限，保证AI专注创作。**待模型能力提升后，再逐步开放。**
 
-> 📗 完整的解析策略细节，请参阅 [架构深度文档 §9](docs/architecture.md#9-arc-格式解析策略)
+> 📗 完整的解析策略细节，请参阅 [架构深度文档 §9](docs/project/architecture.md#9-arc-格式解析策略)
 
 ### 作品记忆池
 
@@ -729,7 +729,7 @@ graph TB
 6. **遗留版本自愈**：迁移链被打断时保守补缺失表/列并对齐版本号，默认不删除额外结构
 7. **版本漂移保护**：版本号已是 head 但缺字段时直接报错，避免悄悄吞掉应提交的 migration
 
-> 📗 完整的开发者工作流、迁移接入指南与清理历史风险说明，请参阅 [数据库自动迁移完整指南](docs/database-migration.md)
+> 📗 完整的开发者工作流、迁移接入指南与清理历史风险说明，请参阅 [数据库自动迁移完整指南](docs/project/database-migration.md)
 
 
 ### 3. 多租户SaaS
@@ -772,7 +772,7 @@ graph TB
 
 流水线阶段：**检出代码 → 构建镜像 → 测试（预留） → 部署 → 清理**
 
-> 📗 完整的 Runner 配置、CI Secret、GitHub Actions 迁移说明，请参阅 [CI/CD 自动化部署完整指南](docs/cicd-deployment.md)
+> 📗 完整的 Runner 配置、CI Secret、GitHub Actions 迁移说明，请参阅 [CI/CD 自动化部署完整指南](docs/project/cicd-deployment.md)
 
 
 ---
@@ -855,12 +855,12 @@ graph TB
 
 | 文档 | 内容 |
 | :--- | :--- |
-| [架构深度文档](docs/architecture.md) | 导演调度 vs 信标协作对比、Agent 三模态完整协议、Critic 审核机制、风格克隆集群、信标总线核心机制、ARC 解析策略、工具注册表、流式基础设施层 |
-| [聊天上下文管理](docs/context-management.zh-CN.md) | 自适应预算、自动压缩、原始历史持久化、checkpoint 事务、按需原文检索与 StoryMemory 边界 |
-| [Launcher 本地部署管理器](docs/local-deployment-manager.zh-CN.md) | Release Launcher 受管 `main`、系统 Git/Node 边界、网络回退、数据保护与更新流程 |
+| [架构深度文档](docs/project/architecture.md) | 导演调度 vs 信标协作对比、Agent 三模态完整协议、Critic 审核机制、风格克隆集群、信标总线核心机制、ARC 解析策略、工具注册表、流式基础设施层 |
+| [聊天上下文管理](docs/project/context-management.zh-CN.md) | 自适应预算、自动压缩、原始历史持久化、checkpoint 事务、按需原文检索与 StoryMemory 边界 |
+| [Launcher 本地部署管理器](docs/project/local-deployment-manager.zh-CN.md) | Release Launcher 受管 `main`、系统 Git/Node 边界、网络回退、数据保护与更新流程 |
 | [火柴Agent网关指南](server/llm/agen_matchbox/README.md) | 双通道设计、接入链路、槽位配置、推理流兼容 |
-| [数据库自动迁移指南](docs/database-migration.md) | 开发者工作流、迁移接入指南、清理历史风险 |
-| [CI/CD 部署指南](docs/cicd-deployment.md) | Runner 配置、CI Secret、GitHub Actions 迁移 |
+| [数据库自动迁移指南](docs/project/database-migration.md) | 开发者工作流、迁移接入指南、清理历史风险 |
+| [CI/CD 部署指南](docs/project/cicd-deployment.md) | Runner 配置、CI Secret、GitHub Actions 迁移 |
 | [AGENTS.md](AGENTS.md) | Agent 开发规范、新增 Agent 自检清单、提示词协议 |
 | [语义检索引擎](#4-语义检索引擎) | 双模式检索、项目级开关、懒构建+哈希增量、LanceDB 向量存储 |
 | [LEGAL/README.md](LEGAL/README.md) | 法律与运营声明统一入口 |

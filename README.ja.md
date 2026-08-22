@@ -235,7 +235,7 @@ cd spark-arc-studio
 - Windows: `start.bat` をダブルクリック
 - macOS / Linux: `bash start.sh` を実行
 
-この経路ではデプロイ済みフラグを再利用しますが、ブランチ選択と `git pull` のタイミングは利用者が管理します。管理対象 Launcher の所有権と更新境界は [詳細設計](docs/local-deployment-manager.zh-CN.md) を参照してください。
+この経路ではデプロイ済みフラグを再利用しますが、ブランチ選択と `git pull` のタイミングは利用者が管理します。管理対象 Launcher の所有権と更新境界は [詳細設計](docs/project/local-deployment-manager.zh-CN.md) を参照してください。
 スマホからアクセスする場合は、同じルーター（LAN）に接続し、**<http://PCのローカルIP:6688>** にアクセスします。
 外部からリモートでアクセスしたい場合は、イントラネット透過（ポートマッピング）技術などをご自身でお調べください。
 
@@ -357,7 +357,7 @@ GitHub Releases のデスクトップクライアントは、まずローカル�
 
 #### MCP クライアント接続
 
-ログイン後、デスクトップのダッシュボードまたはモバイルの AI 管理画面から「MCP 接続サービス」を開きます。共通の設定カードで、インスピレーション用 `/api/mcp/` とコントロール用 `/api/mcp/control/` の両方を生成できます。両方とも同じユーザー MCP API Key と Streamable HTTP（`"type": "http"`）を使用します。設定、ツール一覧、Director タスク手順の詳細は [MCP 接続ガイド](docs/mcp-integration.zh-CN.md) を参照してください。
+ログイン後、デスクトップのダッシュボードまたはモバイルの AI 管理画面から「MCP 接続サービス」を開きます。共通の設定カードで、インスピレーション用 `/api/mcp/` とコントロール用 `/api/mcp/control/` の両方を生成できます。両方とも同じユーザー MCP API Key と Streamable HTTP（`"type": "http"`）を使用します。設定、ツール一覧、Director タスク手順の詳細は [MCP 接続ガイド](docs/project/mcp-integration.zh-CN.md) を参照してください。
 
 ---
 
@@ -405,7 +405,7 @@ SparkArc は単一の巨大な AI モデルに依存せず、役割分担の明�
 
 クリティックエージェントは「これが AI によって書かれたものかどうか」ではなく、**「この文章のどこが、モデルがタスクを機械的にこなしているような印象を読者に与えるか」**を指摘します。評価は `S/A/B/C/D` 段階 ＋ 指摘原文 ＋ 修正指示 `fix_ticket` で構成され、デフォルトでは本文を直接改変しないため、クリエイターが創作の主導権を握り続けられます。
 
-> 📗 4つのコア監査機能と、機械学習分類器ではなく LLM を採用する理由の詳細については、[アーキテクチャ詳細ドキュメント §6](file:///d:/Desktop/sparkarc/docs/architecture.md#6-critic-审核机制完整版) をご参照ください。
+> 📗 4つのコア監査機能と、機械学習分類器ではなく LLM を採用する理由の詳細については、[アーキテクチャ詳細ドキュメント §6](file:///d:/Desktop/sparkarc/docs/project/architecture.md#6-critic-审核机制完整版) をご参照ください。
 
 #### 協調データフロー
 
@@ -459,7 +459,7 @@ graph TD
 | **対話モード** | `chat_system` | 自然な会話調。インスピレーションの拡大を目的とし、特定の出力フォーマットを強制しない。 |
 | **監督委託モード** | `pipeline_system` | 構造化出力 ＋ ツールによる自動保存 ＋ 監督エージェントへの簡易レポート。 |
 
-> 📗 実行時の割り振りロジック、`pipeline_system` 記述上の制約、ツール参照（Reference）自動注入機能、および新規エージェント追加時のチェックリストは、[アーキテクチャ詳細ドキュメント §2](file:///d:/Desktop/sparkarc/docs/architecture.md#2-agent-三模态调用协议完整版) および [AGENTS.md §4.5](file:///d:/Desktop/sparkarc/AGENTS.md) をご参照ください。
+> 📗 実行時の割り振りロジック、`pipeline_system` 記述上の制約、ツール参照（Reference）自動注入機能、および新規エージェント追加時のチェックリストは、[アーキテクチャ詳細ドキュメント §2](file:///d:/Desktop/sparkarc/docs/project/architecture.md#2-agent-三模态调用协议完整版) および [AGENTS.md §4.5](file:///d:/Desktop/sparkarc/AGENTS.md) をご参照ください。
 
 #### 文体クローンクラスター
 
@@ -500,7 +500,7 @@ graph TD
     end
 ```
 
-> 📗 シリアル分析の詳細とネガティブ制約メカニズムの完全な解説については、[アーキテクチャ詳細ドキュメント §7](file:///d:/Desktop/sparkarc/docs/architecture.md#7-风格克隆集群完整版) をご参照ください。
+> 📗 シリアル分析の詳細とネガティブ制約メカニズムの完全な解説については、[アーキテクチャ詳細ドキュメント §7](file:///d:/Desktop/sparkarc/docs/project/architecture.md#7-风格克隆集群完整版) をご参照ください。
 
 ---
 
@@ -530,7 +530,7 @@ flowchart LR
 * **スキルと MCP の境界**: AgentSkills は `search_skills` / `read_skill` / `read_skill_reference` 経由でオンデマンドに読み込まれます。MCP は `/api/mcp/` のインスピレーションサービスと `/api/mcp/control/` のコントロールサービスに分離されています。後者が直接公開するのはプロジェクト照会と Director タスク入口のみで、書き込みは既存の Agent ツールパイプラインを経由します。
 * **フロントエンド対応**: エージェント名、説明、アイコン、テーマカラーなどの情報は [registry.py](file:///d:/Desktop/sparkarc/server/agents/registry.py) をマスターデータとして参照します。ツール呼び出し時の UI メタデータは、バックエンドの `build_tool_stream_event` によってストリームに注入され、フロントエンドの `chatStore` が一元的に処理・レンダリングします。
 
-> 📗 コンテキストの結合構造、キャッシュヒットの表示、各エージェントの役割一覧、スキルと MCP の統合境界、ツールの登録構造の詳細については、[アーキテクチャ詳細ドキュメント §2-§3](file:///d:/Desktop/sparkarc/docs/architecture.md#2-agent-统一调用管线) をご参照ください。
+> 📗 コンテキストの結合構造、キャッシュヒットの表示、各エージェントの役割一覧、スキルと MCP の統合境界、ツールの登録構造の詳細については、[アーキテクチャ詳細ドキュメント §2-§3](file:///d:/Desktop/sparkarc/docs/project/architecture.md#2-agent-统一调用管线) をご参照ください。
 
 ### 3. ビーコンバス通信メカニズム
 
@@ -569,7 +569,7 @@ graph TB
     AgentB -- ホーンなし: 自発的発信不可 --x Bus
 ```
 
-> 📗 3つのステートの定義や具体的な応用シーンについては、[アーキテクチャ詳細ドキュメント §8](file:///d:/Desktop/sparkarc/docs/architecture.md#8-信标总线核心机制完整版) をご参照ください。
+> 📗 3つのステートの定義や具体的な応用シーンについては、[アーキテクチャ詳細ドキュメント §8](file:///d:/Desktop/sparkarc/docs/project/architecture.md#8-信标总线核心机制完整版) をご参照ください。
 
 #### 監督による統制 vs ビーコンによる協調（垂直連携と水平連携）
 
@@ -577,7 +577,7 @@ SparkArc には、**役割と動作ルートが異なる 2 つの通信システ
 * **監督（ディレクター）による統制**（垂直型）: ディレクターが LangGraph のツール呼び出しルーティングに基づいて自律的にタスクを割り振ります。これはビーコンの制約を受けず、任意のエージェントを直接インスタンス化して指示を実行させることができます。
 * **ビーコンによる協調**（水平型）: エージェント同士の直接対話は、無限ループやブロードキャスト嵐を避けるため、互いのビーコン・ホーン・バトンの制約を受けます。
 
-> 📗 2つの仕組みの比較表、協調パターンの違い、設計意図については、[アーキテクチャ詳細ドキュメント §1](file:///d:/Desktop/sparkarc/docs/architecture.md#1-导演调度-vs-信标协作双系统对比) をご参照ください。
+> 📗 2つの仕組みの比較表、協調パターンの違い、設計意図については、[アーキテクチャ詳細ドキュメント §1](file:///d:/Desktop/sparkarc/docs/project/architecture.md#1-导演调度-vs-信标协作双系统对比) をご参照ください。
 
 ---
 
@@ -621,7 +621,7 @@ SparkArc は、**AI の可能性を極限まで引き出すこと**を目指し�
 このフォーマットは最終的に、高速かつバグのないデータベースへとコンパイルされ、実際のゲームや Web の演出を駆動します。
 なお、AI に直接コードや関数ノードを記述する権限はデフォルトでは付与しておらず、純粋な物語創作に集中させています。**今後のモデルの発展を見据え、段階的に解放していく予定です。**
 
-> 📗 構文解析の戦略や最適化の詳細については、[アーキテクチャ詳細ドキュメント §9](file:///d:/Desktop/sparkarc/docs/architecture.md#9-arc-格式解析策略) をご参照ください。
+> 📗 構文解析の戦略や最適化の詳細については、[アーキテクチャ詳細ドキュメント §9](file:///d:/Desktop/sparkarc/docs/project/architecture.md#9-arc-格式解析策略) をご参照ください。
 
 ### 作品メモリプール
 
@@ -691,7 +691,7 @@ SparkArc には**起動時のデータベース自動移行**機能が組み込�
 6. **履歴の修復**: 移行履歴が途切れている場合、安全のため足りないテーブルやカラムを追加した上でバージョン番号を合わせます（既存のカラムは削除しません）。
 7. **バージョン差分の保護**: バージョン履歴上は HEAD（最新）であるにもかかわらず実カラムが足りない場合は起動時にエラーを出し、未コミットの移行ファイルの漏れを早期検知します。
 
-> 📗 開発者向けのワークフロー、新しいテーブル定義時の移行手順、履歴データ整理上の注意点については、[データベース自動移行ガイド](file:///d:/Desktop/sparkarc/docs/database-migration.md) をご参照ください。
+> 📗 開発者向けのワークフロー、新しいテーブル定義時の移行手順、履歴データ整理上の注意点については、[データベース自動移行ガイド](file:///d:/Desktop/sparkarc/docs/project/database-migration.md) をご参照ください。
 
 ### 3. 多テナント SaaS
 
@@ -731,7 +731,7 @@ SparkArc は完全自動化された CI/CD パイプラインを内蔵してい�
 Gitea Actions および GitLab CI をサポートしており、Gitea Actions の定義ファイルは GitHub Actions にも簡単に移植可能です。
 実行フェーズ：**コードチェックアウト → イメージビルド → テスト（事前定義） → デプロイ → クリーンアップ**
 
-> 📗 ランナーの設定方法、CI シークレットの登録、GitHub Actions への移行手順については、[CI/CD 自動デプロイガイド](file:///d:/Desktop/sparkarc/docs/cicd-deployment.md) をご参照ください。
+> 📗 ランナーの設定方法、CI シークレットの登録、GitHub Actions への移行手順については、[CI/CD 自動デプロイガイド](file:///d:/Desktop/sparkarc/docs/project/cicd-deployment.md) をご参照ください。
 
 ---
 
@@ -809,10 +809,10 @@ Gitea Actions および GitLab CI をサポートしており、Gitea Actions �
 
 | ドキュメント | 主な解説内容 |
 | :--- | :--- |
-| [アーキテクチャ詳細ドキュメント](file:///d:/Desktop/sparkarc/docs/architecture.md) | ディレクターとビーコンバスの連携仕様、3つの呼び出しモード仕様、クリティック監査メカニズム、文体クローンクラスター、信標バスの定義、ARC 解析戦略、ツール登録、ストリーミング共通インフラ。 |
+| [アーキテクチャ詳細ドキュメント](file:///d:/Desktop/sparkarc/docs/project/architecture.md) | ディレクターとビーコンバスの連携仕様、3つの呼び出しモード仕様、クリティック監査メカニズム、文体クローンクラスター、信標バスの定義、ARC 解析戦略、ツール登録、ストリーミング共通インフラ。 |
 | [Matchbox Agent Gateway ガイド](file:///d:/Desktop/sparkarc/server/llm/agen_matchbox/README.md) | デュアルチャネル構造、デプロイ方法、APIスロット設定、Reasoning ストリームの処理。 |
-| [データベース自動移行ガイド](file:///d:/Desktop/sparkarc/docs/database-migration.md) | データベース修正時のマイグレーション自動生成ワークフロー、トラブルシューティング。 |
-| [CI/CD 自動デプロイガイド](file:///d:/Desktop/sparkarc/docs/cicd-deployment.md) | ランナー構築、シークレットトークンの管理、GitHub Actions への移植。 |
+| [データベース自動移行ガイド](file:///d:/Desktop/sparkarc/docs/project/database-migration.md) | データベース修正時のマイグレーション自動生成ワークフロー、トラブルシューティング。 |
+| [CI/CD 自動デプロイガイド](file:///d:/Desktop/sparkarc/docs/project/cicd-deployment.md) | ランナー構築、シークレットトークンの管理、GitHub Actions への移植。 |
 | [AGENTS.md](file:///d:/Desktop/sparkarc/AGENTS.md) | エージェント開発時の規約、追加時のチェックリスト、プロンプト定義ポリシー。 |
 | [セマンティック検索エンジン](#4-セマンティック検索エンジン) | 正規表現検索とベクトル検索、自動重構築とハッシュ比較、LanceDB。 |
 | [LEGAL/README.md](file:///d:/Desktop/sparkarc/LEGAL/README.md) | 利用規約、免責事項、法的文書へのポータル。 |

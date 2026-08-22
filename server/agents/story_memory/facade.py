@@ -11,6 +11,7 @@ from typing import Any, Dict, List, Optional
 
 from core.utils import get_project_path
 from core.json_state import load_json_file, save_json_file_atomic, synchronized_json_state
+from agents.prompt_layout import build_prompt_messages
 
 
 STATE_DIR_NAME = ".story_memory"
@@ -19,6 +20,7 @@ MAX_RECENT_SCENES = 8
 MAX_RECENT_EVIDENCE = 5
 SCENE_TASK_PACK_RECENT_SCENES = 2
 SCENE_TASK_PACK_MAX_CHARACTERS = 8
+EXTRACTION_HISTORY_MAX_CHARS = 2000
 
 
 def _utc_now_iso() -> str:
@@ -634,12 +636,11 @@ class StoryMemoryFacade:
         characters: list[str],
         chr_map: Optional[dict] = None,
     ) -> Dict[str, Any]:
-        from langchain_core.messages import HumanMessage, SystemMessage
         from llm.agen_matchbox import matchbox
         from agents.language_policy import prepend_prompt_language_policy
 
         usage_key = (os.getenv("SPARKARC_STORY_MEMORY_USAGE_KEY", "fast") or "fast").strip().lower()
-        timeout = float(os.getenv("SPARKARC_STORY_MEMORY_TIMEOUT", "90"))
+        timeout = float(os.getenv("SPARKARC_STORY_MEMORY_TIMEOUT", "180"))
         llm = matchbox().get_user_llm(
             self.user_id,
             usage_key=usage_key,
@@ -656,9 +657,16 @@ class StoryMemoryFacade:
             ]
             chr_reference = "、".join(names[:80])
 
+        history_context = self._build_extraction_history_context(
+            scene_card=scene_card,
+            characters=characters,
+        )
+
         system_prompt = prepend_prompt_language_policy(
             "你是长篇小说项目的叙事状态抽取器。任务标签:[TASK:STORY_MEMORY_EXTRACT]。"
             "你只从用户提供的场景正文和场景目标中抽取事实，不补设定、不脑补隐含情节、不提供创作建议。"
+            "每次请求只处理当前 user 消息中的一个已保存场景；"
+            "本次结果只能依据当前场景，严禁把项目既有状态当作本场原文证据。"
             """输出必须是严格 JSON 对象，不要 Markdown，不要解释。
 
 【输出 JSON schema】
@@ -690,6 +698,16 @@ class StoryMemoryFacade:
 - 角色名尽量使用项目角色表中的名称。
 - evidence 必须来自场景正文或场景指导。
 - 不要推测作者意图，不要设计伏笔，不要给后续写作方案。"""
+            """
+
+【抽取判定协议】
+1. events 只记录会改变人物处境、信息分布、因果链或后续行动条件的事实；同一因果动作不要拆成多条近义事件，纯气氛和镜头调度不算事件。
+2. character_updates 描述本场结束时的可验证状态。knowledge 必须区分角色已经知道、仍不知道、只是怀疑的内容；goal 和 emotion 没有明确行动或文本证据时留空。
+3. relationship_changes 只在本场确实改变关系、信任、权力或合作状态时填写；仅仅同场出现不算变化。state 写本场结束后的状态，why 写本场造成变化的动作或信息。
+4. foreshadows 只记录正文明确呈现的线索、秘密、承诺和回收。相关历史状态可帮助判断 advanced 或 resolved，但必须由本场正文中的新行动或新信息触发；描述尽量沿用既有线索的核心实体，便于持久状态合并。
+5. fact_claims 只保留后续创作需要持续核对的稳定事实，例如物件归属、地点状态、时间、人物知情边界和已发生结果；不要重复 events，也不要收录转瞬即逝的动作。
+6. conflict_risks 只在本场明确事实与相关历史状态直接冲突、且两者无法自然并存时填写。历史状态只能用于比较，risk 说明冲突点，evidence 仍引用本场文本，不要替作者擅自修正。
+7. evidence 使用当前正文中的最短充分证据，允许忠实短句化，但不得引用相关历史状态、常识或推断。所有数组优先准确和去重，不为凑数量填充。"""
         )
         user_prompt = f"""
 请从以下已保存场景中抽取结构化叙事状态增量。
@@ -703,17 +721,171 @@ class StoryMemoryFacade:
 - 已识别登场角色: {known_characters}
 - 项目角色表: {chr_reference or "（未提供）"}
 
+【相关历史状态】
+{history_context or "（暂无与本场相关的既有状态）"}
+
 【场景正文】
 {_compact_text(scene_text, int(os.getenv("SPARKARC_STORY_MEMORY_MAX_CHARS", "12000")))}
 """
-        response = llm.invoke([
-            SystemMessage(content=system_prompt),
-            HumanMessage(content=user_prompt),
-        ])
+        response = llm.invoke(build_prompt_messages(
+            system_prompt=system_prompt,
+            user_prompt=user_prompt,
+        ))
         content = getattr(response, "content", "")
         if not isinstance(content, str):
             content = str(content)
         return self._safe_json_object(content)
+
+    def _build_extraction_history_context(
+        self,
+        *,
+        scene_card: Dict[str, Any],
+        characters: list[str],
+    ) -> str:
+        """检索与当前场景相关的既有状态，避免把完整历史重新塞回抽取请求。"""
+        state = self.load_state()
+        scene_id = str(scene_card.get("scene_id") or "")
+        target_position = _scene_position(scene_card)
+        prior_scenes = [
+            item
+            for item in state.get("scenes") or []
+            if isinstance(item, dict)
+            and str(item.get("scene_id") or "") != scene_id
+            and (
+                target_position is None
+                or _scene_position(item) is None
+                or _scene_position(item) < target_position
+            )
+        ]
+        prior_scenes = sorted(prior_scenes, key=_scene_sort_key)
+        eligible_scene_ids = {
+            str(item.get("scene_id") or "")
+            for item in prior_scenes
+            if item.get("scene_id")
+        }
+        scene_rank_by_id = {
+            str(item.get("scene_id") or ""): index
+            for index, item in enumerate(prior_scenes)
+            if item.get("scene_id")
+        }
+        query_text = "\n".join([
+            str(scene_card.get("scene_title") or ""),
+            str(scene_card.get("description") or ""),
+            str(scene_card.get("guidance") or ""),
+            "、".join(characters),
+        ])
+
+        lines = [
+            "以下内容来自 StoryMemory 持久状态，只用于判断跨场推进、回收或冲突；",
+            "它不是本场原文，禁止把它写入 evidence。",
+        ]
+        for name in characters[:8]:
+            card = state.get("character_states", {}).get(name)
+            if not isinstance(card, dict):
+                continue
+            evidence = [
+                item
+                for item in card.get("recent_evidence") or []
+                if isinstance(item, dict) and item.get("scene_id") in eligible_scene_ids
+            ]
+            if evidence:
+                latest = max(
+                    evidence,
+                    key=lambda item: scene_rank_by_id.get(str(item.get("scene_id") or ""), -1),
+                )
+                prior_status = (
+                    card.get("current_status")
+                    if card.get("last_seen_scene") in eligible_scene_ids
+                    else "以目标场景之前的最近证据摘要为准"
+                )
+                lines.append(
+                    f"- 角色 {name}：此前状态 {prior_status or '待核对'}；"
+                    f"最近证据摘要 {_compact_text(latest.get('summary', ''), 180)}"
+                )
+
+        for a, b in combinations(characters[:6], 2):
+            rel = state.get("relationships", {}).get(_relationship_key(a, b))
+            if not isinstance(rel, dict):
+                continue
+            evidence = [
+                item
+                for item in rel.get("recent_evidence") or []
+                if isinstance(item, dict) and item.get("scene_id") in eligible_scene_ids
+            ]
+            if evidence:
+                lines.append(
+                    f"- 关系 {a} ↔ {b}：{_compact_text(rel.get('relation_hint', ''), 160)}"
+                )
+
+        def eligible_records(records: Any) -> list[Dict[str, Any]]:
+            return [
+                item
+                for item in records or []
+                if isinstance(item, dict)
+                and (
+                    not item.get("scene_id")
+                    or item.get("scene_id") in eligible_scene_ids
+                )
+            ]
+
+        relevant_threads = self._select_relevant_records(
+            [
+                item
+                for item in state.get("threads") or []
+                if isinstance(item, dict)
+                and item.get("status") in {"open", "advanced"}
+                and (
+                    target_position is None
+                    or (
+                        item.get("last_touched_scene") or item.get("introduced_scene")
+                    ) in eligible_scene_ids
+                )
+            ],
+            active_characters=characters,
+            scene_text=query_text,
+            entity_keys=("related_characters",),
+            text_keys=("description", "evidence", "scene_title", "last_touched_title"),
+            limit=4,
+            scene_rank_by_id=scene_rank_by_id,
+            scene_id_keys=("last_touched_scene", "introduced_scene"),
+        )
+        for item in relevant_threads:
+            lines.append(
+                f"- 开放线索[{item.get('status') or 'open'}]："
+                f"{_compact_text(item.get('description', ''), 220)}"
+            )
+
+        relevant_events = self._select_relevant_records(
+            eligible_records(state.get("events")),
+            active_characters=characters,
+            scene_text=query_text,
+            entity_keys=("participants",),
+            text_keys=("summary", "evidence", "scene_title"),
+            limit=3,
+            scene_rank_by_id=scene_rank_by_id,
+        )
+        for item in relevant_events:
+            lines.append(f"- 历史事件：{_compact_text(item.get('summary', ''), 200)}")
+
+        relevant_facts = self._select_relevant_records(
+            eligible_records(state.get("fact_claims")),
+            active_characters=characters,
+            scene_text=query_text,
+            entity_keys=("entities",),
+            text_keys=("claim", "evidence", "scene_title"),
+            limit=4,
+            scene_rank_by_id=scene_rank_by_id,
+        )
+        for item in relevant_facts:
+            lines.append(f"- 已确立事实：{_compact_text(item.get('claim', ''), 200)}")
+
+        if len(lines) == 2:
+            return ""
+        max_chars = max(
+            800,
+            int(os.getenv("SPARKARC_STORY_MEMORY_HISTORY_MAX_CHARS", str(EXTRACTION_HISTORY_MAX_CHARS))),
+        )
+        return _compact_text("\n".join(lines), max_chars)
 
     def _safe_json_object(self, text: str) -> Dict[str, Any]:
         raw = str(text or "").strip()

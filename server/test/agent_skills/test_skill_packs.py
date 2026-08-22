@@ -39,11 +39,15 @@ Use concrete sensory detail.
 
     assert "search_skills" in {tool.name for tool in get_tools_for_agent("agent_scriptwriter", user_id="skill-test")}
     assert "Agent Skills 读取边界" in prompt
-    assert imported.skill_id in prompt
-    assert "Sensory Prose" in prompt
+    assert imported.skill_id not in prompt
+    assert "Sensory Prose" not in prompt
     assert "SKILL.md 正文" not in prompt
     assert "按需读取一个 Skill 的质量适配视图" in prompt
     assert "QUALITY_ADAPTER" not in prompt
+
+    runtime_tail = agent._build_runtime_tail()
+    assert imported.skill_id in runtime_tail
+    assert "Sensory Prose" in runtime_tail
 
 
 def test_skill_tools_are_hidden_when_no_skill_is_installed(tmp_path: Path, monkeypatch) -> None:

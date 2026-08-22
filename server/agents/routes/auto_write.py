@@ -37,9 +37,11 @@ from agents.story_terminology import get_story_terminology
 from agents.agent_scriptwriter import ScriptwriterAgent
 from agents.scriptwriter_prewrite import (
     PREWRITE_STATUS_MESSAGE,
+    SCRIPTWRITER_CONTINUITY_MAX_TURNS,
     ScriptwriterPreWriteRequest,
     run_autonomous_scriptwriter_creation,
 )
+from agents.prompt_layout import CompletedPromptTurn
 from agents.agent_critic import CriticAgent
 from agents.stream_semantics import (
     semantic_sse_data,
@@ -310,6 +312,7 @@ async def generate_script_stream(
 
     # Context accumulation (简单片段积累，三圈记忆策略会在 build_scene_context 里处理跨章前文)
     chapters_processed = 0
+    scriptwriter_continuity: list[CompletedPromptTurn] = []
 
     for i in range(start_chapter_index, len(chapter_nodes)):
         if request is not None and await request.is_disconnected():
@@ -578,12 +581,16 @@ async def generate_script_stream(
                 ),
                 agent=writer,
                 on_tool_progress=report_prewrite_tool,
+                completed_turns=tuple(scriptwriter_continuity),
             )
             if not prewrite_result.saved:
                 raise RuntimeError(
                     prewrite_result.blocked_reason
                     or "编剧在 4 次请求内未完成当前场景落盘。"
                 )
+            if prewrite_result.continuity_turn is not None:
+                scriptwriter_continuity.append(prewrite_result.continuity_turn)
+                del scriptwriter_continuity[:-SCRIPTWRITER_CONTINUITY_MAX_TURNS]
 
             update_state(
                 "running",

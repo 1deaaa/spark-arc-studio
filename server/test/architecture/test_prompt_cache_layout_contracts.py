@@ -1,8 +1,12 @@
-from langchain_core.messages import AIMessage, HumanMessage, SystemMessage
+from langchain_core.messages import AIMessage, HumanMessage, SystemMessage, ToolMessage
 
 from agents.agent_utils import load_prompt
 from agents.director_graph import _append_director_runtime_user_message
 from agents.context_provider import AgentContextProvider
+from agents.agent_director import DirectorAgent
+from agents.communication import SparkBaseAgent
+from agents.prompt_layout import BoundedPromptTranscript, CompletedPromptTurn
+from agents.tools.registry import SHOWRUNNER_BASE_TOOLS, _showrunner_runtime_tools
 
 
 def _assert_in_order(text: str, *markers: str) -> None:
@@ -119,6 +123,67 @@ def test_director_runtime_context_is_appended_without_rewriting_history_prefix()
     assert original_messages[1].content == "ORIGINAL_USER"
 
 
+def test_director_runtime_context_does_not_duplicate_unchanged_tail() -> None:
+    original_messages = [
+        SystemMessage(content="STABLE_SYSTEM"),
+        HumanMessage(content="ORIGINAL_USER"),
+    ]
+    first = _append_director_runtime_user_message(
+        original_messages,
+        current_user_message="ORIGINAL_USER",
+        active_context="PROJECT_STATE_V1",
+        runtime_tail="WORK_TRACKER_V1",
+    )
+    unchanged = _append_director_runtime_user_message(
+        first,
+        current_user_message="ORIGINAL_USER",
+        active_context="PROJECT_STATE_V1",
+        runtime_tail="WORK_TRACKER_V1",
+        previous_runtime_message=first[-1].content,
+    )
+    changed = _append_director_runtime_user_message(
+        unchanged,
+        current_user_message="ORIGINAL_USER",
+        active_context="PROJECT_STATE_V2",
+        runtime_tail="WORK_TRACKER_V2",
+        previous_runtime_message=first[-1].content,
+    )
+
+    assert unchanged == first
+    assert changed[:-1] == first
+    assert "PROJECT_STATE_V2" in changed[-1].content
+
+
+def test_dynamic_date_is_in_runtime_tail_not_system_prefix() -> None:
+    from agents.tools.registry import TOOLS_BY_NAME
+
+    agent = SparkBaseAgent("agent_director", user_id="cache-user", project_name="demo")
+    tools = [TOOLS_BY_NAME["web_search"]]
+    system = agent._build_tool_system_prompt("STABLE_SYSTEM", tools_override=tools)
+    runtime_tail = agent._build_runtime_tail(tools_override=tools)
+
+    assert "当前真实日期（UTC+8）：" not in system
+    assert "当前真实日期（UTC+8）：" in runtime_tail
+
+
+def test_director_team_block_does_not_depend_on_runtime_tool_sets(monkeypatch) -> None:
+    monkeypatch.setattr(
+        "agents.tools.registry.get_tools_for_agent",
+        lambda *_args, **_kwargs: (_ for _ in ()).throw(AssertionError("不应读取动态工具集")),
+    )
+    block = DirectorAgent(user_id="cache-user", project_name="demo")._build_team_capability_block()
+
+    assert "团队成员能力概览" in block
+    assert "agent_lorebook" in block
+    assert "rewrite_worldview" not in block
+
+
+def test_showrunner_tool_schema_does_not_change_after_story_is_written() -> None:
+    assert [tool.name for tool in _showrunner_runtime_tools("cache-user")] == [
+        tool.name for tool in SHOWRUNNER_BASE_TOOLS
+    ]
+
+
 def test_showrunner_full_outline_precedes_scene_varying_narrative_memory(monkeypatch) -> None:
     provider = AgentContextProvider("cache-user", "cache-project")
     provider._bundle_cache = {
@@ -149,3 +214,53 @@ def test_showrunner_full_outline_precedes_scene_varying_narrative_memory(monkeyp
         "MARK_STRUCTURE_WARNING",
         "MARK_CURRENT_EDITOR",
     )
+
+
+def test_bounded_prompt_transcript_drops_only_hot_history_and_resets_rewrites() -> None:
+    transcript = BoundedPromptTranscript(max_turns=2, max_streams=2)
+    for index in range(3):
+        transcript.append(
+            "project-a",
+            turn_id=f"scene-{index}",
+            turn=CompletedPromptTurn(
+                user_prompt=f"user-{index}",
+                assistant_receipt=f"assistant-{index}",
+            ),
+        )
+
+    retained = transcript.load("project-a", current_turn_id="scene-new")
+    assert [turn.user_prompt for turn in retained] == ["user-1", "user-2"]
+    assert transcript.load("project-a", current_turn_id="scene-2") == ()
+
+
+def test_append_only_task_messages_preserve_bounded_tool_exchange_before_receipt() -> None:
+    from agents.prompt_layout import build_append_only_task_messages
+
+    messages = build_append_only_task_messages(
+        system_prompt="STABLE_SYSTEM",
+        completed_turns=(CompletedPromptTurn(
+            user_prompt="SCENE_ONE",
+            preserved_messages=(
+                AIMessage(content="", tool_calls=[{
+                    "name": "create_chapter",
+                    "args": {"chapter_name": "一 · 开端"},
+                    "id": "chapter-1",
+                    "type": "tool_call",
+                }]),
+                ToolMessage(
+                    content="已存在",
+                    tool_call_id="chapter-1",
+                    name="create_chapter",
+                ),
+            ),
+            assistant_receipt="SCENE_ONE_RECEIPT",
+        ),),
+        current_user_prompt="SCENE_TWO",
+    )
+
+    assert [message.type for message in messages] == [
+        "system", "human", "ai", "tool", "ai", "human"
+    ]
+    assert messages[2].tool_calls[0]["name"] == "create_chapter"
+    assert messages[4].content == "SCENE_ONE_RECEIPT"
+    assert messages[-1].content == "SCENE_TWO"

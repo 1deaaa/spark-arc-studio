@@ -7,9 +7,9 @@ SparkArc is a large multi-agent creative platform, not a small demo repository. 
 Read these documents first:
 
 - [AGENTS.md](../AGENTS.md) for the authoritative engineering rules
-- [docs/architecture.md](../docs/architecture.md) for the current runtime and agent model
-- [docs/database-migration.md](../docs/database-migration.md) if you touch persistence
-- [docs/cicd-deployment.md](../docs/cicd-deployment.md) if you touch CI, packaging, or deployment behavior
+- [docs/project/architecture.md](../docs/project/architecture.md) for the current runtime and agent model
+- [docs/project/database-migration.md](../docs/project/database-migration.md) if you touch persistence
+- [docs/project/cicd-deployment.md](../docs/project/cicd-deployment.md) if you touch CI, packaging, or deployment behavior
 
 The core rule is simple: **extend existing integration points instead of creating parallel pipelines**.
 

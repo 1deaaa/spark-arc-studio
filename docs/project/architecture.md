@@ -282,7 +282,7 @@ flowchart LR
 6. `SparkAgentExecutor` 的 `build_context` / `execute` / `write_result` 协议完整实现。
 7. 该 Agent 的落盘工具已在 `server/agents/tools/*` 中按域实现，并统一在 `server/agents/tools/registry.py` 注册；`server/agents/agent_tools.py` 继续作为唯一公共导出与 `get_tools_for_agent` 门面。
 
-贡献者请参阅 [AGENTS.md](../AGENTS.md) 查看完整协议。
+贡献者请参阅 [AGENTS.md](../../AGENTS.md) 查看完整协议。
 
 ---
 

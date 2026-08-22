@@ -39,7 +39,6 @@ from llm.agen_matchbox.reasoning_compat import extract_visible_text_from_plain_t
 
 from agents.agent_factory import create_agent_instance
 from agents.prompt_layout import build_current_user_message
-from agents.work_tracker import build_work_tracker_prompt_context
 from llm.agen_matchbox.tool_protocol import build_tool_result_messages
 
 # ==================== State 定义 ====================
@@ -52,12 +51,17 @@ class DirectorState(TypedDict):
     messages: Annotated[list, operator.add]
     active_context: str
     current_user_message: str
+    director_system_instruction: str
+    director_runtime_message: str
+    workflow_tools: Dict[str, list]
+    handoff_histories: Dict[str, list]
     
     pending_delegate: Optional[Dict[str, Any]]
     sub_agent_result: Optional[str]
     baton_holder: Optional[str]
     force_return_to_director: Optional[bool]
     handoff_tracker_reconciled: Optional[bool]
+    background_task_started: Optional[bool]
     stop_event: Any
     
     stream_events: Annotated[list, operator.add]
@@ -216,6 +220,7 @@ def _build_director_prompt_context(
     user_id: str,
     project_name: str,
     active_context: str,
+    tools_override: list[Any] | None = None,
 ) -> tuple[str, str]:
     """统一构建导演稳定系统前缀与本轮动态项目上下文。"""
     from agents.agent_utils import load_prompt
@@ -246,6 +251,7 @@ def _build_director_prompt_context(
     system_instruction = director._build_tool_system_prompt(
         base_system_prompt,
         runtime_context,
+        tools_override=tools_override,
     )
     return system_instruction, runtime_context
 
@@ -256,15 +262,18 @@ def _append_director_runtime_user_message(
     current_user_message: str,
     active_context: str,
     runtime_tail: str,
+    previous_runtime_message: str = "",
 ) -> List[Any]:
     """保留历史前缀，在末尾追加本轮刷新后的动态项目现场。"""
     result = list(messages)
-    if active_context or runtime_tail:
-        result.append(HumanMessage(content=build_current_user_message(
+    if current_user_message or active_context or runtime_tail:
+        runtime_message = build_current_user_message(
             user_message=current_user_message,
             active_context=active_context,
             runtime_tail=runtime_tail,
-        )))
+        )
+        if runtime_message != str(previous_runtime_message or ""):
+            result.append(HumanMessage(content=runtime_message))
     return result
 
 
@@ -284,7 +293,7 @@ def director_node(state: DirectorState) -> Dict[str, Any]:
     
     user_id = state["user_id"]
     project_name = state["project_name"]
-    messages = state.get("messages", [])
+    messages = list(state.get("messages", []))
     sub_agent_result = state.get("sub_agent_result")
     tracker_update_required = _director_tracker_update_required(
         user_id,
@@ -334,16 +343,24 @@ def director_node(state: DirectorState) -> Dict[str, Any]:
     
     stream_llm = matchbox().get_user_llm(user_id, agent_name="agent_director")
     base_stream_llm = stream_llm
-    tools = get_tools_for_agent("agent_director", user_id=user_id)
+    workflow_tools = dict(state.get("workflow_tools") or {})
+    tools = list(workflow_tools.get("agent_director") or [])
+    if not tools:
+        tools = get_tools_for_agent("agent_director", user_id=user_id)
+        workflow_tools["agent_director"] = list(tools)
     if tools:
         stream_llm = stream_llm.bind_tools(tools)
     
     # 每轮从磁盘刷新项目状态；动态现场只进入最后一条 user，稳定前缀保持可缓存。
-    system_instruction, active_context = _build_director_prompt_context(
+    rebuilt_system_instruction, active_context = _build_director_prompt_context(
         director,
         user_id=user_id,
         project_name=project_name,
         active_context=state.get("active_context", ""),
+        tools_override=tools,
+    )
+    system_instruction = str(
+        state.get("director_system_instruction") or rebuilt_system_instruction
     )
     messages_with_system = [SystemMessage(content=system_instruction)] + list(messages)
     # -------------------------------------------------------------------
@@ -362,19 +379,26 @@ def director_node(state: DirectorState) -> Dict[str, Any]:
                         current_user_message = str(content)
                 break
 
-    runtime_tail = build_work_tracker_prompt_context(
-        user_id,
-        project_name,
-        "agent_director",
+    runtime_tail = director._build_runtime_tail(tools_override=tools)
+    previous_runtime_message = str(state.get("director_runtime_message") or "")
+    runtime_message = build_current_user_message(
+        user_message=current_user_message,
+        active_context=active_context,
+        runtime_tail=runtime_tail,
     )
-    # 项目状态会在委派后刷新。只能追加到历史尾部，不能覆盖最早用户消息，
-    # 否则一次状态变化会让它之后的全部历史前缀失去缓存。
-    messages_with_system = _append_director_runtime_user_message(
+    # 项目现场发生变化时只能作为一条新消息追加并写回图状态，不能重写旧消息。
+    messages_with_runtime = _append_director_runtime_user_message(
         messages_with_system,
         current_user_message=current_user_message,
         active_context=active_context,
         runtime_tail=runtime_tail,
+        previous_runtime_message=previous_runtime_message,
     )
+    if len(messages_with_runtime) > len(messages_with_system):
+        runtime_update = messages_with_runtime[-1]
+        messages.append(runtime_update)
+        persisted_prefix.append(runtime_update)
+    messages_with_system = messages_with_runtime
 
     stream_events = []
     from agents.context_budget import rebudget_existing_messages
@@ -529,6 +553,10 @@ def director_node(state: DirectorState) -> Dict[str, Any]:
         "baton_holder": baton_holder,
         "force_return_to_director": False,
         "handoff_tracker_reconciled": False,
+        "background_task_started": False,
+        "director_system_instruction": system_instruction,
+        "director_runtime_message": runtime_message,
+        "workflow_tools": workflow_tools,
     }
     
     pending_delegate = None
@@ -715,9 +743,11 @@ def director_node(state: DirectorState) -> Dict[str, Any]:
                 # 旁路检测：导演执行 trigger_auto_write → 推送 director_auto_write_started 给前端
                 _SIDEBAND_MARKER = "__director_auto_write_started__:"
                 if isinstance(tool_result, str) and tool_result.startswith(_SIDEBAND_MARKER):
+                    updates["background_task_started"] = True
                     print(f"[DirectorGraph] Detected Auto-Write sideband marker, tool_name={tool_name}")
                     _nl = tool_result.find("\n")
                     _meta_str = tool_result[len(_SIDEBAND_MARKER):_nl] if _nl != -1 else tool_result[len(_SIDEBAND_MARKER):]
+                    _receipt = tool_result[_nl + 1:].strip() if _nl != -1 else "自动写作任务已在后台启动。"
                     try:
                         _meta = json.loads(_meta_str.strip())
                         _sideband_evt = {"event": "director_auto_write_started", **_meta}
@@ -729,6 +759,12 @@ def director_node(state: DirectorState) -> Dict[str, Any]:
                             print(f"[DirectorGraph] Warning: writer is None, event not pushed!")
                     except Exception as e:
                         print(f"[DirectorGraph] Sideband event parse failed: {e}")
+                    if _receipt and writer:
+                        writer({
+                            "event": "assistant_delta",
+                            "text": _receipt,
+                            "source_agent": "agent_director",
+                        })
 
 
                 tool_results.append((call_id, tool_name, tool_result))
@@ -859,6 +895,42 @@ def sub_agent_node(state: DirectorState) -> Dict[str, Any]:
     suppress_scriptwriter_draft = target_agent == "agent_scriptwriter" and skip_tool_confirmation
     scriptwriter_saved = False
     pipeline_completion_receipt = ""
+    workflow_tools = dict(state.get("workflow_tools") or {})
+    sub_agent_tools = list(workflow_tools.get(target_agent) or [])
+    if not sub_agent_tools:
+        from agents.tools.registry import get_tools_for_agent
+
+        sub_agent_tools = get_tools_for_agent(
+            target_agent,
+            user_id=user_id,
+            pipeline_mode=skip_tool_confirmation,
+        )
+        workflow_tools[target_agent] = list(sub_agent_tools)
+
+    handoff_histories = dict(state.get("handoff_histories") or {})
+    prepared_history = list(handoff_histories.get(target_agent) or [])
+    handoff_memory = None
+    if not prepared_history:
+        try:
+            from agents.handoff_memory import DirectorHandoffMemory
+            from core.request_context import get_current_chat_session
+
+            room_agent_id, context_key = get_current_chat_session()
+            if context_key:
+                handoff_memory = DirectorHandoffMemory(
+                    user_id=user_id,
+                    project_name=project_name,
+                    room_agent_id=room_agent_id or "agent_director",
+                    context_key=context_key,
+                )
+                prepared_history = handoff_memory.load_transcript(target_agent)
+        except Exception as exc:
+            print(f"[DirectorGraph] 子 Agent 交接记忆读取失败（已降级）：{exc}")
+
+    captured_history: list[Any] = []
+
+    def record_conversation(messages: list[Any]) -> None:
+        captured_history[:] = list(messages)
     
     try:
         # NOTE: 此处不使用 yield，而是将生成内容全部截留后向 writer 推送同时汇聚 buf，
@@ -869,6 +941,9 @@ def sub_agent_node(state: DirectorState) -> Dict[str, Any]:
             active_context=merged_active_context,
             skip_tool_confirmation=skip_tool_confirmation,
             stop_event=stop_event,
+            tools_override=sub_agent_tools,
+            prepared_history_messages=(prepared_history if prepared_history else None),
+            conversation_recorder=record_conversation,
             stop_after_pipeline_completion=(
                 completion_mode == HANDOFF_COMPLETION_SILENT_CONTINUE
             ),
@@ -968,6 +1043,18 @@ def sub_agent_node(state: DirectorState) -> Dict[str, Any]:
             "请重新委派同一场景，并明确要求先创建章节、再调用 create_or_rewrite_script 落盘；"
             "不要把未保存草稿视为已完成章节。"
         )
+
+    if captured_history:
+        handoff_histories[target_agent] = list(captured_history)
+        if handoff_memory is not None:
+            try:
+                handoff_memory.save_transcript(
+                    target_agent=target_agent,
+                    messages=list(captured_history),
+                    task_id=str(delegate.get("task_id") or ""),
+                )
+            except Exception as exc:
+                print(f"[DirectorGraph] 子 Agent 交接记忆保存失败（已降级）：{exc}")
     
     if writer:
         writer({"event": "agent_turn_finished", "source_agent": target_agent})
@@ -1052,6 +1139,8 @@ def sub_agent_node(state: DirectorState) -> Dict[str, Any]:
         "baton_holder": target_agent,
         "force_return_to_director": False,
         "handoff_tracker_reconciled": handoff_tracker_reconciled,
+        "workflow_tools": workflow_tools,
+        "handoff_histories": handoff_histories,
     }
 
     tracker_requires_director = (
@@ -1091,6 +1180,9 @@ def sub_agent_node(state: DirectorState) -> Dict[str, Any]:
 def route_after_director(state: DirectorState) -> str:
     """如果存在待委派的任务，走向 sub_agent 节点，否则终止当前对话循环。"""
     if is_stop_event_set(state.get("stop_event")):
+        return END
+
+    if state.get("background_task_started"):
         return END
 
     if state.get("pending_delegate"):
@@ -1173,24 +1265,25 @@ def run_director_stream(
             stream_context_budget_events,
         )
         from agents.prompt_layout import build_chat_prompt_layout
+        from agents.tools.registry import get_tools_for_agent
         from llm.agen_matchbox import matchbox
 
         director = DirectorAgent(user_id=user_id, project_name=project_name)
         base_llm = matchbox().get_user_llm(user_id, agent_name="agent_director")
+        director_tools = get_tools_for_agent("agent_director", user_id=user_id)
         system_instruction, runtime_context = _build_director_prompt_context(
             director,
             user_id=user_id,
             project_name=project_name,
             active_context=active_context or "",
+            tools_override=director_tools,
         )
         prompt_layout = build_chat_prompt_layout(
             system_instruction=system_instruction,
             user_message=user_message,
             active_context=runtime_context,
-            runtime_tail=build_work_tracker_prompt_context(
-                user_id,
-                project_name,
-                "agent_director",
+            runtime_tail=director._build_runtime_tail(
+                tools_override=director_tools,
             ),
         )
 
@@ -1212,19 +1305,25 @@ def run_director_stream(
                 budget_result = completed.value
                 break
 
-        # system 前缀由 director_node 每轮实时重建，图状态只保存动态消息体。
-        lc_messages = list(budget_result.messages[1:])
+        # 当前 user 由 director_node 作为 append-only 运行态快照写入图状态，
+        # 入口只携带经过预算处理的既有历史，避免首轮重复 user。
+        lc_messages = list(budget_result.messages[1:-1])
         initial_state = {
             "user_id": user_id,
             "project_name": project_name,
             "messages": lc_messages,
             "active_context": active_context or "",
             "current_user_message": user_message,
+            "director_system_instruction": system_instruction,
+            "director_runtime_message": "",
+            "workflow_tools": {"agent_director": list(director_tools)},
+            "handoff_histories": {},
             "pending_delegate": None,
             "sub_agent_result": None,
             "baton_holder": "agent_director",
             "force_return_to_director": False,
             "handoff_tracker_reconciled": False,
+            "background_task_started": False,
             "stream_events": [],
             "stop_event": stop_event,
         }

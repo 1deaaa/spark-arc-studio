@@ -4,7 +4,7 @@ import json
 import queue
 import threading
 
-from langchain_core.messages import HumanMessage
+from langchain_core.messages import AIMessage, HumanMessage
 import pytest
 
 from agents.communication import (
@@ -128,6 +128,67 @@ def test_sub_agent_node_restores_outer_tool_event_sink(monkeypatch, fail: bool) 
         assert get_tool_event_sink() is outer_sink
     finally:
         reset_tool_event_sink(outer_token)
+
+
+def test_repeated_delegation_reuses_append_only_sub_agent_history(monkeypatch) -> None:
+    calls = []
+
+    class FakeSubAgent:
+        def chat_stream(self, *args, **kwargs):
+            calls.append(kwargs)
+            prior = list(kwargs.get("prepared_history_messages") or [])
+            current = HumanMessage(content=f"PROMPT:{kwargs['user_message']}")
+            response = AIMessage(content=f"RESULT:{kwargs['user_message']}")
+            kwargs["conversation_recorder"]([*prior, current, response])
+            yield {"event": "assistant_delta", "text": response.content}
+
+    monkeypatch.setattr("agents.director_graph._ensure_graph_agent_registered", lambda *args, **kwargs: FakeSubAgent())
+    monkeypatch.setattr("agents.context_provider.get_agent_context", lambda *args, **kwargs: "")
+    monkeypatch.setattr("agents.director_graph.get_stream_writer", lambda: None)
+    monkeypatch.setattr("agents.director_graph.transfer_baton", lambda *args, **kwargs: {"status": "ok", "baton_holder": "agent_director"})
+
+    base_state = {
+        "user_id": "u-history",
+        "project_name": "p-history",
+        "baton_holder": "agent_lorebook",
+        "active_context": "",
+        "messages": [HumanMessage(content="开始")],
+        "stop_event": threading.Event(),
+        "workflow_tools": {"agent_lorebook": [object()]},
+        "handoff_histories": {},
+    }
+    first = sub_agent_node({
+        **base_state,
+        "pending_delegate": {
+            "target_agent": "agent_lorebook",
+            "task_description": "生成世界观",
+            "completion_mode": "return_to_director",
+            "return_to": "agent_director",
+            "grant_baton_to": "agent_lorebook",
+            "user_confirmation_state": HANDOFF_CONFIRMATION_NOT_REQUIRED,
+            "skip_tool_confirmation": True,
+        },
+    })
+    second = sub_agent_node({
+        **base_state,
+        "handoff_histories": first["handoff_histories"],
+        "pending_delegate": {
+            "target_agent": "agent_lorebook",
+            "task_description": "生成角色",
+            "completion_mode": "return_to_director",
+            "return_to": "agent_director",
+            "grant_baton_to": "agent_lorebook",
+            "user_confirmation_state": HANDOFF_CONFIRMATION_NOT_REQUIRED,
+            "skip_tool_confirmation": True,
+        },
+    })
+
+    first_history = first["handoff_histories"]["agent_lorebook"]
+    second_history = second["handoff_histories"]["agent_lorebook"]
+    assert calls[0]["prepared_history_messages"] is None
+    assert calls[1]["prepared_history_messages"] == first_history
+    assert second_history[: len(first_history)] == first_history
+    assert second_history[-2].content == "PROMPT:生成角色"
 
 
 def test_sub_agent_returns_to_director_when_tracker_has_open_items(monkeypatch, tmp_path) -> None:

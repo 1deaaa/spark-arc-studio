@@ -235,7 +235,7 @@ cd spark-arc-studio
 - Windows: `start.bat` 더블 클릭
 - macOS / Linux: `bash start.sh` 실행
 
-이 경로에서는 배포 완료 플래그를 재사용하지만, 브랜치 선택과 `git pull` 시점은 사용자가 관리합니다. 관리형 Launcher의 소유권과 업데이트 경계는 [상세 설계](docs/local-deployment-manager.zh-CN.md)를 참조하세요.
+이 경로에서는 배포 완료 플래그를 재사용하지만, 브랜치 선택과 `git pull` 시점은 사용자가 관리합니다. 관리형 Launcher의 소유권과 업데이트 경계는 [상세 설계](docs/project/local-deployment-manager.zh-CN.md)를 참조하세요.
 스마트폰 등 모바일 기기로 접근 시, 같은 공유기(LAN)에 접속한 상태로 **<http://PC의_로컬IP:6688>** 로 접근하면 됩니다.
 외부 네트워크를 통한 원격 접속을 원하시는 경우, 포트포워딩이나 인트라넷 터널링(ngrok 등) 기술을 스스로 확인해 보시기 바랍니다.
 
@@ -357,7 +357,7 @@ GitHub Releases의 데스크톱 클라이언트는 먼저 로컬 백엔드(`6688
 
 #### MCP 클라이언트 연결
 
-로그인한 뒤 데스크톱 대시보드 또는 모바일 AI 관리 화면에서 「MCP 연결 서비스」를 여십시오. 공통 설정 카드가 영감 엔드포인트 `/api/mcp/`와 제어 엔드포인트 `/api/mcp/control/`를 함께 생성하며, 두 서비스는 동일한 사용자 MCP API Key와 Streamable HTTP(`"type": "http"`)를 사용합니다. 전체 설정, 도구 목록 및 Director 작업 흐름은 [MCP 연결 가이드](docs/mcp-integration.zh-CN.md)를 참고하십시오.
+로그인한 뒤 데스크톱 대시보드 또는 모바일 AI 관리 화면에서 「MCP 연결 서비스」를 여십시오. 공통 설정 카드가 영감 엔드포인트 `/api/mcp/`와 제어 엔드포인트 `/api/mcp/control/`를 함께 생성하며, 두 서비스는 동일한 사용자 MCP API Key와 Streamable HTTP(`"type": "http"`)를 사용합니다. 전체 설정, 도구 목록 및 Director 작업 흐름은 [MCP 연결 가이드](docs/project/mcp-integration.zh-CN.md)를 참고하십시오.
 
 ---
 
@@ -405,7 +405,7 @@ SparkArc는 한 개 모델의 성능에 기대는 구조가 아닌, 명확한 �
 
 크리틱 에이전트는 단순히 "이 글이 기계가 쓴 것인가"를 판별하지 않고, **"이 글의 어느 파트가 독자에게 모델이 무성의하게 과제를 작성하는 듯한 인상을 심어주는가"**를 조망합니다. `S/A/B/C/D` 성적표와 함께 짚어낸 원문 위치 및 수정 지령 `fix_ticket`을 함께 돌려받으며, 원본을 마음대로 훼손하지 않기에 창작자는 이야기 제어의 절대적 권한을 지켜낼 수 있습니다.
 
-> 📗 4개 핵심 검증 방식과 분류기가 아닌 LLM을 심판관으로 쓰는 타당성 논거는 [아키텍처 문서 §6](file:///d:/Desktop/sparkarc/docs/architecture.md#6-critic-审核机制完整版)을 참고해 주십시오.
+> 📗 4개 핵심 검증 방식과 분류기가 아닌 LLM을 심판관으로 쓰는 타당성 논거는 [아키텍처 문서 §6](file:///d:/Desktop/sparkarc/docs/project/architecture.md#6-critic-审核机制完整版)을 참고해 주십시오.
 
 #### 협업 데이터 파이프라인
 
@@ -459,7 +459,7 @@ graph TD
 | **채팅 가동 모드** | `chat_system` | 자연스러운 일상적 문체로 반응합니다. 틀을 강제하지 않고 아이디어를 확산시키는 대화 위주입니다. |
 | **감독 위임 모드** | `pipeline_system` | 정해진 출력 규격을 준수하고 툴을 활용한 내부 보존 및 디렉터 앞 요약 보고를 실행합니다. |
 
-> 📗 실행 시점 할당 조건, `pipeline_system` 선언 규약, 도구 참조 자동 임베딩 원리, 신규 에이전트 기입용 셀프 체크리스트는 [아키텍처 문서 §2](file:///d:/Desktop/sparkarc/docs/architecture.md#2-agent-三模态调用协议完整版) 및 [AGENTS.md §4.5](file:///d:/Desktop/sparkarc/AGENTS.md)를 참고해 주십시오.
+> 📗 실행 시점 할당 조건, `pipeline_system` 선언 규약, 도구 참조 자동 임베딩 원리, 신규 에이전트 기입용 셀프 체크리스트는 [아키텍처 문서 §2](file:///d:/Desktop/sparkarc/docs/project/architecture.md#2-agent-三模态调用协议完整版) 및 [AGENTS.md §4.5](file:///d:/Desktop/sparkarc/AGENTS.md)를 참고해 주십시오.
 
 #### 문체 클론 클러스터
 
@@ -500,7 +500,7 @@ graph TD
     end
 ```
 
-> 📗 직렬식 분석 규칙과 네거티브 제약 조건 연동 원리에 관한 상세 정보는 [아키텍처 문서 §7](file:///d:/Desktop/sparkarc/docs/architecture.md#7-风格克隆集群完整版)을 참고해 주십시오.
+> 📗 직렬식 분석 규칙과 네거티브 제약 조건 연동 원리에 관한 상세 정보는 [아키텍처 문서 §7](file:///d:/Desktop/sparkarc/docs/project/architecture.md#7-风格克隆集群完整版)을 참고해 주십시오.
 
 ---
 
@@ -530,7 +530,7 @@ flowchart LR
 * **스킬 및 MCP의 연동 경계**: AgentSkills는 `search_skills` / `read_skill` / `read_skill_reference`를 통해 필요할 때만 읽습니다. MCP는 `/api/mcp/` 영감 서비스와 `/api/mcp/control/` 제어 서비스로 분리됩니다. 제어 서비스가 직접 공개하는 것은 프로젝트 조회와 Director 작업 접수이며, 쓰기 작업은 기존 Agent 도구 파이프라인을 거쳐 실행됩니다.
 * **화면 연동 규칙**: 에이전트 표기명, 소개글, 아이콘 및 고유 색상값 정보는 [registry.py](file:///d:/Desktop/sparkarc/server/agents/registry.py) 데이터를 유일한 소스 정보로 바라봅니다. 툴 호출과 관련된 연동 메타데이터는 백엔드의 `build_tool_stream_event` 라이브러리가 실시간으로 스트림에 주입하며, 화면의 `chatStore` 모듈이 통합 소비하여 화면에 맞게 뿌려줍니다.
 
-> 📗 콘텍스트의 상세 구성 형태, 캐시 적중률 기입 상세, 에이전트 역할 상세 정의, 스킬 및 MCP 연동 사양은 [아키텍처 문서 §2-§3](file:///d:/Desktop/sparkarc/docs/architecture.md#2-agent-统一调用管线)을 참고해 주십시오.
+> 📗 콘텍스트의 상세 구성 형태, 캐시 적중률 기입 상세, 에이전트 역할 상세 정의, 스킬 및 MCP 연동 사양은 [아키텍처 문서 §2-§3](file:///d:/Desktop/sparkarc/docs/project/architecture.md#2-agent-统一调用管线)을 참고해 주십시오.
 
 ### 3. 비콘 버스 통신 메커니즘
 
@@ -569,7 +569,7 @@ graph TB
     AgentB -- 호른 없음: 의견 제시 권한 없음 --x Bus
 ```
 
-> 📗 3가지 통신 상태 값의 논리적 상세와 가용 시나리오 정보는 [아키텍처 문서 §8](file:///d:/Desktop/sparkarc/docs/architecture.md#8-信标总线核心机制完整版)을 참고해 주십시오.
+> 📗 3가지 통신 상태 값의 논리적 상세와 가용 시나리오 정보는 [아키텍처 문서 §8](file:///d:/Desktop/sparkarc/docs/project/architecture.md#8-信标总线核心机制完整版)을 참고해 주십시오.
 
 #### 감독 통제 vs 비콘 조율 (수직형 지시와 수평형 조율)
 
@@ -577,7 +577,7 @@ SparkArc 시스템 내부에는 **동작 메커니즘과 목적이 완벽히 다
 * **디렉터(감독) 통제** (수직 지휘형): 감독 에이전트가 LangGraph 플롯 룰을 바탕으로 각 자식 에이전트들을 인스턴스화하고 직접 명령을 조율해 할당합니다. 비콘 버스의 물리적 통제를 받지 않습니다.
 * **비콘 버스 조율** (수평 의사형): 에이전트 간에 직접 대화하는 소통 라인으로, 대화의 무한 루프나 네트워크 폭주를 막기 위해 상호 비콘 정보 규칙의 제약을 따릅니다.
 
-> 📗 두 시스템의 핵심 요약 대조표, 연동 차이 및 설계 의도는 [아키텍처 문서 §1](file:///d:/Desktop/sparkarc/docs/architecture.md#1-导演调度-vs-信标协作双系统对比)을 참고해 주십시오.
+> 📗 두 시스템의 핵심 요약 대조표, 연동 차이 및 설계 의도는 [아키텍처 문서 §1](file:///d:/Desktop/sparkarc/docs/project/architecture.md#1-导演调度-vs-信标协作双系统对比)을 참고해 주십시오.
 
 ---
 
@@ -621,7 +621,7 @@ SparkArc는 **AI를 활용한 문학적·각본적 결과물의 극대화**를 �
 이 양식은 최종적으로 오류율 제로의 런타임용 경량 데이터베이스로 변환되어 게임 혹은 웹의 실시간 연출을 부드럽게 가동합니다.
 다만, 시나리오 모델이 임의로 행동 코드나 게임 함수를 직접 변조하여 작성하는 일은 안전상의 이유로 사전 비활성화되어 있으며 오직 순수한 텍스트 창작만 보조합니다. **이 권한은 거대 모델들의 코드 해석 및 작성 능력이 비약적으로 발전하는 시점에 맞추어 단계적으로 개방할 예정입니다.**
 
-> 📗 스크립트 텍스트 파싱 전략 상세 내역은 [아키텍처 문서 §9](file:///d:/Desktop/sparkarc/docs/architecture.md#9-arc-格式解析策略)를 참고해 주십시오.
+> 📗 스크립트 텍스트 파싱 전략 상세 내역은 [아키텍처 문서 §9](file:///d:/Desktop/sparkarc/docs/project/architecture.md#9-arc-格式解析策略)를 참고해 주십시오.
 
 ### 작품 메모리 풀
 
@@ -691,7 +691,7 @@ SparkArc 내부에는 **서비스 부팅 시점 데이터베이스 변경 사항
 6. **버전 깨짐 자가 치유**: 마이그레이션 버전 꼬임에 의해 부팅이 막히는 경우, 시스템 구동 안정성을 위해 부재중인 테이블이나 필드들만 안전하게 보충 기입한 뒤 버전 값을 강제 합치시킵니다 (기존 데이터가 들어 있는 다른 필드는 삭제하지 않고 보존합니다).
 7. **버전 불일치 방지 경고**: 버전 테이블상 최신 코드로 명시되어 있음에도 실제 스키마 필드가 부재중인 경우 부팅 시점에 즉각적인 경고 오류를 내보내어, 깃(Git) 커밋 시점에 갱신 생성 스크립트 작성을 누락한 실수 등을 조기에 밝혀내 줍니다.
 
-> 💡 신규 테이블 스키마 작성 요령 및 버전 관리 갱신에 관한 개발 가이드는 [데이터베이스 마이그레이션 안내서](file:///d:/Desktop/sparkarc/docs/database-migration.md)를 참고해 주십시오.
+> 💡 신규 테이블 스키마 작성 요령 및 버전 관리 갱신에 관한 개발 가이드는 [데이터베이스 마이그레이션 안내서](file:///d:/Desktop/sparkarc/docs/project/database-migration.md)를 참고해 주십시오.
 
 ### 3. 다중 사용자 시스템 (SaaS)
 
@@ -731,7 +731,7 @@ SparkArc는 리포지토리의 소스 코드가 업데이트되면 **자동으�
 Gitea Actions 및 GitLab CI 빌드 사양을 정식 지원하며 Gitea Actions 용도로 선언된 빌드 스크립트는 GitHub Actions 환경으로도 적은 수공만으로 즉시 이식 가능합니다.
 파이프라인 단계: **코드 체크아웃 → 컨테이너 이미지 빌드 → 유닛 테스트(선언됨) → 서비스 롤링 배포 → 빌드 자원 정리**
 
-> 💡 빌드 러너 사양 설정 및 GitHub Actions 이식 규칙 상세 등은 [자동 배포 가이드](file:///d:/Desktop/sparkarc/docs/cicd-deployment.md)를 참고해 주십시오.
+> 💡 빌드 러너 사양 설정 및 GitHub Actions 이식 규칙 상세 등은 [자동 배포 가이드](file:///d:/Desktop/sparkarc/docs/project/cicd-deployment.md)를 참고해 주십시오.
 
 ---
 
@@ -809,10 +809,10 @@ Gitea Actions 및 GitLab CI 빌드 사양을 정식 지원하며 Gitea Actions �
 
 | 문서 분류 | 세부 기술 정보 사항 |
 | :--- | :--- |
-| [아키텍처 상세 설명서](file:///d:/Desktop/sparkarc/docs/architecture.md) | 디렉터와 비콘 버스의 수평/수직 제어 차이, 3가지 가동 페르소나 모드 규칙, 크리틱 비평 작동 규칙, 문체 클론 심층 정보, 비콘 규약 상세, ARC 구문 해석 전략, 툴 등록 상세, 스트리밍 인프라 사양. |
+| [아키텍처 상세 설명서](file:///d:/Desktop/sparkarc/docs/project/architecture.md) | 디렉터와 비콘 버스의 수평/수직 제어 차이, 3가지 가동 페르소나 모드 규칙, 크리틱 비평 작동 규칙, 문체 클론 심층 정보, 비콘 규약 상세, ARC 구문 해석 전략, 툴 등록 상세, 스트리밍 인프라 사양. |
 | [Matchbox Agent Gateway 가이드](file:///d:/Desktop/sparkarc/server/llm/agen_matchbox/README.md) | 이중 채널 구조 상세, 설치 요령, 용도별 API 할당 규칙, 추론용 Reasoning 스트림 대응 상세. |
-| [데이터베이스 마이그레이션 안내서](file:///d:/Desktop/sparkarc/docs/database-migration.md) | 데이터베이스 스키마 수정 절차, 마이그레이션 자동 빌드 가이드 및 이력 관리 요령. |
-| [CI/CD 자동 배포 가이드](file:///d:/Desktop/sparkarc/docs/cicd-deployment.md) | 빌드 러너 환경 기입, 시크릿 변수 관리 및 GitHub Actions 전환 방법. |
+| [데이터베이스 마이그레이션 안내서](file:///d:/Desktop/sparkarc/docs/project/database-migration.md) | 데이터베이스 스키마 수정 절차, 마이그레이션 자동 빌드 가이드 및 이력 관리 요령. |
+| [CI/CD 자동 배포 가이드](file:///d:/Desktop/sparkarc/docs/project/cicd-deployment.md) | 빌드 러너 환경 기입, 시크릿 변수 관리 및 GitHub Actions 전환 방법. |
 | [AGENTS.md](file:///d:/Desktop/sparkarc/AGENTS.md) | 에이전트 설계 규약서, 추가 등록 체크리스트, 프롬프트 전개 방식. |
 | [시맨틱 검색 엔진](#4-시맨틱-검색-엔진) | 정규식 매칭 및 의미 기반 탐색, 인덱스 자동 해시 비교 갱신, LanceDB 벡터 구조. |
 | [LEGAL/README.md](file:///d:/Desktop/sparkarc/LEGAL/README.md) | 라이선스 정책, 상표권 범위, 약관 및 권리 문서 포털. |

@@ -34,11 +34,9 @@ class DirectorAgent(SparkBaseAgent):
         self.project_name = project_name
 
     def _build_tool_system_prompt(self, base_prompt: str, active_context: str = None, **kwargs) -> str:
-        """重写基类方法：在标准工具提示词基础上追加团队成员能力概览。"""
-        # 先调用基类构建标准工具列表 + active_context
+        """在标准工具提示词后追加稳定的团队成员能力概览。"""
         system = super()._build_tool_system_prompt(base_prompt, active_context, **kwargs)
 
-        # 追加团队成员概览（含各自的工具能力）
         team_block = self._build_team_capability_block()
         if team_block:
             system += team_block
@@ -46,11 +44,9 @@ class DirectorAgent(SparkBaseAgent):
         return system
 
     def _build_team_capability_block(self) -> str:
-        """动态构建团队成员及其工具能力的提示词块。"""
-        from agents.tools.registry import get_tools_for_agent
-
-        lines = ["\n\n### 团队成员及工具能力"]
-        lines.append("通过 `delegate_task` 委派任务时，了解各专家拥有的工具有助于精确描述任务。\n")
+        """从注册表构建稳定团队概览，不读取项目状态或用户工具目录。"""
+        lines = ["\n\n### 团队成员能力概览"]
+        lines.append("通过 `delegate_task` 委派任务时，按专家职责描述目标与交付物。\n")
 
         for agent in get_agent_registry('zh-CN'):
             key = agent.get("key", "")
@@ -58,15 +54,7 @@ class DirectorAgent(SparkBaseAgent):
                 continue
             name = agent.get("name", key)
             desc = agent.get("description", "")
-            tools = get_tools_for_agent(key, user_id=self.user_id) or []
-            tool_lines = []
-            for t in tools:
-                t_desc = (t.description or "").strip().split("\n")[0]
-                tool_lines.append(f"  - `{t.name}`: {t_desc}" if t_desc else f"  - `{t.name}`")
-
             line = f"- **{name}** (`{key}`): {desc}"
-            if tool_lines:
-                line += "\n" + "\n".join(tool_lines)
             lines.append(line)
 
         return "\n".join(lines) + "\n"

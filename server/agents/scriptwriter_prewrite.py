@@ -2,8 +2,12 @@ from __future__ import annotations
 
 import uuid
 import json
+import re
 from dataclasses import dataclass, field
-from typing import Any, Callable
+from typing import Any, Callable, Sequence
+
+from agents.prompt_layout import CompletedPromptTurn, build_append_only_task_messages
+from langchain_core.messages import BaseMessage
 
 from core.request_context import (
     current_agent_id,
@@ -29,6 +33,7 @@ PREWRITE_MAX_REQUESTS = 4
 # 兼容旧调用名；限制的是模型请求次数，不限制单轮或累计工具数量。
 PREWRITE_MAX_TOOL_ROUNDS = PREWRITE_MAX_REQUESTS
 PREWRITE_MAX_TOOL_CALLS = None
+SCRIPTWRITER_CONTINUITY_MAX_TURNS = 4
 
 
 @dataclass(frozen=True)
@@ -62,6 +67,7 @@ class ScriptwriterPreWriteResult:
     saved_payload: dict[str, Any] | None = None
     written_content: str = ""
     blocked_reason: str = ""
+    continuity_turn: CompletedPromptTurn | None = None
 
     @property
     def saved(self) -> bool:
@@ -308,6 +314,47 @@ def _parse_saved_payload(value: Any) -> dict[str, Any] | None:
     return None
 
 
+def _build_continuity_turn(
+    request: ScriptwriterPreWriteRequest,
+    *,
+    user_prompt: str,
+    saved_payload: dict[str, Any] | None,
+    written_content: str,
+    preserved_messages: Sequence[BaseMessage] = (),
+) -> CompletedPromptTurn | None:
+    """从实际落盘结果生成短回执，不复制正文，也不替代 StoryMemory。"""
+    if not saved_payload:
+        return None
+    conception_match = re.search(
+        r"<conception>\s*([\s\S]*?)\s*</conception>",
+        str(written_content or ""),
+        flags=re.IGNORECASE,
+    )
+    conception = re.sub(
+        r"\s+",
+        " ",
+        conception_match.group(1) if conception_match else "",
+    ).strip()
+    if len(conception) > 1200:
+        conception = conception[:1200].rstrip() + "…"
+    receipt_parts = [
+        "当前场景已经完成并成功落盘。",
+        f"章节：{request.chapter_name.strip() or '（未提供）'}",
+        f"场景：{request.scene_name.strip() or '（未提供）'}",
+        f"保存路径：{str(saved_payload.get('path') or '').strip() or '（未提供）'}",
+    ]
+    if conception:
+        receipt_parts.append(f"已落盘的连续性设计：{conception}")
+    receipt_parts.append(
+        "后续场景必须以已保存文件和最新 StoryMemory 事实包为准；不要复写本场正文。"
+    )
+    return CompletedPromptTurn(
+        user_prompt=str(user_prompt or "").strip(),
+        assistant_receipt="\n".join(receipt_parts),
+        preserved_messages=tuple(preserved_messages),
+    )
+
+
 def _run_prewrite_tool_loop(
     request: ScriptwriterPreWriteRequest,
     *,
@@ -319,6 +366,7 @@ def _run_prewrite_tool_loop(
     on_tool_progress: Callable[[str], None] | None,
     max_requests: int,
     require_save: bool,
+    completed_turns: Sequence[CompletedPromptTurn] | None = None,
 ) -> ScriptwriterPreWriteResult:
     from agents.context_budget import (
         prepare_specialized_prompt_messages_with_budget,
@@ -335,11 +383,24 @@ def _run_prewrite_tool_loop(
         "create_or_rewrite_script",
     }
     llm_with_tools = llm.bind_tools(tools)
-    messages = prepare_specialized_prompt_messages_with_budget(
+    prepared_messages = prepare_specialized_prompt_messages_with_budget(
         agent_id="agent_scriptwriter",
         system_prompt=system_prompt,
         user_prompt=user_prompt,
         llm_client=llm,
+    ).messages
+    messages = build_append_only_task_messages(
+        system_prompt=str(prepared_messages[0].content),
+        completed_turns=completed_turns,
+        current_user_prompt=str(prepared_messages[-1].content),
+    )
+    messages = rebudget_existing_messages(
+        user_id=str(request.user_id),
+        project_name=request.project_name,
+        agent_id="agent_scriptwriter",
+        messages=messages,
+        llm_client=llm,
+        current_user_message=user_prompt,
     ).messages
 
     user_token = current_user_id.set(str(request.user_id))
@@ -352,6 +413,7 @@ def _run_prewrite_tool_loop(
     tools_used: list[str] = []
     saved_payload: dict[str, Any] | None = None
     written_content = ""
+    preserved_messages: tuple[BaseMessage, ...] = ()
     blocked_reason = ""
     last_tool_failure = ""
     request_count = 0
@@ -431,6 +493,20 @@ def _run_prewrite_tool_loop(
 
             messages.extend(build_tool_result_messages(tool_results))
             if saved_payload is not None:
+                chapter_specs = [
+                    spec for spec in tool_specs
+                    if str(spec.get("name") or "") == "create_chapter"
+                ]
+                chapter_results = [
+                    item for item in tool_results
+                    if item[1] == "create_chapter"
+                ]
+                if chapter_specs and chapter_results:
+                    preserved_messages = (
+                        build_tool_history_message(response, chapter_specs),
+                        *build_tool_result_messages(chapter_results),
+                    )
+            if saved_payload is not None:
                 break
             messages = rebudget_existing_messages(
                 user_id=str(request.user_id),
@@ -459,6 +535,13 @@ def _run_prewrite_tool_loop(
         saved_payload=saved_payload,
         written_content=written_content,
         blocked_reason=blocked_reason,
+        continuity_turn=_build_continuity_turn(
+            request,
+            user_prompt=user_prompt,
+            saved_payload=saved_payload,
+            written_content=written_content,
+            preserved_messages=preserved_messages,
+        ) if require_save else None,
     )
 
 
@@ -497,6 +580,7 @@ def run_autonomous_scriptwriter_creation(
     agent: Any,
     on_tool_progress: Callable[[str], None] | None = None,
     max_requests: int = PREWRITE_MAX_REQUESTS,
+    completed_turns: Sequence[CompletedPromptTurn] | None = None,
 ) -> ScriptwriterPreWriteResult:
     """Auto-Write 模式：调查、判断、正文生成和落盘都在同一工具循环完成。"""
     brief = _build_prewrite_brief(request)
@@ -522,4 +606,5 @@ def run_autonomous_scriptwriter_creation(
         on_tool_progress=on_tool_progress,
         max_requests=max_requests,
         require_save=True,
+        completed_turns=completed_turns,
     )

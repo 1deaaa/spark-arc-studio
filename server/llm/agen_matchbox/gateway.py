@@ -3,6 +3,8 @@
 from __future__ import annotations
 
 from copy import deepcopy
+import hashlib
+import json
 from typing import Any, Dict, Mapping, Optional
 
 from langchain_core.outputs import ChatGenerationChunk
@@ -15,6 +17,59 @@ from .reasoning_compat import (
     extract_reasoning_text_from_message,
 )
 from .tool_protocol import validate_tool_message_history
+
+
+def _prompt_cache_agent_name(callbacks: Any) -> str:
+    for callback in list(callbacks or []):
+        agent_name = str(getattr(callback, "agent_name", "") or "").strip()
+        if agent_name:
+            return agent_name
+    return ""
+
+
+def build_prompt_cache_routing_key(llm: Any) -> str | None:
+    """为支持改进匹配的 OpenAI 模型生成隔离、稳定且不泄露身份的路由键。"""
+    model_name = str(
+        getattr(llm, "model_name", "")
+        or getattr(llm, "model", "")
+        or ""
+    ).strip().lower()
+    if not model_name.startswith("gpt-5.6"):
+        return None
+
+    try:
+        from core.request_context import (
+            current_user_id,
+            get_current_chat_session,
+            get_current_project_name,
+        )
+
+        user_id = str(current_user_id.get() or "").strip()
+        project_name = str(get_current_project_name() or "").strip()
+        room_agent_id, context_key = get_current_chat_session()
+    except Exception:
+        return None
+
+    agent_name = _prompt_cache_agent_name(getattr(llm, "callbacks", None))
+    if not user_id or not agent_name:
+        return None
+
+    identity = json.dumps(
+        {
+            "version": 1,
+            "user_id": user_id,
+            "project_name": project_name,
+            "room_agent_id": room_agent_id or "",
+            "context_key": context_key or "",
+            "agent_name": agent_name,
+            "model_name": model_name,
+        },
+        ensure_ascii=False,
+        sort_keys=True,
+        separators=(",", ":"),
+    )
+    digest = hashlib.sha256(identity.encode("utf-8")).hexdigest()[:40]
+    return f"sparkarc:v1:{digest}"
 
 
 def _normalize_openai_compat_json_schema(schema: Any) -> Any:
@@ -171,6 +226,10 @@ class ChatUniversal(ChatOpenAI):
         **kwargs: Any,
     ) -> dict:
         payload = super()._get_request_payload(input_, stop=stop, **kwargs)
+        if "prompt_cache_key" not in payload:
+            prompt_cache_key = build_prompt_cache_routing_key(self)
+            if prompt_cache_key:
+                payload["prompt_cache_key"] = prompt_cache_key
         if "tools" in payload:
             payload["tools"] = normalize_openai_tool_schemas(payload.get("tools"))
 

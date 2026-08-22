@@ -109,7 +109,7 @@ const documentationTransforms = [
     expectedMatches: 2,
   },
   {
-    paths: ['docs/local-deployment-manager.zh-CN.md'],
+    paths: ['docs/project/local-deployment-manager.zh-CN.md'],
     pattern: /固定仓库为 `[^`]+`。/g,
     replacement: `固定仓库为 \`${repository.slug}\`。`,
     expectedMatches: 1,
