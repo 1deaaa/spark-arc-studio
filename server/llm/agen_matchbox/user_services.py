@@ -18,6 +18,7 @@ from .models import (
     get_model_modalities,
     is_chat_model,
     is_embedding_model,
+    model_sort_key,
 )
 from .config import DEFAULT_USAGE_KEY, BUILTIN_USAGE_SLOTS
 
@@ -37,13 +38,7 @@ class UserServicesMixin:
                 continue
             if self._is_platform_disabled(session, user_id, platform):
                 continue
-            models = sorted(
-                getattr(platform, "models", None) or [],
-                key=lambda item: (
-                    getattr(item, "sort_order", 0) or 0,
-                    getattr(item, "id", 0) or 0,
-                ),
-            )
+            models = sorted(getattr(platform, "models", None) or [], key=model_sort_key)
             for model in models:
                 if not is_embedding_model(model) or self._is_model_disabled(model):
                     continue

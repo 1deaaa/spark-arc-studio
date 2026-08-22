@@ -107,6 +107,7 @@ export type AiModelItem = {
   sys_credit_input_price_per_million?: number | null;
   sys_credit_cached_input_price_per_million?: number | null;
   sys_credit_output_price_per_million?: number | null;
+  sort_order?: number | null;
 };
 
 export type AiEmbeddingItem = {

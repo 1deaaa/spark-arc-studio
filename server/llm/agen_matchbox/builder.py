@@ -35,6 +35,8 @@ from .models import (
     is_chat_model,
     is_embedding_model,
     is_image_generation_model,
+    model_sort_key,
+    platform_sort_key,
 )
 from .config import SYSTEM_USER_ID, DEFAULT_USAGE_KEY
 from .image_adapters import (
@@ -109,7 +111,7 @@ class LLMBuilderMixin:
             session.query(LLMPlatform)
             .filter_by(is_sys=1)
             .filter(LLMPlatform.disable == 0)
-            .order_by(LLMPlatform.sort_order)
+            .order_by(LLMPlatform.sort_order, LLMPlatform.id)
             .all()
         )
         for plat in plats:
@@ -127,10 +129,7 @@ class LLMBuilderMixin:
             return None
         models = sorted(
             getattr(platform, "models", None) or [],
-            key=lambda item: (
-                getattr(item, "sort_order", 0) or 0,
-                getattr(item, "id", 0) or 0,
-            ),
+            key=model_sort_key,
         )
         return next(
             (
@@ -501,14 +500,14 @@ class LLMBuilderMixin:
                 session.query(LLMPlatform)
                 .all()
             )
-            for platform in sorted(platforms, key=lambda item: int(getattr(item, "sort_order", 0) or 0)):
+            for platform in sorted(platforms, key=platform_sort_key):
                 if self._is_platform_disabled(session, effective_user_id, platform):
                     continue
                 if not platform.is_sys and str(platform.user_id) != effective_user_id:
                     continue
 
                 api_access = self._get_effective_api_access(session, effective_user_id, platform)
-                models = sorted(platform.models, key=lambda item: int(getattr(item, "sort_order", 0) or 0))
+                models = sorted(platform.models, key=model_sort_key)
                 for model in models:
                     if self._is_model_disabled(model) or not is_image_generation_model(model):
                         continue
@@ -560,7 +559,7 @@ class LLMBuilderMixin:
                     session.query(LLMPlatform)
                     .all()
                 )
-                for candidate_platform in sorted(platforms, key=lambda item: int(getattr(item, "sort_order", 0) or 0)):
+                for candidate_platform in sorted(platforms, key=platform_sort_key):
                     if self._is_platform_disabled(session, effective_user_id, candidate_platform):
                         continue
                     if not candidate_platform.is_sys and str(candidate_platform.user_id) != effective_user_id:
@@ -568,7 +567,7 @@ class LLMBuilderMixin:
                     api_access = self._get_effective_api_access(session, effective_user_id, candidate_platform)
                     if not api_access.get("api_key"):
                         continue
-                    for candidate_model in sorted(candidate_platform.models, key=lambda item: int(getattr(item, "sort_order", 0) or 0)):
+                    for candidate_model in sorted(candidate_platform.models, key=model_sort_key):
                         if self._is_model_disabled(candidate_model):
                             continue
                         if is_image_generation_model(candidate_model):

@@ -21,6 +21,7 @@ from .models import (
     is_chat_model,
     is_embedding_model,
     is_image_generation_model,
+    model_sort_key,
     normalize_model_modalities,
     set_model_modalities,
 )
@@ -121,7 +122,13 @@ def _model_payload_for_response(model: LLModels) -> Dict[str, Any]:
         "sys_credit_input_price_per_million": model.sys_credit_input_price_per_million,
         "sys_credit_cached_input_price_per_million": model.sys_credit_cached_input_price_per_million,
         "sys_credit_output_price_per_million": model.sys_credit_output_price_per_million,
+        "sort_order": model.sort_order,
     }
+
+
+def _models_in_sort_order(models: List[LLModels]) -> List[LLModels]:
+    """按持久化排序返回模型，并用数据库 ID 解决历史并列值。"""
+    return sorted(models or [], key=model_sort_key)
 
 
 class AdminMixin:
@@ -488,7 +495,9 @@ class AdminMixin:
                     "user_key_status": user_key_info["status"],
                     "user_key_message": user_key_info["message"],
                     "disabled": int(bool(plat.disable) or bool(user_disable)),
-                    "models": [m for m in plat.models if not self._is_model_disabled(m)],
+                    "models": _models_in_sort_order(
+                        [m for m in plat.models if not self._is_model_disabled(m)]
+                    ),
                 }
             )
 
@@ -519,7 +528,9 @@ class AdminMixin:
                     "user_key_override": False,
                     "user_key_saved": False,
                     "disabled": plat.disable,
-                    "models": [m for m in plat.models if not self._is_model_disabled(m)],
+                    "models": _models_in_sort_order(
+                        [m for m in plat.models if not self._is_model_disabled(m)]
+                    ),
                 }
             )
 
@@ -1134,7 +1145,7 @@ class AdminMixin:
             query = session.query(LLMPlatform).filter_by(is_sys=1)
             if not include_disabled:
                 query = query.filter(LLMPlatform.disable == 0)
-            platforms = query.order_by(LLMPlatform.sort_order).all()
+            platforms = query.order_by(LLMPlatform.sort_order, LLMPlatform.id).all()
 
             sec_mgr = SecurityManager.get_instance()
             results = []
@@ -1173,7 +1184,7 @@ class AdminMixin:
                     # 返回完整模型列表，GUI 用此替代直接 session.query
                     entry["api_key"] = api_key_raw
                     models_list = []
-                    for m in sorted(plat.models, key=lambda x: x.sort_order):
+                    for m in _models_in_sort_order(plat.models):
                         raw_extra_body = None
                         if m.extra_body:
                             try:
@@ -1368,7 +1379,7 @@ class AdminMixin:
                 session.query(LLMPlatform)
                 .filter_by(is_sys=1)
                 .filter(LLMPlatform.disable == 0)
-                .order_by(LLMPlatform.sort_order)
+                .order_by(LLMPlatform.sort_order, LLMPlatform.id)
                 .all()
             )
 
@@ -1383,20 +1394,7 @@ class AdminMixin:
 
             session.commit()
 
-            # 更新运行时默认 ID
-            self._default_platform_id = platform_id
-            first_model = next(
-                (
-                    model for model in session.query(LLModels)
-                    .filter(LLModels.platform_id == platform_id, LLModels.disable == 0)
-                    .order_by(LLModels.sort_order)
-                    .all()
-                    if is_chat_model(model)
-                ),
-                None,
-            )
-            if first_model:
-                self._default_model_id = first_model.id
+            self._refresh_runtime_default_ids(session)
 
             # 刷新缓存
             with self._cache_lock:
@@ -1416,6 +1414,8 @@ class AdminMixin:
                     plat.sort_order = idx
             session.commit()
 
+            self._refresh_runtime_default_ids(session)
+
             with self._cache_lock:
                 self._sys_platforms_cache = None
 
@@ -1434,6 +1434,8 @@ class AdminMixin:
                 if model:
                     model.sort_order = idx
             session.commit()
+
+            self._refresh_runtime_default_ids(session)
 
             with self._cache_lock:
                 self._sys_platforms_cache = None

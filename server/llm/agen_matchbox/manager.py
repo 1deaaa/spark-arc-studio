@@ -37,6 +37,7 @@ from .models import (
     get_model_modalities,
     is_chat_model,
     is_embedding_model,
+    model_sort_key,
     normalize_model_modalities,
     set_model_modalities,
 )
@@ -215,30 +216,40 @@ class AIManagerBase:
         """从数据库 sort_order 确定默认平台 ID 和默认模型 ID。
 
         优先级：
-        1. 数据库中 sort_order 最小的未禁用系统平台
+        1. 数据库中 sort_order 最小且存在可用文本模型的未禁用系统平台
         2. 该平台内 sort_order 最小的未禁用文本生成模型
         """
-        default_plat = (
+        default_plats = (
             session.query(LLMPlatform)
             .options(selectinload(LLMPlatform.models))
             .filter_by(is_sys=1, disable=0)
-            .order_by(LLMPlatform.sort_order)
-            .first()
+            .order_by(LLMPlatform.sort_order, LLMPlatform.id)
+            .all()
         )
-        if not default_plat:
+        if not default_plats:
             raise RuntimeError("数据库中没有可用的系统平台")
 
-        self._default_platform_id = default_plat.id
+        for default_plat in default_plats:
+            sorted_models = sorted(default_plat.models, key=model_sort_key)
+            default_model = next(
+                (model for model in sorted_models if is_chat_model(model) and not self._is_model_disabled(model)),
+                None,
+            )
+            if default_model:
+                self._default_platform_id = default_plat.id
+                self._default_model_id = default_model.id
+                return
 
-        sorted_models = sorted(default_plat.models, key=lambda m: m.sort_order)
-        default_model = next(
-            (m for m in sorted_models if is_chat_model(m) and not self._is_model_disabled(m)),
-            None,
-        )
-        if not default_model:
-            raise RuntimeError(f"默认平台 '{default_plat.name}' 没有可用的 LLM 模型")
+        raise RuntimeError("所有可用的系统平台都没有可用的 LLM 模型")
 
-        self._default_model_id = default_model.id
+    def _refresh_runtime_default_ids(self, session) -> None:
+        """排序或失效状态变化后，立即刷新当前进程的默认平台和模型。"""
+        try:
+            self._resolve_default_ids_from_db(session)
+        except RuntimeError:
+            # 允许管理员先调整空平台或暂时禁用全部模型，后续请求仍可按排序尝试回退。
+            self._default_platform_id = None
+            self._default_model_id = None
 
     def initialize_defaults(self):
         """同步默认平台并初始化默认ID"""
@@ -1000,7 +1011,7 @@ class AIManagerBase:
                 session.query(LLMPlatform)
                 .options(selectinload(LLMPlatform.models))
                 .filter_by(is_sys=1)
-                .order_by(LLMPlatform.sort_order)
+                .order_by(LLMPlatform.sort_order, LLMPlatform.id)
                 .all()
             )
 
@@ -1019,7 +1030,7 @@ class AIManagerBase:
                 # matchbox_cfg.yaml 不再存放 api_key；密钥统一由 matchbox_key.yaml 管理。
                 # 导出时仅保留平台结构，便于安全分享与版本控制。
 
-                for model in sorted(plat.models, key=lambda m: m.sort_order):
+                for model in sorted(plat.models, key=model_sort_key):
                     if self._is_model_disabled(model):
                         continue
 
@@ -1085,7 +1096,7 @@ class AIManagerBase:
             platforms = (
                 session.query(LLMPlatform)
                 .filter_by(is_sys=1)
-                .order_by(LLMPlatform.sort_order)
+                .order_by(LLMPlatform.sort_order, LLMPlatform.id)
                 .all()
             )
 
@@ -1255,7 +1266,7 @@ class AIManagerBase:
                         .options(selectinload(LLMPlatform.models))
                         .filter_by(is_sys=1)
                         .filter(LLMPlatform.disable == 0)
-                        .order_by(LLMPlatform.sort_order)
+                        .order_by(LLMPlatform.sort_order, LLMPlatform.id)
                         .all()
                     )
                     self._sys_platforms_cache_at = time.time()

@@ -150,6 +150,22 @@ def is_image_generation_model(model) -> bool:
     return model_outputs(model, MODALITY_IMAGE)
 
 
+def model_sort_key(model) -> tuple[int, int]:
+    """返回模型排序键；以持久化顺序为主、数据库 ID 为稳定次序。"""
+    return (
+        int(getattr(model, "sort_order", 0) or 0),
+        int(getattr(model, "id", 0) or 0),
+    )
+
+
+def platform_sort_key(platform) -> tuple[int, int]:
+    """返回平台排序键；以持久化顺序为主、数据库 ID 为稳定次序。"""
+    return (
+        int(getattr(platform, "sort_order", 0) or 0),
+        int(getattr(platform, "id", 0) or 0),
+    )
+
+
 class LLMPlatform(Base):
     """LLM 平台模型"""
     __tablename__ = "llm_platforms"
