@@ -591,6 +591,135 @@ def test_explicit_absorb_story_memory_endpoint_enqueues_job(monkeypatch, tmp_pat
     assert calls[0]["file_format"] == "arc"
 
 
+def test_story_memory_state_endpoint_returns_bounded_overview(monkeypatch, tmp_path: Path) -> None:
+    monkeypatch.setattr("core.utils.USERDATA_ROOT", str(tmp_path))
+    (tmp_path / "uid_26" / "projects" / "demo").mkdir(parents=True)
+
+    facade = StoryMemoryFacade("26", "demo")
+    facade.record_scene_write(
+        scene_text="沈棠把旧钥匙交给林烬。",
+        chapter_index=0,
+        scene_index=0,
+        scene_title="钟楼交易",
+        scene_description="沈棠埋下档案室秘密伏笔。",
+        scene_characters=["沈棠", "林烬"],
+        use_llm_extractor=False,
+    )
+    facade.record_quality_review(
+        review={
+            "decision": "REVISE",
+            "rewrite_required": True,
+            "fix_tickets": [{"target": "钟楼交易", "edit_goal": "压缩环境描写"}],
+        },
+        review_target="钟楼交易",
+        scene_name="钟楼交易",
+    )
+    for index in range(1, 22):
+        facade.record_scene_write(
+            scene_text=f"第 {index + 1} 场正文推进。",
+            chapter_index=0,
+            scene_index=index,
+            scene_title=f"场景 {index + 1}",
+            scene_description="日常推进。",
+            use_llm_extractor=False,
+        )
+
+    state = facade.load_state()
+    assert state["threads"]
+    state["threads"][0]["status"] = "resolved"
+    facade.save_state(state)
+
+    from story.routes_files import get_story_memory_state
+
+    result = asyncio.run(get_story_memory_state("demo", user={"user_id": "26"}))
+
+    assert result["success"] is True
+    overview = result["state"]
+    counts = overview["counts"]
+    assert counts["scenes"] == 22
+    assert counts["characters"] == 2
+    assert counts["open_threads"] == 0
+    assert counts["resolved_threads"] == 1
+    assert counts["quality_tickets_open"] == 1
+    assert counts["quality_tickets_total"] == 1
+    assert len(overview["recent_scenes"]) == 20
+    assert overview["recent_scenes"][-1]["scene_title"] == "场景 22"
+    assert {item["name"] for item in overview["characters"]} == {"沈棠", "林烬"}
+    assert overview["threads"][0]["status"] == "resolved"
+    assert overview["quality_tickets"][0]["target"] == "钟楼交易"
+    ticket_fields = set(overview["quality_tickets"][0])
+    assert "ticket_id" in ticket_fields and "edit_goal" in ticket_fields
+
+
+def test_story_memory_state_endpoint_orders_active_threads_first(monkeypatch, tmp_path: Path) -> None:
+    monkeypatch.setattr("core.utils.USERDATA_ROOT", str(tmp_path))
+    (tmp_path / "uid_28" / "projects" / "demo").mkdir(parents=True)
+
+    facade = StoryMemoryFacade("28", "demo")
+    facade.record_scene_write(
+        scene_text="第一场正文。",
+        chapter_index=0,
+        scene_index=0,
+        scene_title="旧线索场",
+        scene_description="埋下旧秘密伏笔。",
+        use_llm_extractor=False,
+    )
+    facade.record_scene_write(
+        scene_text="第二场正文。",
+        chapter_index=0,
+        scene_index=1,
+        scene_title="新线索场",
+        scene_description="埋下新秘密伏笔。",
+        use_llm_extractor=False,
+    )
+
+    state = facade.load_state()
+    resolved_id = state["threads"][0]["thread_id"]
+    for thread in state["threads"]:
+        if thread["thread_id"] == resolved_id:
+            thread["status"] = "resolved"
+    facade.save_state(state)
+
+    from story.routes_files import get_story_memory_state
+
+    result = asyncio.run(get_story_memory_state("demo", user={"user_id": "28"}))
+    assert result["success"] is True
+    threads = result["state"]["threads"]
+    assert len(threads) == 2
+    assert threads[0]["status"] in {"open", "advanced"}
+    assert threads[1]["status"] == "resolved"
+    assert result["state"]["counts"]["open_threads"] == 1
+
+
+def test_story_memory_state_endpoint_returns_zeroed_overview_when_missing(
+    monkeypatch, tmp_path: Path
+) -> None:
+    monkeypatch.setattr("core.utils.USERDATA_ROOT", str(tmp_path))
+    (tmp_path / "uid_27" / "projects" / "fresh").mkdir(parents=True)
+
+    from story.routes_files import get_story_memory_state
+
+    result = asyncio.run(get_story_memory_state("fresh", user={"user_id": "27"}))
+
+    assert result["success"] is True
+    overview = result["state"]
+    assert overview["counts"]["scenes"] == 0
+    assert overview["counts"]["quality_tickets_open"] == 0
+    assert overview["recent_scenes"] == []
+    assert overview["characters"] == []
+    assert overview["relationships"] == []
+    assert overview["threads"] == []
+    assert overview["fact_claims"] == []
+    assert overview["conflict_risks"] == []
+    assert overview["quality_tickets"] == []
+
+    from fastapi.responses import JSONResponse
+
+    missing = asyncio.run(get_story_memory_state("  ", user={"user_id": "27"}))
+    assert isinstance(missing, JSONResponse)
+    assert missing.status_code == 400
+
+
 def test_reabsorbing_same_scene_replaces_old_story_memory_contributions(monkeypatch, tmp_path: Path) -> None:
     monkeypatch.setattr("core.utils.USERDATA_ROOT", str(tmp_path))
     (tmp_path / "uid_25" / "projects" / "demo").mkdir(parents=True)

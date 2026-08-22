@@ -9,6 +9,7 @@ import { useCharacterStore } from './characterStore';
 import { useChatStore } from './chatStore';
 import { useSceneStore } from './sceneStore';
 import { useBlueprintStore } from './blueprintStore';
+import { useStoryMemoryStore } from './storyMemoryStore';
 
 /**
  * 当前会话已经触发过语义索引刷新检查的项目集合。
@@ -202,6 +203,10 @@ export const useProjectStore = defineStore('project', {
 
       // 清空灵感数据
       this.currentInspiration = '';
+
+      // StoryMemory 总览按项目隔离，切换时清空旧项目数据
+      const storyMemoryStore = useStoryMemoryStore();
+      storyMemoryStore.reset();
       this.currentInspirationId = null;
       this.boundInspiration = '';
       this.boundInspirationSource = '';
@@ -391,6 +396,9 @@ export const useProjectStore = defineStore('project', {
       const blueprintStore = useBlueprintStore();
       blueprintStore.nodePositions = {};
       blueprintStore.connections = [];
+
+      const storyMemoryStore = useStoryMemoryStore();
+      storyMemoryStore.reset();
     },
   },
 });

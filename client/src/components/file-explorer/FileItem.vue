@@ -370,10 +370,14 @@ watch(isOpen, (v) => {
 .file-item-content {
   display: flex;
   align-items: center;
+  border-radius: 3px;
+  transition: background-color 0.1s;
 }
 
-.file-item:hover {
-  background-color: var(--spark-border);
+/* 悬停高亮只跟随鼠标所在的那一行：.file-item 是递归容器（文件夹节点包裹整棵子树），
+   直接对它 :hover 会连整个文件夹一起染色；颜色降至原 --spark-border 的约 55% 避免 过深 */
+.file-item-content:hover {
+  background-color: color-mix(in srgb, var(--spark-border) 55%, transparent);
   color: var(--spark-text);
 }
 

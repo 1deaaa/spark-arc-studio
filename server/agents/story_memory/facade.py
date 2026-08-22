@@ -1677,6 +1677,185 @@ class StoryMemoryFacade:
             )[:limit]
         return []
 
+    def compose_state_overview(self) -> Dict[str, Any]:
+        """为前端状态面板组装有界只读总览，不导出全量状态文件。"""
+        state = self.load_state()
+        ordered_scenes = sorted(
+            [item for item in state["scenes"] if isinstance(item, dict)],
+            key=_scene_sort_key,
+        )
+        scene_rank_by_id = {
+            str(item.get("scene_id") or ""): index
+            for index, item in enumerate(ordered_scenes)
+            if item.get("scene_id")
+        }
+
+        def _evidence_summary(records: Any) -> str:
+            items = [item for item in records or [] if isinstance(item, dict)]
+            return str(items[-1].get("summary") or "") if items else ""
+
+        recent_scenes = [
+            {
+                "scene_id": item.get("scene_id"),
+                "chapter_title": item.get("chapter_title") or "",
+                "scene_title": item.get("scene_title") or "",
+                "summary": item.get("summary") or "",
+                "characters": item.get("characters") or [],
+                "state_delta_source": item.get("state_delta_source") or "",
+                "updated_at": item.get("updated_at") or "",
+            }
+            for item in ordered_scenes[-20:]
+        ]
+
+        characters = []
+        for name, card in (state.get("character_states") or {}).items():
+            if not isinstance(card, dict) or not str(name or "").strip():
+                continue
+            raw_status = card.get("current_status")
+            if isinstance(raw_status, dict):
+                status_text = str(raw_status.get("status") or "")
+                goal = str(raw_status.get("goal") or "")
+                emotion = str(raw_status.get("emotion") or "")
+                knowledge = str(raw_status.get("knowledge") or "")
+            else:
+                status_text = str(raw_status or "")
+                goal = emotion = knowledge = ""
+            characters.append({
+                "name": str(name),
+                "last_seen_title": card.get("last_seen_title") or "",
+                "last_seen_scene": card.get("last_seen_scene") or "",
+                "status": status_text,
+                "goal": goal,
+                "emotion": emotion,
+                "knowledge": knowledge,
+                "recent_summary": _evidence_summary(card.get("recent_evidence")),
+                "updated_at": card.get("updated_at") or "",
+            })
+        characters.sort(key=lambda item: item["updated_at"], reverse=True)
+        characters = characters[:50]
+
+        relationships = []
+        for rel in (state.get("relationships") or {}).values():
+            if not isinstance(rel, dict):
+                continue
+            relationships.append({
+                "characters": [str(value) for value in rel.get("characters") or []],
+                "relation_hint": rel.get("relation_hint") or "",
+                "why": rel.get("why") or "",
+                "co_presence_count": int(rel.get("co_presence_count") or 0),
+                "recent_summary": _evidence_summary(rel.get("recent_evidence")),
+                "updated_at": rel.get("updated_at") or "",
+            })
+        relationships.sort(key=lambda item: item["updated_at"], reverse=True)
+        relationships = relationships[:60]
+
+        def _thread_brief(thread: Dict[str, Any]) -> Dict[str, Any]:
+            return {
+                "thread_id": thread.get("thread_id"),
+                "status": thread.get("status") or "open",
+                "description": thread.get("description") or "",
+                "related_characters": thread.get("related_characters") or [],
+                "scene_title": thread.get("scene_title") or "",
+                "last_touched_title": thread.get("last_touched_title") or "",
+                "resolved_title": thread.get("resolved_title") or "",
+                "updated_at": thread.get("updated_at") or "",
+            }
+
+        raw_threads = [item for item in state.get("threads") or [] if isinstance(item, dict)]
+        active_threads = sorted(
+            (item for item in raw_threads if item.get("status") in {"open", "advanced"}),
+            key=lambda item: str(item.get("updated_at") or ""),
+            reverse=True,
+        )
+        resolved_threads = sorted(
+            (item for item in raw_threads if item.get("status") == "resolved"),
+            key=lambda item: str(item.get("updated_at") or ""),
+            reverse=True,
+        )
+        threads = [_thread_brief(item) for item in (active_threads + resolved_threads)[:80]]
+
+        def _claim_rank(item: Dict[str, Any]) -> tuple[int, str]:
+            rank = scene_rank_by_id.get(str(item.get("scene_id") or ""), len(ordered_scenes))
+            return rank, str(item.get("updated_at") or "")
+
+        fact_claims = [
+            {
+                "claim": item.get("claim") or "",
+                "entities": item.get("entities") or [],
+                "scene_title": item.get("scene_title") or "",
+                "evidence": item.get("evidence") or "",
+                "updated_at": item.get("updated_at") or "",
+            }
+            for item in sorted(
+                (item for item in state.get("fact_claims") or [] if isinstance(item, dict)),
+                key=_claim_rank,
+            )[-60:]
+        ]
+
+        conflict_risks = [
+            {
+                "risk": item.get("risk") or "",
+                "severity": item.get("severity") or "medium",
+                "scene_title": item.get("scene_title") or "",
+                "evidence": item.get("evidence") or "",
+                "updated_at": item.get("updated_at") or "",
+            }
+            for item in sorted(
+                (item for item in state.get("conflict_risks") or [] if isinstance(item, dict)),
+                key=lambda item: str(item.get("updated_at") or ""),
+                reverse=True,
+            )[:50]
+        ]
+
+        quality_tickets = [
+            {
+                "ticket_id": item.get("ticket_id"),
+                "target": item.get("target") or "",
+                "edit_goal": item.get("edit_goal") or "",
+                "must_keep": item.get("must_keep") or [],
+                "operations": item.get("operations") or [],
+                "scene_name": item.get("scene_name") or "",
+                "overall_grade": item.get("overall_grade") or "",
+                "updated_at": item.get("updated_at") or "",
+            }
+            for item in sorted(
+                (
+                    item
+                    for item in state.get("quality_memory") or []
+                    if isinstance(item, dict) and item.get("status") == "open"
+                ),
+                key=lambda item: str(item.get("updated_at") or ""),
+                reverse=True,
+            )[:60]
+        ]
+
+        return {
+            "updated_at": state.get("updated_at") or "",
+            "counts": {
+                "scenes": len(ordered_scenes),
+                "characters": len(state.get("character_states") or {}),
+                "relationships": len(state.get("relationships") or {}),
+                "threads": len(raw_threads),
+                "open_threads": len(active_threads),
+                "resolved_threads": len(resolved_threads),
+                "fact_claims": len(state.get("fact_claims") or []),
+                "conflict_risks": len(state.get("conflict_risks") or []),
+                "quality_tickets_open": sum(
+                    1
+                    for item in state.get("quality_memory") or []
+                    if isinstance(item, dict) and item.get("status") == "open"
+                ),
+                "quality_tickets_total": len(state.get("quality_memory") or []),
+            },
+            "recent_scenes": recent_scenes,
+            "characters": characters,
+            "relationships": relationships,
+            "threads": threads,
+            "fact_claims": fact_claims,
+            "conflict_risks": conflict_risks,
+            "quality_tickets": quality_tickets,
+        }
+
     def format_status(self) -> str:
         state = self.load_state()
         open_quality_tickets = [

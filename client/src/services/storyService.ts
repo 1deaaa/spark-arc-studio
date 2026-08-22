@@ -130,6 +130,111 @@ export async function absorbStoryMemory(projectName: string, filename: string): 
   return result;
 }
 
+// --- StoryMemory 状态总览（写作界面只读面板） ---
+
+export interface StoryMemoryCounts {
+  scenes: number;
+  characters: number;
+  relationships: number;
+  threads: number;
+  open_threads: number;
+  resolved_threads: number;
+  fact_claims: number;
+  conflict_risks: number;
+  quality_tickets_open: number;
+  quality_tickets_total: number;
+}
+
+export interface StoryMemoryCharacterCard {
+  name: string;
+  last_seen_title: string;
+  last_seen_scene: string;
+  status: string;
+  goal: string;
+  emotion: string;
+  knowledge: string;
+  recent_summary: string;
+  updated_at: string;
+}
+
+export interface StoryMemoryRelationshipCard {
+  characters: string[];
+  relation_hint: string;
+  why: string;
+  co_presence_count: number;
+  recent_summary: string;
+  updated_at: string;
+}
+
+export interface StoryMemoryThreadCard {
+  thread_id: string;
+  status: 'open' | 'advanced' | 'resolved' | string;
+  description: string;
+  related_characters: string[];
+  scene_title: string;
+  last_touched_title: string;
+  resolved_title: string;
+  updated_at: string;
+}
+
+export interface StoryMemoryFactClaim {
+  claim: string;
+  entities: string[];
+  scene_title: string;
+  evidence: string;
+  updated_at: string;
+}
+
+export interface StoryMemoryConflictRisk {
+  risk: string;
+  severity: 'low' | 'medium' | 'high' | string;
+  scene_title: string;
+  evidence: string;
+  updated_at: string;
+}
+
+export interface StoryMemoryQualityTicket {
+  ticket_id: string;
+  target: string;
+  edit_goal: string;
+  must_keep: string[];
+  operations: string[];
+  scene_name: string;
+  overall_grade: string;
+  updated_at: string;
+}
+
+export interface StoryMemorySceneBrief {
+  scene_id: string;
+  chapter_title: string;
+  scene_title: string;
+  summary: string;
+  characters: string[];
+  state_delta_source: string;
+  updated_at: string;
+}
+
+export interface StoryMemoryOverview {
+  updated_at: string;
+  counts: StoryMemoryCounts;
+  recent_scenes: StoryMemorySceneBrief[];
+  characters: StoryMemoryCharacterCard[];
+  relationships: StoryMemoryRelationshipCard[];
+  threads: StoryMemoryThreadCard[];
+  fact_claims: StoryMemoryFactClaim[];
+  conflict_risks: StoryMemoryConflictRisk[];
+  quality_tickets: StoryMemoryQualityTicket[];
+}
+
+export async function fetchStoryMemoryState(projectName: string): Promise<StoryMemoryOverview> {
+  const response = await fetchWithAuth(`/api/story-memory/${encodeURIComponent(projectName)}/state`);
+  const result = await response.json() as { success?: boolean; message?: string; state?: StoryMemoryOverview };
+  if (!response.ok || result.success === false || !result.state) {
+    throw new Error(result.message || '获取故事记忆失败');
+  }
+  return result.state;
+}
+
 // 上传剧本文件到当前项目 stories 目录
 export async function uploadStory(projectName: string, file: File): Promise<StoryMutationResult> {
   const formData = new FormData();

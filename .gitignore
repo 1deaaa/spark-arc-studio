@@ -30,8 +30,8 @@ node_modules/
 client/src-tauri/target/
 client/src-tauri/gen/
 /.tmp/
+.zcode/
 
-# 本地研究资料（原目录拼写已更正为 research）
 /docs/research/
 
 # Tauri icon 构建产物（由 tauri icon 从 app-icon-source.png 生成）

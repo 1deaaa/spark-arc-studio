@@ -9,6 +9,8 @@ type PanelBounds = {
   aiMax: number;
   chatMin: number;
   chatMax: number;
+  memoryMin: number;
+  memoryMax: number;
 };
 
 function clamp(value: number, min: number, max: number) {
@@ -26,6 +28,8 @@ function getPanelBounds(viewportWidth: number): PanelBounds {
       aiMax: 360,
       chatMin: 300,
       chatMax: 420,
+      memoryMin: 260,
+      memoryMax: 340,
     };
   }
 
@@ -39,6 +43,8 @@ function getPanelBounds(viewportWidth: number): PanelBounds {
       aiMax: 460,
       chatMin: 320,
       chatMax: 560,
+      memoryMin: 280,
+      memoryMax: 400,
     };
   }
 
@@ -51,6 +57,8 @@ function getPanelBounds(viewportWidth: number): PanelBounds {
     aiMax: 800,
     chatMin: 340,
     chatMax: 720,
+    memoryMin: 300,
+    memoryMax: 460,
   };
 }
 
@@ -59,6 +67,7 @@ export function useResizer() {
   const inspectorWidth = ref(320);
   const aiSidebarWidth = ref(380);
   const chatSidebarWidth = ref(380);
+  const memoryWidth = ref(320);
 
   const isResizing = ref(false);
   let currentResizer: HTMLElement | null = null;
@@ -73,6 +82,8 @@ export function useResizer() {
     inspectorWidth.value = clamp(inspectorWidth.value, bounds.inspectorMin, bounds.inspectorMax);
     aiSidebarWidth.value = clamp(aiSidebarWidth.value, bounds.aiMin, bounds.aiMax);
     chatSidebarWidth.value = clamp(chatSidebarWidth.value, bounds.chatMin, bounds.chatMax);
+    // 记忆面板与 ai-sidebar 同样不参与下方保底收缩，只保证自身边界合法。
+    memoryWidth.value = clamp(memoryWidth.value, bounds.memoryMin, bounds.memoryMax);
 
     const reservedSideWidths = sidebarWidth.value + inspectorWidth.value + chatSidebarWidth.value;
     const maxSideWidthTotal = Math.max(760, viewportWidth - 360);
@@ -102,6 +113,7 @@ export function useResizer() {
         inspector: inspectorWidth.value,
         ai: aiSidebarWidth.value,
         chat: chatSidebarWidth.value,
+        memory: memoryWidth.value,
       }),
     );
   };
@@ -114,11 +126,12 @@ export function useResizer() {
     }
 
     try {
-      const cfg = JSON.parse(saved) as Partial<Record<'sidebar' | 'inspector' | 'ai' | 'chat', unknown>>;
+      const cfg = JSON.parse(saved) as Partial<Record<'sidebar' | 'inspector' | 'ai' | 'chat' | 'memory', unknown>>;
       if (typeof cfg.sidebar === 'number') sidebarWidth.value = cfg.sidebar;
       if (typeof cfg.inspector === 'number') inspectorWidth.value = cfg.inspector;
       if (typeof cfg.ai === 'number') aiSidebarWidth.value = cfg.ai;
       if (typeof cfg.chat === 'number') chatSidebarWidth.value = cfg.chat;
+      if (typeof cfg.memory === 'number') memoryWidth.value = cfg.memory;
     } catch {
       // ignore broken localStorage payload
     }
@@ -143,6 +156,8 @@ export function useResizer() {
       startWidth = aiSidebarWidth.value;
     } else if (type === 'chat-sidebar') {
       startWidth = chatSidebarWidth.value;
+    } else if (type === 'memory') {
+      startWidth = memoryWidth.value;
     }
 
     currentResizer.classList.add('active');
@@ -173,6 +188,9 @@ export function useResizer() {
     } else if (type === 'chat-sidebar') {
       newWidth = startWidth - deltaX;
       chatSidebarWidth.value = clamp(newWidth, bounds.chatMin, bounds.chatMax);
+    } else if (type === 'memory') {
+      newWidth = startWidth - deltaX;
+      memoryWidth.value = clamp(newWidth, bounds.memoryMin, bounds.memoryMax);
     }
   };
 
@@ -208,6 +226,7 @@ export function useResizer() {
     inspectorWidth,
     aiSidebarWidth,
     chatSidebarWidth,
+    memoryWidth,
     handleMouseDown,
   };
 }

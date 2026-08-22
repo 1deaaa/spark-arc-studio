@@ -58,6 +58,22 @@
                 <h2 v-else-if="!isNovelWorkspace">{{ t('views.scriptWriter.desktop.dialogueTree') }}</h2>
                 <h2 v-else>{{ t('views.scriptWriter.desktop.modeNovel') }}</h2>
                 <OnboardingHelpButton v-if="!settingsVisible" scene-id="page-production" />
+                <n-tooltip trigger="hover">
+                  <template #trigger>
+                    <button
+                      class="memory-toggle-button"
+                      :class="{ active: memoryPanelVisible }"
+                      @click="toggleMemoryPanel"
+                    >
+                      <ScrollText :size="14" />
+                      <span class="memory-toggle-label">{{ t('components.storyMemoryPanel.title') }}</span>
+                      <span v-if="memoryAttentionCount > 0" class="memory-toggle-badge">
+                        {{ memoryAttentionCount > 99 ? '99+' : memoryAttentionCount }}
+                      </span>
+                    </button>
+                  </template>
+                  {{ t('components.storyMemoryPanel.toggleHint') }}
+                </n-tooltip>
               </div>
 
               <Transition name="workspace-mode" mode="out-in">
@@ -68,6 +84,14 @@
 
               <GlobalLoading scope="production" />
             </div>
+
+            <!-- 故事记忆停靠面板：编辑器右侧、节点面板左侧；剧本/小说模式共用同一位置 -->
+            <template v-if="memoryPanelVisible">
+              <div class="resizer" data-resize="memory" @mousedown="handleMouseDown"></div>
+              <div class="panel memory-panel" :style="{ width: memoryWidth + 'px' }">
+                <StoryMemoryPanel @close="closeMemoryPanel" />
+              </div>
+            </template>
 
             <Transition name="inspector-slide">
               <div v-if="showInspectorPanel" class="resizer" data-resize="center" @mousedown="handleMouseDown"></div>
@@ -201,7 +225,7 @@
 </template>
 
 <script setup lang="ts">
-import { computed, h, nextTick, onMounted, onUnmounted, ref } from 'vue';
+import { computed, h, nextTick, onMounted, onUnmounted, ref, watch } from 'vue';
 import { NButton, NDropdown, NIcon, NModal, NTooltip, type DropdownOption } from 'naive-ui';
 import { useI18n } from 'vue-i18n';
 import { useOnboarding } from '../../onboarding';
@@ -213,6 +237,7 @@ import DialogueTree from '../../components/dlg-editor/DialogueTree.vue';
 import NovelReader from '../../components/dlg-editor/NovelReader.vue';
 import NodeEditor from '../../components/dlg-editor/NodeEditor.vue';
 import AiPanel from '../../components/dlg-editor/AiPanel.vue';
+import StoryMemoryPanel from '../../components/dlg-editor/StoryMemoryPanel.vue';
 import LorebookEditor from '../../components/lorebook/LorebookEditor.vue';
 import AiSettingsPanel from '../../components/lorebook/AiSettingsPanel.vue';
 import CharacterGeneratorPanel from '../../components/lorebook/CharacterGeneratorPanel.vue';
@@ -239,9 +264,10 @@ import { useResizer } from '../../hooks/useResizer';
 import { useScriptWriterLogic } from '../../composables/useScriptWriterLogic';
 import { useSceneStore } from '../../components/stores/sceneStore';
 import { useChatStore } from '../../components/stores/chatStore';
+import { useStoryMemoryStore } from '../../components/stores/storyMemoryStore';
 import { useChatActions } from '../../composables/useChatActions';
 import { useAgentRegistry } from '../../composables/useAgentRegistry';
-import { Send, PanelRightClose } from '@lucide/vue';
+import { Send, PanelRightClose, ScrollText } from '@lucide/vue';
 import { shouldShowProductionInspector } from './productionInspector';
 import {
   NOVEL_SUBMISSION_PLATFORMS,
@@ -251,7 +277,7 @@ import {
 
 const { t } = useI18n();
 const sceneStore = useSceneStore();
-const { sidebarWidth, inspectorWidth, aiSidebarWidth, chatSidebarWidth, handleMouseDown } = useResizer();
+const { sidebarWidth, inspectorWidth, aiSidebarWidth, chatSidebarWidth, memoryWidth, handleMouseDown } = useResizer();
 const {
   viewStore,
   projectStore,
@@ -339,6 +365,52 @@ function toggleChatSidebar() {
   } catch {}
 }
 
+// ==================== 故事记忆停靠面板 ====================
+const MEMORY_PANEL_STORAGE_KEY = 'spark_memory_panel_visible_v1';
+const storyMemoryStore = useStoryMemoryStore();
+const memoryPanelVisible = ref(false);
+
+const memoryAttentionCount = computed(() => storyMemoryStore.attentionCount);
+
+function loadMemoryPanelVisible() {
+  try {
+    const saved = localStorage.getItem(MEMORY_PANEL_STORAGE_KEY);
+    if (saved !== null) {
+      memoryPanelVisible.value = saved === 'true';
+    }
+  } catch {}
+}
+
+function persistMemoryPanelVisible() {
+  try {
+    localStorage.setItem(MEMORY_PANEL_STORAGE_KEY, String(memoryPanelVisible.value));
+  } catch {}
+}
+
+function toggleMemoryPanel() {
+  memoryPanelVisible.value = !memoryPanelVisible.value;
+  persistMemoryPanelVisible();
+  if (memoryPanelVisible.value && projectStore.currentProject) {
+    void storyMemoryStore.fetch(projectStore.currentProject);
+  }
+}
+
+function closeMemoryPanel() {
+  memoryPanelVisible.value = false;
+  persistMemoryPanelVisible();
+}
+
+// 进入写作视图时拉取一次总览，驱动标题栏角标显示待处理风险/工单数
+watch(
+  () => viewStore.currentView,
+  (view) => {
+    if (view === 'production' && projectStore.currentProject) {
+      void storyMemoryStore.fetch(projectStore.currentProject);
+    }
+  },
+  { immediate: true },
+);
+
 // 首次进入桌面工作台时触发引导（等待登录后检查完成）
 const { triggerIfFirst } = useOnboarding();
 const onPostLoginReady = () => {
@@ -346,6 +418,7 @@ const onPostLoginReady = () => {
 };
 onMounted(() => {
   loadChatSidebarVisible();
+  loadMemoryPanelVisible();
   loadAgentRegistry();
   bus.on('post-login-ready', onPostLoginReady);
   // 如果 App.vue 已经发过 post-login-ready（竞态：子组件晚于 App mount），直接触发
@@ -560,6 +633,70 @@ main {
   flex-direction: column;
   background-color: var(--n-color-modal);
   border-left: 1px solid var(--n-border-color);
+}
+
+.memory-toggle-button {
+  margin-left: auto;
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  height: 26px;
+  padding: 0 10px;
+  border: 1px solid var(--spark-border);
+  border-radius: 999px;
+  background: transparent;
+  /* 轻度稀释的文本色，保证亮/暗主题下的前景可见性 */
+  color: color-mix(in srgb, var(--spark-text), var(--spark-bg) 18%);
+  font-size: var(--spark-fs-xs, 12px);
+  cursor: pointer;
+  transition: background 0.15s ease, border-color 0.15s ease, color 0.15s ease;
+}
+
+.memory-toggle-button:hover,
+.memory-toggle-button.active {
+  border-color: var(--spark-primary-muted, var(--spark-primary));
+  color: var(--spark-primary);
+}
+
+.memory-toggle-button.active {
+  background: color-mix(in srgb, var(--spark-primary) 12%, transparent);
+}
+
+.memory-toggle-label {
+  white-space: nowrap;
+}
+
+.memory-toggle-badge {
+  min-width: 16px;
+  height: 16px;
+  padding: 0 4px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  border-radius: 999px;
+  background: var(--spark-warning);
+  color: var(--spark-text-inverse, #fff);
+  font-size: 10px;
+  font-weight: 700;
+  font-variant-numeric: tabular-nums;
+}
+
+.memory-panel {
+  width: 320px;
+  min-width: 0;
+  max-width: 460px;
+  flex: 0 0 auto;
+  min-height: 0;
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+  background-color: var(--n-color-modal);
+  border-left: 1px solid var(--n-border-color);
+}
+
+.memory-panel :deep(.story-memory-panel) {
+  flex: 1 1 auto;
+  min-height: 0;
 }
 
 .ai-sidebar {
