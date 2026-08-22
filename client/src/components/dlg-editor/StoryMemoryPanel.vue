@@ -8,17 +8,25 @@
       <div class="memory-panel-actions">
         <n-tooltip trigger="hover">
           <template #trigger>
-            <button class="memory-icon-button" :class="{ spinning: memoryStore.loading }" @click="refresh">
-              <RefreshCw :size="14" />
-            </button>
+            <n-button class="memory-icon-button" quaternary circle size="small" @click="refresh">
+              <template #icon>
+                <n-icon :size="15">
+                  <RefreshCw :class="{ 'memory-spin-icon': memoryStore.loading }" />
+                </n-icon>
+              </template>
+            </n-button>
           </template>
           {{ t('components.storyMemoryPanel.refresh') }}
         </n-tooltip>
         <n-tooltip trigger="hover">
           <template #trigger>
-            <button class="memory-icon-button" @click="emit('close')">
-              <X :size="14" />
-            </button>
+            <n-button class="memory-icon-button" quaternary circle size="small" @click="emit('close')">
+              <template #icon>
+                <n-icon :size="15">
+                  <X />
+                </n-icon>
+              </template>
+            </n-button>
           </template>
           {{ t('components.storyMemoryPanel.close') }}
         </n-tooltip>
@@ -436,36 +444,14 @@ watch(
   gap: 2px;
 }
 
+/* 动作按钮直接用 naive 的 quaternary circle（与头部 OnboardingHelpButton 同形态）：
+   颜色由 naive 主题解析注入，亮/暗主题前景都有保证，且不与全局 button:not(.n-button) 规则纠缠 */
 .memory-icon-button {
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
-  width: 26px;
-  height: 26px;
-  border: 1px solid var(--spark-border);
-  border-radius: 50%;
-  /* 静止态用轻度稀释的文本色，保证亮/暗两种主题下都有足够前景对比度 */
-  background: color-mix(in srgb, var(--spark-text) 4%, transparent);
-  color: color-mix(in srgb, var(--spark-text), var(--spark-bg) 18%);
-  cursor: pointer;
-  transition: background 0.15s ease, border-color 0.15s ease, color 0.15s ease;
+  flex: 0 0 auto;
 }
 
-.memory-icon-button:hover {
-  border-color: var(--spark-primary-muted, var(--spark-primary));
-  background: color-mix(in srgb, var(--spark-primary) 12%, transparent);
-  color: var(--spark-primary);
-}
-
-.memory-icon-button:focus-visible {
-  outline: 2px solid color-mix(in srgb, var(--spark-primary) 45%, transparent);
-  outline-offset: 1px;
-}
-
-.memory-icon-button.spinning {
+.memory-spin-icon {
   animation: memory-spin 0.9s linear infinite;
-  color: var(--spark-primary);
-  border-color: var(--spark-primary-muted, var(--spark-primary));
 }
 
 @keyframes memory-spin {

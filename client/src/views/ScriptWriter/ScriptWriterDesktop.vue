@@ -645,7 +645,8 @@ main {
   border: 1px solid var(--spark-border);
   border-radius: 999px;
   background: transparent;
-  /* 轻度稀释的文本色，保证亮/暗主题下的前景可见性 */
+  /* 前景可见性：先兜底用已验证可用的主题令牌，再用 color-mix 渐进增强（任一失效自动落到上一行） */
+  color: var(--spark-text-muted);
   color: color-mix(in srgb, var(--spark-text), var(--spark-bg) 18%);
   font-size: var(--spark-fs-xs, 12px);
   cursor: pointer;
