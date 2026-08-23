@@ -1,587 +1,598 @@
 <template>
-  <div class="spark-loader-wrapper">
-    <div class="spark-loader">
-          <!-- 脉冲涟漪：灵感之心的心跳 -->
-          <div class="pulse-rings">
-            <div class="pulse-ring ring-1"></div>
-            <div class="pulse-ring ring-2"></div>
-            <div class="pulse-ring ring-3"></div>
-          </div>
-          
-          <svg class="spark-svg" viewBox="0 0 100 100" xmlns="http://www.w3.org/2000/svg">
-            <defs>
-              <!-- 柔和辉光 -->
-              <filter id="gl-glow" x="-50%" y="-50%" width="200%" height="200%">
-                <feGaussianBlur stdDeviation="2" result="coloredBlur"/>
-                <feMerge>
-                  <feMergeNode in="coloredBlur"/>
-                  <feMergeNode in="SourceGraphic"/>
-                </feMerge>
-              </filter>
-              <!-- 核心强辉光 -->
-              <filter id="gl-glow-core" x="-100%" y="-100%" width="300%" height="300%">
-                <feGaussianBlur stdDeviation="3" result="coloredBlur"/>
-                <feMerge>
-                  <feMergeNode in="coloredBlur"/>
-                  <feMergeNode in="coloredBlur"/>
-                  <feMergeNode in="SourceGraphic"/>
-                </feMerge>
-              </filter>
-              <!-- 核心星星径向渐变 -->
-              <radialGradient id="gl-core-grad" cx="50%" cy="50%" r="50%">
-                <stop offset="0%" style="stop-color: var(--loader-core-bright); stop-opacity: 1" />
-                <stop offset="60%" style="stop-color: var(--loader-primary); stop-opacity: 0.85" />
-                <stop offset="100%" style="stop-color: var(--loader-primary); stop-opacity: 0.4" />
-              </radialGradient>
-            </defs>
-            
-            <!-- 外圈星河轨道弧 -->
-            <circle cx="50" cy="50" r="44" class="orbit orbit-outer" />
-            
-            <!-- 内圈星河轨道弧 -->
-            <circle cx="50" cy="50" r="33" class="orbit orbit-inner" />
+  <div class="spark-loader-wrapper" ref="wrapperRef">
+    <div class="spark-loader-stage">
+      <!-- 柔和热浪呼吸晕光 -->
+      <div class="flame-heat-aura"></div>
 
-            <!-- 外圈轨道能量流光：沿轨道分布的光点依次明灭，让轨道"流动"起来 -->
-            <g class="energy-flow flow-outer">
-              <circle cx="93" cy="40" r="1.2" class="flow-dot fd1" filter="url(#gl-glow)" />
-              <circle cx="80" cy="18" r="1" class="flow-dot fd2" filter="url(#gl-glow)" />
-              <circle cx="50" cy="6" r="1.1" class="flow-dot fd3" filter="url(#gl-glow)" />
-              <circle cx="20" cy="18" r="0.9" class="flow-dot fd4" filter="url(#gl-glow)" />
-              <circle cx="8" cy="42" r="1.2" class="flow-dot fd5" filter="url(#gl-glow)" />
-            </g>
+      <!-- 优雅起伏律动弧光 (Dramatic Rhythmic Arcs) -->
+      <svg class="flame-arc-svg" viewBox="0 0 180 180" xmlns="http://www.w3.org/2000/svg">
+        <defs>
+          <linearGradient id="globalFlameArcGrad" x1="0%" y1="0%" x2="100%" y2="100%">
+            <stop offset="0%" stop-color="var(--loader-primary)" />
+            <stop offset="60%" stop-color="var(--loader-core-bright)" />
+            <stop offset="100%" stop-color="transparent" />
+          </linearGradient>
+          <linearGradient id="globalFlameInnerArcGrad" x1="100%" y1="0%" x2="0%" y2="100%">
+            <stop offset="0%" stop-color="var(--loader-orbit-inner)" stop-opacity="0.8" />
+            <stop offset="70%" stop-color="var(--loader-primary)" stop-opacity="0.3" />
+            <stop offset="100%" stop-color="transparent" />
+          </linearGradient>
+        </defs>
+        <!-- 内圈逆向错相节奏弧 -->
+        <circle cx="90" cy="90" r="62" class="arc-track arc-track-inner" />
+        <!-- 外圈主剧作起伏加速弧 -->
+        <circle cx="90" cy="90" r="62" class="arc-track arc-track-outer" />
+      </svg>
 
-            <!-- 内圈轨道能量流光 -->
-            <g class="energy-flow flow-inner">
-              <circle cx="83" cy="50" r="1" class="flow-dot fd6" filter="url(#gl-glow)" />
-              <circle cx="67" cy="73" r="0.9" class="flow-dot fd7" filter="url(#gl-glow)" />
-              <circle cx="33" cy="73" r="1" class="flow-dot fd8" filter="url(#gl-glow)" />
-              <circle cx="17" cy="50" r="0.8" class="flow-dot fd9" filter="url(#gl-glow)" />
-            </g>
-
-            <!-- 星河微尘：散布在轨道间的极小闪烁星点，填充星河气氛 -->
-            <g class="stardust">
-              <circle cx="25" cy="28" r="0.7" class="dust-dot dd1" />
-              <circle cx="76" cy="30" r="0.5" class="dust-dot dd2" />
-              <circle cx="78" cy="72" r="0.6" class="dust-dot dd3" />
-              <circle cx="22" cy="70" r="0.5" class="dust-dot dd4" />
-              <circle cx="50" cy="25" r="0.4" class="dust-dot dd5" />
-            </g>
-
-            <!-- 灵感汇聚节点：四个方位的能量点依次脉冲，暗示灵感在汇聚 -->
-            <g class="convergence-group">
-              <circle cx="35" cy="35" r="1.3" class="conv-dot cv1" filter="url(#gl-glow)" />
-              <circle cx="65" cy="35" r="1" class="conv-dot cv2" filter="url(#gl-glow)" />
-              <circle cx="65" cy="65" r="1.3" class="conv-dot cv3" filter="url(#gl-glow)" />
-              <circle cx="35" cy="65" r="1" class="conv-dot cv4" filter="url(#gl-glow)" />
-            </g>
-            
-            <!-- 外圈卫星 1：主思绪流 -->
-            <g class="sat-group sg-outer-1">
-              <circle cx="50" cy="6" r="3.5" class="satellite sat-primary" filter="url(#gl-glow-core)" />
-              <circle cx="47" cy="9" r="2" class="sat-trail st1" />
-              <circle cx="44.5" cy="12.5" r="1.2" class="sat-trail st2" />
-              <circle cx="42.5" cy="16.5" r="0.6" class="sat-trail st3" />
-            </g>
-            
-            <!-- 内圈卫星 2：逆向思绪流 -->
-            <g class="sat-group sg-inner">
-              <circle cx="50" cy="83" r="2.5" class="satellite sat-secondary" filter="url(#gl-glow)" />
-              <circle cx="52.5" cy="80.5" r="1.3" class="sat-trail st1" />
-              <circle cx="54.5" cy="78" r="0.7" class="sat-trail st2" />
-            </g>
-
-            <!-- 外圈卫星 3：灵感碎片 -->
-            <g class="sat-group sg-outer-2">
-              <circle cx="94" cy="50" r="2" class="satellite sat-accent" filter="url(#gl-glow)" />
-              <circle cx="91.5" cy="47.5" r="1" class="sat-trail st1" />
-              <circle cx="89" cy="45.5" r="0.5" class="sat-trail st2" />
-            </g>
-
-            <!-- 核心辐射光芒：4道极细光线从中心向外延伸，缓慢旋转 -->
-            <g class="ray-group">
-              <line x1="50" y1="50" x2="50" y2="18" class="core-ray ray1" />
-              <line x1="50" y1="50" x2="82" y2="50" class="core-ray ray2" />
-              <line x1="50" y1="50" x2="50" y2="82" class="core-ray ray3" />
-              <line x1="50" y1="50" x2="18" y2="50" class="core-ray ray4" />
-            </g>
-            
-            <!-- 核心：灵感之心（四角星） -->
-            <g class="core-group">
-              <!-- 外层光晕呼吸 -->
-              <circle cx="50" cy="50" r="12" class="core-halo" />
-              <!-- 四角星主体 -->
-              <path 
-                class="core-star" 
-                d="M50 22 L57 43 L78 50 L57 57 L50 78 L43 57 L22 50 L43 43 Z" 
-                fill="url(#gl-core-grad)" 
-                filter="url(#gl-glow-core)" 
-              />
-              <!-- 中心高亮点 -->
-              <circle cx="50" cy="50" r="4" class="core-center" />
-            </g>
-          </svg>
-        </div>
+      <!-- 五重慢速有机流体火舌 + 发光火滴粒子 Canvas -->
+      <canvas ref="canvasRef" class="flame-particle-canvas"></canvas>
+    </div>
   </div>
 </template>
 
+<script setup lang="ts">
+import { ref, onMounted, onBeforeUnmount } from 'vue';
+
+const wrapperRef = ref<HTMLElement | null>(null);
+const canvasRef = ref<HTMLCanvasElement | null>(null);
+
+let animFrameId: number | null = null;
+let time = 0;
+
+// ==========================================================================
+// 顶级色彩美学色彩空间计算工具 (Color Science & Palette Harmonizer)
+// ==========================================================================
+interface RgbColor {
+  r: number;
+  g: number;
+  b: number;
+}
+
+interface HslColor {
+  h: number;
+  s: number;
+  l: number;
+}
+
+function rgbToHsl(r: number, g: number, b: number): HslColor {
+  r /= 255; g /= 255; b /= 255;
+  const max = Math.max(r, g, b);
+  const min = Math.min(r, g, b);
+  let h = 0;
+  let s = 0;
+  const l = (max + min) / 2;
+
+  if (max !== min) {
+    const d = max - min;
+    s = l > 0.5 ? d / (2 - max - min) : d / (max + min);
+    switch (max) {
+      case r: h = (g - b) / d + (g < b ? 6 : 0); break;
+      case g: h = (b - r) / d + 2; break;
+      case b: h = (r - g) / d + 4; break;
+    }
+    h /= 6;
+  }
+  return { h: h * 360, s, l };
+}
+
+function hslToRgb(h: number, s: number, l: number): RgbColor {
+  h = ((h % 360) + 360) % 360;
+  h /= 360;
+  let r: number, g: number, b: number;
+
+  if (s === 0) {
+    r = g = b = l;
+  } else {
+    const hue2rgb = (p: number, q: number, t: number) => {
+      if (t < 0) t += 1;
+      if (t > 1) t -= 1;
+      if (t < 1 / 6) return p + (q - p) * 6 * t;
+      if (t < 1 / 2) return q;
+      if (t < 2 / 3) return p + (q - p) * (2 / 3 - t) * 6;
+      return p;
+    };
+    const q = l < 0.5 ? l * (1 + s) : l + s - l * s;
+    const p = 2 * l - q;
+    r = hue2rgb(p, q, h + 1 / 3);
+    g = hue2rgb(p, q, h);
+    b = hue2rgb(p, q, h - 1 / 3);
+  }
+  return {
+    r: Math.round(r * 255),
+    g: Math.round(g * 255),
+    b: Math.round(b * 255)
+  };
+}
+
+// 基于主色衍生完整火苗美学光谱
+interface AestheticFlamePalette {
+  whiteIncandescent: RgbColor; // 底部纯白白炽
+  coreWarmGlow: RgbColor;      // 前景白炽温润金辉 (基于主色调配)
+  primaryMain: RgbColor;       // 主火色
+  tipPlasma: RgbColor;         // 尖端色偏等离子色
+  innerCoreBright: RgbColor;   // 内核光斑色
+  isLight: boolean;
+}
+
+let flamePalette: AestheticFlamePalette = {
+  whiteIncandescent: { r: 255, g: 255, b: 255 },
+  coreWarmGlow: { r: 255, g: 240, b: 200 },
+  primaryMain: { r: 29, g: 234, b: 170 },
+  tipPlasma: { r: 126, g: 255, b: 220 },
+  innerCoreBright: { r: 255, g: 250, b: 230 },
+  isLight: false,
+};
+
+// 解析 CSS 颜色
+function parseCssColor(colorStr: string, fallback: RgbColor): RgbColor {
+  if (!colorStr) return fallback;
+  const s = colorStr.trim();
+  if (s.startsWith('#')) {
+    let hex = s.slice(1);
+    if (hex.length === 3) hex = hex.split('').map(c => c + c).join('');
+    if (hex.length === 6) {
+      const num = parseInt(hex, 16);
+      return { r: (num >> 16) & 255, g: (num >> 8) & 255, b: num & 255 };
+    }
+  }
+  const match = s.match(/rgba?\((\d+),\s*(\d+),\s*(\d+)/i);
+  if (match) {
+    return { r: Number(match[1]), g: Number(match[2]), b: Number(match[3]) };
+  }
+  return fallback;
+}
+
+// 实时美学计算：从当前主题色衍生出火苗所有层次的前景色
+function computeFlamePalette() {
+  if (!wrapperRef.value) return;
+  const style = window.getComputedStyle(wrapperRef.value);
+  const primaryStr = style.getPropertyValue('--loader-primary') || style.getPropertyValue('--spark-primary');
+  
+  const isLight = document.body.classList.contains('light-mode') || 
+                  document.documentElement.getAttribute('data-theme') === 'light';
+
+  const defaultPrimary = isLight ? { r: 235, g: 148, b: 96 } : { r: 29, g: 234, b: 170 };
+  const primaryRgb = parseCssColor(primaryStr, defaultPrimary);
+  const hsl = rgbToHsl(primaryRgb.r, primaryRgb.g, primaryRgb.b);
+
+  // 1. 白炽前景色：将主色极度提亮与低饱和化，保留微妙的主色色调韵味
+  const coreWarmHsl: HslColor = {
+    h: hsl.h,
+    s: Math.max(0.2, hsl.s * 0.45),
+    l: isLight ? 0.88 : 0.92
+  };
+  const coreWarmGlow = hslToRgb(coreWarmHsl.h, coreWarmHsl.s, coreWarmHsl.l);
+
+  // 2. 尖端等离子色：色相微偏转 +14°，模拟高温等离子色相漂移
+  const tipHsl: HslColor = {
+    h: hsl.h + (isLight ? -10 : 14),
+    s: Math.min(1, hsl.s * 1.1),
+    l: isLight ? Math.max(0.4, hsl.l * 0.9) : Math.min(0.85, hsl.l * 1.2)
+  };
+  const tipPlasma = hslToRgb(tipHsl.h, tipHsl.s, tipHsl.l);
+
+  // 3. 内焰高亮核：高明度纯净色
+  const innerCoreHsl: HslColor = {
+    h: hsl.h,
+    s: Math.max(0.15, hsl.s * 0.3),
+    l: 0.96
+  };
+  const innerCoreBright = hslToRgb(innerCoreHsl.h, innerCoreHsl.s, innerCoreHsl.l);
+
+  flamePalette = {
+    whiteIncandescent: { r: 255, g: 255, b: 255 },
+    coreWarmGlow,
+    primaryMain: primaryRgb,
+    tipPlasma,
+    innerCoreBright,
+    isLight
+  };
+}
+
+// 强化版多阶多频湍流噪声
+function deepTurbulence(t: number, seed: number = 0) {
+  return (
+    Math.sin(t * 0.7 + seed) * 0.45 +
+    Math.sin(t * 1.6 + seed * 1.7) * 0.3 +
+    Math.sin(t * 3.1 + seed * 2.3) * 0.15 +
+    Math.sin(t * 5.7 + seed * 3.1) * 0.1
+  );
+}
+
+// ==========================================================================
+// 饱满大号发光火滴粒子类 (与主题色彩美学实时同步)
+// ==========================================================================
+class FlameEmberDroplet {
+  x: number = 90;
+  y: number = 114;
+  vx: number = 0;
+  vy: number = 0;
+  baseRadius: number = 3;
+  radius: number = 3;
+  maxLife: number = 100;
+  life: number = 0;
+  colorType: number = 0;
+  seed: number = 0;
+
+  constructor(initial: boolean = false) {
+    this.reset(initial);
+  }
+
+  reset(initial: boolean = false) {
+    const spreadX = (Math.random() - 0.5) * 28;
+    this.x = 90 + spreadX;
+    this.y = 114 - 16 - Math.random() * 38;
+    this.vx = spreadX * 0.012 + (Math.random() - 0.5) * 0.2;
+    this.vy = -(0.22 + Math.random() * 0.35);
+    this.baseRadius = 2.2 + Math.random() * 4.0;
+    this.radius = this.baseRadius;
+    this.maxLife = 90 + Math.random() * 80;
+    this.life = initial ? Math.floor(Math.random() * this.maxLife) : 0;
+    this.colorType = Math.random();
+    this.seed = Math.random() * 20;
+  }
+
+  update() {
+    this.life++;
+    const progress = this.life / this.maxLife;
+    this.x += this.vx + deepTurbulence(this.life * 0.025, this.seed) * 0.35;
+    this.y += this.vy;
+    this.radius = this.baseRadius * (1 - progress * 0.55);
+
+    if (this.life >= this.maxLife || this.radius < 0.5) {
+      this.reset();
+    }
+  }
+
+  draw(ctx: CanvasRenderingContext2D) {
+    const progress = this.life / this.maxLife;
+    const envelope = Math.sin(progress * Math.PI);
+    const alpha = Math.max(0, envelope * 0.85);
+
+    const grad = ctx.createRadialGradient(
+      this.x, this.y, 0,
+      this.x, this.y, Math.max(1, this.radius)
+    );
+
+    const p = flamePalette.primaryMain;
+    const core = flamePalette.coreWarmGlow;
+    const tip = flamePalette.tipPlasma;
+
+    if (this.colorType < 0.55) {
+      // 主火色微火滴
+      grad.addColorStop(0, `rgba(255, 255, 255, ${alpha * 0.95})`);
+      grad.addColorStop(0.35, `rgba(${tip.r}, ${tip.g}, ${tip.b}, ${alpha * 0.8})`);
+      grad.addColorStop(0.75, `rgba(${p.r}, ${p.g}, ${p.b}, ${alpha * 0.4})`);
+      grad.addColorStop(1, `rgba(${p.r}, ${p.g}, ${p.b}, 0)`);
+    } else {
+      // 白炽温润火滴 (基于主题色衍生)
+      grad.addColorStop(0, `rgba(255, 255, 255, ${alpha * 0.98})`);
+      grad.addColorStop(0.4, `rgba(${core.r}, ${core.g}, ${core.b}, ${alpha * 0.85})`);
+      grad.addColorStop(0.8, `rgba(${p.r}, ${p.g}, ${p.b}, ${alpha * 0.4})`);
+      grad.addColorStop(1, `rgba(${p.r}, ${p.g}, ${p.b}, 0)`);
+    }
+
+    ctx.save();
+    ctx.fillStyle = grad;
+    ctx.beginPath();
+    ctx.ellipse(this.x, this.y, this.radius * 0.85, this.radius * 1.15, 0, 0, Math.PI * 2);
+    ctx.fill();
+    ctx.restore();
+  }
+}
+
+const embers: FlameEmberDroplet[] = [];
+for (let i = 0; i < 26; i++) {
+  embers.push(new FlameEmberDroplet(true));
+}
+
+// 绘制单支流体火舌 (完全基于主题色美学光谱)
+function drawOrganicTongue(
+  ctx: CanvasRenderingContext2D,
+  startX: number,
+  startY: number,
+  baseW: number,
+  tipTargetX: number,
+  heightLen: number,
+  swaySeed: number,
+  alphaMax: number
+) {
+  const tipX = startX + tipTargetX;
+  const tipY = startY - heightLen;
+  const bLeftX = startX - baseW;
+  const bRightX = startX + baseW;
+
+  const tTurb1 = deepTurbulence(time, swaySeed);
+  const tTurb2 = deepTurbulence(time + 1.8, swaySeed + 3.2);
+
+  const cp1X = startX - baseW * 1.3 + tTurb1 * 5.0;
+  const cp1Y = startY - heightLen * 0.35;
+  const cp2X = startX - baseW * 0.4 + tTurb2 * 5.5;
+  const cp2Y = startY - heightLen * 0.72;
+
+  const cp3X = startX + baseW * 0.4 + tTurb2 * 5.5;
+  const cp3Y = startY - heightLen * 0.72;
+  const cp4X = startX + baseW * 1.3 + tTurb1 * 5.0;
+  const cp4Y = startY - heightLen * 0.35;
+
+  ctx.save();
+  ctx.beginPath();
+  ctx.moveTo(startX, startY + 2);
+  ctx.quadraticCurveTo(bLeftX, startY + 1, bLeftX, startY - 4);
+  ctx.bezierCurveTo(cp1X, cp1Y, cp2X, cp2Y, tipX, tipY);
+  ctx.bezierCurveTo(cp3X, cp3Y, cp4X, cp4Y, bRightX, startY - 4);
+  ctx.quadraticCurveTo(bRightX, startY + 1, startX, startY + 2);
+  ctx.closePath();
+
+  const grad = ctx.createLinearGradient(startX, startY, tipX, tipY);
+  const white = flamePalette.whiteIncandescent;
+  const core = flamePalette.coreWarmGlow;
+  const p = flamePalette.primaryMain;
+  const tip = flamePalette.tipPlasma;
+
+  // 全面融入主题色前景色渐变计算
+  grad.addColorStop(0, `rgba(${white.r}, ${white.g}, ${white.b}, ${alphaMax * 0.98})`);
+  grad.addColorStop(0.22, `rgba(${core.r}, ${core.g}, ${core.b}, ${alphaMax * 0.9})`);
+  grad.addColorStop(0.58, `rgba(${p.r}, ${p.g}, ${p.b}, ${alphaMax * 0.8})`);
+  grad.addColorStop(0.88, `rgba(${tip.r}, ${tip.g}, ${tip.b}, ${alphaMax * 0.45})`);
+  grad.addColorStop(1, `rgba(${p.r}, ${p.g}, ${p.b}, 0)`);
+
+  ctx.fillStyle = grad;
+  ctx.shadowColor = `rgb(${p.r}, ${p.g}, ${p.b})`;
+  ctx.shadowBlur = 12;
+  ctx.fill();
+  ctx.restore();
+}
+
+// 核心绘制：五重非对称多层有机自然火苗群
+function drawFiveTendrilFlames(ctx: CanvasRenderingContext2D, t: number) {
+  const cx = 90;
+  const baseY = 114;
+
+  // 1. 远景极左微火舌
+  const farLeftTipX = -20 + deepTurbulence(t * 0.8, 11.2) * 6;
+  const farLeftHeight = 28 + deepTurbulence(t * 1.0, 13.5) * 5;
+  drawOrganicTongue(ctx, cx - 9, baseY, 5, farLeftTipX, farLeftHeight, 11.0, 0.55);
+
+  // 2. 远景极右逸散火舌
+  const farRightTipX = 18 + deepTurbulence(t * 0.75, 17.8) * 6;
+  const farRightHeight = 26 + deepTurbulence(t * 1.1, 19.4) * 5;
+  drawOrganicTongue(ctx, cx + 9, baseY, 5, farRightTipX, farRightHeight, 17.0, 0.52);
+
+  // 3. 近景左侧火舌
+  const leftTipX = -11 + deepTurbulence(t * 0.9, 1.4) * 6;
+  const leftHeight = 42 + deepTurbulence(t * 1.05, 2.7) * 6;
+  drawOrganicTongue(ctx, cx - 5, baseY, 8, leftTipX, leftHeight, 1.0, 0.75);
+
+  // 4. 近景右侧火舌
+  const rightTipX = 9 + deepTurbulence(t * 1.15, 5.9) * 5;
+  const rightHeight = 35 + deepTurbulence(t * 0.85, 3.8) * 6;
+  drawOrganicTongue(ctx, cx + 6, baseY, 7, rightTipX, rightHeight, 5.0, 0.72);
+
+  // 5. 中央高耸主火舌
+  const centerTipX = deepTurbulence(t * 0.7, 8.4) * 5;
+  const centerHeight = 54 + deepTurbulence(t * 0.9, 4.2) * 5;
+  drawOrganicTongue(ctx, cx, baseY, 10, centerTipX, centerHeight, 8.0, 0.95);
+
+  // 6. 中心白炽火核 (融合主题色前景色)
+  const inTipX = centerTipX * 0.35;
+  const inHeight = 28 + deepTurbulence(t * 0.95, 9.5) * 2;
+  
+  ctx.save();
+  ctx.beginPath();
+  ctx.moveTo(cx, baseY + 1);
+  ctx.quadraticCurveTo(cx - 6, baseY, cx - 6, baseY - 3);
+  ctx.bezierCurveTo(
+    cx - 7 + deepTurbulence(t * 1.1, 2.3) * 2, baseY - 8,
+    cx - 3 + deepTurbulence(t * 1.3, 4.5) * 2.5, baseY - 18,
+    cx + inTipX, baseY - inHeight
+  );
+  ctx.bezierCurveTo(
+    cx + 3 + deepTurbulence(t * 1.2, 6.7) * 2.5, baseY - 18,
+    cx + 7 + deepTurbulence(t * 1.0, 8.9) * 2, baseY - 8,
+    cx + 6, baseY - 3
+  );
+  ctx.quadraticCurveTo(cx + 6, baseY, cx, baseY + 1);
+  ctx.closePath();
+
+  const innerGrad = ctx.createLinearGradient(cx, baseY, cx, baseY - inHeight);
+  const white = flamePalette.whiteIncandescent;
+  const innerCore = flamePalette.innerCoreBright;
+  const core = flamePalette.coreWarmGlow;
+
+  innerGrad.addColorStop(0, `rgba(${white.r}, ${white.g}, ${white.b}, 0.98)`);
+  innerGrad.addColorStop(0.35, `rgba(${innerCore.r}, ${innerCore.g}, ${innerCore.b}, 0.94)`);
+  innerGrad.addColorStop(0.8, `rgba(${core.r}, ${core.g}, ${core.b}, 0.6)`);
+  innerGrad.addColorStop(1, `rgba(${white.r}, ${white.g}, ${white.b}, 0)`);
+
+  ctx.fillStyle = innerGrad;
+  ctx.shadowColor = '#ffffff';
+  ctx.shadowBlur = 8;
+  ctx.fill();
+  ctx.restore();
+
+  // 焰心白炽亮点
+  ctx.save();
+  ctx.fillStyle = '#ffffff';
+  ctx.shadowColor = '#ffffff';
+  ctx.shadowBlur = 6;
+  ctx.beginPath();
+  ctx.arc(cx, baseY - 5, 2.5, 0, Math.PI * 2);
+  ctx.fill();
+  ctx.restore();
+}
+
+function renderLoop() {
+  if (!canvasRef.value) return;
+  const canvas = canvasRef.value;
+  const ctx = canvas.getContext('2d');
+  if (!ctx) return;
+
+  time += 0.014;
+  ctx.clearRect(0, 0, 180, 180);
+
+  // 1. 绘制五重非对称流体火舌主体
+  drawFiveTendrilFlames(ctx, time);
+
+  // 2. 加色模式渲染大号发光火滴粒子
+  ctx.save();
+  ctx.globalCompositeOperation = 'lighter';
+  for (let e of embers) {
+    e.update();
+    e.draw(ctx);
+  }
+  ctx.restore();
+
+  animFrameId = requestAnimationFrame(renderLoop);
+}
+
+onMounted(() => {
+  if (!canvasRef.value) return;
+  const canvas = canvasRef.value;
+  const dpr = window.devicePixelRatio || 1;
+  canvas.width = 180 * dpr;
+  canvas.height = 180 * dpr;
+  const ctx = canvas.getContext('2d');
+  if (ctx) {
+    ctx.scale(dpr, dpr);
+  }
+
+  computeFlamePalette();
+  renderLoop();
+});
+
+onBeforeUnmount(() => {
+  if (animFrameId !== null) {
+    cancelAnimationFrame(animFrameId);
+    animFrameId = null;
+  }
+});
+</script>
+
 <style scoped>
-
 .spark-loader-wrapper {
-  --loader-primary: var(--spark-primary);
-  --loader-core-bright: var(--spark-primary-light);
-  --loader-glow: var(--spark-primary-glow);
-  --loader-orbit-outer: var(--spark-primary);
-  --loader-orbit-inner: var(--spark-harmonious-a);
-  --loader-text: var(--spark-text-muted);
+  --loader-primary: var(--spark-primary, #1deaaa);
+  --loader-core-bright: var(--spark-primary-light, #7effdc);
+  --loader-glow: var(--spark-primary-glow, rgba(29, 234, 170, 0.35));
+  --loader-orbit-outer: var(--spark-primary, #1deaaa);
+  --loader-orbit-inner: var(--spark-accent, #bd93f9);
+  display: flex;
+  justify-content: center;
+  align-items: center;
 }
 
-:root[data-theme="light"] .spark-loader-wrapper,
-.light .spark-loader-wrapper {
-  --loader-glow: color-mix(in srgb, var(--spark-primary), transparent 55%);
-}
-
-/* ===== 加载器容器 ===== */
-.spark-loader {
+.spark-loader-stage {
   position: relative;
-  width: 110px;
-  height: 110px;
-  margin-bottom: 28px;
+  width: 140px;
+  height: 140px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  margin-bottom: 20px;
 }
 
-
-/* ===== 第2层：脉冲涟漪（灵感心跳） ===== */
-.pulse-rings {
+/* 居中沉静热浪呼吸 */
+.flame-heat-aura {
   position: absolute;
-  top: 50%;
-  left: 50%;
-  transform: translate(-50%, -50%);
-  width: 100%;
-  height: 100%;
+  width: 120px;
+  height: 120px;
+  border-radius: 50%;
+  background: radial-gradient(circle at 50% 50%, var(--loader-glow) 0%, rgba(255, 209, 102, 0.08) 45%, transparent 70%);
+  filter: blur(16px);
+  animation: auraBreath 5.6s ease-in-out infinite alternate;
   pointer-events: none;
 }
 
-.pulse-ring {
+.flame-arc-svg {
   position: absolute;
-  top: 50%;
-  left: 50%;
-  transform: translate(-50%, -50%);
-  border: 1px solid var(--loader-glow);
-  border-radius: 50%;
-  opacity: 0;
-  animation: heartbeat-pulse 4s ease-out infinite;
-}
-
-.pulse-ring.ring-1 {
-  animation-delay: 0s;
-}
-
-.pulse-ring.ring-2 {
-  animation-delay: 1.33s;
-}
-
-.pulse-ring.ring-3 {
-  animation-delay: 2.66s;
-}
-
-@keyframes heartbeat-pulse {
-  0% {
-    width: 24px;
-    height: 24px;
-    opacity: 0.45;
-  }
-
-  100% {
-    width: 150px;
-    height: 150px;
-    opacity: 0;
-  }
-}
-
-
-/* ===== SVG 画布 ===== */
-.spark-svg {
+  inset: 0;
   width: 100%;
   height: 100%;
   overflow: visible;
-  position: relative;
+  pointer-events: none;
   z-index: 2;
 }
 
-
-/* ===== 第3层：星河轨道弧 ===== */
-.orbit {
+.arc-track {
   fill: none;
-  stroke-width: 1;
   stroke-linecap: round;
 }
 
-/* 外圈轨道：约62%可见弧段，顺时针缓转 */
-.orbit-outer {
-  stroke: var(--loader-orbit-outer);
-  stroke-dasharray: 170 107;
-  opacity: 0.35;
-  transform-origin: 50px 50px;
-  animation: orbit-spin-cw 20s linear infinite;
-  filter: drop-shadow(0 0 3px var(--loader-glow));
+/* ==========================================================================
+   【戏剧张力起伏节奏弧】(Dramatic Rhythmic Surge Arcs)
+   非匀速律动：平稳蓄能 -> 瞬间加速流转 -> 优雅减速滑行，周期调快至 4.6s / 3.4s
+   ========================================================================== */
+.arc-track-outer {
+  stroke: url(#globalFlameArcGrad);
+  stroke-width: 1.8;
+  stroke-dasharray: 120 180;
+  transform-origin: 90px 90px;
+  animation: outerArcRhythm 4.6s cubic-bezier(0.4, 0, 0.2, 1) infinite;
+  filter: drop-shadow(0 0 5px var(--loader-primary));
 }
 
-/* 内圈轨道：约48%可见弧段，逆时针缓转 */
-.orbit-inner {
-  stroke: var(--loader-orbit-inner);
-  stroke-dasharray: 100 108;
-  opacity: 0.25;
-  transform-origin: 50px 50px;
-  animation: orbit-spin-ccw 16s linear infinite;
+.arc-track-inner {
+  stroke: url(#globalFlameInnerArcGrad);
+  stroke-width: 1.2;
+  stroke-dasharray: 55 180;
+  transform-origin: 90px 90px;
+  opacity: 0.65;
+  animation: innerArcRhythm 3.4s cubic-bezier(0.45, 0.05, 0.25, 0.95) infinite;
 }
 
-@keyframes orbit-spin-cw {
-  from {
-    transform: rotate(0deg);
-  }
-
-  to {
-    transform: rotate(360deg);
-  }
+.flame-particle-canvas {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  z-index: 3;
+  pointer-events: none;
 }
 
-@keyframes orbit-spin-ccw {
-  from {
-    transform: rotate(360deg);
-  }
-
-  to {
-    transform: rotate(0deg);
-  }
-}
-
-
-/* ===== 轨道能量流光：沿轨道分布的光点依次呼吸，让轨道看起来在"流淌" ===== */
-.energy-flow {
-  transform-origin: 50px 50px;
-}
-
-/* 外圈流光跟随外轨道旋转 */
-.flow-outer {
-  animation: orbit-spin-cw 20s linear infinite;
-}
-
-/* 内圈流光跟随内轨道旋转 */
-.flow-inner {
-  animation: orbit-spin-ccw 16s linear infinite;
-}
-
-.flow-dot {
-  fill: var(--loader-primary);
-  opacity: 0;
-  animation: flow-pulse 2.5s ease-in-out infinite;
-}
-
-/* 沿轨道依次点亮，形成流动感 */
-.flow-dot.fd1 {
-  animation-delay: 0s;
-}
-
-.flow-dot.fd2 {
-  animation-delay: 0.5s;
-}
-
-.flow-dot.fd3 {
-  animation-delay: 1s;
-}
-
-.flow-dot.fd4 {
-  animation-delay: 1.5s;
-}
-
-.flow-dot.fd5 {
-  animation-delay: 2s;
-}
-
-.flow-dot.fd6 {
-  animation-delay: 0.3s;
-}
-
-.flow-dot.fd7 {
-  animation-delay: 0.9s;
-}
-
-.flow-dot.fd8 {
-  animation-delay: 1.5s;
-}
-
-.flow-dot.fd9 {
-  animation-delay: 2.1s;
-}
-
-@keyframes flow-pulse {
-
-  0%,
-  100% {
-    opacity: 0;
-    transform: scale(0.6);
-  }
-
-  50% {
-    opacity: 0.6;
-    transform: scale(1.3);
-  }
-}
-
-
-/* ===== 星河微尘：轨道间极小的闪烁星点，填充视觉空隙 ===== */
-.dust-dot {
-  fill: var(--loader-text);
-  opacity: 0;
-  animation: dust-twinkle 4s ease-in-out infinite;
-}
-
-.dust-dot.dd1 {
-  animation-delay: 0s;
-}
-
-.dust-dot.dd2 {
-  animation-delay: 0.8s;
-}
-
-.dust-dot.dd3 {
-  animation-delay: 1.6s;
-}
-
-.dust-dot.dd4 {
-  animation-delay: 2.4s;
-}
-
-.dust-dot.dd5 {
-  animation-delay: 3.2s;
-}
-
-@keyframes dust-twinkle {
-
-  0%,
-  100% {
-    opacity: 0;
-    transform: scale(0.7);
-  }
-
-  50% {
-    opacity: 0.4;
-    transform: scale(1.2);
-  }
-}
-
-
-/* ===== 第5层：灵感汇聚节点 ===== */
-.conv-dot {
-  fill: var(--loader-primary);
-  opacity: 0;
-  animation: convergence-pulse 3s ease-in-out infinite;
-}
-
-/* 四个方位依次点亮，像灵感火花轮番闪烁 */
-.conv-dot.cv1 {
-  animation-delay: 0s;
-}
-
-.conv-dot.cv2 {
-  animation-delay: 0.75s;
-}
-
-.conv-dot.cv3 {
-  animation-delay: 1.5s;
-}
-
-.conv-dot.cv4 {
-  animation-delay: 2.25s;
-}
-
-@keyframes convergence-pulse {
-
-  0%,
-  100% {
-    opacity: 0;
-    transform: scale(0.5);
-  }
-
-  50% {
-    opacity: 0.65;
-    transform: scale(1.4);
-  }
-}
-
-
-/* ===== 第4层：卫星（思绪流星） ===== */
-.sat-group {
-  transform-origin: 50px 50px;
-}
-
-/* 外圈卫星1 — 主思绪：顺时针，较快 */
-.sg-outer-1 {
-  animation: orbit-spin-cw 10s linear infinite;
-}
-
-/* 内圈卫星2 — 逆向思绪：逆时针，稍慢 */
-.sg-inner {
-  animation: orbit-spin-ccw 14s linear infinite;
-}
-
-/* 外圈卫星3 — 灵感碎片：顺时针，与卫星1同速但偏移 */
-.sg-outer-2 {
-  animation: orbit-spin-cw 10s linear infinite;
-  animation-delay: -3.3s;
-}
-
-/* 卫星样式 */
-.satellite {
-  opacity: 0.95;
-}
-
-.sat-primary {
-  fill: var(--loader-primary);
-}
-
-.sat-secondary {
-  fill: var(--loader-orbit-inner);
-}
-
-.sat-accent {
-  fill: var(--loader-core-bright);
-}
-
-/* 卫星尾迹：渐隐 */
-.sat-trail {
-  fill: var(--loader-primary);
-}
-
-.sat-trail.st1 {
-  opacity: 0.4;
-}
-
-.sat-trail.st2 {
-  opacity: 0.18;
-}
-
-.sat-trail.st3 {
-  opacity: 0.06;
-}
-
-
-/* ===== 核心辐射光芒：极细的光线从中心向外延伸 ===== */
-.ray-group {
-  transform-origin: 50px 50px;
-  animation: ray-rotate 12s linear infinite;
-}
-
-.core-ray {
-  stroke: var(--loader-primary);
-  stroke-width: 0.4;
-  stroke-linecap: round;
-  opacity: 0;
-  animation: ray-breathe 3s ease-in-out infinite;
-}
-
-/* 四道光芒依次闪烁，像灵感火花迸射 */
-.core-ray.ray1 {
-  animation-delay: 0s;
-}
-
-.core-ray.ray2 {
-  animation-delay: 0.75s;
-}
-
-.core-ray.ray3 {
-  animation-delay: 1.5s;
-}
-
-.core-ray.ray4 {
-  animation-delay: 2.25s;
-}
-
-/* 光芒缓慢旋转 */
-@keyframes ray-rotate {
-  from {
-    transform: rotate(0deg);
-  }
-
-  to {
-    transform: rotate(360deg);
-  }
-}
-
-/* 光芒呼吸：用dasharray制造从中心向外延伸的效果 */
-@keyframes ray-breathe {
-
-  0%,
-  100% {
-    opacity: 0;
-    stroke-dasharray: 0 32;
-    stroke-dashoffset: 0;
-  }
-
-  50% {
-    opacity: 0.3;
-    stroke-dasharray: 16 16;
-    stroke-dashoffset: -8;
-  }
-}
-
-
-/* ===== 第6层：核心四角星（灵感之心） ===== */
-.core-group {
-  transform-origin: 50px 50px;
-  animation: core-breathe 6s ease-in-out infinite;
-}
-
-.core-star {
-  fill: var(--loader-primary);
-  opacity: 0.9;
-}
-
-/* 中心高亮 */
-.core-center {
-  fill: var(--spark-text-inverse);
-  opacity: 0.9;
-}
-
-/* 外层光晕：与核心呼吸联动但更慢更柔 */
-.core-halo {
-  fill: var(--loader-glow);
-  opacity: 0;
-  animation: halo-breathe 3s ease-in-out infinite;
-}
-
-/* 核心呼吸：缓慢缩放 + 匀速旋转，一呼一吸暗示"正在思考" */
-@keyframes core-breathe {
+/* 外弧起伏呼吸加速律动 (4.6s 周期) */
+@keyframes outerArcRhythm {
   0% {
-    transform: scale(0.9) rotate(0deg);
+    transform: rotate(0deg) scale(0.96);
+    stroke-dasharray: 110 190;
     opacity: 0.8;
   }
-
-  50% {
-    transform: scale(1.08) rotate(180deg);
+  35% {
+    /* 蓄能加速流转 */
+    transform: rotate(140deg) scale(1.03);
+    stroke-dasharray: 145 155;
     opacity: 1;
   }
-
+  70% {
+    /* 平滑减速滑行 */
+    transform: rotate(270deg) scale(0.98);
+    stroke-dasharray: 125 175;
+    opacity: 0.85;
+  }
   100% {
-    transform: scale(0.9) rotate(360deg);
+    transform: rotate(360deg) scale(0.96);
+    stroke-dasharray: 110 190;
     opacity: 0.8;
   }
 }
 
-/* 光晕呼吸：柔和扩缩 */
-@keyframes halo-breathe {
-
-  0%,
-  100% {
-    opacity: 0;
-    r: 8;
+/* 内弧错相反转律动 (3.4s 周期) */
+@keyframes innerArcRhythm {
+  0% {
+    transform: rotate(360deg) scale(1.02);
+    stroke-dasharray: 50 190;
   }
-
   50% {
-    opacity: 0.3;
-    r: 16;
+    transform: rotate(160deg) scale(0.95);
+    stroke-dasharray: 75 165;
+  }
+  100% {
+    transform: rotate(0deg) scale(1.02);
+    stroke-dasharray: 50 190;
   }
 }
 
-
-
+@keyframes auraBreath {
+  0% { transform: scale(0.88); opacity: 0.35; }
+  100% { transform: scale(1.18); opacity: 0.75; }
+}
 </style>

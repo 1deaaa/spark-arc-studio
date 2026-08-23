@@ -23,6 +23,7 @@
           placement="bottom-start"
           :show-arrow="false"
           :overlap="false"
+          content-class="chat-token-usage-popover"
         >
           <template #trigger>
             <button
