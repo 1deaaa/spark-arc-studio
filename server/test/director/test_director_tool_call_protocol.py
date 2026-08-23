@@ -5,6 +5,7 @@ import threading
 from langchain_core.messages import AIMessage, ToolMessage
 
 from agents.director_graph import (
+    DIRECTOR_TOOL_FAILURE_RETRY_LIMIT,
     _build_director_message_update,
     _director_tracker_update_required,
     _is_tracker_progress_update,
@@ -71,6 +72,27 @@ def test_progress_protocol_error_returns_to_director() -> None:
     }
 
     assert route_after_director(state) == "director"
+
+
+def test_director_tool_failure_retry_limit_is_bounded() -> None:
+    assert DIRECTOR_TOOL_FAILURE_RETRY_LIMIT == 2
+    assert route_after_director({
+        "pending_delegate": None,
+        "force_return_to_director": True,
+        "messages": [],
+    }) == "director"
+    assert route_after_director({
+        "pending_delegate": None,
+        "force_return_to_director": False,
+        "messages": [],
+    }) == "__end__"
+    assert route_after_director({
+        "pending_delegate": None,
+        "force_return_to_director": False,
+        "tool_failure_streak": DIRECTOR_TOOL_FAILURE_RETRY_LIMIT + 1,
+        "tool_failure_tool": "work_tracker",
+        "messages": [ToolMessage(content="失败", tool_call_id="call-1", name="work_tracker")],
+    }) == "__end__"
 
 
 def test_director_stops_model_loop_after_background_auto_write_starts() -> None:

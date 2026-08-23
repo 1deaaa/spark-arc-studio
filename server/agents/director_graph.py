@@ -62,12 +62,18 @@ class DirectorState(TypedDict):
     force_return_to_director: Optional[bool]
     handoff_tracker_reconciled: Optional[bool]
     background_task_started: Optional[bool]
+    tool_failure_streak: int
+    tool_failure_tool: str
     stop_event: Any
     
     stream_events: Annotated[list, operator.add]
 
 
 # ==================== 辅助方法 ====================
+
+# 工具失败后的同工具自愈上限：允许模型看到错误后重新组织参数，
+# 但不能因为模型持续重复错误调用而无限循环。
+DIRECTOR_TOOL_FAILURE_RETRY_LIMIT = 2
 
 def _drain_tool_event_sink_to_writer(writer, sink: queue.Queue, source_agent: str, exclude_tools: set | None = None) -> None:
     """
@@ -557,6 +563,8 @@ def director_node(state: DirectorState) -> Dict[str, Any]:
         "director_system_instruction": system_instruction,
         "director_runtime_message": runtime_message,
         "workflow_tools": workflow_tools,
+        "tool_failure_streak": int(state.get("tool_failure_streak") or 0),
+        "tool_failure_tool": str(state.get("tool_failure_tool") or ""),
     }
     
     pending_delegate = None
@@ -712,6 +720,20 @@ def director_node(state: DirectorState) -> Dict[str, Any]:
                 
                 _drain_tool_event_sink_to_writer(writer, event_sink, "agent_director", exclude_tools={tool_name})
                 _is_tool_failure = is_tool_result_failure(tool_name, tool_result)
+                if _is_tool_failure:
+                    previous_tool = str(state.get("tool_failure_tool") or "")
+                    previous_streak = int(state.get("tool_failure_streak") or 0)
+                    if previous_tool == tool_name:
+                        next_streak = previous_streak + 1
+                    else:
+                        next_streak = 1
+                    updates["tool_failure_tool"] = tool_name
+                    updates["tool_failure_streak"] = next_streak
+                    if next_streak <= DIRECTOR_TOOL_FAILURE_RETRY_LIMIT:
+                        updates["force_return_to_director"] = True
+                else:
+                    updates["tool_failure_tool"] = ""
+                    updates["tool_failure_streak"] = 0
                 if _is_tool_failure:
                     evt_done = build_tool_stream_event(
                         "tool_exec_failed",
@@ -1194,6 +1216,12 @@ def route_after_director(state: DirectorState) -> str:
     # 补充：如果有最新消息并且它是函数调用的应答，可能需要返回 director 继续推敲
     # 结合当前需求，非 delegate 工具我们在节点内消化完了，直接 END
     msg_last = state["messages"][-1] if state.get("messages") else None
+    if (
+        isinstance(msg_last, ToolMessage)
+        and int(state.get("tool_failure_streak") or 0) > DIRECTOR_TOOL_FAILURE_RETRY_LIMIT
+        and str(state.get("tool_failure_tool") or "") == normalize_tool_name(msg_last.name or "")
+    ):
+        return END
     if isinstance(msg_last, ToolMessage) and msg_last.name != "delegate_task":
         return "director"
     
@@ -1324,6 +1352,8 @@ def run_director_stream(
             "force_return_to_director": False,
             "handoff_tracker_reconciled": False,
             "background_task_started": False,
+            "tool_failure_streak": 0,
+            "tool_failure_tool": "",
             "stream_events": [],
             "stop_event": stop_event,
         }
