@@ -84,6 +84,12 @@ def test_director_distinguishes_unattended_and_interactive_scriptwriting() -> No
         assert token in prompt
 
 
+def test_director_delegate_task_uses_single_required_field_name() -> None:
+    prompt = load_prompt("director")["chat_system"]
+    for token in ("task_description", "必须逐字写成", "不得改写成", "最小调用示例"):
+        assert token in prompt
+
+
 def test_scriptwriter_scene_titles_are_reader_facing_in_both_modes() -> None:
     prompts = load_prompt("scriptwriter")
     combined = "\n".join(str(prompts.get(key) or "") for key in ("pipeline_system", "chat_system", "tool_rules"))

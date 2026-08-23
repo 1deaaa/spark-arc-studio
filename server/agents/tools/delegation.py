@@ -27,10 +27,13 @@ class DelegateTaskInput(BaseModel):
         "agent_lorebook",
         "agent_muse",
         "agent_critic",
-    ] = Field(description="唯一的目标专家 ID。必须从枚举中选择一个，不要填写专家中文名。")
+    ] = Field(description="唯一的目标专家 ID。必须从枚举中选择一个，不要填写专家中文名。示例：agent_scriptwriter。")
     task_description: str = Field(
         min_length=1,
-        description="专家可独立执行的完整任务说明，写清目标、范围、已有事实和交付要求；不要在这里重复工具参数。",
+        description=(
+            "必填。专家可独立执行的完整任务说明，写清目标、范围、已有事实和交付要求；"
+            "不要在这里重复工具参数。请始终使用字段名 task_description，不要省略。"
+        ),
     )
     tracker_item_id: str | None = Field(
         default=None,

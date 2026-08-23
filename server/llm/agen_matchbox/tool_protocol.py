@@ -240,6 +240,7 @@ def normalize_tool_args(
     schema = _args_schema_json(schema_model)
     if not schema:
         return normalized
+
     definitions = schema.get("$defs") or schema.get("definitions") or {}
     return _normalize_value_by_schema(normalized, schema, definitions)
 
