@@ -271,6 +271,8 @@ const koKR = {
       sectionResolvedThreads: '회수된 복선',
       sectionRisks: '모순 리스크',
       sectionTickets: '미처리 수정 티켓',
+      ticketOperations: '작업',
+      ticketMustKeep: '유지해야 할 항목',
       lastSeenAt: '마지막 등장',
       statusLabel: '상태',
       goalLabel: '목표',

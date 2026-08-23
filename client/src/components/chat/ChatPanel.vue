@@ -17,13 +17,46 @@
           @rerun="$emit('rerun')"
         />
         <ChatProgressBoardPopover :history="history" :agent-id="agentId" />
+        <template v-if="isMobile && contextTokenLabel">
+          <button
+            type="button"
+            class="chat-token-chip"
+            :title="contextTokenHint"
+            :aria-label="contextTokenHint"
+            @mousedown.stop
+            @touchstart.stop
+            @click.stop="toggleMobileTokenUsage"
+          >
+            {{ contextTokenLabel }}
+          </button>
+          <Teleport to="body">
+            <div
+              v-if="mobileTokenUsageVisible"
+              class="chat-token-usage-mobile-layer"
+              role="presentation"
+              @click.self="closeMobileTokenUsage"
+            >
+              <section
+                class="chat-token-usage-mobile-panel"
+                role="dialog"
+                :aria-label="t('components.chatPanel.tokenUsageTitle')"
+                @click.stop
+              >
+                <ChatTokenUsagePanel
+                  :usage="contextTokenUsage"
+                  :agent-id="agentId"
+                  :live="sending"
+                />
+              </section>
+            </div>
+          </Teleport>
+        </template>
         <n-popover
-          v-if="contextTokenLabel"
+          v-else-if="contextTokenLabel"
           trigger="click"
           placement="bottom-start"
           :show-arrow="false"
           :overlap="false"
-          content-class="chat-token-usage-popover"
         >
           <template #trigger>
             <button
@@ -193,6 +226,7 @@ import AgentRadialPicker from '@/components/chat/AgentRadialPicker.vue';
 import ChatProgressBoardPopover from '@/components/chat/ChatProgressBoardPopover.vue';
 import ChatTokenUsagePanel from '@/components/chat/ChatTokenUsagePanel.vue';
 import GlobalLoading from '@/components/share/GlobalLoading.vue';
+import { useMobile } from '@/composables/useMobile';
 import type { ChatMessage } from '@/services/chatService';
 import {
   selectChatTailWindowStart,
@@ -303,6 +337,7 @@ const emit = defineEmits([
 ]);
 
 const { t } = useI18n();
+const { isMobile } = useMobile();
 const slots = useSlots();
 type ChatListExpose = { listRef?: HTMLElement | null };
 const chatListRef = ref<ChatListExpose | null>(null);
@@ -400,6 +435,19 @@ const contextTokenLabel = computed(() => {
 });
 
 const contextTokenHint = computed(() => t('components.chatPanel.taskTokenHint'));
+const mobileTokenUsageVisible = ref(false);
+
+function toggleMobileTokenUsage(): void {
+  mobileTokenUsageVisible.value = !mobileTokenUsageVisible.value;
+}
+
+function closeMobileTokenUsage(): void {
+  mobileTokenUsageVisible.value = false;
+}
+
+watch([isMobile, contextTokenLabel], ([mobile, label]) => {
+  if (!mobile || !label) closeMobileTokenUsage();
+}, { flush: 'post' });
 
 /** AgentRadialPicker 选中 Agent 时透传给上层（轮盘自身会自动关闭） */
 function onAgentSelected(val: string): void {
@@ -497,31 +545,63 @@ defineExpose({ listRef: chatListRef });
   height: 22px;
   padding: 0 7px;
   margin-left: 2px;
-  border-radius: 999px;
-  border: 1px solid rgba(var(--spark-primary-rgb), 0.16);
-  background: rgba(var(--spark-primary-rgb), 0.06);
+  border: 1px solid var(--spark-border);
+  border-radius: 6px;
+  background: transparent;
   color: var(--spark-text-muted);
   font-size: var(--spark-fs-2xs);
-  font-weight: 700;
+  font-weight: 650;
   font-family: inherit;
   line-height: 1;
   white-space: nowrap;
   overflow: hidden;
   text-overflow: ellipsis;
   cursor: pointer;
+  box-shadow: none;
+  transition: border-color 0.16s ease, background-color 0.16s ease, color 0.16s ease;
 }
 
 .chat-token-chip:hover,
 .chat-token-chip:focus-visible {
-  border-color: rgba(var(--spark-primary-rgb), 0.34);
-  background: rgba(var(--spark-primary-rgb), 0.1);
+  border-color: color-mix(in srgb, var(--spark-primary) 55%, var(--spark-border));
+  background: color-mix(in srgb, var(--spark-primary) 7%, transparent);
   color: var(--spark-primary);
   outline: none;
 }
 
 .chat-token-chip.is-window {
   color: var(--spark-primary);
-  background: rgba(var(--spark-primary-rgb), 0.1);
+  border-color: color-mix(in srgb, var(--spark-primary) 38%, var(--spark-border));
+}
+
+.chat-token-usage-mobile-layer {
+  position: fixed;
+  inset: 0;
+  z-index: 2000;
+  pointer-events: auto;
+  background: transparent;
+}
+
+.chat-token-usage-mobile-panel {
+  position: absolute;
+  top: calc(var(--sat, 0px) + 64px);
+  left: 50%;
+  width: min(440px, calc(100vw - 24px));
+  max-width: calc(100vw - 24px);
+  max-height: calc(100dvh - var(--sat, 0px) - 84px);
+  padding: 12px;
+  box-sizing: border-box;
+  overflow: auto;
+  border: 1px solid var(--spark-border-subtle);
+  border-radius: var(--spark-radius-lg);
+  background: var(--spark-panel-bg);
+  box-shadow: var(--spark-shadow-2xl);
+  transform: translateX(-50%);
+}
+
+.chat-token-usage-mobile-panel :deep(.token-usage-panel) {
+  width: 100%;
+  max-width: 100%;
 }
 
 .chat-panel-header-right {

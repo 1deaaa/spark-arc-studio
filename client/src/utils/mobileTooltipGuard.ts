@@ -2,7 +2,6 @@ import { getViewportSnapshot } from './responsive';
 
 const TOOLTIP_FOLLOWER_SELECTOR = '.v-binder-follower-content';
 const TOOLTIP_SELECTOR = '.n-popover';
-const CENTERED_MOBILE_POPOVER_SELECTOR = '.chat-token-usage-popover';
 const SHIFT_MARKER = ' translateX(var(--spark-tooltip-shift-x, 0px))';
 const VIEWPORT_MARGIN_PX = 12;
 const MOBILE_POPOVER_FOLLOWER_CLASS = 'spark-mobile-popover-follower';
@@ -89,40 +88,6 @@ function getCurrentShiftPx(follower: HTMLElement): number {
     return Number.isFinite(parsed) ? parsed : 0;
 }
 
-export type MobileTooltipShiftOptions = {
-    left: number;
-    width: number;
-    viewportWidth: number;
-    centered?: boolean;
-    margin?: number;
-};
-
-/** 计算移动端弹层在视口内的水平修正量。 */
-export function resolveMobileTooltipShift({
-    left,
-    width,
-    viewportWidth,
-    centered = false,
-    margin = VIEWPORT_MARGIN_PX,
-}: MobileTooltipShiftOptions): number {
-    const safeWidth = Math.max(0, width);
-    const safeViewportWidth = Math.max(0, viewportWidth);
-    const safeMargin = Math.max(0, margin);
-
-    if (!centered) {
-        if (left < safeMargin) return safeMargin - left;
-        const right = left + safeWidth;
-        const maxRight = safeViewportWidth - safeMargin;
-        return right > maxRight ? maxRight - right : 0;
-    }
-
-    const desiredLeft = (safeViewportWidth - safeWidth) / 2;
-    const minLeft = safeMargin;
-    const maxLeft = Math.max(minLeft, safeViewportWidth - safeMargin - safeWidth);
-    const nextLeft = Math.min(Math.max(desiredLeft, minLeft), maxLeft);
-    return nextLeft - left;
-}
-
 function adjustTooltipFollower(follower: HTMLElement): boolean {
     const tooltip = follower.querySelector<HTMLElement>(TOOLTIP_SELECTOR);
     if (!tooltip) {
@@ -140,14 +105,17 @@ function adjustTooltipFollower(follower: HTMLElement): boolean {
     primeFollowerMobileBounds(follower);
     ensureFollowerShiftTransform(follower);
 
-    const centeredContent = tooltip.querySelector<HTMLElement>(CENTERED_MOBILE_POPOVER_SELECTOR);
-    const rect = (centeredContent || tooltip).getBoundingClientRect();
-    const delta = resolveMobileTooltipShift({
-        left: rect.left,
-        width: rect.width,
-        viewportWidth: window.innerWidth,
-        centered: Boolean(centeredContent),
-    });
+    const rect = tooltip.getBoundingClientRect();
+    const viewportWidth = window.innerWidth;
+    const minLeft = VIEWPORT_MARGIN_PX;
+    const maxRight = viewportWidth - VIEWPORT_MARGIN_PX;
+    let delta = 0;
+
+    if (rect.left < minLeft) {
+        delta = minLeft - rect.left;
+    } else if (rect.right > maxRight) {
+        delta = maxRight - rect.right;
+    }
 
     if (Math.abs(delta) < 0.5) {
         return false;

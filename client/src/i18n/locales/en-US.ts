@@ -273,6 +273,8 @@ const enUS = {
       sectionResolvedThreads: 'Resolved threads',
       sectionRisks: 'Conflict risks',
       sectionTickets: 'Open review tickets',
+      ticketOperations: 'Operations',
+      ticketMustKeep: 'Must keep',
       lastSeenAt: 'Last seen',
       statusLabel: 'Status',
       goalLabel: 'Goal',

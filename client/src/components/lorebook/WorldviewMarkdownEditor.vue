@@ -357,8 +357,8 @@ onBeforeUnmount(() => {
   window.removeEventListener('mouseup', onResizerMouseUp);
 });
 
-const document = computed(() => parseWorldviewMarkdown(props.modelValue));
-const visibleSections = computed(() => document.value.sections);
+const worldviewDocument = computed(() => parseWorldviewMarkdown(props.modelValue));
+const visibleSections = computed(() => worldviewDocument.value.sections);
 const activeSection = computed(() => visibleSections.value[activeSectionIndex.value] || visibleSections.value[0]);
 const movableSectionIndexes = computed(() => visibleSections.value.filter(section => !section.legacy).map(section => section.index));
 const movableSectionPosition = computed(() => movableSectionIndexes.value.indexOf(activeSectionIndex.value));

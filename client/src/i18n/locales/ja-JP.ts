@@ -273,6 +273,8 @@ const jaJP = {
       sectionResolvedThreads: '回収済み伏線',
       sectionRisks: '矛盾リスク',
       sectionTickets: '未対応の修正チケット',
+      ticketOperations: '操作',
+      ticketMustKeep: '必ず残す',
       lastSeenAt: '最後の登場',
       statusLabel: '状態',
       goalLabel: '目標',

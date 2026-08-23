@@ -271,6 +271,8 @@ const zhCN = {
       sectionResolvedThreads: '已回收线索',
       sectionRisks: '矛盾风险',
       sectionTickets: '开放修订工单',
+      ticketOperations: '操作',
+      ticketMustKeep: '必须保留',
       lastSeenAt: '最近出场',
       statusLabel: '状态',
       goalLabel: '目标',
