@@ -37,32 +37,39 @@ def test_custom_and_system_platforms_allow_duplicate_base_url(manager: AIManager
         assert len(rows) == 4
 
 
-def test_disabled_platform_revival_requires_its_own_platform_key(manager: AIManager) -> None:
-    """相同 URL 新建平台不会复活另一条禁用记录，明确 key 才能复活。"""
+def test_disabled_platform_revival_requires_matching_name_and_url(manager: AIManager) -> None:
+    """同 URL 的不同名称创建新平台，同名同 URL 创建复活原平台。"""
     url = "https://revive.example/v1"
     custom_a = manager.add_platform("禁用自定义", url, user_id="42")
     manager.disable_platform(custom_a.id, user_id="42")
     custom_b = manager.add_platform("新自定义", url, user_id="42")
     assert custom_b.id != custom_a.id
 
-    system_a = manager.admin_add_sys_platform("禁用系统", url)
-    manager.disable_platform(system_a.id, admin_mode=True)
-    system_b = manager.admin_add_sys_platform("新系统", url)
-    assert system_b.id != system_a.id
+    custom_revived = manager.add_platform("禁用自定义", url, user_id="42")
+    assert custom_revived.id == custom_a.id
 
-    revived = manager.admin_add_sys_platform(
-        "复活系统",
-        url,
-        platform_key=system_a.platform_key,
-    )
-    assert revived.id == system_a.id
-    custom_revived = manager.add_platform(
+    # 显式 platform_key 仍可在名称变化时复活自定义平台的稳定身份。
+    manager.disable_platform(custom_revived.id, user_id="42")
+    custom_key_revived = manager.add_platform(
         "复活自定义",
         url,
         user_id="42",
         platform_key=custom_a.platform_key,
     )
-    assert custom_revived.id == custom_a.id
+    assert custom_key_revived.id == custom_a.id
+
+    system_a = manager.admin_add_sys_platform("禁用系统", url)
+    manager.disable_platform(system_a.id, admin_mode=True)
+    system_b = manager.admin_add_sys_platform("新系统", url)
+    assert system_b.id != system_a.id
+
+    system_revived = manager.admin_add_sys_platform("禁用系统", url)
+    assert system_revived.id == system_a.id
+
+    # 显式 platform_key 仍可在名称变化时复活稳定身份。
+    manager.disable_platform(system_revived.id, admin_mode=True)
+    revived = manager.admin_add_sys_platform("复活系统", url, platform_key=system_a.platform_key)
+    assert revived.id == system_a.id
     with manager.Session() as session:
         assert session.query(LLMPlatform).filter_by(id=system_a.id).one().disable == 0
         assert session.query(LLMPlatform).filter_by(id=custom_a.id).one().disable == 0

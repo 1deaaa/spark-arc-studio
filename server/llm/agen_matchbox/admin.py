@@ -136,6 +136,33 @@ class AdminMixin:
 
     # ==================== 平台管理 ====================
 
+    @staticmethod
+    def _find_disabled_platform_for_revival(
+        session,
+        *,
+        name: str,
+        base_url: str,
+        is_sys: bool,
+        user_id: Optional[str] = None,
+    ) -> Optional[LLMPlatform]:
+        """按平台类型、归属、名称和规范化 URL 精确查找可复活的平台。"""
+        filters = [
+            LLMPlatform.name == name,
+            LLMPlatform.base_url == base_url,
+            LLMPlatform.disable == 1,
+            LLMPlatform.is_sys == int(is_sys),
+        ]
+        if not is_sys:
+            if user_id is None:
+                return None
+            filters.append(LLMPlatform.user_id == str(user_id))
+        return (
+            session.query(LLMPlatform)
+            .filter(*filters)
+            .order_by(LLMPlatform.id)
+            .first()
+        )
+
     def _describe_secret_state(self, raw_value: Optional[str], *, audience: str = "generic") -> Dict[str, Any]:
         text = raw_value.strip() if isinstance(raw_value, str) else ""
         if not text:
@@ -302,6 +329,22 @@ class AdminMixin:
                 existing_key.disable = 0
                 session.commit()
                 return existing_key
+
+            # 未提供稳定身份时，仅复活同名、同 URL 的禁用自定义平台。
+            if not supplied_platform_key:
+                revived = self._find_disabled_platform_for_revival(
+                    session,
+                    name=name,
+                    base_url=base_url,
+                    is_sys=False,
+                    user_id=user_id,
+                )
+                if revived:
+                    revived.api_key = api_key
+                    revived.recharge_url = recharge_url
+                    revived.disable = 0
+                    session.commit()
+                    return revived
 
             # 平台名称全局唯一；平台身份由新生成的 key 区分。
             if name in DEFAULT_PLATFORM_CONFIGS or session.query(LLMPlatform).filter_by(name=name).first():
@@ -1261,6 +1304,25 @@ class AdminMixin:
                 with self._cache_lock:
                     self._sys_platforms_cache = None
                 return existing_key
+
+            # 未提供稳定身份时，仅复活同名、同 URL 的禁用系统平台。
+            if not supplied_platform_key:
+                revived = self._find_disabled_platform_for_revival(
+                    session,
+                    name=name,
+                    base_url=base_url,
+                    is_sys=True,
+                )
+                if revived:
+                    revived.disable = 0
+                    revived.recharge_url = recharge_url
+                    revived.sys_credit_balance = _normalize_nullable_credit_balance(sys_credit_balance)
+                    if api_key:
+                        revived.api_key = SecurityManager.get_instance().encrypt(api_key)
+                    session.commit()
+                    with self._cache_lock:
+                        self._sys_platforms_cache = None
+                    return revived
 
             # 平台名称全局唯一；相同 URL 允许对应多个平台。
             existing_name = session.query(LLMPlatform).filter_by(name=name).first()
