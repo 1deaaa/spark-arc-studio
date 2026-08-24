@@ -19,36 +19,43 @@
         <ChatProgressBoardPopover :history="history" :agent-id="agentId" />
         <template v-if="isMobile && contextTokenLabel">
           <button
+            ref="mobileTokenButtonRef"
             type="button"
             class="chat-token-chip"
             :title="contextTokenHint"
             :aria-label="contextTokenHint"
             @mousedown.stop
             @touchstart.stop
-            @click.stop="toggleMobileTokenUsage"
+            @touchend.stop.prevent="onMobileTokenTouchEnd"
+            @click.stop="onMobileTokenClick"
           >
             {{ contextTokenLabel }}
           </button>
           <Teleport to="body">
-            <div
-              v-if="mobileTokenUsageVisible"
-              class="chat-token-usage-mobile-layer"
-              role="presentation"
-              @click.self="closeMobileTokenUsage"
-            >
-              <section
-                class="chat-token-usage-mobile-panel"
-                role="dialog"
-                :aria-label="t('components.chatPanel.tokenUsageTitle')"
-                @click.stop
+            <Transition name="chat-token-layer">
+              <div
+                v-if="mobileTokenUsageVisible"
+                class="chat-token-usage-mobile-layer"
+                role="presentation"
+                :style="mobileTokenLayerStyle"
+                @click.self="closeMobileTokenUsage"
+                @touchend.self.prevent="closeMobileTokenUsage"
               >
-                <ChatTokenUsagePanel
-                  :usage="contextTokenUsage"
-                  :agent-id="agentId"
-                  :live="sending"
-                />
-              </section>
-            </div>
+                <section
+                  class="chat-token-usage-mobile-panel"
+                  role="dialog"
+                  :aria-label="t('components.chatPanel.tokenUsageTitle')"
+                  @click.stop
+                  @touchend.stop
+                >
+                  <ChatTokenUsagePanel
+                    :usage="contextTokenUsage"
+                    :agent-id="agentId"
+                    :live="sending"
+                  />
+                </section>
+              </div>
+            </Transition>
           </Teleport>
         </template>
         <n-popover
@@ -218,7 +225,7 @@
  * 2. 状态驱动：通过 props 接收对话数据，通过 events 发出交互指令，本身不持有业务 Store。
  * 3. 高复用性：同时服务于 GlobalChatFloat（单例主入口）和 ExtraChatWindow（多实例窗口）。
  */
-import { computed, nextTick, onBeforeUnmount, onMounted, ref, useSlots, watch, type PropType } from 'vue';
+import { computed, nextTick, onBeforeUnmount, onMounted, ref, useSlots, watch, type CSSProperties, type PropType } from 'vue';
 import { useI18n } from 'vue-i18n';
 import { NButton, NInput, NPopconfirm, NPopover, NTooltip } from 'naive-ui';
 import ChatMessageList from '@/components/chat/ChatMessageList.vue';
@@ -436,14 +443,84 @@ const contextTokenLabel = computed(() => {
 
 const contextTokenHint = computed(() => t('components.chatPanel.taskTokenHint'));
 const mobileTokenUsageVisible = ref(false);
+const mobileTokenButtonRef = ref<HTMLButtonElement | null>(null);
+const mobileTokenLayerStyle = ref<CSSProperties>({});
+let suppressMobileTokenClickUntil = 0;
+
+function updateMobileTokenPosition(): void {
+  if (!mobileTokenUsageVisible.value && !mobileTokenButtonRef.value) return;
+
+  const buttonRect = mobileTokenButtonRef.value?.getBoundingClientRect();
+  if (!buttonRect) return;
+
+  const visualViewport = window.visualViewport;
+  const viewportLeft = visualViewport?.offsetLeft ?? 0;
+  const viewportTop = visualViewport?.offsetTop ?? 0;
+  const viewportWidth = visualViewport?.width ?? window.innerWidth;
+  const viewportHeight = visualViewport?.height ?? window.innerHeight;
+  const edgeGap = 12;
+  const anchorGap = 8;
+  const panelWidth = Math.min(440, Math.max(0, viewportWidth - edgeGap * 2));
+  const desiredCenter = buttonRect.left + buttonRect.width / 2;
+  const panelCenter = Math.min(
+    viewportLeft + viewportWidth - edgeGap - panelWidth / 2,
+    Math.max(viewportLeft + edgeGap + panelWidth / 2, desiredCenter),
+  );
+  const panelTop = buttonRect.bottom + anchorGap;
+  const availableHeight = Math.max(80, viewportTop + viewportHeight - panelTop - edgeGap);
+
+  mobileTokenLayerStyle.value = {
+    '--chat-token-panel-left': `${Math.round(panelCenter)}px`,
+    '--chat-token-panel-top': `${Math.round(panelTop)}px`,
+    '--chat-token-panel-width': `${Math.round(panelWidth)}px`,
+    '--chat-token-panel-max-height': `${Math.round(availableHeight)}px`,
+  } as CSSProperties;
+}
 
 function toggleMobileTokenUsage(): void {
-  mobileTokenUsageVisible.value = !mobileTokenUsageVisible.value;
+  if (mobileTokenUsageVisible.value) {
+    closeMobileTokenUsage();
+    return;
+  }
+  updateMobileTokenPosition();
+  mobileTokenUsageVisible.value = true;
+  nextTick(updateMobileTokenPosition);
+}
+
+function onMobileTokenTouchEnd(): void {
+  // 部分移动浏览器/WebView 会吞掉触摸后的合成 click，因此直接在触摸结束时响应。
+  // 同时短暂忽略紧随其后的合成 click，避免弹层被连续切换两次。
+  suppressMobileTokenClickUntil = Date.now() + 700;
+  toggleMobileTokenUsage();
+}
+
+function onMobileTokenClick(): void {
+  if (Date.now() < suppressMobileTokenClickUntil) return;
+  toggleMobileTokenUsage();
 }
 
 function closeMobileTokenUsage(): void {
   mobileTokenUsageVisible.value = false;
 }
+
+function bindMobileTokenPositionListeners(): void {
+  window.addEventListener('resize', updateMobileTokenPosition, { passive: true });
+  window.addEventListener('scroll', updateMobileTokenPosition, { passive: true, capture: true });
+  window.visualViewport?.addEventListener('resize', updateMobileTokenPosition, { passive: true });
+  window.visualViewport?.addEventListener('scroll', updateMobileTokenPosition, { passive: true });
+}
+
+function unbindMobileTokenPositionListeners(): void {
+  window.removeEventListener('resize', updateMobileTokenPosition);
+  window.removeEventListener('scroll', updateMobileTokenPosition, { capture: true });
+  window.visualViewport?.removeEventListener('resize', updateMobileTokenPosition);
+  window.visualViewport?.removeEventListener('scroll', updateMobileTokenPosition);
+}
+
+watch(mobileTokenUsageVisible, (visible) => {
+  if (visible) bindMobileTokenPositionListeners();
+  else unbindMobileTokenPositionListeners();
+}, { flush: 'sync' });
 
 watch([isMobile, contextTokenLabel], ([mobile, label]) => {
   if (!mobile || !label) closeMobileTokenUsage();
@@ -498,6 +575,7 @@ onMounted(() => {
 onBeforeUnmount(() => {
   listResizeObserver?.disconnect();
   listResizeObserver = null;
+  unbindMobileTokenPositionListeners();
 });
 
 // 暴露 ChatMessageList 内部的 DOM listRef，保持与 useChatActions scrollToBottom 兼容
@@ -558,6 +636,8 @@ defineExpose({ listRef: chatListRef });
   text-overflow: ellipsis;
   cursor: pointer;
   box-shadow: none;
+  touch-action: manipulation;
+  -webkit-tap-highlight-color: transparent;
   transition: border-color 0.16s ease, background-color 0.16s ease, color 0.16s ease;
 }
 
@@ -579,16 +659,16 @@ defineExpose({ listRef: chatListRef });
   inset: 0;
   z-index: 2000;
   pointer-events: auto;
-  background: transparent;
+  background: color-mix(in srgb, #000 7%, transparent);
 }
 
 .chat-token-usage-mobile-panel {
-  position: absolute;
-  top: calc(var(--sat, 0px) + 64px);
-  left: 50%;
-  width: min(440px, calc(100vw - 24px));
+  position: fixed;
+  top: var(--chat-token-panel-top);
+  left: var(--chat-token-panel-left);
+  width: var(--chat-token-panel-width);
   max-width: calc(100vw - 24px);
-  max-height: calc(100dvh - var(--sat, 0px) - 84px);
+  max-height: var(--chat-token-panel-max-height);
   padding: 12px;
   box-sizing: border-box;
   overflow: auto;
@@ -597,11 +677,45 @@ defineExpose({ listRef: chatListRef });
   background: var(--spark-panel-bg);
   box-shadow: var(--spark-shadow-2xl);
   transform: translateX(-50%);
+  transform-origin: top center;
+  will-change: transform, opacity;
+}
+
+.chat-token-layer-enter-active,
+.chat-token-layer-leave-active {
+  transition: background-color 0.2s ease;
+}
+
+.chat-token-layer-enter-active .chat-token-usage-mobile-panel,
+.chat-token-layer-leave-active .chat-token-usage-mobile-panel {
+  transition:
+    opacity 0.18s ease,
+    transform 0.24s cubic-bezier(0.2, 0.8, 0.2, 1);
+}
+
+.chat-token-layer-enter-from,
+.chat-token-layer-leave-to {
+  background: transparent;
+}
+
+.chat-token-layer-enter-from .chat-token-usage-mobile-panel,
+.chat-token-layer-leave-to .chat-token-usage-mobile-panel {
+  opacity: 0;
+  transform: translateX(-50%) translateY(-8px) scale(0.97);
 }
 
 .chat-token-usage-mobile-panel :deep(.token-usage-panel) {
   width: 100%;
   max-width: 100%;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .chat-token-layer-enter-active,
+  .chat-token-layer-leave-active,
+  .chat-token-layer-enter-active .chat-token-usage-mobile-panel,
+  .chat-token-layer-leave-active .chat-token-usage-mobile-panel {
+    transition-duration: 0.01ms;
+  }
 }
 
 .chat-panel-header-right {
