@@ -136,15 +136,25 @@
 
         <!-- 模块内容滚动区 -->
         <div class="section-editor-scroll">
-          <!-- 结构化属性卡片流 (Cardified Property Inspector) -->
+          <!-- 设定要素卡片流 (Cardified Property Inspector) -->
           <div v-if="activeFields.length" class="field-editor">
             <div class="subsection-heading">
               <div class="subsection-title-wrap">
                 <n-icon :component="SlidersHorizontal" class="subsection-icon" />
                 <span class="subsection-title">{{ t('components.lorebookEditor.structuredFields') }}</span>
-                <span class="subsection-badge">{{ activeFields.length }} 项属性</span>
+                <span class="subsection-badge">{{ activeFields.length }} 项要素</span>
               </div>
-              <small class="subsection-hint">{{ t('components.lorebookEditor.structuredFieldsHint') }}</small>
+              <n-button
+                v-if="!activeSection.legacy"
+                size="tiny"
+                secondary
+                type="primary"
+                class="add-field-btn"
+                @click="appendField"
+              >
+                <template #icon><n-icon :component="Plus" /></template>
+                {{ t('components.lorebookEditor.addField') }}
+              </n-button>
             </div>
 
             <div class="property-cards-grid">
@@ -156,7 +166,29 @@
                 <div class="property-card-header">
                   <div class="property-label-pill">
                     <span class="property-label-dot" />
-                    <span class="property-label-text">{{ field.label }}</span>
+                    <input
+                      :value="field.label"
+                      class="property-label-input"
+                      :placeholder="t('components.lorebookEditor.fieldLabelPlaceholder')"
+                      title="单击直接编辑要素名称"
+                      @input="e => updateFieldLabel(field.lineIndex, (e.target as HTMLInputElement).value)"
+                    />
+                    <span class="sr-only">{{ field.label }}</span>
+                  </div>
+                  <div class="property-card-actions">
+                    <n-tooltip trigger="hover">
+                      <template #trigger>
+                        <button
+                          type="button"
+                          class="property-card-del-btn"
+                          :aria-label="t('common.delete')"
+                          @click="removeField(field.lineIndex)"
+                        >
+                          <n-icon :component="Trash2" />
+                        </button>
+                      </template>
+                      {{ t('common.delete') }}
+                    </n-tooltip>
                   </div>
                 </div>
                 <div class="property-card-body">
@@ -180,8 +212,15 @@
                 <n-icon :component="ScrollText" class="subsection-icon" />
                 <span class="subsection-title">{{ activeFields.length ? t('components.lorebookEditor.additionalNotes') : t('components.lorebookEditor.sectionContent') }}</span>
               </div>
-              <n-button v-if="!activeSection.legacy" size="tiny" secondary type="primary" class="add-field-btn" @click="appendField">
-                <template #icon><n-icon :component="ListPlus" /></template>
+              <n-button
+                v-if="!activeFields.length && !activeSection.legacy"
+                size="tiny"
+                secondary
+                type="primary"
+                class="add-field-btn"
+                @click="appendField"
+              >
+                <template #icon><n-icon :component="Plus" /></template>
                 {{ t('components.lorebookEditor.addField') }}
               </n-button>
             </div>
@@ -240,7 +279,6 @@ import {
   ArrowDown,
   ArrowUp,
   FileText,
-  ListPlus,
   Plus,
   ScrollText,
   SlidersHorizontal,
@@ -253,6 +291,7 @@ import {
   moveWorldviewSection,
   parseWorldviewFields,
   parseWorldviewMarkdown,
+  removeWorldviewField,
   removeWorldviewSection,
   updateWorldviewField,
   updateWorldviewSection,
@@ -357,8 +396,8 @@ onBeforeUnmount(() => {
   window.removeEventListener('mouseup', onResizerMouseUp);
 });
 
-const worldviewDocument = computed(() => parseWorldviewMarkdown(props.modelValue));
-const visibleSections = computed(() => worldviewDocument.value.sections);
+const document = computed(() => parseWorldviewMarkdown(props.modelValue));
+const visibleSections = computed(() => document.value.sections);
 const activeSection = computed(() => visibleSections.value[activeSectionIndex.value] || visibleSections.value[0]);
 const movableSectionIndexes = computed(() => visibleSections.value.filter(section => !section.legacy).map(section => section.index));
 const movableSectionPosition = computed(() => movableSectionIndexes.value.indexOf(activeSectionIndex.value));
@@ -397,7 +436,7 @@ const activeSectionMetaText = computed(() => {
   }
   const fieldCount = activeFields.value.length;
   const chars = activeSectionCharCount.value;
-  const fieldPart = fieldCount ? `${fieldCount} 项结构化属性` : '纯文本正文';
+  const fieldPart = fieldCount ? `${fieldCount} 项设定要素` : '纯文本正文';
   const charPart = chars ? `共 ${chars} 字` : '暂无详细设定';
   return `${fieldPart} · ${charPart}`;
 });
@@ -431,9 +470,21 @@ function updateSectionTitle(title: string) {
   emitValue(updateWorldviewSection(props.modelValue, activeSectionIndex.value, { title }));
 }
 
+function updateFieldLabel(lineIndex: number, label: string) {
+  if (!activeSection.value) return;
+  const body = updateWorldviewField(activeSection.value.body, lineIndex, { label });
+  emitValue(updateWorldviewSection(props.modelValue, activeSectionIndex.value, { body }));
+}
+
 function updateField(lineIndex: number, value: string) {
   if (!activeSection.value) return;
   const body = updateWorldviewField(activeSection.value.body, lineIndex, { value });
+  emitValue(updateWorldviewSection(props.modelValue, activeSectionIndex.value, { body }));
+}
+
+function removeField(lineIndex: number) {
+  if (!activeSection.value) return;
+  const body = removeWorldviewField(activeSection.value.body, lineIndex);
   emitValue(updateWorldviewSection(props.modelValue, activeSectionIndex.value, { body }));
 }
 
@@ -943,7 +994,7 @@ function removeSection() {
 }
 
 /* ==========================================================================
-   内容滚动区与属性卡片 (Inspector Body & Cards)
+   内容滚动区与设定要素卡片 (Inspector Body & Cards)
    ========================================================================== */
 .section-editor-scroll {
   flex: 1;
@@ -1000,9 +1051,8 @@ function removeSection() {
   font-weight: 600;
 }
 
-.subsection-hint {
-  color: var(--spark-text-muted);
-  font-size: var(--spark-fs-3xs, 11px);
+.add-field-btn {
+  font-weight: 600;
 }
 
 .property-cards-grid {
@@ -1033,6 +1083,7 @@ function removeSection() {
   display: flex;
   align-items: center;
   justify-content: space-between;
+  gap: 8px;
 }
 
 .property-label-pill {
@@ -1042,6 +1093,14 @@ function removeSection() {
   padding: 2px 8px;
   border-radius: 4px;
   background: color-mix(in srgb, var(--spark-text-muted) 10%, transparent);
+  border: 1px solid transparent;
+  transition: border-color 0.18s ease, background-color 0.18s ease;
+}
+
+.property-label-pill:hover,
+.property-label-pill:focus-within {
+  border-color: color-mix(in srgb, var(--spark-primary) 30%, var(--spark-border));
+  background: color-mix(in srgb, var(--spark-primary) 8%, transparent);
 }
 
 .property-label-dot {
@@ -1049,12 +1108,70 @@ function removeSection() {
   height: 5px;
   border-radius: 50%;
   background: var(--spark-primary);
+  flex-shrink: 0;
 }
 
-.property-label-text {
+.property-label-input {
+  border: none;
+  background: transparent;
   color: var(--spark-text);
+  font-family: inherit;
   font-size: var(--spark-fs-xs, 12px);
   font-weight: 650;
+  outline: none;
+  padding: 0;
+  width: auto;
+  min-width: 60px;
+  max-width: 200px;
+}
+
+.property-label-input::placeholder {
+  color: var(--spark-text-muted);
+  font-weight: normal;
+  opacity: 0.5;
+}
+
+.sr-only {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  padding: 0;
+  margin: -1px;
+  overflow: hidden;
+  clip: rect(0, 0, 0, 0);
+  white-space: nowrap;
+  border: 0;
+}
+
+.property-card-actions {
+  display: flex;
+  align-items: center;
+  opacity: 0.6;
+  transition: opacity 0.15s ease;
+}
+
+.property-card:hover .property-card-actions,
+.property-card:focus-within .property-card-actions {
+  opacity: 1;
+}
+
+.property-card-del-btn {
+  display: grid;
+  place-items: center;
+  width: 22px;
+  height: 22px;
+  border: none;
+  border-radius: 4px;
+  background: transparent;
+  color: var(--spark-text-muted);
+  font-size: 13px;
+  cursor: pointer;
+  transition: all 0.15s ease;
+}
+
+.property-card-del-btn:hover {
+  color: var(--spark-danger, #ff5555);
+  background: color-mix(in srgb, var(--spark-danger, #ff5555) 15%, transparent);
 }
 
 .property-card-body :deep(.n-input) {

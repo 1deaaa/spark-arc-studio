@@ -657,7 +657,7 @@ defineExpose({ listRef: chatListRef });
 .chat-token-usage-mobile-layer {
   position: fixed;
   inset: 0;
-  z-index: 2000;
+  z-index: 9000; /* 与聊天全屏浮层统一，必须高于 Naive UI 抽屉的动态层级。 */
   pointer-events: auto;
   background: color-mix(in srgb, #000 7%, transparent);
 }

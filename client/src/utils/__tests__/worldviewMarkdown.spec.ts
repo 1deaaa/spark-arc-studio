@@ -4,6 +4,7 @@ import {
   moveWorldviewSection,
   parseWorldviewFields,
   parseWorldviewMarkdown,
+  removeWorldviewField,
   removeWorldviewSection,
   updateWorldviewField,
   updateWorldviewSection,
@@ -51,6 +52,11 @@ describe('世界观 Markdown 协议', () => {
     const updated = updateWorldviewField(body, fields[1].lineIndex, { value: '记忆' });
     expect(updated).toContain('- 使用代价： 记忆');
     expect(updated).toContain('普通补充说明。');
+
+    const removed = removeWorldviewField(body, fields[0].lineIndex);
+    expect(removed).not.toContain('力量来源');
+    expect(removed).toContain('- 使用代价：寿命');
+    expect(removed).toContain('普通补充说明。');
   });
 
   it('更新一个模块时保留其他模块与文档前言', () => {

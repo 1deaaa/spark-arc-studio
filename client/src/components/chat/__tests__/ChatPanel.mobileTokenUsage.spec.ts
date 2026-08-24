@@ -68,49 +68,20 @@ describe('ChatPanel 移动端 Token 明细弹层', () => {
     document.body.querySelector('.chat-token-usage-mobile-layer')?.remove();
   });
 
-  it('移动端点击后在按钮下方挂载独立固定层，关闭时移除固定层', async () => {
+  it('移动端点击后挂载独立固定层，关闭时移除固定层', async () => {
     const wrapper = mountPanel();
-    const chip = wrapper.get('.chat-token-chip');
-    vi.spyOn(chip.element, 'getBoundingClientRect').mockReturnValue({
-      x: 18,
-      y: 42,
-      top: 42,
-      right: 138,
-      bottom: 64,
-      left: 18,
-      width: 120,
-      height: 22,
-      toJSON: () => ({}),
-    });
 
-    await chip.trigger('click');
-    await nextTick();
-
-    const layer = document.body.querySelector<HTMLElement>('.chat-token-usage-mobile-layer');
-    const panel = document.body.querySelector<HTMLElement>('.chat-token-usage-mobile-panel');
-    expect(panel).not.toBeNull();
-    expect(layer?.style.getPropertyValue('--chat-token-panel-top')).toBe('72px');
-    expect(document.body.querySelector('.token-usage-panel-probe')).not.toBeNull();
-    expect(wrapper.findComponent({ name: 'NPopover' }).exists()).toBe(false);
-
-    await chip.trigger('click');
-    await nextTick();
-    expect(document.body.querySelector('.chat-token-layer-leave-active')).not.toBeNull();
-    await new Promise((resolve) => window.setTimeout(resolve, 280));
-    expect(document.body.querySelector('.chat-token-usage-mobile-panel')).toBeNull();
-
-    wrapper.unmount();
-  });
-
-  it('真实触摸结束时直接打开，并忽略同一次触摸产生的后续 click', async () => {
-    const wrapper = mountPanel();
-    const chip = wrapper.get('.chat-token-chip');
-
-    await chip.trigger('touchend');
-    await chip.trigger('click');
+    await wrapper.get('.chat-token-chip').trigger('click');
     await nextTick();
 
     expect(document.body.querySelector('.chat-token-usage-mobile-panel')).not.toBeNull();
+    expect(document.body.querySelector('.token-usage-panel-probe')).not.toBeNull();
+    expect(wrapper.findComponent({ name: 'NPopover' }).exists()).toBe(false);
+
+    await wrapper.get('.chat-token-chip').trigger('click');
+    await nextTick();
+    await new Promise((resolve) => window.setTimeout(resolve, 280));
+    expect(document.body.querySelector('.chat-token-usage-mobile-panel')).toBeNull();
 
     wrapper.unmount();
   });

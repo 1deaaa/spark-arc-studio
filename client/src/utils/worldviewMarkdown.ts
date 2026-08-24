@@ -112,6 +112,13 @@ export function updateWorldviewField(
   return lines.join('\n');
 }
 
+export function removeWorldviewField(body: string, lineIndex: number): string {
+  const lines = String(body || '').split('\n');
+  if (lineIndex < 0 || lineIndex >= lines.length) return body;
+  lines.splice(lineIndex, 1);
+  return lines.join('\n');
+}
+
 export function updateWorldviewSection(
   markdown: string,
   sectionIndex: number,
