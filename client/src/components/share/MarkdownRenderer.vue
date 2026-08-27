@@ -72,7 +72,7 @@ const props = defineProps({
     type: Boolean,
     default: false,
   },
-  /** 完成态保留的活动块节点数；聊天历史使用更小窗口，完整内容仍可正常滚动查看。 */
+  /** 完成态活动块节点数；设为 0 可关闭节点虚拟化，保证内容完整保留在 DOM 中。 */
   maxLiveNodes: {
     type: Number,
     default: 320,

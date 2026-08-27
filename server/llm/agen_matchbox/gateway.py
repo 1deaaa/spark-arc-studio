@@ -16,6 +16,7 @@ from .reasoning_compat import (
     extract_reasoning_text_from_chat_delta,
     extract_reasoning_text_from_message,
 )
+from .request_headers import build_upstream_request_headers
 from .tool_protocol import validate_tool_message_history
 
 
@@ -161,7 +162,7 @@ def build_sdk_compat_headers(
     existing_headers: Optional[Mapping[str, str]] = None,
 ) -> Optional[Dict[str, str]]:
     """为 OpenAI 兼容网关构建请求头。"""
-    headers = dict(existing_headers or {})
+    headers = build_upstream_request_headers(existing_headers)
 
     if not _env_flag_enabled("AGENT_MATCHBOX_OPENAI_COMPAT_OVERRIDE_UA", default=True):
         return headers or None

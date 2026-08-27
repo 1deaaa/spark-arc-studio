@@ -68,13 +68,20 @@ describe('ChatMessageList 深度思考块展开性能契约', () => {
     expect(source).toMatch(/\.thinking-msg \.chat-role,\s*\.retry-msg \.chat-role\s*{\s*top: 0;/);
   });
 
-  it('活动助手正文使用流式 Markdown，完成后保持原视觉并切回最终态', async () => {
-    const history = [{
-      id: 'assistant-streaming',
-      role: 'assistant',
-      content: '正在生成',
-      segments: [{ type: 'text', text: '正在生成', source_agent: 'agent_director' }],
-    }];
+  it('聊天正文使用流式 Markdown，完成后保持完整 DOM 并切回最终态', async () => {
+    const history = [
+      {
+        id: 'user-before-streaming',
+        role: 'user',
+        content: '用户请求',
+      },
+      {
+        id: 'assistant-streaming',
+        role: 'assistant',
+        content: '正在生成',
+        segments: [{ type: 'text', text: '正在生成', source_agent: 'agent_director' }],
+      },
+    ];
     const wrapper = mount(ChatMessageList, {
       props: { history, sending: true },
       global: {
@@ -91,12 +98,17 @@ describe('ChatMessageList 深度思考块展开性能契约', () => {
       },
     });
 
-    const markdown = wrapper.findComponent({ name: 'MarkdownRenderer' });
+    const markdowns = wrapper.findAllComponents({ name: 'MarkdownRenderer' });
+    expect(markdowns).toHaveLength(2);
+    expect(markdowns.every(renderer => renderer.props('maxLiveNodes') === 0)).toBe(true);
+    const markdown = markdowns[1];
     expect(markdown.props('streaming')).toBe(true);
-    expect(markdown.props('maxLiveNodes')).toBe(96);
 
     await wrapper.setProps({ sending: false });
-    expect(wrapper.findComponent({ name: 'MarkdownRenderer' }).props('streaming')).toBe(false);
+    const completedMarkdowns = wrapper.findAllComponents({ name: 'MarkdownRenderer' });
+    expect(completedMarkdowns).toHaveLength(2);
+    expect(completedMarkdowns.every(renderer => renderer.props('maxLiveNodes') === 0)).toBe(true);
+    expect(completedMarkdowns[1].props('streaming')).toBe(false);
   });
 
   it('长思考内容展开和收起不会触发递归渲染，并保留 Markdown 渲染', async () => {
@@ -152,6 +164,9 @@ describe('ChatMessageList 深度思考块展开性能契约', () => {
 
     const panel = wrapper.find('.reasoning-content-wrapper');
     expect(panel.classes()).toContain('is-expanded');
+    expect(wrapper.findAllComponents({ name: 'MarkdownRenderer' }).every(renderer => (
+      renderer.props('maxLiveNodes') === 0
+    ))).toBe(true);
     expect(wrapper.find('.reasoning-bubble .mock-markdown').text()).toContain('推理段 260');
     expect(wrapper.find('.reasoning-bubble').exists()).toBe(true);
     expect(wrapper.find('.reasoning-block').exists()).toBe(true);

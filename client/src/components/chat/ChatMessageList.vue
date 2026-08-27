@@ -41,7 +41,7 @@
             v-if="typeof displayContent === 'string' && displayContent"
             :content="displayContent"
             :deferred="shouldDeferMarkdown(displayContent)"
-            :max-live-nodes="96"
+            :max-live-nodes="CHAT_MARKDOWN_MAX_LIVE_NODES"
           />
           <pre v-else-if="m.content && typeof m.content === 'object'" class="chat-json">{{ formatObject(m.content) }}</pre>
         </div>
@@ -82,7 +82,7 @@
                 :content="seg.text"
                 :streaming="isTextSegmentStreaming(m, idx, segIdx, segments)"
                 :deferred="shouldDeferMarkdown(seg.text, isTextSegmentStreaming(m, idx, segIdx, segments))"
-                :max-live-nodes="96"
+                :max-live-nodes="CHAT_MARKDOWN_MAX_LIVE_NODES"
               />
             </div>
             <div v-else-if="seg.type === 'json'" class="chat-bubble">
@@ -301,6 +301,7 @@ import ReasoningSegmentBubble from '@/components/chat/message/ReasoningSegmentBu
 import ToolTraceSegment from '@/components/chat/message/ToolTraceSegment.vue';
 import { useAgentRegistry } from '@/composables/useAgentRegistry';
 import { getToolNameLabelKey } from '@/components/stores/chat/toolUi';
+import { CHAT_MARKDOWN_MAX_LIVE_NODES } from './chatMarkdownConfig';
 import {
   formatTokenCount,
   getDisplayContent,

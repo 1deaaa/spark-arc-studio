@@ -7,6 +7,8 @@ import json
 from typing import Dict, Any, List, Optional
 from urllib.parse import urlparse
 
+from .request_headers import build_upstream_request_headers
+
 
 # ─────────────────────────────────────────────
 # URL 工具
@@ -215,7 +217,7 @@ def probe_platform_models(
         return []
 
     target_url = _build_endpoint(base_url, '/models')
-    headers = {"Authorization": f"Bearer {api_key}"}
+    headers = build_upstream_request_headers({"Authorization": f"Bearer {api_key}"})
 
     try:
         resp = requests.get(target_url, headers=headers, timeout=timeout)
@@ -284,10 +286,10 @@ def test_platform_chat(
         raise ImportError("缺少 requests 库")
 
     target_url = _build_endpoint(base_url, '/chat/completions')
-    headers = {
+    headers = build_upstream_request_headers({
         "Authorization": f"Bearer {api_key}",
-        "Content-Type": "application/json"
-    }
+        "Content-Type": "application/json",
+    })
     payload = {
         "model": model_name,
         "messages": [{"role": "user", "content": "本次请求无任何要求 仅供测试连通性 无需任何思考 无需任何组织和计划 以最快的速度回答:OK"}],
@@ -334,7 +336,7 @@ def test_platform_embedding(
     - 通过 httpx 超时控制避免无限等待
     """
     try:
-        from langchain_openai import OpenAIEmbeddings
+        from .gateway import create_quick_embedding
     except ImportError as exc:
         raise ImportError("缺少 langchain_openai 库") from exc
 
@@ -342,11 +344,10 @@ def test_platform_embedding(
     if extra_body and isinstance(extra_body, dict):
         kwargs["extra_body"] = extra_body
 
-    embeddings = OpenAIEmbeddings(
-        model=model_name,
+    embeddings = create_quick_embedding(
+        model_name=model_name,
         api_key=api_key,
         base_url=base_url,
-        check_embedding_ctx_length=False,
         **kwargs,
     )
 
@@ -389,10 +390,10 @@ def stream_speed_test(
         raise ImportError("缺少必要库")
 
     target_url = _build_endpoint(base_url, '/chat/completions')
-    headers = {
+    headers = build_upstream_request_headers({
         "Authorization": f"Bearer {api_key}",
-        "Content-Type": "application/json"
-    }
+        "Content-Type": "application/json",
+    })
 
     payload = {
         "model": model_name,

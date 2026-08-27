@@ -21,6 +21,7 @@ from .image_adapters import (
     strip_internal_image_generation_fields,
 )
 from .models import MODALITY_IMAGE, normalize_input_modalities
+from .request_headers import build_upstream_request_headers
 from .utils import _build_endpoint
 
 
@@ -381,7 +382,7 @@ def _generate_openai_compatible_image(
     timeout = _request_timeout(config)
     extra = _image_extra(config)
     model_name = str(config["model_name"])
-    headers = {"Authorization": f"Bearer {config['api_key']}"}
+    headers = build_upstream_request_headers({"Authorization": f"Bearer {config['api_key']}"})
 
     if request.references:
         _ensure_reference_input_supported(config)
@@ -514,10 +515,10 @@ def _generate_openai_responses_image(config: dict[str, Any], request: SparkImage
 
     response = requests.post(
         endpoint,
-        headers={
+        headers=build_upstream_request_headers({
             "Authorization": f"Bearer {config['api_key']}",
             "Content-Type": "application/json",
-        },
+        }),
         json=payload,
         timeout=timeout,
     )
@@ -581,10 +582,10 @@ def _generate_openai_chat_image(config: dict[str, Any], request: SparkImageReque
 
     response = requests.post(
         endpoint,
-        headers={
+        headers=build_upstream_request_headers({
             "Authorization": f"Bearer {config['api_key']}",
             "Content-Type": "application/json",
-        },
+        }),
         json=payload,
         timeout=timeout,
     )
@@ -618,10 +619,10 @@ def _generate_xai_image(config: dict[str, Any], request: SparkImageRequest) -> S
     timeout = _request_timeout(config)
     extra = _image_extra(config)
     model_name = str(config["model_name"])
-    headers = {
+    headers = build_upstream_request_headers({
         "Authorization": f"Bearer {config['api_key']}",
         "Content-Type": "application/json",
-    }
+    })
 
     payload: dict[str, Any] = {
         "model": model_name,
@@ -791,10 +792,10 @@ def _generate_gemini_interactions_image(config: dict[str, Any], request: SparkIm
 
     response = requests.post(
         _gemini_interactions_endpoint(config["base_url"]),
-        headers={
+        headers=build_upstream_request_headers({
             "x-goog-api-key": str(config["api_key"]),
             "Content-Type": "application/json",
-        },
+        }),
         json=payload,
         timeout=timeout,
     )
@@ -860,10 +861,10 @@ def _generate_gemini_generate_content_image(config: dict[str, Any], request: Spa
 
     response = requests.post(
         _gemini_generate_content_endpoint(config["base_url"], model_name),
-        headers={
+        headers=build_upstream_request_headers({
             "x-goog-api-key": str(config["api_key"]),
-            "Content-Type": "application/json",
-        },
+            "Content-Type": "application/json"
+        }),
         json=payload,
         timeout=timeout,
     )

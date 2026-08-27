@@ -7,6 +7,51 @@ from langchain_core.callbacks import BaseCallbackHandler
 from langchain_core.messages import AIMessage, HumanMessage, ToolMessage
 
 
+def test_sparkarc_handshake_header_is_fixed_and_outside_llm_payload() -> None:
+    from llm.agen_matchbox.gateway import (
+        ChatUniversal,
+        apply_sdk_request_compat,
+        build_sdk_compat_headers,
+    )
+    from llm.agen_matchbox.request_headers import (
+        SPARKARC_HANDSHAKE_HEADER,
+        SPARKARC_HANDSHAKE_VALUE,
+        build_upstream_request_headers,
+    )
+
+    original_headers = {
+        "User-Agent": "SparkArc/1.0",
+        "x-sparkarc-client": "incorrect",
+    }
+    headers = build_upstream_request_headers(original_headers)
+
+    assert headers == {
+        "User-Agent": "SparkArc/1.0",
+        SPARKARC_HANDSHAKE_HEADER: SPARKARC_HANDSHAKE_VALUE,
+    }
+    assert original_headers["x-sparkarc-client"] == "incorrect"
+
+    compat_kwargs = {"default_headers": {"User-Agent": "SparkArc/1.0"}}
+    apply_sdk_request_compat(compat_kwargs, include_stream_usage=False)
+    assert compat_kwargs["default_headers"][SPARKARC_HANDSHAKE_HEADER] == SPARKARC_HANDSHAKE_VALUE
+
+    plain = ChatUniversal(
+        model="deepseek-chat",
+        api_key="offline-key",
+        base_url="https://example.invalid/v1",
+    )
+    marked = ChatUniversal(
+        model="deepseek-chat",
+        api_key="offline-key",
+        base_url="https://example.invalid/v1",
+        default_headers=build_sdk_compat_headers({"User-Agent": "SparkArc/1.0"}),
+    )
+    messages = [HumanMessage(content="固定消息")]
+
+    assert marked._get_request_payload(messages) == plain._get_request_payload(messages)
+    assert SPARKARC_HANDSHAKE_HEADER not in marked._get_request_payload(messages)
+
+
 def test_gpt56_prompt_cache_key_is_stable_and_session_isolated() -> None:
     from core.request_context import (
         current_project_name,

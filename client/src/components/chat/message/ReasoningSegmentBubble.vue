@@ -46,7 +46,7 @@
               :content="text"
               :streaming="streaming"
               :deferred="!streaming && text.length > DEFERRED_REASONING_CHAR_THRESHOLD"
-              :max-live-nodes="96"
+              :max-live-nodes="CHAT_MARKDOWN_MAX_LIVE_NODES"
             />
           </div>
         </div>
@@ -61,6 +61,7 @@ import { useI18n } from 'vue-i18n';
 import AgentAvatar from '@/components/share/AgentAvatar.vue';
 import MarkdownRenderer from '@/components/share/MarkdownRenderer.vue';
 import { CHAT_LAYOUT_FOLLOW_EVENT } from '@/components/chat/chatScrollEvents';
+import { CHAT_MARKDOWN_MAX_LIVE_NODES } from '../chatMarkdownConfig';
 
 type RevealPhase = '' | 'opening' | 'closing';
 
