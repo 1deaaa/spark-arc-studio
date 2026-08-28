@@ -18,7 +18,7 @@ import {
   type AppLocale,
 } from './types';
 
-export type LocaleMessages = typeof zhCN;
+type LocaleMessages = Record<string, unknown>;
 
 const localeMessages: Record<string, LocaleMessages> = {
   'zh-CN': zhCN,
