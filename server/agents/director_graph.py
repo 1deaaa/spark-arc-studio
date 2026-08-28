@@ -38,6 +38,7 @@ from agents.communication import (
 from llm.agen_matchbox.reasoning_compat import extract_visible_text_from_plain_text
 
 from agents.agent_factory import create_agent_instance
+from agents.context_budget import CONTEXT_CHECKPOINT_READY_EVENT
 from agents.prompt_layout import build_current_user_message
 from llm.agen_matchbox.tool_protocol import build_tool_result_messages
 
@@ -416,6 +417,7 @@ def director_node(state: DirectorState) -> Dict[str, Any]:
         agent_id="agent_director",
         messages=messages_with_system,
         llm_client=base_stream_llm,
+        tools=tools,
         emit_event=budget_events.append,
         current_user_message=current_user_message,
     ).messages
@@ -995,6 +997,10 @@ def sub_agent_node(state: DirectorState) -> Dict[str, Any]:
             
             if isinstance(delta, dict):
                 event_type = delta.get("event", "")
+                # 子 Agent 的 checkpoint 属于其专用交接记忆，不能冒泡给外层
+                # 聊天路由，否则可能被误存成导演普通会话的 checkpoint。
+                if event_type == CONTEXT_CHECKPOINT_READY_EVENT:
+                    continue
                 if event_type == "pipeline_step_completed":
                     pipeline_completion_receipt = str(delta.get("receipt") or "").strip()
                     continue
@@ -1325,6 +1331,7 @@ def run_director_stream(
             history=history,
             user_message=prompt_layout.user_message,
             llm_client=base_llm,
+            tools=director_tools,
         )
         while True:
             try:

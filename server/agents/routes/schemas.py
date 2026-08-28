@@ -118,7 +118,7 @@ class ChatContextCompactRequest(BaseModel):
     projectName: Optional[str] = None
     agentId: str
     contextKey: str = 'global'
-    targetTokens: int = 8000
+    targetTokens: Optional[int] = None
 
 
 class BridgeRequest(BaseModel):

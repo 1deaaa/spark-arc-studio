@@ -42,18 +42,22 @@ flowchart LR
 ## 3. 自适应预算
 
 预算使用 Agent Matchbox 提供的模型上下文上限；真正的历史压缩由 SparkArc 主项目完成。
-主项目按连续比例计算总预留，不按 512K/1M 硬切分：
+触发预算继续使用既有的连续安全余量，不按 256K/512K/1M 硬切分：
 
 ```text
-small_context_floor = min(20_000, max_context * 10%)
-reserved_context = max(small_context_floor, max_context * 6.25%)
-hard_budget = max_context - reserved_context
+reserved_output = min(max_output, 20_000, max_context - 256)
+small_context_floor = min(16_000, max_context * 10%)
+safety_margin = max(small_context_floor, max_context * 6.25%)
+reserved_context = reserved_output + safety_margin
+hard_budget = max(256, max_context - reserved_context)
 trigger_budget = hard_budget
 ```
 
-因此 256K、512K、1M 窗口约分别预留 20K、32K、62.5K（约 64K）token。极小窗口的最低预留会按 10% 平滑缩放，并额外保留至少 256 token 的可用预算。
+因此在 `max_output_tokens >= 20K` 时，256K、512K、1M 窗口的安全余量分别为 16K、32K、62.5K，另加 20K 正常输出预留。极小窗口的最低安全余量按 10% 平滑缩放，并额外保留至少 256 token 的可用预算。
 
-历史摘要空间最多 12K token，且不超过可用历史预算的 20%。模型的 `max_output_tokens` 仍作为模型能力元数据记录，但不再按旧的分段比例从聊天输入预算中重复扣除。
+历史压缩另由 `ContextCompactionBudget` 计算工作集比例。默认窗口段为 128K/28%、256K/24%、512K/18%、1M/14%、2M/12%，段间线性插值；导演和灵感 Agent 向更高密度摘要偏移，编剧 Agent 向更多近期原文偏移。摘要预算是工作集扣除稳定 system、当前请求和近期原文后的部分，并受当前模型真实 `max_output_tokens` 的约 95% 上限约束，不使用固定 12K 上限。
+
+以 `max_output_tokens=64K` 且不计 system/current user 的微小差异为例，导演在 256K、512K、1M 窗口的目标工作集约为 56.3K、81.9K、120K；摘要预算约为 34.9K、50.8K、60.8K。这里的目标工作集是压缩后的总动态上下文目标，不是要求每次必须填满的 token 数。
 
 只有完整请求超过 `trigger_budget` 才需要处理历史。系统优先完整保留 system、当前 user 和最近消息；工具调用消息按完整单元保留，不能留下没有对应 ToolMessage 的 assistant `tool_calls`。
 
@@ -126,7 +130,15 @@ checkpoint 仍使用 `ChatMessage` 表，但与用户可见原文严格区分：
 
 手动“压缩上下文”与自动压缩复用同一 checkpoint payload 和幂等保存协议，不维护第二套 summary 语义。
 
-### 5.2 编辑与删除
+### 5.2 导演委派与子 Agent
+
+导演和各专家 Agent 使用独立的 `agent_id + context_key` 历史；导演的主聊天历史不会自动变成每个专家的完整聊天历史。导演委派时，子 Agent 使用当前交接任务、项目上下文和该专家自己的交接快照；同一个专家再次被委派时，才会恢复它自己的 `DirectorHandoffMemory`。
+
+导演节点和子 Agent 都会在模型调用前执行上下文预算检查。子 Agent 在工具循环追加新的 assistant tool call 与 ToolMessage 后，还会再次执行 `rebudget_existing_messages`。该压缩调用是同步发生在子 Agent 的 `chat_stream` 内，因此导演图会等待压缩完成；压缩成功后消息列表被替换为 `system -> 摘要 -> 近期完整轮次 -> 当前 user -> 当前工具尾部`，子 Agent 从下一轮模型调用继续原委派任务，成功后才把结果回交导演。
+
+子 Agent 的压缩候选不会直接写入导演的普通聊天 checkpoint。委派结束时，压缩后的运行时消息快照会由 `conversation_recorder` 写入该专家的交接记忆；普通聊天路由中的自动压缩 checkpoint 则在对应 Agent 的聊天任务成功后保存。压缩失败属于不可重试的上下文错误，子 Agent 不会跳过压缩继续执行，也不会把未压缩旧历史静默丢弃。
+
+### 5.3 编辑与删除
 
 如果用户编辑或删除了已被 checkpoint 覆盖的原始消息，`ChatManager` 会删除覆盖它的 checkpoint 及对应压缩提示卡。下一次请求重新从仍存在的原文构建上下文，避免摘要与用户修改后的事实冲突。
 
@@ -188,6 +200,8 @@ context_window_stats
 3. 当前编辑区、附件现场与本轮用户请求位于最后一条 user message。
 
 checkpoint 更新会改变中段历史，因此该边界之后的缓存需要重新建立；它不会把动态编辑区重新塞回 system。更换模型、平台、Agent、工具绑定、语言或提示词同样会改变前缀，UI 不应承诺跨这些变更仍命中缓存。
+
+压缩请求在可以复用源模型客户端时，会沿用原 Agent 的稳定 system、待压缩历史前缀和工具 schema，并把压缩指令追加到前缀之后；工具选择被设为 `none`，压缩模型的工具调用响应会被拒绝。这样只能提高与上游前缀缓存规则相容的机会，不能保证供应商一定返回缓存命中。若源前缀过大，UtilityAgent 会退回 JSON 历史输入并按 `TokenTextSplitter` 分块摘要。
 
 ## 9. StoryMemory 的边界
 

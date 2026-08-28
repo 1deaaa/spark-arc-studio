@@ -22,9 +22,48 @@ CONTEXT_SAFETY_FLOOR_TOKENS = 16_000
 CONTEXT_SAFETY_RATIO = 0.0625
 SMALL_CONTEXT_RESERVE_RATIO = 0.10
 MIN_CONTEXT_BUDGET_TOKENS = 256
+MIN_COMPACTION_SUMMARY_TOKENS = 256
+MIN_COMPACTION_RECENT_TOKENS = 2_000
 CONTEXT_CHECKPOINT_KIND = "context_checkpoint"
 LEGACY_CONTEXT_SUMMARY_KIND = "context_summary"
 CONTEXT_CHECKPOINT_READY_EVENT = "context_checkpoint_ready"
+
+# 压缩后的工作集随窗口增大而降低占比，避免百万级窗口仍保留大部分旧原文。
+# Agent 偏移体现的是“近期原文”和“结构化摘要”之间的取舍，不改变原始信息的来源。
+COMPACTION_TARGET_RATIOS = (
+    (128_000, 0.28),
+    (256_000, 0.24),
+    (512_000, 0.18),
+    (1_000_000, 0.14),
+    (2_000_000, 0.12),
+)
+COMPACTION_AGENT_RATIO_OFFSETS = {
+    "agent_director": -0.02,
+    "agent_muse": -0.02,
+    "agent_style": 0.00,
+    "agent_lorebook": 0.01,
+    "agent_showrunner": 0.01,
+    "agent_critic": 0.01,
+    "agent_scriptwriter": 0.02,
+}
+COMPACTION_AGENT_SUMMARY_RATIOS = {
+    "agent_director": 0.62,
+    "agent_muse": 0.60,
+    "agent_style": 0.52,
+    "agent_lorebook": 0.56,
+    "agent_showrunner": 0.54,
+    "agent_critic": 0.56,
+    "agent_scriptwriter": 0.42,
+}
+COMPACTION_AGENT_PROFILES = {
+    "agent_director": "优先保留用户目标与硬约束、已完成/未完成任务、委派结果、工具结论、关键决策及下一步；删除重复寒暄和过程性转述。",
+    "agent_muse": "优先保留用户明确偏好、采用与否决的创意、创作方向、灵感种子及其约束；合并重复脑暴，只保留可继续发展的差异点。",
+    "agent_lorebook": "优先保留世界观硬事实、角色身份与关系、时间线、已落盘设定、冲突与覆盖关系；不要把推测写成 canon。",
+    "agent_showrunner": "优先保留故事目标、结构决策、梗概/节拍/大纲的当前版本、节奏约束、否决方案和待解决的结构问题。",
+    "agent_scriptwriter": "优先保留当前场景、角色声音、连续性事实、用户改写要求、已确认文本约束、工具落盘结果和最近创作上下文；近期原文比旧过程更重要。",
+    "agent_critic": "优先保留审阅对象、逐项证据、问题严重度、修改建议、已采纳/拒绝的修正和未关闭风险；不要只保留笼统评价。",
+    "agent_style": "优先保留稳定文风规则、作者偏好与禁区、正反例、当前迁移目标和已确认的表达取舍；合并同义规则。",
+}
 
 
 class NonRetryableChatError(RuntimeError):
@@ -146,6 +185,77 @@ class ContextBudgetPolicy:
     trigger_ratio: float
 
 
+@dataclass(frozen=True, slots=True)
+class ContextCompactionBudget:
+    """一次历史压缩的目标工作集和摘要/近期原文分配。"""
+
+    target_ratio: float
+    target_context_tokens: int
+    summary_tokens: int
+    recent_tokens: int
+    required_tokens: int
+
+
+def _compaction_target_ratio(max_context: int, agent_id: str) -> float:
+    context = max(int(max_context or 0), 1)
+    first_context, first_ratio = COMPACTION_TARGET_RATIOS[0]
+    base_ratio = first_ratio
+    if context > first_context:
+        base_ratio = COMPACTION_TARGET_RATIOS[-1][1]
+        previous_context, previous_ratio = COMPACTION_TARGET_RATIOS[0]
+        for upper_bound, ratio in COMPACTION_TARGET_RATIOS[1:]:
+            if context <= upper_bound:
+                progress = (context - previous_context) / max(1, upper_bound - previous_context)
+                base_ratio = previous_ratio + (ratio - previous_ratio) * progress
+                break
+            previous_context, previous_ratio = upper_bound, ratio
+    adjusted = base_ratio + float(COMPACTION_AGENT_RATIO_OFFSETS.get(str(agent_id or ""), 0.0))
+    return min(max(adjusted, 0.10), 0.30)
+
+
+def _compaction_budget(
+    max_context: int,
+    max_output: int,
+    agent_id: str,
+    required_tokens: int = 0,
+) -> ContextCompactionBudget:
+    """按模型窗口和 Agent 特征计算压缩后工作集，不把窗口剩余空间全部回填给旧历史。"""
+    context = max(int(max_context or 0), 1_024)
+    hard_budget, _ = _budget_limits(context, max_output)
+    required = max(int(required_tokens or 0), 0)
+    ratio = _compaction_target_ratio(context, agent_id)
+    desired = max(MIN_COMPACTION_RECENT_TOKENS, int(context * ratio))
+    # 当前请求及工具闭合单元不可丢弃；必要时允许它们抬高目标，但不超过 hard_budget。
+    target_context = min(hard_budget, max(desired, required + MIN_COMPACTION_SUMMARY_TOKENS))
+    available_history = max(0, target_context - required)
+    summary_ratio = min(
+        max(float(COMPACTION_AGENT_SUMMARY_RATIOS.get(str(agent_id or ""), 0.52)), 0.35),
+        0.70,
+    )
+    if available_history <= MIN_COMPACTION_SUMMARY_TOKENS:
+        summary_tokens = available_history
+        recent_tokens = 0
+    else:
+        output_limit = max(int(max_output or 0), MIN_COMPACTION_SUMMARY_TOKENS)
+        summary_output_capacity = max(
+            MIN_COMPACTION_SUMMARY_TOKENS,
+            output_limit - max(256, int(output_limit * 0.05)),
+        )
+        summary_tokens = max(
+            MIN_COMPACTION_SUMMARY_TOKENS,
+            int(available_history * summary_ratio),
+        )
+        summary_tokens = min(summary_tokens, available_history, summary_output_capacity)
+        recent_tokens = available_history - summary_tokens
+    return ContextCompactionBudget(
+        target_ratio=ratio,
+        target_context_tokens=target_context,
+        summary_tokens=summary_tokens,
+        recent_tokens=recent_tokens,
+        required_tokens=required,
+    )
+
+
 def _coerce_content(content: Any) -> str:
     if content is None:
         return ""
@@ -250,6 +360,43 @@ def _messages_tokens(messages: List[BaseMessage], model_name: str | None) -> int
     if not messages:
         return 0
     return estimate_tokens("\n\n".join(_message_text(m) for m in messages), model=model_name)
+
+
+def _message_turn_units(messages: Sequence[BaseMessage]) -> List[List[BaseMessage]]:
+    """按 user turn 形成不可拆分单元，工具调用和结果自然留在同一轮。"""
+    units: List[List[BaseMessage]] = []
+    current: List[BaseMessage] = []
+    for message in messages:
+        if _message_type(message) in {"human", "user"} and current:
+            units.append(current)
+            current = []
+        current.append(message)
+    if current:
+        units.append(current)
+    return units
+
+
+def _retain_recent_message_units(
+    messages: Sequence[BaseMessage],
+    *,
+    token_budget: int,
+    model_name: str | None,
+) -> tuple[List[BaseMessage], List[BaseMessage]]:
+    """从尾部保留完整 turn；边界轮过大时整轮进入摘要，避免半轮语义和工具协议断裂。"""
+    units = _message_turn_units(messages)
+    retained_reversed: List[List[BaseMessage]] = []
+    used = 0
+    budget = max(int(token_budget or 0), 0)
+    for unit in reversed(units):
+        cost = _messages_tokens(list(unit), model_name)
+        if used + cost > budget:
+            break
+        retained_reversed.append(unit)
+        used += cost
+    retained_units = list(reversed(retained_reversed))
+    retained = [message for unit in retained_units for message in unit]
+    overflow_count = max(0, len(messages) - len(retained))
+    return list(messages[:overflow_count]), retained
 
 
 def _messages_to_history_items(messages: List[BaseMessage]) -> List[Dict[str, Any]]:
@@ -408,6 +555,8 @@ def partition_history_for_manual_compaction(
     history: Sequence[Dict[str, Any]],
     *,
     keep_recent_turns: int = 2,
+    recent_token_budget: int | None = None,
+    model_name: str | None = None,
 ) -> tuple[List[Dict[str, Any]], List[Dict[str, Any]]]:
     """把运行时历史切成待摘要旧历史与保留原文的最近完整轮次。"""
     filtered = [
@@ -419,12 +568,25 @@ def partition_history_for_manual_compaction(
     if not filtered:
         return [], []
 
-    user_indices = [
-        index
-        for index, item in enumerate(filtered)
-        if str(item.get("role") or "") == "user"
-    ]
-    if not user_indices:
+    user_indices = [index for index, item in enumerate(filtered) if str(item.get("role") or "") == "user"]
+    if recent_token_budget is not None:
+        turn_starts = user_indices or [0]
+        turn_ranges = [
+            (start, turn_starts[index + 1] if index + 1 < len(turn_starts) else len(filtered))
+            for index, start in enumerate(turn_starts)
+        ]
+        used = 0
+        split_at = len(filtered)
+        for start, end in reversed(turn_ranges):
+            cost = estimate_tokens(
+                json.dumps(filtered[start:end], ensure_ascii=False),
+                model=model_name or None,
+            )
+            if used + cost > max(int(recent_token_budget or 0), 0):
+                break
+            used += cost
+            split_at = start
+    elif not user_indices:
         split_at = max(0, len(filtered) - 1)
     else:
         turns = max(1, int(keep_recent_turns or 1))
@@ -577,6 +739,11 @@ def _emit_context_window_stats(
     clean_hard = max(int(hard_budget or 0), 1)
     clean_trigger = max(int(trigger_budget or 0), 1)
     policy = _context_budget_policy(max_context_tokens, max_output_tokens)
+    compaction_budget = _compaction_budget(
+        max_context_tokens,
+        max_output_tokens,
+        agent_id,
+    )
     _append_event(emit_event, {
         "event": "context_window_stats",
         "agent_id": agent_id,
@@ -593,6 +760,10 @@ def _emit_context_window_stats(
         "reserved_output_tokens": policy.reserved_output,
         "safety_margin_tokens": policy.safety_margin,
         "trigger_ratio": round(policy.trigger_ratio, 4),
+        "compaction_target_ratio": round(compaction_budget.target_ratio, 4),
+        "compaction_target_tokens": compaction_budget.target_context_tokens,
+        "summary_budget_tokens": compaction_budget.summary_tokens,
+        "recent_budget_tokens": compaction_budget.recent_tokens,
         "usage_ratio": round(_safe_ratio(clean_input, clean_context), 4),
         "original_usage_ratio": round(_safe_ratio(clean_original, clean_context), 4),
         "hard_usage_ratio": round(_safe_ratio(clean_input, clean_hard), 4),
@@ -847,6 +1018,9 @@ def _compress_history_items(
     target_tokens: int,
     current_user_message: str,
     overflow_messages: List[BaseMessage],
+    source_system_message: SystemMessage | None = None,
+    source_llm_client: Any = None,
+    source_tools: Sequence[Any] | None = None,
 ) -> tuple[SystemMessage, Dict[str, Any]]:
     from agents.utility_agent import UtilityAgent
 
@@ -857,6 +1031,16 @@ def _compress_history_items(
         model_name=model_name,
         target_tokens=target_tokens,
         current_user_message=current_user_message,
+        agent_profile=COMPACTION_AGENT_PROFILES.get(
+            str(agent_id or ""),
+            "优先保留用户目标、硬约束、关键事实、决策、进度、工具结论和开放任务；删除重复与无后续价值的过程内容。",
+        ),
+        source_prefix_messages=[
+            *([source_system_message] if source_system_message is not None else []),
+            *overflow_messages,
+        ],
+        source_llm_client=source_llm_client,
+        source_tools=source_tools,
     )
     return (
         SystemMessage(content=(
@@ -900,6 +1084,7 @@ def prepare_chat_messages_with_budget(
     history: List[Dict[str, Any]] | None,
     user_message: str,
     llm_client: Any,
+    tools: Sequence[Any] | None = None,
     emit_event: Callable[[Dict[str, Any]], None] | None = None,
 ) -> ContextBudgetResult:
     """构造聊天 messages，并在超过模型预算时自动压缩早期历史。"""
@@ -954,22 +1139,19 @@ def prepare_chat_messages_with_budget(
             hard_budget=hard_budget,
         )
 
-    available_history_budget = max(0, hard_budget - base_tokens)
-    summary_reserved = min(12000, max(256, int(hard_budget * 0.2)), available_history_budget)
-    recent_budget = max(0, available_history_budget - summary_reserved)
-
-    retained_reversed: List[BaseMessage] = []
-    retained_tokens = 0
-    for message in reversed(history_messages):
-        cost = _messages_tokens([message], model_name)
-        if retained_tokens + cost > recent_budget:
-            break
-        retained_reversed.append(message)
-        retained_tokens += cost
-
-    retained_messages = list(reversed(retained_reversed))
-    overflow_count = max(0, len(history_messages) - len(retained_messages))
-    overflow_messages = history_messages[:overflow_count]
+    compaction_budget = _compaction_budget(
+        max_context,
+        max_output,
+        agent_id,
+        required_tokens=base_tokens,
+    )
+    summary_reserved = compaction_budget.summary_tokens
+    recent_budget = compaction_budget.recent_tokens
+    overflow_messages, retained_messages = _retain_recent_message_units(
+        history_messages,
+        token_budget=recent_budget,
+        model_name=model_name,
+    )
 
     if not overflow_messages:
         compacted_messages = [system_msg, *retained_messages, current_msg]
@@ -1016,6 +1198,9 @@ def prepare_chat_messages_with_budget(
             target_tokens=summary_reserved,
             current_user_message=user_message,
             overflow_messages=overflow_messages,
+            source_system_message=system_msg,
+            source_llm_client=llm_client,
+            source_tools=tools,
         )
         compacted_messages = [system_msg, summary_msg, *retained_messages, current_msg]
         compacted_tokens = _messages_tokens(compacted_messages, model_name)
@@ -1118,6 +1303,7 @@ def rebudget_existing_messages(
     agent_id: str,
     messages: List[BaseMessage],
     llm_client: Any,
+    tools: Sequence[Any] | None = None,
     emit_event: Callable[[Dict[str, Any]], None] | None = None,
     current_user_message: str = "",
 ) -> ContextBudgetResult:
@@ -1200,26 +1386,19 @@ def rebudget_existing_messages(
             max_output=max_output,
             hard_budget=hard_budget,
         )
-    available_body_budget = max(0, hard_budget - base_tokens)
-    summary_reserved = min(12000, max(256, int(hard_budget * 0.2)), available_body_budget)
-    recent_budget = max(0, available_body_budget - summary_reserved)
-
-    retained_reversed: List[BaseMessage] = []
-    retained_tokens = 0
-    for message in reversed(compressible_body):
-        cost = _messages_tokens([message], model_name)
-        if retained_tokens + cost > recent_budget:
-            break
-        retained_reversed.append(message)
-        retained_tokens += cost
-
-    retained_messages = _repair_tool_boundary(
-        compressible_body,
-        list(reversed(retained_reversed)),
+    compaction_budget = _compaction_budget(
+        max_context,
+        max_output,
+        agent_id,
+        required_tokens=base_tokens,
     )
-
-    overflow_count = max(0, len(compressible_body) - len(retained_messages))
-    overflow_messages = compressible_body[:overflow_count]
+    summary_reserved = compaction_budget.summary_tokens
+    recent_budget = compaction_budget.recent_tokens
+    overflow_messages, retained_messages = _retain_recent_message_units(
+        compressible_body,
+        token_budget=recent_budget,
+        model_name=model_name,
+    )
     retained_count = len(retained_messages) + len(required_tail)
     if not overflow_messages:
         compacted = [system_msg, *retained_messages, *required_tail]
@@ -1266,6 +1445,9 @@ def rebudget_existing_messages(
             target_tokens=summary_reserved,
             current_user_message=current_user_message,
             overflow_messages=overflow_messages,
+            source_system_message=system_msg,
+            source_llm_client=llm_client,
+            source_tools=tools,
         )
         compacted = [system_msg, summary_msg, *retained_messages, *required_tail]
         compacted_tokens = _messages_tokens(compacted, model_name)

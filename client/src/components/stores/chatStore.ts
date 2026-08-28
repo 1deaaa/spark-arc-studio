@@ -642,7 +642,7 @@ export const useChatStore = defineStore('chat', {
       await this.clearSession(session.id);
     },
 
-    async compactContext(targetTokens = 8000) {
+    async compactContext(targetTokens?: number) {
       const session = this._getPrimarySession();
       if (!session) return;
       await this.compactSessionContext(session.id, targetTokens);
@@ -1636,7 +1636,7 @@ export const useChatStore = defineStore('chat', {
       }
     },
 
-    async compactSessionContext(sessionId, targetTokens = 8000) {
+    async compactSessionContext(sessionId, targetTokens?: number) {
       const session = this.sessions[sessionId];
       if (!session || session.sending) return;
       const projectName = this._resolveSessionProjectName(session);

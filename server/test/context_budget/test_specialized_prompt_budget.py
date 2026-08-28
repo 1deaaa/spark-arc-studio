@@ -4,11 +4,14 @@ from __future__ import annotations
 
 import inspect
 
+import pytest
 from langchain_core.messages import HumanMessage, SystemMessage
 
 from agents.context_budget import (
     DEFAULT_SPECIALIZED_SECTION_BUDGETS,
     _budget_limits,
+    _compaction_budget,
+    _compaction_target_ratio,
     _context_budget_policy,
     prepare_specialized_prompt_messages_with_budget,
 )
@@ -125,6 +128,30 @@ def test_context_budget_does_not_reserve_more_than_model_output_limit() -> None:
     assert policy.reserved_output == 8_000
     assert policy.safety_margin == 16_000
     assert policy.hard_budget == 232_000
+
+
+def test_compaction_target_uses_continuous_window_interpolation_and_agent_profiles() -> None:
+    assert _compaction_target_ratio(256_000, "unknown") == pytest.approx(0.24)
+    assert _compaction_target_ratio(384_000, "unknown") == pytest.approx(0.21)
+    assert _compaction_target_ratio(512_000, "unknown") == pytest.approx(0.18)
+
+    director = _compaction_budget(1_000_000, 64_000, "agent_director")
+    lorebook = _compaction_budget(1_000_000, 64_000, "agent_lorebook")
+    scriptwriter = _compaction_budget(1_000_000, 64_000, "agent_scriptwriter")
+
+    assert director.target_context_tokens == 120_000
+    assert lorebook.target_context_tokens == 150_000
+    assert scriptwriter.target_context_tokens == 160_000
+    assert director.target_context_tokens < lorebook.target_context_tokens < scriptwriter.target_context_tokens
+
+
+def test_compaction_summary_budget_tracks_real_model_output_capacity() -> None:
+    small_output = _compaction_budget(1_000_000, 8_000, "agent_director")
+    large_output = _compaction_budget(1_000_000, 64_000, "agent_director")
+
+    assert small_output.summary_tokens == 7_600
+    assert large_output.summary_tokens == 60_800
+    assert small_output.target_context_tokens == large_output.target_context_tokens == 120_000
 
 
 def test_context_window_stats_reports_reserve_components(monkeypatch) -> None:

@@ -400,6 +400,7 @@ def _run_prewrite_tool_loop(
         agent_id="agent_scriptwriter",
         messages=messages,
         llm_client=llm,
+        tools=tools,
         current_user_message=user_prompt,
     ).messages
 
@@ -514,6 +515,7 @@ def _run_prewrite_tool_loop(
                 agent_id="agent_scriptwriter",
                 messages=messages,
                 llm_client=llm,
+                tools=tools,
                 current_user_message=user_prompt,
             ).messages
     finally:

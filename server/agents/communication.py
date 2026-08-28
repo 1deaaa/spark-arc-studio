@@ -1650,6 +1650,7 @@ class SparkBaseAgent:
                 history=history,
                 user_message=prompt_layout.user_message,
                 llm_client=base_llm_client,
+                tools=tools,
             )
             self._set_context_checkpoint_candidate(budget_result.checkpoint)
             messages = budget_result.messages
@@ -1732,6 +1733,7 @@ class SparkBaseAgent:
                     agent_id=self.agent_id,
                     messages=messages,
                     llm_client=base_llm_client,
+                    tools=tools,
                     current_user_message=user_message,
                 ).messages
 
@@ -1823,6 +1825,7 @@ class SparkBaseAgent:
                 history=history,
                 user_message=prompt_layout.user_message,
                 llm_client=base_stream_llm,
+                tools=tools,
             )
         else:
             from langchain_core.messages import HumanMessage, SystemMessage
@@ -1840,6 +1843,7 @@ class SparkBaseAgent:
                 agent_id=self.agent_id,
                 messages=prepared_messages,
                 llm_client=base_stream_llm,
+                tools=tools,
                 current_user_message=user_message,
             )
         self._set_context_checkpoint_candidate(budget_result.checkpoint)
@@ -2122,6 +2126,7 @@ class SparkBaseAgent:
                     agent_id=self.agent_id,
                     messages=messages,
                     llm_client=base_stream_llm,
+                    tools=tools,
                     current_user_message=user_message,
                 )
                 messages = tool_budget_result.messages

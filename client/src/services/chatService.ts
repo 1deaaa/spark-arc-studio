@@ -39,11 +39,11 @@ export async function clearChatHistory(projectName: string, agentId: string, con
   return result;
 }
 
-export async function compactChatContext(projectName: string, agentId: string, contextKey = 'global', targetTokens = 8000): Promise<ChatApiResult> {
+export async function compactChatContext(projectName: string, agentId: string, contextKey = 'global', targetTokens?: number): Promise<ChatApiResult> {
   const response = await fetchWithAuth('/api/chat/context/compact', {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({ projectName, agentId, contextKey, targetTokens }),
+    body: JSON.stringify({ projectName, agentId, contextKey, ...(targetTokens == null ? {} : { targetTokens }) }),
   });
   const result = await response.json() as ChatApiResult;
   if (!response.ok || result.success === false) throw new Error(buildErrorMessage(result, '压缩上下文失败'));

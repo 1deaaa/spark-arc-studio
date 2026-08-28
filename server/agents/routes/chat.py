@@ -1078,11 +1078,30 @@ async def compact_chat_context(data: ChatContextCompactRequest, user: dict = Dep
     ]
     if not raw_history:
         return {'success': True, 'compacted': False, 'message': '当前会话没有新增的可压缩上下文'}
-    from agents.context_budget import partition_history_for_manual_compaction
+    from agents.context_budget import (
+        COMPACTION_AGENT_PROFILES,
+        _compaction_budget,
+        partition_history_for_manual_compaction,
+    )
+
+    from llm.agen_matchbox import matchbox
+
+    llm = matchbox().get_user_llm(user_id, agent_name=data.agentId)
+    model_name = str(
+        getattr(getattr(llm, "usage", None), "model_name", "")
+        or getattr(llm, "model_name", "")
+        or ""
+    )
+    compaction_budget = _compaction_budget(
+        int(getattr(llm, "max_context_tokens", 0) or 256_000),
+        int(getattr(llm, "max_output_tokens", 0) or 4_096),
+        data.agentId,
+    )
 
     compactible_source, retained_history = partition_history_for_manual_compaction(
         history,
-        keep_recent_turns=2,
+        recent_token_budget=compaction_budget.recent_tokens,
+        model_name=model_name,
     )
     compactible_history = [
         {
@@ -1101,17 +1120,20 @@ async def compact_chat_context(data: ChatContextCompactRequest, user: dict = Dep
         return {
             'success': True,
             'compacted': False,
-            'message': '当前会话尚未积累超过最近两轮的可压缩上下文',
+            'message': '当前会话尚未积累超过动态近期预算的可压缩上下文',
         }
 
     try:
         from agents.utility_agent import UtilityAgent
         from agents.context_budget import build_context_checkpoint_payload_from_history
-        from llm.agen_matchbox import matchbox
-
-        llm = matchbox().get_user_llm(user_id, agent_name=data.agentId)
-        model_name = str(getattr(getattr(llm, "usage", None), "model_name", "") or getattr(llm, "model_name", "") or "")
-        target_tokens = max(1200, min(int(data.targetTokens or 8000), 24000))
+        requested_target = int(data.targetTokens or 0)
+        target_tokens = max(
+            256,
+            min(
+                compaction_budget.summary_tokens,
+                requested_target if requested_target > 0 else compaction_budget.summary_tokens,
+            ),
+        )
 
         utility = UtilityAgent(user_id=user_id, project_name=project_name)
         summary = await run_in_threadpool(
@@ -1121,6 +1143,7 @@ async def compact_chat_context(data: ChatContextCompactRequest, user: dict = Dep
             model_name=model_name,
             target_tokens=target_tokens,
             current_user_message="用户手动触发上下文压缩。",
+            agent_profile=COMPACTION_AGENT_PROFILES.get(data.agentId, "优先保留用户目标、硬约束、关键事实、决策、进度、工具结论和开放任务；删除重复与无后续价值的过程内容。"),
         )
         summary_text = _context_summary_plain_text(summary)
         summary_json = json.dumps(summary, ensure_ascii=False, indent=2)
@@ -1197,6 +1220,10 @@ async def compact_chat_context(data: ChatContextCompactRequest, user: dict = Dep
                     "model": model_name,
                     "compacted": True,
                     "reason": "manual_context_compacted",
+                    "compaction_target_tokens": compaction_budget.target_context_tokens,
+                    "summary_budget_tokens": compaction_budget.summary_tokens,
+                    "recent_budget_tokens": compaction_budget.recent_tokens,
+                    "compaction_target_ratio": compaction_budget.target_ratio,
                 },
                 "segments": [
                     {
@@ -1218,6 +1245,7 @@ async def compact_chat_context(data: ChatContextCompactRequest, user: dict = Dep
             'noticeMessageId': notice.id,
             'originalMessages': original_message_count,
             'targetTokens': target_tokens,
+            'compactionTargetTokens': compaction_budget.target_context_tokens,
             'summaryText': summary_text,
             'contextWindowStats': {
                 'agent_id': data.agentId,
@@ -1227,6 +1255,10 @@ async def compact_chat_context(data: ChatContextCompactRequest, user: dict = Dep
                 'model': model_name,
                 'compacted': True,
                 'reason': 'manual_context_compacted',
+                'compaction_target_tokens': compaction_budget.target_context_tokens,
+                'summary_budget_tokens': compaction_budget.summary_tokens,
+                'recent_budget_tokens': compaction_budget.recent_tokens,
+                'compaction_target_ratio': compaction_budget.target_ratio,
             },
         }
     except Exception as e:

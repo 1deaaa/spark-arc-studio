@@ -268,6 +268,12 @@ class _SmallLLM:
     model_name = "offline-small"
 
 
+class _MillionTokenLLM:
+    max_context_tokens = 1_000_000
+    max_output_tokens = 64_000
+    model_name = "offline-million"
+
+
 def test_automatic_compaction_emits_persistable_internal_candidate(monkeypatch) -> None:
     monkeypatch.setattr("agents.context_budget.estimate_tokens", lambda text, model=None: len(text))
     monkeypatch.setattr(
@@ -299,6 +305,121 @@ def test_automatic_compaction_emits_persistable_internal_candidate(monkeypatch) 
     assert result.checkpoint["metadata"]["compacted_through_message_id"] < history[-1]["id"]
     assert any(event.get("event") == CONTEXT_CHECKPOINT_READY_EVENT for event in events)
     assert isinstance(result.messages[1], SystemMessage)
+
+
+def test_million_token_context_compacts_to_director_working_set_instead_of_eighty_percent(monkeypatch) -> None:
+    monkeypatch.setattr("agents.context_budget.estimate_tokens", lambda text, model=None: len(text))
+    captured = {}
+
+    def compact(self, **kwargs):
+        captured.update(kwargs)
+        return {"summary": "百万窗口高密度摘要"}
+
+    monkeypatch.setattr("agents.utility_agent.UtilityAgent.compress_chat_history", compact)
+    history = [
+        {
+            "id": index,
+            "role": "user" if index % 2 else "assistant",
+            "content": f"历史{index}-" + "x" * 9_500,
+            "metadata": {},
+        }
+        for index in range(1, 101)
+    ]
+
+    result = prepare_chat_messages_with_budget(
+        user_id="1",
+        project_name="项目",
+        agent_id="agent_director",
+        system_instruction="稳定系统前缀",
+        history=history,
+        user_message="继续当前导演任务",
+        llm_client=_MillionTokenLLM(),
+    )
+
+    assert result.compacted is True
+    assert captured["target_tokens"] == 60_800
+    assert result.compacted_tokens <= 120_000
+    assert result.compacted_tokens < 800_000
+
+
+def test_compaction_request_reuses_source_prefix_and_tool_schema(monkeypatch) -> None:
+    from agents.utility_agent import UtilityAgent
+
+    calls = {"bound_tools": None, "messages": None}
+
+    class PrefixLLM:
+        max_context_tokens = 256_000
+        max_output_tokens = 8_000
+        model_name = "prefix-model"
+
+        class Usage:
+            model_name = "prefix-model"
+
+        usage = Usage()
+
+        def bind_tools(self, tools, **kwargs):
+            calls["bound_tools"] = list(tools)
+            calls["tool_choice"] = kwargs.get("tool_choice")
+            return self
+
+        def invoke(self, messages):
+            calls["messages"] = list(messages)
+            return AIMessage(content='{"summary":"前缀摘要"}')
+
+    monkeypatch.setattr("agents.utility_agent.estimate_tokens", lambda text, model=None: len(text))
+    system = SystemMessage(content="稳定系统前缀")
+    old_user = HumanMessage(content="旧用户消息")
+    old_assistant = AIMessage(content="旧助手消息")
+    tools = [object()]
+
+    summary = UtilityAgent(user_id="1", project_name="项目").compress_chat_history(
+        history_items=[{"role": "user", "content": "旧用户消息"}],
+        agent_id="agent_director",
+        model_name="prefix-model",
+        target_tokens=1_000,
+        current_user_message="当前请求",
+        source_prefix_messages=[system, old_user, old_assistant],
+        source_llm_client=PrefixLLM(),
+        source_tools=tools,
+    )
+
+    assert summary["summary"] == "前缀摘要"
+    assert calls["bound_tools"] == tools
+    assert calls["tool_choice"] == "none"
+    assert calls["messages"][:3] == [system, old_user, old_assistant]
+    assert isinstance(calls["messages"][-1], HumanMessage)
+    assert "系统级上下文压缩器" in calls["messages"][-1].content
+
+
+def test_compaction_model_tool_call_is_rejected_without_execution(monkeypatch) -> None:
+    from agents.utility_agent import UtilityAgent
+
+    class ToolCallingLLM:
+        def bind_tools(self, _tools):
+            return self
+
+        def invoke(self, _messages):
+            return AIMessage(
+                content="",
+                tool_calls=[{
+                    "id": "call_forbidden",
+                    "name": "rewrite_worldview",
+                    "args": {"content": "不应执行"},
+                    "type": "tool_call",
+                }],
+            )
+
+    with pytest.raises(ValueError, match="已拒绝执行"):
+        UtilityAgent(user_id="1", project_name="项目")._compress_once(
+            history_text="历史",
+            agent_id="agent_director",
+            model_name="prefix-model",
+            target_tokens=1_000,
+            current_user_message="继续",
+            prefix_messages=[SystemMessage(content="稳定系统前缀")],
+            llm_client=ToolCallingLLM(),
+            tools=[object()],
+        )
 
 
 def test_compaction_started_event_is_streamed_before_budget_operation_finishes() -> None:

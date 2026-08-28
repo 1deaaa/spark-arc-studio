@@ -191,6 +191,45 @@ def test_repeated_delegation_reuses_append_only_sub_agent_history(monkeypatch) -
     assert second_history[-2].content == "PROMPT:生成角色"
 
 
+def test_nested_sub_agent_checkpoint_does_not_escape_to_director_stream(monkeypatch) -> None:
+    events = []
+
+    class FakeSubAgent:
+        def chat_stream(self, *args, **kwargs):
+            kwargs["conversation_recorder"]([HumanMessage(content="任务"), AIMessage(content="完成")])
+            yield {"event": "context_checkpoint_ready", "checkpoint": {"metadata": {"agent_id": "agent_lorebook"}}}
+            yield {"event": "context_compaction_finished", "source_agent": "agent_lorebook"}
+            yield {"event": "assistant_delta", "text": "完成"}
+
+    monkeypatch.setattr("agents.director_graph._ensure_graph_agent_registered", lambda *args, **kwargs: FakeSubAgent())
+    monkeypatch.setattr("agents.context_provider.get_agent_context", lambda *args, **kwargs: "")
+    monkeypatch.setattr("agents.director_graph.get_stream_writer", lambda: events.append)
+    monkeypatch.setattr("agents.director_graph.transfer_baton", lambda *args, **kwargs: {"status": "ok", "baton_holder": "agent_director"})
+
+    result = sub_agent_node({
+        "user_id": "u-nested-checkpoint",
+        "project_name": "p-nested-checkpoint",
+        "pending_delegate": {
+            "target_agent": "agent_lorebook",
+            "task_description": "生成世界观",
+            "completion_mode": "return_to_director",
+            "return_to": "agent_director",
+            "grant_baton_to": "agent_lorebook",
+            "user_confirmation_state": HANDOFF_CONFIRMATION_NOT_REQUIRED,
+            "skip_tool_confirmation": True,
+        },
+        "baton_holder": "agent_lorebook",
+        "active_context": "",
+        "stop_event": threading.Event(),
+        "workflow_tools": {"agent_lorebook": [object()]},
+        "handoff_histories": {},
+    })
+
+    assert result["sub_agent_result"]
+    assert not any(event.get("event") == "context_checkpoint_ready" for event in events)
+    assert any(event.get("event") == "context_compaction_finished" for event in events)
+
+
 def test_sub_agent_returns_to_director_when_tracker_has_open_items(monkeypatch, tmp_path) -> None:
     monkeypatch.setattr("core.utils.USERDATA_ROOT", str(tmp_path))
     project_path = tmp_path / "uid_u1" / "projects" / "p1"
