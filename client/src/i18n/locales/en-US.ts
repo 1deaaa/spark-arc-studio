@@ -1591,6 +1591,7 @@ const enUS = {
       confirmDeleteSection: 'Delete the “{title}” module?',
       structuredFields: 'World Elements',
       structuredFieldsHint: 'Mapped to Markdown core element lists',
+      fieldLabelPlaceholder: 'Element name',
       fieldValuePlaceholder: 'Enter the concrete setting',
       additionalNotes: 'Additional notes',
       sectionContent: 'Module content',

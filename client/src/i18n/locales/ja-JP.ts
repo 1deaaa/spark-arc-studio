@@ -1591,6 +1591,7 @@ const jaJP = {
       confirmDeleteSection: '「{title}」モジュールを削除しますか？',
       structuredFields: '設定要素',
       structuredFieldsHint: 'Markdown の設定要素リストに対応',
+      fieldLabelPlaceholder: '要素名',
       fieldValuePlaceholder: '具体的な設定を入力',
       additionalNotes: '補足説明',
       sectionContent: 'モジュール本文',

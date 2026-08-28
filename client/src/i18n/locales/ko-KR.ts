@@ -1586,6 +1586,7 @@ const koKR = {
       confirmDeleteSection: '“{title}” 모듈을 삭제하시겠습니까?',
       structuredFields: '설정 요소',
       structuredFieldsHint: 'Markdown 설정 요소 목록과 연결됩니다',
+      fieldLabelPlaceholder: '요소 이름',
       fieldValuePlaceholder: '구체적인 설정 입력',
       additionalNotes: '추가 설명',
       sectionContent: '모듈 본문',
