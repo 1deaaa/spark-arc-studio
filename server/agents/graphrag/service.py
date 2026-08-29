@@ -70,6 +70,8 @@ class GraphRAGService:
         self._max_constraints = int(os.getenv("SPARKARC_GRAPHRAG_MAX_CONSTRAINTS", "12"))
         self._build_usage_key = (os.getenv("SPARKARC_GRAPHRAG_BUILD_USAGE_KEY", "fast") or "fast").strip().lower() or "fast"
         self._llm_timeout = float(os.getenv("SPARKARC_GRAPHRAG_LLM_TIMEOUT", "90"))
+        # 同一次构建内复用客户端，保持模型参数与请求配置稳定。
+        self._build_llm_client: Any | None = None
 
     def _task_key(self) -> str:
         """返回按索引作用域隔离的后台构建任务键。"""
@@ -96,11 +98,13 @@ class GraphRAGService:
 
     def _get_build_llm(self):
         # 建图阶段默认走 fast，也允许部署者通过环境变量切换到自定义用途。
-        return matchbox().get_user_llm(
-            self.user_id,
-            usage_key=self._build_usage_key,
-            timeout=self._llm_timeout,
-        )
+        if self._build_llm_client is None:
+            self._build_llm_client = matchbox().get_user_llm(
+                self.user_id,
+                usage_key=self._build_usage_key,
+                timeout=self._llm_timeout,
+            )
+        return self._build_llm_client
 
     def _get_query_llm(self, query_agent_name: str | None):
         # 查询阶段跟随调用者 agent 绑定；无调用者时回退默认主模型。
@@ -565,15 +569,7 @@ class GraphRAGService:
         if not text.strip():
             return []
 
-        system_prompt = (
-            "你是小说知识图谱构建器。"
-            "任务标签:[TASK:TRIPLET_EXTRACTION]。"
-            "只返回 JSON 数组，每项结构为 {\"subject\":\"\",\"relation\":\"\",\"object\":\"\"}。"
-            "只保留具体实体与明确关系；禁止代词、空泛概念、句子片段。"
-        )
-        hint = self._triplet_entity_hint()
-        if hint:
-            system_prompt += f"\n{hint}"
+        system_prompt = self._build_triplet_system_prompt()
         user_prompt = (
             f"请从以下文本提取不超过 {self._max_triplets_per_chunk} 条高质量三元组。"
             "仅返回 JSON，不要额外解释。\n\n"
@@ -595,6 +591,19 @@ class GraphRAGService:
         retry_raw = self._invoke_text(self._get_build_llm(), system_prompt, retry_prompt)
         retry_payload = self._safe_json_loads(retry_raw, fallback=[])
         return self._parse_triplets_from_payload(retry_payload)
+
+    def _build_triplet_system_prompt(self) -> str:
+        """构造一次构建内稳定复用的三元组抽取协议。"""
+        system_prompt = (
+            "你是小说知识图谱构建器。"
+            "任务标签:[TASK:TRIPLET_EXTRACTION]。"
+            "只返回 JSON 数组，每项结构为 {\"subject\":\"\",\"relation\":\"\",\"object\":\"\"}。"
+            "只保留具体实体与明确关系；禁止代词、空泛概念、句子片段。"
+        )
+        hint = self._triplet_entity_hint()
+        if hint:
+            system_prompt += f"\n{hint}"
+        return system_prompt
 
     def _triplet_entity_hint(self) -> str:
         """返回可选的实体提示，不改变项目级索引的默认提示。"""

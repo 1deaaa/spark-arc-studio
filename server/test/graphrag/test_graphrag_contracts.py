@@ -22,6 +22,28 @@ def test_character_graph_route_is_registered_as_read_only_get() -> None:
     assert route.methods == {"GET"}
 
 
+def test_graphrag_reuses_build_llm_client_with_stable_protocol(monkeypatch) -> None:
+    calls = []
+    client = object()
+
+    class FakeMatchbox:
+        def get_user_llm(self, *args, **kwargs):
+            calls.append((args, kwargs))
+            return client
+
+    monkeypatch.setattr(
+        "agents.graphrag.service.matchbox",
+        lambda: FakeMatchbox(),
+    )
+    service = GraphRAGService("12", "demo")
+
+    assert service._get_build_llm() is client
+    assert service._get_build_llm() is client
+    assert service._build_triplet_system_prompt() == service._build_triplet_system_prompt()
+    assert len(calls) == 1
+    assert calls[0][1]["usage_key"] == service._build_usage_key
+
+
 def test_character_subgraph_reuses_character_ids_aliases_and_graph_evidence(
     monkeypatch,
 ) -> None:

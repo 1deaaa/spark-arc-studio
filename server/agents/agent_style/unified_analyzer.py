@@ -21,6 +21,8 @@ from pathlib import Path
 from typing import List, Optional
 from dataclasses import dataclass
 
+from langchain_core.messages import BaseMessage, HumanMessage, SystemMessage
+
 from .text_splitter import TextChunk
 from .utils import get_style_llm
 
@@ -83,19 +85,30 @@ class UnifiedStyleAnalyzer:
             self._config = yaml.safe_load(f)
         return self._config
 
-    def _get_unified_prompt(self) -> str:
+    def _get_prompt_pair(self, section_name: str) -> tuple[str, str]:
+        """读取稳定 system 与动态 user；兼容旧版单 prompt 配置。"""
         config = self._load_config()
-        prompt = config.get("unified_analysis", {}).get("prompt", "")
-        if not prompt:
-            raise ValueError("style_analysis.yaml 缺少 unified_analysis.prompt 配置")
-        return prompt
+        section = config.get(section_name, {})
+        if not isinstance(section, dict):
+            raise ValueError(f"style_analysis.yaml 的 {section_name} 配置无效")
 
-    def _get_final_synthesis_prompt(self) -> str:
-        config = self._load_config()
-        prompt = config.get("final_synthesis", {}).get("prompt", "")
-        if not prompt:
-            raise ValueError("style_analysis.yaml 缺少 final_synthesis.prompt 配置")
-        return prompt
+        system_prompt = str(section.get("system") or "").strip()
+        user_prompt = str(section.get("user") or "").strip()
+        if system_prompt and user_prompt:
+            return system_prompt, user_prompt
+
+        legacy_prompt = str(section.get("prompt") or "").strip()
+        if legacy_prompt:
+            return "", legacy_prompt
+        raise ValueError(
+            f"style_analysis.yaml 缺少 {section_name}.system/.user 配置"
+        )
+
+    def _get_unified_prompts(self) -> tuple[str, str]:
+        return self._get_prompt_pair("unified_analysis")
+
+    def _get_final_synthesis_prompts(self) -> tuple[str, str]:
+        return self._get_prompt_pair("final_synthesis")
 
     def analyze_chunk(
         self,
@@ -124,13 +137,13 @@ class UnifiedStyleAnalyzer:
                 context_info += f"【上一段末尾】\n...{chunk.previous_tail}\n\n"
 
             if is_last and chunk.total > 1:
-                prompt = self._build_final_prompt(
+                messages = self._build_final_messages(
                     chunk.text,
                     context_info,
                     accumulated_analyses or [],
                 )
             else:
-                prompt = self._build_chunk_prompt(
+                messages = self._build_chunk_messages(
                     chunk.text,
                     context_info,
                     chunk.index + 1,
@@ -138,7 +151,7 @@ class UnifiedStyleAnalyzer:
                 )
 
             print(f"  📝 Analyzing chunk {chunk.index + 1}/{chunk.total} ({chunk.estimated_tokens} tokens)...")
-            response = self.llm.invoke(prompt)
+            response = self.llm.invoke(messages)
             raw_content = (response.content or "").strip()
 
             if is_last and chunk.total > 1:
@@ -170,17 +183,38 @@ class UnifiedStyleAnalyzer:
                 error=str(e),
             )
 
-    def _build_chunk_prompt(self, text: str, context_info: str, current: int, total: int) -> str:
-        prompt_template = self._get_unified_prompt()
-        return prompt_template.format(
+    @staticmethod
+    def _build_messages(system_prompt: str, user_prompt: str) -> List[BaseMessage]:
+        """构造稳定 system + 动态 user 的消息序列。"""
+        messages: List[BaseMessage] = []
+        if system_prompt.strip():
+            messages.append(SystemMessage(content=system_prompt.strip()))
+        messages.append(HumanMessage(content=user_prompt.strip()))
+        return messages
+
+    def _build_chunk_messages(
+        self,
+        text: str,
+        context_info: str,
+        current: int,
+        total: int,
+    ) -> List[BaseMessage]:
+        system_prompt, user_template = self._get_unified_prompts()
+        user_prompt = user_template.format(
             context=context_info,
             text=text,
             current=current,
             total=total,
         )
+        return self._build_messages(system_prompt, user_prompt)
 
-    def _build_final_prompt(self, text: str, context_info: str, accumulated_analyses: List[str]) -> str:
-        prompt_template = self._get_final_synthesis_prompt()
+    def _build_final_messages(
+        self,
+        text: str,
+        context_info: str,
+        accumulated_analyses: List[str],
+    ) -> List[BaseMessage]:
+        system_prompt, user_template = self._get_final_synthesis_prompts()
 
         prev_analyses_text = ""
         if accumulated_analyses:
@@ -190,12 +224,13 @@ class UnifiedStyleAnalyzer:
                 snippet = (analysis_md or "")[:2000]
                 prev_analyses_text += snippet + "\n"
 
-        return prompt_template.format(
+        user_prompt = user_template.format(
             context=context_info,
             text=text,
             previous_analyses=prev_analyses_text,
             context_summaries="",
         )
+        return self._build_messages(system_prompt, user_prompt)
 
     @staticmethod
     def _split_chunk_output(raw: str) -> tuple[str, str]:

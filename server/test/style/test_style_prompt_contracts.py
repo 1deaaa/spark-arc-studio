@@ -3,6 +3,7 @@ from __future__ import annotations
 from agents.agent_critic import CriticAgent
 from agents.agent_scriptwriter import ScriptwriterAgent
 from agents.agent_showrunner import ShowrunnerAgent
+from agents.agent_style.unified_analyzer import UnifiedStyleAnalyzer
 from agents.agent_style.utils import format_style_profile_for_prompt
 
 
@@ -41,6 +42,38 @@ def test_style_profile_formatter_handles_empty_inputs() -> None:
     # 非字符串(防御性兜底)
     assert format_style_profile_for_prompt({"any": "dict"}, fallback=fallback) == fallback
     assert format_style_profile_for_prompt(123, fallback=fallback) == fallback
+
+
+def test_style_analysis_keeps_contract_stable_and_chunk_data_dynamic() -> None:
+    """不同文本块应复用同一 system，变化内容只进入 user。"""
+    analyzer = UnifiedStyleAnalyzer.__new__(UnifiedStyleAnalyzer)
+    analyzer._config = None
+
+    first = analyzer._build_chunk_messages(
+        "FIRST_CHUNK_TEXT",
+        "",
+        current=1,
+        total=3,
+    )
+    second = analyzer._build_chunk_messages(
+        "SECOND_CHUNK_TEXT",
+        "PREVIOUS_CONTEXT",
+        current=2,
+        total=3,
+    )
+
+    assert len(first) == 2
+    assert len(second) == 2
+    assert first[0].type == "system"
+    assert second[0].type == "system"
+    assert first[0].content == second[0].content
+    assert "### 输出格式" in first[0].content
+    assert "FIRST_CHUNK_TEXT" not in first[0].content
+    assert "SECOND_CHUNK_TEXT" not in second[0].content
+    assert "第 1/3" in first[1].content
+    assert "第 2/3" in second[1].content
+    assert "SECOND_CHUNK_TEXT" in second[1].content
+    assert "PREVIOUS_CONTEXT" in second[1].content
 
 
 def test_scriptwriter_main_prompt_receives_style_markdown(monkeypatch) -> None:
