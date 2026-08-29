@@ -35,7 +35,7 @@ export function formatExtraBodyJson(input: string): string {
   return Object.keys(value).length > 0 ? JSON.stringify(value, null, 2) : '';
 }
 
-export function addReasoningEffort(input: string, effort: 'max' | 'high' | 'low'): string {
+export function addReasoningEffort(input: string, effort: 'max' | 'xhigh' | 'high' | 'low'): string {
   const value = parseExtraBodyJson(input);
   value.reasoning_effort = effort;
   return JSON.stringify(value, null, 2);

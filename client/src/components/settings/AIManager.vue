@@ -1616,7 +1616,7 @@ const isNewModelText = computed(() => isTextModel(newModel.value));
 const isEditModelText = computed(() => isTextModel(editingModel.value));
 const addModelExtraBodyPlaceholder = computed(() => extraBodyPlaceholderForModel(newModel.value));
 const editModelExtraBodyPlaceholder = computed(() => extraBodyPlaceholderForModel(editingModel.value));
-const reasoningEffortOptions = ['max', 'high', 'low'] as const;
+const reasoningEffortOptions = ['max', 'xhigh', 'high', 'low'] as const;
 
 function formatExtraBody(target: { extraBody: string }) {
     try {

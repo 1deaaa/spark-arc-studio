@@ -18,6 +18,11 @@ describe('Extra Body JSON 工具', () => {
     expect(JSON.parse(result)).toEqual({ reasoning_effort: 'max', top_k: 40 });
   });
 
+  it('支持 xhigh 推理强度预制', () => {
+    const result = addReasoningEffort('', 'xhigh');
+    expect(JSON.parse(result)).toEqual({ reasoning_effort: 'xhigh' });
+  });
+
   it('拒绝非对象 JSON', () => {
     expect(() => parseExtraBodyJson('[1, 2]')).toThrow();
   });
