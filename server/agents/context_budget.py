@@ -1285,7 +1285,7 @@ def prepare_chat_messages_with_budget(
             reason="context_compaction_failed",
         )
         raise ContextCompactionFailedError(
-            "上下文压缩失败。为避免丢失早期对话，本次请求已停止，请稍后重试或检查 Utility Agent 的模型配置。",
+            "上下文压缩失败。为避免丢失早期对话，本次请求已停止，请稍后重试或检查当前 Agent 的模型配置。",
             reason="context_compaction_failed",
             details={
                 "model": model_name,

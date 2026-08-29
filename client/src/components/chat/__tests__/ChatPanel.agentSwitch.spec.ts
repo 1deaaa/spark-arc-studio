@@ -25,10 +25,21 @@ const ChatMessageListStub = defineComponent({
     loading: { type: Boolean, default: false },
   },
   template: `
-    <div class="history-probe" :data-count="history.length" :data-loading="loading">
+    <div
+      class="history-probe"
+      :data-count="history.length"
+      :data-loading="loading"
+      :data-first-id="history[0]?.id ?? ''"
+      :data-last-id="history[history.length - 1]?.id ?? ''"
+    >
       <button class="reach-top" @click="$emit('reach-top')" />
     </div>
   `,
+});
+
+const SparkLoaderAnimationStub = defineComponent({
+  name: 'SparkLoaderAnimation',
+  template: '<div class="loader-probe" />',
 });
 
 function mountPanel(history: Array<Record<string, unknown>>, extraProps: Record<string, unknown> = {}) {
@@ -43,6 +54,7 @@ function mountPanel(history: Array<Record<string, unknown>>, extraProps: Record<
       stubs: {
         AgentRadialPicker: AgentRadialPickerStub,
         ChatMessageList: ChatMessageListStub,
+        SparkLoaderAnimation: SparkLoaderAnimationStub,
         ChatProgressBoardPopover: true,
         GlobalLoading: true,
         NButton: defineComponent({ template: '<button><slot /><slot name="icon" /></button>' }),
@@ -134,6 +146,43 @@ describe('ChatPanel Agent 切换渲染契约', () => {
     const visibleCount = Number(wrapper.find('.history-probe').attributes('data-count'));
     expect(visibleCount).toBeGreaterThan(4);
     expect(visibleCount).toBeLessThanOrEqual(11);
+
+    wrapper.unmount();
+  });
+
+  it('同长度历史被替换后重置到最新消息窗口', async () => {
+    const history = Array.from({ length: 20 }, (_, index) => ({
+      id: `old-${index}`,
+      role: 'user',
+      content: `旧消息 ${index}`,
+    }));
+    const wrapper = mountPanel(history);
+
+    await wrapper.find('.reach-top').trigger('click');
+    await nextTick();
+    expect(wrapper.find('.history-probe').attributes('data-first-id')).not.toBe('old-16');
+
+    const refreshedHistory = Array.from({ length: 20 }, (_, index) => ({
+      id: `new-${index}`,
+      role: 'user',
+      content: `新消息 ${index}`,
+    }));
+    await wrapper.setProps({ history: refreshedHistory });
+    await nextTick();
+
+    expect(wrapper.find('.history-probe').attributes('data-count')).toBe('4');
+    expect(wrapper.find('.history-probe').attributes('data-first-id')).toBe('new-16');
+    expect(wrapper.find('.history-probe').attributes('data-last-id')).toBe('new-19');
+
+    wrapper.unmount();
+  });
+
+  it('加载态只显示面板级图标，不渲染可见加载文字', () => {
+    const wrapper = mountPanel([], { loading: true });
+
+    expect(wrapper.find('.chat-panel-loading-state').exists()).toBe(true);
+    expect(wrapper.find('.loader-probe').exists()).toBe(true);
+    expect(wrapper.text()).not.toContain('加载中');
 
     wrapper.unmount();
   });

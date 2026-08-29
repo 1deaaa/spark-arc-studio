@@ -981,7 +981,7 @@ const koKR = {
       compactContextSkipped: '아직 압축할 이전 문맥이 없습니다. 대화를 더 진행한 뒤 다시 시도해 주세요.',
       compactContextFailed: '문맥 압축 처리에 실패했습니다',
       contextWindowIncompatible: '현재 모델의 컨텍스트 창이 너무 작아 필수 지침과 이번 내용을 안전하게 담을 수 없습니다. 더 큰 컨텍스트 모델로 변경하거나 첨부 파일과 편집기 문맥을 줄여 주세요.',
-      contextCompactionRuntimeFailed: '이전 대화가 손실되지 않도록 컨텍스트 압축 실패 후 이번 요청을 중단했습니다. 잠시 후 다시 시도하거나 Utility Agent 모델 설정을 확인해 주세요.',
+      contextCompactionRuntimeFailed: '이전 대화가 손실되지 않도록 컨텍스트 압축 실패 후 이번 요청을 중단했습니다. 잠시 후 다시 시도하거나 현재 Agent 모델 설정을 확인해 주세요.',
       compactingContext: '백그라운드 문맥 요약 진행 중',
       compactingContextProgress: '그동안의 채팅 타임라인을 대조 및 정리하여 계속 창작이 가능하도록 요약본을 도출하고 있습니다.',
       taskTokenLabel: '{tokens}',

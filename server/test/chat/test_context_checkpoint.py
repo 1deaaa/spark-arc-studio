@@ -391,6 +391,52 @@ def test_compaction_request_reuses_source_prefix_and_tool_schema(monkeypatch) ->
     assert "系统级上下文压缩器" in calls["messages"][-1].content
 
 
+def test_context_compaction_requires_the_calling_agent_llm() -> None:
+    from agents.utility_agent import ContextCompressionSourceRequiredError, UtilityAgent
+
+    with pytest.raises(ContextCompressionSourceRequiredError, match="必须复用调用方当前 Agent 的 LLM"):
+        UtilityAgent(user_id="1", project_name="项目").compress_chat_history(
+            history_items=[{"role": "user", "content": "历史"}],
+            agent_id="agent_director",
+            model_name="prefix-model",
+            target_tokens=1_000,
+            current_user_message="当前请求",
+        )
+
+
+def test_compaction_budget_retry_reuses_the_same_source_llm(monkeypatch) -> None:
+    from agents.utility_agent import UtilityAgent
+
+    monkeypatch.setattr("agents.utility_agent.estimate_tokens", lambda text, model=None: len(text))
+    calls = []
+
+    class RetryLLM:
+        max_context_tokens = 256_000
+        max_output_tokens = 8_000
+        model_name = "prefix-model"
+
+        def invoke(self, messages):
+            calls.append((self, list(messages)))
+            content = {"summary": "x" * 600} if len(calls) == 1 else {"summary": "收敛后的摘要"}
+            return AIMessage(content=json.dumps(content, ensure_ascii=False))
+
+    source_llm = RetryLLM()
+    summary = UtilityAgent(user_id="1", project_name="项目").compress_chat_history(
+        history_items=[{"role": "user", "content": "旧用户消息"}],
+        agent_id="agent_director",
+        model_name="prefix-model",
+        target_tokens=256,
+        current_user_message="当前请求",
+        source_prefix_messages=[SystemMessage(content="稳定系统前缀")],
+        source_llm_client=source_llm,
+    )
+
+    assert summary["summary"] == "收敛后的摘要"
+    assert len(calls) == 2
+    assert all(client is source_llm for client, _messages in calls)
+    assert all(messages[0].content == "稳定系统前缀" for _client, messages in calls)
+
+
 def test_compaction_model_tool_call_is_rejected_without_execution(monkeypatch) -> None:
     from agents.utility_agent import UtilityAgent
 
@@ -563,6 +609,7 @@ def test_utility_summary_budget_retries_once_then_fails_explicitly(monkeypatch) 
             model_name="offline-small",
             target_tokens=256,
             current_user_message="继续",
+            llm_client=_SmallLLM(),
         )
     assert calls["count"] == 1
 

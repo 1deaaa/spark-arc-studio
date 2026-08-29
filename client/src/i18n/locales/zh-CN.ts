@@ -981,7 +981,7 @@ const zhCN = {
       compactContextSkipped: '暂无可压缩的较早上下文，请在对话积累更多内容后再试',
       compactContextFailed: '压缩上下文失败',
       contextWindowIncompatible: '当前模型的上下文窗口太小，无法安全容纳必要指令和本轮内容。请切换到上下文更大的模型，或减少附件与当前编辑区内容。',
-      contextCompactionRuntimeFailed: '上下文压缩失败。为避免丢失早期对话，本次请求已停止；请稍后重试或检查 Utility Agent 的模型配置。',
+      contextCompactionRuntimeFailed: '上下文压缩失败。为避免丢失早期对话，本次请求已停止；请稍后重试或检查当前 Agent 的模型配置。',
       compactingContext: '正在压缩上下文',
       compactingContextProgress: '系统正在整理当前聊天历史，并生成可继续任务的内部摘要',
       taskTokenLabel: '{tokens}',

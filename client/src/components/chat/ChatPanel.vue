@@ -140,6 +140,15 @@
 
     <div class="chat-panel-body">
       <GlobalLoading scope="chat" :target="loadingTarget" variant="card" />
+      <div
+        v-if="loading || agentContentPending"
+        class="chat-panel-loading-state"
+        role="status"
+        aria-live="polite"
+        :aria-label="t('components.chatMessageList.loading')"
+      >
+        <SparkLoaderAnimation class="chat-panel-loader-animation" aria-hidden="true" />
+      </div>
       <!-- 消息列表 -->
       <ChatMessageList
         ref="chatListRef"
@@ -233,6 +242,7 @@ import AgentRadialPicker from '@/components/chat/AgentRadialPicker.vue';
 import ChatProgressBoardPopover from '@/components/chat/ChatProgressBoardPopover.vue';
 import ChatTokenUsagePanel from '@/components/chat/ChatTokenUsagePanel.vue';
 import GlobalLoading from '@/components/share/GlobalLoading.vue';
+import SparkLoaderAnimation from '@/components/share/SparkLoaderAnimation.vue';
 import { useMobile } from '@/composables/useMobile';
 import type { ChatMessage } from '@/services/chatService';
 import {
@@ -391,6 +401,36 @@ function resetHistoryWindow(): void {
   hasLoadedOlder.value = false;
 }
 
+function getHistoryMessageKey(message: ChatPanelMessage | null | undefined, index: number): string {
+  for (const [kind, value] of [['id', message?.id], ['client', message?.clientId]] as const) {
+    if (value !== null && value !== undefined && String(value).trim() !== '') {
+      return `${kind}:${String(value)}`;
+    }
+  }
+  return `position:${index}:${String(message?.role || '')}:${String(message?.timestamp || '')}`;
+}
+
+function getHistoryKeys(history: ChatPanelMessage[] = []): string[] {
+  return history.map((message, index) => getHistoryMessageKey(message, index));
+}
+
+function haveSameHistoryKeys(nextKeys: string[], previousKeys: string[]): boolean {
+  return nextKeys.length === previousKeys.length
+    && nextKeys.every((key, index) => key === previousKeys[index]);
+}
+
+function isHistoryAppend(nextKeys: string[], previousKeys: string[]): boolean {
+  return nextKeys.length > previousKeys.length
+    && previousKeys.every((key, index) => key === nextKeys[index]);
+}
+
+function scrollToLatest(): void {
+  nextTick(() => {
+    const list = getChatListElement();
+    if (list) list.scrollTop = list.scrollHeight;
+  });
+}
+
 watch(() => props.agentId, (nextAgentId, previousAgentId) => {
   if (nextAgentId === previousAgentId) return;
   resetHistoryWindow();
@@ -398,17 +438,32 @@ watch(() => props.agentId, (nextAgentId, previousAgentId) => {
     pendingPickerAgentId = '';
     agentContentPending.value = false;
     notifyHistoryRendered();
+    scrollToLatest();
   }
 }, { flush: 'sync' });
 
-watch(() => props.history.length, (nextLength, previousLength) => {
-  if (nextLength < previousLength || visibleStartIndex.value > nextLength) {
+watch(() => getHistoryKeys(props.history), (nextKeys, previousKeys = []) => {
+  if (haveSameHistoryKeys(nextKeys, previousKeys)) return;
+
+  if (!isHistoryAppend(nextKeys, previousKeys)) {
+    // 历史被刷新或会话切换后，即使消息总数不变，也必须重新取尾部窗口。
     resetHistoryWindow();
-  } else if (nextLength > previousLength && !hasLoadedOlder.value) {
+    scrollToLatest();
+  } else if (!hasLoadedOlder.value) {
     visibleStartIndex.value = selectChatTailWindowStart(props.history, INITIAL_WINDOW);
   }
   notifyHistoryRendered();
 }, { flush: 'sync' });
+
+const chatLoading = computed(() => props.loading || agentContentPending.value);
+
+watch(chatLoading, (isLoading, wasLoading) => {
+  if (isLoading || !wasLoading) return;
+  // 加载完成时重新计算尾部，覆盖同身份消息内容被替换的情况。
+  resetHistoryWindow();
+  notifyHistoryRendered();
+  scrollToLatest();
+}, { flush: 'post' });
 
 const editingContentLocal = computed({
   get: () => props.editingContent,
@@ -540,6 +595,7 @@ function onAgentPickerClosed(): void {
   pendingPickerAgentId = '';
   agentContentPending.value = false;
   notifyHistoryRendered();
+  scrollToLatest();
 }
 
 /** 用户触顶时补一批更早历史，并保持当前内容在视口中的像素位置。 */
@@ -565,6 +621,7 @@ function loadOlderHistory(): void {
 
 onMounted(() => {
   notifyHistoryRendered();
+  scrollToLatest();
   const list = getChatListElement();
   if (list && typeof ResizeObserver !== 'undefined') {
     listResizeObserver = new ResizeObserver(fillHistoryViewport);
@@ -731,6 +788,28 @@ defineExpose({ listRef: chatListRef });
   min-height: 0;
   flex-direction: column;
   overflow: hidden;
+}
+
+.chat-panel-loading-state {
+  position: absolute;
+  inset: 0;
+  z-index: 50;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  overflow: hidden;
+  background: color-mix(in srgb, var(--spark-bg) 94%, transparent);
+  pointer-events: auto;
+  user-select: none;
+}
+
+.chat-panel-loader-animation {
+  width: 140px;
+  height: 140px;
+}
+
+.chat-panel-loader-animation :deep(.spark-loader-stage) {
+  margin-bottom: 0;
 }
 
 /* Header Icon */

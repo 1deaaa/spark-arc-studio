@@ -6,6 +6,7 @@ from agents.context_provider import AgentContextProvider
 from agents.agent_director import DirectorAgent
 from agents.communication import SparkBaseAgent
 from agents.prompt_layout import BoundedPromptTranscript, CompletedPromptTurn
+from agents.registry import AGENT_REGISTRY
 from agents.tools.registry import SHOWRUNNER_BASE_TOOLS, _showrunner_runtime_tools
 
 
@@ -164,6 +165,13 @@ def test_dynamic_date_is_in_runtime_tail_not_system_prefix() -> None:
 
     assert "当前真实日期（UTC+8）：" not in system
     assert "当前真实日期（UTC+8）：" in runtime_tail
+
+
+def test_context_compaction_facade_does_not_expose_a_dedicated_model_binding() -> None:
+    utility_entry = next(item for item in AGENT_REGISTRY if item["key"] == "agent_utility")
+
+    assert utility_entry["visibleInModelBinding"] is False
+    assert "所属 Agent" in utility_entry["description"]["zh-CN"]
 
 
 def test_director_team_block_does_not_depend_on_runtime_tool_sets(monkeypatch) -> None:

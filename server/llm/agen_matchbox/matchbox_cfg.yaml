@@ -1,4 +1,32 @@
-DeepSeek:
+引火公益站:
+  base_url: https://llm.1dea.top/v1
+  models:
+    gemini-3.7-flash:
+      model_name: gemini-3.7-flash
+      max_context_tokens: 500000
+      max_output_tokens: 64000
+      extra_body:
+        reasoning_effort: high
+    gemini-3.5-flash-lite:
+      model_name: gemini-3.5-flash-lite
+      max_context_tokens: 256000
+      max_output_tokens: 64000
+      extra_body:
+        reasoning_effort: high
+    gemini-3.1-flash-lite-image:
+      model_name: gemini-3.1-flash-lite-image
+      max_context_tokens: 256000
+      max_output_tokens: 64000
+      input_modalities:
+      - text
+      output_modalities:
+      - text
+      - image
+      image_generation_adapter: openai_images
+      extra_body:
+        reasoning_effort: high
+  recharge_url: https://llm.1dea.top
+DeepSeek官方:
   base_url: https://api.deepseek.com/v1
   models:
     deepseek-v4-flash-max:
@@ -7,6 +35,9 @@ DeepSeek:
       max_output_tokens: 128000
       extra_body:
         reasoning_effort: max
+      sys_credit_input_price_per_million: 1.0
+      sys_credit_cached_input_price_per_million: 0.1
+      sys_credit_output_price_per_million: 2.0
     deepseek-v4-pro-max:
       model_name: deepseek-v4-pro
       max_context_tokens: 500000

@@ -983,7 +983,7 @@ const enUS = {
       compactContextSkipped: 'There is no older context to compact yet. Continue the conversation and try again later.',
       compactContextFailed: 'Failed to compact context',
       contextWindowIncompatible: 'This model’s context window is too small for the required instructions and current content. Switch to a model with a larger context window, or reduce attachments and editor context.',
-      contextCompactionRuntimeFailed: 'Context compaction failed. This request was stopped to preserve earlier conversation details. Try again later or check the Utility Agent model configuration.',
+      contextCompactionRuntimeFailed: 'Context compaction failed. This request was stopped to preserve earlier conversation details. Try again later or check the current Agent model configuration.',
       compactingContext: 'Compacting context',
       compactingContextProgress: 'Organizing the current chat history into an internal handoff summary',
       taskTokenLabel: '{tokens}',

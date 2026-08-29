@@ -10,7 +10,10 @@ from llm.agen_matchbox import config as matchbox_config
 from llm.agen_matchbox.database import create_configured_engine
 from llm.agen_matchbox.manager import AIManager
 from llm.agen_matchbox.models import LLMPlatform
-from llm.agen_matchbox.platform_identity import legacy_config_platform_key
+from llm.agen_matchbox.platform_identity import (
+    legacy_config_platform_key,
+    legacy_database_platform_key,
+)
 from llm.agen_matchbox.security import SecurityManager
 
 
@@ -151,6 +154,71 @@ def test_export_keys_are_indexed_by_platform_key(manager: AIManager) -> None:
     }
     assert set(key_data) == {first.platform_key, second.platform_key}
     assert key_data[first.platform_key] != key_data[second.platform_key]
+
+
+def test_legacy_database_key_is_omitted_from_config_export_and_migrated_for_keys(
+    manager: AIManager,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """历史数据库 key 不写入结构文件，密钥导出改用可迁移的兼容 key。"""
+    manager.set_llm_key("legacy-export-master", persist=False)
+    url = "https://legacy-export.example/v1"
+    platform = manager.admin_add_sys_platform("历史平台", url)
+    manager.admin_update_sys_platform_api_key(platform.id, "legacy-api-key")
+
+    with manager.Session() as session:
+        row = session.query(LLMPlatform).filter_by(id=platform.id).one()
+        row.platform_key = legacy_database_platform_key(row.id)
+        session.commit()
+
+    config_data = manager.admin_build_export_data()
+    key_data = manager.admin_build_key_export_data()
+    portable_key = legacy_config_platform_key("历史平台", url)
+    assert "platform_key" not in config_data["历史平台"]
+    assert set(key_data) == {portable_key}
+
+    monkeypatch.setattr(matchbox_config, "load_key_yaml_raw", lambda: key_data)
+    configs = {"历史平台": {"base_url": url, "models": {}}}
+    matchbox_config.merge_key_yaml_into_configs(configs)
+    assert configs["历史平台"]["platform_key"] == portable_key
+    assert configs["历史平台"]["api_key"] == key_data[portable_key]["api_key"]
+
+
+def test_exported_config_without_legacy_key_keeps_existing_database_row(
+    manager: AIManager,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """配置合并自动补 key 后，仍按名称和 URL 找回历史数据库平台。"""
+    url = "https://legacy-sync.example/v1"
+    platform = manager.admin_add_sys_platform("历史同步平台", url)
+    with manager.Session() as session:
+        row = session.query(LLMPlatform).filter_by(id=platform.id).one()
+        row.platform_key = legacy_database_platform_key(row.id)
+        session.commit()
+
+    configs = {"历史同步平台": {"base_url": url, "models": {}}}
+    monkeypatch.setattr(
+        "llm.agen_matchbox.manager.load_default_platform_configs_raw",
+        lambda: configs,
+    )
+
+    def add_compatibility_key(raw_configs):
+        raw_configs["历史同步平台"]["platform_key"] = legacy_config_platform_key(
+            "历史同步平台", url
+        )
+        return raw_configs
+
+    monkeypatch.setattr(
+        "llm.agen_matchbox.manager.merge_key_yaml_into_configs",
+        add_compatibility_key,
+    )
+    manager._sync_default_platforms(force_reset=False)
+
+    with manager.Session() as session:
+        rows = session.query(LLMPlatform).filter_by(is_sys=1).all()
+        assert [(row.id, row.name, row.platform_key) for row in rows] == [
+            (platform.id, "历史同步平台", legacy_database_platform_key(platform.id)),
+        ]
 
 
 def test_import_keys_are_indexed_by_platform_key(manager: AIManager) -> None:

@@ -1,8 +1,8 @@
 """系统工具 Agent。
 
-该模块承载不会直接面对用户的系统级 LLM 任务，例如长上下文压缩。
-它不注册到信标总线，也不参与导演委派；但通过 ``agent_utility`` 这个
-agent_name 复用现有的模型绑定能力。
+该模块承载不会直接面对用户的系统级任务，例如长上下文压缩。
+它不注册到信标总线，也不参与导演委派；需要 LLM 的操作必须由调用方显式
+传入当前 Agent 的客户端，不能在这里自行选择或切换模型。
 """
 
 from __future__ import annotations
@@ -45,6 +45,13 @@ class AttachmentContextWindowExceededError(ValueError):
         )
 
 
+class ContextCompressionSourceRequiredError(ValueError):
+    """上下文压缩没有收到调用方当前 Agent 的 LLM。"""
+
+    def __init__(self) -> None:
+        super().__init__("上下文压缩必须复用调用方当前 Agent 的 LLM，禁止切换到其他 Agent。")
+
+
 class UtilityAgent:
     """系统内部工具 Agent。"""
 
@@ -53,11 +60,6 @@ class UtilityAgent:
     def __init__(self, user_id: str, project_name: str | None = None):
         self.user_id = str(user_id)
         self.project_name = project_name or ""
-
-    def _get_llm(self):
-        from llm.agen_matchbox import matchbox
-
-        return matchbox().get_user_llm(self.user_id, agent_name=self.agent_id)
 
     @staticmethod
     def _json_dumps(value: Any) -> str:
@@ -132,7 +134,9 @@ class UtilityAgent:
             history_text=history_text or "",
             agent_profile=agent_profile or "按通用创作协作上下文处理。",
         )
-        llm = llm_client or self._get_llm()
+        if llm_client is None:
+            raise ContextCompressionSourceRequiredError()
+        llm = llm_client
         if tools:
             llm = self._bind_tools_for_compaction(llm, tools)
         if prefix_messages:
@@ -174,6 +178,9 @@ class UtilityAgent:
         target_tokens: int,
         current_user_message: str,
         agent_profile: str = "",
+        llm_client: Any,
+        tools: Sequence[Any] | None = None,
+        prefix_messages: Sequence[BaseMessage] | None = None,
     ) -> Dict[str, Any]:
         """超出目标时再做一次结构化收敛，仍超限则显式失败。"""
         safe_target = max(int(target_tokens or 0), 256)
@@ -187,6 +194,9 @@ class UtilityAgent:
             target_tokens=safe_target,
             current_user_message=current_user_message,
             agent_profile=agent_profile,
+            prefix_messages=prefix_messages,
+            llm_client=llm_client,
+            tools=tools,
         )
         actual_tokens = self._summary_token_count(
             compacted_again,
@@ -212,29 +222,32 @@ class UtilityAgent:
         source_tools: Sequence[Any] | None = None,
     ) -> Dict[str, Any]:
         """压缩聊天历史，必要时先分块摘要再合并。"""
+        if source_llm_client is None:
+            raise ContextCompressionSourceRequiredError()
+
         material = self._json_dumps(history_items)
-        source_supports_prefix = bool(
-            source_llm_client is not None
-            and (
-                not source_tools
-                or callable(getattr(source_llm_client, "bind_tools", None))
-            )
-        )
-        llm = source_llm_client if source_supports_prefix else self._get_llm()
-        utility_model_name = str(getattr(getattr(llm, "usage", None), "model_name", "") or model_name or "")
+        # 压缩器始终复用调用方当前 Agent 的客户端；不能因为工具绑定能力差异而
+        # 静默切换到另一个 Agent 的模型。
+        llm = source_llm_client
+        source_model_name = str(getattr(getattr(llm, "usage", None), "model_name", "") or model_name or "")
         max_context = int(getattr(llm, "max_context_tokens", 0) or 100000)
         safe_target = max(int(target_tokens or 0), 256)
         safety_tokens = max(2000, int(max_context * 0.05))
         max_input_tokens = max(4000, max_context - safe_target - safety_tokens)
 
         prefix_messages = list(source_prefix_messages or [])
+        stable_prefix_messages = (
+            [prefix_messages[0]]
+            if prefix_messages and getattr(prefix_messages[0], "type", "") == "system"
+            else []
+        )
         prefix_text = "\n\n".join(
             f"{getattr(message, 'type', '')}: {getattr(message, 'content', '')}"
             for message in prefix_messages
         )
-        prefix_tokens = estimate_tokens(prefix_text, model=utility_model_name or model_name) if prefix_messages else 0
+        prefix_tokens = estimate_tokens(prefix_text, model=source_model_name or model_name) if prefix_messages else 0
 
-        if source_supports_prefix and prefix_messages and prefix_tokens <= max_input_tokens:
+        if prefix_messages and prefix_tokens <= max_input_tokens:
             summary = self._compress_once(
                 history_text="（待压缩历史已作为本请求前缀中的原始消息提供，请以这些原始消息为准。）",
                 agent_id=agent_id,
@@ -249,13 +262,16 @@ class UtilityAgent:
             return self._enforce_summary_budget(
                 summary=summary,
                 agent_id=agent_id,
-                model_name=utility_model_name or model_name,
+                model_name=source_model_name or model_name,
                 target_tokens=safe_target,
                 current_user_message=current_user_message,
                 agent_profile=agent_profile,
+                llm_client=llm,
+                tools=source_tools,
+                prefix_messages=stable_prefix_messages,
             )
 
-        if estimate_tokens(material, model=utility_model_name or model_name) <= max_input_tokens:
+        if estimate_tokens(material, model=source_model_name or model_name) <= max_input_tokens:
             summary = self._compress_once(
                 history_text=material,
                 agent_id=agent_id,
@@ -268,17 +284,20 @@ class UtilityAgent:
             return self._enforce_summary_budget(
                 summary=summary,
                 agent_id=agent_id,
-                model_name=utility_model_name or model_name,
+                model_name=source_model_name or model_name,
                 target_tokens=target_tokens,
                 current_user_message=current_user_message,
                 agent_profile=agent_profile,
+                llm_client=llm,
+                tools=source_tools,
+                prefix_messages=stable_prefix_messages,
             )
 
         splitter = TokenTextSplitter(
             chunk_tokens=max_input_tokens,
             min_tokens=1000,
             max_tokens=max(2000, max_input_tokens),
-            estimate_model=utility_model_name or model_name or None,
+            estimate_model=source_model_name or model_name or None,
         )
         partials: list[Dict[str, Any]] = []
         for chunk in splitter.split(material):
@@ -304,10 +323,13 @@ class UtilityAgent:
         return self._enforce_summary_budget(
             summary=summary,
             agent_id=agent_id,
-            model_name=utility_model_name or model_name,
+            model_name=source_model_name or model_name,
             target_tokens=target_tokens,
             current_user_message=current_user_message,
             agent_profile=agent_profile,
+            llm_client=llm,
+            tools=source_tools,
+            prefix_messages=stable_prefix_messages,
         )
 
     @staticmethod

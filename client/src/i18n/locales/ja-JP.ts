@@ -983,7 +983,7 @@ const jaJP = {
       compactContextSkipped: '圧縮できる古いコンテキストがまだありません。会話を続けてから再度お試しください。',
       compactContextFailed: 'コンテキスト圧縮に失敗しました',
       contextWindowIncompatible: '現在のモデルではコンテキストウィンドウが小さく、必要な指示と今回の内容を安全に収容できません。より大きなコンテキストのモデルへ切り替えるか、添付ファイルと編集コンテキストを減らしてください。',
-      contextCompactionRuntimeFailed: '以前の会話を失わないよう、コンテキスト圧縮の失敗後に今回のリクエストを停止しました。後でもう一度試すか、Utility Agent のモデル設定を確認してください。',
+      contextCompactionRuntimeFailed: '以前の会話を失わないよう、コンテキスト圧縮の失敗後に今回のリクエストを停止しました。後でもう一度試すか、現在の Agent のモデル設定を確認してください。',
       compactingContext: 'コンテキストを圧縮中',
       compactingContextProgress: '現在のチャット履歴を整理し、続行用の内部引き継ぎ要約を作成しています',
       taskTokenLabel: '{tokens}',

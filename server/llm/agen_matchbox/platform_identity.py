@@ -8,6 +8,7 @@ import uuid
 
 
 _PLATFORM_KEY_RE = re.compile(r"^[A-Za-z0-9][A-Za-z0-9._:-]{0,127}$")
+_LEGACY_DATABASE_PLATFORM_KEY_RE = re.compile(r"^legacy-db-\d+(?:-\d+)?$")
 
 
 def normalize_platform_key(value: object) -> str | None:
@@ -37,3 +38,10 @@ def legacy_config_platform_key(name: object, base_url: object) -> str:
 def legacy_database_platform_key(platform_id: int) -> str:
     """为历史数据库行生成基于主键的确定性兼容标识。"""
     return f"legacy-db-{int(platform_id)}"
+
+
+def is_legacy_database_platform_key(value: object) -> bool:
+    """判断平台 key 是否为历史数据库行专用的内部兼容标识。"""
+    if not isinstance(value, str):
+        return False
+    return bool(_LEGACY_DATABASE_PLATFORM_KEY_RE.fullmatch(value.strip()))

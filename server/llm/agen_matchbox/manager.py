@@ -65,6 +65,7 @@ from .database import create_configured_engine, normalize_database_url
 from .integrations import MatchboxIntegrations
 from .platform_identity import (
     generate_platform_key,
+    is_legacy_database_platform_key,
     legacy_config_platform_key,
     legacy_database_platform_key,
     normalize_platform_key,
@@ -612,16 +613,30 @@ class AIManagerBase:
 
         if raw_platform_configs is None:
             raw_platform_configs = load_default_platform_configs_raw()
+            # merge_key_yaml_into_configs 会在内存中补充兼容 key，显式性必须在合并前判断。
+            explicit_platform_keys = {
+                name: (
+                    isinstance(cfg, dict)
+                    and normalize_platform_key(cfg.get("platform_key")) is not None
+                )
+                for name, cfg in raw_platform_configs.items()
+            }
             # 从 matchbox_key.yaml 合并各平台 api_key；上传/结构配置文件中的内嵌 api_key 会被忽略。
             merge_key_yaml_into_configs(raw_platform_configs)
+        else:
+            explicit_platform_keys = {
+                name: (
+                    isinstance(cfg, dict)
+                    and normalize_platform_key(cfg.get("platform_key")) is not None
+                )
+                for name, cfg in raw_platform_configs.items()
+            }
 
         with self.Session() as session:
             self._ensure_platform_keys(session)
             config_platform_keys = set()
-            explicit_platform_keys: Dict[str, bool] = {}
             for name, cfg in raw_platform_configs.items():
                 if isinstance(cfg, dict) and cfg.get("base_url"):
-                    explicit_platform_keys[name] = normalize_platform_key(cfg.get("platform_key")) is not None
                     platform_key = self._resolve_seed_platform_key(name, cfg)
                     if platform_key in config_platform_keys:
                         raise ValueError(f"配置中存在重复 platform_key: {platform_key}")
@@ -1019,11 +1034,14 @@ class AIManagerBase:
                 if bool(plat.disable):
                     continue
 
+                platform_key = normalize_platform_key(plat.platform_key)
                 plat_config: Dict[str, Any] = {
-                    "platform_key": plat.platform_key,
                     "base_url": plat.base_url,
                     "models": {}
                 }
+                # legacy-db-* 依赖本地数据库主键，不具备跨环境配置身份，不写入结构文件。
+                if platform_key and not is_legacy_database_platform_key(platform_key):
+                    plat_config["platform_key"] = platform_key
                 if plat.recharge_url:
                     plat_config["recharge_url"] = plat.recharge_url
 
@@ -1104,7 +1122,13 @@ class AIManagerBase:
                 if bool(plat.disable):
                     continue
                 if plat.api_key and isinstance(plat.api_key, str) and plat.api_key.startswith("ENC:"):
-                    export_data[plat.platform_key] = {"api_key": plat.api_key}
+                    platform_key = normalize_platform_key(plat.platform_key)
+                    if not platform_key or is_legacy_database_platform_key(platform_key):
+                        platform_key = legacy_config_platform_key(
+                            plat.name,
+                            normalize_base_url(plat.base_url),
+                        )
+                    export_data[platform_key] = {"api_key": plat.api_key}
 
         return export_data
 

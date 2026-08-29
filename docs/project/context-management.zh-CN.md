@@ -71,11 +71,11 @@ trigger_budget = hard_budget
 
 ### 3.2 压缩失败
 
-Utility Agent 失败、返回不可用结果或其它压缩异常时，抛出 `context_compaction_failed`。系统不会静默删除最旧消息来换取一次“成功”响应，因为这种做法会让创作约束和用户原话无声消失。
+上下文压缩器失败、返回不可用结果或其它压缩异常时，抛出 `context_compaction_failed`。系统不会静默删除最旧消息来换取一次“成功”响应，因为这种做法会让创作约束和用户原话无声消失。
 
 ## 4. 创作型摘要协议
 
-Utility Agent 不是通用会议纪要器。固定 JSON schema 必须覆盖：
+上下文压缩器不是通用会议纪要器。固定 JSON schema 必须覆盖：
 
 - 用户目标、硬约束及必要原话锚点
 - 世界规则、时代、地点、角色、关系、时间线与当前位置
@@ -88,7 +88,7 @@ Utility Agent 不是通用会议纪要器。固定 JSON schema 必须覆盖：
 
 摘要不能补写剧情、不能把推测升级为事实，也不能只保留 AI 对用户诉求的转述。原始历史仍完整持久化；摘要证据不足时，后续 Agent 应调用 `search_chat_history`，而不是猜测。
 
-当历史本身极长时，`UtilityAgent.compress_chat_history()` 复用 `TokenTextSplitter` 分块摘要，再合并为最终 schema；不会另写字符数切分器。
+当历史本身极长时，`UtilityAgent.compress_chat_history()` 复用 `TokenTextSplitter` 分块摘要，再合并为最终 schema；压缩请求始终复用调用方当前 Agent 的 LLM，不单独解析或切换工具 Agent 的模型；不会另写字符数切分器。
 
 ## 5. Checkpoint 数据模型
 
@@ -182,7 +182,7 @@ context_compaction_finished | context_compaction_failed
 context_window_stats
 ```
 
-`context_compaction_started` 会在 Utility Agent 真正工作前到达前端，动画覆盖真实等待时间，不是压缩完成后补播。`chatStore` 将事件写入 assistant message 的 segments，刷新和重连后仍可从 task snapshot 恢复时序。
+`context_compaction_started` 会在上下文压缩器真正工作前到达前端，动画覆盖真实等待时间，不是压缩完成后补播。`chatStore` 将事件写入 assistant message 的 segments，刷新和重连后仍可从 task snapshot 恢复时序。
 
 结构化错误码：
 

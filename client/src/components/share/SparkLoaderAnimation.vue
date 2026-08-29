@@ -38,6 +38,8 @@ const canvasRef = ref<HTMLCanvasElement | null>(null);
 
 let animFrameId: number | null = null;
 let time = 0;
+let themeObserver: MutationObserver | null = null;
+let paletteUpdateFrame: number | null = null;
 
 // ==========================================================================
 // 顶级色彩美学色彩空间计算工具 (Color Science & Palette Harmonizer)
@@ -187,6 +189,31 @@ function computeFlamePalette() {
     innerCoreBright,
     isLight
   };
+}
+
+function scheduleFlamePaletteUpdate(): void {
+  if (paletteUpdateFrame !== null) return;
+
+  const update = () => {
+    paletteUpdateFrame = null;
+    computeFlamePalette();
+  };
+  paletteUpdateFrame = typeof requestAnimationFrame === 'function'
+    ? requestAnimationFrame(update)
+    : window.setTimeout(update, 0);
+}
+
+function observeThemeChanges(): void {
+  if (typeof MutationObserver === 'undefined') return;
+
+  themeObserver = new MutationObserver(scheduleFlamePaletteUpdate);
+  for (const element of [document.documentElement, document.body]) {
+    if (!element) continue;
+    themeObserver.observe(element, {
+      attributes: true,
+      attributeFilter: ['class', 'style', 'data-theme'],
+    });
+  }
 }
 
 // 强化版多阶多频湍流噪声
@@ -458,6 +485,7 @@ onMounted(() => {
   }
 
   computeFlamePalette();
+  observeThemeChanges();
   renderLoop();
 });
 
@@ -465,6 +493,13 @@ onBeforeUnmount(() => {
   if (animFrameId !== null) {
     cancelAnimationFrame(animFrameId);
     animFrameId = null;
+  }
+  themeObserver?.disconnect();
+  themeObserver = null;
+  if (paletteUpdateFrame !== null) {
+    if (typeof cancelAnimationFrame === 'function') cancelAnimationFrame(paletteUpdateFrame);
+    else clearTimeout(paletteUpdateFrame);
+    paletteUpdateFrame = null;
   }
 });
 </script>

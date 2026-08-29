@@ -1141,6 +1141,7 @@ async def compact_chat_context(data: ChatContextCompactRequest, user: dict = Dep
             history_items=compactible_history,
             agent_id=data.agentId,
             model_name=model_name,
+            source_llm_client=llm,
             target_tokens=target_tokens,
             current_user_message="用户手动触发上下文压缩。",
             agent_profile=COMPACTION_AGENT_PROFILES.get(data.agentId, "优先保留用户目标、硬约束、关键事实、决策、进度、工具结论和开放任务；删除重复与无后续价值的过程内容。"),
