@@ -41,3 +41,7 @@ def test_sparkarc_migration_commands_disable_matchbox(monkeypatch) -> None:
     matchbox_adapter.configure_sparkarc_matchbox_environment()
 
     assert isolated_os.environ["AGENT_MATCHBOX_DISABLED"] == "1"
+
+
+def test_story_memory_uses_fast_usage_by_default() -> None:
+    assert matchbox_adapter._default_usage_key("agent_story_memory") == "fast"

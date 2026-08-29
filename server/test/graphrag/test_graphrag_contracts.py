@@ -44,6 +44,67 @@ def test_graphrag_reuses_build_llm_client_with_stable_protocol(monkeypatch) -> N
     assert calls[0][1]["usage_key"] == service._build_usage_key
 
 
+def test_graphrag_extraction_keeps_chunk_text_in_dynamic_user_tail(monkeypatch) -> None:
+    calls = []
+
+    class FakeResponse:
+        def __init__(self, content: str):
+            self.content = content
+
+    class FakeClient:
+        def invoke(self, messages):
+            calls.append(list(messages))
+            return FakeResponse(
+                '[{"subject":"沈棠","relation":"保护","object":"旧钥匙"}]'
+            )
+
+    service = GraphRAGService("12", "demo")
+    client = FakeClient()
+    monkeypatch.setattr(service, "_get_build_llm", lambda: client)
+
+    first = service._extract_triplets("FIRST_GRAPH_CHUNK")
+    second = service._extract_triplets("SECOND_GRAPH_CHUNK")
+
+    assert first == [("沈棠", "保护", "旧钥匙")]
+    assert second == [("沈棠", "保护", "旧钥匙")]
+    assert len(calls) == 2
+    assert all(len(messages) == 2 for messages in calls)
+    assert all(messages[0].type == "system" for messages in calls)
+    assert all(messages[1].type == "human" for messages in calls)
+    assert calls[0][0].content == calls[1][0].content
+    assert "FIRST_GRAPH_CHUNK" not in calls[0][0].content
+    assert "SECOND_GRAPH_CHUNK" not in calls[1][0].content
+    assert "FIRST_GRAPH_CHUNK" in calls[0][1].content
+    assert "SECOND_GRAPH_CHUNK" in calls[1][1].content
+
+
+def test_graphrag_extraction_retry_changes_only_dynamic_user_message(monkeypatch) -> None:
+    calls = []
+
+    class FakeResponse:
+        def __init__(self, content: str):
+            self.content = content
+
+    class FakeClient:
+        def invoke(self, messages):
+            calls.append(list(messages))
+            if len(calls) == 1:
+                return FakeResponse("不是 JSON")
+            return FakeResponse(
+                '[{"subject":"沈棠","relation":"保护","object":"旧钥匙"}]'
+            )
+
+    service = GraphRAGService("12", "demo")
+    monkeypatch.setattr(service, "_get_build_llm", lambda: FakeClient())
+
+    assert service._extract_triplets("RETRY_GRAPH_CHUNK") == [("沈棠", "保护", "旧钥匙")]
+    assert len(calls) == 2
+    assert calls[0][0].content == calls[1][0].content
+    assert "RETRY_GRAPH_CHUNK" in calls[0][1].content
+    assert "RETRY_GRAPH_CHUNK" in calls[1][1].content
+    assert calls[0][1].content != calls[1][1].content
+
+
 def test_character_subgraph_reuses_character_ids_aliases_and_graph_evidence(
     monkeypatch,
 ) -> None:

@@ -116,9 +116,9 @@ def test_registered_agents_bind_explicit_project_without_changing_context(
         }
     elif agent_id in LEGACY_USER_ONLY_AGENT_IDS:
         assert calls[agent_id] == {"user_id": "user-1"}
-    elif agent_id == "agent_utility":
+    elif agent_id in {"agent_utility", "agent_story_memory"}:
         assert calls[agent_id] == {
-            "agent_id": "agent_utility",
+            "agent_id": agent_id,
             "user_id": "user-1",
             "project_name": "项目甲",
         }
@@ -151,9 +151,9 @@ def test_registered_agents_bind_empty_project_without_changing_context(
         }
     elif agent_id in LEGACY_USER_ONLY_AGENT_IDS:
         assert calls[agent_id] == {"user_id": "user-1"}
-    elif agent_id == "agent_utility":
+    elif agent_id in {"agent_utility", "agent_story_memory"}:
         assert calls[agent_id] == {
-            "agent_id": "agent_utility",
+            "agent_id": agent_id,
             "user_id": "user-1",
             "project_name": "",
         }

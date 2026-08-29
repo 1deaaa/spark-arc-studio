@@ -690,6 +690,7 @@ const koKR = {
       agent_critic: '비평 전문가',
       agent_style: '문체 클론',
       agent_utility: '시스템 툴',
+      agent_story_memory: '스토리 메모리',
     },
     agentDescriptions: {
       agent_director: '전체적인 전개 조율 및 다중 전문가의 파이프라인 협업을 총괄합니다.',
@@ -700,6 +701,7 @@ const koKR = {
       agent_critic: '결과물 리딩, 품질 검토, 윤문 조율 및 수정 피드백을 제공합니다.',
       agent_style: '특정 명작 소설 등 목적 필체를 클론하여 문학 어조를 맞춥니다.',
       agent_utility: '컨텍스트 용량 압축 및 첨부 문서 백그라운드 전처리를 수행합니다.',
+      agent_story_memory: '저장된 장면에서 서사 상태와 장면 간 사실을 정리합니다.',
     },
     agentFlowBlueprint: {
       portInput: '입력',

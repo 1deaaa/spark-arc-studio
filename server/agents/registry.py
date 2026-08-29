@@ -207,6 +207,35 @@ AGENT_REGISTRY = [
         "visibleInModelBinding": True,
         "icon": "Settings2",
         "color": "#64748b"
+    },
+    {
+        "key": "agent_story_memory",
+        "name": {
+            "zh-CN": "故事记忆",
+            "en-US": "Story Memory",
+            "ja-JP": "ストーリーメモリ",
+            "ko-KR": "스토리 메모리",
+        },
+        "display": {
+            "zh-CN": "负责整理已保存场景中的叙事状态与跨场事实。",
+            "en-US": "Extracts narrative state and cross-scene facts from saved scenes.",
+            "ja-JP": "保存済みシーンから物語状態とシーン間の事実を整理します。",
+            "ko-KR": "저장된 장면에서 서사 상태와 장면 간 사실을 정리합니다.",
+        },
+        "description": {
+            "zh-CN": "系统内部的故事记忆整理器，在场景保存后异步抽取人物状态、事件、伏笔和事实，供后续创作核对。它不是聊天 Agent，不参与导演委派，也不开放单独模型绑定。",
+            "en-US": "An internal story-memory processor that asynchronously extracts character states, events, foreshadowing, and facts after scenes are saved for later continuity checks. It is not a chat agent, is not delegated by the Director, and has no dedicated model binding.",
+            "ja-JP": "シーン保存後に人物状態、出来事、伏線、事実を非同期で抽出し、後続の創作確認に使う内部ストーリーメモリ処理器です。チャット Agent ではなく、監督から委任されず、個別モデルの紐付けにも対応しません。",
+            "ko-KR": "장면 저장 후 인물 상태, 사건, 복선 및 사실을 비동기로 추출하여 후속 창작의 연속성 확인에 사용하는 내부 스토리 메모리 처리기입니다. 채팅 Agent가 아니며 감독 위임과 개별 모델 바인딩을 지원하지 않습니다.",
+        },
+        "group": "system",
+        "routable": False,
+        "participatesInBeaconBus": False,
+        "visibleInChat": False,
+        "visibleInModelBinding": False,
+        "visibleInUsage": True,
+        "icon": "Sparkles",
+        "color": "#8b9cf6"
     }
 ]
 

@@ -692,6 +692,7 @@ const enUS = {
       agent_critic: 'Critic',
       agent_style: 'Style Clone',
       agent_utility: 'System Utility',
+      agent_story_memory: 'Story Memory',
     },
     agentDescriptions: {
       agent_director: 'Coordinates the whole workflow and delegates tasks.',
@@ -702,6 +703,7 @@ const enUS = {
       agent_critic: 'Reviews quality and provides rewrite suggestions.',
       agent_style: 'Unifies writing style and tone.',
       agent_utility: 'Handles context compaction and chat attachment preprocessing.',
+      agent_story_memory: 'Extracts narrative state and cross-scene facts from saved scenes.',
     },
     agentFlowBlueprint: {
       portInput: 'Input',

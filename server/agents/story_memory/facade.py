@@ -639,11 +639,10 @@ class StoryMemoryFacade:
         from llm.agen_matchbox import matchbox
         from agents.language_policy import prepend_prompt_language_policy
 
-        usage_key = (os.getenv("SPARKARC_STORY_MEMORY_USAGE_KEY", "fast") or "fast").strip().lower()
         timeout = float(os.getenv("SPARKARC_STORY_MEMORY_TIMEOUT", "180"))
         llm = matchbox().get_user_llm(
             self.user_id,
-            usage_key=usage_key,
+            usage_key="fast",
             agent_name="agent_story_memory",
             timeout=timeout,
         )

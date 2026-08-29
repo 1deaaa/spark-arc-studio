@@ -62,7 +62,9 @@ def _apply_legacy_env_file_aliases() -> None:
 
 
 def _default_usage_key(agent_name: Optional[str]) -> str:
-    """保留 SparkArc 的 Director 推理模型默认槽位。"""
+    """返回 SparkArc 各类 Agent 的默认用途槽位。"""
+    if agent_name in {"agent_story_memory"}:
+        return "fast"
     return "reason" if agent_name == "agent_director" else "main"
 
 

@@ -692,6 +692,7 @@ const jaJP = {
       agent_critic: '批評エキスパート',
       agent_style: '文体クローン',
       agent_utility: 'システムツール',
+      agent_story_memory: 'ストーリーメモリ',
     },
     agentDescriptions: {
       agent_director: '全体進行を統括し、各 Agent を協調させます。',
@@ -702,6 +703,7 @@ const jaJP = {
       agent_critic: '品質レビューと改稿提案を担当します。',
       agent_style: '文体と表現の統一を担当します。',
       agent_utility: 'コンテキスト圧縮とチャット添付の前処理を担当します。',
+      agent_story_memory: '保存済みシーンから物語状態とシーン間の事実を整理します。',
     },
     agentFlowBlueprint: {
       portInput: '入力',

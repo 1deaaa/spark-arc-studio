@@ -690,6 +690,7 @@ const zhCN = {
       agent_critic: '评审专家',
       agent_style: '文风克隆',
       agent_utility: '系统工具',
+      agent_story_memory: '故事记忆',
     },
     agentDescriptions: {
       agent_director: '负责统筹全局，多专家协同调度。',
@@ -700,6 +701,7 @@ const zhCN = {
       agent_critic: '负责质量审查、小迭代重写与修改建议。',
       agent_style: '负责风格校正与表达统一。',
       agent_utility: '负责上下文压缩与聊天附件预处理。',
+      agent_story_memory: '负责整理已保存场景中的叙事状态与跨场事实。',
     },
     agentFlowBlueprint: {
       portInput: '输入',
