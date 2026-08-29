@@ -137,6 +137,27 @@ class AdminMixin:
     # ==================== 平台管理 ====================
 
     @staticmethod
+    def _find_active_platform_with_name(
+        session,
+        *,
+        name: str,
+        exclude_platform_id: Optional[int] = None,
+    ) -> Optional[LLMPlatform]:
+        """查找仍在使用中的同名平台；已禁用记录不再占用名称。"""
+        filters = [
+            LLMPlatform.name == name,
+            LLMPlatform.disable == 0,
+        ]
+        if exclude_platform_id is not None:
+            filters.append(LLMPlatform.id != exclude_platform_id)
+        return (
+            session.query(LLMPlatform)
+            .filter(*filters)
+            .order_by(LLMPlatform.id)
+            .first()
+        )
+
+    @staticmethod
     def _find_disabled_platform_for_revival(
         session,
         *,
@@ -316,10 +337,11 @@ class AdminMixin:
             if existing_key:
                 if not supplied_platform_key or existing_key.is_sys or existing_key.user_id != user_id or not existing_key.disable:
                     raise ValueError(f"platform_key '{platform_key}' 已存在")
-                existing_name = session.query(LLMPlatform).filter(
-                    LLMPlatform.name == name,
-                    LLMPlatform.id != existing_key.id,
-                ).first()
+                existing_name = self._find_active_platform_with_name(
+                    session,
+                    name=name,
+                    exclude_platform_id=existing_key.id,
+                )
                 if existing_name:
                     raise ValueError(f"平台名称 '{name}' 已存在")
                 existing_key.name = name
@@ -329,6 +351,10 @@ class AdminMixin:
                 existing_key.disable = 0
                 session.commit()
                 return existing_key
+
+            # 活动平台名称全局唯一；活动记录优先于历史禁用记录。
+            if self._find_active_platform_with_name(session, name=name):
+                raise ValueError(f"平台名称 '{name}' 已存在（系统预设或已被其他用户使用）")
 
             # 未提供稳定身份时，仅复活同名、同 URL 的禁用自定义平台。
             if not supplied_platform_key:
@@ -347,9 +373,9 @@ class AdminMixin:
                     return revived
 
             # 平台名称全局唯一；平台身份由新生成的 key 区分。
-            if name in DEFAULT_PLATFORM_CONFIGS or session.query(LLMPlatform).filter_by(name=name).first():
+            if name in DEFAULT_PLATFORM_CONFIGS:
                 raise ValueError(f"平台名称 '{name}' 已存在（系统预设或已被其他用户使用）")
-            
+
             p = LLMPlatform(
                 name=name,
                 platform_key=platform_key,
@@ -417,10 +443,11 @@ class AdminMixin:
             # 名称全局唯一性检查（排除自己）
             if new_name in DEFAULT_PLATFORM_CONFIGS:
                 raise ValueError("平台名称与系统平台冲突")
-            existing_name = session.query(LLMPlatform).filter(
-                LLMPlatform.name == new_name,
-                LLMPlatform.id != platform_id
-            ).first()
+            existing_name = self._find_active_platform_with_name(
+                session,
+                name=new_name,
+                exclude_platform_id=platform_id,
+            )
             if existing_name:
                 raise ValueError(f"平台名称 '{new_name}' 已被使用")
                 
@@ -1288,13 +1315,15 @@ class AdminMixin:
             if existing_key:
                 if not supplied_platform_key or not (existing_key.is_sys and existing_key.disable):
                     raise ValueError(f"platform_key '{platform_key}' 已存在")
-                existing_name = session.query(LLMPlatform).filter(
-                    LLMPlatform.name == name,
-                    LLMPlatform.id != existing_key.id,
-                ).first()
+                existing_name = self._find_active_platform_with_name(
+                    session,
+                    name=name,
+                    exclude_platform_id=existing_key.id,
+                )
                 if existing_name:
                     raise ValueError(f"平台名称 '{name}' 已存在")
                 existing_key.name = name
+                existing_key.base_url = base_url
                 existing_key.disable = 0
                 existing_key.recharge_url = recharge_url
                 existing_key.sys_credit_balance = _normalize_nullable_credit_balance(sys_credit_balance)
@@ -1304,6 +1333,10 @@ class AdminMixin:
                 with self._cache_lock:
                     self._sys_platforms_cache = None
                 return existing_key
+
+            # 活动平台名称全局唯一；活动记录优先于历史禁用记录。
+            if self._find_active_platform_with_name(session, name=name):
+                raise ValueError(f"平台名称 '{name}' 已存在")
 
             # 未提供稳定身份时，仅复活同名、同 URL 的禁用系统平台。
             if not supplied_platform_key:
@@ -1324,11 +1357,7 @@ class AdminMixin:
                         self._sys_platforms_cache = None
                     return revived
 
-            # 平台名称全局唯一；相同 URL 允许对应多个平台。
-            existing_name = session.query(LLMPlatform).filter_by(name=name).first()
-            if existing_name:
-                raise ValueError(f"平台名称 '{name}' 已存在")
-            
+            # 相同 URL 允许对应多个平台。
             # 加密 API Key
             encrypted_key = None
             if api_key:
@@ -1373,10 +1402,11 @@ class AdminMixin:
             
             if new_name is not None:
                 # 检查名称全局唯一性
-                existing = session.query(LLMPlatform).filter(
-                    LLMPlatform.name == new_name,
-                    LLMPlatform.id != platform_id
-                ).first()
+                existing = self._find_active_platform_with_name(
+                    session,
+                    name=new_name,
+                    exclude_platform_id=platform_id,
+                )
                 if existing:
                     raise ValueError(f"平台名称 '{new_name}' 已被使用")
                 plat.name = new_name

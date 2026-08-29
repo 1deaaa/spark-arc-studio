@@ -78,6 +78,46 @@ def test_disabled_platform_revival_requires_matching_name_and_url(manager: AIMan
         assert session.query(LLMPlatform).filter_by(id=custom_a.id).one().disable == 0
 
 
+def test_disabled_system_name_does_not_block_system_rename(manager: AIManager) -> None:
+    """旧的禁用系统平台名称不应阻塞管理员重命名当前系统平台。"""
+    url = "https://rename-disabled.example/v1"
+    legacy = manager.admin_add_sys_platform("Alibaba Dashscope", url)
+    manager.disable_platform(legacy.id, admin_mode=True)
+    current = manager.admin_add_sys_platform("阿里云百炼", url)
+
+    manager.admin_update_sys_platform(
+        current.id,
+        new_name="Alibaba Dashscope",
+        new_base_url=url,
+    )
+
+    with manager.Session() as session:
+        assert session.query(LLMPlatform).filter_by(id=legacy.id).one().disable == 1
+        renamed = session.query(LLMPlatform).filter_by(id=current.id).one()
+        assert renamed.name == "Alibaba Dashscope"
+        assert renamed.disable == 0
+
+
+def test_disabled_system_name_can_be_reused_by_custom_platform_without_revival(
+    manager: AIManager,
+) -> None:
+    """普通平台创建不能跨类型复活禁用系统平台，但应允许重新使用该名称。"""
+    url = "https://reuse-disabled-system.example/v1"
+    name = "禁用系统平台名称"
+    system = manager.admin_add_sys_platform(name, url)
+    manager.disable_platform(system.id, admin_mode=True)
+
+    custom = manager.add_platform(name, url, user_id="1")
+
+    assert custom.id != system.id
+    assert custom.is_sys == 0
+    with manager.Session() as session:
+        assert session.query(LLMPlatform).filter_by(id=system.id).one().disable == 1
+
+    with pytest.raises(ValueError, match="平台名称.*已存在"):
+        manager.admin_add_sys_platform(name, url)
+
+
 def test_yaml_sync_uses_platform_key_for_duplicate_urls(manager: AIManager) -> None:
     """YAML 中相同 URL 的两个系统平台必须分别落库。"""
     url = "https://yaml-duplicate.example/v1"

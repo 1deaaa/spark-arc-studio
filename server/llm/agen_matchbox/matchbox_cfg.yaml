@@ -1,4 +1,4 @@
-引火公益站:
+SparkArc Gateway:
   base_url: https://llm.1dea.top/v1
   models:
     gemini-3.7-flash:
@@ -26,7 +26,7 @@
       extra_body:
         reasoning_effort: high
   recharge_url: https://llm.1dea.top
-阿里云百炼:
+Alibaba Dashscope:
   base_url: https://dashscope.aliyuncs.com/compatible-mode/v1
   models:
     qwen3.7-flash:
@@ -42,21 +42,7 @@
       extra_body:
         reasoning_effort: max
   platform_key: platform-ce2806010d96451daa5a6e7980ef13e9
-Siliconflow:
-  base_url: https://api.siliconflow.cn/v1
-  models:
-    Qwen/Qwen3-Embedding-0.6B:
-      model_name: Qwen/Qwen3-Embedding-0.6B
-      max_context_tokens: 32768
-      max_output_tokens: 64000
-      input_modalities:
-      - text
-      output_modalities:
-      - embedding
-      extra_body:
-        dimensions: 1024
-        encoding_format: float
-DeepSeek官方:
+DeepSeek Official:
   base_url: https://api.deepseek.com/v1
   models:
     deepseek-v4-flash-max:
@@ -75,3 +61,17 @@ DeepSeek官方:
       extra_body:
         reasoning_effort: max
   recharge_url: https://platform.deepseek.com/top_up
+Siliconflow:
+  base_url: https://api.siliconflow.cn/v1
+  models:
+    Qwen/Qwen3-Embedding-0.6B:
+      model_name: Qwen/Qwen3-Embedding-0.6B
+      max_context_tokens: 32768
+      max_output_tokens: 64000
+      input_modalities:
+      - text
+      output_modalities:
+      - embedding
+      extra_body:
+        dimensions: 1024
+        encoding_format: float
