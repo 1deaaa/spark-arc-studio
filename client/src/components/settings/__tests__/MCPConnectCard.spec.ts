@@ -6,14 +6,16 @@ const readSource = (relativePath: string) =>
   readFileSync(resolve(process.cwd(), relativePath), 'utf8');
 
 describe('MCP 连接配置契约', () => {
-  it('共享配置卡生成灵感与控制两个 Streamable HTTP 端点', () => {
+  it('共享配置卡生成一个统一的 Streamable HTTP 端点', () => {
     const source = readSource('src/components/settings/MCPConnectCard.vue');
 
     expect(source).toContain('/api/mcp/');
     expect(source).toContain('/api/mcp/control/');
-    expect(source).toContain('"spark-inspiration"');
-    expect(source).toContain('"spark-control"');
-    expect(source.match(/"type": "http"/g)).toHaveLength(2);
+    expect(source).toContain('"spark-arc"');
+    expect(source).not.toContain('"spark-inspiration"');
+    expect(source).not.toContain('"spark-control"');
+    expect(source).toContain('mcpLegacyControlUrl');
+    expect(source.match(/"type": "http"/g)).toHaveLength(1);
     expect(source).not.toContain('"type": "sse"');
   });
 

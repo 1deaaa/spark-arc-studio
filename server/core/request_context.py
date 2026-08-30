@@ -33,7 +33,7 @@ def get_current_project_name() -> Optional[str]:
     return resolve_project_name(current_project_name.get())
 
 
-# Global context for current request (Agent/tools can read these)
+# 当前请求上下文（Agent 与工具共享读取）
 current_user_id: ContextVar[Optional[str]] = ContextVar('current_user_id', default=None)
 current_user_is_admin: ContextVar[bool] = ContextVar('current_user_is_admin', default=False)
 current_project_name: ContextVar[Optional[str]] = ContextVar('current_project_name', default=None)

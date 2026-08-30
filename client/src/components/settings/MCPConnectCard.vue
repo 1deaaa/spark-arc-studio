@@ -44,7 +44,7 @@
                 </n-input-group>
             </div>
 
-            <!-- Config Guide -->
+            <!-- 配置指南 -->
             <div class="guide-section">
                 <n-tabs type="segment" v-model:value="activeTab" size="small" class="config-tabs spark-segment-tabs">
                     <n-tab-pane name="json" :tab="t('components.mcpConnectCard.jsonConfig')">
@@ -62,18 +62,18 @@
                                 <n-descriptions-item :label="t('components.mcpConnectCard.typeLabel')">
                                     {{ t('components.mcpConnectCard.streamableHttp') }}
                                 </n-descriptions-item>
-                                <n-descriptions-item :label="t('components.mcpConnectCard.inspirationUrlLabel')">
+                                <n-descriptions-item :label="t('components.mcpConnectCard.unifiedUrlLabel')">
                                     <n-input-group style="width: 100%">
-                                        <n-input :value="mcpInspirationUrl" readonly size="small" class="mcp-config-input" />
-                                        <n-button size="small" @click="copyText(mcpInspirationUrl)">
+                                        <n-input :value="mcpUnifiedUrl" readonly size="small" class="mcp-config-input" />
+                                        <n-button size="small" @click="copyText(mcpUnifiedUrl)">
                                             <template #icon><n-icon :component="Copy" /></template>
                                         </n-button>
                                     </n-input-group>
                                 </n-descriptions-item>
-                                <n-descriptions-item :label="t('components.mcpConnectCard.controlUrlLabel')">
+                                <n-descriptions-item :label="t('components.mcpConnectCard.legacyControlUrlLabel')">
                                     <n-input-group style="width: 100%">
-                                        <n-input :value="mcpControlUrl" readonly size="small" class="mcp-config-input" />
-                                        <n-button size="small" @click="copyText(mcpControlUrl)">
+                                        <n-input :value="mcpLegacyControlUrl" readonly size="small" class="mcp-config-input" />
+                                        <n-button size="small" @click="copyText(mcpLegacyControlUrl)">
                                             <template #icon><n-icon :component="Copy" /></template>
                                         </n-button>
                                     </n-input-group>
@@ -83,12 +83,12 @@
                                         <n-input
                                             type="textarea"
                                             :autosize="{ minRows: 3, maxRows: 5 }"
-                                            :value="`Authorization=${apiKey || 'YOUR_KEY'}`"
+                                            :value="mcpHeaderText"
                                             readonly
                                             size="small"
                                             class="mcp-config-input"
                                         />
-                                        <n-button size="small" style="height: auto" @click="copyText(`Authorization=${apiKey}`)">
+                                        <n-button size="small" style="height: auto" @click="copyText(mcpHeaderText)">
                                             <template #icon><n-icon :component="Copy" /></template>
                                         </n-button>
                                     </n-input-group>
@@ -133,25 +133,17 @@ const displayKey = computed(() => {
 });
 
 const mcpBaseUrl = computed(() => `${window.location.protocol}//${window.location.host}`);
-const mcpInspirationUrl = computed(() => `${mcpBaseUrl.value}/api/mcp/`);
-const mcpControlUrl = computed(() => `${mcpBaseUrl.value}/api/mcp/control/`);
+const mcpUnifiedUrl = computed(() => `${mcpBaseUrl.value}/api/mcp/`);
+const mcpLegacyControlUrl = computed(() => `${mcpBaseUrl.value}/api/mcp/control/`);
+const mcpHeaderText = computed(() => `Authorization=${apiKey.value || 'YOUR_KEY'}`);
 
 const claudeConfigJson = computed(() => {
     const keyStr = apiKey.value || "YOUR_API_KEY_HERE";
     return JSON.stringify({
         "mcpServers": {
-            "spark-inspiration": {
+            "spark-arc": {
                 "type": "http",
-                "url": mcpInspirationUrl.value,
-                "headers": {
-                    "Content-Type": "application/json",
-                    "Accept": "application/json, text/event-stream",
-                    "Authorization": `${keyStr}`
-                }
-            },
-            "spark-control": {
-                "type": "http",
-                "url": mcpControlUrl.value,
+                "url": mcpUnifiedUrl.value,
                 "headers": {
                     "Content-Type": "application/json",
                     "Accept": "application/json, text/event-stream",

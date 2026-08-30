@@ -381,7 +381,7 @@ GitHub Release 中提供的桌面客户端会优先探测本机后端（`6688` /
 
 #### MCP 客户端接入
 
-登录后可在桌面仪表盘或移动端 AI 管理页面打开「MCP 连接服务」。同一张配置卡会生成灵感端点 `/api/mcp/` 与控制端点 `/api/mcp/control/`，二者共用用户 MCP API Key，客户端传输类型应选择 Streamable HTTP（`"type": "http"`）。完整配置、工具清单与 Director 工单流程见 [MCP 接入指南](docs/project/mcp-integration.zh-CN.md)。
+登录后可在桌面仪表盘或移动端 AI 管理页面打开「MCP 连接服务」。同一张配置卡会为统一 MCP 服务生成一个 `spark-arc` 配置，地址为 `/api/mcp/`；控制工具在统一入口下使用 `control_` 前缀。`/api/mcp/control/` 仍作为已有客户端的兼容入口保留。客户端传输类型应选择 Streamable HTTP（`"type": "http"`）。完整配置、工具清单与 Director 工单流程见 [MCP 接入指南](docs/project/mcp-integration.zh-CN.md)。
 
 ---
 
@@ -558,7 +558,7 @@ flowchart LR
 * **上下文拼接**：`communication.py` 构造稳定 system 前缀，`prompt_layout.py` 将当前编辑区、附件现场与本轮用户请求放入后段，`context_budget.py` 负责历史预算、压缩与工具循环再预算。
 * **统一执行协议**：典型专家 Agent 复用 `SparkBaseAgent` 与 `SparkAgentExecutor`，以 `build_context -> execute -> write_result` 收口业务入口；聊天与导演委派统一走 `chat_stream(skip_tool_confirmation)`。
 * **统一工具生态**：所有工具经 `server/agents/tools/registry.py` 分组注册，再由 `agent_tools.py` 作为公共门面导出。剧本、大纲、设定等局部替换统一复用 `_apply_patch`，Token 切分与语义分块也复用公共底座。
-* **AgentSkills 与 MCP**：AgentSkills 通过 `search_skills` / `read_skill` / `read_skill_reference` 作为写作质量参考按需读取，不自动污染 system 前缀；MCP 分为 `/api/mcp/` 灵感服务和 `/api/mcp/control/` 控制服务。前者保持灵感来源语义隔离，后者只直接暴露项目查询与 Director 工单入口，写盘仍经既有 Agent 工具管线执行。
+* **AgentSkills 与 MCP**：AgentSkills 通过 `search_skills` / `read_skill` / `read_skill_reference` 作为写作质量参考按需读取，不自动污染 system 前缀；MCP 统一挂载在 `/api/mcp/`，灵感工具保留原名，控制工具使用 `control_` 前缀。`/api/mcp/control/` 仅作为旧客户端兼容入口保留，写盘仍经既有 Agent 工具管线执行。
 * **前端映射**：Agent 名称、描述、徽标和主题色以 `server/agents/registry.py` 为真相源；工具调用 UI 元数据由后端 `build_tool_stream_event` 注入，前端 `chatStore` 统一消费并渲染。
 
 > 📗 更完整的上下文结构、缓存命中显示、Agent 职责表、AgentSkills/MCP 边界与工具注册细节，请参阅 [架构深度文档 §2-§3](docs/project/architecture.md#2-agent-统一调用管线)。

@@ -7,27 +7,15 @@ Spark Inspiration MCP Server
 
 from fastmcp import FastMCP
 from typing import List, Optional, Dict
-from .logic import save_inspiration, get_all_inspirations, current_user_id
-from core.auth import user_db
+from .logic import save_inspiration, get_all_inspirations
+from core.request_context import current_user_id
 from agents.agent_utils import collect_text_output
 from agents.setup_agents import MuseAgent
+from mcp_server.shared.host import verify_mcp_api_key
 
 
-# 自定义鉴权验证函数
-async def verify_api_key(token: str) -> dict | None:
-    """
-    验证 API Key 并返回用户信息。
-    
-    Args:
-        token: 客户端传来的 API Key
-        
-    Returns:
-        包含 user_id 的字典（验证成功）或 None（验证失败）
-    """
-    user_id = user_db.verify_mcp_key(token)
-    if user_id:
-        return {"user_id": str(user_id)}
-    return None
+# 保留旧导出名，兼容现有宿主和外部集成。
+verify_api_key = verify_mcp_api_key
 
 
 # 创建 MCP Server 实例

@@ -21,9 +21,8 @@ from typing import Literal
 
 from fastmcp import FastMCP
 
-from core.auth import user_db
 from core.utils import get_project_path, get_user_projects_root, validate_project_name
-from mcp_server.spark_inspiration.logic import current_user_id
+from core.request_context import current_user_id
 from mcp_server.spark_control.director_tasks import (
     cancel_director_task,
     get_director_task,
@@ -33,18 +32,11 @@ from mcp_server.spark_control.director_tasks import (
     submit_director_task as submit_director_task_impl,
 )
 from mcp_server.spark_control.query_tools import register_query_tools
+from mcp_server.shared.host import verify_mcp_api_key
 
 
-async def verify_api_key(token: str) -> dict | None:
-    """验证 API Key 并返回用户信息。
-
-    复用与 spark_inspiration 相同的鉴权体系（user_db.verify_mcp_key），
-    同一个 MCP API Key 可同时用于两个 MCP 服务。
-    """
-    user_id = user_db.verify_mcp_key(token)
-    if user_id:
-        return {"user_id": str(user_id)}
-    return None
+# 保留旧导出名，兼容现有宿主和外部集成。
+verify_api_key = verify_mcp_api_key
 
 
 mcp = FastMCP(

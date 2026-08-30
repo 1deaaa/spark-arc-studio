@@ -1,9 +1,9 @@
 """
 守护对象：
-- MCP 远程操控接入层的契约完整性
+- 统一 MCP 入口的工具命名空间与注册完整性
 - MCP_EXPOSED_QUERY_TOOL_NAMES 白名单与 TOOLS_BY_NAME 真相源一致性
-- spark_control MCP 工具注册完整性（异步导演工单 + 总进度 + 查询工具）
-- ensure_query_context 双 ContextVar 注入正确性（core.request_context + 灵感库）
+- spark_control 兼容入口的工具注册完整性（异步导演工单 + 总进度 + 查询工具）
+- 统一鉴权中间件与 core.request_context 上下文注入
 - 白名单不包含写盘工具或 AgentSkills 原始读取工具
 - 导演远程操控必须是非阻塞工单入口，不得暴露同步 chat/direct
 
@@ -156,67 +156,142 @@ def test_mcp_control_total_tool_count():
     assert count == 21, f"工具总数应为 21，实际 {count}"
 
 
+# ── 统一 MCP 入口 ────────────────────────────────────────────
+
+def test_unified_mcp_namespaces_control_tools():
+    """统一入口必须合并两套服务，并为控制工具统一加 control_ 前缀。"""
+    from mcp_server.unified import mcp
+
+    async def _get_names():
+        tools = await mcp.list_tools()
+        return {tool.name for tool in tools}
+
+    tool_names = asyncio.run(_get_names())
+    assert len(tool_names) == 23
+    assert {"capture_spark", "list_sparks"} <= tool_names
+    assert "list_projects" not in tool_names
+    assert "control_list_projects" in tool_names
+    assert "control_submit_director_task" in tool_names
+    assert "control_read_task_result" in tool_names
+
+    from mcp_server.spark_control.server import mcp as control_mcp
+
+    control_names = {
+        tool.name for tool in asyncio.run(control_mcp.list_tools())
+    }
+    assert {f"control_{name}" for name in control_names} <= tool_names
+
+
+def test_mcp_services_share_authenticator():
+    """统一入口与旧业务模块必须复用同一套 MCP API Key 校验函数。"""
+    from mcp_server.shared.host import verify_mcp_api_key
+    from mcp_server.spark_control.server import verify_api_key as control_verify
+    from mcp_server.spark_inspiration.server import verify_api_key as inspiration_verify
+
+    assert control_verify is verify_mcp_api_key
+    assert inspiration_verify is verify_mcp_api_key
+
+
+def test_unified_mcp_http_transport_exposes_namespaced_tools():
+    """统一 MCP HTTP 入口必须能在鉴权后完成初始化并发现全部工具。"""
+    import httpx
+    from fastmcp import Client
+    from fastmcp.client.transports import StreamableHttpTransport
+
+    from mcp_server.shared.host import McpAuthMiddleware, create_mcp_http_app
+    from mcp_server.unified import mcp
+
+    async def verify(token):
+        return {"user_id": "http-user"} if token == "test-key" else None
+
+    async def _check():
+        http_app = create_mcp_http_app(mcp)
+        protected_app = McpAuthMiddleware(http_app, verify_fn=verify)
+
+        def client_factory(**kwargs):
+            return httpx.AsyncClient(
+                transport=httpx.ASGITransport(app=protected_app),
+                **kwargs,
+            )
+
+        transport = StreamableHttpTransport(
+            "http://testserver/",
+            headers={"Authorization": "test-key"},
+            httpx_client_factory=client_factory,
+        )
+        async with http_app.router.lifespan_context(http_app):
+            async with Client(transport) as client:
+                tool_names = {tool.name for tool in await client.list_tools()}
+
+        assert len(tool_names) == 23
+        assert "capture_spark" in tool_names
+        assert "control_list_projects" in tool_names
+        assert "list_projects" not in tool_names
+
+    asyncio.run(_check())
+
+
 # ── ContextVar 注入 ──────────────────────────────────────────
 
-def test_ensure_query_context_sets_both_contextvars():
-    """ensure_query_context 必须同时设置 core.request_context 和灵感库的 ContextVar。"""
+def test_ensure_query_context_sets_shared_contextvars():
+    """ensure_query_context 必须设置统一的 core.request_context 上下文。"""
     from core.request_context import current_user_id, get_current_project_name
     from mcp_server.shared.tool_adapter import ensure_query_context
-    from mcp_server.spark_inspiration.logic import current_user_id as mcp_uid_var
 
     orig_core = current_user_id.get()
-    orig_mcp = mcp_uid_var.get()
+    from core.request_context import current_project_name
+
+    orig_project = current_project_name.get()
 
     try:
         ensure_query_context("test_user_123", "test_project")
         assert current_user_id.get() == "test_user_123"
         assert get_current_project_name() == "test_project"
-        assert mcp_uid_var.get() == "test_user_123"
     finally:
         current_user_id.set(orig_core)
-        mcp_uid_var.set(orig_mcp)
+        current_project_name.set(orig_project)
 
 
 def test_invoke_langchain_tool_missing_user_context():
     """缺少 user_id 上下文时 invoke_langchain_tool 必须返回错误文本。"""
+    from core.request_context import current_user_id
     from mcp_server.shared.tool_adapter import invoke_langchain_tool
-    from mcp_server.spark_inspiration.logic import current_user_id as mcp_uid_var
 
-    orig = mcp_uid_var.get()
+    orig = current_user_id.get()
     try:
-        mcp_uid_var.set(None)
+        current_user_id.set(None)
         result = invoke_langchain_tool("list_chapters", "test_project", {})
         assert "错误" in result
     finally:
-        mcp_uid_var.set(orig)
+        current_user_id.set(orig)
 
 
 def test_invoke_langchain_tool_unknown_tool():
     """调用不存在的工具名时必须返回错误文本，不得抛异常。"""
+    from core.request_context import current_user_id
     from mcp_server.shared.tool_adapter import invoke_langchain_tool
-    from mcp_server.spark_inspiration.logic import current_user_id as mcp_uid_var
 
-    orig = mcp_uid_var.get()
+    orig = current_user_id.get()
     try:
-        mcp_uid_var.set("test_user")
+        current_user_id.set("test_user")
         result = invoke_langchain_tool("nonexistent_tool_xyz", "test_project", {})
         assert "未在注册表中找到" in result
     finally:
-        mcp_uid_var.set(orig)
+        current_user_id.set(orig)
 
 
 @pytest.mark.parametrize("project_name", ["../demo", "..\\demo", "/tmp/demo", "C:\\demo"])
 def test_invoke_langchain_tool_rejects_path_like_project_name(project_name):
     """MCP 查询工具不得接受目录穿越或绝对路径形式的项目名。"""
+    from core.request_context import current_user_id
     from mcp_server.shared.tool_adapter import invoke_langchain_tool
-    from mcp_server.spark_inspiration.logic import current_user_id as mcp_uid_var
 
-    token = mcp_uid_var.set("test_user")
+    token = current_user_id.set("test_user")
     try:
         result = invoke_langchain_tool("list_chapters", project_name, {})
         assert "非法项目名称" in result
     finally:
-        mcp_uid_var.reset(token)
+        current_user_id.reset(token)
 
 
 def test_read_beat_sheet_empty_file_returns_explicit_state(monkeypatch, tmp_path):
@@ -437,8 +512,7 @@ def test_get_all_work_status_single_project(monkeypatch):
 # ── app.py 挂载验证 ──────────────────────────────────────────
 
 def test_app_py_mounts_spark_control():
-    """app.py 必须导入并挂载 spark_control MCP 到 /api/mcp/control。"""
-    import ast
+    """app.py 必须挂载统一入口，并保留控制 MCP 的兼容地址。"""
     import os
 
     app_path = os.path.join(
@@ -448,7 +522,9 @@ def test_app_py_mounts_spark_control():
     with open(app_path, encoding="utf-8") as f:
         source = f.read()
 
-    assert "mcp_control_inst" in source, "app.py 未导入 spark_control mcp 实例"
+    assert "mcp_unified_inst" in source, "app.py 未导入统一 MCP 实例"
+    assert "mcp_control_inst" in source, "app.py 未导入控制 MCP 实例"
+    assert "create_mcp_http_app" in source, "app.py 未使用统一 MCP HTTP 装配"
     assert "/api/mcp/control" in source, "app.py 未挂载 spark_control 到 /api/mcp/control"
     assert "mcp_control_redirect" in source, "app.py 未添加 /api/mcp/control 重定向"
     control_mount = source.index('app.mount("/api/mcp/control"')
@@ -456,16 +532,50 @@ def test_app_py_mounts_spark_control():
     assert control_mount < inspiration_mount, "控制 MCP 子路径必须先于 /api/mcp 父路径挂载"
 
 
-def test_app_py_middleware_sets_core_context():
-    """McpAuthMiddleware 必须同时设置 core.request_context.current_user_id。"""
-    import os
+def test_mcp_auth_middleware_injects_and_restores_shared_context():
+    """鉴权中间件应注入用户上下文，并在请求结束后恢复调用方状态。"""
+    from core.request_context import current_project_name, current_user_id
+    from mcp_server.shared.host import McpAuthMiddleware
 
-    app_path = os.path.join(
-        os.path.dirname(os.path.dirname(os.path.dirname(__file__))),
-        "app.py",
-    )
-    with open(app_path, encoding="utf-8") as f:
-        source = f.read()
+    observed = {}
 
-    assert "core_current_user_id" in source, "McpAuthMiddleware 未设置 core.request_context 上下文"
-    assert "core.request_context" in source, "app.py 未导入 core.request_context"
+    async def verify(token):
+        assert token == "test-key"
+        return {"user_id": "user-42"}
+
+    async def app(scope, receive, send):
+        observed["user_id"] = current_user_id.get()
+        observed["project_name"] = current_project_name.get()
+        await send({
+            "type": "http.response.start",
+            "status": 204,
+            "headers": [],
+        })
+        await send({"type": "http.response.body", "body": b""})
+
+    middleware = McpAuthMiddleware(app, verify_fn=verify)
+    user_token = current_user_id.set("outer-user")
+    project_token = current_project_name.set("outer-project")
+    messages = []
+
+    async def send(message):
+        messages.append(message)
+
+    try:
+        asyncio.run(middleware(
+            {
+                "type": "http",
+                "method": "POST",
+                "path": "/",
+                "headers": [(b"authorization", b"test-key")],
+            },
+            lambda: None,
+            send,
+        ))
+        assert observed == {"user_id": "user-42", "project_name": None}
+        assert current_user_id.get() == "outer-user"
+        assert current_project_name.get() == "outer-project"
+        assert messages[0]["status"] == 204
+    finally:
+        current_project_name.reset(project_token)
+        current_user_id.reset(user_token)

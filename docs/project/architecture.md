@@ -333,9 +333,9 @@ SparkArc 的工具层采用“统一门面 + 内部按域拆分”的结构：
 SparkArc 同时兼容两类外部生态，但两者边界不同：
 
 - **AgentSkills**：面向写作质量参考。用户或管理员通过 `/api/agents/skills` 上传 `SKILL.md` 或从 URL 导入，后端存入用户域 / 全局域索引。导入时只保留文本与允许目录，并生成 `QUALITY_ADAPTER.md`；脚本、工具、安装命令、MCP 运行时说明会被忽略或剥离。聊天 Agent 只通过 `search_skills` / `read_skill` / `read_skill_reference` 按需读取，读取视图明确声明不得改变系统输出格式、工具协议、字段结构或落盘规则。
-- **MCP 灵感服务**：面向外部客户端写入与查询灵感。FastMCP 服务挂载在 `/api/mcp/`，对外工具为 `capture_spark` / `list_sparks`；内部写入真相源 `capture_inspiration` 列入 `MCP_ONLY_TOOLS`，不挂载给聊天 Agent。
-- **MCP 控制服务**：挂载在 `/api/mcp/control/`，提供 9 个项目/Director 工单工具和从 `MCP_EXPOSED_QUERY_TOOL_NAMES` 派生的 12 个只读查询工具。写盘任务统一经 `submit_director_task` 进入 Director 与既有 Agent 工具管线。工单按用户持久化并校验所有权，项目名统一经过 `core.utils.validate_project_name`；ASGI 挂载时控制子路径必须先于 `/api/mcp` 父路径注册。
-- **共同鉴权与配置**：两套服务共用用户 MCP API Key，传输协议均为 Streamable HTTP。桌面仪表盘与移动端 AI 管理复用 `MCPConnectCard` 生成双端点配置，详细接入方式见 [MCP 接入指南](mcp-integration.zh-CN.md)。
+- **统一 MCP 服务**：面向外部客户端提供灵感写入/查询、项目查询和 Director 工单能力。FastMCP 统一入口挂载在 `/api/mcp/`；灵感工具保留 `capture_spark` / `list_sparks` 原名，控制工具统一使用 `control_` 命名空间。内部写入真相源 `capture_inspiration` 列入 `MCP_ONLY_TOOLS`，不挂载给聊天 Agent。
+- **控制兼容入口**：`/api/mcp/control/` 继续挂载原 `spark_control` 服务，为已有客户端保留未加前缀的控制工具名。新客户端不需要配置该入口。写盘任务统一经 `control_submit_director_task`（兼容入口为 `submit_director_task`）进入 Director 与既有 Agent 工具管线。工单按用户持久化并校验所有权，项目名统一经过 `core.utils.validate_project_name`；兼容子路径必须先于 `/api/mcp` 父路径注册。
+- **共同鉴权与配置**：统一入口与控制兼容入口共用 `McpAuthMiddleware`、用户 MCP API Key 和 Streamable HTTP 装配。桌面仪表盘与移动端 AI 管理复用 `MCPConnectCard` 生成单服务配置，并在文本配置中显示兼容地址，详细接入方式见 [MCP 接入指南](mcp-integration.zh-CN.md)。
 - **外部 MCP 搜索**：`web_search` 内部通过 Exa MCP Streamable HTTP 调用外部搜索服务，但它在 SparkArc 内仍表现为普通工具，统一经 `tools/registry.py` 分配给需要联网知识的 Agent。
 
 AgentSkills 对 prompt cache 的影响是受控的：Skill 内容不是固定 system 前缀的一部分，只有被工具读取后才作为工具结果进入后续上下文。也就是说，安装 Skill 不会改变同一 Agent 的稳定前缀；使用某个 Skill 会改变本轮及后续历史，这是符合预期的动态内容。

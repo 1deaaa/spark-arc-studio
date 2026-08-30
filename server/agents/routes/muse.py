@@ -11,7 +11,7 @@ from typing import Optional, Dict, List, Any
 import threading
 
 from core.auth import get_current_user
-from core.request_context import normalize_project_name
+from core.request_context import current_user_id, normalize_project_name
 from core.project_settings import get_project_story_tags
 from agents.project_context import build_story_tags_hint
 
@@ -29,7 +29,6 @@ from mcp_server.spark_inspiration.logic import (
     mark_as_read,
     get_unread_count,
     unbind_inspiration_from_project,
-    current_user_id,
 )
 
 from .schemas import (

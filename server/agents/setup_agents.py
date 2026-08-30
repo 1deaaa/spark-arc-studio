@@ -78,7 +78,8 @@ class MuseAgent(SparkBaseAgent, SparkAgentExecutor):
         - `mcp`：来自 MCP 捕获，会进入未读提醒与 MCP 列表逻辑
         - `legacy`：历史老数据补标记，表示该条目创建时系统还没有来源字段
         """
-        from mcp_server.spark_inspiration.logic import save_inspiration, update_inspiration, current_user_id
+        from mcp_server.spark_inspiration.logic import save_inspiration, update_inspiration
+        from core.request_context import current_user_id
 
         inspiration_id = kwargs.get("inspiration_id")
         source = kwargs.get("source", "")

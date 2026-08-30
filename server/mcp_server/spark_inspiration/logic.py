@@ -31,7 +31,8 @@ import json
 import uuid
 from datetime import datetime
 from typing import List, Optional, Dict, Any
-from contextvars import ContextVar
+
+from core.request_context import current_user_id
 
 # 列表过滤范围：
 #   all      → 返回全部条目
@@ -41,9 +42,6 @@ INSPIRATION_SCOPE_ALL = "all"
 INSPIRATION_SCOPE_PROJECT = "project"
 INSPIRATION_SCOPE_DRAFTS = "drafts"
 VALID_INSPIRATION_SCOPES = {INSPIRATION_SCOPE_ALL, INSPIRATION_SCOPE_PROJECT, INSPIRATION_SCOPE_DRAFTS}
-
-# ContextVar to store the current user_id for the request
-current_user_id: ContextVar[Optional[str]] = ContextVar("current_user_id", default=None)
 
 BASE_DIR = os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 USERDATA_ROOT = os.path.join(BASE_DIR, "_userdata")

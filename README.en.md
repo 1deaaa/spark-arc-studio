@@ -357,7 +357,7 @@ If you want to access your private instance on phones, tablets, or other remote 
 
 #### MCP Client Integration
 
-After signing in, open **MCP Connection Service** from the desktop dashboard or mobile AI management page. The shared configuration card generates the inspiration endpoint `/api/mcp/` and control endpoint `/api/mcp/control/`; both use the same user MCP API key and Streamable HTTP (`"type": "http"`). See the [MCP Integration Guide](docs/project/mcp-integration.zh-CN.md) for the complete configuration, tool list, and Director task workflow.
+After signing in, open **MCP Connection Service** from the desktop dashboard or mobile AI management page. The shared configuration card generates one `spark-arc` configuration for the unified MCP endpoint `/api/mcp/`; control tools use the `control_` prefix there. `/api/mcp/control/` remains available as a compatibility endpoint for existing clients. Use Streamable HTTP (`"type": "http"`). See the [MCP Integration Guide](docs/project/mcp-integration.zh-CN.md) for the complete configuration, tool list, and Director task workflow.
 
 ---
 
@@ -531,7 +531,7 @@ This is **persisted short-term chat context**, not a cross-project user profile 
 * **Context Concatenation**: `communication.py` constructs the stable system prefix, `prompt_layout.py` puts the current editing area, attachment scene, and the current user request into the back segment, and `context_budget.py` handles historical budgets, compression, and tool loop re-budgeting.
 * **Unified Execution Protocol**: Typical expert Agents reuse `SparkBaseAgent` and `SparkAgentExecutor`, using `build_context -> execute -> write_result` to unify business entries; chat and director delegations go through `chat_stream(skip_tool_confirmation)`.
 * **Unified Tool Ecosystem**: All tools are grouped and registered in [registry.py](file:///d:/Desktop/sparkarc/server/agents/tools/registry.py) and exported through `agent_tools.py` as a public facade. Local replacements of scripts, outlines, and settings all reuse `_apply_patch`; token splitting and semantic chunking also reuse the public base.
-* **AgentSkills & MCP**: AgentSkills are read on demand through `search_skills` / `read_skill` / `read_skill_reference` and do not automatically pollute the system prefix. MCP is split into the inspiration service at `/api/mcp/` and the control service at `/api/mcp/control/`. The latter directly exposes only project queries and Director work orders; writes still run through the existing Agent tool pipeline.
+* **AgentSkills & MCP**: AgentSkills are read on demand through `search_skills` / `read_skill` / `read_skill_reference` and do not automatically pollute the system prefix. MCP is unified at `/api/mcp/`: inspiration tools keep their original names, while control tools use the `control_` prefix. `/api/mcp/control/` remains only as a compatibility endpoint for existing clients; writes still run through the existing Agent tool pipeline.
 * **Frontend Mapping**: Agent names, descriptions, icons, and theme colors use [registry.py](file:///d:/Desktop/sparkarc/server/agents/registry.py) as the source of truth; tool-calling UI metadata is injected by the backend's `build_tool_stream_event` and consumed and rendered uniformly by the frontend's `chatStore`.
 
 > 📗 For more complete details on context structure, cache hit displays, Agent responsibility tables, AgentSkills/MCP boundaries, and tool registration, please refer to [Architecture Document §2-§3](file:///d:/Desktop/sparkarc/docs/project/architecture.md#2-agent-统一调用管线).

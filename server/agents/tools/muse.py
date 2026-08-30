@@ -120,7 +120,6 @@ def rewrite_inspiration(overwrite_content: str) -> str:
     """覆盖当前灵感条目或创建新条目；有项目上下文时自动设为项目当前灵感。"""
     from mcp_server.spark_inspiration.logic import (
         activate_inspiration_for_project,
-        current_user_id as mcp_uid_var,
         save_inspiration,
         update_inspiration,
     )
@@ -148,11 +147,11 @@ def rewrite_inspiration(overwrite_content: str) -> str:
         return "已成功重写当前灵感条目；当前没有项目上下文，保留原绑定状态。"
 
     source = MuseAgent.generate_source_title(content)
-    token = mcp_uid_var.set(str(user_id))
+    token = current_user_id.set(str(user_id))
     try:
         result = save_inspiration(source=source, content=content, tags=None, origin="ui")
     finally:
-        mcp_uid_var.reset(token)
+        current_user_id.reset(token)
     if isinstance(result, dict) and result.get("success"):
         new_id = str(result["id"])
         project_name = get_current_project_name()

@@ -357,7 +357,7 @@ GitHub Releases のデスクトップクライアントは、まずローカル�
 
 #### MCP クライアント接続
 
-ログイン後、デスクトップのダッシュボードまたはモバイルの AI 管理画面から「MCP 接続サービス」を開きます。共通の設定カードで、インスピレーション用 `/api/mcp/` とコントロール用 `/api/mcp/control/` の両方を生成できます。両方とも同じユーザー MCP API Key と Streamable HTTP（`"type": "http"`）を使用します。設定、ツール一覧、Director タスク手順の詳細は [MCP 接続ガイド](docs/project/mcp-integration.zh-CN.md) を参照してください。
+ログイン後、デスクトップのダッシュボードまたはモバイルの AI 管理画面から「MCP 接続サービス」を開きます。共通の設定カードで、統合 MCP エンドポイント `/api/mcp/` 用の `spark-arc` 設定を 1 つ生成できます。統合入口ではコントロールツールに `control_` プレフィックスを使用し、`/api/mcp/control/` は既存クライアント向けの互換エンドポイントとして残ります。通信方式は Streamable HTTP（`"type": "http"`）を選択してください。設定、ツール一覧、Director タスク手順の詳細は [MCP 接続ガイド](docs/project/mcp-integration.zh-CN.md) を参照してください。
 
 ---
 
@@ -527,7 +527,7 @@ flowchart LR
 * **コンテキスト構築**: `communication.py` が安定したシステム前頭部を構築し、`prompt_layout.py` が現在の編集領域や添付ファイル、本ターンのユーザー要求を後半部に結合します。`context_budget.py` は対話履歴のトークン予算管理、要約の圧縮、ツールループ時の再計算を行います。
 * **統一実行プロトコル**: 各専門エージェントは `SparkBaseAgent` と `SparkAgentExecutor` を継承し、`build_context -> execute -> write_result` の手順で処理を統一管理します。対話と監督からの委任タスクはすべて `chat_stream(skip_tool_confirmation)` を経由して実行されます。
 * **統一ツールシステム**: すべてのツールは [registry.py](file:///d:/Desktop/sparkarc/server/agents/tools/registry.py) でグループ分けして登録され、`agent_tools.py` のパブリックファサードから外部に公開されます。本文、アウトライン、世界設定の部分修正はすべて `_apply_patch` を再利用し、トークン分割やセマンティックチャンキングも共通インフラを利用します。
-* **スキルと MCP の境界**: AgentSkills は `search_skills` / `read_skill` / `read_skill_reference` 経由でオンデマンドに読み込まれます。MCP は `/api/mcp/` のインスピレーションサービスと `/api/mcp/control/` のコントロールサービスに分離されています。後者が直接公開するのはプロジェクト照会と Director タスク入口のみで、書き込みは既存の Agent ツールパイプラインを経由します。
+* **スキルと MCP の境界**: AgentSkills は `search_skills` / `read_skill` / `read_skill_reference` 経由でオンデマンドに読み込まれます。MCP は `/api/mcp/` に統合され、インスピレーションツールは従来の名前を保ち、コントロールツールには `control_` プレフィックスを付けます。`/api/mcp/control/` は既存クライアント向けの互換入口としてのみ残り、書き込みは既存の Agent ツールパイプラインを経由します。
 * **フロントエンド対応**: エージェント名、説明、アイコン、テーマカラーなどの情報は [registry.py](file:///d:/Desktop/sparkarc/server/agents/registry.py) をマスターデータとして参照します。ツール呼び出し時の UI メタデータは、バックエンドの `build_tool_stream_event` によってストリームに注入され、フロントエンドの `chatStore` が一元的に処理・レンダリングします。
 
 > 📗 コンテキストの結合構造、キャッシュヒットの表示、各エージェントの役割一覧、スキルと MCP の統合境界、ツールの登録構造の詳細については、[アーキテクチャ詳細ドキュメント §2-§3](file:///d:/Desktop/sparkarc/docs/project/architecture.md#2-agent-统一调用管线) をご参照ください。

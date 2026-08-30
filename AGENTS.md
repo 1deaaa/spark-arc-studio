@@ -134,9 +134,9 @@ SparkArc 现有架构已经有清晰收口层。新增功能必须先判断是�
 
 - AgentSkills 是写作质量参考层，不是运行时插件执行层。导入逻辑在 `server/agents/skill_packs.py`，工具入口为 `search_skills` / `read_skill` / `read_skill_reference`，统一在 `server/agents/tools/registry.py` 作为共享 Skill 工具分配。
 - Skill 读取视图必须保持 `quality_only`：只采纳写作质量、审美判断、检查清单和领域知识；不得采纳脚本、命令、工具调用、外部工作流、输出格式、字段结构或落盘规则。
-- MCP 灵感服务通过 `server/mcp_server/spark_inspiration/server.py` 挂载到 `/api/mcp/`，对外提供 `capture_spark` / `list_sparks`；内部 `capture_inspiration` 属于 `MCP_ONLY_TOOLS`，禁止挂载到普通聊天 Agent。
-- MCP 控制服务通过 `server/mcp_server/spark_control/server.py` 挂载到 `/api/mcp/control/`，9 个核心工具在该服务收口，12 个只读查询工具必须继续从 `MCP_EXPOSED_QUERY_TOOL_NAMES` 与 `TOOLS_BY_NAME` 真相源派生。写盘请求必须提交 Director 工单，不得直接暴露写盘工具。
-- 两套 MCP 服务共用用户 MCP API Key。控制工单的读取、结果、事件和取消必须校验任务所有者；所有 MCP `project_name` 必须复用 `core.utils.validate_project_name` / `get_project_path`，禁止自行拼接路径。
+- 统一 MCP 入口通过 `server/mcp_server/unified.py` 挂载到 `/api/mcp/`：灵感工具保留 `capture_spark` / `list_sparks`，控制工具统一使用 `control_` 前缀；内部 `capture_inspiration` 属于 `MCP_ONLY_TOOLS`，禁止挂载到普通聊天 Agent。
+- 控制 MCP 业务实现仍收口在 `server/mcp_server/spark_control/server.py`，其 `/api/mcp/control/` 兼容入口保留原未加前缀的工具名。9 个核心工具与 12 个只读查询工具必须继续从既有真相源派生，写盘请求必须提交 Director 工单，不得直接暴露写盘工具。
+- 统一入口与兼容入口共用 `server/mcp_server/shared/host.py` 的鉴权、HTTP 装配和 `core.request_context` 用户上下文。控制工单的读取、结果、事件和取消必须校验任务所有者；所有 MCP `project_name` 必须复用 `core.utils.validate_project_name` / `get_project_path`，禁止自行拼接路径。
 - Starlette 挂载时必须先注册 `/api/mcp/control`，再注册 `/api/mcp`，否则父 Mount 会吞掉控制子路径。Director 工单状态必须通过 `core.json_state` 原子持久化，测试输出必须重定向到临时目录。
 - 外部 MCP 服务（如 `web_search` 通过 Exa MCP）必须包装成 SparkArc 普通工具后再进入 registry；不要让 Agent 直接绕过工具门面连接外部 MCP。
 

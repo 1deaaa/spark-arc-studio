@@ -171,98 +171,21 @@ from agents.routes.graphrag_routes import graphrag_router
 from llm.routes_llm import llm_router
 from llm.agen_matchbox import QuotaExceededError, CreditBalanceExceededError
 
-# MCP 服务器（使用 fastmcp 框架）
-from mcp_server.spark_inspiration.server import mcp as mcp_inst, verify_api_key, current_user_id
-
-# spark_control MCP 服务器（远程操控：聊天链路 + 导演调度 + 查询工具）
-from mcp_server.spark_control.server import mcp as mcp_control_inst, verify_api_key as verify_api_key_control
+# MCP 服务器：统一入口与控制兼容入口
+from mcp_server.unified import mcp as mcp_unified_inst
+from mcp_server.spark_control.server import mcp as mcp_control_inst
+from mcp_server.shared.host import McpAuthMiddleware, create_mcp_http_app
 
 # ============================================
 # MCP 应用配置（使用 HTTP 传输）
 # ============================================
-# 创建 MCP ASGI 应用
-# fastmcp 使用 transport='http' 支持标准的 Streamable HTTP 协议
-# path='/' 让端点直接在挂载路径下，挂载到 /api/mcp 后端点就是 /api/mcp
-_mcp_app = mcp_inst.http_app(
-    path='/',
-    transport='http',
-    json_response=True,
-    stateless_http=True
-)
+# 创建统一入口和旧控制入口的 Streamable HTTP 应用。
+_mcp_app = create_mcp_http_app(mcp_unified_inst)
+_mcp_control_app = create_mcp_http_app(mcp_control_inst)
 
-# spark_control MCP 应用（挂载到 /api/mcp/control）
-_mcp_control_app = mcp_control_inst.http_app(
-    path='/',
-    transport='http',
-    json_response=True,
-    stateless_http=True
-)
-
-
-# 自定义 MCP 鉴权中间件
-from starlette.types import ASGIApp, Scope, Receive, Send
-from starlette.responses import JSONResponse
-
-# 导入 core.request_context 的 ContextVar（工具执行依赖这套上下文）
-from core.request_context import current_user_id as core_current_user_id
-
-class McpAuthMiddleware:
-    """
-    MCP 鉴权中间件：验证 API Key 并设置用户上下文。
-    
-    使用 fastmcp 框架后，我们仍需要自定义中间件来：
-    1. 验证 Authorization header 中的 API Key
-    2. 设置两套 current_user_id 上下文变量：
-       a. mcp_server.spark_inspiration.logic.current_user_id（灵感库工具依赖）
-       b. core.request_context.current_user_id（Agent/工具执行依赖）
-    """
-    def __init__(self, app: ASGIApp, verify_fn=None):
-        self.app = app
-        self.verify_fn = verify_fn or verify_api_key
-
-    async def __call__(self, scope: Scope, receive: Receive, send: Send):
-        if scope["type"] != "http":
-            await self.app(scope, receive, send)
-            return
-
-        # 从请求头获取 Authorization
-        headers = dict(scope.get("headers", []))
-        auth_header = headers.get(b"authorization", b"").decode()
-        
-        if not auth_header:
-            response = JSONResponse(
-                status_code=401,
-                content={"error": "需要鉴权：请提供 API Key"}
-            )
-            await response(scope, receive, send)
-            return
-
-        # 验证 API Key
-        user_info = await self.verify_fn(auth_header.strip())
-        
-        if not user_info:
-            response = JSONResponse(
-                status_code=401,
-                content={"error": "无效的 API Key"}
-            )
-            await response(scope, receive, send)
-            return
-        
-        # 设置用户上下文（两套 ContextVar 同时设置）
-        token_mcp = current_user_id.set(user_info["user_id"])
-        token_core = core_current_user_id.set(user_info["user_id"])
-        try:
-            await self.app(scope, receive, send)
-        finally:
-            current_user_id.reset(token_mcp)
-            core_current_user_id.reset(token_core)
-
-
-# 包装 MCP 应用，添加鉴权
+# 两个入口都使用同一个共享鉴权中间件；旧控制入口仅用于兼容已有客户端。
 _mcp_app_with_auth = McpAuthMiddleware(_mcp_app)
-
-# 包装 spark_control MCP 应用（复用同一鉴权中间件类，使用相同的 verify_api_key 逻辑）
-_mcp_control_app_with_auth = McpAuthMiddleware(_mcp_control_app, verify_fn=verify_api_key_control)
+_mcp_control_app_with_auth = McpAuthMiddleware(_mcp_control_app)
 
 
 # ============================================
@@ -310,9 +233,8 @@ async def lifespan(app: FastAPI):
         print(error_msg)
         raise FileNotFoundError(error_msg)
 
-    # 嵌套 MCP 的 lifespan（初始化 session manager）
-    # 使用 AsyncExitStack 同时管理两个 MCP 服务的 lifespan，
-    # 确保两者在应用 yield（开始服务请求）期间都保持活跃。
+    # 同时管理统一入口和兼容入口的 MCP session manager。
+    # 统一入口内部还会管理两个业务子服务的生命周期。
     from contextlib import AsyncExitStack
     async with AsyncExitStack() as _mcp_stack:
         await _mcp_stack.enter_async_context(_mcp_app.lifespan(app))
