@@ -13,6 +13,7 @@ from llm.agen_matchbox.image_generation import (
     ImageReference,
     ImageGenerationError,
     SparkImageRequest,
+    _generate_gemini_generate_content_image,
     _generate_gemini_interactions_image,
     _generate_openai_chat_image,
     _generate_openai_compatible_image,
@@ -348,6 +349,42 @@ def test_gemini_interactions_adapter_sends_text_and_reference_parts(monkeypatch)
     assert call["json"]["response_format"]["aspect_ratio"] == "3:2"
     assert call["json"]["input"][0] == {"type": "text", "text": "保持例图画风，生成横版雨夜书店背景"}
     assert call["json"]["input"][1]["type"] == "image"
+    assert call["headers"]["x-goog-api-key"] == "gemini-test"
+
+
+def test_gemini_generate_content_adapter_rewrites_v1_to_v1beta(monkeypatch) -> None:
+    fake = _FakeRequests({
+        "candidates": [{
+            "content": {
+                "parts": [{
+                    "inline_data": {
+                        "mime_type": "image/png",
+                        "data": _png_b64(),
+                    }
+                }]
+            }
+        }]
+    })
+    monkeypatch.setitem(sys.modules, "requests", fake)
+
+    result = _generate_gemini_generate_content_image(
+        {
+            "base_url": "https://generativelanguage.googleapis.com/v1",
+            "api_key": "gemini-test",
+            "model_name": "gemini-3.1-flash-lite-image",
+            "extra_body": {},
+            "input_modalities": [MODALITY_TEXT],
+            "output_modalities": [MODALITY_IMAGE],
+        },
+        SparkImageRequest(prompt="生成横版雨夜书店背景", size="1536x1024"),
+    )
+
+    assert result.provider == "gemini_generate_content"
+    call = fake.calls[0]
+    assert call["url"] == (
+        "https://generativelanguage.googleapis.com/v1beta/"
+        "models/gemini-3.1-flash-lite-image:generateContent"
+    )
     assert call["headers"]["x-goog-api-key"] == "gemini-test"
 
 

@@ -673,6 +673,7 @@ def _generate_xai_image(config: dict[str, Any], request: SparkImageRequest) -> S
 
 
 def _gemini_root_and_version(base_url: str) -> tuple[str, str]:
+    """解析 Gemini 请求根地址，并把兼容网关的 v1 归一为 Gemini 的 v1beta。"""
     parsed = urlparse(str(base_url or "").strip())
     if not parsed.scheme or not parsed.netloc:
         raise ImageGenerationError("Gemini 平台 base_url 无效")
@@ -680,7 +681,9 @@ def _gemini_root_and_version(base_url: str) -> tuple[str, str]:
     version = "v1beta"
     for part in path.split("/"):
         if part in {"v1", "v1beta"}:
-            version = part
+            # Chat Universal 的公共入口固定是 v1；Gemini 生图端点要求 v1beta。
+            # 这里只影响本次上游请求，不回写平台配置，避免影响同一平台的文本链路。
+            version = "v1beta"
             break
     root = f"{parsed.scheme}://{parsed.netloc}"
     return root, version

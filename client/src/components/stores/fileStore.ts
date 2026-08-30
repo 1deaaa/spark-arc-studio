@@ -152,23 +152,19 @@ export const useFileStore = defineStore('file', {
       }
       // 在树中查找该文件并选中，同时加载剧本
       const target = findByPath(this.fileTree, filePath);
-      if (target) {
-        this.selectedFile = target;
-        if (target.type === 'story' && target.path) {
-          const sceneStore = useSceneStore();
-          await sceneStore.loadStory(target.path);
-        }
-      } else {
-        // 兼容仅传入文件名（在根目录下）
-        const maybe = findByNameInTree(this.fileTree, filePath);
-        if (maybe) {
-          this.selectedFile = maybe;
-          if (maybe.type === 'story' && maybe.path) {
-            const sceneStore = useSceneStore();
-            await sceneStore.loadStory(maybe.path);
-          }
-        } else {
-          throw new Error(`文件未找到: ${filePath}`);
+      const selected = target || findByNameInTree(this.fileTree, filePath);
+      if (!selected) {
+        throw new Error(`文件未找到: ${filePath}`);
+      }
+
+      this.selectedFile = selected;
+      if (selected.type === 'story' && selected.path) {
+        const sceneStore = useSceneStore();
+        await sceneStore.loadStory(selected.path);
+
+        // 用户主动切换文件时，编辑焦点应回到场景；内部重载仍由 loadStory 自行恢复节点。
+        if (sceneStore.currentFilePath === selected.path && sceneStore.currentScene) {
+          sceneStore.selectScene(sceneStore.currentScene);
         }
       }
     },

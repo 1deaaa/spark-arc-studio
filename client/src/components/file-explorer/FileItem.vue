@@ -207,7 +207,7 @@ function selectFile(e) {
   
   // 如果是故事文件，加载它
   if (props.item.type === 'story') {
-    sceneStore.loadStory(props.item.path);
+    void fileStore.setCurrentFile(projectStore.currentProject, props.item.path);
   }
 }
 
