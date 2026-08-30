@@ -192,20 +192,28 @@ def test_mcp_services_share_authenticator():
     assert inspiration_verify is verify_mcp_api_key
 
 
-def test_unified_mcp_http_transport_exposes_namespaced_tools():
-    """统一 MCP HTTP 入口必须能在鉴权后完成初始化并发现全部工具。"""
+def test_unified_mcp_http_transport_exposes_namespaced_tools(monkeypatch):
+    """统一入口和控制兼容入口都必须能完成鉴权、初始化与工具发现。"""
     import httpx
     from fastmcp import Client
     from fastmcp.client.transports import StreamableHttpTransport
 
     from mcp_server.shared.host import McpAuthMiddleware, create_mcp_http_app
+    from mcp_server.spark_control import server as control_server
     from mcp_server.unified import mcp
+
+    observed_user_ids = []
+    monkeypatch.setattr(
+        control_server,
+        "_list_user_projects",
+        lambda user_id: observed_user_ids.append(user_id) or [],
+    )
 
     async def verify(token):
         return {"user_id": "http-user"} if token == "test-key" else None
 
-    async def _check():
-        http_app = create_mcp_http_app(mcp)
+    async def _list_names(server, tool_name):
+        http_app = create_mcp_http_app(server)
         protected_app = McpAuthMiddleware(http_app, verify_fn=verify)
 
         def client_factory(**kwargs):
@@ -221,12 +229,28 @@ def test_unified_mcp_http_transport_exposes_namespaced_tools():
         )
         async with http_app.router.lifespan_context(http_app):
             async with Client(transport) as client:
-                tool_names = {tool.name for tool in await client.list_tools()}
+                return {
+                    "tool_names": {tool.name for tool in await client.list_tools()},
+                    "project_result": await client.call_tool(
+                        tool_name, {}
+                    ),
+                }
 
+    async def _check():
+        unified_result = await _list_names(mcp, "control_list_projects")
+        compat_result = await _list_names(control_server.mcp, "list_projects")
+        tool_names = unified_result["tool_names"]
+        compat_tool_names = compat_result["tool_names"]
         assert len(tool_names) == 23
         assert "capture_spark" in tool_names
         assert "control_list_projects" in tool_names
         assert "list_projects" not in tool_names
+        assert unified_result["project_result"].data == "暂无项目。"
+        assert len(compat_tool_names) == 21
+        assert "list_projects" in compat_tool_names
+        assert "control_list_projects" not in compat_tool_names
+        assert compat_result["project_result"].data == "暂无项目。"
+        assert observed_user_ids == ["http-user", "http-user"]
 
     asyncio.run(_check())
 

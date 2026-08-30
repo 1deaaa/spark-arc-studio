@@ -20,7 +20,7 @@
                 {{ t('components.mcpConnectCard.description') }}
             </SparkAlert>
 
-            <!-- API Key Section -->
+            <!-- API Key 区域 -->
             <div class="key-section">
                 <div class="section-label">{{ t('components.mcpConnectCard.yourApiKey') }}</div>
                 <n-input-group class="key-input-group">
@@ -271,7 +271,7 @@ onMounted(() => {
 
 .code-wrapper {
     position: relative;
-    background-color: var(--spark-bg); /* Use theme bg instead of black */
+    background-color: var(--spark-bg); /* 使用主题背景色 */
     border: 1px solid var(--spark-border);
     border-radius: 4px;
     padding: 12px;
