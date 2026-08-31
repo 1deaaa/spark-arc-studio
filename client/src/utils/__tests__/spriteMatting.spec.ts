@@ -57,7 +57,6 @@ describe('立绘绿幕抠图', () => {
     expect(getPixel(frame, 0, 1)).toEqual([0, 0, 0, 0]);
     expect(getPixel(frame, 1, 1)).toEqual([180, 50, 50, 255]);
   });
-
   it('会清除人物轮廓内未与画面边缘连通的绿幕孔洞', () => {
     const frame = createFrame(11, 11, [40, 244, 25, 255]);
     for (let x = 3; x <= 7; x += 1) {
