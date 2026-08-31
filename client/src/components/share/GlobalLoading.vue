@@ -104,9 +104,8 @@ function onGlobalLoading(p) {
     const payloadTarget = (p?.target || '').toString().trim();
     const localTarget = (props.target || '').toString().trim();
 
-    if (payloadTarget) {
-      if (!localTarget || payloadTarget !== localTarget) return;
-    } else if (localTarget && p?.show) {
+    if (payloadTarget && localTarget && payloadTarget !== localTarget) return;
+    if (!payloadTarget && localTarget && p?.show) {
       return;
     }
 
