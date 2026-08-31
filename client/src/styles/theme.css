@@ -113,8 +113,8 @@ body {
     --spark-accent-container: color-mix(in srgb, var(--spark-accent), transparent 85%);
 
     /* --- 和谐色变体 (Analogous) --- */
-    --spark-harmonious-a: oklch(from var(--spark-primary) l c calc(h + 45));
-    --spark-harmonious-b: oklch(from var(--spark-primary) l c calc(h - 45));
+    --spark-harmonious-a: oklch(from var(--spark-primary) calc(l + 0.04) c calc(h + 35));
+    --spark-harmonious-b: oklch(from var(--spark-primary) calc(l - 0.02) c calc(h - 35));
 
     /* --- 对比色变体 (Complementary Pair) --- */
     /* 输入节点色：补色旋转 */
@@ -151,7 +151,7 @@ body.app-font-ready {
 body.light-mode {
     --seed-primary: #EB9460;
     --seed-bg: #FAF6EE;
-    --seed-accent: #6b9080;
+    --seed-accent: #E27B58;
     --seed-text: #5c5c5c;
     --seed-text-inverse: #ffffff;
     --seed-success: #81b29a;
@@ -166,6 +166,10 @@ body.light-mode {
     --spark-success: var(--seed-success);
     --spark-warning: var(--seed-warning);
     --spark-danger: var(--seed-danger);
+
+    /* 亮色模式高级美学和谐色：避免落入黄绿/泥泞绿区间，衍生为琥珀金辉与晚霞玫瑰红 */
+    --spark-harmonious-a: oklch(from var(--spark-primary) calc(l + 0.06) calc(c * 0.92) calc(h + 20));
+    --spark-harmonious-b: oklch(from var(--spark-primary) calc(l - 0.03) calc(c * 1.05) calc(h - 26));
 
     --spark-bg: color-mix(in srgb, var(--seed-bg), var(--spark-primary) 3%);
     --spark-panel-bg: var(--seed-text-inverse); 

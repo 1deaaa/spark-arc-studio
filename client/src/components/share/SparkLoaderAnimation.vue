@@ -10,12 +10,12 @@
           <linearGradient id="globalFlameArcGrad" x1="0%" y1="0%" x2="100%" y2="100%">
             <stop offset="0%" stop-color="var(--loader-primary)" />
             <stop offset="60%" stop-color="var(--loader-core-bright)" />
-            <stop offset="100%" stop-color="transparent" />
+            <stop offset="100%" stop-color="var(--loader-core-bright)" stop-opacity="0" />
           </linearGradient>
           <linearGradient id="globalFlameInnerArcGrad" x1="100%" y1="0%" x2="0%" y2="100%">
-            <stop offset="0%" stop-color="var(--loader-orbit-inner)" stop-opacity="0.8" />
-            <stop offset="70%" stop-color="var(--loader-primary)" stop-opacity="0.3" />
-            <stop offset="100%" stop-color="transparent" />
+            <stop offset="0%" stop-color="var(--loader-orbit-inner)" stop-opacity="0.85" />
+            <stop offset="70%" stop-color="var(--loader-primary)" stop-opacity="0.35" />
+            <stop offset="100%" stop-color="var(--loader-primary)" stop-opacity="0" />
           </linearGradient>
         </defs>
         <!-- 内圈逆向错相节奏弧 -->
@@ -510,7 +510,7 @@ onBeforeUnmount(() => {
   --loader-core-bright: var(--spark-primary-light, #7effdc);
   --loader-glow: var(--spark-primary-glow, rgba(29, 234, 170, 0.35));
   --loader-orbit-outer: var(--spark-primary, #1deaaa);
-  --loader-orbit-inner: var(--spark-accent, #bd93f9);
+  --loader-orbit-inner: var(--spark-harmonious-a, var(--spark-accent, #bd93f9));
   display: flex;
   justify-content: center;
   align-items: center;

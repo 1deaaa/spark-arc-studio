@@ -26,4 +26,18 @@ describe('SparkLoaderAnimation 主题同步', () => {
     expect(getComputedStyleSpy.mock.calls.length).toBeGreaterThan(initialComputeCount);
     wrapper.unmount();
   });
+
+  it('SVG 轨道渐变使用同色系零透明度且内圈弧接入和谐色轨', () => {
+    vi.spyOn(HTMLCanvasElement.prototype, 'getContext').mockReturnValue(null);
+    const wrapper = mount(SparkLoaderAnimation);
+
+    const outerGrad = wrapper.find('#globalFlameArcGrad');
+    expect(outerGrad.exists()).toBe(true);
+    const innerGrad = wrapper.find('#globalFlameInnerArcGrad');
+    expect(innerGrad.exists()).toBe(true);
+
+    // 渐变终止点使用 stop-opacity="0" 而非 transparent 关键字以避免插值灰黑边缘
+    expect(wrapper.html()).not.toContain('stop-color="transparent"');
+    wrapper.unmount();
+  });
 });

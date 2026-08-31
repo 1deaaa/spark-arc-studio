@@ -34,10 +34,12 @@
 
 /* 亮色模式适配 */
 :root[data-theme="light"] .loading-overlay,
-.light .loading-overlay {
+.light .loading-overlay,
+body.light-mode .loading-overlay {
   --loader-bg: color-mix(in srgb, var(--spark-bg), transparent 5%);
   --loader-glow: color-mix(in srgb, var(--spark-primary), transparent 55%);
   --loader-particle: color-mix(in srgb, var(--spark-primary), transparent 60%);
+  --loader-core-bright: color-mix(in srgb, var(--spark-primary), white 45%);
 }
 
 
