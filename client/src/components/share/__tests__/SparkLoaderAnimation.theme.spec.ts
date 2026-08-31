@@ -40,4 +40,13 @@ describe('SparkLoaderAnimation 主题同步', () => {
     expect(wrapper.html()).not.toContain('stop-color="transparent"');
     wrapper.unmount();
   });
+
+  it('组件自身具备色彩探针以自给自足继承主题色', () => {
+    vi.spyOn(HTMLCanvasElement.prototype, 'getContext').mockReturnValue(null);
+    const wrapper = mount(SparkLoaderAnimation);
+
+    const probe = wrapper.find('.flame-color-probe');
+    expect(probe.exists()).toBe(true);
+    wrapper.unmount();
+  });
 });

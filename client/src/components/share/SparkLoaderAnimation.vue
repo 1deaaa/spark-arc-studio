@@ -1,5 +1,8 @@
 <template>
   <div class="spark-loader-wrapper" ref="wrapperRef">
+    <!-- 隐藏色彩探针：让浏览器 CSS 引擎直接完成任意 CSS 变量与主题色的真实 RGB 求值 -->
+    <span ref="colorProbeRef" class="flame-color-probe" aria-hidden="true"></span>
+
     <div class="spark-loader-stage">
       <!-- 柔和热浪呼吸晕光 -->
       <div class="flame-heat-aura"></div>
@@ -34,6 +37,7 @@
 import { ref, onMounted, onBeforeUnmount } from 'vue';
 
 const wrapperRef = ref<HTMLElement | null>(null);
+const colorProbeRef = ref<HTMLElement | null>(null);
 const canvasRef = ref<HTMLCanvasElement | null>(null);
 
 let animFrameId: number | null = null;
@@ -125,10 +129,10 @@ let flamePalette: AestheticFlamePalette = {
   isLight: false,
 };
 
-// 解析 CSS 颜色
-function parseCssColor(colorStr: string, fallback: RgbColor): RgbColor {
-  if (!colorStr) return fallback;
-  const s = colorStr.trim();
+// 简单 RGB/HEX 格式解析
+function parseSimpleRgb(str: string): RgbColor | null {
+  if (!str) return null;
+  const s = str.trim();
   if (s.startsWith('#')) {
     let hex = s.slice(1);
     if (hex.length === 3) hex = hex.split('').map(c => c + c).join('');
@@ -141,42 +145,63 @@ function parseCssColor(colorStr: string, fallback: RgbColor): RgbColor {
   if (match) {
     return { r: Number(match[1]), g: Number(match[2]), b: Number(match[3]) };
   }
+  return null;
+}
+
+// 利用 DOM 探针精确求值 CSS 变量或颜色表达式（Computed Color）
+function extractComputedRgb(el: HTMLElement | null, fallback: RgbColor): RgbColor {
+  if (typeof window === 'undefined' || !el) return fallback;
+  try {
+    const colorVal = window.getComputedStyle(el).color;
+    const parsed = parseSimpleRgb(colorVal);
+    if (parsed) return parsed;
+  } catch {}
   return fallback;
 }
 
 // 实时美学计算：从当前主题色衍生出火苗所有层次的前景色
 function computeFlamePalette() {
-  if (!wrapperRef.value) return;
-  const style = window.getComputedStyle(wrapperRef.value);
-  const primaryStr = style.getPropertyValue('--loader-primary') || style.getPropertyValue('--spark-primary');
-  
-  const isLight = document.body.classList.contains('light-mode') || 
-                  document.documentElement.getAttribute('data-theme') === 'light';
+  const isLight = (typeof document !== 'undefined' && document.body.classList.contains('light-mode')) || 
+                  (typeof document !== 'undefined' && document.documentElement.getAttribute('data-theme') === 'light');
 
   const defaultPrimary = isLight ? { r: 235, g: 148, b: 96 } : { r: 29, g: 234, b: 170 };
-  const primaryRgb = parseCssColor(primaryStr, defaultPrimary);
+
+  // 1. 优先通过组件探针直接获取浏览器计算后的 Computed Color
+  let primaryRgb = extractComputedRgb(colorProbeRef.value, defaultPrimary);
+
+  // 2. 如果探针未求值成功，尝试从 wrapper 样式或 body 样式解析
+  if (primaryRgb.r === defaultPrimary.r && primaryRgb.g === defaultPrimary.g && primaryRgb.b === defaultPrimary.b) {
+    if (wrapperRef.value) {
+      const style = window.getComputedStyle(wrapperRef.value);
+      const str = style.getPropertyValue('--loader-primary') || style.getPropertyValue('--spark-primary');
+      const parsed = parseSimpleRgb(str);
+      if (parsed) primaryRgb = parsed;
+    }
+  }
+
   const hsl = rgbToHsl(primaryRgb.r, primaryRgb.g, primaryRgb.b);
 
   // 1. 白炽前景色：将主色极度提亮与低饱和化，保留微妙的主色色调韵味
   const coreWarmHsl: HslColor = {
     h: hsl.h,
-    s: Math.max(0.2, hsl.s * 0.45),
+    s: Math.max(0.15, hsl.s * 0.45),
     l: isLight ? 0.88 : 0.92
   };
   const coreWarmGlow = hslToRgb(coreWarmHsl.h, coreWarmHsl.s, coreWarmHsl.l);
 
-  // 2. 尖端等离子色：色相微偏转 +14°，模拟高温等离子色相漂移
+  // 2. 尖端等离子色：色相微偏转，模拟高温等离子色相漂移
+  const hueShift = isLight ? (hsl.h >= 25 && hsl.h <= 85 ? -8 : 10) : 14;
   const tipHsl: HslColor = {
-    h: hsl.h + (isLight ? -10 : 14),
-    s: Math.min(1, hsl.s * 1.1),
-    l: isLight ? Math.max(0.4, hsl.l * 0.9) : Math.min(0.85, hsl.l * 1.2)
+    h: hsl.h + hueShift,
+    s: Math.min(1, hsl.s * 1.05),
+    l: isLight ? Math.max(0.42, hsl.l * 0.92) : Math.min(0.85, hsl.l * 1.2)
   };
   const tipPlasma = hslToRgb(tipHsl.h, tipHsl.s, tipHsl.l);
 
   // 3. 内焰高亮核：高明度纯净色
   const innerCoreHsl: HslColor = {
     h: hsl.h,
-    s: Math.max(0.15, hsl.s * 0.3),
+    s: Math.max(0.12, hsl.s * 0.25),
     l: 0.96
   };
   const innerCoreBright = hslToRgb(innerCoreHsl.h, innerCoreHsl.s, innerCoreHsl.l);
@@ -507,13 +532,24 @@ onBeforeUnmount(() => {
 <style scoped>
 .spark-loader-wrapper {
   --loader-primary: var(--spark-primary, #1deaaa);
-  --loader-core-bright: var(--spark-primary-light, #7effdc);
-  --loader-glow: var(--spark-primary-glow, rgba(29, 234, 170, 0.35));
-  --loader-orbit-outer: var(--spark-primary, #1deaaa);
-  --loader-orbit-inner: var(--spark-harmonious-a, var(--spark-accent, #bd93f9));
+  --loader-core-bright: var(--spark-primary-light, color-mix(in srgb, var(--loader-primary), white 40%));
+  --loader-glow: var(--spark-primary-glow, color-mix(in srgb, var(--loader-primary), transparent 65%));
+  --loader-orbit-outer: var(--loader-primary);
+  --loader-orbit-inner: var(--spark-harmonious-a, var(--spark-accent, color-mix(in srgb, var(--loader-primary), #bd93f9 45%)));
   display: flex;
   justify-content: center;
   align-items: center;
+}
+
+/* 隐藏探针：由浏览器负责解析变量与继承链 */
+.flame-color-probe {
+  position: absolute;
+  width: 0;
+  height: 0;
+  opacity: 0;
+  pointer-events: none;
+  visibility: hidden;
+  color: var(--loader-primary, var(--spark-primary, #1deaaa));
 }
 
 .spark-loader-stage {
