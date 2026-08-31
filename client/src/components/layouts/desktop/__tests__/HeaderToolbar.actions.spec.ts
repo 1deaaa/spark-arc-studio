@@ -6,6 +6,8 @@ import { NDropdown } from 'naive-ui';
 const mocks = vi.hoisted(() => ({
   createFile: vi.fn(),
   createProject: vi.fn(),
+  fetchWithAuth: vi.fn(),
+  flushStorySave: vi.fn(),
 }));
 
 vi.mock('vue-i18n', () => ({
@@ -36,6 +38,8 @@ vi.mock('@/components/stores/fileStore', () => ({
 vi.mock('@/components/stores/sceneStore', () => ({
   useSceneStore: () => ({
     workspaceMode: 'script',
+    fileFormat: 'arc',
+    flushStorySave: mocks.flushStorySave,
     canUndo: false,
     canRedo: false,
     undoStoryEdit: vi.fn(),
@@ -77,7 +81,7 @@ vi.mock('@/services/api', () => ({
   absorbStoryMemory: vi.fn(),
   uploadStory: vi.fn(),
   logout: vi.fn(),
-  fetchWithAuth: vi.fn(),
+  fetchWithAuth: mocks.fetchWithAuth,
 }));
 
 import HeaderToolbar from '../HeaderToolbar.vue';
@@ -108,6 +112,9 @@ describe('HeaderToolbar 文件入口', () => {
   beforeEach(() => {
     mocks.createFile.mockReset();
     mocks.createProject.mockReset();
+    mocks.fetchWithAuth.mockReset();
+    mocks.flushStorySave.mockReset();
+    mocks.flushStorySave.mockResolvedValue(true);
   });
 
   it('原项目按钮位置的新按钮复用完整的新建项目流程', async () => {
@@ -137,5 +144,31 @@ describe('HeaderToolbar 文件入口', () => {
       'export_project',
       'import_project',
     ]);
+  });
+
+  it('试玩在异步编译前预打开标签页，完成后导航到临时版本', async () => {
+    const previewTab = {
+      closed: false,
+      opener: null,
+      location: { href: '' },
+      close: vi.fn(),
+    } as unknown as Window;
+    const openSpy = vi.spyOn(window, 'open').mockReturnValue(previewTab);
+    mocks.fetchWithAuth.mockResolvedValue({
+      ok: true,
+      json: vi.fn().mockResolvedValue({ version_id: 'version-preview-1' }),
+    });
+
+    const wrapper = mountToolbar();
+    const button = wrapper.findAll('button').find((item) => item.text().includes('components.headerToolbar.quickPreview'));
+
+    expect(button).toBeDefined();
+    await button!.trigger('click');
+    await new Promise(resolve => setTimeout(resolve, 0));
+
+    expect(openSpy).toHaveBeenCalledWith('', '_blank');
+    expect(previewTab.location.href).toBe('#/play/v/version-preview-1');
+    expect(previewTab.close).not.toHaveBeenCalled();
+    openSpy.mockRestore();
   });
 });

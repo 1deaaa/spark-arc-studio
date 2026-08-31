@@ -189,6 +189,7 @@ import ZhOnlyTag from '@/components/player/shared/ZhOnlyTag.vue';
 import BookNavButton from '@/components/player/shared/BookNavButton.vue';
 import type { NavItem } from '@/components/player/shared/SceneNavPanel.vue';
 import { addVisitedIndex, filterItemsByVisited, normalizeVisitedIndexes } from '@/utils/playerProgress';
+import { resolveDefaultCharacterSprite } from '@/utils/playerPresentation';
 import { ensureAppFontReadyForText, warmupAppFontInBackground } from '@/utils/fontWarmup';
 import { SPARKARC_GITHUB_URL } from '@/config';
 
@@ -324,7 +325,13 @@ const presentationAssetBaseUrl = ref('');
 const activeBackgroundUrl = ref('');
 const activeIllustrationUrl = ref('');
 const stageBackgroundColor = ref<string | null>(null);
-const activeSprite = ref<{ url: string; name: string; position: string } | null>(null);
+const activeSprite = ref<{
+  assetId: string;
+  characterId: string;
+  url: string;
+  name: string;
+  position: string;
+} | null>(null);
 const contentFormat = ref('script');
 const novelContent = ref('');
 const titleText = ref(t('views.player.desktop.publicContent'));
@@ -435,10 +442,15 @@ function getManifestAssets(manifest: PresentationManifest | null): Record<string
   return assets && typeof assets === 'object' && !Array.isArray(assets) ? assets : {};
 }
 
+function getManifestAsset(assetId: string): PresentationAsset | undefined {
+  const assets = getManifestAssets(presentationManifest.value);
+  return assets[assetId] || Object.values(assets).find(asset => String(asset.id || '').trim() === assetId);
+}
+
 function resolvePresentationAssetUrl(assetId: string): string {
   const id = String(assetId || '').trim();
   if (!id) return '';
-  const asset = getManifestAssets(presentationManifest.value)[id];
+  const asset = getManifestAsset(id);
   if (!asset) return '';
   if (asset.url) return asset.url;
   if (!asset.path || !presentationAssetBaseUrl.value) return '';
@@ -509,12 +521,46 @@ function applySpriteValue(rawValue: unknown) {
     return;
   }
   const url = resolvePresentationAssetUrl(text);
-  if (!url) return;
-  const asset = getManifestAssets(presentationManifest.value)[text];
+  if (!url) {
+    resetPresentationSprite();
+    return;
+  }
+  const asset = getManifestAsset(text);
   activeSprite.value = {
+    assetId: text,
+    characterId: String(asset?.characterId || '').trim(),
     url,
     name: String(asset?.title || currentSpeakerName.value || ''),
-    position: String((asset as Record<string, unknown> | undefined)?.position || 'center'),
+    position: normalizeSpritePosition(asset),
+  };
+}
+
+function normalizeSpritePosition(asset: PresentationAsset | undefined): string {
+  const position = String(asset?.position || '').trim().toLowerCase();
+  return ['left', 'right'].includes(position) ? position : 'center';
+}
+
+function applyDefaultSpriteForDialogue(dialogue: StoryDialogue) {
+  const assets = getManifestAssets(presentationManifest.value);
+  const resolved = resolveDefaultCharacterSprite(dialogue, charMap.value, assets);
+  if (!resolved) {
+    resetPresentationSprite();
+    return;
+  }
+
+  const url = resolvePresentationAssetUrl(resolved.id);
+  if (!url) {
+    resetPresentationSprite();
+    return;
+  }
+
+  const position = normalizeSpritePosition(resolved.asset);
+  activeSprite.value = {
+    assetId: resolved.id,
+    characterId: resolved.characterId,
+    url,
+    name: currentSpeakerName.value || String(resolved.asset.title || ''),
+    position,
   };
 }
 
@@ -534,6 +580,14 @@ function applyPresentationCue(cue: Record<string, unknown> | null | undefined) {
   if (cue.bg !== undefined) applyBackgroundValue(cue.bg);
   if (cue.sprite !== undefined) applySpriteValue(cue.sprite);
   if (cue.illustration !== undefined) applyIllustrationValue(cue.illustration);
+}
+
+function applyCurrentNodePresentation(node: StoryDialogue) {
+  const cue = node.presentation;
+  applyPresentationCue(cue);
+  if (!cue || !Object.prototype.hasOwnProperty.call(cue, 'sprite') || cue.sprite === undefined) {
+    applyDefaultSpriteForDialogue(node);
+  }
 }
 
 function clearTitleTimer() {
@@ -804,7 +858,7 @@ function processCurrentNode() {
       executeAction(key, value);
     }
   }
-  applyPresentationCue(node.presentation);
+  applyCurrentNodePresentation(node);
 
   if (node.opt && node.opt.length > 0) {
     waitingForChoice.value = true;

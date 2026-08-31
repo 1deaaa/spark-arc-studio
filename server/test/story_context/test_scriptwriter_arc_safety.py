@@ -3,11 +3,60 @@ from __future__ import annotations
 from pathlib import Path
 
 from story.arc_safety import (
+    normalize_illustration_pending,
     sanitize_arc_ai_fragment,
     sanitize_arc_ai_output,
     sanitize_arc_for_ai_context,
     validate_arc_visual_prompt_candidate,
 )
+
+
+def test_illustration_pending_is_normalized_and_strictly_gated() -> None:
+    raw = "\n".join([
+        "# 雨夜",
+        "[旁白]",
+        "她停在门外。",
+        "@presentation illustration_pending: YES",
+        "[林澈]",
+        "别回头。",
+        "@presentation illustration_pending:true",
+        "@presentation illustration_pending:false",
+    ])
+
+    assert normalize_illustration_pending(" YES ") == "true"
+    assert normalize_illustration_pending("false") == ""
+    assert "@presentation illustration_pending:true" in sanitize_arc_for_ai_context(
+        raw,
+        allow_visual_illustration=True,
+    )
+    assert "illustration_pending" not in sanitize_arc_for_ai_context(raw)
+
+
+def test_visual_illustration_output_keeps_pending_and_replaces_it_with_prompt() -> None:
+    raw = "\n".join([
+        "# 雨夜",
+        "[旁白]",
+        "她停在门外。",
+        "@presentation illustration_pending:yes",
+        "@presentation illustration_prompt:后来补充的画面",
+        "[林澈]",
+        "别回头。",
+        "@presentation illustration_pending:true",
+        "[旁白]",
+        "雨声停了。",
+        "@presentation illustration_pending:true",
+    ])
+
+    cleaned = sanitize_arc_ai_output(
+        raw,
+        allow_visual_illustration=True,
+        max_per_scene=3,
+        min_node_gap=1,
+    )
+
+    assert "@presentation illustration_prompt:后来补充的画面" in cleaned
+    assert cleaned.count("@presentation illustration_pending:true") == 1
+    assert "[林澈]\n别回头。\n@presentation illustration_pending" not in cleaned
 
 
 def test_visual_illustration_context_is_strictly_gated() -> None:
@@ -248,6 +297,25 @@ def test_production_node_cleaner_only_keeps_visual_prompt() -> None:
         "txt": "别回头。",
         "presentation": {"illustration_prompt": "雨夜回望"},
     }]
+
+
+def test_production_node_cleaner_keeps_pending_without_concrete_prompt() -> None:
+    from agents.routes.production import _clean_generated_nodes
+
+    nodes = [{
+        "id": 1,
+        "speaker": "林澈",
+        "txt": "别回头。",
+        "presentation": {
+            "illustration_pending": "YES",
+            "illustration_prompt": "",
+            "illustration": "ill_forbidden",
+        },
+    }]
+
+    cleaned = _clean_generated_nodes(nodes, allow_visual_illustration=True)
+
+    assert cleaned[0]["presentation"] == {"illustration_pending": "true"}
 
 
 def test_illustration_prompt_with_commas_remains_scalar_in_arc_parser() -> None:

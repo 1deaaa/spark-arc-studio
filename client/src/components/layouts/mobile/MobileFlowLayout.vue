@@ -232,6 +232,7 @@ import bus from '../../../eventBus';
 import { saveStory, fetchWithAuth } from '../../../services/api';
 import { exportProjectAsSpark, importProjectFromSpark } from '../../../services/projectService';
 import StoryTagsPanel from '../../share/StoryTagsPanel.vue';
+import { closeDeferredBrowserTab, navigateDeferredBrowserTab, openDeferredBrowserTab } from '../../../utils/deferredBrowserTab';
 
 const projectStore = useProjectStore();
 const viewStore = useViewStore();
@@ -442,12 +443,14 @@ async function quickPreview() {
     return;
   }
 
+  const previewTab = openDeferredBrowserTab();
   // 先保存当前文件
   const currentFilePath = fileStore.selectedFile?.type === 'story' ? fileStore.selectedFile.path : null;
   if (currentFilePath) {
     try {
       await saveStory(projectStore.currentProject, currentFilePath, sceneStore.scriptData);
     } catch {
+      closeDeferredBrowserTab(previewTab);
       return;
     }
   }
@@ -476,9 +479,10 @@ async function quickPreview() {
       throw new Error(t('components.headerToolbar.quickPreviewFailed'));
     }
 
-    window.open(`#/play/v/${data.version_id}`, '_blank');
+    navigateDeferredBrowserTab(previewTab, `#/play/v/${data.version_id}`);
     bus.emit('toast', { type: 'success', message: t('components.headerToolbar.quickPreviewStarted') });
   } catch (e: unknown) {
+    closeDeferredBrowserTab(previewTab);
     const errorMessage = e instanceof Error ? e.message : String(e || t('components.headerToolbar.quickPreviewFailed'));
     bus.emit('toast', { type: 'error', message: `${t('components.headerToolbar.quickPreviewFailed')}: ${errorMessage}` });
   } finally {

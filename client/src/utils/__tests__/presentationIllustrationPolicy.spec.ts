@@ -1,9 +1,13 @@
 import { describe, expect, it } from 'vitest';
-import { selectPresentationIllustrationCandidates } from '../presentationIllustrationPolicy';
+import {
+  selectPresentationIllustrationCandidates,
+  selectPresentationIllustrationConceptionCandidates,
+} from '../presentationIllustrationPolicy';
 
 type TestNode = {
   illustration_prompt?: string;
   illustration?: string;
+  illustration_pending?: string;
 };
 
 const select = (nodes: TestNode[], maxPerScene = 2, minNodeGap = 1) => selectPresentationIllustrationCandidates(
@@ -51,5 +55,46 @@ describe('视觉插图候选策略', () => {
 
     expect(select(nodes).map(node => node.illustration_prompt)).toEqual([]);
     expect(nodes[2].illustration).toBe('ill-manual-over-limit');
+  });
+
+  it('所有 pending 节点都进入构思候选，不受普通插图节奏策略过滤', () => {
+    const nodes: TestNode[] = [
+      { illustration: 'ill-existing' },
+      { illustration_pending: 'true' },
+      {},
+      { illustration_pending: 'true' },
+      { illustration_pending: 'true' },
+    ];
+
+    expect(selectPresentationIllustrationConceptionCandidates(
+      nodes,
+      node => node,
+      { maxPerScene: 1, minNodeGap: 4 },
+    ).map(node => node.illustration_pending)).toEqual(['true', 'true', 'true']);
+  });
+
+  it('已有描述或图片资产的节点不再进入 pending 构思候选', () => {
+    const nodes: TestNode[] = [
+      { illustration_pending: 'true', illustration_prompt: '已经补过描述' },
+      { illustration_pending: 'true', illustration: 'ill-existing' },
+      { illustration_pending: 'true' },
+    ];
+
+    expect(selectPresentationIllustrationConceptionCandidates(
+      nodes,
+      node => node,
+      { maxPerScene: 1, minNodeGap: 4 },
+    )).toEqual([nodes[2]]);
+  });
+
+  it('pending 转为具体描述后，常规图片候选仍遵守预留名额', () => {
+    const nodes: TestNode[] = [
+      { illustration_pending: 'true', illustration_prompt: '待生成画面' },
+      {},
+      { illustration_pending: 'true' },
+      { illustration_prompt: '新的画面' },
+    ];
+
+    expect(select(nodes, 2, 1).map(node => node.illustration_prompt)).toEqual(['待生成画面']);
   });
 });

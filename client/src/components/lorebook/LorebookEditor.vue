@@ -245,8 +245,7 @@ import {
   type PresentationImageModel,
   type PresentationManifest,
   type PresentationReferenceDescriptor,
-  isPresentationEndpointNotFoundError,
-  isPresentationUpstream500Error,
+  getPresentationErrorMessage,
 } from '@/services/presentationService';
 import { supportsImageInput } from '@/services/modelModalities';
 import { matteSprite } from '@/utils/spriteMatting';
@@ -532,15 +531,7 @@ function imageModelSupportsReference(model: PresentationImageModel | null) {
 }
 
 function presentationErrorMessage(error: unknown, fallback: string) {
-  if (isPresentationUpstream500Error(error)) {
-    return t('nodeEditor.presentation.upstream500Hint');
-  }
-  if (isPresentationEndpointNotFoundError(error)) {
-    return t('nodeEditor.presentation.endpoint404Hint');
-  }
-  if (error instanceof Error && error.message.trim()) return error.message;
-  const raw = String(error || '').trim();
-  return raw || fallback;
+  return getPresentationErrorMessage(error, fallback);
 }
 
 async function loadPresentationImageModels() {

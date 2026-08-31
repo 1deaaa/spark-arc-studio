@@ -1,4 +1,5 @@
 import { fetchWithAuth } from './apiClient';
+import { i18n } from '@/i18n';
 
 export type PresentationAsset = {
   id: string;
@@ -12,6 +13,7 @@ export type PresentationAsset = {
   prompt?: string;
   characterId?: string;
   expression?: string;
+  position?: string;
   sceneName?: string;
   nodeId?: string;
   createdAt?: string;
@@ -126,6 +128,20 @@ export type PresentationGenerateIllustrationPayload = PresentationGenerateImageP
   nodeId?: string;
 };
 
+export type PresentationGenerateIllustrationConceptionPayload = {
+  sceneName?: string;
+  nodeId?: string;
+  currentPrompt?: string;
+  context?: PresentationGenerationContext;
+};
+
+export type PresentationIllustrationConceptionResult = {
+  success?: boolean;
+  prompt: string;
+  sceneName?: string;
+  nodeId?: string;
+};
+
 export type UpdatePresentationSettingsPayload = {
   visualIllustrationEnabled?: boolean;
   styleSeedPrompt?: string | null;
@@ -169,6 +185,23 @@ export function isPresentationEndpointNotFoundError(error: unknown): boolean {
 
 export function isPresentationUpstreamBlockingError(error: unknown): boolean {
   return PRESENTATION_UPSTREAM_BLOCKING_STATUSES.has(getPresentationErrorStatus(error) || 0);
+}
+
+export function getPresentationErrorMessage(error: unknown, fallback: string): string {
+  if (isPresentationUpstream500Error(error)) {
+    return i18n.global.t('nodeEditor.presentation.upstream500Hint');
+  }
+  if (isPresentationUpstreamBlockingError(error)) {
+    return i18n.global.t('nodeEditor.presentation.upstreamNodeHint', {
+      status: getPresentationErrorStatus(error) || '',
+    });
+  }
+  if (isPresentationEndpointNotFoundError(error)) {
+    return i18n.global.t('nodeEditor.presentation.endpoint404Hint');
+  }
+  if (error instanceof Error && error.message.trim()) return error.message;
+  const raw = String(error || '').trim();
+  return raw || fallback;
 }
 
 async function readPresentationError(response: Response): Promise<string> {
@@ -349,6 +382,23 @@ export async function generatePresentationIllustration(
     throw new PresentationRequestError(await readPresentationError(response), response.status);
   }
   return await response.json() as PresentationUploadResult;
+}
+
+export async function generatePresentationIllustrationConception(
+  projectName: string,
+  payload: PresentationGenerateIllustrationConceptionPayload,
+  signal?: AbortSignal,
+): Promise<PresentationIllustrationConceptionResult> {
+  const response = await fetchWithAuth(`/api/presentation/${encodeURIComponent(projectName)}/illustrations/conception`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify(payload),
+    signal,
+  });
+  if (!response.ok) {
+    throw new PresentationRequestError(await readPresentationError(response), response.status);
+  }
+  return await response.json() as PresentationIllustrationConceptionResult;
 }
 
 export async function fetchPresentationImageModels(): Promise<PresentationImageModelsResult> {

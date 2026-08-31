@@ -316,6 +316,9 @@
               <SparkTag v-else-if="currentIllustrationPrompt" type="warning" size="small">
                 {{ t('nodeEditor.presentation.illustrationPlanned') }}
               </SparkTag>
+              <SparkTag v-else-if="currentIllustrationPending" type="warning" size="small">
+                {{ t('nodeEditor.presentation.illustrationPending') }}
+              </SparkTag>
             </div>
           </n-form-item>
 
@@ -785,16 +788,26 @@ const currentIllustrationPrompt = computed(() => {
   return typeof value === 'string' ? value.trim() : '';
 });
 
+const currentIllustrationPending = computed(() => {
+  const value = currentDialoguePresentation.value?.illustration_pending;
+  const normalized = Array.isArray(value) ? value[0] : value;
+  return String(normalized || '').trim().toLowerCase() === 'true';
+});
+
 const hasPresentationCue = computed(() => !!currentBackgroundId.value
   || !!currentSpriteId.value
   || !!currentIllustrationId.value
-  || !!currentIllustrationPrompt.value);
+  || !!currentIllustrationPrompt.value
+  || currentIllustrationPending.value);
 
 function updatePresentationConception(value: string) {
   if (!isDialogueNode(sceneStore.currentNode) || sceneStore.selectionType !== 'dialogue') return;
   const presentation = { ...(sceneStore.currentNode.presentation || {}) };
   const normalized = String(value || '').replace(/[\r\n]+/g, ' ');
-  if (normalized.trim()) presentation.illustration_prompt = normalized;
+  if (normalized.trim()) {
+    presentation.illustration_prompt = normalized;
+    delete presentation.illustration_pending;
+  }
   else delete presentation.illustration_prompt;
   sceneStore.updateCurrentDialogue({
     presentation: Object.keys(presentation).length > 0 ? presentation : undefined,

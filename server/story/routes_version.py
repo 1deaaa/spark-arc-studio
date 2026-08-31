@@ -19,7 +19,11 @@ from story.public_share_review import (
 )
 from story.importer import import_project_stories_to_db
 from story.novel_parser import aggregate_novel
-from story.presentation_manifest import copy_presentation_snapshot, remove_presentation_snapshot
+from story.presentation_manifest import (
+    copy_presentation_snapshot,
+    remove_presentation_snapshot,
+    restore_presentation_snapshot,
+)
 
 version_router = APIRouter()
 
@@ -352,7 +356,8 @@ async def restore_version(version_id: str, user: dict = Depends(get_current_user
         project_path = get_project_path(user_id, version.project_name)
         target_db_path = os.path.join(project_path, 'stories.db')
         
-        if os.path.exists(version.snapshot_path):
+        if version.snapshot_path and os.path.isfile(version.snapshot_path):
+            restore_presentation_snapshot(user_id, version.project_name, version.snapshot_path)
             shutil.copy2(version.snapshot_path, target_db_path)
             return {'success': True, 'message': f'已成功恢复到版本: {version.version_name}'}
         else:

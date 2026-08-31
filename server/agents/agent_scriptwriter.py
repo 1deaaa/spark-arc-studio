@@ -20,13 +20,20 @@ from typing import Any
 from llm.agen_matchbox import matchbox
 from llm.agen_matchbox.reasoning_compat import (
     PrefixReasoningStreamParser,
+    extract_raw_text_content_from_message,
+    extract_text_content_from_message,
     extract_visible_text_from_plain_text,
 )
 from agents.agent_utils import load_prompt, SparkAgentExecutor
 from agents.agent_style.utils import format_style_profile_for_prompt
 from agents.context_budget import prepare_specialized_prompt_messages_with_budget
+from agents.language_policy import prepend_prompt_language_policy
 from agents.prompt_layout import build_prompt_messages
-from story.arc_safety import sanitize_arc_ai_output, sanitize_arc_for_ai_context
+from story.arc_safety import (
+    normalize_illustration_prompt,
+    sanitize_arc_ai_output,
+    sanitize_arc_for_ai_context,
+)
 from story.novel_parser import clean_novel_visible_text
 from .communication import SparkBaseAgent
 
@@ -183,12 +190,13 @@ class ScriptwriterAgent(SparkBaseAgent, SparkAgentExecutor):
         return f"""
 ### Web 演出构思协议
 - 你可以在需要视觉演出的对话或旁白节点正文后增加一行：`@presentation illustration_prompt:自然语言演出构思`。它是背景生成与完整场景插图共用的默认提示词。
+- 如果这个节点明确需要画面，但当前还不能写出可靠的具体画面描述，可以增加一行：`@presentation illustration_pending:true`，把它交给后续 AI 构思流程；已有具体描述时不要同时保留 pending。
 - `presentation` 仅供 SparkArc Web 播放器演出，Unity SDK 会统一忽略整个节点字段；不要把它当作 Unity 行为指令。
 - 如当前节点发生在项目已有固定场景，可额外写 `@presentation bg:背景资产ID`。只能从下方白名单逐字选择，禁止编造 ID；它既是播放器背景，也是后续天气、时间或完整插图生成的场景参考。
 - 可用背景资产：
 {background_lines}
 - 不得生成 `illustration`、`sprite`、`@act` 或 `@next`；运行时生成结果仍由系统绑定。
-- 每个场景允许 0 张，通常只用 1 张，硬上限为 {max_per_scene} 张；两个插图描述节点之间至少隔一个普通节点。
+- 每个场景允许 0 张，通常只用 1 张，`illustration_prompt` 与 `illustration_pending` 合计硬上限为 {max_per_scene} 个视觉节点；两个视觉节点之间至少隔一个普通节点。
 - 只在场景首次建立、重大视觉转折、剧情高潮或关键情绪定格时使用。普通对白、连续动作、同一空间的重复信息不得换图。
 - 插图必须带来仅靠常规背景加立绘难以低成本表达的新信息。描述应包含地点与时代、出场角色及外观动作、情绪、构图景别、镜头、光照和关键环境细节。
 - 不要描述文字、字幕、对话框、界面、水印或标志；画面主体应位于横版中央安全区，以兼容桌面和竖屏模糊扩展演出。
@@ -287,6 +295,67 @@ class ScriptwriterAgent(SparkBaseAgent, SparkAgentExecutor):
                 "length_instruction": "按实际任务决定",
             },
         }
+
+    def generate_illustration_conception(
+        self,
+        *,
+        project_name: str,
+        scene_name: str = "",
+        node_id: str = "",
+        context: dict[str, Any] | None = None,
+        existing_prompt: str = "",
+    ) -> str:
+        """使用现有 Scriptwriter 模型为 pending 节点生成一条演出构思。"""
+        from story.presentation_generation import build_illustration_conception_prompt
+
+        user_prompt, _snapshot = build_illustration_conception_prompt(
+            user_id=str(self.user_id),
+            project_name=str(project_name),
+            scene_name=scene_name,
+            node_id=node_id,
+            context=context,
+            existing_prompt=existing_prompt,
+        )
+        system_prompt = prepend_prompt_language_policy(
+            "你是 SparkArc 的视觉演出构思助手。"
+            "请根据当前叙事现场，为一个待生成的视觉节点写出一条可直接用于生图的自然语言画面描述。"
+            "只输出一条完整描述，不要输出解释、标题、列表、Markdown、ARC 指令或引号。"
+            "描述应包含地点与时代、角色外观和动作、情绪、构图景别、镜头、光照及关键环境细节；"
+            "不要添加字幕、文字、UI、水印或品牌标志。"
+        )
+        llm = self._get_invoke_llm()
+        messages = prepare_specialized_prompt_messages_with_budget(
+            agent_id="agent_scriptwriter",
+            system_prompt=system_prompt,
+            user_prompt=user_prompt,
+            llm_client=llm,
+        ).messages
+        try:
+            response = llm.invoke(messages)
+            raw_content = response.content if isinstance(response.content, str) else str(response.content)
+            generated = extract_visible_text_from_plain_text(raw_content).strip()
+            if generated.startswith("```"):
+                first_newline = generated.find("\n")
+                if first_newline >= 0:
+                    generated = generated[first_newline + 1:]
+                if generated.endswith("```"):
+                    generated = generated[:-3]
+            for prefix in ("演出构思：", "插图描述：", "illustration_prompt:"):
+                if generated.startswith(prefix):
+                    generated = generated[len(prefix):].strip()
+                    break
+            result = normalize_illustration_prompt(generated)
+            if not result:
+                raise ValueError("文本模型未返回有效的演出构思")
+            return result
+        except ValueError:
+            raise
+        except Exception as exc:
+            wrapped = RuntimeError(f"[Scriptwriter] 生成演出构思失败: {exc}")
+            upstream_status = getattr(exc, "status_code", None)
+            if upstream_status is not None:
+                wrapped.status_code = upstream_status
+            raise wrapped from exc
 
     def _build_tool_prompt_reference_block(self, *, tools_override=None) -> str:
         """让聊天与导演委派的落盘工具复用同一条件视觉协议。"""
@@ -451,8 +520,7 @@ class ScriptwriterAgent(SparkBaseAgent, SparkAgentExecutor):
 
         try:
             response = self.llm.invoke(messages)
-            raw_content = response.content if isinstance(response.content, str) else str(response.content)
-            full_content = extract_visible_text_from_plain_text(raw_content)
+            full_content = extract_text_content_from_message(response)
 
             thought = ""
             thought_match = re.search(
@@ -549,7 +617,7 @@ class ScriptwriterAgent(SparkBaseAgent, SparkAgentExecutor):
         visible_content = ""
         parser = PrefixReasoningStreamParser()
         for chunk in self.llm.stream(messages):
-            content = getattr(chunk, "content", "")
+            content = extract_raw_text_content_from_message(chunk)
             if content:
                 _, visible = parser.push(content)
                 if not visible:
@@ -653,7 +721,7 @@ class ScriptwriterAgent(SparkBaseAgent, SparkAgentExecutor):
 
         parser = PrefixReasoningStreamParser()
         for chunk in self.llm.stream(messages):
-            content = getattr(chunk, "content", "")
+            content = extract_raw_text_content_from_message(chunk)
             if content:
                 _, visible = parser.push(content)
                 if visible:
@@ -698,10 +766,7 @@ class ScriptwriterAgent(SparkBaseAgent, SparkAgentExecutor):
         )
 
         response = self.llm.invoke(messages)
-        content = getattr(response, "content", "")
-        if isinstance(content, str):
-            return extract_visible_text_from_plain_text(content)
-        return extract_visible_text_from_plain_text(str(content))
+        return extract_text_content_from_message(response)
 
     def _get_arc_example(self) -> str:
         """Returns the AI-only .arc format example for prompt injection."""
@@ -803,9 +868,7 @@ class ScriptwriterAgent(SparkBaseAgent, SparkAgentExecutor):
         )
 
         response = self._get_invoke_llm().invoke(messages)
-        full_content = extract_visible_text_from_plain_text(
-            response.content if isinstance(response.content, str) else str(response.content)
-        )
+        full_content = extract_text_content_from_message(response)
 
         # 提取 .arc 脚本 (同样剥离 thought 和代码块)
         arc_script = self._extract_arc_script(full_content)
@@ -874,7 +937,7 @@ class ScriptwriterAgent(SparkBaseAgent, SparkAgentExecutor):
         full_content = ""
         parser = PrefixReasoningStreamParser()
         for chunk in self.llm.stream(messages):
-            content = getattr(chunk, "content", "")
+            content = extract_raw_text_content_from_message(chunk)
             if content:
                 _, visible = parser.push(content)
                 if not visible:

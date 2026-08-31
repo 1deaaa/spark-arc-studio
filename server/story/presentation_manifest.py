@@ -10,6 +10,7 @@ import json
 import os
 import shutil
 import threading
+import tempfile
 import uuid
 from datetime import datetime, timezone
 from typing import Any, Optional
@@ -98,6 +99,22 @@ def _now_iso() -> str:
     return datetime.now(timezone.utc).isoformat()
 
 
+def _merge_manifest_defaults(default: Any, value: Any) -> Any:
+    """递归补全 manifest 默认字段，同时保留用户自定义字段和值。"""
+    if not isinstance(default, dict):
+        return value
+    if not isinstance(value, dict):
+        return default
+
+    merged = dict(default)
+    for key, current in value.items():
+        if key in default:
+            merged[key] = _merge_manifest_defaults(default[key], current)
+        else:
+            merged[key] = current
+    return merged
+
+
 def _project_root(user_id: str, project_name: str) -> str:
     return get_project_path(str(user_id), project_name)
 
@@ -160,8 +177,7 @@ def load_manifest_from_root(root: str) -> dict[str, Any]:
             return empty_manifest()
         if not isinstance(data, dict):
             return empty_manifest()
-        manifest = empty_manifest()
-        manifest.update(data)
+        manifest = _merge_manifest_defaults(empty_manifest(), data)
         manifest["schema"] = "sparkarc.presentation.v2"
         manifest["version"] = 2
         if not isinstance(manifest.get("assets"), dict):
@@ -173,13 +189,11 @@ def load_manifest_from_root(root: str) -> dict[str, Any]:
         if not isinstance(manifest.get("runtime"), dict):
             manifest["runtime"] = empty_manifest()["runtime"]
         else:
-            web_runtime = manifest["runtime"].setdefault("web", {})
-            if isinstance(web_runtime, dict):
-                web_runtime.pop("actBindings", None)
-            bindings = web_runtime.setdefault("cueBindings", {}) if isinstance(web_runtime, dict) else {}
-            if isinstance(bindings, dict):
-                for key, value in empty_manifest()["runtime"]["web"]["cueBindings"].items():
-                    bindings.setdefault(key, value)
+            web_runtime = manifest["runtime"].get("web")
+            if not isinstance(web_runtime, dict):
+                web_runtime = empty_manifest()["runtime"]["web"]
+                manifest["runtime"]["web"] = web_runtime
+            web_runtime.pop("actBindings", None)
         return manifest
 
 
@@ -487,6 +501,87 @@ def copy_presentation_snapshot(user_id: str, project_name: str, snapshot_path: s
             shutil.copytree(source_assets, target_assets, dirs_exist_ok=True)
 
         return sidecar
+
+
+def restore_presentation_snapshot(user_id: str, project_name: str, snapshot_path: str) -> bool:
+    """恢复快照 sidecar 中的演出 manifest 与资产目录。
+
+    返回 ``False`` 表示该快照创建于演出资源 sidecar 引入之前；这种情况保留
+    旧版本的数据库恢复行为。存在 sidecar 时则整体替换当前演出资源，避免
+    ARC 中的 ``presentation`` 资产 ID 与当前 manifest 发生错配。
+    """
+    sidecar = _snapshot_sidecar_dir(snapshot_path)
+    if not os.path.isdir(sidecar):
+        return False
+
+    source_manifest = _manifest_path(sidecar)
+    if not os.path.isfile(source_manifest):
+        raise PresentationAssetError("演出资源快照缺少 manifest")
+
+    project_root = _project_root(user_id, project_name)
+    if not os.path.isdir(project_root):
+        raise PresentationAssetError("项目目录不存在")
+
+    def remove_path(path: str) -> None:
+        if os.path.isdir(path) and not os.path.islink(path):
+            shutil.rmtree(path)
+        elif os.path.lexists(path):
+            os.remove(path)
+
+    with _MANIFEST_LOCK:
+        staging_root = tempfile.mkdtemp(prefix=".presentation-restore-", dir=project_root)
+        backup_root = tempfile.mkdtemp(prefix=".presentation-backup-", dir=project_root)
+        target_manifest = _manifest_path(project_root)
+        target_assets = os.path.join(project_root, ASSET_ROOT.replace("/", os.sep))
+        staged_manifest = _manifest_path(staging_root)
+        staged_assets = os.path.join(staging_root, ASSET_ROOT.replace("/", os.sep))
+        backup_manifest = _manifest_path(backup_root)
+        backup_assets = os.path.join(backup_root, ASSET_ROOT.replace("/", os.sep))
+        manifest_backed_up = False
+        assets_backed_up = False
+        manifest_installed = False
+        assets_installed = False
+
+        try:
+            shutil.copy2(source_manifest, staged_manifest)
+            source_assets = os.path.join(sidecar, ASSET_ROOT.replace("/", os.sep))
+            if os.path.isdir(source_assets):
+                os.makedirs(os.path.dirname(staged_assets), exist_ok=True)
+                shutil.copytree(source_assets, staged_assets, dirs_exist_ok=True)
+            elif os.path.exists(source_assets):
+                raise PresentationAssetError("演出资源快照目录非法")
+
+            if os.path.lexists(target_manifest):
+                os.makedirs(os.path.dirname(backup_manifest), exist_ok=True)
+                os.replace(target_manifest, backup_manifest)
+                manifest_backed_up = True
+            if os.path.lexists(target_assets):
+                os.makedirs(os.path.dirname(backup_assets), exist_ok=True)
+                os.replace(target_assets, backup_assets)
+                assets_backed_up = True
+
+            os.replace(staged_manifest, target_manifest)
+            manifest_installed = True
+            if os.path.isdir(staged_assets):
+                os.makedirs(os.path.dirname(target_assets), exist_ok=True)
+                os.replace(staged_assets, target_assets)
+                assets_installed = True
+
+            return True
+        except Exception:
+            if manifest_installed:
+                remove_path(target_manifest)
+            if assets_installed:
+                remove_path(target_assets)
+            if assets_backed_up and not os.path.lexists(target_assets):
+                os.makedirs(os.path.dirname(target_assets), exist_ok=True)
+                os.replace(backup_assets, target_assets)
+            if manifest_backed_up and not os.path.lexists(target_manifest):
+                os.replace(backup_manifest, target_manifest)
+            raise
+        finally:
+            remove_path(staging_root)
+            remove_path(backup_root)
 
 
 def load_snapshot_manifest(snapshot_path: str) -> dict[str, Any]:

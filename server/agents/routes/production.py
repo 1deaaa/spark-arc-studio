@@ -49,7 +49,10 @@ from agents.context_budget import prepare_specialized_prompt_messages_with_budge
 from agents.language_policy import prepend_prompt_language_policy
 from core.project_settings import get_project_story_tags
 from llm.agen_matchbox import matchbox
-from llm.agen_matchbox.reasoning_compat import PrefixReasoningStreamParser
+from llm.agen_matchbox.reasoning_compat import (
+    PrefixReasoningStreamParser,
+    extract_raw_text_content_from_message,
+)
 
 from .schemas import (
     CriticReviewRequest,
@@ -369,7 +372,7 @@ def _clean_generated_nodes(
     清洗 AI 生成的节点列表，只保留叙事字段与受门禁控制的插图描述，
     防止 AI 幻觉添加的额外字段污染落盘后的 .arc 文件。
     """
-    from story.arc_safety import normalize_illustration_prompt
+    from story.arc_safety import normalize_illustration_pending, normalize_illustration_prompt
 
     allowed_backgrounds = {
         str(value).strip() for value in (allowed_background_ids or set()) if str(value).strip()
@@ -385,9 +388,12 @@ def _clean_generated_nodes(
                     del node[key]
             presentation = node.get("presentation")
             prompt = ""
+            pending = ""
             background_id = ""
             if allow_visual_illustration and isinstance(presentation, dict):
                 prompt = normalize_illustration_prompt(presentation.get("illustration_prompt"))
+                if not prompt:
+                    pending = normalize_illustration_pending(presentation.get("illustration_pending"))
                 raw_background = presentation.get("bg")
                 if isinstance(raw_background, list):
                     raw_background = raw_background[0] if raw_background else ""
@@ -397,6 +403,8 @@ def _clean_generated_nodes(
             safe_presentation = {}
             if prompt:
                 safe_presentation["illustration_prompt"] = prompt
+            elif pending:
+                safe_presentation["illustration_pending"] = pending
             if background_id:
                 safe_presentation["bg"] = background_id
             if safe_presentation:
@@ -416,6 +424,23 @@ def _clean_generated_nodes(
 
     clean_nodes_list(final_nodes)
     return final_nodes
+
+
+def _ensure_generated_output_is_persistable(
+    *,
+    export_format: str,
+    generated_text: str,
+    final_nodes: List[Dict[str, Any]] | None = None,
+    label: str = "正文",
+) -> None:
+    """在落盘前确认模型确实产出了可被当前格式消费的内容。"""
+    if export_format == "novel":
+        if not str(generated_text or "").strip():
+            raise RuntimeError(f"ScriptWriter 未生成可落盘的{label}，原文件未修改。")
+        return
+
+    if not str(generated_text or "").strip() or not isinstance(final_nodes, list) or not final_nodes:
+        raise RuntimeError(f"ScriptWriter 未生成可解析的 ARC {label}，原文件未修改。")
 
 
 def _persist_generated_nodes(
@@ -650,6 +675,9 @@ async def scriptwriter_compose_stream(
         )
 
     stop_event = threading.Event()
+    # 桥接器会在每轮迭代收尾时设置 stop_event 以停止断连轮询，
+    # 不能把它直接当作“客户端已断开”；只有 cancelled_event 才代表真实取消。
+    cancelled_event = threading.Event()
 
     async def generate():
         started_at = time.monotonic()
@@ -683,8 +711,9 @@ async def scriptwriter_compose_stream(
                     lambda: agent.execute(exec_context, stream=True),
                     request=request,
                     stop_event=stop_event,
+                    cancelled_event=cancelled_event,
                 ):
-                    if stop_event.is_set():
+                    if cancelled_event.is_set():
                         yield semantic_event_data(
                             "cancelled",
                             status="cancelled",
@@ -719,6 +748,12 @@ async def scriptwriter_compose_stream(
                             chunk.get("transition_text", "") or "",
                             chr_map=context_pack.get("chr_map") or None,
                         )
+                        _ensure_generated_output_is_persistable(
+                            export_format="arc",
+                            generated_text=chunk.get("transition_text", "") or "",
+                            final_nodes=dialogues,
+                            label="过渡正文",
+                        )
                         final_chars = chunk.get("total_chars", total_chars)
                         final_speed = round((final_chars or 0) / elapsed, 2)
                         yield semantic_event_data(
@@ -752,12 +787,14 @@ async def scriptwriter_compose_stream(
                     llm_client=chat,
                 ).messages
                 parser = PrefixReasoningStreamParser()
+                single_node_text = ""
                 async for model_chunk in iterate_sync_iterable_in_thread(
                     lambda: chat.stream(messages),
                     request=request,
                     stop_event=stop_event,
+                    cancelled_event=cancelled_event,
                 ):
-                    if stop_event.is_set():
+                    if cancelled_event.is_set():
                         yield semantic_event_data(
                             "cancelled",
                             status="cancelled",
@@ -766,10 +803,11 @@ async def scriptwriter_compose_stream(
                             **on_cancelled("单节点续写已取消"),
                         )
                         return
-                    raw_text = getattr(model_chunk, "content", "") or ""
+                    raw_text = extract_raw_text_content_from_message(model_chunk)
                     _, text = parser.push(raw_text)
                     if not text:
                         continue
+                    single_node_text += text
                     total_chars += len(text)
                     elapsed = max(time.monotonic() - started_at, 0.001)
                     speed = round(total_chars / elapsed, 2)
@@ -790,6 +828,7 @@ async def scriptwriter_compose_stream(
                     )
                 _, trailing_text = parser.flush()
                 if trailing_text:
+                    single_node_text += trailing_text
                     total_chars += len(trailing_text)
                     elapsed = max(time.monotonic() - started_at, 0.001)
                     speed = round(total_chars / elapsed, 2)
@@ -808,6 +847,11 @@ async def scriptwriter_compose_stream(
                             ),
                         ),
                     )
+                _ensure_generated_output_is_persistable(
+                    export_format="novel",
+                    generated_text=single_node_text,
+                    label="单节点正文",
+                )
                 elapsed = max(time.monotonic() - started_at, 0.001)
                 final_speed = round(total_chars / elapsed, 2)
                 yield semantic_event_data(
@@ -898,8 +942,9 @@ async def scriptwriter_compose_stream(
                 lambda: agent.execute(exec_context, stream=True),
                 request=request,
                 stop_event=stop_event,
+                cancelled_event=cancelled_event,
             ):
-                if stop_event.is_set():
+                if cancelled_event.is_set():
                     yield semantic_event_data(
                         "cancelled",
                         status="cancelled",
@@ -937,7 +982,7 @@ async def scriptwriter_compose_stream(
                 if full_arc_script and effective_export_format != "novel"
                 else []
             )
-            if stop_event.is_set():
+            if cancelled_event.is_set():
                 yield semantic_event_data(
                     "cancelled",
                     status="cancelled",
@@ -946,6 +991,11 @@ async def scriptwriter_compose_stream(
                     **on_cancelled("ScriptWriter 生成已取消"),
                 )
                 return
+            _ensure_generated_output_is_persistable(
+                export_format=effective_export_format,
+                generated_text=full_arc_script,
+                final_nodes=final_nodes,
+            )
             if mode != "single-node" and data.filePath:
                 if effective_export_format == "novel":
                     _persist_generated_text(
@@ -1002,7 +1052,7 @@ async def scriptwriter_compose_stream(
                 ),
             )
         except Exception as e:
-            if stop_event.is_set():
+            if cancelled_event.is_set():
                 yield semantic_event_data(
                     "cancelled",
                     status="cancelled",
@@ -1046,6 +1096,7 @@ async def scriptwriter_feedback_stream(
         )
 
     stop_event = threading.Event()
+    cancelled_event = threading.Event()
 
     async def generate():
         feedback_started_at = time.monotonic()
@@ -1074,7 +1125,7 @@ async def scriptwriter_feedback_stream(
                     worldview,
                     roles,
                 )
-                if stop_event.is_set():
+                if cancelled_event.is_set():
                     yield semantic_event_data(
                         "cancelled",
                         status="cancelled",
@@ -1102,8 +1153,9 @@ async def scriptwriter_feedback_stream(
                     ),
                     request=request,
                     stop_event=stop_event,
+                    cancelled_event=cancelled_event,
                 ):
-                    if stop_event.is_set():
+                    if cancelled_event.is_set():
                         yield semantic_event_data(
                             "cancelled",
                             status="cancelled",
@@ -1120,7 +1172,7 @@ async def scriptwriter_feedback_stream(
                             build_stats_payload(feedback_started_at, total_chars),
                         ),
                     )
-            if stop_event.is_set():
+            if cancelled_event.is_set():
                 yield semantic_event_data(
                     "cancelled",
                     status="cancelled",
@@ -1137,7 +1189,7 @@ async def scriptwriter_feedback_stream(
                 ),
             )
         except Exception as e:
-            if stop_event.is_set():
+            if cancelled_event.is_set():
                 yield semantic_event_data(
                     "cancelled",
                     status="cancelled",

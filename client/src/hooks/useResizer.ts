@@ -13,6 +13,17 @@ type PanelBounds = {
   memoryMax: number;
 };
 
+export type ResizablePanelWidths = {
+  sidebar: number;
+  inspector: number;
+  ai: number;
+  chat: number;
+};
+
+const ACTIVITY_BAR_WIDTH = 68;
+const MIN_CENTER_PANEL_WIDTH = 180;
+const RESIZER_WIDTH_BUDGET = 12;
+
 function clamp(value: number, min: number, max: number) {
   return Math.max(min, Math.min(max, value));
 }
@@ -25,7 +36,7 @@ function getPanelBounds(viewportWidth: number): PanelBounds {
       inspectorMin: Math.max(260, Math.round(viewportWidth * 0.21)),
       inspectorMax: 320,
       aiMin: Math.max(280, Math.round(viewportWidth * 0.23)),
-      aiMax: 360,
+      aiMax: 340,
       chatMin: 300,
       chatMax: 420,
       memoryMin: 260,
@@ -62,6 +73,47 @@ function getPanelBounds(viewportWidth: number): PanelBounds {
   };
 }
 
+export function fitResizablePanelWidths(
+  widths: ResizablePanelWidths,
+  viewportWidth: number,
+): ResizablePanelWidths {
+  const bounds = getPanelBounds(viewportWidth);
+  const fitted: ResizablePanelWidths = {
+    sidebar: clamp(widths.sidebar, bounds.sidebarMin, bounds.sidebarMax),
+    inspector: clamp(widths.inspector, bounds.inspectorMin, bounds.inspectorMax),
+    ai: clamp(widths.ai, bounds.aiMin, bounds.aiMax),
+    chat: clamp(widths.chat, bounds.chatMin, bounds.chatMax),
+  };
+
+  const minSideWidthTotal = bounds.sidebarMin
+    + bounds.inspectorMin
+    + bounds.aiMin
+    + bounds.chatMin;
+  const workspaceWidth = Math.max(0, viewportWidth - ACTIVITY_BAR_WIDTH);
+  const maxSideWidthTotal = Math.max(
+    minSideWidthTotal,
+    workspaceWidth - MIN_CENTER_PANEL_WIDTH - RESIZER_WIDTH_BUDGET,
+  );
+  const reservedSideWidths = fitted.sidebar + fitted.inspector + fitted.ai + fitted.chat;
+
+  if (reservedSideWidths <= maxSideWidthTotal) return fitted;
+
+  let overflow = reservedSideWidths - maxSideWidthTotal;
+  const shrinkFrom = (current: number, min: number) => {
+    if (overflow <= 0) return current;
+    const available = Math.max(0, current - min);
+    const reduced = Math.min(available, overflow);
+    overflow -= reduced;
+    return current - reduced;
+  };
+
+  fitted.sidebar = shrinkFrom(fitted.sidebar, bounds.sidebarMin);
+  fitted.inspector = shrinkFrom(fitted.inspector, bounds.inspectorMin);
+  fitted.ai = shrinkFrom(fitted.ai, bounds.aiMin);
+  fitted.chat = shrinkFrom(fitted.chat, bounds.chatMin);
+  return fitted;
+}
+
 export function useResizer() {
   const sidebarWidth = ref(220);
   const inspectorWidth = ref(320);
@@ -78,31 +130,21 @@ export function useResizer() {
     const viewportWidth = window.innerWidth || 1440;
     const bounds = getPanelBounds(viewportWidth);
 
-    sidebarWidth.value = clamp(sidebarWidth.value, bounds.sidebarMin, bounds.sidebarMax);
-    inspectorWidth.value = clamp(inspectorWidth.value, bounds.inspectorMin, bounds.inspectorMax);
-    aiSidebarWidth.value = clamp(aiSidebarWidth.value, bounds.aiMin, bounds.aiMax);
-    chatSidebarWidth.value = clamp(chatSidebarWidth.value, bounds.chatMin, bounds.chatMax);
-    // 记忆面板与 ai-sidebar 同样不参与下方保底收缩，只保证自身边界合法。
+    const fitted = fitResizablePanelWidths(
+      {
+        sidebar: sidebarWidth.value,
+        inspector: inspectorWidth.value,
+        ai: aiSidebarWidth.value,
+        chat: chatSidebarWidth.value,
+      },
+      viewportWidth,
+    );
+    sidebarWidth.value = fitted.sidebar;
+    inspectorWidth.value = fitted.inspector;
+    aiSidebarWidth.value = fitted.ai;
+    chatSidebarWidth.value = fitted.chat;
+    // 记忆面板是可选停靠面板，只保证自身边界合法。
     memoryWidth.value = clamp(memoryWidth.value, bounds.memoryMin, bounds.memoryMax);
-
-    const reservedSideWidths = sidebarWidth.value + inspectorWidth.value + chatSidebarWidth.value;
-    const maxSideWidthTotal = Math.max(760, viewportWidth - 360);
-
-    if (reservedSideWidths <= maxSideWidthTotal) return;
-
-    let overflow = reservedSideWidths - maxSideWidthTotal;
-
-    const shrinkFrom = (current: number, min: number) => {
-      if (overflow <= 0) return current;
-      const available = Math.max(0, current - min);
-      const reduced = Math.min(available, overflow);
-      overflow -= reduced;
-      return current - reduced;
-    };
-
-    sidebarWidth.value = shrinkFrom(sidebarWidth.value, bounds.sidebarMin);
-    inspectorWidth.value = shrinkFrom(inspectorWidth.value, bounds.inspectorMin);
-    chatSidebarWidth.value = shrinkFrom(chatSidebarWidth.value, bounds.chatMin);
   }
 
   const savePanelSizes = () => {

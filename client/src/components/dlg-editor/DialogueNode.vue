@@ -162,10 +162,12 @@ const presentationBadges = computed(() => {
   const sprite = normalizePresentationValue(cue.sprite);
   const illustrationPrompt = normalizePresentationValue(cue.illustration_prompt);
   const illustration = normalizePresentationValue(cue.illustration);
+  const illustrationPending = normalizePresentationValue(cue.illustration_pending).toLowerCase() === 'true';
   if (bg) badges.push({ key: 'bg', label: 'BG', value: bg });
   if (sprite) badges.push({ key: 'sprite', label: t('nodeEditor.presentation.spriteBadge'), value: sprite });
   if (illustration) badges.push({ key: 'illustration', label: t('nodeEditor.presentation.illustrationBadge'), value: illustration });
   else if (illustrationPrompt) badges.push({ key: 'illustration_prompt', label: t('nodeEditor.presentation.illustrationPlannedBadge'), value: illustrationPrompt });
+  else if (illustrationPending) badges.push({ key: 'illustration_pending', label: t('nodeEditor.presentation.illustrationPendingBadge'), value: t('nodeEditor.presentation.illustrationPending') });
   return badges;
 });
 const hasAnyBadge = computed(() => (props.node?.opt?.length) || (props.node?.act && Object.keys(props.node.act).length) || presentationBadges.value.length || props.node?.next);

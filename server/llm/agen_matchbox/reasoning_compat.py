@@ -448,13 +448,18 @@ def extract_text_content_from_message(message: Any) -> str:
     if message is None:
         return ""
 
+    if isinstance(message, (str, list, tuple)):
+        return "".join(_extract_text_from_content_value(message))
+
     if hasattr(message, "message"):
         inner_message = getattr(message, "message", None)
         if inner_message is not None:
             return extract_text_content_from_message(inner_message)
 
     if isinstance(message, dict):
-        return "".join(_extract_text_from_content_value(message.get("content")))
+        if "content" in message:
+            return "".join(_extract_text_from_content_value(message.get("content")))
+        return "".join(_extract_text_from_content_value(message))
 
     return "".join(_extract_text_from_content_value(getattr(message, "content", None)))
 
@@ -466,13 +471,18 @@ def extract_raw_text_content_from_message(message: Any) -> str:
     if message is None:
         return ""
 
+    if isinstance(message, (str, list, tuple)):
+        return "".join(_extract_raw_text_from_content_value(message))
+
     if hasattr(message, "message"):
         inner_message = getattr(message, "message", None)
         if inner_message is not None:
             return extract_raw_text_content_from_message(inner_message)
 
     if isinstance(message, dict):
-        return "".join(_extract_raw_text_from_content_value(message.get("content")))
+        if "content" in message:
+            return "".join(_extract_raw_text_from_content_value(message.get("content")))
+        return "".join(_extract_raw_text_from_content_value(message))
 
     return "".join(_extract_raw_text_from_content_value(getattr(message, "content", None)))
 

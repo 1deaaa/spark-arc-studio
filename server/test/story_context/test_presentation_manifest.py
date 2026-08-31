@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import json
 import os
 from concurrent.futures import ThreadPoolExecutor
 from pathlib import Path
@@ -10,6 +11,63 @@ from story import presentation_manifest as pm
 
 
 PNG_BYTES = b"\x89PNG\r\n\x1a\npresentation-test"
+
+
+def test_legacy_manifest_recursively_restores_defaults(monkeypatch, tmp_path: Path) -> None:
+    project_root = tmp_path / "project"
+    project_root.mkdir()
+    monkeypatch.setattr(pm, "get_project_path", lambda user_id, project_name: str(project_root))
+
+    legacy_manifest = {
+        "schema": "sparkarc.presentation.v2",
+        "version": 2,
+        "targets": ["web"],
+        "ignore": {
+            "unity": {
+                "actKeys": ["bg", "sprite"],
+                "assetTargets": ["web"],
+                "customRule": "keep",
+            }
+        },
+        "assets": {
+            "bg_legacy": {
+                "id": "bg_legacy",
+                "type": "background",
+            }
+        },
+        "runtime": {
+            "web": {
+                "actBindings": {"legacy": True},
+                "customSetting": "keep",
+                "cueBindings": {
+                    "bg": {"fallback": "custom"},
+                    "customCue": {"type": "custom"},
+                },
+            }
+        },
+    }
+    (project_root / pm.MANIFEST_FILENAME).write_text(
+        json.dumps(legacy_manifest, ensure_ascii=False),
+        encoding="utf-8",
+    )
+
+    manifest = pm.load_project_manifest("u1", "p1")
+
+    assert manifest["ignore"]["unity"]["actKeys"] == ["bg", "sprite"]
+    assert manifest["ignore"]["unity"]["nodeKeys"] == ["presentation"]
+    assert manifest["ignore"]["unity"]["assetTargets"] == ["web"]
+    assert manifest["ignore"]["unity"]["customRule"] == "keep"
+    assert pm.get_ignored_node_keys(manifest, "unity") == {"presentation"}
+    assert manifest["assets"]["bg_legacy"]["type"] == "background"
+    assert manifest["runtime"]["web"]["customSetting"] == "keep"
+    assert "actBindings" not in manifest["runtime"]["web"]
+    assert manifest["runtime"]["web"]["cueBindings"]["bg"] == {
+        "type": "background",
+        "fallback": "custom",
+    }
+    assert manifest["runtime"]["web"]["cueBindings"]["sprite"]["type"] == "character_sprite"
+    assert manifest["runtime"]["web"]["cueBindings"]["illustration"]["fallback"] == "background_and_sprite"
+    assert manifest["runtime"]["web"]["cueBindings"]["customCue"] == {"type": "custom"}
 
 
 def test_background_asset_manifest_snapshot_and_path_guard(monkeypatch, tmp_path: Path) -> None:
@@ -96,6 +154,65 @@ def test_background_asset_manifest_snapshot_and_path_guard(monkeypatch, tmp_path
 
     pm.remove_presentation_snapshot(str(snapshot_path))
     assert not Path(sidecar).exists()
+
+
+def test_presentation_snapshot_restore_replaces_current_manifest_and_assets(
+    monkeypatch,
+    tmp_path: Path,
+) -> None:
+    project_root = tmp_path / "project"
+    monkeypatch.setattr(pm, "get_project_path", lambda user_id, project_name: str(project_root))
+
+    original = pm.upload_background_asset(
+        user_id="u1",
+        project_name="p1",
+        data=PNG_BYTES,
+        filename="original.png",
+        title="快照背景",
+    )
+    snapshot_path = tmp_path / "story_snapshot.sqlite"
+    snapshot_path.write_bytes(b"sqlite-placeholder")
+    pm.copy_presentation_snapshot("u1", "p1", str(snapshot_path))
+
+    current = pm.upload_background_asset(
+        user_id="u1",
+        project_name="p1",
+        data=PNG_BYTES + b"-current",
+        filename="current.png",
+        title="当前背景",
+    )
+    assert current["id"] != original["id"]
+    assert current["id"] in pm.load_project_manifest("u1", "p1")["assets"]
+
+    assert pm.restore_presentation_snapshot("u1", "p1", str(snapshot_path)) is True
+
+    restored_manifest = pm.load_project_manifest("u1", "p1")
+    assert set(restored_manifest["assets"]) == {original["id"]}
+    assert Path(pm.get_project_asset_path("u1", "p1", original["path"])).is_file()
+    assert not Path(pm.get_project_asset_path("u1", "p1", current["path"])).exists()
+    assert not list(project_root.glob(".presentation-*-*"))
+
+
+def test_legacy_presentation_snapshot_without_sidecar_keeps_current_assets(
+    monkeypatch,
+    tmp_path: Path,
+) -> None:
+    project_root = tmp_path / "project"
+    monkeypatch.setattr(pm, "get_project_path", lambda user_id, project_name: str(project_root))
+
+    current = pm.upload_background_asset(
+        user_id="u1",
+        project_name="p1",
+        data=PNG_BYTES,
+        filename="current.png",
+        title="当前背景",
+    )
+    snapshot_path = tmp_path / "legacy_snapshot.sqlite"
+    snapshot_path.write_bytes(b"sqlite-placeholder")
+
+    assert pm.restore_presentation_snapshot("u1", "p1", str(snapshot_path)) is False
+    manifest = pm.load_project_manifest("u1", "p1")
+    assert current["id"] in manifest["assets"]
 
 
 def test_manifest_concurrent_asset_updates_are_atomic(monkeypatch, tmp_path: Path) -> None:

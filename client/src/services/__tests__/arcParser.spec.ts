@@ -39,4 +39,16 @@ describe('ARC 演出提示协议', () => {
     expect(serialized).not.toContain('@act sprite:');
     expect(serialized).not.toContain('废弃描述');
   });
+
+  it('保留 pending 演出构思标记并可序列化', () => {
+    const scenes = parseArc([
+      '# 高潮',
+      '[旁白]',
+      '门在身后合上。',
+      '@presentation illustration_pending:true',
+    ].join('\n'));
+
+    expect(scenes[0].dia[0].presentation?.illustration_pending).toBe('true');
+    expect(serializeToArc(scenes)).toContain('@presentation illustration_pending:true');
+  });
 });

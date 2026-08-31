@@ -25,6 +25,7 @@
               size="small"
               clearable
               :loading="imageModelsLoading"
+              :disabled="presentationGenerationBusy"
               :options="imageModelSelectOptions"
               :placeholder="t('nodeEditor.presentation.imageModelPlaceholder')"
             />
@@ -75,6 +76,22 @@
               :placeholder="t('nodeEditor.presentation.conceptionPlaceholder')"
               @blur="saveIllustrationPrompt"
             />
+            <n-space v-if="currentIllustrationPending" :size="8" wrap align="center">
+              <n-tag type="warning" size="small" :bordered="false">
+                {{ t('nodeEditor.presentation.illustrationPending') }}
+              </n-tag>
+              <n-button
+                size="small"
+                type="primary"
+                secondary
+                :disabled="!canGenerateIllustrationConception"
+                :loading="illustrationConceptionGenerating"
+                @click="generateIllustrationConceptionByAI"
+              >
+                <template #icon><n-icon :component="Sparkles" /></template>
+                {{ t('nodeEditor.presentation.generateIllustrationConception') }}
+              </n-button>
+            </n-space>
             <div v-if="visualIllustrationEnabled" class="presentation-participants">
               <div class="toolbox-field-label">{{ t('nodeEditor.presentation.participatingCharacters') }}</div>
               <n-select
@@ -92,7 +109,13 @@
               </n-text>
             </div>
             <n-space :size="8" wrap align="center">
-              <n-button size="small" secondary :loading="backgroundUploading" @click="triggerBackgroundUpload">
+              <n-button
+                size="small"
+                secondary
+                :disabled="backgroundUploading || presentationGenerationBusy"
+                :loading="backgroundUploading"
+                @click="triggerBackgroundUpload"
+              >
                 <template #icon>
                   <n-icon :component="Upload" />
                 </template>
@@ -103,6 +126,7 @@
                 size="small"
                 secondary
                 type="warning"
+                :disabled="backgroundUploading || presentationGenerationBusy"
                 @click="clearDialogueBackground"
               >
                 <template #icon>
@@ -145,7 +169,13 @@
               {{ currentIllustrationId || t('nodeEditor.presentation.noIllustration') }}
             </div>
             <n-space :size="8" wrap align="center">
-              <n-button size="small" secondary :loading="illustrationUploading" @click="triggerIllustrationUpload">
+              <n-button
+                size="small"
+                secondary
+                :disabled="illustrationUploading || presentationGenerationBusy"
+                :loading="illustrationUploading"
+                @click="triggerIllustrationUpload"
+              >
                 <template #icon><n-icon :component="Upload" /></template>
                 {{ t('nodeEditor.presentation.uploadIllustration') }}
               </n-button>
@@ -154,6 +184,7 @@
                 size="small"
                 secondary
                 type="warning"
+                :disabled="illustrationUploading || presentationGenerationBusy"
                 @click="clearDialogueIllustration"
               >
                 <template #icon><n-icon :component="Eraser" /></template>
@@ -201,7 +232,29 @@
                 <template #icon><n-icon :component="Images" /></template>
                 {{ t('nodeEditor.presentation.generateSceneIllustrations') }}
               </n-button>
+              <n-button
+                size="small"
+                secondary
+                :disabled="!canGenerateIllustrationConceptions"
+                :loading="illustrationConceptionBatchGenerating"
+                @click="generateIllustrationConceptions"
+              >
+                <template #icon><n-icon :component="Sparkles" /></template>
+                {{ t('nodeEditor.presentation.generateIllustrationConceptions') }}
+              </n-button>
             </n-space>
+            <n-text depth="3" class="presentation-tool-tip" role="status">
+              {{ illustrationConceptionBatchStatusText }}
+            </n-text>
+            <n-text v-if="illustrationConceptionBatchCurrent" depth="3" class="presentation-tool-tip">
+              {{ illustrationConceptionBatchCurrentText }}
+            </n-text>
+            <n-text v-if="illustrationConceptionBatchError" type="error" class="presentation-tool-tip">
+              {{ illustrationConceptionBatchError }}
+            </n-text>
+            <n-text v-if="illustrationConceptionBatchFailureText" type="warning" class="presentation-tool-tip">
+              {{ illustrationConceptionBatchFailureText }}
+            </n-text>
           </div>
           <input
             v-if="canEditPresentation"
@@ -560,6 +613,7 @@ import {
   fetchPresentationImageModels,
   fetchPresentationManifest,
   generatePresentationBackground,
+  generatePresentationIllustrationConception,
   generatePresentationIllustration,
   uploadPresentationBackground,
   uploadPresentationIllustration,
@@ -570,11 +624,14 @@ import {
   type PresentationReferenceDescriptor,
   isPresentationEndpointNotFoundError,
   isPresentationUpstreamBlockingError,
-  isPresentationUpstream500Error,
+  getPresentationErrorMessage,
 } from '@/services/presentationService';
 import { supportsImageInput } from '@/services/modelModalities';
 import { createStreamingTask, consumeSSEReader, isAbortLikeError, parseSSEEventPayload } from '@/utils/streamingRuntime';
-import { selectPresentationIllustrationCandidates } from '@/utils/presentationIllustrationPolicy';
+import {
+  selectPresentationIllustrationCandidates,
+  selectPresentationIllustrationConceptionCandidates,
+} from '@/utils/presentationIllustrationPolicy';
 import type { CancelLoadingPayload } from '@/eventBus';
 import type { StoryCharacterDetail } from '@/services/aiContracts';
 import { formatSpeakerMarker, type ArcDialogueNode, type ArcScene, type PresentationCue } from '@/services/arcParser';
@@ -767,6 +824,20 @@ const illustrationBatchCurrent = ref<{
 const illustrationBatchFailureItems = ref<string[]>([]);
 const illustrationBatchError = ref('');
 const illustrationBatchLastState = ref<'idle' | 'done' | 'cancelled' | 'failed'>('idle');
+const illustrationConceptionGenerating = ref(false);
+const illustrationConceptionBatchGenerating = ref(false);
+const illustrationConceptionBatchTotal = ref(0);
+const illustrationConceptionBatchCompleted = ref(0);
+const illustrationConceptionBatchFailed = ref(0);
+const illustrationConceptionBatchCurrent = ref<{
+  index: number;
+  total: number;
+  sceneName: string;
+  nodeLabel: string;
+} | null>(null);
+const illustrationConceptionBatchFailureItems = ref<string[]>([]);
+const illustrationConceptionBatchError = ref('');
+const illustrationConceptionBatchLastState = ref<'idle' | 'done' | 'cancelled' | 'failed'>('idle');
 const backgroundPreviewFailed = ref(false);
 const illustrationPrompt = ref('');
 const imageModels = ref<PresentationImageModel[]>([]);
@@ -859,6 +930,11 @@ const currentPresentation = computed<Record<string, unknown>>(() => {
 
 const currentBackgroundId = computed(() => normalizePresentationValue(currentPresentation.value.bg));
 const currentIllustrationId = computed(() => normalizePresentationValue(currentPresentation.value.illustration));
+const currentIllustrationPending = computed(() => (
+  !normalizePresentationValue(currentPresentation.value.illustration_prompt)
+  && !currentIllustrationId.value
+  && normalizePresentationValue(currentPresentation.value.illustration_pending).toLowerCase() === 'true'
+));
 
 const manifestAssets = computed<Record<string, PresentationAsset>>(() => {
   const assets = presentationManifest.value?.assets;
@@ -894,17 +970,34 @@ const selectedImageModel = computed(() => {
   return availableImageModels.value[0] || null;
 });
 
+const presentationGenerationBusy = computed(() => (
+  backgroundGenerating.value
+  || illustrationGenerating.value
+  || illustrationBatchGenerating.value
+  || illustrationConceptionGenerating.value
+  || illustrationConceptionBatchGenerating.value
+));
+
 const canGenerateBackground = computed(() =>
-  !!projectStore.currentProject
+  !presentationGenerationBusy.value
+  && !!projectStore.currentProject
   && !!illustrationPrompt.value.trim()
   && !!selectedImageModel.value
 );
 
 const canGenerateIllustration = computed(() =>
-  visualIllustrationEnabled.value
+  !presentationGenerationBusy.value
+  && visualIllustrationEnabled.value
   && !!projectStore.currentProject
   && !!illustrationPrompt.value.trim()
   && !!selectedImageModel.value
+);
+
+const canGenerateIllustrationConception = computed(() =>
+  canEditPresentation.value
+  && visualIllustrationEnabled.value
+  && currentIllustrationPending.value
+  && !presentationGenerationBusy.value
 );
 
 const illustrationCandidates = computed(() => {
@@ -921,12 +1014,33 @@ const illustrationCandidates = computed(() => {
   ).map(node => ({ scene, node })));
 });
 
+const illustrationConceptionCandidates = computed(() => {
+  const scenes = illustrationBatchScope.value === 'file'
+    ? (Array.isArray(sceneStore.scriptData) ? sceneStore.scriptData as ArcScene[] : [])
+    : (sceneStore.currentScene ? [sceneStore.currentScene as ArcScene] : []);
+  return scenes.flatMap(scene => selectPresentationIllustrationConceptionCandidates(
+    collectDialogueNodes(scene),
+    node => node.presentation,
+    {
+      maxPerScene: visualIllustrationMaxPerScene.value,
+      minNodeGap: visualIllustrationMinNodeGap.value,
+    },
+  ).map(node => ({ scene, node })));
+});
+
 const canBatchGenerateIllustrations = computed(() =>
   canUsePresentationTools.value
   && visualIllustrationEnabled.value
-  && !illustrationBatchGenerating.value
+  && !presentationGenerationBusy.value
   && illustrationCandidates.value.length > 0
   && !!selectedImageModel.value
+);
+
+const canGenerateIllustrationConceptions = computed(() =>
+  canUsePresentationTools.value
+  && visualIllustrationEnabled.value
+  && !presentationGenerationBusy.value
+  && illustrationConceptionCandidates.value.length > 0
 );
 
 const illustrationBatchStatusText = computed(() => {
@@ -966,6 +1080,48 @@ const illustrationBatchFailureText = computed(() => {
   if (!illustrationBatchFailureItems.value.length) return '';
   return t('nodeEditor.presentation.batchFailedItems', {
     items: illustrationBatchFailureItems.value.join('、'),
+  });
+});
+
+const illustrationConceptionBatchStatusText = computed(() => {
+  if (illustrationConceptionBatchGenerating.value) {
+    return t('nodeEditor.presentation.conceptionBatchProgress', {
+      current: illustrationConceptionBatchCompleted.value + illustrationConceptionBatchFailed.value + 1,
+      total: illustrationConceptionBatchTotal.value,
+    });
+  }
+  if (illustrationConceptionBatchLastState.value === 'done') {
+    return t('nodeEditor.presentation.conceptionBatchDone', {
+      completed: illustrationConceptionBatchCompleted.value,
+      failed: illustrationConceptionBatchFailed.value,
+    });
+  }
+  if (illustrationConceptionBatchLastState.value === 'cancelled') {
+    return t('nodeEditor.presentation.conceptionBatchCancelled', {
+      completed: illustrationConceptionBatchCompleted.value,
+    });
+  }
+  if (illustrationConceptionBatchLastState.value === 'failed') {
+    return t('nodeEditor.presentation.conceptionBatchFailed');
+  }
+  return t('nodeEditor.presentation.conceptionBatchPendingCount', {
+    count: illustrationConceptionCandidates.value.length,
+  });
+});
+
+const illustrationConceptionBatchCurrentText = computed(() => {
+  const current = illustrationConceptionBatchCurrent.value;
+  if (!current) return '';
+  return t('nodeEditor.presentation.batchCurrentItem', {
+    scene: current.sceneName,
+    node: current.nodeLabel,
+  });
+});
+
+const illustrationConceptionBatchFailureText = computed(() => {
+  if (!illustrationConceptionBatchFailureItems.value.length) return '';
+  return t('nodeEditor.presentation.batchFailedItems', {
+    items: illustrationConceptionBatchFailureItems.value.join('、'),
   });
 });
 
@@ -1026,15 +1182,7 @@ function imageModelSupportsReference(model: PresentationImageModel | null) {
 }
 
 function presentationErrorMessage(error: unknown, fallback: string) {
-  if (isPresentationUpstream500Error(error)) {
-    return t('nodeEditor.presentation.upstream500Hint');
-  }
-  if (isPresentationEndpointNotFoundError(error)) {
-    return t('nodeEditor.presentation.endpoint404Hint');
-  }
-  if (error instanceof Error && error.message.trim()) return error.message;
-  const raw = String(error || '').trim();
-  return raw || fallback;
+  return getPresentationErrorMessage(error, fallback);
 }
 
 function presentationAssetUrl(asset: PresentationAsset) {
@@ -1118,23 +1266,43 @@ async function savePresentationBinding() {
   }
 }
 
-function setNodePresentationValue(
+type EditablePresentationKey = 'bg' | 'illustration_prompt' | 'illustration' | 'illustration_pending' | 'characters';
+type EditablePresentationValue = string | string[] | null;
+
+function setNodePresentationValues(
   node: ArcDialogueNode | null,
-  key: 'bg' | 'illustration_prompt' | 'illustration' | 'characters',
-  value: string | string[] | null,
+  values: Partial<Record<EditablePresentationKey, EditablePresentationValue>>,
 ) {
   if (!node) return;
   const nextPresentation: PresentationCue = { ...(node.presentation || {}) };
-  if (!value) delete nextPresentation[key];
-  else nextPresentation[key] = value;
+  for (const [key, value] of Object.entries(values)) {
+    const isEmpty = value === null
+      || value === undefined
+      || value === ''
+      || (Array.isArray(value) && value.length === 0);
+    if (isEmpty) delete nextPresentation[key];
+    else nextPresentation[key] = value;
+  }
   const presentation = Object.keys(nextPresentation).length > 0 ? nextPresentation : undefined;
   if (node === currentDialogueNode.value) sceneStore.updateCurrentDialogue({ presentation });
   else node.presentation = presentation;
 }
 
-function setDialoguePresentationValue(key: 'bg' | 'illustration_prompt' | 'illustration' | 'characters', value: string | string[] | null) {
-  setNodePresentationValue(currentDialogueNode.value, key, value);
+function setNodePresentationValue(
+  node: ArcDialogueNode | null,
+  key: EditablePresentationKey,
+  value: EditablePresentationValue,
+) {
+  setNodePresentationValues(node, { [key]: value });
+}
+
+function setDialoguePresentationValues(values: Partial<Record<EditablePresentationKey, EditablePresentationValue>>) {
+  setNodePresentationValues(currentDialogueNode.value, values);
   void savePresentationBinding();
+}
+
+function setDialoguePresentationValue(key: EditablePresentationKey, value: EditablePresentationValue) {
+  setDialoguePresentationValues({ [key]: value });
 }
 
 function collectDialogueNodes(scene: ArcScene | null | undefined): ArcDialogueNode[] {
@@ -1243,6 +1411,7 @@ function referenceAssetsFor(
 }
 
 function triggerBackgroundUpload() {
+  if (presentationGenerationBusy.value || backgroundUploading.value) return;
   if (!projectStore.currentProject) {
     bus.emit('toast', { type: 'warning', message: t('nodeEditor.presentation.projectRequired') });
     return;
@@ -1254,13 +1423,24 @@ async function onBackgroundFileChange(event: Event) {
   const input = event.target as HTMLInputElement | null;
   const file = input?.files?.[0];
   if (input) input.value = '';
-  if (!file || !projectStore.currentProject) return;
+  const projectName = projectStore.currentProject;
+  const targetNode = currentDialogueNode.value;
+  const targetScene = sceneStore.currentScene as ArcScene | null;
+  if (
+    !file
+    || !projectName
+    || !targetNode
+    || !targetScene
+    || presentationGenerationBusy.value
+    || backgroundUploading.value
+  ) return;
   backgroundUploading.value = true;
   try {
-    const result = await uploadPresentationBackground(projectStore.currentProject, file, file.name);
+    const result = await uploadPresentationBackground(projectName, file, file.name);
     if (!result.asset?.id) throw new Error(t('nodeEditor.presentation.uploadInvalidResult'));
     updateManifest(result.manifest);
-    setDialoguePresentationValue('bg', result.asset.id);
+    setNodePresentationValue(targetNode, 'bg', result.asset.id);
+    await savePresentationBinding();
     bus.emit('toast', { type: 'success', message: t('nodeEditor.presentation.uploadSuccess') });
   } catch (error: unknown) {
     bus.emit('toast', { type: 'error', message: presentationErrorMessage(error, t('nodeEditor.presentation.uploadFailed')) });
@@ -1275,10 +1455,15 @@ function clearDialogueBackground() {
 }
 
 async function generateBackgroundByAI() {
-  if (!projectStore.currentProject) {
+  if (presentationGenerationBusy.value) return;
+  const projectName = projectStore.currentProject;
+  const targetNode = currentDialogueNode.value;
+  const targetScene = sceneStore.currentScene as ArcScene | null;
+  if (!projectName) {
     bus.emit('toast', { type: 'warning', message: t('nodeEditor.presentation.projectRequired') });
     return;
   }
+  if (!targetNode || !targetScene) return;
   const prompt = illustrationPrompt.value.trim();
   const model = selectedImageModel.value;
   if (!prompt) {
@@ -1299,20 +1484,21 @@ async function generateBackgroundByAI() {
   });
   try {
     task.throwIfAborted();
-    saveIllustrationPrompt();
-    const result = await generatePresentationBackground(projectStore.currentProject, {
+    saveIllustrationPromptForNode(targetNode);
+    const result = await generatePresentationBackground(projectName, {
       prompt,
-      title: currentDialogueNode.value?.txt?.trim().slice(0, 18) || t('nodeEditor.presentation.generatedBackgroundTitle'),
+      title: targetNode.txt?.trim().slice(0, 18) || t('nodeEditor.presentation.generatedBackgroundTitle'),
       size: '1536x1024',
       platformId: Number(model.platform_id),
       modelId: Number(model.model_id),
-      referenceAssets: referenceAssetsFor('background'),
-      context: buildPresentationGenerationContext(currentDialogueNode.value, sceneStore.currentScene as ArcScene | null, false),
+      referenceAssets: referenceAssetsFor('background', targetNode, targetScene),
+      context: buildPresentationGenerationContext(targetNode, targetScene, false),
     }, task.signal);
     task.throwIfAborted();
     if (!result.asset?.id) throw new Error(t('nodeEditor.presentation.uploadInvalidResult'));
     updateManifest(result.manifest);
-    setDialoguePresentationValue('bg', result.asset.id);
+    setNodePresentationValue(targetNode, 'bg', result.asset.id);
+    await savePresentationBinding();
     bus.emit('toast', { type: 'success', message: t('nodeEditor.presentation.generateSuccess') });
   } catch (error: unknown) {
     if (isAbortLikeError(error) || task.aborted) return;
@@ -1323,8 +1509,21 @@ async function generateBackgroundByAI() {
   }
 }
 
+function saveIllustrationPromptForNode(node: ArcDialogueNode | null) {
+  const prompt = illustrationPrompt.value.trim();
+  if (prompt) {
+    setNodePresentationValues(node, {
+      illustration_prompt: prompt,
+      illustration_pending: null,
+    });
+  } else {
+    setNodePresentationValue(node, 'illustration_prompt', null);
+  }
+  void savePresentationBinding();
+}
+
 function saveIllustrationPrompt() {
-  setDialoguePresentationValue('illustration_prompt', illustrationPrompt.value.trim() || null);
+  saveIllustrationPromptForNode(currentDialogueNode.value);
 }
 
 function savePresentationCharacters() {
@@ -1332,7 +1531,12 @@ function savePresentationCharacters() {
 }
 
 function triggerIllustrationUpload() {
-  if (!projectStore.currentProject || !visualIllustrationEnabled.value) return;
+  if (
+    presentationGenerationBusy.value
+    || illustrationUploading.value
+    || !projectStore.currentProject
+    || !visualIllustrationEnabled.value
+  ) return;
   illustrationFileInputRef.value?.click();
 }
 
@@ -1340,18 +1544,29 @@ async function onIllustrationFileChange(event: Event) {
   const input = event.target as HTMLInputElement | null;
   const file = input?.files?.[0];
   if (input) input.value = '';
-  if (!file || !projectStore.currentProject || !currentDialogueNode.value) return;
+  const projectName = projectStore.currentProject;
+  const targetNode = currentDialogueNode.value;
+  const targetScene = sceneStore.currentScene as ArcScene | null;
+  if (
+    !file
+    || !projectName
+    || !targetNode
+    || !targetScene
+    || presentationGenerationBusy.value
+    || illustrationUploading.value
+  ) return;
   illustrationUploading.value = true;
   try {
-    saveIllustrationPrompt();
-    const result = await uploadPresentationIllustration(projectStore.currentProject, file, {
+    saveIllustrationPromptForNode(targetNode);
+    const result = await uploadPresentationIllustration(projectName, file, {
       title: file.name,
-      sceneName: sceneStore.currentScene?.scene || '',
-      nodeId: String(currentDialogueNode.value.id),
+      sceneName: targetScene.scene || '',
+      nodeId: String(targetNode.id),
     });
     if (!result.asset?.id) throw new Error(t('nodeEditor.presentation.uploadInvalidResult'));
     updateManifest(result.manifest);
-    setDialoguePresentationValue('illustration', result.asset.id);
+    setNodePresentationValue(targetNode, 'illustration', result.asset.id);
+    await savePresentationBinding();
     bus.emit('toast', { type: 'success', message: t('nodeEditor.presentation.illustrationUploadSuccess') });
   } catch (error: unknown) {
     bus.emit('toast', { type: 'error', message: presentationErrorMessage(error, t('nodeEditor.presentation.illustrationUploadFailed')) });
@@ -1392,7 +1607,62 @@ async function generateIllustrationForNode(
   return result.asset;
 }
 
+async function generateIllustrationConceptionForNode(
+  node: ArcDialogueNode,
+  scene: ArcScene,
+  signal?: AbortSignal,
+) {
+  const projectName = projectStore.currentProject;
+  if (
+    !projectName
+    || normalizePresentationValue(node.presentation?.illustration_pending).toLowerCase() !== 'true'
+  ) {
+    throw new Error(t('nodeEditor.presentation.illustrationConceptionRequired'));
+  }
+  const result = await generatePresentationIllustrationConception(projectName, {
+    sceneName: scene.scene || '',
+    nodeId: String(node.id),
+    context: buildPresentationGenerationContext(node, scene),
+  }, signal);
+  const prompt = String(result.prompt || '').trim();
+  if (!prompt) throw new Error(t('nodeEditor.presentation.illustrationConceptionEmpty'));
+  setNodePresentationValues(node, {
+    illustration_prompt: prompt,
+    illustration_pending: null,
+  });
+  await sceneStore._saveStory?.();
+  return prompt;
+}
+
+async function generateIllustrationConceptionByAI() {
+  if (presentationGenerationBusy.value) return;
+  const node = currentDialogueNode.value;
+  const scene = sceneStore.currentScene as ArcScene | null;
+  if (!node || !scene || !currentIllustrationPending.value) return;
+  illustrationConceptionGenerating.value = true;
+  const task = createStreamingTask('production', {
+    target: 'visual-illustration-conception',
+    text: t('nodeEditor.presentation.generateIllustrationConception'),
+    progress: t('nodeEditor.presentation.generateIllustrationConception'),
+    canCancel: true,
+    statsMode: 'elapsed',
+  });
+  try {
+    task.throwIfAborted();
+    await generateIllustrationConceptionForNode(node, scene, task.signal);
+    task.throwIfAborted();
+    bus.emit('toast', { type: 'success', message: t('nodeEditor.presentation.illustrationConceptionSuccess') });
+  } catch (error: unknown) {
+    if (isAbortLikeError(error) || task.aborted) return;
+    bus.emit('toast', { type: 'error', message: presentationErrorMessage(error, t('nodeEditor.presentation.illustrationConceptionFailed')) });
+  } finally {
+    task.dispose();
+    illustrationConceptionGenerating.value = false;
+  }
+}
+
 async function generateIllustrationByAI() {
+  if (presentationGenerationBusy.value) return;
   const node = currentDialogueNode.value;
   const scene = sceneStore.currentScene as ArcScene | null;
   if (!node || !scene) return;
@@ -1429,6 +1699,7 @@ function illustrationBatchItemMeta(candidate: { node: ArcDialogueNode; scene: Ar
 }
 
 async function generateSceneIllustrations() {
+  if (presentationGenerationBusy.value) return;
   const candidates = [...illustrationCandidates.value];
   if (!candidates.length) return;
   illustrationBatchTotal.value = candidates.length;
@@ -1493,6 +1764,75 @@ async function generateSceneIllustrations() {
     illustrationBatchCurrent.value = null;
     task.dispose();
     illustrationBatchGenerating.value = false;
+  }
+}
+
+async function generateIllustrationConceptions() {
+  if (presentationGenerationBusy.value) return;
+  const candidates = [...illustrationConceptionCandidates.value];
+  if (!candidates.length) return;
+  illustrationConceptionBatchTotal.value = candidates.length;
+  illustrationConceptionBatchCompleted.value = 0;
+  illustrationConceptionBatchFailed.value = 0;
+  illustrationConceptionBatchCurrent.value = null;
+  illustrationConceptionBatchFailureItems.value = [];
+  illustrationConceptionBatchError.value = '';
+  illustrationConceptionBatchLastState.value = 'idle';
+  illustrationConceptionBatchGenerating.value = true;
+  const task = createStreamingTask('production', {
+    target: 'visual-illustration-conceptions',
+    text: t('nodeEditor.presentation.conceptionBatchGenerating'),
+    progress: t('nodeEditor.presentation.conceptionBatchProgress', { current: 0, total: candidates.length }),
+    canCancel: true,
+    statsMode: 'elapsed',
+  });
+  let completed = 0;
+  let failed = 0;
+  try {
+    for (const [index, candidate] of candidates.entries()) {
+      task.throwIfAborted();
+      const current = illustrationBatchItemMeta(candidate, index + 1, candidates.length);
+      illustrationConceptionBatchCurrent.value = current;
+      task.setProgress(`${t('nodeEditor.presentation.conceptionBatchProgress', {
+        current: current.index,
+        total: current.total,
+      })} · ${t('nodeEditor.presentation.batchCurrentItem', {
+        scene: current.sceneName,
+        node: current.nodeLabel,
+      })}`);
+      try {
+        await generateIllustrationConceptionForNode(candidate.node, candidate.scene, task.signal);
+        completed += 1;
+        illustrationConceptionBatchCompleted.value = completed;
+      } catch (error: unknown) {
+        if (isAbortError(error) || task.aborted) throw error;
+        if (isPresentationUpstreamBlockingError(error) || isPresentationEndpointNotFoundError(error)) throw error;
+        failed += 1;
+        illustrationConceptionBatchFailed.value = failed;
+        illustrationConceptionBatchFailureItems.value = [
+          ...illustrationConceptionBatchFailureItems.value,
+          `${current.sceneName} · ${current.nodeLabel}`,
+        ];
+      }
+    }
+    illustrationConceptionBatchLastState.value = 'done';
+    bus.emit('toast', {
+      type: failed ? 'warning' : 'success',
+      message: t('nodeEditor.presentation.conceptionBatchDone', { completed, failed }),
+    });
+  } catch (error: unknown) {
+    if (isAbortError(error) || task.aborted) {
+      illustrationConceptionBatchLastState.value = 'cancelled';
+      bus.emit('toast', { type: 'info', message: t('nodeEditor.presentation.conceptionBatchCancelled', { completed }) });
+    } else {
+      illustrationConceptionBatchLastState.value = 'failed';
+      illustrationConceptionBatchError.value = presentationErrorMessage(error, t('nodeEditor.presentation.conceptionBatchFailed'));
+      bus.emit('toast', { type: 'error', message: presentationErrorMessage(error, t('nodeEditor.presentation.conceptionBatchFailed')) });
+    }
+  } finally {
+    illustrationConceptionBatchCurrent.value = null;
+    task.dispose();
+    illustrationConceptionBatchGenerating.value = false;
   }
 }
 

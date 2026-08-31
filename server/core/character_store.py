@@ -15,6 +15,7 @@ from .utils import (
 
 
 CHARACTER_STORE_FILENAME = "characters.json"
+LEGACY_CHARACTER_BIND_FILENAME = "chr.bind"
 SYSTEM_CHARACTER_NARRATOR_ID = -1
 SYSTEM_CHARACTER_UNKNOWN_ID = -2
 _STORE_LOCK = threading.RLock()
@@ -58,9 +59,80 @@ def _ordered_records(records: dict[str, dict[str, str]]) -> dict[str, dict[str, 
     return {character_id: records[character_id] for character_id in sorted(records, key=lambda value: int(value))}
 
 
+def _legacy_character_name(value: Any) -> str:
+    """从旧版 chr.bind 条目中提取角色名。"""
+    if isinstance(value, dict):
+        return str(value.get("name") or "").strip()
+    return str(value or "").strip()
+
+
+def _legacy_character_content(character_path: Path, character_name: str) -> str:
+    """读取旧版角色正文，并去掉文件首行重复的角色名。"""
+    if not character_path.is_file():
+        return ""
+    try:
+        text = character_path.read_text(encoding="utf-8", errors="ignore")
+    except OSError:
+        return ""
+    if not text or not character_name:
+        return text
+
+    lines = text.splitlines(keepends=True)
+    if not lines or lines[0].strip() != character_name:
+        return text
+    return "".join(lines[1:]).lstrip("\r\n")
+
+
+def _read_legacy_character_records(store_path: str) -> dict[str, dict[str, str]]:
+    """只读解析旧版 chr.bind 与数字角色文件，供新仓库过渡兼容。"""
+    character_dir = Path(store_path).parent
+    bind_path = character_dir / LEGACY_CHARACTER_BIND_FILENAME
+    if not bind_path.is_file():
+        return {}
+    try:
+        data = json.loads(bind_path.read_text(encoding="utf-8"))
+    except (OSError, json.JSONDecodeError):
+        return {}
+    if not isinstance(data, dict):
+        return {}
+
+    records: dict[str, dict[str, str]] = {}
+    for raw_id, raw_record in data.items():
+        try:
+            character_id = str(int(raw_id))
+        except (TypeError, ValueError):
+            continue
+        if int(character_id) in SYSTEM_CHARACTER_IDS:
+            continue
+        name = _legacy_character_name(raw_record)
+        if not name:
+            continue
+        records[character_id] = {
+            "name": name,
+            "content": _legacy_character_content(
+                character_dir / f"{character_id}.txt",
+                name,
+            ),
+        }
+    return records
+
+
 def read_character_records_from_path(store_path: str) -> dict[str, dict[str, str]]:
-    with open(store_path, "r", encoding="utf-8") as handle:
-        return _normalize_records(json.load(handle))
+    canonical_path = Path(store_path)
+    if canonical_path.is_file():
+        with open(canonical_path, "r", encoding="utf-8") as handle:
+            records = _normalize_records(json.load(handle))
+    else:
+        records = {}
+
+    legacy_records = _read_legacy_character_records(store_path)
+    if not canonical_path.is_file() and not legacy_records:
+        raise FileNotFoundError(store_path)
+    for character_id, record in legacy_records.items():
+        records.setdefault(character_id, record)
+    for character_id, record in _system_records().items():
+        records.setdefault(character_id, record)
+    return _ordered_records(records)
 
 
 def read_character_records(user_id: str, project_name: str) -> dict[str, dict[str, str]]:

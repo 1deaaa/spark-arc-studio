@@ -1,4 +1,5 @@
 import os
+import re
 from urllib.parse import quote
 
 from fastapi import APIRouter, Depends, File, Form, UploadFile
@@ -15,7 +16,7 @@ from core.project_settings import (
     set_visual_illustration_settings,
     set_visual_style_settings,
 )
-from core.request_context import normalize_project_name
+from core.request_context import normalize_project_name, set_agent_context
 from core.utils import get_project_path
 from llm.agen_matchbox import matchbox
 from llm.agen_matchbox.image_generation import (
@@ -90,6 +91,13 @@ class GenerateIllustrationRequest(GenerateImageRequest):
     nodeId: str = ""
 
 
+class GenerateIllustrationConceptionRequest(BaseModel):
+    sceneName: str = ""
+    nodeId: str = ""
+    currentPrompt: str = ""
+    context: VisualGenerationContextRequest | None = None
+
+
 class UpdatePresentationSettingsRequest(BaseModel):
     visualIllustrationEnabled: bool | None = None
     styleSeedPrompt: str | None = None
@@ -114,16 +122,62 @@ def _presentation_project_error(user_id: str, project_name: str) -> JSONResponse
 
 def _image_generation_error_response(action: str, error: ImageGenerationError) -> JSONResponse:
     """把生图上游状态码原样传回，同时保留本地动作上下文。"""
-    status_code = error.status_code
+    upstream_status = _extract_http_status(error)
+    status_code = upstream_status
     if status_code is None or not 400 <= status_code <= 599:
         status_code = 400
     content = {
         "success": False,
         "error": f"{action}: {error}",
     }
-    if error.status_code is not None:
-        content["upstreamStatusCode"] = error.status_code
-    return JSONResponse(status_code=status_code, content=content)
+    if upstream_status is not None:
+        content["upstreamStatusCode"] = upstream_status
+    return JSONResponse(
+        status_code=status_code,
+        content=content,
+        headers=_upstream_error_headers(upstream_status),
+    )
+
+
+_UPSTREAM_BLOCKING_STATUSES = {401, 403, 429, 500}
+
+
+def _extract_http_status(error: BaseException | None) -> int | None:
+    """从统一错误属性或上游错误文本中提取 HTTP 状态码。"""
+    raw_status = getattr(error, "status_code", None)
+    try:
+        status = int(raw_status)
+        if 400 <= status <= 599:
+            return status
+    except (TypeError, ValueError):
+        pass
+    match = re.search(
+        r"\b(?:HTTP\s*|(?:status|status_code|error\s+code|code)\s*[:=]\s*)([45]\d{2})\b",
+        str(error or ""),
+        re.IGNORECASE,
+    )
+    return int(match.group(1)) if match else None
+
+
+def _upstream_error_headers(status: int | None) -> dict[str, str]:
+    """标记上游鉴权失败，避免前端把上游 401 当成本地会话过期。"""
+    if status not in _UPSTREAM_BLOCKING_STATUSES:
+        return {}
+    return {
+        "X-Spark-Upstream-Error": "true",
+        "X-Spark-Upstream-Status": str(status),
+    }
+
+
+def _model_generation_error_response(action: str, error: Exception) -> JSONResponse:
+    """返回文本模型生成错误，并沿用上游节点错误的前端识别标记。"""
+    upstream_status = _extract_http_status(error)
+    status_code = upstream_status if upstream_status is not None else 500
+    return JSONResponse(
+        status_code=status_code,
+        content={"success": False, "error": f"{action}: {error}"},
+        headers=_upstream_error_headers(upstream_status),
+    )
 
 
 def _normalize_reference_asset_type(asset_type: str) -> str:
@@ -771,6 +825,48 @@ async def upload_presentation_illustration(
         return JSONResponse(status_code=400, content={"success": False, "error": str(exc)})
     except Exception as exc:
         return JSONResponse(status_code=500, content={"success": False, "error": f"上传场景插图失败: {exc}"})
+
+
+@presentation_router.post("/api/presentation/{project_name}/illustrations/conception")
+async def generate_presentation_illustration_conception(
+    project_name: str,
+    data: GenerateIllustrationConceptionRequest,
+    user: dict = Depends(get_current_user),
+):
+    """使用现有 Scriptwriter 文本模型补全 pending 节点的演出构思。"""
+    user_id = str(user["user_id"])
+    normalized_project = normalize_project_name(project_name)
+    if not normalized_project:
+        return JSONResponse(status_code=400, content={"success": False, "error": "缺少项目名称"})
+    if error := _presentation_project_error(user_id, normalized_project):
+        return error
+    if not is_visual_illustration_enabled(user_id, normalized_project):
+        return JSONResponse(status_code=409, content={"success": False, "error": "项目尚未启用实验性视觉插图"})
+
+    set_agent_context(user_id, normalized_project)
+    context = data.context.model_dump() if data.context else {}
+    try:
+        from agents.agent_scriptwriter import ScriptwriterAgent
+
+        agent = await run_in_threadpool(ScriptwriterAgent, user_id)
+        conception = await run_in_threadpool(
+            agent.generate_illustration_conception,
+            project_name=normalized_project,
+            scene_name=data.sceneName,
+            node_id=data.nodeId,
+            context=context,
+            existing_prompt=data.currentPrompt,
+        )
+        return {
+            "success": True,
+            "prompt": conception,
+            "sceneName": data.sceneName,
+            "nodeId": data.nodeId,
+        }
+    except ValueError as exc:
+        return JSONResponse(status_code=400, content={"success": False, "error": str(exc)})
+    except Exception as exc:
+        return _model_generation_error_response("生成演出构思失败", exc)
 
 
 @presentation_router.post("/api/presentation/{project_name}/illustrations/generate")

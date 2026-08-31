@@ -165,6 +165,7 @@ import { useWindowControls } from '@/composables/useWindowControls';
 import { useDockMagnify } from '@/composables/useDockMagnify';
 import AppBrand from '@/components/share/AppBrand.vue';
 import { SPARKARC_GITHUB_URL } from '@/config';
+import { closeDeferredBrowserTab, navigateDeferredBrowserTab, openDeferredBrowserTab } from '@/utils/deferredBrowserTab';
 import WindowControls from './WindowControls.vue';
 
 const { startDragging, isTauriDesktop: showWinControls } = useWindowControls();
@@ -412,8 +413,12 @@ async function quickPreview() {
     return;
   }
 
+  const previewTab = openDeferredBrowserTab();
   const saved = await sceneStore.flushStorySave();
-  if (!saved) return;
+  if (!saved) {
+    closeDeferredBrowserTab(previewTab);
+    return;
+  }
 
   previewing.value = true;
   try {
@@ -439,9 +444,10 @@ async function quickPreview() {
       throw new Error(t('components.headerToolbar.quickPreviewFailed'));
     }
 
-    window.open(`#/play/v/${data.version_id}`, '_blank');
+    navigateDeferredBrowserTab(previewTab, `#/play/v/${data.version_id}`);
     bus.emit('toast', { type: 'success', message: t('components.headerToolbar.quickPreviewStarted') });
   } catch (e: unknown) {
+    closeDeferredBrowserTab(previewTab);
     const errorMessage = e instanceof Error ? e.message : String(e || t('components.headerToolbar.quickPreviewFailed'));
     bus.emit('toast', { type: 'error', message: `${t('components.headerToolbar.quickPreviewFailed')}: ${errorMessage}` });
   } finally {

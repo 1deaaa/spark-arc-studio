@@ -3,6 +3,7 @@ import { describe, expect, it } from 'vitest';
 import {
   PresentationRequestError,
   getPresentationErrorStatus,
+  getPresentationErrorMessage,
   isPresentationEndpointNotFoundError,
   isPresentationUpstream500Error,
   isPresentationUpstreamBlockingError,
@@ -22,5 +23,14 @@ describe('演出生图错误状态', () => {
     expect(isPresentationEndpointNotFoundError(new Error('Gemini 生图接口调用失败: HTTP 404'))).toBe(true);
     expect(isPresentationUpstreamBlockingError(new Error('Gemini 生图接口调用失败: HTTP 404'))).toBe(false);
     expect(isPresentationUpstreamBlockingError(new Error('Gemini 生图接口调用失败: HTTP 400'))).toBe(false);
+  });
+
+  it('将上游节点阻断状态统一转换为更换节点提示', () => {
+    expect(getPresentationErrorMessage(new PresentationRequestError('鉴权失败', 401), 'fallback'))
+      .toContain('HTTP 401');
+    expect(getPresentationErrorMessage(new PresentationRequestError('限流', 429), 'fallback'))
+      .toContain('HTTP 429');
+    expect(getPresentationErrorMessage(new PresentationRequestError('端点不存在', 404), 'fallback'))
+      .toContain('HTTP 404');
   });
 });

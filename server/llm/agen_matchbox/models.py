@@ -138,8 +138,19 @@ def model_outputs(model, modality: str) -> bool:
     return str(modality).strip().lower() in get_model_modalities(model)["output_modalities"]
 
 
+def is_text_generation_model(model) -> bool:
+    """判断模型是否适合文本 Agent 的聊天/生成请求。"""
+    modalities = get_model_modalities(model)["output_modalities"]
+    return (
+        MODALITY_TEXT in modalities
+        and MODALITY_IMAGE not in modalities
+        and MODALITY_EMBEDDING not in modalities
+    )
+
+
 def is_chat_model(model) -> bool:
-    return model_outputs(model, MODALITY_TEXT)
+    """兼容旧名称；文本 Agent 不接受生图或 Embedding 模型。"""
+    return is_text_generation_model(model)
 
 
 def is_embedding_model(model) -> bool:

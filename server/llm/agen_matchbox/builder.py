@@ -659,6 +659,8 @@ class LLMBuilderMixin:
             ).first()
             if not model:
                 raise ValueError(f"模型 '{model_display_name}' 在平台 '{platform_name}' 中不存在")
+            if not is_chat_model(model):
+                raise ValueError(f"模型 '{model_display_name}' 不具备文本生成能力")
 
             api_access = self._get_effective_api_access(session, effective_user_id, plat)
             api_key = api_access.get("api_key")

@@ -149,3 +149,64 @@ def test_invalid_direct_and_usage_bindings_are_persistently_repaired() -> None:
             )
     finally:
         engine.dispose()
+
+
+def test_multimodal_image_binding_is_repaired_to_text_model() -> None:
+    """直接绑定误选多模态生图模型时，不得把它交给文本 Agent。"""
+    engine = create_engine(
+        "sqlite+pysqlite:///:memory:",
+        connect_args={"check_same_thread": False},
+        poolclass=StaticPool,
+    )
+    Base.metadata.create_all(engine)
+
+    try:
+        manager = _FallbackManager(engine)
+        with manager.Session() as session:
+            platform = LLMPlatform(
+                name="多模态平台",
+                user_id=None,
+                base_url="https://mixed.example",
+                is_sys=1,
+                sort_order=0,
+            )
+            session.add(platform)
+            session.flush()
+
+            image_model = LLModels(
+                platform_id=platform.id,
+                model_name="image-model",
+                display_name="生图模型",
+                input_modalities='["text", "image"]',
+                output_modalities='["text", "image"]',
+                sort_order=0,
+            )
+            text_model = LLModels(
+                platform_id=platform.id,
+                model_name="text-model",
+                display_name="文本模型",
+                output_modalities='["text"]',
+                sort_order=1,
+            )
+            session.add_all([image_model, text_model])
+            session.flush()
+            session.add(
+                AgentModelBinding(
+                    user_id="user-1",
+                    agent_name="agent_director",
+                    target_type="direct",
+                    platform_id=platform.id,
+                    model_id=image_model.id,
+                )
+            )
+            session.commit()
+
+        rows = manager.get_agent_bindings("user-1")
+
+        director = next(row for row in rows if row["agent_name"] == "agent_director")
+        assert (director["platform_id"], director["model_id"]) == (
+            platform.id,
+            text_model.id,
+        )
+    finally:
+        engine.dispose()

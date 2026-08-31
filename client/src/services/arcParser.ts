@@ -15,6 +15,10 @@ export type ActValue = string | string[];
 export type PresentationCue = {
   bg?: ActValue;
   sprite?: ActValue;
+  illustration?: ActValue;
+  illustration_prompt?: ActValue;
+  illustration_pending?: ActValue;
+  characters?: ActValue;
   [key: string]: ActValue | undefined;
 };
 export type ArcSpeaker = number | string;

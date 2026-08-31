@@ -284,3 +284,190 @@ def test_image_generation_route_preserves_upstream_status_code() -> None:
     payload = json.loads(response.body)
     assert payload["upstreamStatusCode"] == 500
     assert payload["error"] == "生成背景图失败: 上游节点故障"
+
+
+def test_model_error_status_parser_accepts_wrapped_upstream_error() -> None:
+    from story import routes_presentation as routes
+
+    assert routes._extract_http_status(RuntimeError("Error code: 401 - unauthorized")) == 401
+    assert routes._extract_http_status(RuntimeError("status_code=429")) == 429
+
+
+def test_illustration_conception_prompt_combines_project_context_and_target_node(monkeypatch) -> None:
+    monkeypatch.setattr(
+        generation,
+        "load_worldview",
+        lambda user_id, project_name: "近未来海港城，雨季持续三个月。",
+    )
+    monkeypatch.setattr(
+        generation,
+        "get_visual_style_settings",
+        lambda user_id, project_name: {"seed_prompt": "清透赛璐璐，冷暖霓虹", "reference_asset_ids": []},
+    )
+    monkeypatch.setattr(
+        generation,
+        "_load_character_contexts",
+        lambda user_id, project_name, character_ids: [{
+            "id": "7",
+            "name": "林澈",
+            "profile": "短黑发，灰蓝风衣，左眼下有泪痣。",
+        }],
+    )
+
+    prompt, snapshot = generation.build_illustration_conception_prompt(
+        user_id="u1",
+        project_name="demo",
+        scene_name="雨夜书店",
+        node_id="42",
+        context={
+            "sceneIntro": "追兵正在接近。",
+            "sceneConception": "让门内外形成强烈的安全感反差。",
+            "nodeText": "林澈：别回头。",
+            "nearbyDialogue": ["旁白：霓虹映在积水中。"],
+            "characterIds": ["7", "7"],
+        },
+        existing_prompt="保留门口的雨幕。",
+    )
+
+    assert "近未来海港城" in prompt
+    assert "清透赛璐璐" in prompt
+    assert "雨夜书店" in prompt
+    assert "追兵正在接近" in prompt
+    assert "林澈" in prompt
+    assert "保留门口的雨幕" in prompt
+    assert snapshot["schema"] == "sparkarc.illustration-conception.v1"
+    assert snapshot["nodeId"] == "42"
+    assert snapshot["characterIds"] == ["7"]
+    assert snapshot["nearbyDialogue"] == ["旁白：霓虹映在积水中。"]
+
+
+def test_scriptwriter_illustration_conception_uses_agent_model_and_budget(monkeypatch) -> None:
+    from agents import agent_scriptwriter as scriptwriter_module
+    from agents.agent_scriptwriter import ScriptwriterAgent
+
+    captured: dict[str, object] = {}
+
+    monkeypatch.setattr(
+        generation,
+        "build_illustration_conception_prompt",
+        lambda **kwargs: ("动态叙事现场", {"nodeId": kwargs["node_id"]}),
+    )
+
+    class FakeLlm:
+        def invoke(self, messages):
+            captured["messages"] = messages
+            return SimpleNamespace(content="演出构思：雨夜书店门外，林澈在霓虹雨幕中回望，低机位中景。")
+
+    fake_llm = FakeLlm()
+    agent = object.__new__(ScriptwriterAgent)
+    agent.user_id = "u1"
+    agent._get_invoke_llm = lambda: fake_llm
+
+    def fake_budget(**kwargs):
+        captured.update(kwargs)
+        return SimpleNamespace(messages=["prepared-message"])
+
+    monkeypatch.setattr(scriptwriter_module, "prepare_specialized_prompt_messages_with_budget", fake_budget)
+
+    result = agent.generate_illustration_conception(
+        project_name="demo",
+        scene_name="雨夜书店",
+        node_id="42",
+        context={"nodeText": "林澈：别回头。"},
+    )
+
+    assert result == "雨夜书店门外，林澈在霓虹雨幕中回望，低机位中景。"
+    assert captured["agent_id"] == "agent_scriptwriter"
+    assert captured["user_prompt"] == "动态叙事现场"
+    assert captured["llm_client"] is fake_llm
+    assert captured["messages"] == ["prepared-message"]
+    assert "视觉演出构思助手" in str(captured["system_prompt"])
+
+
+def test_illustration_conception_route_sets_context_and_passes_model_input(monkeypatch) -> None:
+    from story import routes_presentation as routes
+
+    calls: dict[str, object] = {}
+    monkeypatch.setattr(routes, "_presentation_project_error", lambda *_args: None)
+    monkeypatch.setattr(routes, "is_visual_illustration_enabled", lambda *_args: True)
+    monkeypatch.setattr(
+        routes,
+        "set_agent_context",
+        lambda user_id, project_name: calls.update({"context": (user_id, project_name)}),
+    )
+
+    class FakeAgent:
+        def __init__(self, user_id):
+            calls["agent_user_id"] = user_id
+
+        def generate_illustration_conception(self, **kwargs):
+            calls["generation"] = kwargs
+            return "雨夜书店门外的低机位画面。"
+
+    monkeypatch.setattr("agents.agent_scriptwriter.ScriptwriterAgent", FakeAgent)
+    data = routes.GenerateIllustrationConceptionRequest(
+        sceneName="雨夜书店",
+        nodeId="42",
+        currentPrompt="保留雨幕",
+        context=routes.VisualGenerationContextRequest(
+            nodeText="林澈：别回头。",
+            characterIds=["7"],
+        ),
+    )
+
+    result = asyncio.run(
+        routes.generate_presentation_illustration_conception(
+            "demo",
+            data,
+            user={"user_id": "u1"},
+        )
+    )
+
+    assert result == {
+        "success": True,
+        "prompt": "雨夜书店门外的低机位画面。",
+        "sceneName": "雨夜书店",
+        "nodeId": "42",
+    }
+    assert calls["context"] == ("u1", "demo")
+    assert calls["agent_user_id"] == "u1"
+    assert calls["generation"] == {
+        "project_name": "demo",
+        "scene_name": "雨夜书店",
+        "node_id": "42",
+        "context": {"sceneName": "", "sceneIntro": "", "sceneConception": "", "nodeText": "林澈：别回头。", "nearbyDialogue": None, "characterIds": ["7"]},
+        "existing_prompt": "保留雨幕",
+    }
+
+
+def test_illustration_conception_route_marks_upstream_500(monkeypatch) -> None:
+    from story import routes_presentation as routes
+
+    monkeypatch.setattr(routes, "_presentation_project_error", lambda *_args: None)
+    monkeypatch.setattr(routes, "is_visual_illustration_enabled", lambda *_args: True)
+
+    class UpstreamModelError(RuntimeError):
+        status_code = 500
+
+    class FailingAgent:
+        def __init__(self, user_id):
+            pass
+
+        def generate_illustration_conception(self, **kwargs):
+            raise UpstreamModelError("上游节点返回 HTTP 500")
+
+    monkeypatch.setattr("agents.agent_scriptwriter.ScriptwriterAgent", FailingAgent)
+    response = asyncio.run(
+        routes.generate_presentation_illustration_conception(
+            "demo",
+            routes.GenerateIllustrationConceptionRequest(sceneName="雨夜书店", nodeId="42"),
+            user={"user_id": "u1"},
+        )
+    )
+
+    assert response.status_code == 500
+    assert response.headers["X-Spark-Upstream-Error"] == "true"
+    assert response.headers["X-Spark-Upstream-Status"] == "500"
+    payload = json.loads(response.body)
+    assert payload["success"] is False
+    assert payload["error"] == "生成演出构思失败: 上游节点返回 HTTP 500"

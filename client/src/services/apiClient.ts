@@ -195,7 +195,8 @@ export async function fetchWithAuth(url: string, options: RequestInit = {}): Pro
     // 移除了 credentials: 'include' ，以杜绝对于通配符 CORS 配置的服务节点报拦截错。
   });
   
-  if (response.status === 401) {
+  const isUpstreamError = response.headers.get('X-Spark-Upstream-Error') === 'true';
+  if (response.status === 401 && !isUpstreamError) {
     clearSessionToken();
     // 读取后端响应体，提取 error_code 和 require_login
     // FastAPI HTTPException 会将 detail 包装为 {"detail": {...}}，需兼容两种格式
