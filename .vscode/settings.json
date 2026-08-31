@@ -5,5 +5,9 @@
     "python.languageServer": "None",
     "python.terminal.activateEnvironment": true,
     "dotnet.defaultSolution": "disable",
-    "git.ignoreLimitWarning": true
+    "git.ignoreLimitWarning": true,
+    // Linux 下 VS Code 识别默认浏览器失败时会回退到 pwa-chrome；此时仍使用已安装的 Edge。
+    "debug.javascript.defaultRuntimeExecutable": {
+        "pwa-chrome": "/usr/bin/microsoft-edge"
+    }
 }
