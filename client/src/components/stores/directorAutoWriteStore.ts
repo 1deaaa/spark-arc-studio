@@ -41,6 +41,11 @@ export interface AutoWriteSnapshot {
   phase?: 'prewrite' | 'writing' | '';
   phaseMessage?: string;
   phaseToolName?: string;
+  phaseEvent?: string;
+  phaseError?: string;
+  phaseResult?: string;
+  phaseAttempt?: number;
+  phaseMaxAttempts?: number;
   totalChapters?: number;    // 前端注册时从旁路事件得到
   totalScenes?: number;
   completedScenes?: number;
@@ -601,6 +606,9 @@ export const useDirectorAutoWriteStore = defineStore('directorAutoWrite', () => 
       snap.phase = 'prewrite';
       snap.phaseMessage = (data.message as string) ?? snap.phaseMessage;
       snap.phaseToolName = '';
+      snap.phaseEvent = '';
+      snap.phaseError = '';
+      snap.phaseResult = '';
       snap.streamingPreview = '';
       snap.streamingSpeed = 0;
       snap.streamingChars = 0;
@@ -612,9 +620,50 @@ export const useDirectorAutoWriteStore = defineStore('directorAutoWrite', () => 
       snap.phaseMessage = (data.message as string) ?? snap.phaseMessage;
       snap.phaseToolName = '';
     } else if (data.status === 'prewrite_tool') {
-      snap.phase = 'prewrite';
+      const toolName = (data.tool_name as string) ?? snap.phaseToolName;
+      snap.phase = toolName === 'create_chapter' || toolName === 'create_or_rewrite_script'
+        ? 'writing'
+        : 'prewrite';
+      snap.phaseEvent = 'tool_started';
       snap.phaseToolName = (data.tool_name as string) ?? snap.phaseToolName;
+      snap.phaseError = '';
+      snap.phaseResult = '';
+      snap.phaseAttempt = Number(data.attempt || snap.phaseAttempt || 0);
+      snap.phaseMaxAttempts = Number(data.max_attempts || snap.phaseMaxAttempts || 0);
       snap.streamingPreview = '';
+    } else if (data.status === 'model_request_started') {
+      snap.phase = 'writing';
+      snap.phaseEvent = 'model_request_started';
+      snap.phaseToolName = '';
+      snap.phaseError = '';
+      snap.phaseResult = '';
+      snap.phaseAttempt = Number(data.attempt || 0);
+      snap.phaseMaxAttempts = Number(data.max_attempts || 0);
+    } else if (data.status === 'model_request_succeeded') {
+      snap.phase = 'writing';
+      snap.phaseEvent = 'model_request_succeeded';
+      snap.phaseError = '';
+      snap.phaseAttempt = Number(data.attempt || snap.phaseAttempt || 0);
+      snap.phaseMaxAttempts = Number(data.max_attempts || snap.phaseMaxAttempts || 0);
+    } else if (data.status === 'model_request_failed') {
+      snap.phase = 'writing';
+      snap.phaseEvent = 'model_request_failed';
+      snap.phaseError = String(data.error || '');
+      snap.phaseAttempt = Number(data.attempt || snap.phaseAttempt || 0);
+      snap.phaseMaxAttempts = Number(data.max_attempts || snap.phaseMaxAttempts || 0);
+    } else if (data.status === 'tool_succeeded') {
+      snap.phaseEvent = 'tool_succeeded';
+      snap.phaseToolName = String(data.tool_name || snap.phaseToolName || '');
+      snap.phaseResult = String(data.result || '');
+      snap.phaseAttempt = Number(data.attempt || snap.phaseAttempt || 0);
+      snap.phaseMaxAttempts = Number(data.max_attempts || snap.phaseMaxAttempts || 0);
+    } else if (data.status === 'tool_failed') {
+      snap.phaseEvent = data.will_retry === true ? 'tool_failed_retrying' : 'tool_failed';
+      snap.phaseToolName = String(data.tool_name || snap.phaseToolName || '');
+      snap.phaseError = String(data.error || '');
+      snap.phaseResult = '';
+      snap.phaseAttempt = Number(data.attempt || snap.phaseAttempt || 0);
+      snap.phaseMaxAttempts = Number(data.max_attempts || snap.phaseMaxAttempts || 0);
     } else if (data.status === 'streaming') {
       // 实时文字流！这是手动触发独有的体验
       snap.streamingPreview = (data.preview as string) ?? snap.streamingPreview;
@@ -625,6 +674,9 @@ export const useDirectorAutoWriteStore = defineStore('directorAutoWrite', () => 
       snap.streamingPreview = '';
       snap.phase = '';
       snap.phaseMessage = '';
+      snap.phaseEvent = '';
+      snap.phaseError = '';
+      snap.phaseResult = '';
     } else if (data.status === 'scene_saved') {
       snap.lastSavedFilename = (data.filename as string) ?? snap.lastSavedFilename;
       // 后端 SSE 事件携带精确的 completedScenes / totalScenes，实时更新进度条

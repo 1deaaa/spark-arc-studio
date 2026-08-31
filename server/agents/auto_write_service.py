@@ -177,8 +177,18 @@ def _run_auto_write(
         except Exception as exc:
             from agents.error_formatting import format_ai_error
             from agents.stream_semantics import on_error, semantic_sse_data
+            from agents.auto_write_state import patch_auto_write_state
 
             friendly = format_ai_error(exc)
+            patch_auto_write_state(
+                entry.user_id,
+                entry.project_name,
+                status="error",
+                phase="",
+                phaseEvent="failed",
+                phaseError=friendly,
+                lastError=friendly,
+            )
             entry.append(semantic_sse_data("error", message=friendly, **on_error(friendly)))
         finally:
             entry.finish()
@@ -187,12 +197,27 @@ def _run_auto_write(
 
 
 def _prewrite_tool_event(payload: dict[str, Any]) -> str:
-    """把写前调研工具调用转换为可回放的业务语义帧。"""
+    """把模型请求和工具调用生命周期转换为可回放的业务语义帧。"""
     from agents.stream_semantics import semantic_sse_data
 
+    event = str(payload.get("event") or "tool_started")
+    status_by_event = {
+        "model_request_started": "model_request_started",
+        "model_request_succeeded": "model_request_succeeded",
+        "model_request_failed": "model_request_failed",
+        "tool_started": "prewrite_tool",
+        "tool_succeeded": "tool_succeeded",
+        "tool_failed": "tool_failed",
+    }
     return semantic_sse_data(
-        "prewrite_tool",
+        status_by_event.get(event, event),
         tool_name=str(payload.get("tool_name") or ""),
+        attempt=payload.get("attempt"),
+        max_attempts=payload.get("max_attempts"),
+        will_retry=payload.get("will_retry"),
+        error=str(payload.get("error") or ""),
+        result=str(payload.get("result") or ""),
+        tool_count=payload.get("tool_count"),
         chapter_index=payload.get("chapter_index"),
         scene_index=payload.get("scene_index"),
         chapter_title=str(payload.get("chapter_title") or ""),

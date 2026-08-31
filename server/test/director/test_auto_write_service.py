@@ -84,3 +84,35 @@ def test_auto_write_start_fails_cleanly_before_runner_registration(monkeypatch) 
     assert result.started is False
     assert result.entry is None
     assert result.error == "自动写作执行器尚未初始化"
+
+
+def test_unhandled_runner_failure_persists_error_and_replays_terminal_event(monkeypatch) -> None:
+    from agents import auto_write_service as service
+
+    state_updates: list[dict] = []
+    monkeypatch.setattr(
+        "agents.auto_write_state.patch_auto_write_state",
+        lambda *_args, **fields: state_updates.append(dict(fields)) or fields,
+    )
+
+    async def failing_stream(**_kwargs):
+        yield 'data: {"status":"started"}\n\n'
+        raise RuntimeError("模型调用被迫停止")
+
+    service.configure_auto_write_runner(failing_stream)
+    started = _start(service, "u-auto-error", "异常项目")
+    started.entry.thread.join(timeout=2)
+
+    async def collect():
+        return [event async for event in service.observe_auto_write_progress("u-auto-error", "异常项目")]
+
+    replayed = asyncio.run(collect())
+    payloads = [
+        json.loads(next(line[5:].strip() for line in event.splitlines() if line.startswith("data:")))
+        for event in replayed
+    ]
+
+    assert started.entry.done is True
+    assert state_updates[-1]["status"] == "error"
+    assert "模型调用被迫停止" in state_updates[-1]["lastError"]
+    assert [item["status"] for item in payloads] == ["started", "error"]
