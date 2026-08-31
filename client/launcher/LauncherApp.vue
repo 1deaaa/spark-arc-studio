@@ -1213,13 +1213,6 @@ watch(autoEnterNextTime, (nextValue) => {
 
 /* --- Boot 状态 --- */
 .launcher-boot {
-  --loader-primary: var(--spark-primary);
-  --loader-core-bright: var(--spark-primary-light, var(--spark-primary));
-  --loader-glow: var(--spark-primary-glow, color-mix(in srgb, var(--spark-primary), transparent 55%));
-  --loader-orbit-outer: var(--spark-primary);
-  --loader-orbit-inner: var(--spark-harmonious-a, var(--spark-primary));
-  --loader-text: var(--spark-text);
-
   display: flex;
   flex-direction: column;
   align-items: center;

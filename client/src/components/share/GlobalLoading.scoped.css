@@ -12,23 +12,13 @@
    配色策略：统一基于主题色体系，用已有变体做层次
    ========================================================================== */
 
-/* ===== 颜色变量定义 ===== */
+/* ===== 遮罩层自身颜色变量 ===== */
 .loading-overlay {
-  /* 核心色：直接使用主题色 */
-  --loader-primary: var(--spark-primary);
-  /* 核心高亮：主题色提亮变体 */
-  --loader-core-bright: var(--spark-primary-light);
-  /* 主辉光：主题色半透明，用于光晕和脉冲涟漪 */
-  --loader-glow: var(--spark-primary-glow);
-  /* 外轨道色：主题色，略带和谐色相偏移增加层次 */
-  --loader-orbit-outer: var(--spark-primary);
-  /* 内轨道色：和谐色（色相偏移+45°），与外轨道形成微妙的色相差 */
-  --loader-orbit-inner: var(--spark-harmonious-a);
   /* 背景遮罩 */
   --loader-bg: color-mix(in srgb, var(--spark-bg), transparent 8%);
   /* 文字色 */
   --loader-text: var(--spark-text);
-  /* 粒子色 */
+  /* 背景粒子色 */
   --loader-particle: var(--spark-primary-glow);
 }
 
@@ -37,9 +27,7 @@
 .light .loading-overlay,
 body.light-mode .loading-overlay {
   --loader-bg: color-mix(in srgb, var(--spark-bg), transparent 5%);
-  --loader-glow: color-mix(in srgb, var(--spark-primary), transparent 55%);
   --loader-particle: color-mix(in srgb, var(--spark-primary), transparent 60%);
-  --loader-core-bright: color-mix(in srgb, var(--spark-primary), white 45%);
 }
 
 
