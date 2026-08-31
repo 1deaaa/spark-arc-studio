@@ -15,6 +15,7 @@ from llm.agen_matchbox.image_generation import (
     SparkImageRequest,
     _generate_gemini_generate_content_image,
     _generate_gemini_interactions_image,
+    _gemini_generate_content_endpoint,
     _generate_openai_chat_image,
     _generate_openai_compatible_image,
     _generate_openai_responses_image,
@@ -39,13 +40,15 @@ class _FakeResponse:
 
 
 class _FakeRequests:
-    def __init__(self, payload: dict[str, Any]):
+    def __init__(self, payload: dict[str, Any], *, ok: bool = True, status_code: int = 200):
         self.payload = payload
+        self.ok = ok
+        self.status_code = status_code
         self.calls: list[dict[str, Any]] = []
 
     def post(self, url: str, **kwargs: Any) -> _FakeResponse:
         self.calls.append({"url": url, **kwargs})
-        return _FakeResponse(self.payload)
+        return _FakeResponse(self.payload, ok=self.ok, status_code=self.status_code)
 
 
 def _png_b64() -> str:
@@ -386,6 +389,90 @@ def test_gemini_generate_content_adapter_rewrites_v1_to_v1beta(monkeypatch) -> N
         "models/gemini-3.1-flash-lite-image:generateContent"
     )
     assert call["headers"]["x-goog-api-key"] == "gemini-test"
+
+
+def test_gemini_generate_content_adapter_keeps_gateway_path_prefix() -> None:
+    assert _gemini_generate_content_endpoint(
+        "https://ai.1dea.top/api/v1",
+        "gemini-3.1-flash-lite-image",
+    ) == (
+        "https://ai.1dea.top/api/v1beta/"
+        "models/gemini-3.1-flash-lite-image:generateContent"
+    )
+
+
+@pytest.mark.parametrize(
+    ("generator", "config"),
+    [
+        (
+            _generate_openai_compatible_image,
+            {
+                "base_url": "https://ai.example.test/v1",
+                "api_key": "test-key",
+                "model_name": "image-model",
+                "extra_body": {},
+            },
+        ),
+        (
+            _generate_openai_responses_image,
+            {
+                "base_url": "https://ai.example.test/v1",
+                "api_key": "test-key",
+                "model_name": "image-model",
+                "extra_body": {},
+            },
+        ),
+        (
+            _generate_openai_chat_image,
+            {
+                "base_url": "https://ai.example.test/v1",
+                "api_key": "test-key",
+                "model_name": "image-model",
+                "extra_body": {},
+            },
+        ),
+        (
+            _generate_xai_image,
+            {
+                "base_url": "https://ai.example.test/v1",
+                "api_key": "test-key",
+                "model_name": "image-model",
+                "extra_body": {},
+            },
+        ),
+        (
+            _generate_gemini_interactions_image,
+            {
+                "base_url": "https://ai.example.test/v1",
+                "api_key": "test-key",
+                "model_name": "image-model",
+                "extra_body": {},
+            },
+        ),
+        (
+            _generate_gemini_generate_content_image,
+            {
+                "base_url": "https://ai.example.test/v1",
+                "api_key": "test-key",
+                "model_name": "image-model",
+                "extra_body": {},
+            },
+        ),
+    ],
+)
+def test_image_adapters_preserve_upstream_status_code(monkeypatch, generator, config) -> None:
+    fake = _FakeRequests(
+        {"error": {"message": "upstream node failure"}},
+        ok=False,
+        status_code=500,
+    )
+    monkeypatch.setitem(sys.modules, "requests", fake)
+
+    with pytest.raises(ImageGenerationError) as exc_info:
+        generator(config, SparkImageRequest(prompt="生成横版雨夜背景"))
+
+    assert exc_info.value.status_code == 500
+    assert "HTTP 500" in str(exc_info.value)
 
 
 def test_reference_image_is_rejected_before_network_without_image_input(monkeypatch) -> None:

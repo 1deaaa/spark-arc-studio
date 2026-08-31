@@ -8,11 +8,22 @@ vi.mock('../apiClient', () => ({
   fetchWithAuth: mocks.fetchWithAuth,
 }));
 
-import { applyStyle, getStyles } from '../aiService';
+import { i18n } from '@/i18n';
+import { applyStyle, getFriendlyErrorMessage, getStyles } from '../aiService';
 
 describe('风格列表响应', () => {
   beforeEach(() => {
     vi.clearAllMocks();
+    i18n.global.locale.value = 'zh-CN';
+  });
+
+  it('纯 HTTP 500 直接提示更换上游节点', () => {
+    expect(getFriendlyErrorMessage('Internal Server Error', 500)).toBe(
+      '上游模型节点返回 HTTP 500，请前往上游更换节点后重试。',
+    );
+    expect(getFriendlyErrorMessage(JSON.stringify({ error: 'upstream failure' }), 500)).toBe(
+      '上游模型节点返回 HTTP 500，请前往上游更换节点后重试。',
+    );
   });
 
   it('新用户的合法空列表保持无风格状态', async () => {

@@ -1,5 +1,6 @@
 import { fetchWithAuth, fetchWithSWR, cache } from './apiClient';
 import { consumeSSEReader, consumeTextReader, parseSSEEventPayload } from '@/utils/streamingRuntime';
+import { i18n } from '@/i18n';
 import {
   parseBeatSheetMarkup as parseBeatSheetMarkupShared,
   parseOutlineMarkup as parseOutlineMarkupShared,
@@ -44,6 +45,11 @@ export function getFriendlyErrorMessage(errorMsg: unknown, statusCode?: number) 
     return msg;
   }
 
+  // 纯 HTTP 500 无论响应体如何包装，都按上游节点故障提示用户处理。
+  if (statusCode === 500) {
+    return i18n.global.t('common.upstream500Node');
+  }
+
   // 尝试解析 JSON body 中的 error / detail 字段（我们自己的服务器返回的结构化错误）
   try {
     const parsed = JSON.parse(msg);
@@ -81,12 +87,6 @@ export function getFriendlyErrorMessage(errorMsg: unknown, statusCode?: number) 
       return '模型不存在或端点不可达 (404) — 可能是模型名称与端点不匹配，或端点地址有误。请通过「探测模型」确认可用模型名称。';
     }
     return '请求资源不存在 (404) — 可能是模型名称拼写错误，或请求端点地址不正确。请通过「探测模型」确认可用模型名称。';
-  }
-  if (statusCode === 500) {
-    if (msg && msg !== 'Internal Server Error') {
-      return msg;
-    }
-    return '服务器内部错误，请稍后重试 (500)';
   }
   if (statusCode === 502 || statusCode === 504) {
     return '网关错误或超时 (502/504) — 后端服务可能未启动';

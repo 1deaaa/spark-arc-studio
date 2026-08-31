@@ -28,6 +28,13 @@ from .utils import _build_endpoint
 class ImageGenerationError(RuntimeError):
     """在线生图调用失败。"""
 
+    def __init__(self, message: str, *, status_code: Optional[int] = None):
+        super().__init__(message)
+        try:
+            self.status_code = int(status_code) if status_code is not None else None
+        except (TypeError, ValueError):
+            self.status_code = None
+
 
 @dataclass
 class ImageReference:
@@ -141,6 +148,19 @@ def _compact_error_response(response: Any) -> str:
     return text[:500] or f"HTTP {getattr(response, 'status_code', '?')}"
 
 
+def _raise_upstream_error(response: Any, prefix: str) -> None:
+    """保留上游 HTTP 状态码，交给路由和前端做一致处理。"""
+    raw_status = getattr(response, "status_code", None)
+    try:
+        status_code = int(raw_status)
+    except (TypeError, ValueError):
+        status_code = None
+    raise ImageGenerationError(
+        f"{prefix}: HTTP {raw_status}: {_compact_error_response(response)}",
+        status_code=status_code,
+    )
+
+
 def _download_image_url(url: str, *, timeout: float) -> tuple[bytes, str]:
     try:
         import requests
@@ -149,7 +169,7 @@ def _download_image_url(url: str, *, timeout: float) -> tuple[bytes, str]:
 
     response = requests.get(url, timeout=timeout)
     if not response.ok:
-        raise ImageGenerationError(f"下载图片结果失败: HTTP {response.status_code}")
+        _raise_upstream_error(response, "下载图片结果失败")
     mime_type = str(response.headers.get("content-type") or "image/png").split(";")[0].strip() or "image/png"
     return response.content, mime_type
 
@@ -418,7 +438,7 @@ def _generate_openai_compatible_image(
         response = requests.post(endpoint, headers=headers, json=payload, timeout=timeout)
 
     if not response.ok:
-        raise ImageGenerationError(f"生图接口调用失败: HTTP {response.status_code}: {_compact_error_response(response)}")
+        _raise_upstream_error(response, "生图接口调用失败")
 
     try:
         data = response.json()
@@ -523,9 +543,7 @@ def _generate_openai_responses_image(config: dict[str, Any], request: SparkImage
         timeout=timeout,
     )
     if not response.ok:
-        raise ImageGenerationError(
-            f"Responses 生图接口调用失败: HTTP {response.status_code}: {_compact_error_response(response)}"
-        )
+        _raise_upstream_error(response, "Responses 生图接口调用失败")
 
     try:
         data = response.json()
@@ -590,7 +608,7 @@ def _generate_openai_chat_image(config: dict[str, Any], request: SparkImageReque
         timeout=timeout,
     )
     if not response.ok:
-        raise ImageGenerationError(f"Chat 生图接口调用失败: HTTP {response.status_code}: {_compact_error_response(response)}")
+        _raise_upstream_error(response, "Chat 生图接口调用失败")
 
     try:
         data = response.json()
@@ -652,7 +670,7 @@ def _generate_xai_image(config: dict[str, Any], request: SparkImageRequest) -> S
 
     response = requests.post(endpoint, headers=headers, json=payload, timeout=timeout)
     if not response.ok:
-        raise ImageGenerationError(f"xAI 生图接口调用失败: HTTP {response.status_code}: {_compact_error_response(response)}")
+        _raise_upstream_error(response, "xAI 生图接口调用失败")
 
     try:
         data = response.json()
@@ -673,20 +691,31 @@ def _generate_xai_image(config: dict[str, Any], request: SparkImageRequest) -> S
 
 
 def _gemini_root_and_version(base_url: str) -> tuple[str, str]:
-    """解析 Gemini 请求根地址，并把兼容网关的 v1 归一为 Gemini 的 v1beta。"""
+    """解析 Gemini 请求根地址，并把兼容网关的版本段归一为 Gemini 的 v1beta。"""
     parsed = urlparse(str(base_url or "").strip())
     if not parsed.scheme or not parsed.netloc:
         raise ImageGenerationError("Gemini 平台 base_url 无效")
-    path = parsed.path.strip("/")
-    version = "v1beta"
-    for part in path.split("/"):
-        if part in {"v1", "v1beta"}:
-            # Chat Universal 的公共入口固定是 v1；Gemini 生图端点要求 v1beta。
-            # 这里只影响本次上游请求，不回写平台配置，避免影响同一平台的文本链路。
-            version = "v1beta"
-            break
+    path_parts = [part for part in parsed.path.split("/") if part]
+    version_index = next(
+        (
+            index
+            for index, part in enumerate(path_parts)
+            if part.lower() in {"v1", "v1beta", "v1-beta"}
+        ),
+        None,
+    )
+    if version_index is None:
+        # 平台规范化通常会带 /v1；没有版本段时仍保留网关的全部路径前缀。
+        prefix_parts = path_parts
+    else:
+        prefix_parts = path_parts[:version_index]
+
     root = f"{parsed.scheme}://{parsed.netloc}"
-    return root, version
+    if prefix_parts:
+        root += "/" + "/".join(prefix_parts)
+    # Chat Universal 的公共入口固定是 v1；Gemini 生图端点要求 v1beta。
+    # 这里只影响本次上游请求，不回写平台配置，避免影响同一平台的文本链路。
+    return root, "v1beta"
 
 
 def _gemini_generate_content_endpoint(base_url: str, model_name: str) -> str:
@@ -803,7 +832,7 @@ def _generate_gemini_interactions_image(config: dict[str, Any], request: SparkIm
         timeout=timeout,
     )
     if not response.ok:
-        raise ImageGenerationError(f"Gemini 生图接口调用失败: HTTP {response.status_code}: {_compact_error_response(response)}")
+        _raise_upstream_error(response, "Gemini 生图接口调用失败")
 
     try:
         data = response.json()
@@ -872,7 +901,7 @@ def _generate_gemini_generate_content_image(config: dict[str, Any], request: Spa
         timeout=timeout,
     )
     if not response.ok:
-        raise ImageGenerationError(f"Gemini 生图接口调用失败: HTTP {response.status_code}: {_compact_error_response(response)}")
+        _raise_upstream_error(response, "Gemini 生图接口调用失败")
 
     try:
         data = response.json()
@@ -909,10 +938,11 @@ def generate_image_for_user(
     platform_id: Optional[int] = None,
     model_id: Optional[int] = None,
     references: Optional[list[ImageReference]] = None,
+    resolved_config: Optional[dict[str, Any]] = None,
 ) -> SparkImageResult:
     """使用 Matchbox 中当前用户可用的生图模型生成图片。"""
     manager = matchbox()
-    config = manager.resolve_user_image_generation_model(
+    config = resolved_config or manager.resolve_user_image_generation_model(
         user_id=user_id,
         platform_id=platform_id,
         model_id=model_id,

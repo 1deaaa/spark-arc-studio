@@ -11,7 +11,7 @@
       </template>
 
       <n-form class="toolbox-form" label-placement="top" size="medium">
-        <section v-if="canEditPresentation" class="toolbox-module image-generation-module">
+        <section v-if="canUsePresentationTools" class="toolbox-module image-generation-module">
           <div class="toolbox-module-heading">
             <n-icon :component="Images" />
             <span>{{ t('nodeEditor.presentation.imageGenerationModule') }}</span>
@@ -31,9 +31,12 @@
             <n-text v-if="!imageModelsLoading && availableImageModels.length === 0" depth="3" class="presentation-tool-tip">
               {{ t('nodeEditor.presentation.imageModelMissing') }}
             </n-text>
+            <n-text v-if="selectedImageModel && !imageModelSupportsReference(selectedImageModel)" depth="3" class="presentation-tool-tip">
+              {{ t('nodeEditor.presentation.imageModelTextOnlyHint') }}
+            </n-text>
           </div>
 
-          <div class="presentation-tool-stack">
+          <div v-if="canEditPresentation" class="presentation-tool-stack">
             <div class="presentation-tool-heading">
               <n-icon :component="ImagePlus" />
               <span>{{ t('nodeEditor.presentation.background') }}</span>
@@ -129,65 +132,85 @@
               @change="onBackgroundFileChange"
             />
 
-            <div v-if="visualIllustrationEnabled" class="presentation-style-card presentation-illustration-card">
-              <div class="presentation-tool-heading">
-                <n-icon :component="Images" />
-                <span>{{ t('nodeEditor.presentation.illustration') }}</span>
-              </div>
-              <div class="presentation-current-line" :class="{ 'is-empty': !currentIllustrationId }">
-                {{ currentIllustrationId || t('nodeEditor.presentation.noIllustration') }}
-              </div>
-              <n-radio-group v-model:value="illustrationBatchScope" size="small">
-                <n-radio-button value="scene">{{ t('nodeEditor.presentation.batchScopeScene') }}</n-radio-button>
-                <n-radio-button value="file">{{ t('nodeEditor.presentation.batchScopeFile') }}</n-radio-button>
-              </n-radio-group>
-              <n-space :size="8" wrap align="center">
-                <n-button size="small" secondary :loading="illustrationUploading" @click="triggerIllustrationUpload">
-                  <template #icon><n-icon :component="Upload" /></template>
-                  {{ t('nodeEditor.presentation.uploadIllustration') }}
-                </n-button>
-                <n-button
-                  v-if="currentIllustrationId"
-                  size="small"
-                  secondary
-                  type="warning"
-                  @click="clearDialogueIllustration"
-                >
-                  <template #icon><n-icon :component="Eraser" /></template>
-                  {{ t('nodeEditor.presentation.clearIllustration') }}
-                </n-button>
-                <n-button
-                  size="small"
-                  type="primary"
-                  secondary
-                  :disabled="!canGenerateIllustration"
-                  :loading="illustrationGenerating"
-                  @click="generateIllustrationByAI"
-                >
-                  <template #icon><n-icon :component="Sparkles" /></template>
-                  {{ t('nodeEditor.presentation.generateIllustration') }}
-                </n-button>
-                <n-button
-                  size="small"
-                  secondary
-                  :disabled="!canBatchGenerateIllustrations"
-                  :loading="illustrationBatchGenerating"
-                  @click="generateSceneIllustrations"
-                >
-                  <template #icon><n-icon :component="Images" /></template>
-                  {{ t('nodeEditor.presentation.generateSceneIllustrations') }}
-                </n-button>
-              </n-space>
-              <input
-                ref="illustrationFileInputRef"
-                class="presentation-hidden-input"
-                type="file"
-                accept="image/png,image/jpeg,image/webp"
-                @change="onIllustrationFileChange"
-              />
-            </div>
-
           </div>
+        </section>
+
+        <section v-if="canUsePresentationTools && visualIllustrationEnabled" class="toolbox-module presentation-style-card presentation-illustration-card">
+          <div class="toolbox-module-heading">
+            <n-icon :component="Images" />
+            <span>{{ t('nodeEditor.presentation.illustration') }}</span>
+          </div>
+          <template v-if="canEditPresentation">
+            <div class="presentation-current-line" :class="{ 'is-empty': !currentIllustrationId }">
+              {{ currentIllustrationId || t('nodeEditor.presentation.noIllustration') }}
+            </div>
+            <n-space :size="8" wrap align="center">
+              <n-button size="small" secondary :loading="illustrationUploading" @click="triggerIllustrationUpload">
+                <template #icon><n-icon :component="Upload" /></template>
+                {{ t('nodeEditor.presentation.uploadIllustration') }}
+              </n-button>
+              <n-button
+                v-if="currentIllustrationId"
+                size="small"
+                secondary
+                type="warning"
+                @click="clearDialogueIllustration"
+              >
+                <template #icon><n-icon :component="Eraser" /></template>
+                {{ t('nodeEditor.presentation.clearIllustration') }}
+              </n-button>
+              <n-button
+                size="small"
+                type="primary"
+                secondary
+                :disabled="!canGenerateIllustration"
+                :loading="illustrationGenerating"
+                @click="generateIllustrationByAI"
+              >
+                <template #icon><n-icon :component="Sparkles" /></template>
+                {{ t('nodeEditor.presentation.generateIllustration') }}
+              </n-button>
+            </n-space>
+          </template>
+
+          <div class="illustration-batch-controls">
+            <n-radio-group v-model:value="illustrationBatchScope" size="small">
+              <n-radio-button value="scene">{{ t('nodeEditor.presentation.batchScopeScene') }}</n-radio-button>
+              <n-radio-button value="file">{{ t('nodeEditor.presentation.batchScopeFile') }}</n-radio-button>
+            </n-radio-group>
+            <n-text depth="3" class="presentation-tool-tip" role="status">
+              {{ illustrationBatchStatusText }}
+            </n-text>
+            <n-text v-if="illustrationBatchCurrent" depth="3" class="presentation-tool-tip">
+              {{ illustrationBatchCurrentText }}
+            </n-text>
+            <n-text v-if="illustrationBatchError" type="error" class="presentation-tool-tip">
+              {{ illustrationBatchError }}
+            </n-text>
+            <n-text v-if="illustrationBatchFailureText" type="warning" class="presentation-tool-tip">
+              {{ illustrationBatchFailureText }}
+            </n-text>
+            <n-space :size="8" wrap align="center">
+              <n-button
+                size="small"
+                secondary
+                :disabled="!canBatchGenerateIllustrations"
+                :loading="illustrationBatchGenerating"
+                @click="generateSceneIllustrations"
+              >
+                <template #icon><n-icon :component="Images" /></template>
+                {{ t('nodeEditor.presentation.generateSceneIllustrations') }}
+              </n-button>
+            </n-space>
+          </div>
+          <input
+            v-if="canEditPresentation"
+            ref="illustrationFileInputRef"
+            class="presentation-hidden-input"
+            type="file"
+            accept="image/png,image/jpeg,image/webp"
+            @change="onIllustrationFileChange"
+          />
         </section>
 
         <section class="toolbox-module continuation-module">
@@ -543,10 +566,15 @@ import {
   type PresentationAsset,
   type PresentationImageModel,
   type PresentationManifest,
+  type PresentationSettings,
   type PresentationReferenceDescriptor,
+  isPresentationEndpointNotFoundError,
+  isPresentationUpstreamBlockingError,
+  isPresentationUpstream500Error,
 } from '@/services/presentationService';
 import { supportsImageInput } from '@/services/modelModalities';
 import { createStreamingTask, consumeSSEReader, isAbortLikeError, parseSSEEventPayload } from '@/utils/streamingRuntime';
+import { selectPresentationIllustrationCandidates } from '@/utils/presentationIllustrationPolicy';
 import type { CancelLoadingPayload } from '@/eventBus';
 import type { StoryCharacterDetail } from '@/services/aiContracts';
 import { formatSpeakerMarker, type ArcDialogueNode, type ArcScene, type PresentationCue } from '@/services/arcParser';
@@ -672,7 +700,12 @@ const props = withDefaults(defineProps<PanelProps>(), {
 });
 
 const isNovelMode = computed(() => sceneStore.workspaceMode === 'novel' || sceneStore.fileFormat === 'novel');
-const visible = computed(() => sceneStore.selectionType === 'dialogue' || sceneStore.selectionType === 'scene' || sceneStore.selectionType === 'novel' || mode.value === 'bridge');
+const isScriptMode = computed(() => sceneStore.workspaceMode === 'script' && !isNovelMode.value);
+const visible = computed(() => sceneStore.selectionType === 'dialogue'
+  || sceneStore.selectionType === 'scene'
+  || sceneStore.selectionType === 'novel'
+  || (isScriptMode.value && !!sceneStore.currentScene)
+  || mode.value === 'bridge');
 
 // 模式选项
 const baseModeOptions = [
@@ -722,6 +755,18 @@ const illustrationUploading = ref(false);
 const illustrationGenerating = ref(false);
 const illustrationBatchGenerating = ref(false);
 const illustrationBatchScope = ref<'scene' | 'file'>('scene');
+const illustrationBatchTotal = ref(0);
+const illustrationBatchCompleted = ref(0);
+const illustrationBatchFailed = ref(0);
+const illustrationBatchCurrent = ref<{
+  index: number;
+  total: number;
+  sceneName: string;
+  nodeLabel: string;
+} | null>(null);
+const illustrationBatchFailureItems = ref<string[]>([]);
+const illustrationBatchError = ref('');
+const illustrationBatchLastState = ref<'idle' | 'done' | 'cancelled' | 'failed'>('idle');
 const backgroundPreviewFailed = ref(false);
 const illustrationPrompt = ref('');
 const imageModels = ref<PresentationImageModel[]>([]);
@@ -729,6 +774,10 @@ const imageModelsLoading = ref(false);
 const selectedImageModelKey = ref<string | null>(null);
 const presentationManifest = ref<PresentationManifest | null>(null);
 const visualIllustrationEnabled = ref(false);
+const visualIllustrationMaxPerScene = ref(2);
+const visualIllustrationMinNodeGap = ref(1);
+let presentationManifestRequestId = 0;
+let localManifestRevision = 0;
 
 // 重写场景
 const rewriteThought = ref('');
@@ -793,6 +842,7 @@ const criticTargetLabel = computed(() => {
   return sceneStore.currentScene?.scene ? `将审查当前场景：${sceneStore.currentScene.scene}` : '将审查当前场景';
 });
 
+const canUsePresentationTools = computed(() => isScriptMode.value && !!projectStore.currentProject && !!sceneStore.currentScene);
 const canEditPresentation = computed(() => sceneStore.selectionType === 'dialogue' && !!currentDialogueNode.value && !isNovelMode.value);
 
 const currentDialogueNode = computed<ArcDialogueNode | null>(() => {
@@ -861,26 +911,76 @@ const illustrationCandidates = computed(() => {
   const scenes = illustrationBatchScope.value === 'file'
     ? (Array.isArray(sceneStore.scriptData) ? sceneStore.scriptData as ArcScene[] : [])
     : (sceneStore.currentScene ? [sceneStore.currentScene as ArcScene] : []);
-  return scenes.flatMap(scene => collectDialogueNodes(scene)
-    .filter((node) => {
-      const cue = node.presentation;
-      return !!normalizePresentationValue(cue?.illustration_prompt)
-        && !normalizePresentationValue(cue?.illustration);
-    })
-    .map(node => ({ scene, node })));
+  return scenes.flatMap(scene => selectPresentationIllustrationCandidates(
+    collectDialogueNodes(scene),
+    node => node.presentation,
+    {
+      maxPerScene: visualIllustrationMaxPerScene.value,
+      minNodeGap: visualIllustrationMinNodeGap.value,
+    },
+  ).map(node => ({ scene, node })));
 });
 
 const canBatchGenerateIllustrations = computed(() =>
-  visualIllustrationEnabled.value
+  canUsePresentationTools.value
+  && visualIllustrationEnabled.value
   && !illustrationBatchGenerating.value
   && illustrationCandidates.value.length > 0
   && !!selectedImageModel.value
 );
 
-watch(() => currentDialogueNode.value?.id, () => {
-  illustrationPrompt.value = normalizePresentationValue(currentPresentation.value.illustration_prompt);
-  presentationCharacterIds.value = normalizePresentationList(currentPresentation.value.characters);
-}, { immediate: true });
+const illustrationBatchStatusText = computed(() => {
+  if (illustrationBatchGenerating.value) {
+    return t('nodeEditor.presentation.batchProgress', {
+      current: illustrationBatchCompleted.value + illustrationBatchFailed.value + 1,
+      total: illustrationBatchTotal.value,
+    });
+  }
+  if (illustrationBatchLastState.value === 'done') {
+    return t('nodeEditor.presentation.batchDone', {
+      completed: illustrationBatchCompleted.value,
+      failed: illustrationBatchFailed.value,
+    });
+  }
+  if (illustrationBatchLastState.value === 'cancelled') {
+    return t('nodeEditor.presentation.batchCancelled', {
+      completed: illustrationBatchCompleted.value,
+    });
+  }
+  if (illustrationBatchLastState.value === 'failed') {
+    return t('nodeEditor.presentation.batchFailed');
+  }
+  return t('nodeEditor.presentation.batchPendingCount', { count: illustrationCandidates.value.length });
+});
+
+const illustrationBatchCurrentText = computed(() => {
+  const current = illustrationBatchCurrent.value;
+  if (!current) return '';
+  return t('nodeEditor.presentation.batchCurrentItem', {
+    scene: current.sceneName,
+    node: current.nodeLabel,
+  });
+});
+
+const illustrationBatchFailureText = computed(() => {
+  if (!illustrationBatchFailureItems.value.length) return '';
+  return t('nodeEditor.presentation.batchFailedItems', {
+    items: illustrationBatchFailureItems.value.join('、'),
+  });
+});
+
+watch(
+  () => [
+    currentDialogueNode.value?.id,
+    normalizePresentationValue(currentPresentation.value.illustration_prompt),
+    normalizePresentationList(currentPresentation.value.characters).join('|'),
+  ],
+  () => {
+    illustrationPrompt.value = normalizePresentationValue(currentPresentation.value.illustration_prompt);
+    presentationCharacterIds.value = normalizePresentationList(currentPresentation.value.characters);
+  },
+  { immediate: true },
+);
 
 watch(currentBackgroundPreviewUrl, () => {
   backgroundPreviewFailed.value = false;
@@ -896,6 +996,27 @@ function normalizePresentationList(value: unknown): string[] {
   return Array.from(new Set(values.map(item => String(item || '').trim()).filter(Boolean)));
 }
 
+function normalizeVisualIllustrationPolicyValue(value: unknown, fallback: number, minimum: number, maximum: number) {
+  const parsed = Number(value);
+  if (!Number.isFinite(parsed)) return fallback;
+  return Math.max(minimum, Math.min(maximum, Math.trunc(parsed)));
+}
+
+function applyVisualIllustrationSettings(settings: PresentationSettings['visualIllustration'] | undefined) {
+  visualIllustrationMaxPerScene.value = normalizeVisualIllustrationPolicyValue(
+    settings?.max_per_scene,
+    2,
+    1,
+    4,
+  );
+  visualIllustrationMinNodeGap.value = normalizeVisualIllustrationPolicyValue(
+    settings?.min_node_gap,
+    1,
+    0,
+    4,
+  );
+}
+
 function imageModelKey(model: PresentationImageModel) {
   return `${model.platform_id}:${model.model_id}`;
 }
@@ -905,6 +1026,12 @@ function imageModelSupportsReference(model: PresentationImageModel | null) {
 }
 
 function presentationErrorMessage(error: unknown, fallback: string) {
+  if (isPresentationUpstream500Error(error)) {
+    return t('nodeEditor.presentation.upstream500Hint');
+  }
+  if (isPresentationEndpointNotFoundError(error)) {
+    return t('nodeEditor.presentation.endpoint404Hint');
+  }
   if (error instanceof Error && error.message.trim()) return error.message;
   const raw = String(error || '').trim();
   return raw || fallback;
@@ -924,8 +1051,12 @@ function presentationAssetUrl(asset: PresentationAsset) {
 
 function updateManifest(manifest: PresentationManifest | undefined | null) {
   if (manifest) {
+    localManifestRevision += 1;
     presentationManifest.value = manifest;
-    bus.emit('presentation-manifest-updated', { projectName: projectStore.currentProject });
+    bus.emit('presentation-manifest-updated', {
+      projectName: projectStore.currentProject,
+      manifest,
+    });
   }
 }
 
@@ -954,14 +1085,28 @@ async function loadPresentationManifest() {
   if (!projectStore.currentProject || isNovelMode.value) {
     presentationManifest.value = null;
     visualIllustrationEnabled.value = false;
+    applyVisualIllustrationSettings(undefined);
     return;
   }
+  const requestId = ++presentationManifestRequestId;
+  const revisionAtRequest = localManifestRevision;
+  const projectName = projectStore.currentProject;
   try {
-    const result = await fetchPresentationManifest(projectStore.currentProject);
+    const result = await fetchPresentationManifest(projectName);
+    if (
+      requestId !== presentationManifestRequestId
+      || revisionAtRequest !== localManifestRevision
+      || projectName !== projectStore.currentProject
+      || isNovelMode.value
+    ) return;
     presentationManifest.value = result.manifest || null;
+    applyVisualIllustrationSettings(result.settings?.visualIllustration);
     visualIllustrationEnabled.value = !!result.settings?.visualIllustration?.effectiveEnabled;
   } catch (_error: unknown) {
-    presentationManifest.value = null;
+    if (requestId === presentationManifestRequestId && revisionAtRequest === localManifestRevision) {
+      presentationManifest.value = null;
+      applyVisualIllustrationSettings(undefined);
+    }
   }
 }
 
@@ -1145,7 +1290,15 @@ async function generateBackgroundByAI() {
     return;
   }
   backgroundGenerating.value = true;
+  const task = createStreamingTask('production', {
+    target: 'visual-background',
+    text: t('nodeEditor.presentation.generateBackground'),
+    progress: t('nodeEditor.presentation.generateBackground'),
+    canCancel: true,
+    statsMode: 'elapsed',
+  });
   try {
+    task.throwIfAborted();
     saveIllustrationPrompt();
     const result = await generatePresentationBackground(projectStore.currentProject, {
       prompt,
@@ -1155,14 +1308,17 @@ async function generateBackgroundByAI() {
       modelId: Number(model.model_id),
       referenceAssets: referenceAssetsFor('background'),
       context: buildPresentationGenerationContext(currentDialogueNode.value, sceneStore.currentScene as ArcScene | null, false),
-    });
+    }, task.signal);
+    task.throwIfAborted();
     if (!result.asset?.id) throw new Error(t('nodeEditor.presentation.uploadInvalidResult'));
     updateManifest(result.manifest);
     setDialoguePresentationValue('bg', result.asset.id);
     bus.emit('toast', { type: 'success', message: t('nodeEditor.presentation.generateSuccess') });
   } catch (error: unknown) {
+    if (isAbortLikeError(error) || task.aborted) return;
     bus.emit('toast', { type: 'error', message: presentationErrorMessage(error, t('nodeEditor.presentation.generateFailed')) });
   } finally {
+    task.dispose();
     backgroundGenerating.value = false;
   }
 }
@@ -1191,7 +1347,7 @@ async function onIllustrationFileChange(event: Event) {
     const result = await uploadPresentationIllustration(projectStore.currentProject, file, {
       title: file.name,
       sceneName: sceneStore.currentScene?.scene || '',
-      nodeId: currentDialogueNode.value.id,
+      nodeId: String(currentDialogueNode.value.id),
     });
     if (!result.asset?.id) throw new Error(t('nodeEditor.presentation.uploadInvalidResult'));
     updateManifest(result.manifest);
@@ -1222,7 +1378,7 @@ async function generateIllustrationForNode(
     prompt,
     title: String(node.txt || '').trim().slice(0, 18) || t('nodeEditor.presentation.generatedIllustrationTitle'),
     sceneName: scene.scene || '',
-    nodeId: node.id,
+    nodeId: String(node.id),
     size: '1536x1024',
     platformId: Number(model.platform_id),
     modelId: Number(model.model_id),
@@ -1242,19 +1398,46 @@ async function generateIllustrationByAI() {
   if (!node || !scene) return;
   saveIllustrationPrompt();
   illustrationGenerating.value = true;
+  const task = createStreamingTask('production', {
+    target: 'visual-illustration',
+    text: t('nodeEditor.presentation.generateIllustration'),
+    progress: t('nodeEditor.presentation.generateIllustration'),
+    canCancel: true,
+    statsMode: 'elapsed',
+  });
   try {
-    await generateIllustrationForNode(node, scene);
+    task.throwIfAborted();
+    await generateIllustrationForNode(node, scene, task.signal);
+    task.throwIfAborted();
     bus.emit('toast', { type: 'success', message: t('nodeEditor.presentation.illustrationGenerateSuccess') });
   } catch (error: unknown) {
+    if (isAbortLikeError(error) || task.aborted) return;
     bus.emit('toast', { type: 'error', message: presentationErrorMessage(error, t('nodeEditor.presentation.illustrationGenerateFailed')) });
   } finally {
+    task.dispose();
     illustrationGenerating.value = false;
   }
+}
+
+function illustrationBatchItemMeta(candidate: { node: ArcDialogueNode; scene: ArcScene }, index: number, total: number) {
+  return {
+    index,
+    total,
+    sceneName: String(candidate.scene.scene || '').trim() || t('nodeEditor.presentation.batchUnnamedScene'),
+    nodeLabel: String(candidate.node.txt || '').trim().slice(0, 72) || t('nodeEditor.presentation.batchUnnamedNode'),
+  };
 }
 
 async function generateSceneIllustrations() {
   const candidates = [...illustrationCandidates.value];
   if (!candidates.length) return;
+  illustrationBatchTotal.value = candidates.length;
+  illustrationBatchCompleted.value = 0;
+  illustrationBatchFailed.value = 0;
+  illustrationBatchCurrent.value = null;
+  illustrationBatchFailureItems.value = [];
+  illustrationBatchError.value = '';
+  illustrationBatchLastState.value = 'idle';
   illustrationBatchGenerating.value = true;
   const task = createStreamingTask('production', {
     target: 'visual-illustrations',
@@ -1266,31 +1449,48 @@ async function generateSceneIllustrations() {
   let completed = 0;
   let failed = 0;
   try {
-    for (const candidate of candidates) {
+    for (const [index, candidate] of candidates.entries()) {
       task.throwIfAborted();
-      task.setProgress(t('nodeEditor.presentation.batchProgress', {
-        current: completed + failed + 1,
-        total: candidates.length,
-      }));
+      const current = illustrationBatchItemMeta(candidate, index + 1, candidates.length);
+      illustrationBatchCurrent.value = current;
+      task.setProgress(`${t('nodeEditor.presentation.batchProgress', {
+        current: current.index,
+        total: current.total,
+      })} · ${t('nodeEditor.presentation.batchCurrentItem', {
+        scene: current.sceneName,
+        node: current.nodeLabel,
+      })}`);
       try {
         await generateIllustrationForNode(candidate.node, candidate.scene, task.signal);
         completed += 1;
+        illustrationBatchCompleted.value = completed;
       } catch (error: unknown) {
         if (isAbortError(error) || task.aborted) throw error;
+        if (isPresentationUpstreamBlockingError(error) || isPresentationEndpointNotFoundError(error)) throw error;
         failed += 1;
+        illustrationBatchFailed.value = failed;
+        illustrationBatchFailureItems.value = [
+          ...illustrationBatchFailureItems.value,
+          `${current.sceneName} · ${current.nodeLabel}`,
+        ];
       }
     }
+    illustrationBatchLastState.value = 'done';
     bus.emit('toast', {
       type: failed ? 'warning' : 'success',
       message: t('nodeEditor.presentation.batchDone', { completed, failed }),
     });
   } catch (error: unknown) {
     if (isAbortError(error) || task.aborted) {
+      illustrationBatchLastState.value = 'cancelled';
       bus.emit('toast', { type: 'info', message: t('nodeEditor.presentation.batchCancelled', { completed }) });
     } else {
+      illustrationBatchLastState.value = 'failed';
+      illustrationBatchError.value = presentationErrorMessage(error, t('nodeEditor.presentation.batchFailed'));
       bus.emit('toast', { type: 'error', message: presentationErrorMessage(error, t('nodeEditor.presentation.batchFailed')) });
     }
   } finally {
+    illustrationBatchCurrent.value = null;
     task.dispose();
     illustrationBatchGenerating.value = false;
   }
@@ -1387,16 +1587,36 @@ function onPresentationSettingsUpdated(payload?: unknown) {
   void loadPresentationManifest();
 }
 
+function onPresentationManifestUpdated(payload?: unknown) {
+  const projectName = payload && typeof payload === 'object' && 'projectName' in payload
+    ? String((payload as { projectName?: unknown }).projectName || '')
+    : '';
+  if (projectName && projectName !== projectStore.currentProject) return;
+  const manifest = payload && typeof payload === 'object' && 'manifest' in payload
+    ? (payload as { manifest?: unknown }).manifest
+    : null;
+  if (manifest && typeof manifest === 'object') {
+    localManifestRevision += 1;
+    presentationManifest.value = manifest as PresentationManifest;
+    return;
+  }
+  void loadPresentationManifest();
+}
+
 onMounted(() => {
   loadCharacters();
   void loadPresentationImageModels();
   void loadPresentationManifest();
   bus.on('presentation-settings-updated', onPresentationSettingsUpdated);
+  bus.on('presentation-manifest-updated', onPresentationManifestUpdated);
 });
 onBeforeUnmount(() => {
   bus.off('presentation-settings-updated', onPresentationSettingsUpdated);
+  bus.off('presentation-manifest-updated', onPresentationManifestUpdated);
 });
 watch(() => projectStore.currentProject, () => {
+  presentationManifestRequestId += 1;
+  localManifestRevision += 1;
   loadCharacters();
   void loadPresentationManifest();
 });
@@ -2215,6 +2435,14 @@ function insertBridgeResult() {
   border-color: color-mix(in srgb, var(--spark-border), transparent 8%);
   background: color-mix(in srgb, var(--spark-bg) 44%, transparent);
   color: var(--spark-text-muted);
+}
+
+.illustration-batch-controls {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  min-width: 0;
+  padding-top: 4px;
 }
 
 .background-preview {

@@ -176,6 +176,9 @@
           :options="imageModelOptions"
           :placeholder="t('nodeEditor.presentation.imageModelPlaceholder')"
         />
+        <n-text v-if="selectedImageModel && !imageModelSupportsReference(selectedImageModel)" depth="3" class="sprite-panel-tip">
+          {{ t('nodeEditor.presentation.imageModelTextOnlyHint') }}
+        </n-text>
 
         <n-input
           v-model:value="characterSpritePrompt"
@@ -242,9 +245,12 @@ import {
   type PresentationImageModel,
   type PresentationManifest,
   type PresentationReferenceDescriptor,
+  isPresentationEndpointNotFoundError,
+  isPresentationUpstream500Error,
 } from '@/services/presentationService';
 import { supportsImageInput } from '@/services/modelModalities';
 import { matteSprite } from '@/utils/spriteMatting';
+import { createStreamingTask, isAbortLikeError } from '@/utils/streamingRuntime';
 import { AUTO_SAVE_DEBOUNCE_TIME } from '../../config';
 import { buildCreativeCacheKey, isCreativeCacheEqual, loadCreativeCache, saveCreativeCache } from '@/utils/creativeLocalCache';
 import {
@@ -526,6 +532,12 @@ function imageModelSupportsReference(model: PresentationImageModel | null) {
 }
 
 function presentationErrorMessage(error: unknown, fallback: string) {
+  if (isPresentationUpstream500Error(error)) {
+    return t('nodeEditor.presentation.upstream500Hint');
+  }
+  if (isPresentationEndpointNotFoundError(error)) {
+    return t('nodeEditor.presentation.endpoint404Hint');
+  }
   if (error instanceof Error && error.message.trim()) return error.message;
   const raw = String(error || '').trim();
   return raw || fallback;
@@ -681,7 +693,15 @@ async function generateCharacterSpriteByAI() {
     return;
   }
   characterSpriteGenerating.value = true;
+  const task = createStreamingTask('world', {
+    target: 'visual-character-sprite',
+    text: t('components.lorebookEditor.generateSprite'),
+    progress: t('components.lorebookEditor.generateSprite'),
+    canCancel: true,
+    statsMode: 'elapsed',
+  });
   try {
+    task.throwIfAborted();
     const result = await generatePresentationSprite(projectStore.currentProject, {
       prompt: characterSpritePrompt.value.trim(),
       title: activeSpriteCharacter.value.name || t('components.lorebookEditor.characterN', { n: activeSpriteCharacter.value.id }),
@@ -694,7 +714,8 @@ async function generateCharacterSpriteByAI() {
       context: {
         characterIds: [String(activeSpriteCharacter.value.id)],
       },
-    });
+    }, task.signal);
+    task.throwIfAborted();
     updatePresentationManifest(result.manifest);
     if (result.asset?.id) {
       try {
@@ -710,8 +731,10 @@ async function generateCharacterSpriteByAI() {
     characterSpritePrompt.value = '';
     bus.emit('toast', { type: 'success', message: t('nodeEditor.presentation.spriteGenerateSuccess') });
   } catch (error: unknown) {
+    if (isAbortLikeError(error) || task.aborted) return;
     bus.emit('toast', { type: 'error', message: presentationErrorMessage(error, t('nodeEditor.presentation.spriteGenerateFailed')) });
   } finally {
+    task.dispose();
     characterSpriteGenerating.value = false;
   }
 }
@@ -984,7 +1007,18 @@ function onLorebookRefreshCharacters() {
   markCharacterGraphStale();
 }
 
-function onPresentationManifestUpdated() {
+function onPresentationManifestUpdated(payload?: unknown) {
+  const projectName = payload && typeof payload === 'object' && 'projectName' in payload
+    ? String((payload as { projectName?: unknown }).projectName || '')
+    : '';
+  if (projectName && projectName !== projectStore.currentProject) return;
+  const manifest = payload && typeof payload === 'object' && 'manifest' in payload
+    ? (payload as { manifest?: unknown }).manifest
+    : null;
+  if (manifest && typeof manifest === 'object') {
+    presentationManifest.value = manifest as PresentationManifest;
+    return;
+  }
   loadPresentationManifest();
 }
 

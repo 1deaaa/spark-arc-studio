@@ -23,6 +23,7 @@ from llm.agen_matchbox.image_generation import (
     ImageReference,
     generate_image_for_user,
 )
+from llm.agen_matchbox.models import MODALITY_IMAGE, normalize_input_modalities
 from story.presentation_manifest import (
     PresentationAssetError,
     get_project_asset_path,
@@ -109,6 +110,20 @@ def _presentation_project_error(user_id: str, project_name: str) -> JSONResponse
             content={"success": False, "error": "Web 视觉演出仅适用于剧本项目"},
         )
     return None
+
+
+def _image_generation_error_response(action: str, error: ImageGenerationError) -> JSONResponse:
+    """把生图上游状态码原样传回，同时保留本地动作上下文。"""
+    status_code = error.status_code
+    if status_code is None or not 400 <= status_code <= 599:
+        status_code = 400
+    content = {
+        "success": False,
+        "error": f"{action}: {error}",
+    }
+    if error.status_code is not None:
+        content["upstreamStatusCode"] = error.status_code
+    return JSONResponse(status_code=status_code, content=content)
 
 
 def _normalize_reference_asset_type(asset_type: str) -> str:
@@ -215,7 +230,10 @@ def _resolve_reference_descriptors(
     *,
     asset_ids: list[str] | None,
     references: list[VisualReferenceRequest] | None,
+    allow_image_references: bool = True,
 ) -> list[dict[str, str]]:
+    if not allow_image_references:
+        return []
     manifest = load_project_manifest(user_id, project_name)
     assets = manifest.get("assets") if isinstance(manifest, dict) else {}
     if not isinstance(assets, dict):
@@ -304,11 +322,21 @@ async def _generate_visual_asset(
     node_id: str = "",
 ) -> tuple[dict, dict]:
     """统一执行上下文构建、图生图调用、资产写入和生成溯源。"""
+    model_config = await run_in_threadpool(
+        matchbox().resolve_user_image_generation_model,
+        user_id=user_id,
+        platform_id=data.platformId,
+        model_id=data.modelId,
+    )
+    accepts_image_references = MODALITY_IMAGE in normalize_input_modalities(
+        model_config.get("input_modalities")
+    )
     reference_descriptors = _resolve_reference_descriptors(
         user_id,
         project_name,
         asset_ids=data.referenceAssetIds,
         references=data.referenceAssets,
+        allow_image_references=accepts_image_references,
     )
     context = data.context.model_dump() if data.context else {}
     if character_id:
@@ -336,6 +364,7 @@ async def _generate_visual_asset(
         platform_id=data.platformId,
         model_id=data.modelId,
         references=image_references,
+        resolved_config=model_config,
     )
 
     common = {
@@ -541,7 +570,9 @@ async def generate_presentation_background(
             "asset": _asset_with_url(normalized_project, asset),
             "manifest": manifest,
         }
-    except (PresentationAssetError, ImageGenerationError, ValueError) as exc:
+    except ImageGenerationError as exc:
+        return _image_generation_error_response("生成背景图失败", exc)
+    except (PresentationAssetError, ValueError) as exc:
         return JSONResponse(status_code=400, content={"success": False, "error": str(exc)})
     except Exception as exc:
         return JSONResponse(status_code=500, content={"success": False, "error": f"生成背景图失败: {exc}"})
@@ -614,7 +645,9 @@ async def generate_presentation_reference(
             "asset": _asset_with_url(normalized_project, asset),
             "manifest": manifest,
         }
-    except (PresentationAssetError, ImageGenerationError, ValueError) as exc:
+    except ImageGenerationError as exc:
+        return _image_generation_error_response("生成参考图失败", exc)
+    except (PresentationAssetError, ValueError) as exc:
         return JSONResponse(status_code=400, content={"success": False, "error": str(exc)})
     except Exception as exc:
         return JSONResponse(status_code=500, content={"success": False, "error": f"生成参考图失败: {exc}"})
@@ -689,7 +722,9 @@ async def generate_presentation_sprite(
             "asset": _asset_with_url(normalized_project, asset),
             "manifest": manifest,
         }
-    except (PresentationAssetError, ImageGenerationError, ValueError) as exc:
+    except ImageGenerationError as exc:
+        return _image_generation_error_response("生成角色立绘失败", exc)
+    except (PresentationAssetError, ValueError) as exc:
         return JSONResponse(status_code=400, content={"success": False, "error": str(exc)})
     except Exception as exc:
         return JSONResponse(status_code=500, content={"success": False, "error": f"生成角色立绘失败: {exc}"})
@@ -768,7 +803,9 @@ async def generate_presentation_illustration(
             "asset": _asset_with_url(normalized_project, asset),
             "manifest": manifest,
         }
-    except (PresentationAssetError, ImageGenerationError, ValueError) as exc:
+    except ImageGenerationError as exc:
+        return _image_generation_error_response("生成场景插图失败", exc)
+    except (PresentationAssetError, ValueError) as exc:
         return JSONResponse(status_code=400, content={"success": False, "error": str(exc)})
     except Exception as exc:
         return JSONResponse(status_code=500, content={"success": False, "error": f"生成场景插图失败: {exc}"})

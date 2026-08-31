@@ -123,7 +123,7 @@ export type PresentationGenerateReferencePayload = PresentationGenerateImagePayl
 
 export type PresentationGenerateIllustrationPayload = PresentationGenerateImagePayload & {
   sceneName?: string;
-  nodeId?: string | number;
+  nodeId?: string;
 };
 
 export type UpdatePresentationSettingsPayload = {
@@ -131,6 +131,45 @@ export type UpdatePresentationSettingsPayload = {
   styleSeedPrompt?: string | null;
   styleReferenceAssetIds?: string[];
 };
+
+const PRESENTATION_UPSTREAM_BLOCKING_STATUSES = new Set([401, 403, 429, 500]);
+
+export class PresentationRequestError extends Error {
+  readonly status: number;
+
+  constructor(message: string, status: number) {
+    super(message || `请求失败 (${status})`);
+    this.name = 'PresentationRequestError';
+    this.status = status;
+  }
+}
+
+export function getPresentationErrorStatus(error: unknown): number | null {
+  if (error && typeof error === 'object') {
+    const status = (error as { status?: unknown }).status;
+    const parsedStatus = Number(status);
+    if (Number.isInteger(parsedStatus) && parsedStatus >= 400 && parsedStatus <= 599) {
+      return parsedStatus;
+    }
+  }
+  const message = error instanceof Error ? error.message : String(error || '');
+  const statusMatch = message.match(/\b(?:http\s*)?(400|401|403|404|408|409|413|429|500|502|503|504)\b/i)
+    || message.match(/\b(?:status|status_code|code)\s*[:=]\s*(400|401|403|404|408|409|413|429|500|502|503|504)\b/i);
+  return statusMatch ? Number(statusMatch[1]) : null;
+}
+
+export function isPresentationUpstream500Error(error: unknown): boolean {
+  return getPresentationErrorStatus(error) === 500
+    || /internal server error/i.test(error instanceof Error ? error.message : String(error || ''));
+}
+
+export function isPresentationEndpointNotFoundError(error: unknown): boolean {
+  return getPresentationErrorStatus(error) === 404;
+}
+
+export function isPresentationUpstreamBlockingError(error: unknown): boolean {
+  return PRESENTATION_UPSTREAM_BLOCKING_STATUSES.has(getPresentationErrorStatus(error) || 0);
+}
 
 async function readPresentationError(response: Response): Promise<string> {
   try {
@@ -155,7 +194,7 @@ export async function uploadPresentationBackground(projectName: string, file: Fi
     body: form,
   });
   if (!response.ok) {
-    throw new Error(await readPresentationError(response));
+    throw new PresentationRequestError(await readPresentationError(response), response.status);
   }
   return await response.json() as PresentationUploadResult;
 }
@@ -172,7 +211,7 @@ export async function generatePresentationBackground(
     signal,
   });
   if (!response.ok) {
-    throw new Error(await readPresentationError(response));
+    throw new PresentationRequestError(await readPresentationError(response), response.status);
   }
   return await response.json() as PresentationUploadResult;
 }
@@ -193,7 +232,7 @@ export async function uploadPresentationSprite(
     body: form,
   });
   if (!response.ok) {
-    throw new Error(await readPresentationError(response));
+    throw new PresentationRequestError(await readPresentationError(response), response.status);
   }
   return await response.json() as PresentationUploadResult;
 }
@@ -210,7 +249,7 @@ export async function generatePresentationSprite(
     signal,
   });
   if (!response.ok) {
-    throw new Error(await readPresentationError(response));
+    throw new PresentationRequestError(await readPresentationError(response), response.status);
   }
   return await response.json() as PresentationUploadResult;
 }
@@ -230,7 +269,7 @@ export async function uploadPresentationReference(
     body: form,
   });
   if (!response.ok) {
-    throw new Error(await readPresentationError(response));
+    throw new PresentationRequestError(await readPresentationError(response), response.status);
   }
   return await response.json() as PresentationUploadResult;
 }
@@ -247,7 +286,7 @@ export async function generatePresentationReference(
     signal,
   });
   if (!response.ok) {
-    throw new Error(await readPresentationError(response));
+    throw new PresentationRequestError(await readPresentationError(response), response.status);
   }
   return await response.json() as PresentationUploadResult;
 }
@@ -255,7 +294,7 @@ export async function generatePresentationReference(
 export async function fetchPresentationManifest(projectName: string): Promise<PresentationPayload> {
   const response = await fetchWithAuth(`/api/presentation/${encodeURIComponent(projectName)}`);
   if (!response.ok) {
-    throw new Error(await readPresentationError(response));
+    throw new PresentationRequestError(await readPresentationError(response), response.status);
   }
   return await response.json() as PresentationPayload;
 }
@@ -270,7 +309,7 @@ export async function updatePresentationSettings(
     body: JSON.stringify(payload),
   });
   if (!response.ok) {
-    throw new Error(await readPresentationError(response));
+    throw new PresentationRequestError(await readPresentationError(response), response.status);
   }
   return await response.json() as { success?: boolean; settings?: PresentationSettings };
 }
@@ -290,7 +329,7 @@ export async function uploadPresentationIllustration(
     body: form,
   });
   if (!response.ok) {
-    throw new Error(await readPresentationError(response));
+    throw new PresentationRequestError(await readPresentationError(response), response.status);
   }
   return await response.json() as PresentationUploadResult;
 }
@@ -307,7 +346,7 @@ export async function generatePresentationIllustration(
     signal,
   });
   if (!response.ok) {
-    throw new Error(await readPresentationError(response));
+    throw new PresentationRequestError(await readPresentationError(response), response.status);
   }
   return await response.json() as PresentationUploadResult;
 }
@@ -315,7 +354,7 @@ export async function generatePresentationIllustration(
 export async function fetchPresentationImageModels(): Promise<PresentationImageModelsResult> {
   const response = await fetchWithAuth('/api/presentation/image-models');
   if (!response.ok) {
-    throw new Error(await readPresentationError(response));
+    throw new PresentationRequestError(await readPresentationError(response), response.status);
   }
   return await response.json() as PresentationImageModelsResult;
 }

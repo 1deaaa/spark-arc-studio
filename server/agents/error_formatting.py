@@ -81,10 +81,10 @@ def _llm_error_mappings() -> list:
         (
             lambda m: "500" in m or "internal_server_error" in m,
             {
-                "zh-CN": "模型提供商内部错误。这通常是提供商侧的临时故障，请稍后重试。",
-                "en-US": "Internal server error from the model provider. This is usually a temporary issue on their side. Please retry later.",
-                "ja-JP": "モデルプロバイダの内部エラーです。プロバイダ側の一時的な障害であることが多いです。後ほど再試行してください。",
-                "ko-KR": "모델 제공업체의 내부 서버 오류입니다. 이는 대개 제공업체 측의 일시적인 장애이므로 나중에 다시 시도해 주세요.",
+                "zh-CN": "上游模型节点返回 500，请前往上游更换节点后重试。",
+                "en-US": "The upstream model node returned 500. Go to the upstream service, change the node, and try again.",
+                "ja-JP": "上流モデルノードが 500 を返しました。上流サービスでノードを変更してから再試行してください。",
+                "ko-KR": "상위 모델 노드가 500을 반환했습니다. 상위 서비스에서 노드를 변경한 후 다시 시도해 주세요.",
             },
             "500",
         ),

@@ -1,5 +1,11 @@
 from __future__ import annotations
 
+import asyncio
+import json
+from types import SimpleNamespace
+
+import pytest
+
 from story import presentation_generation as generation
 
 
@@ -179,3 +185,102 @@ def test_five_saved_style_references_are_injected_before_other_reference_roles(m
         ("character_manual", "character"),
         ("continuity_manual", "continuity"),
     ]
+
+
+def test_visual_asset_resolves_model_once_and_drops_references_for_text_only_model(monkeypatch) -> None:
+    from story import routes_presentation as routes
+
+    model_config = {
+        "base_url": "https://ai.example.test/v1",
+        "api_key": "test-key",
+        "model_name": "gemini-3.1-flash-lite-image",
+        "input_modalities": ["text"],
+        "output_modalities": ["image"],
+        "image_generation_adapter": "gemini_generate_content",
+    }
+    resolve_calls: list[dict] = []
+    descriptor_calls: list[dict] = []
+    generation_call: dict = {}
+
+    class FakeMatchbox:
+        def resolve_user_image_generation_model(self, **kwargs):
+            resolve_calls.append(kwargs)
+            return model_config
+
+    monkeypatch.setattr(routes, "matchbox", lambda: FakeMatchbox())
+
+    def capture_descriptors(*args, **kwargs):
+        descriptor_calls.append(kwargs)
+        return []
+
+    monkeypatch.setattr(routes, "_resolve_reference_descriptors", capture_descriptors)
+    monkeypatch.setattr(
+        routes,
+        "build_visual_generation_prompt",
+        lambda **kwargs: ("已拼好的背景提示词", {"references": kwargs["references"]}),
+    )
+    monkeypatch.setattr(
+        routes,
+        "_load_reference_assets",
+        lambda _user_id, _project_name, descriptors: [] if not descriptors else pytest.fail("文本模型不应加载参考图"),
+    )
+
+    def capture_generation(**kwargs):
+        generation_call.update(kwargs)
+        return SimpleNamespace(
+            image=b"png",
+            mime_type="image/png",
+            revised_prompt="",
+            provider="gemini_generate_content",
+            platform_id=7,
+            model_id=8,
+            model_name="gemini-3.1-flash-lite-image",
+        )
+
+    monkeypatch.setattr(routes, "generate_image_for_user", capture_generation)
+    monkeypatch.setattr(
+        routes,
+        "upload_background_asset",
+        lambda **kwargs: {"id": "bg_test", "path": "presentation/bg_test.png", **kwargs},
+    )
+    monkeypatch.setattr(routes, "_persist_generated_asset_metadata", lambda **_kwargs: {"assets": {}})
+
+    data = routes.GenerateBackgroundRequest(
+        prompt="雨夜书店背景",
+        platformId=7,
+        modelId=8,
+        referenceAssetIds=["style_seed"],
+        referenceAssets=[routes.VisualReferenceRequest(assetId="scene_ref", role="scene")],
+    )
+    asset, manifest = asyncio.run(routes._generate_visual_asset(
+        user_id="u1",
+        project_name="demo",
+        asset_type="background",
+        data=data,
+    ))
+
+    assert asset["id"] == "bg_test"
+    assert manifest == {"assets": {}}
+    assert resolve_calls == [{"user_id": "u1", "platform_id": 7, "model_id": 8}]
+    assert descriptor_calls == [{
+        "asset_ids": ["style_seed"],
+        "references": data.referenceAssets,
+        "allow_image_references": False,
+    }]
+    assert generation_call["resolved_config"] is model_config
+    assert generation_call["references"] == []
+
+
+def test_image_generation_route_preserves_upstream_status_code() -> None:
+    from llm.agen_matchbox.image_generation import ImageGenerationError
+    from story import routes_presentation as routes
+
+    response = routes._image_generation_error_response(
+        "生成背景图失败",
+        ImageGenerationError("上游节点故障", status_code=500),
+    )
+
+    assert response.status_code == 500
+    payload = json.loads(response.body)
+    assert payload["upstreamStatusCode"] == 500
+    assert payload["error"] == "生成背景图失败: 上游节点故障"

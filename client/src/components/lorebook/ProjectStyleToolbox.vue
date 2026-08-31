@@ -81,6 +81,9 @@
           :options="imageModelOptions"
           :placeholder="t('nodeEditor.presentation.imageModelPlaceholder')"
         />
+        <n-text v-if="selectedImageModel && !imageModelSupportsReference(selectedImageModel)" depth="3" class="project-style-tip">
+          {{ t('nodeEditor.presentation.imageModelTextOnlyHint') }}
+        </n-text>
 
         <StudioSeamlessTextarea
           v-model:value="styleReferencePrompt"
@@ -173,7 +176,7 @@
 </template>
 
 <script setup lang="ts">
-import { computed, onActivated, onBeforeUnmount, onMounted, ref, watch } from 'vue';
+import { computed, nextTick, onActivated, onBeforeUnmount, onMounted, ref, watch } from 'vue';
 import { useI18n } from 'vue-i18n';
 import { NButton, NCard, NIcon, NSelect, NSpace, NSwitch, NText } from 'naive-ui';
 import { Check, Sparkles, Upload } from '@lucide/vue';
@@ -191,11 +194,14 @@ import {
   type PresentationImageModel,
   type PresentationManifest,
   type PresentationReferenceDescriptor,
+  isPresentationEndpointNotFoundError,
+  isPresentationUpstream500Error,
 } from '@/services/presentationService';
 import { supportsImageInput } from '@/services/modelModalities';
 import { useProjectStore } from '@/components/stores/projectStore';
 import { useSceneStore } from '@/components/stores/sceneStore';
 import { createAutoSaveScheduler } from '@/utils/autoSaveScheduler';
+import { createStreamingTask, isAbortLikeError } from '@/utils/streamingRuntime';
 
 defineProps({
   embedded: { type: Boolean, default: false },
@@ -224,6 +230,9 @@ const presentationSettingsSaving = ref(false);
 const missingCharacterSprites = ref<Array<{ id: string; name: string }>>([]);
 const isScriptMode = computed(() => sceneStore.workspaceMode === 'script');
 let suppressProjectStyleAutoSave = false;
+let projectStyleHydrating = false;
+let presentationManifestRequestId = 0;
+let localManifestRevision = 0;
 
 type ProjectStyleSavePayload = {
   projectName: string;
@@ -298,15 +307,19 @@ const canGenerateProjectBackground = computed(() =>
 
 watch([() => projectStore.currentProject, () => sceneStore.workspaceMode], () => {
   projectStyleSaveScheduler.cancel();
+  presentationManifestRequestId += 1;
+  localManifestRevision += 1;
+  projectStyleHydrating = true;
   suppressProjectStyleAutoSave = true;
   styleReferencePrompt.value = '';
   selectedProjectStyleReferenceIds.value = [];
   visualIllustrationEnabled.value = false;
   missingCharacterSprites.value = [];
-  if (!isScriptMode.value) {
+  if (!isScriptMode.value || !projectStore.currentProject) {
     presentationManifest.value = null;
     imageModels.value = [];
     selectedImageModelKey.value = null;
+    projectStyleHydrating = false;
     suppressProjectStyleAutoSave = false;
     return;
   }
@@ -315,7 +328,8 @@ watch([() => projectStore.currentProject, () => sceneStore.workspaceMode], () =>
 }, { immediate: true });
 
 watch([styleReferencePrompt, selectedProjectStyleReferenceIds], () => {
-  if (suppressProjectStyleAutoSave || !projectStore.currentProject || !isScriptMode.value) return;
+  if (suppressProjectStyleAutoSave || projectStyleHydrating || !projectStore.currentProject || !isScriptMode.value) return;
+  localManifestRevision += 1;
   projectStyleSaveScheduler.schedule({
     projectName: projectStore.currentProject,
     styleSeedPrompt: styleReferencePrompt.value.trim(),
@@ -332,6 +346,12 @@ function imageModelSupportsReference(model: PresentationImageModel | null) {
 }
 
 function presentationErrorMessage(error: unknown, fallback: string) {
+  if (isPresentationUpstream500Error(error)) {
+    return t('nodeEditor.presentation.upstream500Hint');
+  }
+  if (isPresentationEndpointNotFoundError(error)) {
+    return t('nodeEditor.presentation.endpoint404Hint');
+  }
   if (error instanceof Error && error.message.trim()) return error.message;
   const raw = String(error || '').trim();
   return raw || fallback;
@@ -370,22 +390,48 @@ async function loadPresentationManifest() {
   if (!projectStore.currentProject || !isScriptMode.value) {
     presentationManifest.value = null;
     selectedProjectStyleReferenceIds.value = [];
+    projectStyleHydrating = false;
+    suppressProjectStyleAutoSave = false;
     return;
   }
+  const requestId = ++presentationManifestRequestId;
+  const revisionAtRequest = localManifestRevision;
+  const projectName = projectStore.currentProject;
   try {
+    const result = await fetchPresentationManifest(projectName);
+    if (
+      requestId !== presentationManifestRequestId
+      || revisionAtRequest !== localManifestRevision
+      || projectName !== projectStore.currentProject
+      || !isScriptMode.value
+    ) return;
+
     suppressProjectStyleAutoSave = true;
-    const result = await fetchPresentationManifest(projectStore.currentProject);
-    presentationManifest.value = result.manifest || null;
-    styleReferencePrompt.value = result.settings?.visualStyle?.seed_prompt || '';
-    selectedProjectStyleReferenceIds.value = (result.settings?.visualStyle?.reference_asset_ids || [])
-      .filter(assetId => manifestAssets.value[assetId]?.type === 'style_reference')
-      .slice(0, 5);
-    visualIllustrationEnabled.value = !!result.settings?.visualIllustration?.enabled;
-    missingCharacterSprites.value = result.settings?.readiness?.missingCharacterSprites || [];
+    try {
+      presentationManifest.value = result.manifest || null;
+      styleReferencePrompt.value = result.settings?.visualStyle?.seed_prompt || '';
+      selectedProjectStyleReferenceIds.value = (result.settings?.visualStyle?.reference_asset_ids || [])
+        .filter(assetId => manifestAssets.value[assetId]?.type === 'style_reference')
+        .slice(0, 5);
+      visualIllustrationEnabled.value = !!result.settings?.visualIllustration?.enabled;
+      missingCharacterSprites.value = result.settings?.readiness?.missingCharacterSprites || [];
+      await nextTick();
+    } finally {
+      if (
+        requestId === presentationManifestRequestId
+        && projectName === projectStore.currentProject
+        && isScriptMode.value
+      ) {
+        projectStyleHydrating = false;
+        suppressProjectStyleAutoSave = false;
+      }
+    }
   } catch {
-    presentationManifest.value = null;
-  } finally {
-    suppressProjectStyleAutoSave = false;
+    if (requestId === presentationManifestRequestId && revisionAtRequest === localManifestRevision) {
+      presentationManifest.value = null;
+      projectStyleHydrating = false;
+      suppressProjectStyleAutoSave = false;
+    }
   }
 }
 
@@ -406,11 +452,25 @@ async function saveVisualIllustrationEnabled(enabled: boolean) {
   }
 }
 
-function updatePresentationManifest(manifest: PresentationManifest | undefined | null) {
-  if (manifest) {
-    presentationManifest.value = manifest;
-    bus.emit('presentation-manifest-updated', { projectName: projectStore.currentProject });
-  }
+async function updatePresentationManifest(manifest: PresentationManifest | undefined | null) {
+  if (!manifest) return;
+  localManifestRevision += 1;
+  presentationManifest.value = manifest;
+  if (!await projectStyleSaveScheduler.flush()) return;
+  bus.emit('presentation-manifest-updated', {
+    projectName: projectStore.currentProject,
+    manifest,
+  });
+}
+
+async function flushProjectStyleSettings() {
+  if (!projectStore.currentProject || !isScriptMode.value) return true;
+  projectStyleSaveScheduler.schedule({
+    projectName: projectStore.currentProject,
+    styleSeedPrompt: styleReferencePrompt.value.trim(),
+    styleReferenceAssetIds: selectedProjectStyleReferenceIds.value.slice(0, 5),
+  });
+  return await projectStyleSaveScheduler.flush();
 }
 
 function projectStyleReferenceAssetIds() {
@@ -461,8 +521,8 @@ async function onStyleReferenceFileChange(event: Event) {
       title: file.name,
       assetType: 'style_reference',
     });
-    updatePresentationManifest(result.manifest);
     includeNewProjectStyleReference(result.asset.id);
+    await updatePresentationManifest(result.manifest);
     bus.emit('toast', { type: 'success', message: t('nodeEditor.presentation.styleReferenceUploadSuccess') });
   } catch (error: unknown) {
     bus.emit('toast', { type: 'error', message: presentationErrorMessage(error, t('nodeEditor.presentation.styleReferenceUploadFailed')) });
@@ -486,7 +546,17 @@ async function generateStyleReferenceByAI() {
     return;
   }
   styleReferenceGenerating.value = true;
+  const task = createStreamingTask('world', {
+    target: 'visual-style-reference',
+    text: t('nodeEditor.presentation.generateStyleReference'),
+    progress: t('nodeEditor.presentation.generateStyleReference'),
+    canCancel: true,
+    statsMode: 'elapsed',
+  });
   try {
+    task.throwIfAborted();
+    if (!await flushProjectStyleSettings()) return;
+    task.throwIfAborted();
     const result = await generatePresentationReference(projectStore.currentProject, {
       prompt: styleReferencePrompt.value.trim(),
       title: t('nodeEditor.presentation.generatedStyleReferenceTitle'),
@@ -495,13 +565,15 @@ async function generateStyleReferenceByAI() {
       platformId: Number(model.platform_id),
       modelId: Number(model.model_id),
       referenceAssetIds: projectStyleReferenceAssetIds(),
-    });
-    updatePresentationManifest(result.manifest);
+    }, task.signal);
     includeNewProjectStyleReference(result.asset.id);
+    await updatePresentationManifest(result.manifest);
     bus.emit('toast', { type: 'success', message: t('nodeEditor.presentation.styleReferenceGenerateSuccess') });
   } catch (error: unknown) {
+    if (isAbortLikeError(error) || task.aborted) return;
     bus.emit('toast', { type: 'error', message: presentationErrorMessage(error, t('nodeEditor.presentation.styleReferenceGenerateFailed')) });
   } finally {
+    task.dispose();
     styleReferenceGenerating.value = false;
   }
 }
@@ -512,7 +584,17 @@ async function generateProjectBackground() {
   const prompt = backgroundLibraryPrompt.value.trim();
   if (!projectName || !model || !prompt) return;
   backgroundLibraryGenerating.value = true;
+  const task = createStreamingTask('world', {
+    target: 'visual-background-library',
+    text: t('nodeEditor.presentation.generateLibraryBackground'),
+    progress: t('nodeEditor.presentation.generateLibraryBackground'),
+    canCancel: true,
+    statsMode: 'elapsed',
+  });
   try {
+    task.throwIfAborted();
+    if (!await flushProjectStyleSettings()) return;
+    task.throwIfAborted();
     const result = await generatePresentationBackground(projectName, {
       prompt,
       title: prompt.slice(0, 24),
@@ -522,14 +604,16 @@ async function generateProjectBackground() {
       referenceAssets: projectBackgroundReferences(),
       context: { characterIds: [] },
       library: true,
-    });
-    updatePresentationManifest(result.manifest);
+    }, task.signal);
+    await updatePresentationManifest(result.manifest);
     selectedBackgroundReferenceId.value = result.asset?.id || null;
     backgroundLibraryPrompt.value = '';
     bus.emit('toast', { type: 'success', message: t('nodeEditor.presentation.backgroundLibraryGenerateSuccess') });
   } catch (error: unknown) {
+    if (isAbortLikeError(error) || task.aborted) return;
     bus.emit('toast', { type: 'error', message: presentationErrorMessage(error, t('nodeEditor.presentation.backgroundLibraryGenerateFailed')) });
   } finally {
+    task.dispose();
     backgroundLibraryGenerating.value = false;
   }
 }
@@ -547,7 +631,7 @@ async function onBackgroundLibraryFileChange(event: Event) {
   backgroundLibraryUploading.value = true;
   try {
     const result = await uploadPresentationBackground(projectStore.currentProject, file, file.name, true);
-    updatePresentationManifest(result.manifest);
+    await updatePresentationManifest(result.manifest);
     selectedBackgroundReferenceId.value = result.asset?.id || null;
     bus.emit('toast', { type: 'success', message: t('nodeEditor.presentation.backgroundLibraryUploadSuccess') });
   } catch (error: unknown) {
@@ -562,6 +646,13 @@ function onPresentationManifestUpdated(payload?: unknown) {
     ? String((payload as { projectName?: unknown }).projectName || '')
     : '';
   if (projectName && projectName !== projectStore.currentProject) return;
+  const manifest = payload && typeof payload === 'object' && 'manifest' in payload
+    ? (payload as { manifest?: unknown }).manifest
+    : null;
+  if (manifest && typeof manifest === 'object') {
+    presentationManifest.value = manifest as PresentationManifest;
+    return;
+  }
   void loadPresentationManifest();
 }
 
