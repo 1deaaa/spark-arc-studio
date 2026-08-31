@@ -164,11 +164,25 @@
           </Transition>
 
           <Transition name="daw-row-fade" mode="out-in">
-            <div v-if="snapshot?.phase === 'prewrite'" class="daw-phase-row">
-              <n-icon :component="Search" :size="13" class="daw-row-icon" />
+            <div v-if="snapshot?.phase && snapshot?.status === 'running'" class="daw-phase-row">
+              <n-icon :component="snapshot?.phaseEvent?.includes('failed') ? CircleAlert : Search" :size="13" class="daw-row-icon" />
               <span class="daw-phase-text">
-                {{ t('components.directorAutoWrite.prewriteStatus') }}<template v-if="prewriteToolLabel"> - {{ prewriteToolLabel }}</template>
+                {{ lifecycleStatusText }}
               </span>
+            </div>
+          </Transition>
+
+          <Transition name="daw-row-fade" mode="out-in">
+            <div v-if="snapshot?.status === 'running' && snapshot?.phaseError" class="daw-error-row daw-error-row--recoverable">
+              <n-icon :component="CircleAlert" :size="13" class="daw-row-icon daw-icon--danger" />
+              <span class="daw-error-text">{{ snapshot.phaseError }}</span>
+            </div>
+          </Transition>
+
+          <Transition name="daw-row-fade" mode="out-in">
+            <div v-if="snapshot?.status === 'running' && snapshot?.phaseEvent === 'tool_succeeded' && snapshot?.phaseResult" class="daw-saved-row">
+              <n-icon :component="CircleCheck" :size="13" class="daw-row-icon daw-icon--success" />
+              <span class="daw-saved-text">{{ snapshot.phaseResult }}</span>
             </div>
           </Transition>
 
@@ -439,7 +453,9 @@ const showStreamingPreview = computed(() => {
   const task = store.currentTask;
   if (!task) return false;
   // 手动触发且正在运行时显示流式区域
-  return !task.fromDirector && task.snapshot.status === 'running' && task.snapshot.phase !== 'prewrite';
+  return !task.fromDirector
+    && task.snapshot.status === 'running'
+    && Boolean(task.snapshot.streamingPreview);
 });
 
 const snapshot = computed(() => store.currentTask?.snapshot ?? null);
@@ -449,6 +465,42 @@ const prewriteToolLabel = computed(() => {
   if (!toolName) return '';
   const labelKey = getToolNameLabelKey(toolName);
   return labelKey ? t(labelKey) : toolName;
+});
+
+const lifecycleStatusText = computed(() => {
+  const s = snapshot.value;
+  if (!s) return '';
+  const attempt = s.phaseAttempt || 0;
+  const max = s.phaseMaxAttempts || 0;
+  const attemptParams = { attempt, max };
+  if (s.phaseEvent === 'model_request_started') {
+    return t('components.directorAutoWrite.modelRequestRunning', attemptParams);
+  }
+  if (s.phaseEvent === 'model_request_succeeded') {
+    return t('components.directorAutoWrite.modelRequestSucceeded', attemptParams);
+  }
+  if (s.phaseEvent === 'model_request_failed') {
+    return t('components.directorAutoWrite.modelRequestFailed', attemptParams);
+  }
+  if (s.phaseEvent === 'tool_started') {
+    return t('components.directorAutoWrite.toolRunning', { tool: prewriteToolLabel.value });
+  }
+  if (s.phaseEvent === 'tool_succeeded') {
+    return t('components.directorAutoWrite.toolSucceeded', { tool: prewriteToolLabel.value });
+  }
+  if (s.phaseEvent === 'tool_failed_retrying') {
+    return t('components.directorAutoWrite.toolFailedRetrying', {
+      tool: prewriteToolLabel.value,
+      attempt,
+      max,
+    });
+  }
+  if (s.phaseEvent === 'tool_failed') {
+    return t('components.directorAutoWrite.toolFailed', { tool: prewriteToolLabel.value });
+  }
+  return s.phase === 'prewrite'
+    ? t('components.directorAutoWrite.prewriteStatus')
+    : t('components.directorAutoWrite.writingStatus');
 });
 
 /** 章节进度文本 */

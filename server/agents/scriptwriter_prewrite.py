@@ -24,7 +24,11 @@ from llm.agen_matchbox.tool_protocol import (
     extract_tool_specs_from_message,
     prepare_tool_specs_for_execution,
 )
-from agents.tools.stream_events import is_tool_result_failure, normalize_tool_name
+from agents.tools.stream_events import (
+    build_tool_display_details,
+    is_tool_result_failure,
+    normalize_tool_name,
+)
 
 
 PREWRITE_STATUS_MESSAGE = "编剧调研"
@@ -364,6 +368,7 @@ def _run_prewrite_tool_loop(
     user_prompt: str,
     clean_text: Callable[[Any], str] | None,
     on_tool_progress: Callable[[str], None] | None,
+    on_lifecycle_event: Callable[[dict[str, Any]], None] | None,
     max_requests: int,
     require_save: bool,
     completed_turns: Sequence[CompletedPromptTurn] | None = None,
@@ -419,21 +424,51 @@ def _run_prewrite_tool_loop(
     last_tool_failure = ""
     request_count = 0
 
+    def emit_lifecycle(event: str, **payload: Any) -> None:
+        """上报自动写作生命周期；观察回调失败不得影响正文任务。"""
+        if on_lifecycle_event is None:
+            return
+        try:
+            on_lifecycle_event({"event": event, **payload})
+        except Exception:
+            return
+
     try:
         request_limit = max(1, min(int(max_requests), PREWRITE_MAX_REQUESTS))
         for round_index in range(request_limit):
+            attempt = round_index + 1
             if require_save and round_index == request_limit - 1:
                 messages.append(HumanMessage(content=(
                     "这是本场允许的最后一次模型请求。现在必须作出最终决定：资料足够或只有非关键缺口时，"
                     "直接调用 create_chapter 与 create_or_rewrite_script 完成落盘；不得再调用任何只读调查工具。"
                     "只有关键依据冲突时才停止并明确说明冲突。"
                 )))
-            response = llm_with_tools.invoke(messages)
-            request_count += 1
+            emit_lifecycle(
+                "model_request_started",
+                attempt=attempt,
+                max_attempts=request_limit,
+            )
+            try:
+                response = llm_with_tools.invoke(messages)
+                request_count += 1
+            except Exception as exc:
+                emit_lifecycle(
+                    "model_request_failed",
+                    attempt=attempt,
+                    max_attempts=request_limit,
+                    error=str(exc),
+                )
+                raise
             tool_specs = prepare_tool_specs_for_execution(
                 extract_tool_specs_from_message(response),
                 normalize_name=normalize_tool_name,
                 tool_lookup=allowed_tools,
+            )
+            emit_lifecycle(
+                "model_request_succeeded",
+                attempt=attempt,
+                max_attempts=request_limit,
+                tool_count=len(tool_specs),
             )
             if not tool_specs:
                 response_text = clean(extract_text_content_from_message(response)).strip()
@@ -473,13 +508,43 @@ def _run_prewrite_tool_loop(
                     try:
                         if on_tool_progress is not None:
                             on_tool_progress(tool_name)
+                        emit_lifecycle(
+                            "tool_started",
+                            tool_name=tool_name,
+                            attempt=attempt,
+                            max_attempts=request_limit,
+                        )
                         result = tool.invoke(tool_args)
                     except Exception as exc:
                         result = f"工具 {tool_name} 执行失败：{exc}"
 
                 cleaned = clean(result).strip()
-                if is_tool_result_failure(tool_name, result):
+                tool_failed = is_tool_result_failure(tool_name, result)
+                if tool_failed:
                     last_tool_failure = str(result).strip()
+                    emit_lifecycle(
+                        "tool_failed",
+                        tool_name=tool_name,
+                        attempt=attempt,
+                        max_attempts=request_limit,
+                        will_retry=round_index < request_limit - 1,
+                        error=cleaned[:1000],
+                    )
+                else:
+                    display_details = build_tool_display_details(
+                        tool_name,
+                        tool_result=result,
+                    )
+                    display_result = display_details.get("tool_result", "")
+                    if not isinstance(display_result, str):
+                        display_result = json.dumps(display_result, ensure_ascii=False)
+                    emit_lifecycle(
+                        "tool_succeeded",
+                        tool_name=tool_name,
+                        attempt=attempt,
+                        max_attempts=request_limit,
+                        result=str(display_result)[:500],
+                    )
                 tools_used.append(tool_name)
                 if tool_name in read_tool_names:
                     gathered.append(f"[{tool_name}]\n{cleaned}")
@@ -553,6 +618,7 @@ def run_autonomous_scriptwriter_prewrite(
     llm: Any,
     clean_text: Callable[[Any], str] | None = None,
     on_tool_progress: Callable[[str], None] | None = None,
+    on_lifecycle_event: Callable[[dict[str, Any]], None] | None = None,
     max_tool_rounds: int = PREWRITE_MAX_TOOL_ROUNDS,
 ) -> ScriptwriterPreWriteResult:
     """局部编辑兼容模式：最多四次请求完成只读调查，不再生成独立总结。"""
@@ -571,6 +637,7 @@ def run_autonomous_scriptwriter_prewrite(
         user_prompt=user_prompt,
         clean_text=clean_text,
         on_tool_progress=on_tool_progress,
+        on_lifecycle_event=on_lifecycle_event,
         max_requests=max_tool_rounds,
         require_save=False,
     )
@@ -581,6 +648,7 @@ def run_autonomous_scriptwriter_creation(
     *,
     agent: Any,
     on_tool_progress: Callable[[str], None] | None = None,
+    on_lifecycle_event: Callable[[dict[str, Any]], None] | None = None,
     max_requests: int = PREWRITE_MAX_REQUESTS,
     completed_turns: Sequence[CompletedPromptTurn] | None = None,
 ) -> ScriptwriterPreWriteResult:
@@ -606,6 +674,7 @@ def run_autonomous_scriptwriter_creation(
         user_prompt=user_prompt,
         clean_text=agent._clean_model_visible_arc_text,
         on_tool_progress=on_tool_progress,
+        on_lifecycle_event=on_lifecycle_event,
         max_requests=max_requests,
         require_save=True,
         completed_turns=completed_turns,

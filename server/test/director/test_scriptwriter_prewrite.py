@@ -133,6 +133,7 @@ def test_autonomous_prewrite_allows_same_tool_retry_after_failure(monkeypatch) -
         }]),
     ])
 
+    lifecycle_events: list[dict] = []
     result = run_autonomous_scriptwriter_prewrite(
         ScriptwriterPreWriteRequest(
             user_id="u-retry",
@@ -140,12 +141,22 @@ def test_autonomous_prewrite_allows_same_tool_retry_after_failure(monkeypatch) -
             task_description="核对当前场景",
         ),
         llm=llm,
+        on_lifecycle_event=lifecycle_events.append,
         max_tool_rounds=2,
     )
 
     assert attempts["count"] == 2
     assert result.tools_used == ("retry_probe", "retry_probe")
     assert "重试后取得的事实" in result.research_context
+    failed = next(item for item in lifecycle_events if item["event"] == "tool_failed")
+    assert failed["error"] == "工具 retry_probe 执行失败：临时读取失败"
+    assert failed["will_retry"] is True
+    assert failed["attempt"] == 1
+    assert failed["max_attempts"] == 2
+    assert any(
+        item["event"] == "tool_succeeded" and item["tool_name"] == "retry_probe"
+        for item in lifecycle_events
+    )
 
 
 def test_autonomous_prewrite_normalizes_missing_tool_call_id(monkeypatch) -> None:
@@ -759,8 +770,19 @@ def test_auto_write_emits_prewrite_before_writing_scene(monkeypatch, tmp_path: P
     )
     def fake_prewrite(*_args, **kwargs):
         callback = kwargs.get("on_tool_progress")
+        lifecycle_callback = kwargs.get("on_lifecycle_event")
+        if lifecycle_callback is not None:
+            lifecycle_callback({"event": "model_request_started", "attempt": 1, "max_attempts": 4})
         if callback is not None:
             callback("story_memory_tool")
+        if lifecycle_callback is not None:
+            lifecycle_callback({
+                "event": "tool_succeeded",
+                "tool_name": "story_memory_tool",
+                "attempt": 1,
+                "max_attempts": 4,
+                "result": "已读取事实",
+            })
         scene_path.parent.mkdir(parents=True, exist_ok=True)
         scene_path.write_text(
             "# 初遇\n<conception>\n本场建立雨夜悬念。\n</conception>\n[旁白]\n已保存正文",
@@ -820,11 +842,14 @@ def test_auto_write_emits_prewrite_before_writing_scene(monkeypatch, tmp_path: P
     assert statuses.index("scene_completed") < statuses.index("scene_saved")
     assert statuses[-1] == "complete"
     assert scene_path.read_text(encoding="utf-8").count("<conception>") == 1
-    assert prewrite_tool_payloads[0]["tool_name"] == "story_memory_tool"
+    tool_started_payload = next(
+        item for item in prewrite_tool_payloads
+        if item.get("tool_name") == "story_memory_tool"
+    )
     from agents.auto_write_service import _prewrite_tool_event
 
     replay_payload = json.loads(
-        _prewrite_tool_event(prewrite_tool_payloads[0]).removeprefix("data: ").strip()
+        _prewrite_tool_event(tool_started_payload).removeprefix("data: ").strip()
     )
     assert replay_payload["status"] == "prewrite_tool"
     assert replay_payload["tool_name"] == "story_memory_tool"
@@ -832,3 +857,41 @@ def test_auto_write_emits_prewrite_before_writing_scene(monkeypatch, tmp_path: P
     assert phase_sequence[0] == "prewrite"
     assert "writing" in phase_sequence
     assert any(item.get("phaseToolName") == "story_memory_tool" for item in state_updates)
+    assert any(item.get("phaseEvent") == "model_request_started" for item in state_updates)
+    assert any(item.get("phaseEvent") == "tool_succeeded" for item in state_updates)
+
+    def failing_creation(*_args, **kwargs):
+        lifecycle_callback = kwargs.get("on_lifecycle_event")
+        if lifecycle_callback is not None:
+            lifecycle_callback({
+                "event": "model_request_failed",
+                "attempt": 1,
+                "max_attempts": 4,
+                "error": "上游连接被迫停止",
+            })
+        raise RuntimeError("上游连接被迫停止")
+
+    monkeypatch.setattr(auto_write, "run_autonomous_scriptwriter_creation", failing_creation)
+    state_updates.clear()
+
+    async def collect_failure_statuses() -> list[dict]:
+        stream = auto_write.generate_script_stream(
+            "u4",
+            "p4",
+            outline,
+            mode="continuous_write",
+            export_format="arc",
+        )
+        return [
+            json.loads(raw_event.removeprefix("data: ").strip())
+            async for raw_event in stream
+        ]
+
+    failure_events = asyncio.run(collect_failure_statuses())
+    assert failure_events[-1]["status"] == "error"
+    assert "上游连接被迫停止" in failure_events[-1]["message"]
+    terminal_state = state_updates[-1]
+    assert terminal_state["status"] == "error"
+    assert terminal_state["availableResumeChapterIndex"] == 0
+    assert terminal_state["availableResumeSceneIndex"] == 0
+    assert "上游连接被迫停止" in terminal_state["lastError"]

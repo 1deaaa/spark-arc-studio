@@ -543,7 +543,9 @@ async def generate_script_stream(
                     "running",
                     phase="writing" if is_writing_tool else "prewrite",
                     phaseMessage=phase_message,
+                    phaseEvent="tool_started",
                     phaseToolName=normalized_tool_name,
+                    phaseResult="",
                 )
                 if prewrite_tool_callback is not None:
                     prewrite_tool_callback({
@@ -554,40 +556,102 @@ async def generate_script_stream(
                         "scene_title": scene_title,
                     })
 
-            scene_started_at = time.time()
-            prewrite_result = await asyncio.to_thread(
-                run_autonomous_scriptwriter_creation,
-                ScriptwriterPreWriteRequest(
-                    user_id=user_id,
-                    project_name=project_name,
-                    task_description=scene_goal,
-                    chapter_name=str(raw_chapter_title or "").strip(),
-                    scene_name=str(raw_scene_title or "").strip(),
-                    scene_guidance=scene_desc,
-                    scene_characters=[str(name) for name in scene_characters],
-                    full_outline=full_outline,
-                    available_context=context_str,
-                    worldview=worldview,
-                    roles=roles,
-                    style_profile=format_style_profile_for_prompt(style_profile),
-                    story_tags=story_tags_block,
-                    chr_reference=writer._build_chr_reference(chr_map),
-                    export_format=export_format,
-                    target_chars=(
-                        story_tags.get("scene_target_chars")
-                        if isinstance(story_tags.get("scene_target_chars"), int)
-                        else None
-                    ),
-                ),
-                agent=writer,
-                on_tool_progress=report_prewrite_tool,
-                completed_turns=tuple(scriptwriter_continuity),
-            )
-            if not prewrite_result.saved:
-                raise RuntimeError(
-                    prewrite_result.blocked_reason
-                    or "编剧在 4 次请求内未完成当前场景落盘。"
+            def report_creation_lifecycle(payload: Dict[str, Any]) -> None:
+                """把 invoke 与工具执行状态收口到持久化快照和 SSE 回放日志。"""
+                event = str(payload.get("event") or "").strip()
+                tool_name = str(payload.get("tool_name") or "").strip()
+                error = str(payload.get("error") or "").strip()
+                if event == "model_request_failed" and error:
+                    from agents.error_formatting import format_ai_error
+
+                    error = format_ai_error(RuntimeError(error))
+                    payload = {**payload, "error": error}
+                result = str(payload.get("result") or "").strip()
+                attempt = int(payload.get("attempt") or 0)
+                max_attempts = int(payload.get("max_attempts") or 0)
+                # 工具开始事件继续由既有 on_tool_progress 管线发送，避免重复日志帧。
+                if event == "tool_started":
+                    return
+                phase = "writing" if event.startswith("model_request") or tool_name in {
+                    "create_chapter",
+                    "create_or_rewrite_script",
+                } else "prewrite"
+                state_fields: Dict[str, Any] = {
+                    "phase": phase,
+                    "phaseEvent": event,
+                    "phaseToolName": tool_name,
+                    "phaseResult": result,
+                    "phaseAttempt": attempt,
+                    "phaseMaxAttempts": max_attempts,
+                }
+                if event in {"model_request_started", "model_request_failed", "tool_failed"}:
+                    state_fields["phaseError"] = error
+                update_state(
+                    "running",
+                    **state_fields,
                 )
+                if prewrite_tool_callback is not None:
+                    prewrite_tool_callback({
+                        **payload,
+                        "chapter_index": i,
+                        "scene_index": scene_idx,
+                        "chapter_title": chapter_title,
+                        "scene_title": scene_title,
+                    })
+
+            scene_started_at = time.time()
+            try:
+                prewrite_result = await asyncio.to_thread(
+                    run_autonomous_scriptwriter_creation,
+                    ScriptwriterPreWriteRequest(
+                        user_id=user_id,
+                        project_name=project_name,
+                        task_description=scene_goal,
+                        chapter_name=str(raw_chapter_title or "").strip(),
+                        scene_name=str(raw_scene_title or "").strip(),
+                        scene_guidance=scene_desc,
+                        scene_characters=[str(name) for name in scene_characters],
+                        full_outline=full_outline,
+                        available_context=context_str,
+                        worldview=worldview,
+                        roles=roles,
+                        style_profile=format_style_profile_for_prompt(style_profile),
+                        story_tags=story_tags_block,
+                        chr_reference=writer._build_chr_reference(chr_map),
+                        export_format=export_format,
+                        target_chars=(
+                            story_tags.get("scene_target_chars")
+                            if isinstance(story_tags.get("scene_target_chars"), int)
+                            else None
+                        ),
+                    ),
+                    agent=writer,
+                    on_tool_progress=report_prewrite_tool,
+                    on_lifecycle_event=report_creation_lifecycle,
+                    completed_turns=tuple(scriptwriter_continuity),
+                )
+                if not prewrite_result.saved:
+                    raise RuntimeError(
+                        prewrite_result.blocked_reason
+                        or "编剧在 4 次请求内未完成当前场景落盘。"
+                    )
+            except Exception as e:
+                from agents.error_formatting import format_ai_error
+
+                message = format_ai_error(e)
+                update_state(
+                    "error",
+                    phase="",
+                    phaseEvent="failed",
+                    phaseError=message,
+                    nextChapterIndex=i,
+                    availableResumeChapterIndex=i,
+                    availableResumeSceneIndex=scene_idx,
+                    availableRestartChapterIndex=i,
+                    lastError=message,
+                )
+                yield semantic_sse_data("error", message=message, **on_error(message))
+                return
             if prewrite_result.continuity_turn is not None:
                 scriptwriter_continuity.append(prewrite_result.continuity_turn)
                 del scriptwriter_continuity[:-SCRIPTWRITER_CONTINUITY_MAX_TURNS]

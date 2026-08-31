@@ -111,6 +111,51 @@ describe('directorAutoWriteStore SSE 恢复契约', () => {
     expect(snapshot.streamingChars).toBe(0);
   });
 
+  it('工具返回失败时立即保留原因和重试状态，最终错误结束等待', async () => {
+    vi.mocked(fetchWithAuth).mockResolvedValue(new Response(JSON.stringify({
+      success: true,
+      export_format: 'arc',
+    }), { status: 200 }));
+
+    vi.stubGlobal('fetch', vi.fn().mockResolvedValue(sseResponse([
+      {
+        status: 'model_request_started',
+        streamSeq: 1,
+        attempt: 1,
+        max_attempts: 4,
+      },
+      {
+        status: 'tool_failed',
+        streamSeq: 2,
+        tool_name: 'create_or_rewrite_script',
+        attempt: 1,
+        max_attempts: 4,
+        will_retry: true,
+        error: '创建/重写剧本失败：正文没有可见内容',
+      },
+      {
+        status: 'error',
+        streamSeq: 3,
+        message: '多次尝试后仍未完成正文落盘',
+      },
+    ])));
+
+    const store = useDirectorAutoWriteStore();
+    const result = await store.startManualWrite('工具失败项目');
+    expect(result.success).toBe(true);
+    await flushAsyncWork();
+
+    const snapshot = store.tasks['工具失败项目'].snapshot;
+    expect(snapshot.status).toBe('error');
+    expect(snapshot.phaseEvent).toBe('tool_failed_retrying');
+    expect(snapshot.phaseToolName).toBe('create_or_rewrite_script');
+    expect(snapshot.phaseError).toContain('正文没有可见内容');
+    expect(snapshot.phaseAttempt).toBe(1);
+    expect(snapshot.phaseMaxAttempts).toBe(4);
+    expect(snapshot.lastError).toBe('多次尝试后仍未完成正文落盘');
+    expect(store.activeProjects).not.toContain('工具失败项目');
+  });
+
   it('未收到聊天旁路事件时也能从服务端 running 状态恢复任务', async () => {
     vi.mocked(fetchWithAuth).mockResolvedValue(new Response(JSON.stringify({
       status: 'running',
