@@ -374,6 +374,41 @@ def update_presentation_asset_metadata(
         return dict(updated), manifest
 
 
+def remove_presentation_asset(
+    user_id: str,
+    project_name: str,
+    asset_id: str,
+    *,
+    expected_source: Optional[str] = None,
+) -> bool:
+    """删除一次未提交成功的演出资产，并保持 manifest 与文件同步。"""
+    clean_asset_id = str(asset_id or "").strip()
+    if not clean_asset_id:
+        return False
+    root = _project_root(user_id, project_name)
+    with _MANIFEST_LOCK:
+        manifest = load_manifest_from_root(root)
+        assets = manifest.setdefault("assets", {})
+        current = assets.get(clean_asset_id) if isinstance(assets, dict) else None
+        if not isinstance(current, dict):
+            return False
+        if expected_source and str(current.get("source") or "").strip() != expected_source:
+            return False
+
+        rel_path = str(current.get("path") or "").strip()
+        asset_path = _safe_presentation_asset_path(root, rel_path) if rel_path else ""
+        assets.pop(clean_asset_id, None)
+        try:
+            save_manifest_to_root(root, manifest)
+            if asset_path and os.path.isfile(asset_path) and not os.path.islink(asset_path):
+                os.remove(asset_path)
+        except Exception:
+            assets[clean_asset_id] = current
+            save_manifest_to_root(root, manifest)
+            raise
+        return True
+
+
 def upload_background_asset(
     *,
     user_id: str,
@@ -413,10 +448,17 @@ def upload_character_sprite_asset(
     prompt: str = "",
     character_id: str = "",
     expression: str = "default",
+    matting: Optional[dict[str, Any]] = None,
 ) -> dict[str, Any]:
     """写入角色立绘资产，并注册到 manifest。"""
     clean_character_id = str(character_id or "").strip()
     clean_expression = str(expression or "default").strip() or "default"
+    metadata: dict[str, Any] = {
+        "characterId": clean_character_id,
+        "expression": clean_expression,
+    }
+    if matting:
+        metadata["matting"] = dict(matting)
     return upload_presentation_asset(
         user_id=user_id,
         project_name=project_name,
@@ -427,10 +469,7 @@ def upload_character_sprite_asset(
         title=title,
         source=source,
         prompt=prompt,
-        metadata={
-            "characterId": clean_character_id,
-            "expression": clean_expression,
-        },
+        metadata=metadata,
     )
 
 

@@ -246,6 +246,27 @@ def test_manifest_concurrent_asset_updates_are_atomic(monkeypatch, tmp_path: Pat
     assert persisted["assets"][assets[0]["id"]]["generation"]["provider"] == "offline-test"
 
 
+def test_remove_presentation_asset_keeps_manifest_and_file_in_sync(monkeypatch, tmp_path: Path) -> None:
+    project_root = tmp_path / "project"
+    monkeypatch.setattr(pm, "get_project_path", lambda user_id, project_name: str(project_root))
+
+    asset = pm.upload_background_asset(
+        user_id="u1",
+        project_name="p1",
+        data=PNG_BYTES,
+        filename="generated.png",
+        title="待提交背景",
+        source="ai",
+    )
+    asset_path = Path(pm.get_project_asset_path("u1", "p1", asset["path"]))
+    assert asset_path.is_file()
+
+    assert pm.remove_presentation_asset("u1", "p1", asset["id"], expected_source="ai") is True
+    assert asset["id"] not in pm.load_project_manifest("u1", "p1")["assets"]
+    assert not asset_path.exists()
+    assert pm.remove_presentation_asset("u1", "p1", asset["id"], expected_source="ai") is False
+
+
 def test_background_catalog_only_contains_explicit_library_assets(monkeypatch, tmp_path: Path) -> None:
     project_root = tmp_path / "project"
     monkeypatch.setattr(pm, "get_project_path", lambda user_id, project_name: str(project_root))

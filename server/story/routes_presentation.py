@@ -2,10 +2,11 @@ import os
 import re
 from urllib.parse import quote
 
-from fastapi import APIRouter, Depends, File, Form, UploadFile
+from fastapi import APIRouter, Depends, File, Form, Request, UploadFile
 from fastapi.responses import FileResponse, JSONResponse
 from pydantic import BaseModel
 from starlette.concurrency import run_in_threadpool
+from starlette.requests import ClientDisconnect
 
 from core.auth import get_current_user
 from core.project_settings import (
@@ -29,6 +30,7 @@ from story.presentation_manifest import (
     PresentationAssetError,
     get_project_asset_path,
     load_project_manifest,
+    remove_presentation_asset,
     update_presentation_asset_metadata,
     upload_background_asset,
     upload_character_sprite_asset,
@@ -374,8 +376,12 @@ async def _generate_visual_asset(
     expression: str = "default",
     scene_name: str = "",
     node_id: str = "",
+    request: Request | None = None,
 ) -> tuple[dict, dict]:
     """统一执行上下文构建、图生图调用、资产写入和生成溯源。"""
+    created_asset_id = ""
+    if request is not None and await request.is_disconnected():
+        raise ClientDisconnect()
     model_config = await run_in_threadpool(
         matchbox().resolve_user_image_generation_model,
         user_id=user_id,
@@ -420,58 +426,76 @@ async def _generate_visual_asset(
         references=image_references,
         resolved_config=model_config,
     )
+    if request is not None and await request.is_disconnected():
+        raise ClientDisconnect()
 
-    common = {
-        "user_id": user_id,
-        "project_name": project_name,
-        "data": generated.image,
-        "filename": f"{data.title or f'ai-{asset_type}'}.png",
-        "content_type": generated.mime_type,
-        "source": "ai",
-        "prompt": generated.revised_prompt or final_prompt,
-    }
-    if asset_type == "background":
-        asset = upload_background_asset(
-            **common,
-            title=data.title or "AI 背景图",
-            library=bool(getattr(data, "library", False)),
-        )
-    elif asset_type == "character_sprite":
-        asset = upload_character_sprite_asset(
-            **common,
-            title=data.title or "AI 角色立绘",
-            character_id=character_id,
-            expression=expression,
-        )
-    elif asset_type == "scene_illustration":
-        asset = upload_scene_illustration_asset(
-            **common,
-            title=data.title or "AI 场景插图",
-            scene_name=scene_name,
-            node_id=node_id,
-        )
-    else:
-        default_title = "AI 风格参考图" if asset_type == "style_reference" else "AI 场景参考图"
-        asset = upload_presentation_asset(
-            **common,
-            title=data.title or default_title,
-            asset_type=asset_type,
-        )
+    try:
+        common = {
+            "user_id": user_id,
+            "project_name": project_name,
+            "data": generated.image,
+            "filename": f"{data.title or f'ai-{asset_type}'}.png",
+            "content_type": generated.mime_type,
+            "source": "ai",
+            "prompt": generated.revised_prompt or final_prompt,
+        }
+        if asset_type == "background":
+            asset = upload_background_asset(
+                **common,
+                title=data.title or "AI 背景图",
+                library=bool(getattr(data, "library", False)),
+            )
+        elif asset_type == "character_sprite":
+            asset = upload_character_sprite_asset(
+                **common,
+                title=data.title or "AI 角色立绘",
+                character_id=character_id,
+                expression=expression,
+            )
+        elif asset_type == "scene_illustration":
+            asset = upload_scene_illustration_asset(
+                **common,
+                title=data.title or "AI 场景插图",
+                scene_name=scene_name,
+                node_id=node_id,
+            )
+        else:
+            default_title = "AI 风格参考图" if asset_type == "style_reference" else "AI 场景参考图"
+            asset = upload_presentation_asset(
+                **common,
+                title=data.title or default_title,
+                asset_type=asset_type,
+            )
+        created_asset_id = str(asset.get("id") or "").strip()
 
-    manifest = _persist_generated_asset_metadata(
-        user_id=user_id,
-        project_name=project_name,
-        asset=asset,
-        provider=generated.provider,
-        platform_id=generated.platform_id,
-        model_id=generated.model_id,
-        model_name=generated.model_name,
-        size=data.size,
-        reference_descriptors=reference_descriptors,
-        context_snapshot=context_snapshot,
-        requested_prompt=final_prompt,
-    )
-    return asset, manifest
+        manifest = _persist_generated_asset_metadata(
+            user_id=user_id,
+            project_name=project_name,
+            asset=asset,
+            provider=generated.provider,
+            platform_id=generated.platform_id,
+            model_id=generated.model_id,
+            model_name=generated.model_name,
+            size=data.size,
+            reference_descriptors=reference_descriptors,
+            context_snapshot=context_snapshot,
+            requested_prompt=final_prompt,
+        )
+        if request is not None and await request.is_disconnected():
+            raise ClientDisconnect()
+        return asset, manifest
+    except Exception:
+        if created_asset_id:
+            try:
+                remove_presentation_asset(
+                    user_id,
+                    project_name,
+                    created_asset_id,
+                    expected_source="ai",
+                )
+            except Exception:
+                pass
+        raise
 
 
 @presentation_router.get("/api/presentation/image-models")
@@ -603,6 +627,7 @@ async def generate_presentation_background(
     project_name: str,
     data: GenerateBackgroundRequest,
     user: dict = Depends(get_current_user),
+    request: Request = None,
 ):
     """调用在线生图模型生成背景图，并注册为 Web 播放器专用演出资产。"""
     user_id = str(user["user_id"])
@@ -618,12 +643,15 @@ async def generate_presentation_background(
             project_name=normalized_project,
             asset_type="background",
             data=data,
+            request=request,
         )
         return {
             "success": True,
             "asset": _asset_with_url(normalized_project, asset),
             "manifest": manifest,
         }
+    except ClientDisconnect:
+        return JSONResponse(status_code=499, content={"success": False, "error": "客户端已取消"})
     except ImageGenerationError as exc:
         return _image_generation_error_response("生成背景图失败", exc)
     except (PresentationAssetError, ValueError) as exc:
@@ -677,6 +705,7 @@ async def generate_presentation_reference(
     project_name: str,
     data: GenerateReferenceRequest,
     user: dict = Depends(get_current_user),
+    request: Request = None,
 ):
     """调用在线生图模型生成风格或场景参考图，并注册为 Web 播放器专用演出资产。"""
     user_id = str(user["user_id"])
@@ -693,12 +722,15 @@ async def generate_presentation_reference(
             project_name=normalized_project,
             asset_type=reference_type,
             data=data,
+            request=request,
         )
         return {
             "success": True,
             "asset": _asset_with_url(normalized_project, asset),
             "manifest": manifest,
         }
+    except ClientDisconnect:
+        return JSONResponse(status_code=499, content={"success": False, "error": "客户端已取消"})
     except ImageGenerationError as exc:
         return _image_generation_error_response("生成参考图失败", exc)
     except (PresentationAssetError, ValueError) as exc:
@@ -714,6 +746,8 @@ async def upload_presentation_sprite(
     title: str = Form(""),
     characterId: str = Form(""),
     expression: str = Form("default"),
+    mattingMode: str = Form(""),
+    mattingSourceAssetId: str = Form(""),
     user: dict = Depends(get_current_user),
 ):
     """上传角色立绘并注册为 Web 播放器专用演出资产。"""
@@ -736,6 +770,15 @@ async def upload_presentation_sprite(
             source="upload",
             character_id=characterId,
             expression=expression,
+            matting=(
+                {
+                    "status": "complete",
+                    "mode": str(mattingMode).strip(),
+                    "sourceAssetId": str(mattingSourceAssetId).strip(),
+                }
+                if str(mattingMode).strip()
+                else None
+            ),
         )
         return {
             "success": True,
@@ -753,6 +796,7 @@ async def generate_presentation_sprite(
     project_name: str,
     data: GenerateSpriteRequest,
     user: dict = Depends(get_current_user),
+    request: Request = None,
 ):
     """调用在线生图模型生成角色立绘，并注册为 Web 播放器专用演出资产。"""
     user_id = str(user["user_id"])
@@ -770,12 +814,15 @@ async def generate_presentation_sprite(
             data=data,
             character_id=data.characterId,
             expression=data.expression,
+            request=request,
         )
         return {
             "success": True,
             "asset": _asset_with_url(normalized_project, asset),
             "manifest": manifest,
         }
+    except ClientDisconnect:
+        return JSONResponse(status_code=499, content={"success": False, "error": "客户端已取消"})
     except ImageGenerationError as exc:
         return _image_generation_error_response("生成角色立绘失败", exc)
     except (PresentationAssetError, ValueError) as exc:
@@ -874,6 +921,7 @@ async def generate_presentation_illustration(
     project_name: str,
     data: GenerateIllustrationRequest,
     user: dict = Depends(get_current_user),
+    request: Request = None,
 ):
     """根据节点描述与项目上下文生成完整场景插图。"""
     user_id = str(user["user_id"])
@@ -893,12 +941,15 @@ async def generate_presentation_illustration(
             data=data,
             scene_name=data.sceneName,
             node_id=data.nodeId,
+            request=request,
         )
         return {
             "success": True,
             "asset": _asset_with_url(normalized_project, asset),
             "manifest": manifest,
         }
+    except ClientDisconnect:
+        return JSONResponse(status_code=499, content={"success": False, "error": "客户端已取消"})
     except ImageGenerationError as exc:
         return _image_generation_error_response("生成场景插图失败", exc)
     except (PresentationAssetError, ValueError) as exc:

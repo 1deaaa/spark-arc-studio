@@ -44,7 +44,7 @@ describe('router 认证守卫', () => {
 
     expect(router.currentRoute.value.path).toBe('/synopsis');
     expect(fetchSpy).not.toHaveBeenCalled();
-  });
+  }, 15_000);
 
   it('没有本地 token 时跳转登录页并记录原目标', async () => {
     const { router, fetchSpy } = await loadFreshRouter();

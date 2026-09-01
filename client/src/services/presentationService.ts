@@ -18,6 +18,11 @@ export type PresentationAsset = {
   nodeId?: string;
   createdAt?: string;
   library?: boolean;
+  matting?: {
+    status?: string;
+    mode?: string;
+    sourceAssetId?: string;
+  };
 };
 
 export type PresentationManifest = {
@@ -252,13 +257,20 @@ export async function generatePresentationBackground(
 export async function uploadPresentationSprite(
   projectName: string,
   file: File,
-  options: { title?: string; characterId?: string | number | null; expression?: string } = {},
+  options: {
+    title?: string;
+    characterId?: string | number | null;
+    expression?: string;
+    matting?: { mode?: string; sourceAssetId?: string };
+  } = {},
 ): Promise<PresentationUploadResult> {
   const form = new FormData();
   form.append('file', file);
   if (options.title) form.append('title', options.title);
   if (options.characterId !== undefined && options.characterId !== null) form.append('characterId', String(options.characterId));
   if (options.expression) form.append('expression', options.expression);
+  if (options.matting?.mode) form.append('mattingMode', String(options.matting.mode));
+  if (options.matting?.sourceAssetId) form.append('mattingSourceAssetId', String(options.matting.sourceAssetId));
 
   const response = await fetchWithAuth(`/api/presentation/${encodeURIComponent(projectName)}/sprites/upload`, {
     method: 'POST',

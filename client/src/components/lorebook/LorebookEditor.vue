@@ -148,12 +148,16 @@
             <n-tag size="small" :bordered="false" type="info">
               {{ asset.title || asset.id }}
             </n-tag>
+            <n-tag v-if="isSpriteMatted(asset)" size="small" :bordered="false" type="success">
+              {{ t('components.lorebookEditor.mattingComplete') }}
+            </n-tag>
             <n-tooltip trigger="hover">
               <template #trigger>
                 <n-button
                   size="tiny"
                   quaternary
                   circle
+                  :disabled="isSpriteMatted(asset)"
                   :loading="mattingAssetId === asset.id"
                   @click="matteExistingSprite(asset)"
                 >
@@ -608,6 +612,18 @@ function presentationAssetUrl(asset: PresentationAsset) {
   return projectName && path ? `/api/presentation/${projectName}/assets/${path}` : '';
 }
 
+function isSpriteMatted(asset: PresentationAsset): boolean {
+  const status = String(asset.matting?.status || '').trim().toLowerCase();
+  if (status === 'complete' || status === 'completed') return true;
+
+  // 兼容本功能上线前已经生成的透明立绘记录，后续新记录以 matting 元数据为准。
+  const title = String(asset.title || '').trim().toLowerCase();
+  const path = String(asset.path || '').trim().toLowerCase();
+  return asset.source === 'upload'
+    && path.endsWith('.png')
+    && /透明立绘|透過立ち絵|transparent\s+sprite|투명\s*(?:스프라이트|立ち絵)/i.test(title);
+}
+
 async function matteAndUploadSprite(asset: PresentationAsset) {
   const projectName = projectStore.currentProject;
   const character = activeSpriteCharacter.value;
@@ -624,10 +640,18 @@ async function matteAndUploadSprite(asset: PresentationAsset) {
     title: `${character.name || character.id}-${t('components.lorebookEditor.transparentSpriteTitle')}`,
     characterId: characterAssetKey(character),
     expression: asset.expression || 'default',
+    matting: {
+      mode: spriteMattingMode.value,
+      sourceAssetId: asset.id,
+    },
   });
 }
 
 async function matteExistingSprite(asset: PresentationAsset) {
+  if (isSpriteMatted(asset)) {
+    bus.emit('toast', { type: 'info', message: t('components.lorebookEditor.mattingAlreadyComplete') });
+    return;
+  }
   mattingAssetId.value = asset.id;
   try {
     const result = await matteAndUploadSprite(asset);

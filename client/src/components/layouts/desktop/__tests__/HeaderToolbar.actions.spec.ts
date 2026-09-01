@@ -167,7 +167,7 @@ describe('HeaderToolbar 文件入口', () => {
     await new Promise(resolve => setTimeout(resolve, 0));
 
     expect(openSpy).toHaveBeenCalledWith('', '_blank');
-    expect(previewTab.location.href).toBe('#/play/v/version-preview-1');
+    expect(previewTab.location.href).toBe(new URL('#/play/v/version-preview-1', window.location.href).href);
     expect(previewTab.close).not.toHaveBeenCalled();
     openSpy.mockRestore();
   });

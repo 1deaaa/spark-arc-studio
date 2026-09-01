@@ -5,6 +5,7 @@ import json
 from types import SimpleNamespace
 
 import pytest
+from starlette.requests import ClientDisconnect
 
 from story import presentation_generation as generation
 
@@ -269,6 +270,101 @@ def test_visual_asset_resolves_model_once_and_drops_references_for_text_only_mod
     }]
     assert generation_call["resolved_config"] is model_config
     assert generation_call["references"] == []
+
+
+def test_visual_asset_skips_commit_when_client_is_already_disconnected(monkeypatch) -> None:
+    from story import routes_presentation as routes
+
+    calls: list[str] = []
+
+    class DisconnectedRequest:
+        async def is_disconnected(self):
+            calls.append("disconnect-check")
+            return True
+
+    monkeypatch.setattr(
+        routes,
+        "matchbox",
+        lambda: pytest.fail("客户端已断开时不应解析生图模型"),
+    )
+    data = routes.GenerateBackgroundRequest(prompt="雨夜书店背景")
+
+    with pytest.raises(ClientDisconnect):
+        asyncio.run(routes._generate_visual_asset(
+            user_id="u1",
+            project_name="demo",
+            asset_type="background",
+            data=data,
+            request=DisconnectedRequest(),
+        ))
+
+    assert calls == ["disconnect-check"]
+
+
+def test_visual_asset_cleans_up_after_client_disconnects_post_commit(monkeypatch) -> None:
+    from story import routes_presentation as routes
+
+    model_config = {
+        "model_name": "gemini-3.1-flash-lite-image",
+        "input_modalities": ["text"],
+        "output_modalities": ["image"],
+        "image_generation_adapter": "gemini_generate_content",
+    }
+    cleanup_calls: list[tuple[tuple, dict]] = []
+
+    class DisconnectingRequest:
+        def __init__(self):
+            self.checks = 0
+
+        async def is_disconnected(self):
+            self.checks += 1
+            return self.checks > 2
+
+    class FakeMatchbox:
+        def resolve_user_image_generation_model(self, **kwargs):
+            return model_config
+
+    monkeypatch.setattr(routes, "matchbox", lambda: FakeMatchbox())
+    monkeypatch.setattr(routes, "_resolve_reference_descriptors", lambda *args, **kwargs: [])
+    monkeypatch.setattr(routes, "build_visual_generation_prompt", lambda **kwargs: ("提示词", {}))
+    monkeypatch.setattr(routes, "_load_reference_assets", lambda *args, **kwargs: [])
+    monkeypatch.setattr(
+        routes,
+        "generate_image_for_user",
+        lambda **kwargs: SimpleNamespace(
+            image=b"png",
+            mime_type="image/png",
+            revised_prompt="",
+            provider="gemini_generate_content",
+            platform_id=7,
+            model_id=8,
+            model_name="gemini-3.1-flash-lite-image",
+        ),
+    )
+    monkeypatch.setattr(
+        routes,
+        "upload_background_asset",
+        lambda **kwargs: {"id": "bg_test", "source": "ai", "path": "assets/presentation/bg_test.png"},
+    )
+    monkeypatch.setattr(routes, "_persist_generated_asset_metadata", lambda **kwargs: {"assets": {"bg_test": {}}})
+    monkeypatch.setattr(
+        routes,
+        "remove_presentation_asset",
+        lambda *args, **kwargs: cleanup_calls.append((args, kwargs)) or True,
+    )
+
+    with pytest.raises(ClientDisconnect):
+        asyncio.run(routes._generate_visual_asset(
+            user_id="u1",
+            project_name="demo",
+            asset_type="background",
+            data=routes.GenerateBackgroundRequest(prompt="雨夜书店背景"),
+            request=DisconnectingRequest(),
+        ))
+
+    assert cleanup_calls == [
+        (("u1", "demo", "bg_test"), {"expected_source": "ai"}),
+    ]
 
 
 def test_image_generation_route_preserves_upstream_status_code() -> None:

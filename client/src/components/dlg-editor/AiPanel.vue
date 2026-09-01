@@ -65,8 +65,18 @@
                     ? t('nodeEditor.presentation.backgroundPreviewUnavailable')
                     : t('nodeEditor.presentation.noBackground') }}
                 </span>
-              </div>
+                </div>
             </div>
+            <div class="toolbox-field-label">{{ t('nodeEditor.presentation.explicitSprite') }}</div>
+            <n-select
+              :value="currentSpriteId || null"
+              size="small"
+              clearable
+              filterable
+              :options="characterSpriteAssetOptions"
+              :placeholder="t('nodeEditor.presentation.explicitSpritePlaceholder')"
+              @update:value="setDialoguePresentationValue('sprite', $event || null)"
+            />
             <div class="toolbox-field-label">{{ t('nodeEditor.presentation.conceptionLabel') }}</div>
             <n-input
               v-model:value="illustrationPrompt"
@@ -599,7 +609,7 @@
 <script setup lang="ts">
 import { computed, onBeforeUnmount, onMounted, ref, watch } from 'vue';
 import { useI18n } from 'vue-i18n';
-import { NCard, NForm, NFormItem, NSelect, NInputNumber, NButton, NInput, NIcon, NSpace, NTag, NDivider, NText, NRadioButton, NRadioGroup, useDialog } from 'naive-ui';
+import { NCard, NForm, NFormItem, NSelect, NInputNumber, NButton, NInput, NIcon, NSpace, NTag, NDivider, NText, NRadioButton, NRadioGroup, NCollapse, NCollapseItem, useDialog } from 'naive-ui';
 import SparkAlert from '@/components/share/SparkAlert.vue';
 import { ChartColumn, CircleCheck, Eraser, FileText, Files, GitBranch, ImagePlus, Images, RefreshCw, Sparkles, SquarePen, Upload, Zap } from '@lucide/vue';
 import bus from '@/eventBus';
@@ -930,6 +940,7 @@ const currentPresentation = computed<Record<string, unknown>>(() => {
 
 const currentBackgroundId = computed(() => normalizePresentationValue(currentPresentation.value.bg));
 const currentIllustrationId = computed(() => normalizePresentationValue(currentPresentation.value.illustration));
+const currentSpriteId = computed(() => normalizePresentationValue(currentPresentation.value.sprite));
 const currentIllustrationPending = computed(() => (
   !normalizePresentationValue(currentPresentation.value.illustration_prompt)
   && !currentIllustrationId.value
@@ -945,6 +956,14 @@ const currentBackgroundAsset = computed(() => manifestAssets.value[currentBackgr
 const currentBackgroundPreviewUrl = computed(() => (
   currentBackgroundAsset.value ? presentationAssetUrl(currentBackgroundAsset.value) : ''
 ));
+
+const characterSpriteAssetOptions = computed(() => Object.values(manifestAssets.value)
+  .filter(asset => asset.type === 'character_sprite')
+  .sort((a, b) => String(b.createdAt || '').localeCompare(String(a.createdAt || '')))
+  .map(asset => ({
+    label: asset.title || asset.id,
+    value: asset.id,
+  })));
 
 const backgroundAssetOptions = computed(() => Object.values(manifestAssets.value)
   .filter(asset => asset.type === 'background' && asset.library === true)
@@ -1266,7 +1285,7 @@ async function savePresentationBinding() {
   }
 }
 
-type EditablePresentationKey = 'bg' | 'illustration_prompt' | 'illustration' | 'illustration_pending' | 'characters';
+type EditablePresentationKey = 'bg' | 'sprite' | 'illustration_prompt' | 'illustration' | 'illustration_pending' | 'characters';
 type EditablePresentationValue = string | string[] | null;
 
 function setNodePresentationValues(

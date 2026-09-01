@@ -88,6 +88,101 @@ function floodFillBackground(
   return visited;
 }
 
+function findEnclosedGreenBackground(
+  candidate: Uint8Array,
+  data: Uint8ClampedArray,
+  width: number,
+  height: number,
+  minGreenDominance: number,
+): Uint8Array {
+  const visited = new Uint8Array(candidate.length);
+  const enclosed = new Uint8Array(candidate.length);
+  const queue = new Uint32Array(candidate.length);
+  const componentThreshold = Math.max(48, minGreenDominance * 5);
+
+  for (let start = 0; start < candidate.length; start += 1) {
+    if (!candidate[start] || visited[start]) continue;
+
+    let head = 0;
+    let tail = 0;
+    let opaqueCount = 0;
+    let greenExcessSum = 0;
+    let greenSum = 0;
+    let nonGreenSum = 0;
+    let strongGreenCount = 0;
+    let brightGreenCount = 0;
+    let touchesEdge = false;
+    queue[tail++] = start;
+    visited[start] = 1;
+
+    while (head < tail) {
+      const index = queue[head++];
+      const x = index % width;
+      const y = Math.floor(index / width);
+      if (x === 0 || x === width - 1 || y === 0 || y === height - 1) touchesEdge = true;
+
+      const offset = pixelOffset(index);
+      if (data[offset + 3] > 0) {
+        const excess = greenExcess(data, offset);
+        const green = data[offset + 1];
+        opaqueCount += 1;
+        greenExcessSum += excess;
+        greenSum += green;
+        nonGreenSum += Math.max(data[offset], data[offset + 2]);
+        if (excess >= Math.max(60, minGreenDominance * 6)) strongGreenCount += 1;
+        if (green >= 150 && excess >= Math.max(48, minGreenDominance * 5)) brightGreenCount += 1;
+      }
+
+      if (x > 0) {
+        const neighbor = index - 1;
+        if (candidate[neighbor] && !visited[neighbor]) {
+          visited[neighbor] = 1;
+          queue[tail++] = neighbor;
+        }
+      }
+      if (x + 1 < width) {
+        const neighbor = index + 1;
+        if (candidate[neighbor] && !visited[neighbor]) {
+          visited[neighbor] = 1;
+          queue[tail++] = neighbor;
+        }
+      }
+      if (y > 0) {
+        const neighbor = index - width;
+        if (candidate[neighbor] && !visited[neighbor]) {
+          visited[neighbor] = 1;
+          queue[tail++] = neighbor;
+        }
+      }
+      if (y + 1 < height) {
+        const neighbor = index + width;
+        if (candidate[neighbor] && !visited[neighbor]) {
+          visited[neighbor] = 1;
+          queue[tail++] = neighbor;
+        }
+      }
+    }
+
+    if (touchesEdge || opaqueCount < 8) continue;
+    const averageGreenExcess = greenExcessSum / opaqueCount;
+    const averageGreen = greenSum / opaqueCount;
+    const averageNonGreen = nonGreenSum / opaqueCount;
+    const strongGreenRatio = strongGreenCount / opaqueCount;
+    const brightGreenRatio = brightGreenCount / opaqueCount;
+    const backgroundLike = averageGreenExcess >= Math.max(54, componentThreshold)
+      && strongGreenRatio >= 0.4
+      && brightGreenRatio >= 0.25
+      && averageNonGreen / Math.max(1, averageGreen) <= 0.72;
+    if (!backgroundLike) continue;
+
+    for (let index = 0; index < tail; index += 1) {
+      enclosed[queue[index]] = 1;
+    }
+  }
+
+  return enclosed;
+}
+
 function isNearForeground(
   candidate: Uint8Array,
   index: number,
@@ -299,9 +394,20 @@ function applyGreenChromaKey(
     12,
     fallbackBackground[1] - Math.max(fallbackBackground[0], fallbackBackground[2]),
   );
+  const enclosedBackgroundMask = findEnclosedGreenBackground(
+    candidate,
+    data,
+    width,
+    height,
+    minGreenDominance,
+  );
 
   for (let index = 0; index < size; index += 1) {
     const offset = pixelOffset(index);
+    if (enclosedBackgroundMask[index]) {
+      clearPixel(data, offset);
+      continue;
+    }
     if (backgroundMask[index]) {
       if (!isNearForeground(candidate, index, width, height)) {
         clearPixel(data, offset);

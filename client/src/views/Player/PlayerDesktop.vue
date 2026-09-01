@@ -1017,6 +1017,25 @@ watch(
   }
 );
 
+watch(
+  () => [route.query.scene, route.query.dia],
+  () => {
+    if (loading.value || error.value || contentFormat.value !== 'script' || storyData.value.length === 0) {
+      return;
+    }
+
+    const nextProgress = resolveInitialScriptProgress();
+    if (
+      nextProgress.sceneIndex === currentSceneIndex.value
+      && nextProgress.dialogueIndex === currentDialogueIndex.value
+    ) {
+      return;
+    }
+
+    startGame(nextProgress);
+  },
+);
+
 onMounted(() => {
   loadGame();
 });

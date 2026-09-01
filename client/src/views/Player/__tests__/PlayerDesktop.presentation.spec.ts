@@ -1,5 +1,5 @@
 import { flushPromises, mount } from '@vue/test-utils';
-import { nextTick } from 'vue';
+import { nextTick, reactive } from 'vue';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 
 const mocks = vi.hoisted(() => ({
@@ -11,6 +11,8 @@ const mocks = vi.hoisted(() => ({
     query: { scene: '1', dia: '2' } as Record<string, string>,
   },
 }));
+
+mocks.route = reactive(mocks.route);
 
 vi.mock('@/services/apiClient', () => ({
   fetchWithAuth: mocks.fetchWithAuth,
@@ -122,5 +124,25 @@ describe('播放器角色立绘绑定', () => {
     const narratorWrapper = await mountPlayer('1');
     expect(narratorWrapper.find('.character-sprite img').exists()).toBe(false);
     narratorWrapper.unmount();
+  });
+
+  it('同一播放器实例响应场景和对白查询参数跳转', async () => {
+    const wrapper = await mountPlayer('2');
+
+    mocks.route.query.dia = '3';
+    await nextTick();
+    await flushPromises();
+
+    expect(wrapper.find('.character-sprite img').attributes('src')).toBe(
+      '/api/play/v/version-1/presentation/assets/assets/presentation/sprites/explicit.png',
+    );
+
+    mocks.route.query = { scene: '1', dia: '4' };
+    await nextTick();
+    await flushPromises();
+    await new Promise(resolve => setTimeout(resolve, 600));
+
+    expect(wrapper.find('.character-sprite img').exists()).toBe(false);
+    wrapper.unmount();
   });
 });

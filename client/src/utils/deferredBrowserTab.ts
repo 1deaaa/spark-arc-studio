@@ -13,18 +13,28 @@ export function openDeferredBrowserTab(): Window | null {
   return tab;
 }
 
+function resolveBrowserUrl(url: string): string {
+  if (typeof window === 'undefined') return url;
+  try {
+    return new URL(url, window.location.href).href;
+  } catch {
+    return url;
+  }
+}
+
 /** 将预打开的标签页导航到最终地址；弹窗被拦截时退回当前窗口。 */
 export function navigateDeferredBrowserTab(tab: Window | null, url: string): void {
+  const targetUrl = resolveBrowserUrl(url);
   if (tab && !tab.closed) {
-    tab.location.href = url;
+    tab.location.href = targetUrl;
     return;
   }
 
   const opened = typeof window !== 'undefined'
-    ? window.open(url, '_blank', 'noopener,noreferrer')
+    ? window.open(targetUrl, '_blank', 'noopener,noreferrer')
     : null;
   if (!opened && typeof window !== 'undefined') {
-    window.location.assign(url);
+    window.location.assign(targetUrl);
   }
 }
 

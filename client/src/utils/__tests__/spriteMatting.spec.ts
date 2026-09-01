@@ -57,4 +57,42 @@ describe('立绘绿幕抠图', () => {
     expect(getPixel(frame, 0, 1)).toEqual([0, 0, 0, 0]);
     expect(getPixel(frame, 1, 1)).toEqual([180, 50, 50, 255]);
   });
+
+  it('会清除人物轮廓内未与画面边缘连通的绿幕孔洞', () => {
+    const frame = createFrame(11, 11, [40, 244, 25, 255]);
+    for (let x = 3; x <= 7; x += 1) {
+      setPixel(frame, x, 3, [25, 30, 35, 255]);
+      setPixel(frame, x, 7, [25, 30, 35, 255]);
+    }
+    for (let y = 4; y <= 6; y += 1) {
+      setPixel(frame, 3, y, [25, 30, 35, 255]);
+      setPixel(frame, 7, y, [25, 30, 35, 255]);
+    }
+
+    applyChromaKeyMatte(frame);
+
+    expect(getPixel(frame, 5, 5)).toEqual([0, 0, 0, 0]);
+    expect(getPixel(frame, 4, 4)).toEqual([0, 0, 0, 0]);
+  });
+
+  it('会保留封闭区域内低绿度的前景细节', () => {
+    const frame = createFrame(11, 11, [40, 244, 25, 255]);
+    for (let x = 3; x <= 7; x += 1) {
+      setPixel(frame, x, 3, [25, 30, 35, 255]);
+      setPixel(frame, x, 7, [25, 30, 35, 255]);
+    }
+    for (let y = 4; y <= 6; y += 1) {
+      setPixel(frame, 3, y, [25, 30, 35, 255]);
+      setPixel(frame, 7, y, [25, 30, 35, 255]);
+    }
+    for (let y = 4; y <= 6; y += 1) {
+      for (let x = 4; x <= 6; x += 1) {
+        setPixel(frame, x, y, [70, 125, 70, 255]);
+      }
+    }
+
+    applyChromaKeyMatte(frame);
+
+    expect(getPixel(frame, 5, 5)).toEqual([70, 125, 70, 255]);
+  });
 });
