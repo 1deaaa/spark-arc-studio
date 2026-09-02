@@ -9,7 +9,7 @@
       <template #header-extra>
         <n-icon 
           :component="editorType === 'scene' ? Film : editorType === 'dialogue' ? MessageCircle : editorType === 'option' ? CircleDot : CircleHelp"
-          size="20" 
+          size="18" 
         />
       </template>
 
@@ -286,41 +286,8 @@
             />
           </n-form-item>
 
-          <n-form-item :label="t('nodeEditor.presentation.conceptionLabel')">
-            <n-input
-              :value="currentIllustrationPrompt"
-              type="textarea"
-              :autosize="{ minRows: 2, maxRows: 6 }"
-              :placeholder="t('nodeEditor.presentation.conceptionPlaceholder')"
-              @update:value="updatePresentationConception"
-            />
-          </n-form-item>
-
-          <n-form-item v-if="hasPresentationCue">
-            <template #label>
-              <div class="content-runtime-label">
-                <span>{{ t('nodeEditor.presentation.presentationCue') }}</span>
-                <n-text depth="3" class="content-runtime-label__hint">{{ t('nodeEditor.presentation.movedToAiPanel') }}</n-text>
-              </div>
-            </template>
-            <div class="presentation-cue-panel">
-              <SparkTag v-if="currentBackgroundId" type="primary" size="small">
-                {{ t('nodeEditor.presentation.backgroundShort', { value: currentBackgroundId }) }}
-              </SparkTag>
-              <SparkTag v-if="currentSpriteId" type="info" size="small">
-                {{ t('nodeEditor.presentation.spriteShort', { value: currentSpriteId }) }}
-              </SparkTag>
-              <SparkTag v-if="currentIllustrationId" type="success" size="small">
-                {{ t('nodeEditor.presentation.illustrationShort', { value: currentIllustrationId }) }}
-              </SparkTag>
-              <SparkTag v-else-if="currentIllustrationPrompt" type="warning" size="small">
-                {{ t('nodeEditor.presentation.illustrationPlanned') }}
-              </SparkTag>
-              <SparkTag v-else-if="currentIllustrationPending" type="warning" size="small">
-                {{ t('nodeEditor.presentation.illustrationPending') }}
-              </SparkTag>
-            </div>
-          </n-form-item>
+          <!-- 演出画面配置与生图整合模块（背景、立绘、插图、唯一演出构思） -->
+          <NodePresentationSection />
 
           <n-divider />
 
@@ -355,27 +322,6 @@
               </template>
             </n-popconfirm>
           </n-space>
-
-          <!-- Unity 行为配置（可折叠） -->
-          <n-collapse style="margin-top: 8px;">
-            <n-collapse-item name="unity-act">
-              <template #header>
-                <span class="unity-collapse-title">
-                  <n-icon :component="Gamepad2" size="16" />
-                  <span>{{ t('nodeEditor.actBinding') }}</span>
-                </span>
-              </template>
-              <template #header-extra>
-                <SparkTag v-if="currentActCount > 0" type="info" size="small">{{ t('nodeEditor.actCount', { count: currentActCount }) }}</SparkTag>
-              </template>
-
-              <!-- ActEditor 组件 -->
-              <ActEditor
-                :model-value="currentDialogueAct"
-                @update:model-value="onActChange"
-              />
-            </n-collapse-item>
-          </n-collapse>
         </n-form>
 
         <!-- 选项编辑器 -->
@@ -427,15 +373,15 @@
 </template>
 
 <script setup lang="ts">
-import { computed, reactive, watch, onMounted, onBeforeUnmount, type Component } from 'vue';
-import { NCard, NForm, NFormItem, NInput, NInputNumber, NSwitch, NSelect, NButton, NIcon, NDivider, NSpace, NPopconfirm, NEmpty, NCollapse, NCollapseItem, NText } from 'naive-ui';
+import { computed, reactive, ref, watch, onMounted, onBeforeUnmount, type Component } from 'vue';
+import { NCard, NForm, NFormItem, NInput, NInputNumber, NSwitch, NSelect, NButton, NIcon, NDivider, NSpace, NPopconfirm, NEmpty, NCollapse, NCollapseItem, NText, NTooltip } from 'naive-ui';
 import SparkTag from '../share/SparkTag.vue';
-import { ArrowDown, CircleDot, CircleHelp, CirclePlus, Film, Flag, Gamepad2, Layers3, MessageCircle, PanelTopOpen, Plus, RadioTower, Route, Trash } from '@lucide/vue';
+import { ArrowDown, CircleDot, CircleHelp, CirclePlus, Film, Flag, Gamepad2, Layers3, MessageCircle, PanelTopOpen, Plus, RadioTower, Route, Trash, Wand2 } from '@lucide/vue';
 import { useI18n } from 'vue-i18n';
 import bus from '@/eventBus';
 import ConditionsEditor from './ConditionsEditor.vue';
 import EffectsEditor from './EffectsEditor.vue';
-import ActEditor from './ActEditor.vue';
+import NodePresentationSection from './NodePresentationSection.vue';
 import { useSceneStore } from '@/components/stores/sceneStore';
 import { useProjectStore } from '@/components/stores/projectStore';
 import { useFileStore } from '@/components/stores/fileStore';
@@ -741,87 +687,8 @@ function applyDialogue() {
     chr: dialogueDraft.chr,
     speaker: typeof dialogueDraft.chr === 'string' ? dialogueDraft.chr : undefined,
     txt: dialogueDraft.txt,
-    next: dialogueDraft.next
+    next: dialogueDraft.next,
   });
-  debouncedAutoSave();
-}
-
-// ──────────────────────────────────────────
-// 行为(act)编辑 — 委托给 ActEditor 组件
-// ──────────────────────────────────────────
-const currentDialogueAct = computed(() => {
-  if (!isDialogueNode(sceneStore.currentNode) || sceneStore.selectionType !== 'dialogue') return null;
-  return sceneStore.currentNode.act ?? null;
-});
-
-const currentActCount = computed(() => {
-  if (!isDialogueNode(sceneStore.currentNode) || sceneStore.selectionType !== 'dialogue') return 0;
-  return Object.keys(sceneStore.currentNode.act || {}).length;
-});
-
-const currentDialoguePresentation = computed(() => {
-  if (!isDialogueNode(sceneStore.currentNode) || sceneStore.selectionType !== 'dialogue') return null;
-  return sceneStore.currentNode.presentation ?? null;
-});
-
-const currentBackgroundId = computed(() => {
-  const bg = currentDialoguePresentation.value?.bg;
-  if (Array.isArray(bg)) return String(bg[0] || '').trim();
-  return typeof bg === 'string' ? bg.trim() : '';
-});
-
-const currentSpriteId = computed(() => {
-  const sprite = currentDialoguePresentation.value?.sprite;
-  if (Array.isArray(sprite)) return String(sprite[0] || '').trim();
-  return typeof sprite === 'string' ? sprite.trim() : '';
-});
-
-const currentIllustrationId = computed(() => {
-  const value = currentDialoguePresentation.value?.illustration;
-  if (Array.isArray(value)) return String(value[0] || '').trim();
-  return typeof value === 'string' ? value.trim() : '';
-});
-
-const currentIllustrationPrompt = computed(() => {
-  const value = currentDialoguePresentation.value?.illustration_prompt;
-  if (Array.isArray(value)) return String(value[0] || '').trim();
-  return typeof value === 'string' ? value.trim() : '';
-});
-
-const currentIllustrationPending = computed(() => {
-  const value = currentDialoguePresentation.value?.illustration_pending;
-  const normalized = Array.isArray(value) ? value[0] : value;
-  return String(normalized || '').trim().toLowerCase() === 'true';
-});
-
-const hasPresentationCue = computed(() => !!currentBackgroundId.value
-  || !!currentSpriteId.value
-  || !!currentIllustrationId.value
-  || !!currentIllustrationPrompt.value
-  || currentIllustrationPending.value);
-
-function updatePresentationConception(value: string) {
-  if (!isDialogueNode(sceneStore.currentNode) || sceneStore.selectionType !== 'dialogue') return;
-  const presentation = { ...(sceneStore.currentNode.presentation || {}) };
-  const normalized = String(value || '').replace(/[\r\n]+/g, ' ');
-  if (normalized.trim()) {
-    presentation.illustration_prompt = normalized;
-    delete presentation.illustration_pending;
-  }
-  else delete presentation.illustration_prompt;
-  sceneStore.updateCurrentDialogue({
-    presentation: Object.keys(presentation).length > 0 ? presentation : undefined,
-  });
-  debouncedAutoSave();
-}
-
-function onActChange(val: Record<string, string | string[]> | null) {
-  if (!isDialogueNode(sceneStore.currentNode) || sceneStore.selectionType !== 'dialogue') return;
-  if (!val || Object.keys(val).length === 0) {
-    delete (sceneStore.currentNode as any).act;
-  } else {
-    sceneStore.currentNode.act = val;
-  }
   debouncedAutoSave();
 }
 
@@ -1172,5 +1039,23 @@ watch(
   display: flex;
   flex-wrap: wrap;
   gap: 6px;
+}
+
+.toolbox-toggle-btn {
+  font-size: var(--spark-fs-xs, 12px);
+  border-radius: 6px;
+  transition: all 0.2s cubic-bezier(0.16, 1, 0.3, 1);
+  color: var(--spark-text-muted);
+}
+
+.toolbox-toggle-btn:hover {
+  color: var(--spark-primary);
+  background: color-mix(in srgb, var(--spark-primary) 10%, transparent);
+}
+
+.toolbox-toggle-btn.is-active {
+  color: var(--spark-primary);
+  background: color-mix(in srgb, var(--spark-primary) 16%, transparent);
+  font-weight: 600;
 }
 </style>

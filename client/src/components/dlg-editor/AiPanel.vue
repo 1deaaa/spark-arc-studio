@@ -7,272 +7,34 @@
       size="small"
     >
       <template #header-extra>
-        <n-icon :component="SquarePen" size="20" />
+        <n-space align="center" :size="4">
+          <slot name="header-extra"></slot>
+          <n-tooltip trigger="hover">
+            <template #trigger>
+              <n-button quaternary circle size="small" @click="emit('close')">
+                <template #icon>
+                  <n-icon :size="16"><PanelRightClose /></n-icon>
+                </template>
+              </n-button>
+            </template>
+            {{ t('views.scriptWriter.desktop.collapseAiToolbox') }}
+          </n-tooltip>
+        </n-space>
       </template>
 
       <n-form class="toolbox-form" label-placement="top" size="medium">
-        <section v-if="canUsePresentationTools" class="toolbox-module image-generation-module">
+        <!-- Unity 行为配置（已移入工具箱） -->
+        <section v-if="canEditActBinding" class="toolbox-module act-binding-module">
           <div class="toolbox-module-heading">
-            <n-icon :component="Images" />
-            <span>{{ t('nodeEditor.presentation.imageGenerationModule') }}</span>
+            <n-icon :component="Gamepad2" />
+            <span>{{ t('nodeEditor.actBinding') }}</span>
+            <SparkTag v-if="currentActCount > 0" type="info" size="small" style="margin-left: auto;">
+              {{ t('nodeEditor.actCount', { count: currentActCount }) }}
+            </SparkTag>
           </div>
-
-          <div class="presentation-model-control">
-            <div class="toolbox-field-label">{{ t('nodeEditor.presentation.imageModelLabel') }}</div>
-            <n-select
-              v-model:value="selectedImageModelKey"
-              class="presentation-wide-select"
-              size="small"
-              clearable
-              :loading="imageModelsLoading"
-              :disabled="presentationGenerationBusy"
-              :options="imageModelSelectOptions"
-              :placeholder="t('nodeEditor.presentation.imageModelPlaceholder')"
-            />
-            <n-text v-if="!imageModelsLoading && availableImageModels.length === 0" depth="3" class="presentation-tool-tip">
-              {{ t('nodeEditor.presentation.imageModelMissing') }}
-            </n-text>
-            <n-text v-if="selectedImageModel && !imageModelSupportsReference(selectedImageModel)" depth="3" class="presentation-tool-tip">
-              {{ t('nodeEditor.presentation.imageModelTextOnlyHint') }}
-            </n-text>
-          </div>
-
-          <div v-if="canEditPresentation" class="presentation-tool-stack">
-            <div class="presentation-tool-heading">
-              <n-icon :component="ImagePlus" />
-              <span>{{ t('nodeEditor.presentation.background') }}</span>
-            </div>
-            <n-select
-              :value="currentBackgroundId || null"
-              size="small"
-              clearable
-              filterable
-              :options="backgroundAssetOptions"
-              :placeholder="t('nodeEditor.presentation.backgroundLibrarySelect')"
-              @update:value="setDialoguePresentationValue('bg', $event || null)"
-            />
-            <div class="background-preview" :class="{ 'is-empty': !currentBackgroundPreviewUrl || backgroundPreviewFailed }">
-              <img
-                v-if="currentBackgroundPreviewUrl && !backgroundPreviewFailed"
-                :src="currentBackgroundPreviewUrl"
-                :alt="t('nodeEditor.presentation.background')"
-                @error="backgroundPreviewFailed = true"
-              />
-              <div v-else class="background-preview-empty">
-                <n-icon :component="ImagePlus" />
-                <span>
-                  {{ currentBackgroundId
-                    ? t('nodeEditor.presentation.backgroundPreviewUnavailable')
-                    : t('nodeEditor.presentation.noBackground') }}
-                </span>
-                </div>
-            </div>
-            <div class="toolbox-field-label">{{ t('nodeEditor.presentation.explicitSprite') }}</div>
-            <n-select
-              :value="currentSpriteId || null"
-              size="small"
-              clearable
-              filterable
-              :options="characterSpriteAssetOptions"
-              :placeholder="t('nodeEditor.presentation.explicitSpritePlaceholder')"
-              @update:value="setDialoguePresentationValue('sprite', $event || null)"
-            />
-            <div class="toolbox-field-label">{{ t('nodeEditor.presentation.conceptionLabel') }}</div>
-            <n-input
-              v-model:value="illustrationPrompt"
-              type="textarea"
-              size="small"
-              :autosize="{ minRows: 2, maxRows: 4 }"
-              :placeholder="t('nodeEditor.presentation.conceptionPlaceholder')"
-              @blur="saveIllustrationPrompt"
-            />
-            <n-space v-if="currentIllustrationPending" :size="8" wrap align="center">
-              <n-tag type="warning" size="small" :bordered="false">
-                {{ t('nodeEditor.presentation.illustrationPending') }}
-              </n-tag>
-              <n-button
-                size="small"
-                type="primary"
-                secondary
-                :disabled="!canGenerateIllustrationConception"
-                :loading="illustrationConceptionGenerating"
-                @click="generateIllustrationConceptionByAI"
-              >
-                <template #icon><n-icon :component="Sparkles" /></template>
-                {{ t('nodeEditor.presentation.generateIllustrationConception') }}
-              </n-button>
-            </n-space>
-            <div v-if="visualIllustrationEnabled" class="presentation-participants">
-              <div class="toolbox-field-label">{{ t('nodeEditor.presentation.participatingCharacters') }}</div>
-              <n-select
-                v-model:value="presentationCharacterIds"
-                multiple
-                clearable
-                filterable
-                size="small"
-                :options="characterOptions"
-                :placeholder="t('nodeEditor.presentation.participatingCharactersPlaceholder')"
-                @update:value="savePresentationCharacters"
-              />
-              <n-text depth="3" class="presentation-tool-tip">
-                {{ t('nodeEditor.presentation.participatingCharactersHint') }}
-              </n-text>
-            </div>
-            <n-space :size="8" wrap align="center">
-              <n-button
-                size="small"
-                secondary
-                :disabled="backgroundUploading || presentationGenerationBusy"
-                :loading="backgroundUploading"
-                @click="triggerBackgroundUpload"
-              >
-                <template #icon>
-                  <n-icon :component="Upload" />
-                </template>
-                {{ t('nodeEditor.presentation.uploadBackground') }}
-              </n-button>
-              <n-button
-                v-if="currentBackgroundId"
-                size="small"
-                secondary
-                type="warning"
-                :disabled="backgroundUploading || presentationGenerationBusy"
-                @click="clearDialogueBackground"
-              >
-                <template #icon>
-                  <n-icon :component="Eraser" />
-                </template>
-                {{ t('nodeEditor.presentation.clearBackground') }}
-              </n-button>
-              <n-button
-                size="small"
-                type="primary"
-                secondary
-                :disabled="!canGenerateBackground"
-                :loading="backgroundGenerating"
-                @click="generateBackgroundByAI"
-              >
-                <template #icon>
-                  <n-icon :component="Sparkles" />
-                </template>
-                {{ t('nodeEditor.presentation.generateBackground') }}
-              </n-button>
-            </n-space>
-            <input
-              ref="backgroundFileInputRef"
-              class="presentation-hidden-input"
-              type="file"
-              accept="image/png,image/jpeg,image/webp"
-              @change="onBackgroundFileChange"
-            />
-
-          </div>
-        </section>
-
-        <section v-if="canUsePresentationTools && visualIllustrationEnabled" class="toolbox-module presentation-style-card presentation-illustration-card">
-          <div class="toolbox-module-heading">
-            <n-icon :component="Images" />
-            <span>{{ t('nodeEditor.presentation.illustration') }}</span>
-          </div>
-          <template v-if="canEditPresentation">
-            <div class="presentation-current-line" :class="{ 'is-empty': !currentIllustrationId }">
-              {{ currentIllustrationId || t('nodeEditor.presentation.noIllustration') }}
-            </div>
-            <n-space :size="8" wrap align="center">
-              <n-button
-                size="small"
-                secondary
-                :disabled="illustrationUploading || presentationGenerationBusy"
-                :loading="illustrationUploading"
-                @click="triggerIllustrationUpload"
-              >
-                <template #icon><n-icon :component="Upload" /></template>
-                {{ t('nodeEditor.presentation.uploadIllustration') }}
-              </n-button>
-              <n-button
-                v-if="currentIllustrationId"
-                size="small"
-                secondary
-                type="warning"
-                :disabled="illustrationUploading || presentationGenerationBusy"
-                @click="clearDialogueIllustration"
-              >
-                <template #icon><n-icon :component="Eraser" /></template>
-                {{ t('nodeEditor.presentation.clearIllustration') }}
-              </n-button>
-              <n-button
-                size="small"
-                type="primary"
-                secondary
-                :disabled="!canGenerateIllustration"
-                :loading="illustrationGenerating"
-                @click="generateIllustrationByAI"
-              >
-                <template #icon><n-icon :component="Sparkles" /></template>
-                {{ t('nodeEditor.presentation.generateIllustration') }}
-              </n-button>
-            </n-space>
-          </template>
-
-          <div class="illustration-batch-controls">
-            <n-radio-group v-model:value="illustrationBatchScope" size="small">
-              <n-radio-button value="scene">{{ t('nodeEditor.presentation.batchScopeScene') }}</n-radio-button>
-              <n-radio-button value="file">{{ t('nodeEditor.presentation.batchScopeFile') }}</n-radio-button>
-            </n-radio-group>
-            <n-text depth="3" class="presentation-tool-tip" role="status">
-              {{ illustrationBatchStatusText }}
-            </n-text>
-            <n-text v-if="illustrationBatchCurrent" depth="3" class="presentation-tool-tip">
-              {{ illustrationBatchCurrentText }}
-            </n-text>
-            <n-text v-if="illustrationBatchError" type="error" class="presentation-tool-tip">
-              {{ illustrationBatchError }}
-            </n-text>
-            <n-text v-if="illustrationBatchFailureText" type="warning" class="presentation-tool-tip">
-              {{ illustrationBatchFailureText }}
-            </n-text>
-            <n-space :size="8" wrap align="center">
-              <n-button
-                size="small"
-                secondary
-                :disabled="!canBatchGenerateIllustrations"
-                :loading="illustrationBatchGenerating"
-                @click="generateSceneIllustrations"
-              >
-                <template #icon><n-icon :component="Images" /></template>
-                {{ t('nodeEditor.presentation.generateSceneIllustrations') }}
-              </n-button>
-              <n-button
-                size="small"
-                secondary
-                :disabled="!canGenerateIllustrationConceptions"
-                :loading="illustrationConceptionBatchGenerating"
-                @click="generateIllustrationConceptions"
-              >
-                <template #icon><n-icon :component="Sparkles" /></template>
-                {{ t('nodeEditor.presentation.generateIllustrationConceptions') }}
-              </n-button>
-            </n-space>
-            <n-text depth="3" class="presentation-tool-tip" role="status">
-              {{ illustrationConceptionBatchStatusText }}
-            </n-text>
-            <n-text v-if="illustrationConceptionBatchCurrent" depth="3" class="presentation-tool-tip">
-              {{ illustrationConceptionBatchCurrentText }}
-            </n-text>
-            <n-text v-if="illustrationConceptionBatchError" type="error" class="presentation-tool-tip">
-              {{ illustrationConceptionBatchError }}
-            </n-text>
-            <n-text v-if="illustrationConceptionBatchFailureText" type="warning" class="presentation-tool-tip">
-              {{ illustrationConceptionBatchFailureText }}
-            </n-text>
-          </div>
-          <input
-            v-if="canEditPresentation"
-            ref="illustrationFileInputRef"
-            class="presentation-hidden-input"
-            type="file"
-            accept="image/png,image/jpeg,image/webp"
-            @change="onIllustrationFileChange"
+          <ActEditor
+            :model-value="currentDialogueAct"
+            @update:model-value="onActChange"
           />
         </section>
 
@@ -609,9 +371,15 @@
 <script setup lang="ts">
 import { computed, onBeforeUnmount, onMounted, ref, watch } from 'vue';
 import { useI18n } from 'vue-i18n';
-import { NCard, NForm, NFormItem, NSelect, NInputNumber, NButton, NInput, NIcon, NSpace, NTag, NDivider, NText, NRadioButton, NRadioGroup, NCollapse, NCollapseItem, useDialog } from 'naive-ui';
+import { NCard, NForm, NFormItem, NSelect, NInputNumber, NButton, NInput, NIcon, NSpace, NTag, NDivider, NText, NRadioButton, NRadioGroup, NCollapse, NCollapseItem, NTooltip, useDialog } from 'naive-ui';
 import SparkAlert from '@/components/share/SparkAlert.vue';
-import { ChartColumn, CircleCheck, Eraser, FileText, Files, GitBranch, ImagePlus, Images, RefreshCw, Sparkles, SquarePen, Upload, Zap } from '@lucide/vue';
+import SparkTag from '@/components/share/SparkTag.vue';
+import ActEditor from './ActEditor.vue';
+import { ChartColumn, CircleCheck, Eraser, FileText, Files, Gamepad2, GitBranch, ImagePlus, Images, PanelRightClose, RefreshCw, Sparkles, SquarePen, Upload, Zap } from '@lucide/vue';
+
+const emit = defineEmits<{
+  (e: 'close'): void;
+}>();
 import bus from '@/eventBus';
 import MarkdownRenderer from '@/components/share/MarkdownRenderer.vue';
 import { useSceneStore } from '@/components/stores/sceneStore';
@@ -925,6 +693,30 @@ const criticTargetLabel = computed(() => {
 
 const canUsePresentationTools = computed(() => isScriptMode.value && !!projectStore.currentProject && !!sceneStore.currentScene);
 const canEditPresentation = computed(() => sceneStore.selectionType === 'dialogue' && !!currentDialogueNode.value && !isNovelMode.value);
+
+function isDialogueNode(node: unknown): node is ArcDialogueNode {
+  return !!node && typeof node === 'object' && 'id' in node && 'txt' in node;
+}
+
+const canEditActBinding = computed(() => sceneStore.selectionType === 'dialogue' && !isNovelMode.value && !!currentDialogueNode.value);
+
+const currentDialogueAct = computed(() => {
+  if (!isDialogueNode(sceneStore.currentNode) || sceneStore.selectionType !== 'dialogue') return null;
+  return sceneStore.currentNode.act ?? null;
+});
+
+const currentActCount = computed(() => {
+  if (!isDialogueNode(sceneStore.currentNode) || sceneStore.selectionType !== 'dialogue') return 0;
+  return Object.keys(sceneStore.currentNode.act || {}).length;
+});
+
+function onActChange(newAct: Record<string, any> | null) {
+  if (!isDialogueNode(sceneStore.currentNode) || sceneStore.selectionType !== 'dialogue') return;
+  sceneStore.updateCurrentDialogue({
+    act: newAct && Object.keys(newAct).length > 0 ? newAct : undefined
+  });
+  void sceneStore._saveStory?.();
+}
 
 const currentDialogueNode = computed<ArcDialogueNode | null>(() => {
   if (sceneStore.selectionType !== 'dialogue') return null;

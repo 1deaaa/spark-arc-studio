@@ -2538,6 +2538,10 @@ const jaJP = {
         collapseChatSidebar: 'AIサイドバーを閉じる',
         expandChatSidebar: 'AIアシスタントを展開',
         aiAssistant: 'AIアシスタント',
+        collapseAiToolbox: 'ツールボックスを折りたたむ',
+        expandAiToolbox: 'ツールボックスを展開',
+        collapseSidebar: 'ワークスペースを折りたたむ',
+        expandSidebar: 'ワークスペースを展開',
       },
     },
     style: {

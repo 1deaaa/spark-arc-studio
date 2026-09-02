@@ -2533,6 +2533,10 @@ const koKR = {
         collapseChatSidebar: 'AI 사이드바 접기',
         expandChatSidebar: 'AI 어시스턴트 열기',
         aiAssistant: 'AI 어시스턴트',
+        collapseAiToolbox: '도구함 접기',
+        expandAiToolbox: '도구함 펼치기',
+        collapseSidebar: '작업 공간 접기',
+        expandSidebar: '작업 공간 펼치기',
       },
     },
     style: {

@@ -115,11 +115,11 @@ export function fitResizablePanelWidths(
 }
 
 export function useResizer() {
-  const sidebarWidth = ref(220);
-  const inspectorWidth = ref(320);
-  const aiSidebarWidth = ref(380);
-  const chatSidebarWidth = ref(380);
-  const memoryWidth = ref(320);
+  const sidebarWidth = ref(210);
+  const inspectorWidth = ref(290);
+  const aiSidebarWidth = ref(330);
+  const chatSidebarWidth = ref(360);
+  const memoryWidth = ref(310);
 
   const isResizing = ref(false);
   let currentResizer: HTMLElement | null = null;
