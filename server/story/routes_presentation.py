@@ -848,7 +848,7 @@ async def upload_presentation_illustration(
     if error := _presentation_project_error(user_id, normalized_project):
         return error
     if not is_visual_illustration_enabled(user_id, normalized_project):
-        return JSONResponse(status_code=409, content={"success": False, "error": "项目尚未启用实验性视觉插图"})
+        return JSONResponse(status_code=409, content={"success": False, "error": "项目尚未启用「视觉小说」开关"})
 
     try:
         payload = await file.read()
@@ -888,7 +888,7 @@ async def generate_presentation_illustration_conception(
     if error := _presentation_project_error(user_id, normalized_project):
         return error
     if not is_visual_illustration_enabled(user_id, normalized_project):
-        return JSONResponse(status_code=409, content={"success": False, "error": "项目尚未启用实验性视觉插图"})
+        return JSONResponse(status_code=409, content={"success": False, "error": "项目尚未启用「视觉小说」开关"})
 
     set_agent_context(user_id, normalized_project)
     context = data.context.model_dump() if data.context else {}
@@ -931,7 +931,7 @@ async def generate_presentation_illustration(
     if error := _presentation_project_error(user_id, normalized_project):
         return error
     if not is_visual_illustration_enabled(user_id, normalized_project):
-        return JSONResponse(status_code=409, content={"success": False, "error": "项目尚未启用实验性视觉插图"})
+        return JSONResponse(status_code=409, content={"success": False, "error": "项目尚未启用「视觉小说」开关"})
 
     try:
         asset, manifest = await _generate_visual_asset(

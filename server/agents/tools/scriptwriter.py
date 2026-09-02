@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import os
+import re
 
 from langchain.tools import tool
 from pydantic import BaseModel, Field, field_validator
@@ -1010,9 +1011,15 @@ def patch_script(search_text: str, replace_text: str) -> str:
         item["id"] for item in get_project_background_catalog(user_id, project_name)
     }
     raw_replace_text = replace_text
+    visual_enabled = is_visual_illustration_enabled(user_id, project_name)
+    if not visual_enabled and re.search(r"@presentation\s+illustration_(?:prompt|pending)", str(raw_replace_text or ""), re.I):
+        return (
+            "局部修改剧本失败：当前项目的「视觉小说」开关尚未开启。\n"
+            "请向用户说明：需前往「设定集 / 世界观」页面的项目风格设置中开启「视觉小说」开关后，方可在剧本节点中写入演出构思并调用生图。"
+        )
     replace_text = sanitize_arc_ai_fragment(
         replace_text,
-        allow_visual_illustration=is_visual_illustration_enabled(user_id, project_name),
+        allow_visual_illustration=visual_enabled,
         allowed_background_ids=allowed_background_ids,
     )
     if str(raw_replace_text or "").strip() and not replace_text:

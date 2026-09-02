@@ -155,8 +155,21 @@ class ScriptwriterAgent(SparkBaseAgent, SparkAgentExecutor):
         )
         return llm.bind_tools(get_tools_for_agent("agent_scriptwriter", user_id=self.user_id))
 
-    # tool_rules 已迁入 scriptwriter.yaml 的 tool_rules 字段，
-    # 基类 _build_tool_system_prompt 会自动加载并追加，无需再重写此方法。
+    def _build_tool_system_prompt(self, base_prompt: str, active_context: str = None, **kwargs) -> str:
+        """在标准工具系统提示词后追加视觉小说演出构思协议或状态引导说明。"""
+        prompt = super()._build_tool_system_prompt(base_prompt, active_context, **kwargs)
+        visual_protocol = self._visual_illustration_protocol()
+        if visual_protocol:
+            return f"{prompt.rstrip()}\n\n{visual_protocol}"
+        settings = self._visual_illustration_settings()
+        if not settings.get("enabled"):
+            return (
+                f"{prompt.rstrip()}\n\n"
+                "### 视觉小说演出构思功能说明\n"
+                "- 当前项目未开启「视觉小说」开关。若用户要求为节点添加“演出构思”、“画面构思”或插图描述，"
+                "请提示用户：需前往「设定集 / 世界观」页面的项目风格设置中开启「视觉小说」开关后，方可在节点记录演出构思并调用生图。"
+            )
+        return prompt
 
     def _visual_illustration_settings(self) -> dict[str, Any]:
         """读取当前项目视觉插图策略；缺少请求上下文时保持默认关闭。"""

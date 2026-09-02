@@ -103,8 +103,16 @@ def test_scriptwriter_visual_protocol_is_absent_when_disabled_and_shared_by_tool
         lambda self: {"enabled": False, "max_per_scene": 2},
     )
 
+    monkeypatch.setattr(
+        SparkBaseAgent,
+        "_build_tool_system_prompt",
+        lambda self, base_prompt, active_context=None, **kwargs: base_prompt,
+    )
+
     assert agent._prepare_script_system_prompt("基础系统提示") == "基础系统提示"
     assert agent._build_tool_prompt_reference_block() == "基础工具规范"
+    disabled_tool_prompt = agent._build_tool_system_prompt("基础系统提示")
+    assert "当前项目未开启「视觉小说」开关" in disabled_tool_prompt
 
     monkeypatch.setattr(
         ScriptwriterAgent,
@@ -113,8 +121,9 @@ def test_scriptwriter_visual_protocol_is_absent_when_disabled_and_shared_by_tool
     )
     specialized = agent._prepare_script_system_prompt("基础系统提示")
     tool_reference = agent._build_tool_prompt_reference_block()
+    enabled_tool_prompt = agent._build_tool_system_prompt("基础系统提示")
 
-    for prompt in (specialized, tool_reference):
+    for prompt in (specialized, tool_reference, enabled_tool_prompt):
         assert "@presentation illustration_prompt:" in prompt
         assert "@web" not in prompt
         assert "@presentation bg:背景资产ID" in prompt
@@ -267,6 +276,34 @@ def test_patch_script_validates_merged_scene_without_removing_manual_cues(monkey
         })
         assert rejected.startswith("局部修改失败")
         assert story_path.read_text(encoding="utf-8") == updated
+    finally:
+        current_project_name.reset(project_token)
+        current_user_id.reset(user_token)
+
+
+def test_patch_script_returns_friendly_error_when_visual_novel_disabled(tmp_path, monkeypatch) -> None:
+    from agents.tools.scriptwriter import patch_script
+    from core.request_context import current_project_name, current_user_id
+
+    stories_path = tmp_path / "stories"
+    stories_path.mkdir(parents=True, exist_ok=True)
+    monkeypatch.setattr("core.utils.get_project_stories_path", lambda *_args: str(stories_path))
+    monkeypatch.setattr("core.project_settings.is_visual_illustration_enabled", lambda *_args: False)
+    monkeypatch.setattr("core.project_settings.get_visual_illustration_settings", lambda *_args: {"max_per_scene": 2, "min_node_gap": 1})
+    monkeypatch.setattr("story.presentation_manifest.get_project_background_catalog", lambda *_args: [])
+
+    story_path = stories_path / "001_雨夜.arc"
+    story_path.write_text("# 1-1 雨夜\n[旁白]\n节点零。\n", encoding="utf-8")
+
+    user_token = current_user_id.set("7")
+    project_token = current_project_name.set("demo")
+    try:
+        result = patch_script.invoke({
+            "search_text": "[旁白]\n节点零。",
+            "replace_text": "[旁白]\n节点零。\n@presentation illustration_prompt:想加演出构思",
+        })
+        assert "当前项目的「视觉小说」开关尚未开启" in result
+        assert "需前往「设定集 / 世界观」" in result
     finally:
         current_project_name.reset(project_token)
         current_user_id.reset(user_token)

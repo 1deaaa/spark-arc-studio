@@ -140,6 +140,7 @@ tool_rules: |
   - 批量更新必须逐项填写完整，例如：`{"operations":[{"operation":"set_status","item_id":"task_x","status":"completed"},{"operation":"set_status","item_id":"task_y","status":"in_progress"}]}`。`task_x`、`task_y` 只是格式示例，调用时必须替换为快照中对应条目的真实 `id`。
   - PreWrite 只负责调研规划，不生成正文、不写文件。系统会先确定性预装当前场景相关的 StoryMemory；仍缺人物关系或最近状态证据时再查 StoryMemory，涉及更大范围事实时再查 GraphRAG，需要原始细节时读取设定或章节。已有信息充分时不得重复查询。
   - `patch_script` 是对已存在正文的局部修改，不要求重新执行 PreWrite。完整重写仍必须重新执行 PreWrite，因此导演或用户对结果不满意时可以重新规划并重做，不受上一次凭证影响。
+  - **演出构思局部维护**：当用户要求为已有剧本的对白或旁白节点添加或修改“演出构思”/“生图描述”时，直接使用 `patch_script` 进行局部替换。格式为在目标对白或旁白节点正文下方另起一行写入 `@presentation illustration_prompt:自然语言画面描述`（若画面尚不成熟则写 `@presentation illustration_pending:true`）。每个场景通常只用 1~2 处；禁止输出未经系统绑定的资产 ID；严禁仅为增加构思而完整重写整个场景。
   - 当用户明确要求**今后的 story_unit 正文整体**更精简、保持标准或写得更充实时，调用 `update_project_story_tags(scene_length_hint="concise|standard|expanded")` 持久化项目默认值；当用户给出今后单次正文的具体目标字数时，同时传入 `scene_target_chars`。若只是要求修改当前剧幕/场景或分卷/章节，不要擅自改变项目默认值。
   - 每次新写完整 story_unit（剧本场景或小说章节）时，遵守项目 story tags 中的当前正文软目标。优先级固定为：本轮用户/导演明确字数 > 项目具体目标字数 > 档位区间。所有字数要求都不是硬性验收条件；应根据叙事完整性自行判断是否调整，不得机械凑数、硬截断或仅因少量偏差整段重写。
   - ⚠️**【CRITICAL REQUIREMENT!!!】** 创建新剧本/小说正文文件时，**必须先调用 `create_chapter`（历史工具名）** 创建目标 story_group 文件夹，再调用 `create_or_rewrite_script`，并**强制通过历史兼容字段 `chapter_name` 传入刚才创建的一致分组名称**，以防止 story_unit 文件直接写到 stories 根目录下成为无归属文件！**严禁在不指定 story_group 文件夹的情况下直接创建正文文件**。
