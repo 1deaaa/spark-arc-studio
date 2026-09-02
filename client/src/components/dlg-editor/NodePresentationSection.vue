@@ -292,9 +292,9 @@ const currentBackgroundId = computed(() => normalizePresentationValue(currentPre
 const currentIllustrationId = computed(() => normalizePresentationValue(currentPresentation.value.illustration));
 const currentSpriteId = computed(() => normalizePresentationValue(currentPresentation.value.sprite));
 const currentIllustrationPending = computed(() => (
-  !normalizePresentationValue(currentPresentation.value.illustration_prompt)
+  !normalizePresentationValue(currentPresentation.value.img ?? currentPresentation.value.illustration_prompt)
   && !currentIllustrationId.value
-  && normalizePresentationValue(currentPresentation.value.illustration_pending).toLowerCase() === 'true'
+  && normalizePresentationValue(currentPresentation.value.pending ?? currentPresentation.value.illustration_pending).toLowerCase() === 'true'
 ));
 
 const manifestAssets = computed<Record<string, PresentationAsset>>(() => {
@@ -377,11 +377,11 @@ const canGenerateIllustrationConception = computed(() =>
 watch(
   () => [
     currentDialogueNode.value?.id,
-    normalizePresentationValue(currentPresentation.value.illustration_prompt),
+    normalizePresentationValue(currentPresentation.value.img ?? currentPresentation.value.illustration_prompt),
     normalizePresentationList(currentPresentation.value.characters).join('|'),
   ],
   () => {
-    illustrationPrompt.value = normalizePresentationValue(currentPresentation.value.illustration_prompt);
+    illustrationPrompt.value = normalizePresentationValue(currentPresentation.value.img ?? currentPresentation.value.illustration_prompt);
     presentationCharacterIds.value = normalizePresentationList(currentPresentation.value.characters);
   },
   { immediate: true },
@@ -487,7 +487,7 @@ async function savePresentationBinding() {
   }
 }
 
-type EditablePresentationKey = 'bg' | 'sprite' | 'illustration_prompt' | 'illustration' | 'illustration_pending' | 'characters';
+type EditablePresentationKey = 'bg' | 'sprite' | 'img' | 'pending' | 'illustration_prompt' | 'illustration' | 'illustration_pending' | 'characters';
 type EditablePresentationValue = string | string[] | null;
 
 function setNodePresentationValue(
@@ -599,14 +599,18 @@ function saveIllustrationPrompt() {
   const prompt = illustrationPrompt.value.trim();
   const node = currentDialogueNode.value;
   if (!node) return;
-  const nextPresentation: PresentationCue = { ...(node.presentation || {}) };
+  const nextPresentation: PresentationCue = { ...(node.show || node.presentation || {}) };
   if (prompt) {
-    nextPresentation.illustration_prompt = prompt;
+    nextPresentation.img = prompt;
+    delete nextPresentation.pending;
+    delete nextPresentation.illustration_prompt;
     delete nextPresentation.illustration_pending;
   } else {
+    delete nextPresentation.img;
     delete nextPresentation.illustration_prompt;
   }
   node.presentation = Object.keys(nextPresentation).length > 0 ? nextPresentation : undefined;
+  node.show = node.presentation;
   sceneStore.updateCurrentDialogue({ presentation: node.presentation });
   void savePresentationBinding();
 }

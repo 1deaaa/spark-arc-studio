@@ -1,12 +1,14 @@
 """
-主窗口 — LLMConfigGUI 主类，混入所有 Mixin，构建产品化 GUI 布局。
+主窗口 — LLMConfigGUI 主类，混入所有 Mixin，构建现代化 Flet 0.28.3 响应式布局。
 """
+from __future__ import annotations
+
+import datetime
+import os
 import sys
-import tkinter as tk
 from pathlib import Path
-from tkinter import messagebox, ttk
 from typing import Callable, Optional
-import customtkinter as ctk
+import flet as ft
 
 if __package__ in (None, "", "gui"):
     _component_dir = Path(__file__).resolve().parents[1]
@@ -19,12 +21,12 @@ if __package__ in (None, "", "gui"):
 from ..manager import AIManager
 from ..security import SecurityManager
 from .dialogs import DialogsMixin
-from .dpi import configure_tk_scaling, enable_high_dpi_awareness, prepare_root_window, prepare_toplevel_window
+from .dpi import configure_page_window, enable_high_dpi_awareness
 from .key_manager import KeyManagerMixin
 from .model_panel import ModelPanelMixin
 from .platform_panel import PlatformPanelMixin
 from .probe import ProbeMixin
-from .theme import COLORS, apply_theme, style_listbox, style_text_widget
+from .theme import COLORS, create_theme
 
 
 class LLMConfigGUI(
@@ -34,17 +36,17 @@ class LLMConfigGUI(
     KeyManagerMixin,
     ProbeMixin,
 ):
-    """LLM 配置管理器主窗口。"""
+    """LLM 配置管理器主界面。"""
 
     def __init__(
         self,
-        root: ctk.CTk,
+        page: ft.Page,
         *,
         schema_initializer: Optional[Callable[[AIManager], None]] = None,
+        auto_bootstrap: bool = True,
     ):
-        self.root = root
+        self.page = page
         self._schema_initializer = schema_initializer
-        self.ui_scale = configure_tk_scaling(self.root)
 
         self.current_config: dict = {}
         self.probe_models_cache: dict = {}
@@ -52,33 +54,41 @@ class LLMConfigGUI(
         self.platform_keys_in_order: list = []
         self.last_selected_platform_name: str = ""
         self.user_usage_rows: list = []
-        self.user_usage_sort_column = "requests"
-        self.user_usage_sort_descending = True
-
-        self.header_status_var = tk.StringVar(value="等待初始化配置环境")
-        self.user_usage_status_var = tk.StringVar(value="双击用户 ID 可查看详情与编辑配额；点击任意列头可排序。")
+        self.user_usage_sort_column: str = "requests"
+        self.user_usage_sort_descending: bool = True
+        self.selected_model_display_name: str = ""
+        self.selected_probe_model_id: str = ""
 
         try:
             self.ai_manager = AIManager()
         except Exception as e:
-            messagebox.showerror("初始化失败", f"AIManager 初始化失败: {e}")
+            if hasattr(self.page, "open"):
+                self.show_error("初始化失败", f"AIManager 初始化失败: {e}")
             raise
 
-        self._build_styles()
-        prepare_root_window(
-            self.root,
+        self._init_controls()
+        configure_page_window(
+            self.page,
             title="火柴Agent网关 · LLM 配置台",
-            base_size=(1360, 820),
-            min_size=(1360, 820),
-            ui_scale=self.ui_scale,
+            width=1460,
+            height=900,
+            min_width=1180,
+            min_height=740,
         )
-        self._build_ui()
-        self.root.after(100, self._bootstrap_startup)
+        self.page.theme = create_theme()
+        self.page.theme_mode = ft.ThemeMode.LIGHT
 
+        self._build_ui()
+
+        if auto_bootstrap:
+            self._bootstrap_startup()
+
+    # ------------------------------------------------------------------ #
+    #  基础工具与格式化                                                     #
+    # ------------------------------------------------------------------ #
 
     def _scale(self, value: int) -> int:
-        scale = min(max(self.ui_scale, 1.0), 1.35)
-        return max(value, int(round(value * scale)))
+        return value
 
     @staticmethod
     def _fmt_tokens(n) -> str:
@@ -93,13 +103,500 @@ class LLMConfigGUI(
             return f"{n / 1_000:.3f}K"
         return str(n)
 
+    # ------------------------------------------------------------------ #
+    #  通用提示与弹窗辅助                                                   #
+    # ------------------------------------------------------------------ #
+
+    def show_info(self, title: str, message: str, on_ok=None):
+        """显示信息弹窗。"""
+        def handle_ok(e):
+            self.page.close(dlg)
+            if on_ok:
+                on_ok()
+
+        dlg = ft.AlertDialog(
+            modal=True,
+            title=ft.Row([ft.Icon(ft.Icons.INFO_OUTLINE, color=ft.Colors.BLUE_600), ft.Text(title)]),
+            content=ft.Text(message, selectable=True),
+            actions=[ft.ElevatedButton("确定", on_click=handle_ok)],
+            actions_alignment=ft.MainAxisAlignment.END,
+        )
+        self.page.open(dlg)
+
+    def show_error(self, title: str, message: str):
+        """显示错误弹窗。"""
+        dlg = ft.AlertDialog(
+            modal=True,
+            title=ft.Row([ft.Icon(ft.Icons.ERROR_OUTLINE, color=ft.Colors.RED_600), ft.Text(title)]),
+            content=ft.Text(message, selectable=True),
+            actions=[ft.ElevatedButton("确定", on_click=lambda e: self.page.close(dlg))],
+            actions_alignment=ft.MainAxisAlignment.END,
+        )
+        self.page.open(dlg)
+
+    def show_warning(self, title: str, message: str):
+        """显示警告弹窗。"""
+        dlg = ft.AlertDialog(
+            modal=True,
+            title=ft.Row([ft.Icon(ft.Icons.WARNING_AMBER_OUTLINED, color=ft.Colors.AMBER_700), ft.Text(title)]),
+            content=ft.Text(message, selectable=True),
+            actions=[ft.ElevatedButton("确定", on_click=lambda e: self.page.close(dlg))],
+            actions_alignment=ft.MainAxisAlignment.END,
+        )
+        self.page.open(dlg)
+
+    def ask_yes_no(self, title: str, message: str, on_yes, on_no=None):
+        """显示确认弹窗。"""
+        def handle_yes(e):
+            self.page.close(dlg)
+            if on_yes:
+                on_yes()
+
+        def handle_no(e):
+            self.page.close(dlg)
+            if on_no:
+                on_no()
+
+        dlg = ft.AlertDialog(
+            modal=True,
+            title=ft.Row([ft.Icon(ft.Icons.HELP_OUTLINE, color=ft.Colors.BLUE_700), ft.Text(title)]),
+            content=ft.Text(message, selectable=True),
+            actions=[
+                ft.TextButton("取消", on_click=handle_no),
+                ft.ElevatedButton("确定", on_click=handle_yes),
+            ],
+            actions_alignment=ft.MainAxisAlignment.END,
+        )
+        self.page.open(dlg)
+
+    def show_snack(self, message: str):
+        """底部轻提示。"""
+        snack = ft.SnackBar(content=ft.Text(message), duration=2500)
+        self.page.open(snack)
+
+    # ------------------------------------------------------------------ #
+    #  控件初始化与 UI 构建                                                 #
+    # ------------------------------------------------------------------ #
+
+    def _init_controls(self):
+        """预实例化各核心输入与显示控件。"""
+        # 头部状态
+        self.header_status_text = ft.Text("等待初始化配置环境", size=12, color=ft.Colors.BLUE_700, weight=ft.FontWeight.W_500)
+        self.user_usage_status_text = ft.Text("点击列头可排序；双击用户行查看详情与配额。", size=12, color=ft.Colors.GREY_700)
+
+        # 平台控件
+        self.platform_dropdown = ft.Dropdown(
+            label="当前平台",
+            options=[],
+            on_change=lambda e: self.on_platform_selected(),
+            dense=True,
+            expand=True,
+        )
+        self.base_url_entry = ft.TextField(label="当前 Base URL", read_only=True, dense=True)
+        self.platform_url_entry = ft.TextField(label="编辑 Base URL", dense=True)
+        self.recharge_url_entry = ft.TextField(label="充值地址", dense=True)
+        self.api_key_entry = ft.TextField(label="API Key", password=True, can_reveal_password=True, dense=True)
+
+        # 模型列表控件 (支持拖拽排序，关闭原生重复把手)
+        self.model_list_view = ft.ReorderableListView(
+            on_reorder=self._on_model_reorder,
+            expand=True,
+            padding=6,
+            show_default_drag_handles=False,
+        )
+
+        # 探测控件与多选状态
+        self.selected_probe_model_ids = set()
+        self.last_clicked_probe_index = None
+        self._current_rendered_probe_models = []
+        self.is_ctrl_pressed = False
+        self.is_shift_pressed = False
+
+        self.btn_add_probe_models = ft.OutlinedButton(
+            "添加选中模型",
+            icon=ft.Icons.ADD_LINK,
+            on_click=lambda e: self.add_selected_probe_models(),
+            height=36,
+        )
+
+        self.filter_entry = ft.TextField(
+            label="筛选模型",
+            hint_text="输入关键词过滤...",
+            prefix_icon=ft.Icons.SEARCH,
+            suffix=ft.IconButton(icon=ft.Icons.CLEAR, tooltip="清除筛选", on_click=lambda e: self.clear_filter()),
+            on_change=self.on_filter_change,
+            dense=True,
+            expand=True,
+        )
+        self.probe_list_view = ft.ListView(expand=True, spacing=4)
+
+        # 用户总览表格
+        self.user_usage_table = ft.DataTable(
+            columns=[
+                ft.DataColumn(ft.Text("用户 ID"), on_sort=lambda e: self.sort_user_usage_overview("user_id")),
+                ft.DataColumn(ft.Text("调用"), numeric=True, on_sort=lambda e: self.sort_user_usage_overview("requests")),
+                ft.DataColumn(ft.Text("总 Token"), numeric=True, on_sort=lambda e: self.sort_user_usage_overview("tokens")),
+                ft.DataColumn(ft.Text("Prompt"), numeric=True, on_sort=lambda e: self.sort_user_usage_overview("prompt")),
+                ft.DataColumn(ft.Text("Completion"), numeric=True, on_sort=lambda e: self.sort_user_usage_overview("completion")),
+                ft.DataColumn(ft.Text("站长付费"), numeric=True, on_sort=lambda e: self.sort_user_usage_overview("sys_paid")),
+                ft.DataColumn(ft.Text("用户自费"), numeric=True, on_sort=lambda e: self.sort_user_usage_overview("self_paid")),
+                ft.DataColumn(ft.Text("错误"), numeric=True, on_sort=lambda e: self.sort_user_usage_overview("errors")),
+                ft.DataColumn(ft.Text("操作")),
+            ],
+            rows=[],
+            heading_row_height=40,
+            data_row_min_height=36,
+            data_row_max_height=42,
+        )
+
+        # 日志控件
+        self.log_list_view = ft.ListView(expand=True, spacing=2, auto_scroll=True)
+
+    def _build_ui(self):
+        """构建主界面整体布局。"""
+        self.page.clean()
+        self.page.padding = 16
+        self.page.spacing = 10
+
+        # 监听全局键盘事件以支持 Ctrl / Shift 组合按键
+        def on_keyboard(e: ft.KeyboardEvent):
+            self.is_ctrl_pressed = bool(e.ctrl or e.meta)
+            self.is_shift_pressed = bool(e.shift)
+
+        self.page.on_keyboard_event = on_keyboard
+
+        # 窗口关闭时自动保存平台配置
+        def on_window_event(e):
+            if e.data == "close":
+                try:
+                    self.save_platform_config(silent=True)
+                except Exception:
+                    pass
+                if hasattr(self.page, "window") and self.page.window:
+                    self.page.window.destroy()
+
+        if hasattr(self.page, "window") and self.page.window:
+            self.page.window.prevent_close = True
+            self.page.window.on_event = on_window_event
+
+        import atexit
+        atexit.register(lambda: getattr(self, "save_platform_config", lambda silent=True: None)(silent=True))
+
+        # 1. 顶部 Header
+        header = self._build_header()
+
+        # 2. 中间工作台（左侧平台设置 420px，右侧多标签工作区铺满）
+        workspace = self._build_workspace()
+
+        # 3. 底部操作日志（调高默认高度至 240px，便于舒适查看日志信息）
+        log_panel = self._build_log_panel()
+
+        self.page.add(
+            ft.Column(
+                [
+                    header,
+                    ft.Container(content=workspace, expand=True),
+                    ft.Container(content=log_panel, height=240),
+                ],
+                expand=True,
+                spacing=10,
+            )
+        )
+        self.page.update()
+
+    def _build_header(self) -> ft.Control:
+        """构建顶部品牌与操作按钮栏。"""
+        brand_col = ft.Column(
+            [
+                ft.Row(
+                    [
+                        ft.Icon(ft.Icons.HUB_ROUNDED, color=ft.Colors.BLUE_700, size=24),
+                        ft.Text("火柴Agent网关 · LLM 配置台", size=17, weight=ft.FontWeight.BOLD),
+                    ],
+                    spacing=8,
+                    tight=True,
+                ),
+                self.header_status_text,
+            ],
+            spacing=3,
+            tight=True,
+        )
+
+        actions_row = ft.Row(
+            [
+                ft.ElevatedButton("刷新配置", icon=ft.Icons.REFRESH, on_click=lambda e: self.load_config_from_db(), height=36),
+                ft.OutlinedButton("系统用途", icon=ft.Icons.TUNE_OUTLINED, on_click=lambda e: self.edit_system_model(), height=36),
+                ft.OutlinedButton("用户配额", icon=ft.Icons.ADMIN_PANEL_SETTINGS_OUTLINED, on_click=lambda e: self.open_quota_manager_dialog(), height=36),
+                ft.OutlinedButton("设置主密钥", icon=ft.Icons.KEY_OUTLINED, on_click=lambda e: self.open_set_llm_key_dialog(), height=36),
+                ft.PopupMenuButton(
+                    icon=ft.Icons.MORE_HORIZ,
+                    tooltip="高级 / YAML 操作",
+                    items=[
+                        ft.PopupMenuItem(text="从配置文件重置 (YAML)", icon=ft.Icons.RESTORE_PAGE_OUTLINED, on_click=lambda e: self.reload_from_yaml()),
+                        ft.PopupMenuItem(text="导出配置到文件 (YAML)", icon=ft.Icons.FILE_DOWNLOAD_OUTLINED, on_click=lambda e: self.export_db_to_yaml()),
+                    ],
+                ),
+            ],
+            spacing=8,
+            wrap=False,
+        )
+
+        return ft.Card(
+            content=ft.Container(
+                content=ft.Row([brand_col, actions_row], alignment=ft.MainAxisAlignment.SPACE_BETWEEN, wrap=False),
+                padding=12,
+            )
+        )
+
+    def _build_workspace(self) -> ft.Control:
+        """构建中间工作区（两栏自适应）。"""
+        left_panel = self._build_platform_panel()
+        right_panel = self._build_tabs_panel()
+
+        return ft.Row(
+            [
+                ft.Container(content=left_panel, width=420),
+                ft.VerticalDivider(width=1),
+                ft.Container(content=right_panel, expand=True),
+            ],
+            expand=True,
+            spacing=10,
+        )
+
+    def _build_platform_panel(self) -> ft.Control:
+        """构建左侧平台管理卡片。"""
+        return ft.Card(
+            content=ft.Container(
+                content=ft.Column(
+                    [
+                        ft.Row(
+                            [
+                                ft.Icon(ft.Icons.DNS_OUTLINED, color=ft.Colors.BLUE_700, size=20),
+                                ft.Text("平台配置", size=14, weight=ft.FontWeight.BOLD),
+                            ],
+                            spacing=6,
+                        ),
+                        ft.Row([self.platform_dropdown], expand=False),
+                        self.base_url_entry,
+                        self.platform_url_entry,
+                        self.recharge_url_entry,
+                        self.api_key_entry,
+                        ft.Divider(height=1),
+                        ft.Row(
+                            [
+                                ft.ElevatedButton("+ 新增平台", on_click=lambda e: self.add_platform(), expand=True, height=36),
+                                ft.OutlinedButton("重命名", icon=ft.Icons.EDIT_NOTE, on_click=lambda e: self.rename_platform(), expand=True, height=36),
+                                ft.OutlinedButton(
+                                    "禁用平台",
+                                    icon=ft.Icons.DELETE_OUTLINE,
+                                    on_click=lambda e: self.delete_platform(),
+                                    style=ft.ButtonStyle(color=ft.Colors.RED_600),
+                                    expand=True,
+                                    height=36,
+                                ),
+                            ],
+                            spacing=6,
+                        ),
+                        ft.Row(
+                            [
+                                ft.OutlinedButton(
+                                    "设为系统默认平台",
+                                    icon=ft.Icons.STAR_BORDER,
+                                    on_click=lambda e: self.set_as_default(),
+                                    expand=True,
+                                    height=38,
+                                ),
+                                ft.ElevatedButton(
+                                    "保存配置",
+                                    icon=ft.Icons.SAVE_OUTLINED,
+                                    on_click=lambda e: self.save_platform_config(),
+                                    expand=True,
+                                    height=38,
+                                ),
+                            ],
+                            spacing=8,
+                        ),
+                    ],
+                    spacing=9,
+                    scroll=ft.ScrollMode.AUTO,
+                ),
+                padding=14,
+            )
+        )
+
+    def _build_tabs_panel(self) -> ft.Control:
+        """构建右侧三标签卡片。"""
+        # Tab 1: 已配置模型
+        model_tab_content = ft.Column(
+            [
+                ft.Row(
+                    [
+                        ft.Row(
+                            [
+                                ft.ElevatedButton("+ 新增模型", on_click=lambda e: self.open_add_model_dialog(), height=36),
+                                ft.OutlinedButton("编辑模型", icon=ft.Icons.EDIT_OUTLINED, on_click=lambda e: self.edit_model(), height=36),
+                                ft.OutlinedButton("删除模型", icon=ft.Icons.DELETE_OUTLINE, on_click=lambda e: self.delete_model(), style=ft.ButtonStyle(color=ft.Colors.RED_600), height=36),
+                                ft.VerticalDivider(width=1, color=ft.Colors.GREY_300),
+                                ft.FilledTonalButton("测试对话", icon=ft.Icons.CHAT_OUTLINED, on_click=lambda e: self.test_model(), height=36),
+                                ft.FilledTonalButton("测试向量", icon=ft.Icons.TRANSFORM_OUTLINED, on_click=lambda e: self.test_embedding(), height=36),
+                                ft.FilledTonalButton("流式测速", icon=ft.Icons.SPEED_OUTLINED, on_click=lambda e: self.speed_test_model(), height=36),
+                            ],
+                            spacing=6,
+                            wrap=True,
+                        ),
+                        ft.Container(
+                            content=ft.Row(
+                                [
+                                    ft.Icon(ft.Icons.SWAP_VERT, size=15, color=ft.Colors.BLUE_700),
+                                    ft.Text("上下拖动卡片可调整优先级 · 首位模型缺省优先", size=11, color=ft.Colors.BLUE_900),
+                                ],
+                                spacing=4,
+                                tight=True,
+                            ),
+                            padding=ft.padding.symmetric(horizontal=10, vertical=4),
+                            bgcolor=ft.Colors.BLUE_50,
+                            border=ft.border.all(1, ft.Colors.BLUE_200),
+                            border_radius=14,
+                        ),
+                    ],
+                    alignment=ft.MainAxisAlignment.SPACE_BETWEEN,
+                    wrap=True,
+                ),
+                ft.Container(
+                    content=self.model_list_view,
+                    expand=True,
+                    border=ft.border.all(1, ft.Colors.GREY_300),
+                    border_radius=6,
+                    padding=4,
+                ),
+            ],
+            expand=True,
+            spacing=8,
+        )
+
+        # Tab 2: 模型探测
+        probe_tab_content = ft.Column(
+            [
+                ft.Row(
+                    [
+                        self.filter_entry,
+                        ft.ElevatedButton("开始探测", icon=ft.Icons.RADAR, on_click=lambda e: self.probe_models(), height=36),
+                        self.btn_add_probe_models,
+                        ft.OutlinedButton("按自定义名称添加", icon=ft.Icons.TEXT_FIELDS, on_click=lambda e: self.use_custom_model_name(), height=36),
+                        ft.TextButton("全选", on_click=lambda e: self.select_all_probe_models()),
+                        ft.TextButton("清空选择", on_click=lambda e: self.clear_probe_selection()),
+                    ],
+                    spacing=6,
+                    wrap=False,
+                ),
+                ft.Container(content=self.probe_list_view, expand=True, border=ft.border.all(1, ft.Colors.GREY_300), border_radius=6, padding=4),
+            ],
+            expand=True,
+            spacing=8,
+        )
+
+        # Tab 3: 用户调用总览
+        user_usage_content = ft.Column(
+            [
+                ft.Row([self.user_usage_status_text, ft.OutlinedButton("刷新数据", icon=ft.Icons.REFRESH, on_click=lambda e: self.load_user_usage_overview(), height=32)], alignment=ft.MainAxisAlignment.SPACE_BETWEEN),
+                ft.Container(
+                    content=ft.Row([self.user_usage_table], scroll=ft.ScrollMode.AUTO, expand=True),
+                    expand=True,
+                    border=ft.border.all(1, ft.Colors.GREY_300),
+                    border_radius=6,
+                ),
+            ],
+            expand=True,
+            spacing=8,
+        )
+
+        tabs = ft.Tabs(
+            selected_index=0,
+            animation_duration=200,
+            tabs=[
+                ft.Tab(text="已配置模型", icon=ft.Icons.SETTINGS_SUGGEST_OUTLINED, content=model_tab_content),
+                ft.Tab(text="模型探测", icon=ft.Icons.EXPLORE_OUTLINED, content=probe_tab_content),
+                ft.Tab(text="用户调用总览", icon=ft.Icons.PEOPLE_ALT_OUTLINED, content=user_usage_content),
+            ],
+            expand=True,
+        )
+
+        return ft.Card(content=ft.Container(content=tabs, padding=10, expand=True), expand=True)
+
+    def _build_log_panel(self) -> ft.Control:
+        """构建底部操作日志面板。"""
+        return ft.Card(
+            content=ft.Container(
+                content=ft.Column(
+                    [
+                        ft.Row(
+                            [
+                                ft.Row([ft.Icon(ft.Icons.TERMINAL, size=16, color=ft.Colors.BLUE_700), ft.Text("系统操作日志", size=13, weight=ft.FontWeight.BOLD)], spacing=6),
+                                ft.TextButton("清空日志", icon=ft.Icons.CLEAR_ALL, on_click=lambda e: self._clear_log()),
+                            ],
+                            alignment=ft.MainAxisAlignment.SPACE_BETWEEN,
+                        ),
+                        ft.Container(
+                            content=self.log_list_view,
+                            expand=True,
+                            bgcolor=ft.Colors.GREY_50,
+                            border=ft.border.all(1, ft.Colors.GREY_200),
+                            border_radius=6,
+                            padding=6,
+                        ),
+                    ],
+                    expand=True,
+                    spacing=4,
+                ),
+                padding=ft.padding.symmetric(horizontal=12, vertical=8),
+                expand=True,
+            ),
+            expand=True,
+        )
+
+    # ------------------------------------------------------------------ #
+    #  日志记录与清理                                                        #
+    # ------------------------------------------------------------------ #
+
+    def log(self, message: str, tag: str | None = None):
+        """向日志列表追加一行格式化消息。"""
+        timestamp = datetime.datetime.now().strftime("%H:%M:%S")
+        color = ft.Colors.BLACK87
+        if tag == "success":
+            color = ft.Colors.GREEN_700
+        elif tag == "error":
+            color = ft.Colors.RED_700
+        elif tag == "warning":
+            color = ft.Colors.AMBER_800
+
+        self.log_list_view.controls.append(
+            ft.Text(f"[{timestamp}] {message}", color=color, size=12, selectable=True)
+        )
+        if len(self.log_list_view.controls) > 300:
+            self.log_list_view.controls.pop(0)
+        self.page.update()
+
+    def _clear_log(self):
+        """清空日志列表。"""
+        self.log_list_view.controls.clear()
+        self.page.update()
+
+    # ------------------------------------------------------------------ #
+    #  启动与初始化                                                         #
+    # ------------------------------------------------------------------ #
+
     def _bootstrap_startup(self):
         """启动自检：强制主密钥、建表初始化、再加载数据库配置。"""
         try:
             if not self._ensure_master_key_ready_on_startup():
-                self.root.after(0, self.root.destroy)
                 return
+            self._bootstrap_startup_continue()
+        except Exception as e:
+            self.show_error("初始化失败", f"GUI 启动失败: {e}")
 
+    def _bootstrap_startup_continue(self):
+        """主密钥就绪后的初始化链路。"""
+        try:
             if self._schema_initializer is None:
                 self.ai_manager.ensure_schema()
             else:
@@ -107,611 +604,14 @@ class LLMConfigGUI(
             self.ai_manager.initialize_defaults()
             self.load_config_from_db()
         except Exception as e:
-            messagebox.showerror("初始化失败", f"GUI 启动失败: {e}")
-            self.root.destroy()
-
-    def _build_styles(self):
-        """配置 ttk 样式。"""
-        self.theme_tokens = apply_theme(self.root, ui_scale=self.ui_scale)
-
-    def _build_ui(self):
-        """构建主界面布局。"""
-        shell = ctk.CTkFrame(self.root, fg_color="transparent")
-        shell.pack(fill=tk.BOTH, expand=True, padx=self._scale(12), pady=self._scale(12))
-        shell.columnconfigure(0, weight=1)
-        shell.rowconfigure(1, weight=1)
-
-        self._build_header(shell)
-
-        workspace = ctk.CTkFrame(shell, fg_color="transparent")
-        workspace.grid(row=1, column=0, sticky="nsew")
-        workspace.columnconfigure(0, weight=65, uniform="group1")
-        workspace.columnconfigure(1, weight=35, uniform="group1")
-        workspace.rowconfigure(0, weight=1)
-
-        left_frame = ctk.CTkFrame(workspace, fg_color="transparent")
-        left_frame.grid(row=0, column=0, sticky="nsew", padx=(0, self._scale(6)))
-        right_frame = ctk.CTkFrame(workspace, fg_color="transparent")
-        right_frame.grid(row=0, column=1, sticky="nsew", padx=(self._scale(6), 0))
-
-        self._build_left_panel(left_frame)
-        self._build_right_panel(right_frame)
-        self._update_overview_state()
-
-    def _build_header(self, parent):
-        """构建顶部品牌头部与全局操作区。"""
-        header = ctk.CTkFrame(parent, fg_color=("white", "#202020"), corner_radius=8)
-        header.grid(row=0, column=0, sticky="ew", pady=(0, self._scale(8)))
-        header.columnconfigure(0, weight=1)
-        header.columnconfigure(1, weight=1)
-
-        text_frame = ctk.CTkFrame(header, fg_color="transparent")
-        text_frame.grid(row=0, column=0, sticky="w", padx=self._scale(16), pady=(self._scale(10), self._scale(10)))
-
-        ctk.CTkLabel(text_frame, text="火柴Agent网关 · LLM 配置台", font=("Microsoft YaHei UI", 18, "bold")).pack(anchor=tk.W)
-        ctk.CTkLabel(text_frame, textvariable=self.header_status_var, text_color="#3667D6", font=("Microsoft YaHei UI", 11, "bold")).pack(anchor=tk.W, pady=(self._scale(4), 0))
-
-        actions_frame = ctk.CTkFrame(header, fg_color="transparent")
-        actions_frame.grid(row=0, column=1, sticky="e", padx=self._scale(16))
-
-        buttons = [
-            ("刷新配置", self.load_config_from_db, "primary"),
-            ("从配置文件重置", self.reload_from_yaml, "normal"),
-            ("导出到配置文件", self.export_db_to_yaml, "normal"),
-            ("设置主密钥", self.open_set_llm_key_dialog, "normal"),
-            ("系统用途管理", self.edit_system_model, "normal"),
-            ("用户配额管理", self.open_quota_manager_dialog, "normal"),
-        ]
-        for index, (text, command, btn_type) in enumerate(buttons):
-            row = index // 3
-            col = index % 3
-            if btn_type == "primary":
-                fg = "#3667D6"
-                hover = "#2E57B5"
-                txt_col = "#FFFFFF"
-            else:
-                fg = ("#eef3fb", "#2b2b2b")
-                hover = ("#e1eaf8", "#3a3a3a")
-                txt_col = ("#1e293b", "#dce4ee")
-
-            ctk.CTkButton(
-                actions_frame, 
-                text=text, 
-                command=command,
-                fg_color=fg,
-                hover_color=hover,
-                text_color=txt_col,
-                font=("Microsoft YaHei UI", 11),
-                width=self._scale(105),
-                height=self._scale(26),
-            ).grid(
-                row=row,
-                column=col,
-                padx=(0 if col == 0 else self._scale(6), 0),
-                pady=(0, self._scale(6) if row == 0 else 0),
-            )
-
-    def _build_left_panel(self, parent):
-        """构建左侧工作区。"""
-        parent.columnconfigure(0, weight=1)
-        parent.rowconfigure(0, weight=7)
-        parent.rowconfigure(1, weight=13)
-
-        plat_frame = ctk.CTkFrame(parent)
-        plat_frame.grid(row=0, column=0, sticky="nsew", pady=(0, self._scale(8)))
-        ctk.CTkLabel(plat_frame, text="平台配置", font=("Microsoft YaHei UI", 12, "bold")).grid(row=0, column=0, columnspan=3, sticky="w", padx=16, pady=(8, 2))
-        self._build_platform_panel(plat_frame)
-
-        usage_frame = ctk.CTkFrame(parent)
-        usage_frame.grid(row=1, column=0, sticky="nsew")
-        ctk.CTkLabel(usage_frame, text="用户调用总览（双击用户查看详情设置配额）", font=("Microsoft YaHei UI", 12, "bold")).grid(row=0, column=0, columnspan=3, sticky="w", padx=16, pady=(8, 2))
-        self._build_user_usage_panel(usage_frame)
-
-    def _build_platform_panel(self, parent):
-        """构建平台管理面板。"""
-        parent.columnconfigure(0, weight=0)
-        parent.columnconfigure(1, weight=1)
-        parent.columnconfigure(2, weight=0)
-        
-        ctk.CTkLabel(parent, text="平台", font=("Microsoft YaHei UI", 11)).grid(row=2, column=0, sticky=tk.W, pady=(self._scale(2), self._scale(4)), padx=(16, 0))
-        self.platform_var = tk.StringVar()
-        self.platform_combo = ctk.CTkComboBox(
-            parent, 
-            variable=self.platform_var, 
-            state="readonly",
-            command=lambda choice: self.on_platform_selected()
-        )
-        self.platform_combo.grid(row=2, column=1, columnspan=2, sticky="ew", pady=(self._scale(2), self._scale(4)), padx=(0, 16))
-
-        ctk.CTkLabel(parent, text="当前 URL", font=("Microsoft YaHei UI", 11)).grid(row=3, column=0, sticky=tk.W, pady=(self._scale(2), self._scale(4)), padx=(16, 0))
-        self.base_url_entry = ctk.CTkEntry(parent, state="readonly")
-        self.base_url_entry.grid(row=3, column=1, columnspan=2, sticky="ew", pady=(self._scale(2), self._scale(4)), padx=(0, 16))
-
-        ctk.CTkLabel(parent, text="编辑 URL", font=("Microsoft YaHei UI", 11)).grid(row=4, column=0, sticky=tk.W, pady=(self._scale(2), self._scale(4)), padx=(16, 0))
-        self.platform_url_entry = ctk.CTkEntry(parent)
-        self.platform_url_entry.grid(row=4, column=1, sticky="ew", pady=(self._scale(2), self._scale(4)), padx=(0, 8))
-        ctk.CTkButton(parent, text="保存 URL", command=self.save_platform_url, fg_color="#3667D6", hover_color="#2E57B5", font=("Microsoft YaHei UI", 11), width=self._scale(100)).grid(row=4, column=2, sticky="ew", pady=(self._scale(2), self._scale(4)), padx=(0, 16))
-
-        ctk.CTkLabel(parent, text="充值地址", font=("Microsoft YaHei UI", 11)).grid(row=5, column=0, sticky=tk.W, pady=(self._scale(2), self._scale(4)), padx=(16, 0))
-        self.recharge_url_entry = ctk.CTkEntry(parent)
-        self.recharge_url_entry.grid(row=5, column=1, sticky="ew", pady=(self._scale(2), self._scale(4)), padx=(0, 8))
-        ctk.CTkButton(parent, text="保存充值地址", command=self.save_recharge_url, fg_color="#3667D6", hover_color="#2E57B5", font=("Microsoft YaHei UI", 11), width=self._scale(100)).grid(row=5, column=2, sticky="ew", pady=(self._scale(2), self._scale(4)), padx=(0, 16))
-
-        ctk.CTkLabel(parent, text="API Key", font=("Microsoft YaHei UI", 11)).grid(row=6, column=0, sticky=tk.W, pady=(self._scale(2), self._scale(6)), padx=(16, 0))
-        self.api_key_entry = ctk.CTkEntry(parent, show="*")
-        self.api_key_entry.grid(row=6, column=1, sticky="ew", pady=(self._scale(2), self._scale(6)), padx=(0, 8))
-        ctk.CTkButton(parent, text="保存 Key", command=self.save_api_key, fg_color="#3667D6", hover_color="#2E57B5", font=("Microsoft YaHei UI", 11), width=self._scale(100)).grid(row=6, column=2, sticky="ew", pady=(self._scale(2), self._scale(6)), padx=(0, 16))
-
-        sep = ctk.CTkFrame(parent, height=2, fg_color=("gray85", "gray30"))
-        sep.grid(row=7, column=0, columnspan=3, sticky="ew", pady=(0, self._scale(6)), padx=16)
-
-        action_row = ctk.CTkFrame(parent, fg_color="transparent")
-        action_row.grid(row=8, column=0, columnspan=3, sticky="ew", padx=16, pady=(0, 8))
-        for col in range(3):
-            action_row.columnconfigure(col, weight=1)
-        ctk.CTkButton(action_row, text="新增平台", command=self.add_platform, font=("Microsoft YaHei UI", 11)).grid(row=0, column=0, sticky="ew", padx=(0, 4))
-        ctk.CTkButton(action_row, text="禁用平台", command=self.delete_platform, fg_color="transparent", border_color="#C23B22", border_width=1, text_color="#C23B22", hover_color="#3D1A16", font=("Microsoft YaHei UI", 11)).grid(row=0, column=1, sticky="ew", padx=4)
-        ctk.CTkButton(action_row, text="设为默认平台", command=self.set_as_default, font=("Microsoft YaHei UI", 11)).grid(row=0, column=2, sticky="ew", padx=(4, 0))
-
-    def _build_user_usage_panel(self, parent):
-        """构建用户调用查询面板。"""
-        parent.columnconfigure(0, weight=1)
-        parent.rowconfigure(1, weight=1)
-
-        table_frame = ctk.CTkFrame(parent, fg_color=("white", "#2b2b2b"), border_color=("gray85", "gray20"), border_width=1, corner_radius=6)
-        table_frame.grid(row=1, column=0, sticky="nsew", padx=16, pady=(0, 12))
-        table_frame.columnconfigure(0, weight=1)
-        table_frame.rowconfigure(0, weight=1)
-
-        columns = ("user_id", "requests", "tokens", "prompt", "completion", "sys_paid", "self_paid", "errors")
-        self.user_usage_tree = ttk.Treeview(table_frame, columns=columns, show="headings", height=10)
-        headings = {
-            "user_id": ("用户 ID", self._scale(140)),
-            "requests": ("调用", self._scale(50)),
-            "tokens": ("总 Token", self._scale(85)),
-            "prompt": ("Prompt", self._scale(75)),
-            "completion": ("Completion", self._scale(85)),
-            "sys_paid": ("站长付费", self._scale(75)),
-            "self_paid": ("用户自费", self._scale(75)),
-            "errors": ("错误", self._scale(50)),
-        }
-        for key, (title, width) in headings.items():
-            self.user_usage_tree.heading(key, text=title, command=lambda sort_key=key: self.sort_user_usage_overview(sort_key))
-            self.user_usage_tree.column(key, width=width, anchor=tk.W if key == "user_id" else tk.CENTER, stretch=True)
-
-        tree_scroll = ttk.Scrollbar(table_frame, orient=tk.VERTICAL, command=self.user_usage_tree.yview)
-        self.user_usage_tree.configure(yscrollcommand=tree_scroll.set)
-        self.user_usage_tree.grid(row=0, column=0, sticky="nsew", padx=1, pady=1)
-        tree_scroll.grid(row=0, column=1, sticky="ns", padx=(0, 1), pady=1)
-        self.user_usage_tree.bind("<Double-1>", self._on_user_usage_tree_double_click)
-
-        tree_scroll = ttk.Scrollbar(table_frame, orient=tk.VERTICAL, command=self.user_usage_tree.yview)
-        self.user_usage_tree.configure(yscrollcommand=tree_scroll.set)
-        self.user_usage_tree.grid(row=0, column=0, sticky="nsew")
-        tree_scroll.grid(row=0, column=1, sticky="ns")
-        self.user_usage_tree.bind("<Double-1>", self._on_user_usage_tree_double_click)
-
-    def _clear_user_usage_tree(self):
-        """清空用户用量表格。"""
-        for item_id in self.user_usage_tree.get_children():
-            self.user_usage_tree.delete(item_id)
-
-    def _render_user_usage_overview_rows(self, rows):
-        """渲染用户总览表格。"""
-        self._clear_user_usage_tree()
-        for row in rows:
-            self.user_usage_tree.insert(
-                "",
-                tk.END,
-                values=(
-                    row.get("user_id", "-"),
-                    int(row.get("requests", 0)),
-                    self._fmt_tokens(row.get("total_tokens", 0)),
-                    self._fmt_tokens(row.get("prompt_tokens", 0)),
-                    self._fmt_tokens(row.get("completion_tokens", 0)),
-                    int(row.get("sys_paid_requests", 0)),
-                    int(row.get("self_paid_requests", 0)),
-                    int(row.get("errors", 0)),
-                ),
-            )
-
-    def load_user_usage_overview(self, silent=False):
-        """加载全部用户的累计调用总览。"""
-        try:
-            self.user_usage_rows = self.ai_manager.get_users_usage_overview()
-            self.sort_user_usage_overview(self.user_usage_sort_column, toggle=False, descending=self.user_usage_sort_descending)
-            user_count = len(self.user_usage_rows)
-            if user_count:
-                self.user_usage_status_var.set(
-                    f"共 {user_count} 个用户有调用记录；双击用户 ID 可查看详情与编辑配额；点击任意列头可排序。"
-                )
-            else:
-                self.user_usage_status_var.set("当前还没有任何用户调用记录；点击任意列头可排序。")
-            self.log("✓ 已刷新全部用户调用总览", tag="success")
-        except Exception as exc:
-            self.log(f"✗ 加载用户总览失败: {exc}", tag="error")
-            self.user_usage_status_var.set(f"加载用户总览失败: {exc}")
-            if not silent:
-                messagebox.showerror("错误", f"加载用户总览失败: {exc}")
-
-    def sort_user_usage_overview(self, column_key, toggle=True, descending=None):
-        """按指定列对用户总览表格排序。"""
-        if not self.user_usage_rows:
-            self._clear_user_usage_tree()
-            return
-
-        key_map = {
-            "user_id": "user_id",
-            "requests": "requests",
-            "tokens": "total_tokens",
-            "prompt": "prompt_tokens",
-            "completion": "completion_tokens",
-            "sys_paid": "sys_paid_requests",
-            "self_paid": "self_paid_requests",
-            "errors": "errors",
-        }
-        data_key = key_map.get(column_key, column_key)
-
-        if toggle:
-            if self.user_usage_sort_column == column_key:
-                self.user_usage_sort_descending = not self.user_usage_sort_descending
-            else:
-                self.user_usage_sort_column = column_key
-                self.user_usage_sort_descending = column_key != "user_id"
-        else:
-            self.user_usage_sort_column = column_key
-            if descending is not None:
-                self.user_usage_sort_descending = bool(descending)
-
-        descending_flag = self.user_usage_sort_descending
-        if self.user_usage_sort_column == "user_id":
-            sorted_rows = sorted(self.user_usage_rows, key=lambda row: str(row.get("user_id", "")).lower(), reverse=descending_flag)
-        else:
-            sorted_rows = sorted(self.user_usage_rows, key=lambda row: int(row.get(data_key, 0)), reverse=descending_flag)
-        self._render_user_usage_overview_rows(sorted_rows)
-
-    def _get_selected_user_id(self):
-        """返回当前选中的用户 ID。"""
-        selection = self.user_usage_tree.selection()
-        if not selection:
-            return ""
-        values = self.user_usage_tree.item(selection[0], "values")
-        if not values:
-            return ""
-        return str(values[0]).strip()
-
-    def _on_user_usage_tree_double_click(self, event):
-        """双击用户 ID 列时打开详情窗口。"""
-        item_id = self.user_usage_tree.identify_row(event.y)
-        column_id = self.user_usage_tree.identify_column(event.x)
-        if not item_id or column_id != "#1":
-            return
-        values = self.user_usage_tree.item(item_id, "values")
-        if not values:
-            return
-        self.open_user_usage_detail_dialog(str(values[0]).strip())
-
-    def open_user_usage_detail_dialog(self, user_id):
-        """打开单个用户的调用详情窗口。"""
-        user_id = str(user_id or "").strip()
-        if not user_id:
-            return
-
-        total_payload = self.ai_manager.get_user_usage_total(user_id)
-        stats_rows = self.ai_manager.get_user_usage_stats(user_id)
-        quota_payload = self.ai_manager.admin_get_user_quota_status(user_id)
-
-        dialog = ctk.CTkToplevel(self.root)
-        dialog.title(f"用户详情 · {user_id}")
-        dialog.transient(self.root)
-        dialog.grab_set()
-        prepare_toplevel_window(
-            dialog,
-            self.root,
-            base_size=(980, 720),
-            min_size=(820, 620),
-            ui_scale=self.ui_scale,
-        )
-        dialog.columnconfigure(0, weight=1)
-        dialog.rowconfigure(1, weight=1)
-
-        header = ctk.CTkFrame(dialog, fg_color="transparent")
-        header.grid(row=0, column=0, sticky="ew", padx=16, pady=16)
-        header.columnconfigure(0, weight=1)
-        ctk.CTkLabel(header, text=f"用户详情 · {user_id}", font=("Microsoft YaHei UI", 14, "bold")).grid(row=0, column=0, sticky=tk.W)
-        ctk.CTkLabel(header, text="展示该用户的累计调用摘要、额度状态与按模型聚合的调用明细。", text_color=("gray45", "gray65"), font=("Microsoft YaHei UI", 11)).grid(row=1, column=0, sticky=tk.W, pady=(self._scale(4), 0))
-
-        content = ctk.CTkFrame(dialog, fg_color="transparent")
-        content.grid(row=1, column=0, sticky="nsew", padx=16, pady=(0, 16))
-        content.columnconfigure(0, weight=1)
-        content.rowconfigure(1, weight=1)
-
-        summary = ctk.CTkFrame(content, fg_color="transparent")
-        summary.grid(row=0, column=0, sticky="ew", pady=(0, self._scale(12)))
-        for col in range(4):
-            summary.columnconfigure(col, weight=1)
-
-        summary_items = [
-            ("总请求", f"{int(total_payload.get('requests', 0))} 次"),
-            ("总 Token", self._fmt_tokens(total_payload.get('tokens', 0))),
-            ("站长付费", f"{int(quota_payload.get('sys_paid', {}).get('total', {}).get('usage', {}).get('requests', 0))} 次"),
-            ("用户自费", f"{int(quota_payload.get('self_paid', {}).get('total', {}).get('usage', {}).get('requests', 0))} 次"),
-        ]
-        for index, (title, value) in enumerate(summary_items):
-            block = ctk.CTkFrame(summary)
-            block.grid(row=0, column=index, sticky="nsew", padx=(0, self._scale(6) if index < len(summary_items) - 1 else 0))
-            ctk.CTkLabel(block, text=title, text_color=("gray45", "gray65"), font=("Microsoft YaHei UI", 11)).pack(anchor=tk.W, padx=12, pady=(8, 0))
-            ctk.CTkLabel(block, text=value, font=("Microsoft YaHei UI", 14, "bold")).pack(anchor=tk.W, pady=(self._scale(2), 8), padx=12)
-
-        detail_frame = ctk.CTkFrame(content, fg_color=("white", "#2b2b2b"), border_color=("gray85", "gray20"), border_width=1, corner_radius=6)
-        detail_frame.grid(row=1, column=0, sticky="nsew")
-        detail_frame.columnconfigure(0, weight=1)
-        detail_frame.rowconfigure(0, weight=1)
-
-        columns = ("platform", "display", "calls", "tokens", "prompt", "completion", "success", "error")
-        detail_tree = ttk.Treeview(detail_frame, columns=columns, show="headings", height=12, style="Treeview")
-        detail_rows = list(stats_rows)
-        detail_sort_state = {"column": "calls", "descending": True}
-        detail_headings = {
-            "platform": ("平台", self._scale(120)),
-            "display": ("模型", self._scale(160)),
-            "calls": ("调用", self._scale(60)),
-            "tokens": ("总 Token", self._scale(88)),
-            "prompt": ("Prompt", self._scale(76)),
-            "completion": ("Completion", self._scale(88)),
-            "success": ("成功", self._scale(60)),
-            "error": ("错误", self._scale(60)),
-        }
-
-        def render_detail_rows(rows):
-            for item_id in detail_tree.get_children():
-                detail_tree.delete(item_id)
-            for row in rows:
-                detail_tree.insert(
-                    "",
-                    tk.END,
-                    values=(
-                        row.get("platform_name", "-"),
-                        row.get("display_name", "-"),
-                        int(row.get("call_count", 0)),
-                        self._fmt_tokens(row.get("total_tokens", 0)),
-                        self._fmt_tokens(row.get("prompt_tokens", 0)),
-                        self._fmt_tokens(row.get("completion_tokens", 0)),
-                        int(row.get("success_count", 0)),
-                        int(row.get("error_count", 0)),
-                    ),
-                )
-
-        def sort_detail_rows(column_key):
-            if detail_sort_state["column"] == column_key:
-                detail_sort_state["descending"] = not detail_sort_state["descending"]
-            else:
-                detail_sort_state["column"] = column_key
-                detail_sort_state["descending"] = column_key not in {"platform", "display"}
-
-            if column_key == "platform":
-                sorted_rows = sorted(detail_rows, key=lambda row: str(row.get("platform_name", "")).lower(), reverse=detail_sort_state["descending"])
-            elif column_key == "display":
-                sorted_rows = sorted(detail_rows, key=lambda row: str(row.get("display_name", "")).lower(), reverse=detail_sort_state["descending"])
-            else:
-                metric_map = {
-                    "calls": "call_count",
-                    "tokens": "total_tokens",
-                    "prompt": "prompt_tokens",
-                    "completion": "completion_tokens",
-                    "success": "success_count",
-                    "error": "error_count",
-                }
-                sorted_rows = sorted(detail_rows, key=lambda row: int(row.get(metric_map[column_key], 0)), reverse=detail_sort_state["descending"])
-            render_detail_rows(sorted_rows)
-
-        for key, (title, width) in detail_headings.items():
-            detail_tree.heading(key, text=title, command=lambda sort_key=key: sort_detail_rows(sort_key))
-            detail_tree.column(key, width=width, anchor=tk.W if key in {"platform", "display"} else tk.CENTER, stretch=True)
-        render_detail_rows(sorted(detail_rows, key=lambda row: int(row.get("call_count", 0)), reverse=True))
-
-        detail_scroll = ttk.Scrollbar(detail_frame, orient=tk.VERTICAL, command=detail_tree.yview)
-        detail_tree.configure(yscrollcommand=detail_scroll.set)
-        detail_tree.grid(row=0, column=0, sticky="nsew", padx=1, pady=1)
-        detail_scroll.grid(row=0, column=1, sticky="ns", padx=(0, 1), pady=1)
-
-        action_row = ctk.CTkFrame(dialog, fg_color="transparent")
-        action_row.grid(row=2, column=0, sticky="ew", padx=16, pady=16)
-        ctk.CTkButton(action_row, text="编辑额度", command=lambda uid=user_id: self.open_quota_manager_dialog(default_user_id=uid), font=("Microsoft YaHei UI", 11)).pack(side=tk.LEFT)
-        ctk.CTkButton(action_row, text="关闭", command=dialog.destroy, font=("Microsoft YaHei UI", 11)).pack(side=tk.RIGHT)
-
-    def open_current_user_quota_dialog(self):
-        """打开当前选中用户的额度管理对话框。"""
-        user_id = self._get_selected_user_id()
-        if not user_id:
-            messagebox.showwarning("提示", "请先在用户总览表格中选中一个用户")
-            return
-        self.open_quota_manager_dialog(default_user_id=user_id)
-
-    def _build_model_panel(self, parent):
-        """构建模型管理面板。"""
-        parent.columnconfigure(0, weight=1)
-        parent.rowconfigure(1, weight=1)
-
-        ctk.CTkLabel(
-            parent, 
-            text="维护当前平台的已配置模型。支持拖拽排序，排序后的第一项更适合作为默认选择。", 
-            text_color=("gray45", "gray65"),
-            font=("Microsoft YaHei UI", 11),
-            wraplength=self._scale(640), 
-            justify=tk.LEFT
-        ).grid(row=0, column=0, sticky="ew", pady=(0, self._scale(6)))
-
-        list_frame = ctk.CTkFrame(parent, fg_color=("white", "#2b2b2b"), border_color=("gray85", "gray20"), border_width=1, corner_radius=6)
-        list_frame.grid(row=1, column=0, sticky="nsew", padx=1, pady=(0, 4))
-        list_frame.columnconfigure(0, weight=1)
-        list_frame.rowconfigure(0, weight=1)
-
-        self.model_listbox = tk.Listbox(list_frame, selectmode=tk.SINGLE, height=8)
-        style_listbox(self.model_listbox, ui_scale=self.ui_scale)
-        model_scroll = ttk.Scrollbar(list_frame, orient=tk.VERTICAL, command=self.model_listbox.yview)
-        self.model_listbox.configure(yscrollcommand=model_scroll.set)
-        self.model_listbox.grid(row=0, column=0, sticky="nsew", padx=1, pady=1)
-        model_scroll.grid(row=0, column=1, sticky="ns", padx=(0, 1), pady=1)
-
-        self.model_listbox.bind("<ButtonPress-1>", self.on_model_drag_start)
-        self.model_listbox.bind("<B1-Motion>", self.on_model_drag_motion)
-        self.model_listbox.bind("<ButtonRelease-1>", self.on_model_drag_stop)
-
-        actions_row = ctk.CTkFrame(parent, fg_color="transparent")
-        actions_row.grid(row=2, column=0, sticky="ew", pady=(self._scale(4), 0))
-        for col in range(3):
-            actions_row.columnconfigure(col, weight=1)
-
-        ctk.CTkButton(actions_row, text="新增模型", command=self.open_add_model_dialog, font=("Microsoft YaHei UI", 11)).grid(row=0, column=0, sticky="ew", padx=(0, 4), pady=(0, 4))
-        ctk.CTkButton(actions_row, text="编辑模型", command=self.edit_model, font=("Microsoft YaHei UI", 11)).grid(row=0, column=1, sticky="ew", padx=4, pady=(0, 4))
-        ctk.CTkButton(actions_row, text="删除模型", command=self.delete_model, fg_color="transparent", border_color="#C23B22", border_width=1, text_color="#C23B22", hover_color="#3D1A16", font=("Microsoft YaHei UI", 11)).grid(row=0, column=2, sticky="ew", padx=(4, 0), pady=(0, 4))
-
-        ctk.CTkButton(actions_row, text="测试模型", command=self.test_model, fg_color="#3667D6", hover_color="#2E57B5", font=("Microsoft YaHei UI", 11)).grid(row=1, column=0, sticky="ew", padx=(0, 4))
-        ctk.CTkButton(actions_row, text="测试 Embedding", command=self.test_embedding, font=("Microsoft YaHei UI", 11)).grid(row=1, column=1, sticky="ew", padx=4)
-        ctk.CTkButton(actions_row, text="流式测速", command=self.speed_test_model, font=("Microsoft YaHei UI", 11)).grid(row=1, column=2, sticky="ew", padx=(4, 0))
-
-    def _build_right_panel(self, parent):
-        """构建右侧工作区。"""
-        parent.columnconfigure(0, weight=1)
-        parent.rowconfigure(0, weight=1)
-        parent.rowconfigure(1, weight=1)
-
-        notebook_card = ctk.CTkFrame(parent)
-        notebook_card.grid(row=0, column=0, sticky="nsew", pady=(0, self._scale(8)))
-        notebook_card.columnconfigure(0, weight=1)
-        notebook_card.rowconfigure(0, weight=1)
-
-        notebook = ctk.CTkTabview(notebook_card)
-        notebook.grid(row=0, column=0, sticky="nsew", padx=8, pady=8)
-
-        notebook.add("已配置模型")
-        notebook.add("模型探测")
-
-        model_tab = notebook.tab("已配置模型")
-        model_tab.columnconfigure(0, weight=1)
-
-        probe_tab = notebook.tab("模型探测")
-        probe_tab.columnconfigure(0, weight=1)
-
-        self._build_model_panel(model_tab)
-        self._build_probe_panel(probe_tab)
-
-        log_card = ctk.CTkFrame(parent)
-        log_card.grid(row=1, column=0, sticky="nsew")
-        self._build_log_panel(log_card)
-
-    def _build_probe_panel(self, parent):
-        """构建探测面板。"""
-        parent.columnconfigure(0, weight=1)
-        parent.rowconfigure(2, weight=1)
-
-        ctk.CTkLabel(
-            parent, 
-            text="探测兼容 OpenAI 协议的平台模型列表，并将结果一键加入当前平台。", 
-            text_color=("gray45", "gray65"),
-            font=("Microsoft YaHei UI", 11),
-            wraplength=self._scale(640), 
-            justify=tk.LEFT
-        ).grid(row=0, column=0, sticky="ew", pady=(0, self._scale(6)))
-
-        filter_row = ctk.CTkFrame(parent, fg_color="transparent")
-        filter_row.grid(row=1, column=0, sticky="ew", pady=(0, self._scale(6)))
-        filter_row.columnconfigure(1, weight=1)
-        ctk.CTkLabel(filter_row, text="筛选", font=("Microsoft YaHei UI", 11)).grid(row=0, column=0, sticky=tk.W)
-        self.filter_entry = ctk.CTkEntry(filter_row)
-        self.filter_entry.grid(row=0, column=1, sticky="ew", padx=self._scale(8))
-        self.filter_entry.bind("<KeyRelease>", self.on_filter_change)
-        ctk.CTkButton(filter_row, text="清除", command=self.clear_filter, width=60, font=("Microsoft YaHei UI", 11)).grid(row=0, column=2, sticky="e")
-
-        list_frame = ctk.CTkFrame(parent, fg_color=("white", "#2b2b2b"), border_color=("gray85", "gray20"), border_width=1, corner_radius=6)
-        list_frame.grid(row=2, column=0, sticky="nsew", padx=1, pady=(0, 4))
-        list_frame.columnconfigure(0, weight=1)
-        list_frame.rowconfigure(0, weight=1)
-
-        self.probe_listbox = tk.Listbox(list_frame, selectmode=tk.SINGLE, height=8)
-        style_listbox(self.probe_listbox, ui_scale=self.ui_scale)
-        probe_scroll = ttk.Scrollbar(list_frame, orient=tk.VERTICAL, command=self.probe_listbox.yview)
-        self.probe_listbox.configure(yscrollcommand=probe_scroll.set)
-        self.probe_listbox.grid(row=0, column=0, sticky="nsew", padx=1, pady=1)
-        probe_scroll.grid(row=0, column=1, sticky="ns", padx=(0, 1), pady=1)
-
-        btn_row = ctk.CTkFrame(parent, fg_color="transparent")
-        btn_row.grid(row=3, column=0, sticky="ew", pady=(self._scale(4), 0))
-        for col in range(3):
-            btn_row.columnconfigure(col, weight=1)
-        ctk.CTkButton(btn_row, text="开始探测", command=self.probe_models, fg_color="#3667D6", hover_color="#2E57B5", font=("Microsoft YaHei UI", 11)).grid(row=0, column=0, sticky="ew", padx=(0, 4))
-        ctk.CTkButton(btn_row, text="添加选中模型", command=self.open_add_model_dialog, font=("Microsoft YaHei UI", 11)).grid(row=0, column=1, sticky="ew", padx=4)
-        ctk.CTkButton(btn_row, text="按自定义名称添加", command=self.use_custom_model_name, font=("Microsoft YaHei UI", 11)).grid(row=0, column=2, sticky="ew", padx=(4, 0))
-
-    def _build_log_panel(self, parent):
-        """构建日志面板。"""
-        parent.columnconfigure(0, weight=1)
-        parent.rowconfigure(1, weight=1)
-
-        header = ctk.CTkFrame(parent, fg_color="transparent")
-        header.grid(row=0, column=0, sticky="ew", pady=(4, self._scale(3)), padx=16)
-        header.columnconfigure(0, weight=1)
-
-        ctk.CTkLabel(header, text="操作日志", font=("Microsoft YaHei UI", 12, "bold")).grid(row=0, column=0, sticky=tk.W)
-        ctk.CTkLabel(header, text="记录探测、测试、导入导出与密钥处理过程。", text_color=("gray45", "gray65"), font=("Microsoft YaHei UI", 11)).grid(row=1, column=0, sticky=tk.W, pady=(self._scale(2), 0))
-        ctk.CTkButton(header, text="清空日志", command=self._clear_log, width=80, font=("Microsoft YaHei UI", 11)).grid(row=0, column=1, rowspan=2, sticky="e")
-
-        log_body = ctk.CTkFrame(parent, fg_color="transparent")
-        log_body.grid(row=1, column=0, sticky="nsew", padx=16, pady=(0, 8))
-        log_body.columnconfigure(0, weight=1)
-        log_body.rowconfigure(0, weight=1)
-
-        self.log_text = ctk.CTkTextbox(log_body, height=7, wrap=tk.WORD)
-        self.log_text.grid(row=0, column=0, sticky="nsew")
-
-        self.log_text.tag_config("success", foreground=COLORS["success"])
-        self.log_text.tag_config("error", foreground=COLORS["danger"])
-        self.log_text.tag_config("warning", foreground=COLORS["warning"])
-
-    def _clear_log(self):
-        """清空日志。"""
-        self.log_text.delete("1.0", tk.END)
-
-    def _update_overview_state(self):
-        """更新头部状态与操作提示。"""
-        platform_count = len(self.current_config)
-        total_models = sum(len(cfg.get("models", {})) for cfg in self.current_config.values()) if self.current_config else 0
-
-        if not self.current_config:
-            self.header_status_var.set("当前尚未加载任何平台配置")
-            return
-
-        platform_name = self._resolve_platform_name()
-        if not platform_name or platform_name not in self.current_config:
-            platform_name = next(iter(self.current_config.keys()), "")
-
-        platform_cfg = self.current_config.get(platform_name, {})
-        model_count = len(platform_cfg.get("models", {})) if platform_cfg else 0
-        has_api_key = bool(platform_cfg.get("api_key"))
-
-        self.header_status_var.set(
-            f"已加载 {platform_count} 个平台 / {total_models} 个模型 · 当前平台：{platform_name or '未选择'} · API Key {'已保存' if has_api_key else '未保存'}"
-        )
+            self.show_error("初始化失败", f"配置环境初始化失败: {e}")
 
     # ------------------------------------------------------------------ #
-    #  日志                                                                  #
-    # ------------------------------------------------------------------ #
-
-    def log(self, message, tag=None):
-        """向日志区域追加一行消息。"""
-        if tag:
-            self.log_text.insert(tk.END, f"{message}\n", tag)
-        else:
-            self.log_text.insert(tk.END, f"{message}\n")
-        self.log_text.see(tk.END)
-
-    # ------------------------------------------------------------------ #
-    #  数据加载                                                              #
+    #  数据加载与配置重载                                                   #
     # ------------------------------------------------------------------ #
 
     def load_config_from_db(self):
-        """从数据库加载配置（不含已禁用/已删除的平台和模型）。"""
+        """从数据库加载配置。"""
         try:
             platforms = self.ai_manager.admin_get_sys_platforms(
                 include_disabled=False,
@@ -767,134 +667,418 @@ class LLMConfigGUI(
             if self.current_config:
                 self.on_platform_selected()
             else:
-                self.platform_var.set("")
-                self.model_listbox.delete(0, tk.END)
-                self.probe_listbox.delete(0, tk.END)
-                for entry in (self.base_url_entry, self.platform_url_entry, self.recharge_url_entry, self.api_key_entry):
-                    entry.configure(state="normal")
-                    entry.delete(0, tk.END)
-                    if entry is self.base_url_entry:
-                        entry.configure(state="readonly")
+                self.platform_dropdown.value = None
+                self.model_list_view.controls.clear()
+                self.probe_list_view.controls.clear()
+                self.base_url_entry.value = ""
+                self.platform_url_entry.value = ""
+                self.recharge_url_entry.value = ""
+                self.api_key_entry.value = ""
 
             self._update_overview_state()
             self.load_user_usage_overview(silent=True)
             self.log("✓ 已从数据库加载配置", tag="success")
+            self.page.update()
 
         except Exception as e:
-            messagebox.showerror("错误", f"从数据库加载失败: {e}")
-            self.log(f"✗ 从数据库加载失败: {e}")
+            self.log(f"✗ 从数据库加载失败: {e}", tag="error")
+            self.show_error("错误", f"从数据库加载失败: {e}")
 
     def reload_from_yaml(self):
-        """强制从配置文件重置数据库（调用后端 admin_reload_from_yaml）。"""
-        if not messagebox.askyesno(
-            "确认重置",
-            "⚠️ 警告：这将使用 YAML 文件重置数据库中的系统平台配置！\n\n"
-            "- YAML 中不存在的平台将被软禁用，不会硬删除\n"
-            "- 平台名称和模型列表将重置为 YAML 中的状态\n"
-            "- 用户的 API Key 设置不会受影响\n\n"
-            "确定要继续吗？"
-        ):
-            return
+        """从本地 YAML 文件重置数据库。"""
+        def do_reset():
+            try:
+                self.ai_manager.admin_reload_from_yaml()
+                self.log("✓ 数据库已从配置文件重置", tag="success")
+                self.show_snack("数据库配置已从 YAML 成功重置！")
+                self.load_config_from_db()
+            except Exception as e:
+                self.log(f"✗ 重置失败: {e}", tag="error")
+                self.show_error("错误", f"重置失败: {e}")
 
-        try:
-            self.ai_manager.admin_reload_from_yaml()
-            self.log("✓ 数据库已从配置文件重置", tag="success")
-            messagebox.showinfo("成功", "数据库已重置。")
-            self.load_config_from_db()
-        except Exception as e:
-            messagebox.showerror("错误", f"重置失败: {e}")
-            self.log(f"✗ 重置失败: {e}")
+        self.ask_yes_no(
+            "确认重置",
+            "⚠️ 警告：这将使用 YAML 文件重置数据库中的系统平台配置！\n\n- YAML 中不存在的平台将被软禁用\n- 平台名称和模型列表将重置为 YAML 中的状态\n- 用户的 API Key 设置不会受影响\n\n确定要继续吗？",
+            on_yes=do_reset,
+        )
 
     def export_db_to_yaml(self):
-        """导出数据库配置到 YAML（调用后端 admin_save_to_yaml）。"""
-        if not messagebox.askyesno(
+        """导出当前数据库配置至 YAML。"""
+        def do_export():
+            try:
+                paths = self.ai_manager.admin_save_to_yaml()
+                cfg_path = paths.get("config_path", paths) if isinstance(paths, dict) else paths
+                key_path = paths.get("key_path", "") if isinstance(paths, dict) else ""
+                self.log(f"✓ 已导出配置到 {cfg_path}", tag="success")
+                if key_path:
+                    self.log(f"✓ 已导出密钥到 {key_path}", tag="success")
+                self.show_info("导出成功", f"配置已导出至:\n{cfg_path}\n{key_path}")
+            except Exception as e:
+                self.log(f"✗ 导出失败: {e}", tag="error")
+                self.show_error("错误", f"导出失败: {e}")
+
+        self.ask_yes_no(
             "确认导出",
-            "这将覆盖当前的 matchbox_cfg.yaml 和 matchbox_key.yaml 文件。\n确定要导出数据库配置吗？"
-        ):
+            "这将覆盖当前的 matchbox_cfg.yaml 和 matchbox_key.yaml 文件。\n确定要导出数据库配置吗？",
+            on_yes=do_export,
+        )
+
+    # ------------------------------------------------------------------ #
+    #  用户用量总览表格                                                      #
+    # ------------------------------------------------------------------ #
+
+    def load_user_usage_overview(self, silent=False):
+        """加载全部用户的调用总览。"""
+        try:
+            self.user_usage_rows = self.ai_manager.get_users_usage_overview()
+            self.sort_user_usage_overview(self.user_usage_sort_column, toggle=False, descending=self.user_usage_sort_descending)
+            count = len(self.user_usage_rows)
+            if count:
+                self.user_usage_status_text.value = f"共 {count} 个用户有调用记录；点击列头可排序，双击用户行或点击“明细”查看详情与配置额度。"
+            else:
+                self.user_usage_status_text.value = "当前暂无用户调用记录。"
+            self.log("✓ 已刷新全部用户调用总览", tag="success")
+            self.page.update()
+        except Exception as exc:
+            self.log(f"✗ 加载用户总览失败: {exc}", tag="error")
+            self.user_usage_status_text.value = f"加载用户总览失败: {exc}"
+            if not silent:
+                self.show_error("错误", f"加载用户总览失败: {exc}")
+
+    def sort_user_usage_overview(self, column_key: str, toggle: bool = True, descending: bool | None = None):
+        """对用户总览按指定列进行排序。"""
+        if not self.user_usage_rows:
+            self.user_usage_table.rows.clear()
+            self.page.update()
             return
 
-        try:
-            paths = self.ai_manager.admin_save_to_yaml()
-            config_path = paths.get("config_path", paths) if isinstance(paths, dict) else paths
-            key_path = paths.get("key_path", "") if isinstance(paths, dict) else ""
-            self.log(f"✓ 已导出配置到 {config_path}", tag="success")
-            if key_path:
-                self.log(f"✓ 已导出密钥到 {key_path}", tag="success")
-            messagebox.showinfo("成功", f"已导出到 {config_path}")
-        except Exception as e:
-            messagebox.showerror("错误", f"导出失败: {e}")
-            self.log(f"✗ 导出失败: {e}")
+        key_map = {
+            "user_id": "user_id",
+            "requests": "requests",
+            "tokens": "total_tokens",
+            "prompt": "prompt_tokens",
+            "completion": "completion_tokens",
+            "sys_paid": "sys_paid_requests",
+            "self_paid": "self_paid_requests",
+            "errors": "errors",
+        }
+        data_key = key_map.get(column_key, column_key)
+
+        if toggle:
+            if self.user_usage_sort_column == column_key:
+                self.user_usage_sort_descending = not self.user_usage_sort_descending
+            else:
+                self.user_usage_sort_column = column_key
+                self.user_usage_sort_descending = column_key != "user_id"
+        else:
+            self.user_usage_sort_column = column_key
+            if descending is not None:
+                self.user_usage_sort_descending = bool(descending)
+
+        desc = self.user_usage_sort_descending
+        if self.user_usage_sort_column == "user_id":
+            sorted_rows = sorted(self.user_usage_rows, key=lambda r: str(r.get("user_id", "")).lower(), reverse=desc)
+        else:
+            sorted_rows = sorted(self.user_usage_rows, key=lambda r: int(r.get(data_key, 0)), reverse=desc)
+
+        self._render_user_usage_table_rows(sorted_rows)
+
+    def _render_user_usage_table_rows(self, rows: list):
+        """渲染用户用量表格行。"""
+        self.user_usage_table.rows.clear()
+        for r in rows:
+            uid = str(r.get("user_id", "-"))
+            detail_btn = ft.IconButton(
+                icon=ft.Icons.VISIBILITY_OUTLINED,
+                tooltip="查看明细与配额",
+                on_click=lambda e, u=uid: self.open_user_usage_detail_dialog(u),
+            )
+            self.user_usage_table.rows.append(
+                ft.DataRow(
+                    cells=[
+                        ft.DataCell(ft.Text(uid, weight=ft.FontWeight.BOLD), on_double_tap=lambda e, u=uid: self.open_user_usage_detail_dialog(u)),
+                        ft.DataCell(ft.Text(str(int(r.get("requests", 0))))),
+                        ft.DataCell(ft.Text(self._fmt_tokens(r.get("total_tokens", 0)))),
+                        ft.DataCell(ft.Text(self._fmt_tokens(r.get("prompt_tokens", 0)))),
+                        ft.DataCell(ft.Text(self._fmt_tokens(r.get("completion_tokens", 0)))),
+                        ft.DataCell(ft.Text(str(int(r.get("sys_paid_requests", 0))))),
+                        ft.DataCell(ft.Text(str(int(r.get("self_paid_requests", 0))))),
+                        ft.DataCell(ft.Text(str(int(r.get("errors", 0))))),
+                        ft.DataCell(detail_btn),
+                    ]
+                )
+            )
+        self.page.update()
 
     # ------------------------------------------------------------------ #
-    #  内部工具（覆盖 Mixin 中的简化版本，使用更精确的索引匹配）               #
+    #  模型与探测列表渲染                                                   #
     # ------------------------------------------------------------------ #
 
-    def _resolve_platform_name(self, platform_value=None):
-        """将下拉框显示值解析为实际平台 key（优先使用值索引）。"""
-        try:
-            val = self.platform_combo.get()
-            current_index = self.platform_keys_in_order.index(val)
-        except Exception:
-            current_index = -1
-        if isinstance(current_index, int) and 0 <= current_index < len(self.platform_keys_in_order):
-            return self.platform_keys_in_order[current_index]
+    def _refresh_model_list_view(self):
+        """刷新已配置模型列表视图。"""
+        self.model_list_view.controls.clear()
+        platform_name = self._resolve_platform_name()
+        if not platform_name or platform_name not in self.current_config:
+            self.page.update()
+            return
 
-        raw_value = (platform_value if platform_value is not None else self.platform_var.get()).strip()
-        if not raw_value:
-            return ""
-        if raw_value in self.current_config:
-            return raw_value
-        if raw_value in self.platform_display_to_key:
-            return self.platform_display_to_key[raw_value]
-        return raw_value
+        models = self.current_config[platform_name].get("models", {})
+        for d_name, m_cfg in models.items():
+            formatted_text = self._format_model_list_item(d_name, m_cfg)
+            is_selected = d_name == self.selected_model_display_name
 
-    def _refresh_platform_combo(self, selected_platform_name=None):
-        """刷新平台下拉框内容（仅展示未删除的平台）。"""
+            def on_tile_click(e, name=d_name):
+                self.selected_model_display_name = name
+                self._refresh_model_list_view()
+
+            card = ft.Container(
+                content=ft.ListTile(
+                    leading=ft.Icon(ft.Icons.DRAG_HANDLE, color=ft.Colors.GREY_400, size=22),
+                    title=ft.Text(d_name, weight=ft.FontWeight.BOLD if is_selected else ft.FontWeight.W_500, size=14),
+                    subtitle=ft.Text(formatted_text, size=12, color=ft.Colors.GREY_700),
+                    trailing=ft.Row(
+                        [
+                            ft.IconButton(
+                                icon=ft.Icons.EDIT_OUTLINED,
+                                tooltip="编辑模型",
+                                icon_size=18,
+                                on_click=lambda e, n=d_name: [setattr(self, "selected_model_display_name", n), self.edit_model()],
+                            ),
+                            ft.IconButton(
+                                icon=ft.Icons.DELETE_OUTLINE,
+                                tooltip="删除模型",
+                                icon_size=18,
+                                icon_color=ft.Colors.RED_500,
+                                on_click=lambda e, n=d_name: [setattr(self, "selected_model_display_name", n), self.delete_model()],
+                            ),
+                        ],
+                        tight=True,
+                    ),
+                    dense=True,
+                    on_click=on_tile_click,
+                ),
+                bgcolor=ft.Colors.BLUE_50 if is_selected else ft.Colors.WHITE,
+                border=ft.border.all(1.5 if is_selected else 1, ft.Colors.BLUE_500 if is_selected else ft.Colors.GREY_200),
+                border_radius=8,
+                padding=ft.padding.symmetric(horizontal=4, vertical=2),
+                data=d_name,
+            )
+            self.model_list_view.controls.append(card)
+        self.page.update()
+
+    def _on_model_reorder(self, e: ft.OnReorderEvent):
+        """响应模型拖拽排序事件。"""
+        item = self.model_list_view.controls.pop(e.old_index)
+        self.model_list_view.controls.insert(e.new_index, item)
+        self.reorder_models()
+        self.page.update()
+
+    def _is_ctrl_pressed(self) -> bool:
+        """检测当前是否按下了 Ctrl 键（或 Mac 上的 Command/Meta 键）。"""
+        if sys.platform == "win32":
+            try:
+                import ctypes
+                if bool(ctypes.windll.user32.GetKeyState(0x11) & 0x8000):
+                    return True
+            except Exception:
+                pass
+        return getattr(self, "is_ctrl_pressed", False)
+
+    def _is_shift_pressed(self) -> bool:
+        """检测当前是否按下了 Shift 键。"""
+        if sys.platform == "win32":
+            try:
+                import ctypes
+                if bool(ctypes.windll.user32.GetKeyState(0x10) & 0x8000):
+                    return True
+            except Exception:
+                pass
+        return getattr(self, "is_shift_pressed", False)
+
+    def _update_probe_controls_state(self):
+        """根据当前选中的探测模型数量更新操作按钮提示与状态。"""
+        if not hasattr(self, "btn_add_probe_models") or self.btn_add_probe_models is None:
+            return
+        sel_count = len(getattr(self, "selected_probe_model_ids", set()))
+        if sel_count == 0:
+            self.btn_add_probe_models.text = "添加选中模型"
+            self.btn_add_probe_models.icon = ft.Icons.ADD_LINK
+        elif sel_count == 1:
+            self.btn_add_probe_models.text = "添加选中模型 (1)"
+            self.btn_add_probe_models.icon = ft.Icons.ADD_LINK
+        else:
+            self.btn_add_probe_models.text = f"批量添加选中模型 ({sel_count})"
+            self.btn_add_probe_models.icon = ft.Icons.LIBRARY_ADD
+
+    def _clear_probe_list(self):
+        """清空探测结果列表及多选状态。"""
+        self.probe_list_view.controls.clear()
+        self.selected_probe_model_id = ""
+        self.selected_probe_model_ids.clear()
+        self.last_clicked_probe_index = None
+        self._current_rendered_probe_models = []
+        self._update_probe_controls_state()
+        self.page.update()
+
+    def _render_probe_items(self, models: list):
+        """渲染探测到的模型列表，支持 Ctrl 逐个多选与 Shift 范围批量多选。"""
+        self._current_rendered_probe_models = list(models)
+        self.probe_list_view.controls.clear()
+
+        for idx, m in enumerate(models):
+            m_id = m.get("id", "") if isinstance(m, dict) else str(m)
+            ctx = m.get("max_context_tokens") if isinstance(m, dict) else None
+            out = m.get("max_output_tokens") if isinstance(m, dict) else None
+            hints = []
+            if ctx:
+                hints.append(f"ctx={ctx}")
+            if out:
+                hints.append(f"out={out}")
+            hint_str = f"  [{' '.join(hints)}]" if hints else ""
+
+            is_sel = m_id in self.selected_probe_model_ids
+
+            def make_on_select(curr_idx=idx, curr_mid=m_id):
+                def handler(e):
+                    ctrl = self._is_ctrl_pressed()
+                    shift = self._is_shift_pressed()
+
+                    if shift and self.last_clicked_probe_index is not None:
+                        start = min(self.last_clicked_probe_index, curr_idx)
+                        end = max(self.last_clicked_probe_index, curr_idx)
+                        for i in range(start, end + 1):
+                            item = self._current_rendered_probe_models[i]
+                            item_id = item.get("id", "") if isinstance(item, dict) else str(item)
+                            if item_id:
+                                self.selected_probe_model_ids.add(item_id)
+                    elif ctrl:
+                        if curr_mid in self.selected_probe_model_ids:
+                            self.selected_probe_model_ids.remove(curr_mid)
+                        else:
+                            self.selected_probe_model_ids.add(curr_mid)
+                        self.last_clicked_probe_index = curr_idx
+                    else:
+                        if self.selected_probe_model_ids == {curr_mid}:
+                            self.selected_probe_model_ids.clear()
+                            self.last_clicked_probe_index = None
+                        else:
+                            self.selected_probe_model_ids = {curr_mid}
+                            self.last_clicked_probe_index = curr_idx
+
+                    self.selected_probe_model_id = curr_mid if curr_mid in self.selected_probe_model_ids else (next(iter(self.selected_probe_model_ids)) if self.selected_probe_model_ids else "")
+                    self._update_probe_controls_state()
+                    self._render_probe_items(self._current_rendered_probe_models)
+                return handler
+
+            def on_quick_add(e, mid=m_id):
+                self.selected_probe_model_ids = {mid}
+                self.selected_probe_model_id = mid
+                self.open_add_model_dialog(custom_model_id=mid)
+
+            def make_on_checkbox(curr_idx=idx, curr_mid=m_id):
+                def handler(e):
+                    if e.control.value:
+                        self.selected_probe_model_ids.add(curr_mid)
+                        self.last_clicked_probe_index = curr_idx
+                    else:
+                        self.selected_probe_model_ids.discard(curr_mid)
+                    self.selected_probe_model_id = curr_mid if curr_mid in self.selected_probe_model_ids else (next(iter(self.selected_probe_model_ids)) if self.selected_probe_model_ids else "")
+                    self._update_probe_controls_state()
+                    self._render_probe_items(self._current_rendered_probe_models)
+                return handler
+
+            checkbox = ft.Checkbox(
+                value=is_sel,
+                on_change=make_on_checkbox(idx, m_id),
+            )
+
+            self.probe_list_view.controls.append(
+                ft.Container(
+                    content=ft.ListTile(
+                        leading=ft.Row([checkbox, ft.Icon(ft.Icons.SMART_TOY_OUTLINED, size=20, color=ft.Colors.BLUE_600)], tight=True, spacing=6),
+                        title=ft.Text(f"{m_id}{hint_str}", weight=ft.FontWeight.BOLD if is_sel else ft.FontWeight.W_400, size=13),
+                        trailing=ft.ElevatedButton("添加", on_click=on_quick_add, height=32),
+                        dense=True,
+                        on_click=make_on_select(idx, m_id),
+                    ),
+                    bgcolor=ft.Colors.BLUE_50 if is_sel else None,
+                    border=ft.border.all(1, ft.Colors.BLUE_300 if is_sel else ft.Colors.TRANSPARENT),
+                    border_radius=6,
+                )
+            )
+        self._update_probe_controls_state()
+        self.page.update()
+
+    # ------------------------------------------------------------------ #
+    #  平台下拉框与辅助计算                                                 #
+    # ------------------------------------------------------------------ #
+
+    def _resolve_platform_name(self, platform_value=None) -> str:
+        """获取当前选中的平台标识。"""
+        if platform_value:
+            raw = str(platform_value).strip()
+            return self.platform_display_to_key.get(raw, raw)
+        current = (self.platform_dropdown.value or "").strip()
+        return self.platform_display_to_key.get(current, current)
+
+    def _refresh_platform_combo(self, selected_platform_name: str | None = None):
+        """刷新平台下拉选项。"""
         platform_names = list(self.current_config.keys()) if self.current_config else []
-        self.platform_display_to_key = {}
+        self.platform_display_to_key = {name: name for name in platform_names}
         self.platform_keys_in_order = list(platform_names)
 
-        self.platform_combo.configure(values=platform_names)
-        for name in platform_names:
-            self.platform_display_to_key[name] = name
+        self.platform_dropdown.options = [ft.dropdown.Option(name, name) for name in platform_names]
 
-        target_name = selected_platform_name if selected_platform_name in self.current_config else ""
-        if not target_name and platform_names:
-            target_name = platform_names[0]
+        target = selected_platform_name if selected_platform_name in self.current_config else ""
+        if not target and platform_names:
+            target = platform_names[0]
 
-        if target_name:
-            self.platform_combo.set(target_name)
-        else:
-            self.platform_combo.set("")
-            self.platform_var.set("")
+        self.platform_dropdown.value = target if target else None
+        self.page.update()
+
+    def _update_overview_state(self):
+        """更新顶部状态文本。"""
+        p_count = len(self.current_config)
+        total_m = sum(len(c.get("models", {})) for c in self.current_config.values()) if self.current_config else 0
+
+        if not self.current_config:
+            self.header_status_text.value = "当前尚未加载任何平台配置"
+            self.page.update()
+            return
+
+        p_name = self._resolve_platform_name()
+        if not p_name or p_name not in self.current_config:
+            p_name = next(iter(self.current_config.keys()), "")
+
+        p_cfg = self.current_config.get(p_name, {})
+        has_key = bool(p_cfg.get("api_key"))
+
+        self.header_status_text.value = (
+            f"已加载 {p_count} 个平台 / {total_m} 个模型 · 当前平台：{p_name or '未选择'} · API Key {'已保存' if has_key else '未保存'}"
+        )
+        self.page.update()
 
     def _decrypt_api_key_strict(self, api_key_val: str) -> str:
-        """严格解密 API Key，要求必须得到可用明文。"""
-        if not api_key_val:
+        """严格解密 API Key。"""
+        if not api_key_val or not isinstance(api_key_val, str):
             return ""
-        if not isinstance(api_key_val, str):
-            raise ValueError("API Key 数据类型错误")
-
         text = api_key_val.strip()
         if not text:
             return ""
-
-        sec_mgr = SecurityManager.get_instance()
-        result = sec_mgr.decrypt(text)
-        if result.has_plaintext:
-            return result.value
-        if result.is_missing_key:
+        sec = SecurityManager.get_instance()
+        res = sec.decrypt(text)
+        if res.has_plaintext:
+            return res.value
+        if res.is_missing_key:
             raise ValueError("检测到加密 API Key，但当前未设置 LLM_KEY")
-        raise ValueError("托管密钥与当前站点主密钥不匹配，该平台需要配置 API Key")
+        raise ValueError("托管密钥与当前站点主密钥不匹配，该平台需要重新配置 API Key")
 
-    def _get_probe_cache_key(self, platform_name, base_url, api_key):
-        """生成探测缓存 key。"""
+    def _get_probe_cache_key(self, platform_name, base_url, api_key) -> str | None:
         if not platform_name or not base_url or not api_key:
             return None
         return f"{platform_name}::{base_url}::{api_key}"
 
-    def _invalidate_probe_cache(self, platform_name=None):
-        """清除探测缓存。"""
+    def _invalidate_probe_cache(self, platform_name: str | None = None):
         if not platform_name:
             self.probe_models_cache.clear()
             return
@@ -904,13 +1088,14 @@ class LLMConfigGUI(
 
 
 def main(*, schema_initializer: Optional[Callable[[AIManager], None]] = None):
-    """主函数：启动 GUI。"""
+    """主函数：启动 Flet GUI。"""
     enable_high_dpi_awareness()
-    root = ctk.CTk()
-    LLMConfigGUI(root, schema_initializer=schema_initializer)
-    root.mainloop()
+
+    def app_main(page: ft.Page):
+        LLMConfigGUI(page, schema_initializer=schema_initializer)
+
+    ft.app(target=app_main)
 
 
 if __name__ == "__main__":
     main()
-

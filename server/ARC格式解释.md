@@ -16,7 +16,7 @@
 *   **`@guide` (Chapter)**: 对应 UI 界面显示的任务指引。
 *   **`@intro` (Introduction)**: 场景初始化描述，用于写前情提要并衔接到本场景的开始。
 *   **`@act` (Action)**: 行为节点，由开发者手动添加，用于触发音效、状态记录等通用运行时逻辑。
-*   **`@presentation` (Presentation)**: SparkArc Web 播放器专用的视觉演出提示，与通用行为节点分离。它不属于 Unity SDK 协议，Unity 导出会统一忽略整个 `presentation` 节点字段。
+*   **`@show` (Show)**: SparkArc Web 播放器专用的视觉演出提示，与通用行为节点分离。支持背景引用 `@show bg:xxx`、插图生成 `@show img:xxx` 等。它不属于 Unity SDK 协议，Unity 导出会统一忽略整个演出节点字段。
 
 ## 2. 叙事元素解析
 剧本通过“旁白”与“对话”交替推动逻辑。
@@ -90,13 +90,14 @@
 ```
 *   **`@next`**: 定义该分支结束后的跳转目标。如果缺失，默认进入下一物理行。
 
-## 5. 演出提示（presentation）、行为节点（act）与默认顺序（progress）
+## 5. 演出提示（show）、行为节点（act）与默认顺序（progress）
 
 ```markdown
 [旁白]
 晚风把校门口的树影吹得晃动起来。
 
-@presentation bg:school_road_sunset
+@show bg:school_road_sunset
+@show img:晚风吹拂校门，暖黄余晖拉长树影，电影质感中景
 @act sound:summer_wind,school_bell
 
 [江砚]
@@ -105,7 +106,7 @@
 @next 最后的告别
 ```
 
-*   **`@presentation key:value`**: Web 播放器视觉演出提示。背景、立绘、完整场景插图及其自然语言描述均收口到节点的 `presentation` 字段；Unity SDK 不消费该字段。
+*   **`@show key:value`**: Web 播放器视觉演出提示。背景（`bg`）、生图构思（`img`）、立绘（`sprite`）均收口到节点的 `show` 字段；Unity SDK 不消费该字段。
 *   **`@act key:value`**: 通用行为触发指令。当前解析逻辑允许同一节点连续声明多个 `@act`，会在解析后汇总进同一个对话节点。
 *   **`@next`**: 显式跳转边，由人类控制，用于覆盖默认线性推进。
 *   **`progress`**: 不在 `.arc` 文件中手写，而是在导出 SQLite 时自动生成，作为默认线性播放顺序。
@@ -120,7 +121,7 @@
 | `[希希]` | `Speaker` | `"speaker": "希希"`，导出时派生 `"chr": 1` | 少女（希希） |
 | `[旁白]` | `Narration` | `"speaker": "旁白"`，导出时派生 `"chr": -1` | 不显示角色名和立绘 |
 | `<opt>` | `Branch` | `"optn": [...]` | 每一个 opt 对应一个逻辑分支 |
-| `@presentation bg:xxx` | `Presentation` | `"presentation": {"bg": "xxx"}` | 仅供 Web 播放器演出；Unity SDK 统一忽略该节点字段 |
+| `@show bg:xxx` | `Show` | `"show": {"bg": "xxx"}` | 仅供 Web 播放器演出；Unity SDK 统一忽略该节点字段 |
 | `@act sound:xxx` | `Action` | `"act": {"sound": "xxx"}` | 人工控制的通用行为节点 |
 | `@next 场景名` | `Jump` | `"next": "场景名"` | 人工控制的显式跳转 |
 

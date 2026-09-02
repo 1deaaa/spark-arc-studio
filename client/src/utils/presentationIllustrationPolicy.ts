@@ -16,7 +16,10 @@ function normalizedValue(value: unknown) {
 
 function cueValue(cue: unknown, key: string) {
   if (!cue || typeof cue !== 'object') return undefined;
-  return (cue as Record<string, unknown>)[key];
+  const dict = cue as Record<string, unknown>;
+  if (key === 'illustration_prompt') return dict.img ?? dict.illustration_prompt;
+  if (key === 'illustration_pending') return dict.pending ?? dict.illustration_pending;
+  return dict[key];
 }
 
 function hasIllustrationAsset(cue: unknown) {

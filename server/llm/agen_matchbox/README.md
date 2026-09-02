@@ -50,7 +50,7 @@ Agent Matchbox 面向 Agent 开发而生，是一个可独立运行、可嵌入�
   - 用户可通过兑换码充值系统点数，兑换记录可追溯。
 - **动态模型探测**：内置独立的模型探测工具 (`probe_platform_models`)，可以探测任何兼容OpenAI接口的平台所支持的模型列表。
   - **推理内容/计费字段可视化（平台测试）**：GUI 的“测试模型”会展示原始响应 JSON，部分平台会返回 `reasoning_content`、`usage` 或 `billing` 相关字段，可直接在日志中查看。
-  - **图形化配置工具**：提供一个基于 `Tkinter` 的 GUI 工具（`matchbox_cfg_gui.py`），完全无需依赖前端配置，**直接操作数据库**，支持添加/编辑/软禁用平台与模型、加密存储 API Key、探测和测试模型，以及从本地 YAML 重置数据库或将数据库导出为 `matchbox_cfg.yaml` + `matchbox_key.yaml`。
+  - **图形化配置工具**：提供一个基于 `Flet (0.28.3)` 的现代化自适应 GUI 工具（`matchbox_cfg_gui.pyw`，Windows 下支持无控制台直接双击自启），完全无需依赖前端配置，**直接操作数据库**，支持添加/编辑/软禁用平台与模型、拖拽排序、加密存储 API Key、探测和测试模型，以及从本地 YAML 重置数据库或将数据库导出为 `matchbox_cfg.yaml` + `matchbox_key.yaml`。
 - **数据库持久化**：默认使用 SQLite 存储用户配置、平台和模型信息；生产环境可通过 `AGENT_MATCHBOX_DATABASE_URL` 切换到 PostgreSQL。
 - **自动配置修正**：当用户的配置失效（如模型或平台被删除），系统会自动回退到第一个可用的默认平台，保证服务的可用性。
 
@@ -77,8 +77,8 @@ Agent Matchbox 面向 Agent 开发而生，是一个可独立运行、可嵌入�
 ├── utils.py               # 工具函数 (probe_platform_models, parse_extra_body 等)
 ├── matchbox_cfg.yaml       # 系统平台结构配置（仅用于初始化/导出，运行时以数据库为准）
 ├── matchbox_key.yaml       # 系统平台 API Key（应被 git 忽略，禁止提交）
-├── matchbox_cfg_gui.py     # 图形化配置管理工具（入口，实际代码在 gui/ 子目录）
-├── gui/                   # GUI 模块（拆分自 matchbox_cfg_gui.py）
+├── matchbox_cfg_gui.pyw    # 图形化配置管理工具（双击直接自启入口，实际代码在 gui/ 子目录）
+├── gui/                   # GUI 模块（拆分自 matchbox_cfg_gui）
 │   ├── __init__.py
 │   ├── main_window.py     # 主窗口 LLMConfigGUI 类（平台配置、用户总览、模型管理）
 │   ├── platform_panel.py  # 平台管理 Mixin
@@ -87,7 +87,7 @@ Agent Matchbox 面向 Agent 开发而生，是一个可独立运行、可嵌入�
 │   ├── key_manager.py     # 密钥管理 Mixin
 │   ├── probe.py           # 探测功能 Mixin
 │   ├── dpi.py             # 高分屏适配与窗口尺寸策略
-│   └── theme.py           # GUI 主题、配色与表格样式
+│   └── theme.py           # GUI 主题、配色与字体跨平台（Windows/Ubuntu）适配
 └── README.md              # 本文档
 ```
 
@@ -95,7 +95,7 @@ Agent Matchbox 面向 Agent 开发而生，是一个可独立运行、可嵌入�
 - **`quota_services.py`**: 配额服务模块，集中处理 `sys_paid/self_paid` 两条计费口径的配额配置、周期用量统计、总量统计与调用前拦截。
 - **`usage_services.py`**: 用量统计模块，除单用户汇总外，也提供面向 GUI 的全用户调用总览聚合能力。
 - **`matchbox_cfg.yaml`**: **初始化配置文件**。用于定义初始的"系统平台"。首次启动时，管理器会将此文件中的平台同步到数据库。后续启动仅增量添加新平台，不会覆盖已有配置。**运行时权威数据源是数据库，而非此文件。**
-- **`matchbox_cfg_gui.py`**: GUI 入口文件，实际逻辑拆分在 `gui/` 子目录中。**直接操作数据库**，支持平台/模型增删改（删除为软禁用）、API Key 加密存储、模型探测与测试、全用户调用总览、双击用户查看详情，以及从本地 YAML 重置数据库或将数据库导出为 `matchbox_cfg.yaml` + `matchbox_key.yaml`。
+- **`matchbox_cfg_gui.pyw`**: GUI 入口文件，实际逻辑拆分在 `gui/` 子目录中。**直接操作数据库**，支持平台/模型增删改（删除为软禁用）、API Key 加密存储、模型探测与测试、全用户调用总览、双击用户查看详情，以及从本地 YAML 重置数据库或将数据库导出为 `matchbox_cfg.yaml` + `matchbox_key.yaml`。
 
 ## 🛠️ 第一次配置流程 (新手必读)
 
@@ -108,7 +108,7 @@ Agent Matchbox 面向 Agent 开发而生，是一个可独立运行、可嵌入�
     - **首次部署时若你看到“存在历史密钥无法解密”的提示，不必惊慌。** 这通常意味着 `matchbox_key.yaml` 中携带了仓库作者或其他环境生成的加密 Key，它们在你的机器上本来就不可用。此时你只需要设置自己的 `LLM_KEY`，并按提示选择清理这些不可恢复密钥即可。**清理不会删除平台与模型结构，只会清空这些不可用的托管 Key。**
 
 2. **启动配置工具**：
-    - 安装下方列出的依赖后，在组件目录运行 `python matchbox_cfg_gui.py`。
+    - 安装下方列出的依赖后，在 Windows 下直接双击 `matchbox_cfg_gui.pyw`，或在命令行运行 `python matchbox_cfg_gui.pyw`。
     - 你会看到预置的平台（如 DeepSeek, OpenRouter），但它们的 Key 是无法使用的。
 
 3. **替换并激活平台**：
@@ -269,15 +269,15 @@ for chunk in client.stream("继续扩展成三幕结构"):
 ```bash
 pip install langchain-core langchain-openai sqlalchemy tiktoken cryptography pyyaml requests python-dotenv
 # 按需：PostgreSQL / GUI / Alembic
-pip install "psycopg[binary]" customtkinter alembic
+pip install "psycopg[binary]" "flet>=0.28.3,<0.29.0" alembic
 ```
 
 ### 2. 通过 GUI 配置平台与模型
 
-**推荐方式**：直接使用 GUI 工具操作数据库，无需手动编辑 YAML。
+**推荐方式**：在 Windows 下直接双击 `matchbox_cfg_gui.pyw` 启动，或使用命令行操作数据库，无需手动编辑 YAML。
 
 ```bash
-python matchbox_cfg_gui.py
+python matchbox_cfg_gui.pyw
 ```
 
 > **说明**：`matchbox_cfg.yaml` 仅在**首次启动**时将预置平台写入数据库（增量同步，不覆盖已有配置）。
@@ -447,7 +447,7 @@ except ValueError as e:
 
 ### GUI 工具
 
-GUI 配置工具 (`matchbox_cfg_gui.py`) **直接操作数据库**，修改即时生效，无需重启服务。
+GUI 配置工具 (`matchbox_cfg_gui.pyw`) **直接操作数据库**，修改即时生效，无需重启服务。
 
 - **📦 数据库（唯一模式）**：所有平台/模型的增删改均写入数据库，API Key 加密存储。
 - **📥 从YAML重置DB**：以本地 `matchbox_cfg.yaml` + `matchbox_key.yaml` 为准重置数据库中的系统平台；YAML 中不存在的平台会被软禁用，用户 API Key 会保留。适合恢复标准状态。

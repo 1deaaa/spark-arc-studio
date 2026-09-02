@@ -40,8 +40,8 @@ def test_import_project_stories_keeps_presentation_and_ignores_legacy_visual_dir
                 "@meta button_text:按 F 与 {npc_name} 对话",
                 "[-1]",
                 "系统准备触发行为。",
-                "@presentation bg:bg_school_road",
-                "@presentation sprite:sprite_hero_default",
+                "@show bg:bg_school_road",
+                "@show sprite:sprite_hero_default",
                 "@act bgm:town_theme",
                 "[信使]",
                 "你好，{player_name}。",
@@ -107,7 +107,7 @@ def test_import_project_stories_keeps_presentation_and_ignores_legacy_visual_dir
         ("player_name", '["艾莉"]'),
     ]
     decoded_dlg_json = dlg_json.decode("utf-8") if isinstance(dlg_json, bytes) else dlg_json
-    assert '"presentation": {"bg": "bg_school_road", "sprite": "sprite_hero_default"}' in decoded_dlg_json
+    assert ('"show": {"bg": "bg_school_road", "sprite": "sprite_hero_default"}' in decoded_dlg_json or '"presentation": {"bg": "bg_school_road", "sprite": "sprite_hero_default"}' in decoded_dlg_json)
     assert "bg_legacy_alley" not in decoded_dlg_json
     assert "sprite_legacy_hero" not in decoded_dlg_json
     assert "bg_deprecated_alley" not in decoded_dlg_json

@@ -3,13 +3,15 @@ import { describe, expect, it } from 'vitest';
 import { parseArc, serializeToArc } from '@/services/arcParser';
 
 describe('ARC 演出提示协议', () => {
-  it('只解析 @presentation，并把废弃视觉指令静默丢弃', () => {
+  it('解析 @show，忽略旧的 @presentation，并把废弃视觉指令静默丢弃', () => {
     const scenes = parseArc([
       '# 雨夜',
       '[旁白]',
       '雨落在玻璃上。',
-      '@presentation bg:bg_rainy_window',
-      '@presentation illustration_prompt:雨夜窗边，低机位，中景',
+      '@show bg:bg_rainy_window',
+      '@show img:雨夜窗边，低机位，中景',
+      '@presentation bg:legacy_ignored',
+      '@presentation illustration_prompt:legacy_prompt_ignored',
       '@act sound:rain_loop',
       '[林澈]',
       '别回头。',
@@ -23,7 +25,7 @@ describe('ARC 演出提示协议', () => {
     const [first, second] = scenes[0].dia;
     expect(first.presentation).toEqual({
       bg: 'bg_rainy_window',
-      illustration_prompt: '雨夜窗边，低机位，中景',
+      img: '雨夜窗边，低机位，中景',
     });
     expect(first.act).toEqual({ sound: 'rain_loop' });
     expect(second.presentation).toBeUndefined();
@@ -31,12 +33,14 @@ describe('ARC 演出提示协议', () => {
     expect(second.txt).toBe('别回头。');
 
     const serialized = serializeToArc(scenes);
-    expect(serialized).toContain('@presentation bg:bg_rainy_window');
-    expect(serialized).toContain('@presentation illustration_prompt:雨夜窗边，低机位，中景');
+    expect(serialized).toContain('@show bg:bg_rainy_window');
+    expect(serialized).toContain('@show img:雨夜窗边，低机位，中景');
     expect(serialized).toContain('@act sound:rain_loop');
+    expect(serialized).not.toContain('@presentation');
     expect(serialized).not.toContain('@web');
     expect(serialized).not.toContain('@act bg:');
     expect(serialized).not.toContain('@act sprite:');
+    expect(serialized).not.toContain('legacy_ignored');
     expect(serialized).not.toContain('废弃描述');
   });
 
@@ -45,10 +49,10 @@ describe('ARC 演出提示协议', () => {
       '# 高潮',
       '[旁白]',
       '门在身后合上。',
-      '@presentation illustration_pending:true',
+      '@show pending:true',
     ].join('\n'));
 
-    expect(scenes[0].dia[0].presentation?.illustration_pending).toBe('true');
-    expect(serializeToArc(scenes)).toContain('@presentation illustration_pending:true');
+    expect(scenes[0].dia[0].presentation?.pending).toBe('true');
+    expect(serializeToArc(scenes)).toContain('@show pending:true');
   });
 });

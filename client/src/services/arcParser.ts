@@ -18,6 +18,8 @@ export type PresentationCue = {
   illustration?: ActValue;
   illustration_prompt?: ActValue;
   illustration_pending?: ActValue;
+  img?: ActValue;
+  pending?: ActValue;
   characters?: ActValue;
   [key: string]: ActValue | undefined;
 };
@@ -31,6 +33,7 @@ export type ArcDialogueNode = {
   thought?: string;
   next?: string;
   presentation?: PresentationCue;
+  show?: PresentationCue;
   act?: Record<string, ActValue>;
   opt?: ArcOptionNode[];
 };
@@ -453,15 +456,21 @@ function parseDialogueContent(
           continue;
         }
 
-        // Web 专用演出提示使用独立协议，不与 Unity 通用行为节点混用。
-        const presentationMatch = nextLine.match(/^@presentation\s+(\w+):([^<]+)/i);
-        if (presentationMatch) {
-          const key = presentationMatch[1].trim().toLowerCase();
-          let value: ActValue = presentationMatch[2].trim();
-          if (key !== 'illustration_prompt' && value.includes(',')) {
+        // Web 专用演出提示使用 @show 协议，不与 Unity 通用行为节点混用。
+        const showMatch = nextLine.match(/^@show\s+(\w+):([^<]+)/i);
+        if (showMatch) {
+          const key = showMatch[1].trim().toLowerCase();
+          let value: ActValue = showMatch[2].trim();
+          if (key !== 'img' && key !== 'illustration_prompt' && value.includes(',')) {
             value = value.split(',').map(v => v.trim());
           }
           presentationCommands[key] = value;
+          i++;
+          continue;
+        }
+
+        // 旧的 @presentation 指令直接忽略，确保兼容不报错且不混入对白
+        if (nextLine.match(/^@presentation\b/i)) {
           i++;
           continue;
         }
@@ -769,11 +778,14 @@ function serializeDialogues(dialogues: ArcDialogueNode[], chrMap: Record<string 
     lines.push(`${indentStr}${d.txt}`);
 
     // Web 专用演出提示与通用行为分离，Unity SDK 会统一忽略该节点字段。
-    if (d.presentation && Object.keys(d.presentation).length > 0) {
-      for (const [key, value] of Object.entries(d.presentation)) {
+    const showPayload = d.show || d.presentation;
+    if (showPayload && Object.keys(showPayload).length > 0) {
+      for (let [key, value] of Object.entries(showPayload)) {
         if (value === undefined || value === null || value === '') continue;
+        if (key === 'illustration_prompt') key = 'img';
+        if (key === 'illustration_pending') key = 'pending';
         const valStr = Array.isArray(value) ? value.join(',') : value;
-        lines.push(`${indentStr}@presentation ${key}:${valStr}`);
+        lines.push(`${indentStr}@show ${key}:${valStr}`);
       }
     }
 

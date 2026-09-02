@@ -2,7 +2,7 @@
 
 SparkArc Unity SDK 的目标是把 SparkArc 创作端导出的 `stories.db` 变成 Unity 游戏运行时可以直接消费的剧情数据。
 
-> **协议边界：** ARC 中的 `@presentation` 节点仅供 SparkArc Web 播放器进行背景、立绘和场景插图演出，不属于 Unity SDK 协议。生成 Unity 目标数据库时，SparkArc 会统一移除整个 `presentation` 节点字段；Unity 运行时不会读取其内容。需要由 Unity 执行的音乐、镜头、Timeline、角色动作等通用行为应继续使用 `@act` 和行为绑定系统。
+> **协议边界：** ARC 中的 `@show`（与历史 `@presentation`）节点仅供 SparkArc Web 播放器进行背景、立绘和场景插图演出，不属于 Unity SDK 协议。生成 Unity 目标数据库时，SparkArc 会统一移除整个演出节点字段（`show` / `presentation`）；Unity 运行时不会读取其内容。需要由 Unity 执行的音乐、镜头、Timeline、角色动作等通用行为应继续使用 `@act` 和行为绑定系统。
 
 这不是一个只能展示文本的 demo。它的设计目标是：
 

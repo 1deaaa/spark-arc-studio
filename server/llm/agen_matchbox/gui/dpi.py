@@ -1,135 +1,61 @@
 """
-高分屏与响应式窗口布局辅助工具。
+高分屏与窗口几何尺寸配置辅助工具（适配 Flet 0.28.3）。
 """
 from __future__ import annotations
 
-import sys
-
-
-_BASE_DPI = 96.0
-_BASE_TK_SCALING = _BASE_DPI / 72.0
+import flet as ft
 
 
 def enable_high_dpi_awareness() -> None:
-    """在 Windows 上尽量启用高分屏感知（由 CustomTkinter 内部处理，此处留空以防冲突）。"""
+    """保持兼容性的高分屏感知入口（Flutter/Flet 底层自动适配高分屏缩放）。"""
     pass
 
 
-def configure_tk_scaling(root) -> float:
-    """根据当前屏幕 DPI 调整 Tk 缩放（由 CustomTkinter 内部处理，此处仅返回 1.0 兼容老代码）。"""
-    return 1.0
-
-
-def _scaled_pair(size: tuple[int, int], ui_scale: float, *, upper: float = 1.2) -> tuple[int, int]:
-    scale = min(max(ui_scale, 1.0), upper)
-    return (
-        int(round(size[0] * scale)),
-        int(round(size[1] * scale)),
-    )
-
-
-def _compute_window_size(
-    window,
+def configure_page_window(
+    page: ft.Page,
     *,
-    base_size: tuple[int, int],
-    min_size: tuple[int, int],
-    ui_scale: float,
-    width_ratio: float,
-    height_ratio: float,
-) -> tuple[tuple[int, int], tuple[int, int]]:
-    screen_w = int(window.winfo_screenwidth())
-    screen_h = int(window.winfo_screenheight())
-
-    scaled_base = _scaled_pair(base_size, ui_scale, upper=1.12)
-    scaled_min = _scaled_pair(min_size, ui_scale, upper=1.18)
-
-    max_w = max(int(screen_w * width_ratio), scaled_min[0])
-    max_h = max(int(screen_h * height_ratio), scaled_min[1])
-
-    width = max(scaled_min[0], min(scaled_base[0], max_w))
-    height = max(scaled_min[1], min(scaled_base[1], max_h))
-    return (width, height), scaled_min
-
-
-def _center_geometry(window, width: int, height: int, parent=None) -> str:
-    if parent is not None:
+    title: str = "火柴Agent网关 · LLM 配置台",
+    width: int = 1420,
+    height: int = 880,
+    min_width: int = 1180,
+    min_height: int = 720,
+) -> None:
+    """统一配置 Flet 0.28.3 主窗口的标题、尺寸、最小尺寸与居中。"""
+    page.title = title
+    if hasattr(page, "window") and page.window is not None:
+        page.window.width = width
+        page.window.height = height
+        page.window.min_width = min_width
+        page.window.min_height = min_height
         try:
-            parent.update_idletasks()
-            parent_w = parent.winfo_width() or width
-            parent_h = parent.winfo_height() or height
-            parent_x = parent.winfo_rootx()
-            parent_y = parent.winfo_rooty()
-
-            x = parent_x + max((parent_w - width) // 2, 24)
-            y = parent_y + max((parent_h - height) // 2, 24)
-            return f"{width}x{height}+{x}+{y}"
+            page.window.center()
         except Exception:
             pass
 
-    screen_w = int(window.winfo_screenwidth())
-    screen_h = int(window.winfo_screenheight())
-    x = max((screen_w - width) // 2, 24)
-    y = max((screen_h - height) // 2, 24)
-    return f"{width}x{height}+{x}+{y}"
 
-
-def prepare_root_window(
-    root,
-    *,
-    title: str | None = None,
-    base_size: tuple[int, int] = (1480, 930),
-    min_size: tuple[int, int] = (1120, 720),
-    width_ratio: float = 0.88,
-    height_ratio: float = 0.86,
-    ui_scale: float = 1.0,
-) -> tuple[int, int]:
-    """配置主窗口的默认大小、最小大小与居中布局。"""
-    if title:
-        root.title(title)
-
-    (width, height), scaled_min = _compute_window_size(
-        root,
-        base_size=base_size,
-        min_size=min_size,
-        ui_scale=ui_scale,
-        width_ratio=width_ratio,
-        height_ratio=height_ratio,
+def prepare_root_window(page: ft.Page, **kwargs) -> tuple[int, int]:
+    """老接口兼容实现。"""
+    width = kwargs.get("width", 1420)
+    height = kwargs.get("height", 880)
+    configure_page_window(
+        page,
+        title=kwargs.get("title", "火柴Agent网关 · LLM 配置台"),
+        width=width,
+        height=height,
+        min_width=kwargs.get("min_size", (1180, 720))[0] if "min_size" in kwargs else 1180,
+        min_height=kwargs.get("min_size", (1180, 720))[1] if "min_size" in kwargs else 720,
     )
-
-    root.minsize(*scaled_min)
-    root.geometry(_center_geometry(root, width, height))
     return width, height
 
 
-def prepare_toplevel_window(
-    window,
-    parent,
-    *,
-    base_size: tuple[int, int] = (860, 700),
-    min_size: tuple[int, int] = (680, 520),
-    width_ratio: float = 0.8,
-    height_ratio: float = 0.84,
-    ui_scale: float = 1.0,
-) -> tuple[int, int]:
-    """配置模态窗口的响应式尺寸与位置。"""
-    (width, height), scaled_min = _compute_window_size(
-        window,
-        base_size=base_size,
-        min_size=min_size,
-        ui_scale=ui_scale,
-        width_ratio=width_ratio,
-        height_ratio=height_ratio,
-    )
-
-    window.minsize(*scaled_min)
-    window.geometry(_center_geometry(window, width, height, parent=parent))
-    return width, height
+def prepare_toplevel_window(dialog: ft.AlertDialog, **kwargs) -> None:
+    """老接口兼容实现（Flet 中模态对话框由 AlertDialog 承载）。"""
+    pass
 
 
 __all__ = [
-    "configure_tk_scaling",
     "enable_high_dpi_awareness",
+    "configure_page_window",
     "prepare_root_window",
     "prepare_toplevel_window",
 ]
-

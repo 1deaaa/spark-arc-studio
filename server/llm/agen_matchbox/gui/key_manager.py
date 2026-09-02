@@ -1,8 +1,11 @@
+"""
+密钥管理功能 Mixin（适配 Flet 0.28.3）。
+"""
+from __future__ import annotations
+
 import os
 import sys
-import tkinter as tk
-from tkinter import messagebox
-import customtkinter as ctk
+import flet as ft
 
 if __package__ in (None, "", "gui"):
     _GUI_DIR = os.path.dirname(os.path.abspath(__file__))
@@ -14,79 +17,10 @@ if __package__ in (None, "", "gui"):
 
 from ..env_utils import get_env_var, get_env_path
 from ..manager import MasterKeyMigrationRequiredError
-from .dpi import prepare_toplevel_window
 
 
 class KeyManagerMixin:
     """密钥管理功能 Mixin，需与 LLMConfigGUI 混入使用。"""
-
-    # ------------------------------------------------------------------ #
-    #  内部工具                                                             #
-    # ------------------------------------------------------------------ #
-
-    def _ask_password(self, title: str, prompt: str) -> str | None:
-        """创建一个美观且带遮罩的安全密码/密钥输入框。"""
-        result = [None]
-        dialog = ctk.CTkToplevel(self.root)
-        dialog.title(title)
-        dialog.transient(self.root)
-        dialog.grab_set()
-        
-        # 居中和大小设定
-        prepare_toplevel_window(
-            dialog,
-            self.root,
-            base_size=(440, 220),
-            min_size=(440, 220),
-            ui_scale=getattr(self, "ui_scale", 1.0),
-        )
-        dialog.columnconfigure(0, weight=1)
-        
-        ctk.CTkLabel(
-            dialog, 
-            text=prompt, 
-            font=("Microsoft YaHei UI", 11), 
-            wraplength=380, 
-            justify="left"
-        ).grid(row=0, column=0, padx=20, pady=(20, 10), sticky="ew")
-        
-        entry = ctk.CTkEntry(dialog, show="*")
-        entry.grid(row=1, column=0, padx=20, pady=10, sticky="ew")
-        entry.focus()
-        
-        def on_ok():
-            result[0] = entry.get()
-            dialog.destroy()
-            
-        def on_cancel():
-            dialog.destroy()
-            
-        btn_frame = ctk.CTkFrame(dialog, fg_color="transparent")
-        btn_frame.grid(row=2, column=0, padx=20, pady=10, sticky="e")
-        
-        ctk.CTkButton(
-            btn_frame, 
-            text="确定", 
-            command=on_ok, 
-            width=80, 
-            fg_color="#3667D6", 
-            hover_color="#2E57B5",
-            font=("Microsoft YaHei UI", 11),
-        ).pack(side="left", padx=5)
-        
-        ctk.CTkButton(
-            btn_frame, 
-            text="取消", 
-            command=on_cancel, 
-            width=80,
-            font=("Microsoft YaHei UI", 11),
-        ).pack(side="left", padx=5)
-        
-        dialog.bind("<Return>", lambda e: on_ok())
-        dialog.bind("<Escape>", lambda e: on_cancel())
-        
-        self.root.wait_window(dialog)
-        return result[0]
 
     def _format_master_key_summary(self, result: dict) -> str:
         """格式化主密钥迁移结果。"""
@@ -101,86 +35,108 @@ class KeyManagerMixin:
             parts.append(f"清除不可恢复密钥 {result['cleared_unrecoverable']} 项")
         return "；".join(parts) if parts else "未发现需要迁移的历史密钥"
 
-    def _prompt_master_key_recovery(self, error_message: str, require_success: bool) -> str | None:
-        """提示输入旧主密钥，或允许用户确认清除历史密钥。"""
-        while True:
-            old_key = self._ask_password(
-                "迁移历史密钥",
-                "当前主密钥无法解密部分历史 API Key。\n\n"
-                f"{error_message}\n\n"
-                "请输入旧主密钥以迁移历史密钥。\n"
-                "如果这些历史密钥本来就不需要保留，可以直接留空并点击确定，随后确认清除。"
+    def _apply_master_key_change(
+        self,
+        new_key: str,
+        require_success: bool = False,
+        old_key: str | None = None,
+        allow_clear_unrecoverable: bool = False,
+    ) -> bool:
+        """调用后端主密钥接口，必要时引导旧主密钥或清除历史密钥。"""
+        try:
+            result = self.ai_manager.rotate_master_key(
+                new_key=new_key,
+                old_key=old_key,
+                persist=True,
+                allow_clear_unrecoverable=allow_clear_unrecoverable,
+            )
+            self.log(f"✓ 已完成主密钥处理：{self._format_master_key_summary(result)}", tag="success")
+            return True
+        except MasterKeyMigrationRequiredError as exc:
+            self._prompt_master_key_recovery(str(exc), new_key, require_success=require_success)
+            return False
+        except Exception as exc:
+            self.show_error("主密钥处理失败", str(exc))
+            self.log(f"✗ 主密钥处理失败: {exc}", tag="error")
+            return False
+
+    def _prompt_master_key_recovery(self, error_message: str, new_key: str, require_success: bool) -> None:
+        """弹出历史密钥迁移/清除确认对话框。"""
+        old_key_entry = ft.TextField(
+            label="旧主密钥（留空并点击确定可清除不可恢复密钥）",
+            password=True,
+            can_reveal_password=True,
+            autofocus=True,
+        )
+
+        def on_confirm_recovery(e):
+            input_old_key = old_key_entry.value.strip() if old_key_entry.value else ""
+            if not input_old_key:
+                # 提示确认清除
+                self.page.close(dlg)
+
+                def do_clear():
+                    self._apply_master_key_change(
+                        new_key=new_key,
+                        require_success=require_success,
+                        old_key=None,
+                        allow_clear_unrecoverable=True,
+                    )
+
+                self.ask_yes_no(
+                    "确认清除历史密钥",
+                    "你没有提供旧主密钥。\n\n这将清除所有当前无法解密的历史 API Key：\n- 数据库中的相关密钥会被置空\n- YAML 中相关 api_key 也会被删除\n\n该操作不可撤销，是否继续？",
+                    on_yes=do_clear,
+                    on_no=(lambda: self.page.window.close()) if require_success else None,
+                )
+                return
+
+            self.page.close(dlg)
+            self._apply_master_key_change(
+                new_key=new_key,
+                require_success=require_success,
+                old_key=input_old_key,
+                allow_clear_unrecoverable=False,
             )
 
-            if old_key is None:
-                if require_success:
-                    messagebox.showwarning(
-                        "无法继续",
-                        "必须完成主密钥迁移，或明确确认清除历史密钥后，GUI 才能继续启动。",
-                        parent=self.root,
-                    )
-                    continue
-                return None
+        def on_cancel(e):
+            self.page.close(dlg)
+            if require_success and hasattr(self.page, "window") and self.page.window:
+                self.page.window.close()
 
-            old_key = old_key.strip()
-            if old_key:
-                return old_key
-
-            if messagebox.askyesno(
-                "确认清除历史密钥",
-                "你没有提供旧主密钥。\n\n"
-                "这将清除所有当前无法解密的历史 API Key：\n"
-                "- 数据库中的相关密钥会被置空\n"
-                "- YAML 中相关 api_key 也会被删除\n\n"
-                "该操作不可撤销，是否继续？",
-                parent=self.root,
-            ):
-                return ""
-
-    def _apply_master_key_change(self, new_key: str, require_success: bool = False) -> bool:
-        """调用后端唯一主密钥接口，必要时补录旧主密钥或清除历史密钥。"""
-        pending_old_key = None
-        allow_clear_unrecoverable = False
-
-        while True:
-            try:
-                result = self.ai_manager.rotate_master_key(
-                    new_key=new_key,
-                    old_key=pending_old_key,
-                    persist=True,
-                    allow_clear_unrecoverable=allow_clear_unrecoverable,
-                )
-                self.log(f"✓ 已完成主密钥处理：{self._format_master_key_summary(result)}", tag="success")
-                return True
-            except MasterKeyMigrationRequiredError as exc:
-                recovery_input = self._prompt_master_key_recovery(str(exc), require_success=require_success)
-                if recovery_input is None:
-                    return False
-                pending_old_key = recovery_input or None
-                allow_clear_unrecoverable = recovery_input == ""
-            except Exception as exc:
-                messagebox.showerror("主密钥处理失败", str(exc), parent=self.root)
-                self.log(f"✗ 主密钥处理失败: {exc}", tag="error")
-                return False
+        dlg = ft.AlertDialog(
+            modal=True,
+            title=ft.Text("迁移历史密钥"),
+            content=ft.Container(
+                content=ft.Column(
+                    [
+                        ft.Text("当前主密钥无法解密部分历史 API Key：", size=13),
+                        ft.Text(error_message, size=12, color=ft.Colors.RED_600),
+                        ft.Text("请输入旧主密钥以迁移历史密钥；若不再需要保留历史密钥，可直接留空确定以清除。", size=12),
+                        old_key_entry,
+                    ],
+                    tight=True,
+                    spacing=12,
+                ),
+                width=480,
+            ),
+            actions=[
+                ft.TextButton("取消", on_click=on_cancel),
+                ft.ElevatedButton("确定", on_click=on_confirm_recovery),
+            ],
+            actions_alignment=ft.MainAxisAlignment.END,
+        )
+        self.page.open(dlg)
 
     def _ensure_master_key_ready_on_startup(self) -> bool:
-        """启动时强制检查主密钥；缺失或不匹配时必须完成修复，否则退出 GUI。"""
+        """启动时强制检查主密钥；缺失时引导设置。"""
         current_key = (get_env_var("LLM_KEY") or "").strip()
         if not current_key:
-            messagebox.showwarning(
-                "必须先设置主密钥",
-                "未检测到 LLM_KEY。\n\n"
-                "根据当前安全策略，未设置主密钥时不再允许以明文方式保存或继续运行配置 GUI。\n"
-                "请先完成主密钥设置；若取消，将直接退出 GUI。",
-                parent=self.root,
-            )
-            return self.open_set_llm_key_dialog(require_success=True)
+            self.open_set_llm_key_dialog(require_success=True)
+            return False
 
-        return self._apply_master_key_change(current_key, require_success=True)
-
-    # ------------------------------------------------------------------ #
-    #  公开方法                                                             #
-    # ------------------------------------------------------------------ #
+        success = self._apply_master_key_change(current_key, require_success=True)
+        return success
 
     def save_api_key(self):
         """保存 API Key 到数据库（加密存储）。"""
@@ -189,12 +145,12 @@ class KeyManagerMixin:
             if self.last_selected_platform_name:
                 platform_name = self.last_selected_platform_name
             else:
-                messagebox.showwarning("警告", "请先选择一个有效的平台")
+                self.show_warning("警告", "请先选择一个有效的平台")
                 return
 
-        api_key = self.api_key_entry.get().strip()
+        api_key = (self.api_key_entry.value or "").strip()
         if not api_key:
-            messagebox.showwarning("警告", "请输入 API Key")
+            self.show_warning("警告", "请输入 API Key")
             return
 
         try:
@@ -202,41 +158,74 @@ class KeyManagerMixin:
             if not db_id:
                 raise ValueError("无法获取平台数据库 ID")
             self.ai_manager.admin_update_sys_platform_api_key(db_id, api_key)
-            # 更新内存配置
             self.current_config[platform_name]["api_key"] = api_key
-            # Key 变化后清理探测缓存
             self._invalidate_probe_cache(platform_name)
             self.on_platform_selected()
             self.log(f"✓ 平台 '{platform_name}' 的 API Key 已加密保存", tag="success")
+            self.show_snack(f"平台 '{platform_name}' 的 API Key 已成功加密保存！")
         except Exception as e:
-            self.log(f"✗ 保存失败: {e}")
-            messagebox.showerror("错误", f"保存 API Key 失败: {e}")
+            self.log(f"✗ 保存失败: {e}", tag="error")
+            self.show_error("错误", f"保存 API Key 失败: {e}")
 
-    def open_set_llm_key_dialog(self, require_success=False):
+    def open_set_llm_key_dialog(self, require_success: bool = False):
         """手动设置或轮换主密钥 LLM_KEY。"""
+        key_input = ft.TextField(
+            label="新的主密钥 (LLM_KEY)",
+            hint_text="写入 agen_matchbox/.env",
+            password=True,
+            can_reveal_password=True,
+            autofocus=True,
+        )
+        error_msg_text = ft.Text("", color=ft.Colors.RED_600, size=12, visible=False)
 
-        while True:
-            key = self._ask_password(
-                "设置主密钥",
-                "请输入新的 LLM_KEY（将写入 agen_matchbox/.env）："
-            )
-            if key is None:
-                if require_success:
-                    messagebox.showwarning("无法继续", "未完成主密钥设置，GUI 将退出。", parent=self.root)
-                return False
+        def on_confirm(e):
+            new_key = (key_input.value or "").strip()
+            if not new_key:
+                error_msg_text.value = "主密钥不能为空！"
+                error_msg_text.visible = True
+                self.page.update()
+                return
 
-            key = key.strip()
-            if not key:
-                messagebox.showwarning("提示", "LLM_KEY 不能为空", parent=self.root)
-                continue
-
-            if self._apply_master_key_change(key, require_success=require_success):
+            if self._apply_master_key_change(new_key, require_success=require_success):
+                self.page.close(dlg)
                 self.log(f"✓ 主密钥已保存到 {get_env_path()}", tag="success")
+                self.show_snack("主密钥已成功保存！")
                 if getattr(self, "current_config", None):
                     self._invalidate_probe_cache()
                     self.load_config_from_db()
-                return True
+                if require_success:
+                    self._bootstrap_startup_continue()
 
-            if not require_success:
-                return False
+        def on_cancel(e):
+            self.page.close(dlg)
+            if require_success:
+                self.show_warning("无法继续", "未完成主密钥设置，GUI 即将关闭。")
+                if hasattr(self.page, "window") and self.page.window:
+                    self.page.window.close()
 
+        dlg = ft.AlertDialog(
+            modal=True,
+            title=ft.Text("设置主密钥"),
+            content=ft.Container(
+                content=ft.Column(
+                    [
+                        ft.Text("请输入新的 LLM_KEY，所有托管和自定义 API Key 将以此密钥加密：", size=13),
+                        key_input,
+                        error_msg_text,
+                    ],
+                    tight=True,
+                    spacing=12,
+                ),
+                width=460,
+            ),
+            actions=[
+                ft.TextButton("取消", on_click=on_cancel),
+                ft.ElevatedButton("保存主密钥", on_click=on_confirm),
+            ],
+            actions_alignment=ft.MainAxisAlignment.END,
+        )
+        self.page.open(dlg)
+
+    def _ask_password(self, title: str, prompt: str) -> str | None:
+        """向后兼容的密码输入接口。"""
+        return None

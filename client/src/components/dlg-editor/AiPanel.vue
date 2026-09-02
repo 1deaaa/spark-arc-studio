@@ -734,9 +734,9 @@ const currentBackgroundId = computed(() => normalizePresentationValue(currentPre
 const currentIllustrationId = computed(() => normalizePresentationValue(currentPresentation.value.illustration));
 const currentSpriteId = computed(() => normalizePresentationValue(currentPresentation.value.sprite));
 const currentIllustrationPending = computed(() => (
-  !normalizePresentationValue(currentPresentation.value.illustration_prompt)
+  !normalizePresentationValue(currentPresentation.value.img ?? currentPresentation.value.illustration_prompt)
   && !currentIllustrationId.value
-  && normalizePresentationValue(currentPresentation.value.illustration_pending).toLowerCase() === 'true'
+  && normalizePresentationValue(currentPresentation.value.pending ?? currentPresentation.value.illustration_pending).toLowerCase() === 'true'
 ));
 
 const manifestAssets = computed<Record<string, PresentationAsset>>(() => {
@@ -939,11 +939,11 @@ const illustrationConceptionBatchFailureText = computed(() => {
 watch(
   () => [
     currentDialogueNode.value?.id,
-    normalizePresentationValue(currentPresentation.value.illustration_prompt),
+    normalizePresentationValue(currentPresentation.value.img ?? currentPresentation.value.illustration_prompt),
     normalizePresentationList(currentPresentation.value.characters).join('|'),
   ],
   () => {
-    illustrationPrompt.value = normalizePresentationValue(currentPresentation.value.illustration_prompt);
+    illustrationPrompt.value = normalizePresentationValue(currentPresentation.value.img ?? currentPresentation.value.illustration_prompt);
     presentationCharacterIds.value = normalizePresentationList(currentPresentation.value.characters);
   },
   { immediate: true },
@@ -1077,7 +1077,7 @@ async function savePresentationBinding() {
   }
 }
 
-type EditablePresentationKey = 'bg' | 'sprite' | 'illustration_prompt' | 'illustration' | 'illustration_pending' | 'characters';
+type EditablePresentationKey = 'bg' | 'sprite' | 'img' | 'pending' | 'illustration_prompt' | 'illustration' | 'illustration_pending' | 'characters';
 type EditablePresentationValue = string | string[] | null;
 
 function setNodePresentationValues(
@@ -1324,11 +1324,16 @@ function saveIllustrationPromptForNode(node: ArcDialogueNode | null) {
   const prompt = illustrationPrompt.value.trim();
   if (prompt) {
     setNodePresentationValues(node, {
-      illustration_prompt: prompt,
+      img: prompt,
+      pending: null,
+      illustration_prompt: null,
       illustration_pending: null,
     });
   } else {
-    setNodePresentationValue(node, 'illustration_prompt', null);
+    setNodePresentationValues(node, {
+      img: null,
+      illustration_prompt: null,
+    });
   }
   void savePresentationBinding();
 }
@@ -1398,7 +1403,8 @@ async function generateIllustrationForNode(
 ) {
   const projectName = projectStore.currentProject;
   const model = selectedImageModel.value;
-  const prompt = normalizePresentationValue(node.presentation?.illustration_prompt);
+  const cue = (node.show || node.presentation || {}) as Record<string, any>;
+  const prompt = normalizePresentationValue(cue.img ?? cue.illustration_prompt);
   if (!projectName || !model || !prompt) throw new Error(t('nodeEditor.presentation.illustrationPromptRequired'));
   const result = await generatePresentationIllustration(projectName, {
     prompt,
@@ -1426,7 +1432,7 @@ async function generateIllustrationConceptionForNode(
   const projectName = projectStore.currentProject;
   if (
     !projectName
-    || normalizePresentationValue(node.presentation?.illustration_pending).toLowerCase() !== 'true'
+    || normalizePresentationValue(node.show?.pending ?? node.presentation?.pending ?? node.presentation?.illustration_pending).toLowerCase() !== 'true'
   ) {
     throw new Error(t('nodeEditor.presentation.illustrationConceptionRequired'));
   }
@@ -1438,7 +1444,9 @@ async function generateIllustrationConceptionForNode(
   const prompt = String(result.prompt || '').trim();
   if (!prompt) throw new Error(t('nodeEditor.presentation.illustrationConceptionEmpty'));
   setNodePresentationValues(node, {
-    illustration_prompt: prompt,
+    img: prompt,
+    pending: null,
+    illustration_prompt: null,
     illustration_pending: null,
   });
   await sceneStore._saveStory?.();

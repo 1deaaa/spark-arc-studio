@@ -1,9 +1,10 @@
+
 import copy
 from dataclasses import dataclass, field
 from typing import Any, Dict, List, Optional
 
 LEGACY_SCENE_KEYS = {"guide", "intro", "scene", "dia", "button_text", "buttonText", "btn", "conditions", "cond", "effects", "trigger_event", "priority", "once_key", "hiden", "hidden"}
-LEGACY_DIALOG_KEYS = {"id", "chr", "speaker", "txt", "opt", "act", "next", "presentation"}
+LEGACY_DIALOG_KEYS = {"id", "chr", "speaker", "txt", "opt", "act", "next", "presentation", "show"}
 LEGACY_OPTION_KEYS = {"optn", "dia"}
 
 
@@ -70,7 +71,8 @@ class DialogueNode:
         options_payload = payload.get("opt") or []
         options = [DialogueOption.from_dict(opt) for opt in options_payload if isinstance(opt, dict)]
         act_payload = payload.get("act") if isinstance(payload.get("act"), dict) else None
-        presentation_payload = payload.get("presentation") if isinstance(payload.get("presentation"), dict) else None
+        raw_show = payload.get("show") if isinstance(payload.get("show"), dict) else payload.get("presentation")
+        presentation_payload = raw_show if isinstance(raw_show, dict) else None
         next_scene = payload.get("next")
         return cls(
             identifier=identifier,

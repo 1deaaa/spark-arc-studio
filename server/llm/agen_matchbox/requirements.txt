@@ -6,3 +6,4 @@ cryptography
 PyYAML
 requests
 python-dotenv
+flet>=0.28.3,<0.29.0

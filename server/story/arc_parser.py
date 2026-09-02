@@ -403,18 +403,23 @@ def _parse_dialogue_content(
                     i += 1
                     continue
 
-                # Web 专用演出提示使用独立协议，不与 Unity 通用行为节点混用。
-                presentation_match = re.match(
-                    r'^@presentation\s+(\w+):([^<]+)',
+                # Web 专用演出提示使用 @show 协议，不与 Unity 通用行为节点混用。
+                show_match = re.match(
+                    r'^@show\s+(\w+):([^<]+)',
                     next_line,
                     re.IGNORECASE,
                 )
-                if presentation_match:
-                    key = presentation_match.group(1).strip().lower()
-                    value = presentation_match.group(2).strip()
-                    if key != 'illustration_prompt' and ',' in value:
+                if show_match:
+                    key = show_match.group(1).strip().lower()
+                    value = show_match.group(2).strip()
+                    if key not in {'img', 'illustration_prompt'} and ',' in value:
                         value = [v.strip() for v in value.split(',')]
                     presentation_commands[key] = value
+                    i += 1
+                    continue
+
+                # 旧的 @presentation 指令直接忽略，确保兼容不报错且不混入对白
+                if re.match(r'^@presentation\b', next_line, re.IGNORECASE):
                     i += 1
                     continue
 
@@ -443,6 +448,7 @@ def _parse_dialogue_content(
                     if idx == 0:
                         if presentation_commands:
                             node['presentation'] = presentation_commands
+                            node['show'] = presentation_commands
                         if act_commands:
                             node['act'] = act_commands
                         if thought:
@@ -465,6 +471,7 @@ def _parse_dialogue_content(
                 id_counter[0] += 1
                 if presentation_commands:
                     node['presentation'] = presentation_commands
+                    node['show'] = presentation_commands
                 if act_commands:
                     node['act'] = act_commands
                 if next_target:
@@ -693,12 +700,17 @@ def _serialize_dialogues(dialogues: List[Dict[str, Any]], chr_map: Dict[int, str
         lines.append(f"{indent_str}{d.get('txt', '')}")
         
         # Web 专用演出提示与通用行为分离，Unity SDK 会统一忽略该节点字段。
-        if d.get('presentation'):
-            for key, value in d['presentation'].items():
+        show_payload = d.get('show') or d.get('presentation')
+        if show_payload:
+            for key, value in show_payload.items():
                 if value in (None, ''):
                     continue
+                if key == 'illustration_prompt':
+                    key = 'img'
+                elif key == 'illustration_pending':
+                    key = 'pending'
                 val_str = ','.join(value) if isinstance(value, list) else value
-                lines.append(f"{indent_str}@presentation {key}:{val_str}")
+                lines.append(f"{indent_str}@show {key}:{val_str}")
 
         # @next
         if d.get('next'):

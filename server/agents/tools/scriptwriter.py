@@ -1012,7 +1012,7 @@ def patch_script(search_text: str, replace_text: str) -> str:
     }
     raw_replace_text = replace_text
     visual_enabled = is_visual_illustration_enabled(user_id, project_name)
-    if not visual_enabled and re.search(r"@presentation\s+illustration_(?:prompt|pending)", str(raw_replace_text or ""), re.I):
+    if not visual_enabled and re.search(r"@(?:show|presentation)\s+(?:img|illustration_prompt|pending|illustration_pending)", str(raw_replace_text or ""), re.I):
         return (
             "局部修改剧本失败：当前项目的「视觉小说」开关尚未开启。\n"
             "请向用户说明：需前往「设定集 / 世界观」页面的项目风格设置中开启「视觉小说」开关后，方可在剧本节点中写入演出构思并调用生图。"

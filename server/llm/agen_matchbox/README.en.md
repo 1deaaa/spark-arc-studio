@@ -50,7 +50,7 @@ Although specialized external gateways (such as NewAPI, LiteLLM, etc.) are power
   - Users can recharge system points using redeem codes, with fully traceable transaction records.
 - **Dynamic Model Probing**: Built-in model detection tool (`probe_platform_models`) capable of fetching model lists from any OpenAI-compatible provider.
   - **Reasoning Content / Billing Fields Visualization (Platform Test)**: The GUI "Test Model" displays the raw JSON response. Some platforms return `reasoning_content`, `usage`, or `billing`-related fields, which can be viewed directly in the logs.
-  - **Graphical Configuration Tool**: Features a `Tkinter`-based GUI tool (`matchbox_cfg_gui.py`) that operates **directly on the database** without any frontend dependency. It supports adding, editing, and soft-disabling platforms/models, encrypting and storing API keys, probing/testing models, resetting the DB from local YAML, or exporting the DB back to `matchbox_cfg.yaml` + `matchbox_key.yaml`.
+  - **Graphical Configuration Tool**: Features a `Flet (0.28.3)` based modern adaptive GUI tool (`matchbox_cfg_gui.pyw`, supports double-click auto-launch without a console window on Windows) that operates **directly on the database** without any frontend dependency. It supports adding, editing, and soft-disabling platforms/models, drag-and-drop reordering, encrypting and storing API keys, probing/testing models, resetting the DB from local YAML, or exporting the DB back to `matchbox_cfg.yaml` + `matchbox_key.yaml`.
 - **Database Persistence**: Defaults to SQLite for storing user configurations, platforms, and models. Production environments can switch to PostgreSQL via `AGENT_MATCHBOX_DATABASE_URL`.
 - **Automatic Configuration Correction**: When a user's configuration becomes invalid (e.g., a model or platform is deleted), the system automatically rolls back to the first available default platform to guarantee service uptime.
 
@@ -75,8 +75,8 @@ Although specialized external gateways (such as NewAPI, LiteLLM, etc.) are power
 ├── utils.py               # Utility functions (probe_platform_models, parse_extra_body, etc.)
 ├── matchbox_cfg.yaml       # System platform structure configuration (used for initialization/export only, runtime uses database)
 ├── matchbox_key.yaml       # System platform API keys (should be gitignored, do not commit)
-├── matchbox_cfg_gui.py     # Graphical configuration management tool (entry point, actual code is in gui/ subdirectory)
-├── gui/                   # GUI modules (split from matchbox_cfg_gui.py)
+├── matchbox_cfg_gui.pyw    # Graphical configuration management tool (double-clickable entry point, actual code is in gui/ subdirectory)
+├── gui/                   # GUI modules (split from matchbox_cfg_gui)
 │   ├── __init__.py
 │   ├── main_window.py     # Main window LLMConfigGUI class (platform config, user overview, model management)
 │   ├── platform_panel.py  # Platform management Mixin
@@ -85,7 +85,7 @@ Although specialized external gateways (such as NewAPI, LiteLLM, etc.) are power
 │   ├── key_manager.py     # Key management Mixin
 │   ├── probe.py           # Model probing Mixin
 │   ├── dpi.py             # High-DPI scaling and window size strategy
-│   └── theme.py           # GUI theme, color palette, and table styling
+│   └── theme.py           # GUI theme, color palette, and cross-platform font compatibility
 └── README.md              # This document
 ```
 
@@ -93,7 +93,7 @@ Although specialized external gateways (such as NewAPI, LiteLLM, etc.) are power
 - **`quota_services.py`**: Quota services module, handling configuration, periodic usage statistics, total usage statistics, and pre-invocation interception for the two billing scopes (`sys_paid`/`self_paid`).
 - **`usage_services.py`**: Usage statistics module. In addition to single-user aggregation, it also provides user-wide usage overview aggregation for the GUI.
 - **`matchbox_cfg.yaml`**: **Initialization configuration file**. Used to define initial "System Platforms". On first startup, the manager syncs the platforms in this file to the database. Subsequent startups will only incrementally add new platforms without overwriting existing configurations. **The database, not this file, is the authority source at runtime.**
-- **`matchbox_cfg_gui.py`**: GUI entry file, with actual logic split into the `gui/` subdirectory. **Operates directly on the database**, supporting adding/deleting/modifying platforms and models (deleting is soft-disabling), encrypting/storing API keys, probing/testing models, user usage overview, double-clicking users to view details, and resetting the DB from local YAML or exporting the DB to `matchbox_cfg.yaml` + `matchbox_key.yaml`.
+- **`matchbox_cfg_gui.pyw`**: GUI entry file, with actual logic split into the `gui/` subdirectory. **Operates directly on the database**, supporting adding/deleting/modifying platforms and models (deleting is soft-disabling), encrypting/storing API keys, probing/testing models, user usage overview, double-clicking users to view details, and resetting the DB from local YAML or exporting the DB to `matchbox_cfg.yaml` + `matchbox_key.yaml`.
 
 ## 🛠️ First-Time Configuration Flow (Newbies Must Read)
 
@@ -106,7 +106,7 @@ When using the manager for the first time, you need to run the configuration too
     - **Do not panic if you see a warning saying "Historical keys exist and cannot be decrypted" on your first deployment.** This usually means that `matchbox_key.yaml` contains encrypted keys generated by the repository author or another environment, which are naturally invalid on your machine. You only need to set your own `LLM_KEY` and follow the prompt to clean up these unrecoverable keys. **Cleaning up keys will not delete platform or model structures, it only clears those invalid hosted keys.**
 
 2. **Launch the Configuration Tool**:
-    - Install the dependencies listed below, then run `python matchbox_cfg_gui.py` from the component directory.
+    - Install the dependencies listed below, then run `python matchbox_cfg_gui.pyw` or double-click `matchbox_cfg_gui.pyw` on Windows.
     - You will see pre-configured platforms (e.g., DeepSeek, OpenRouter), but their keys are currently unusable.
 
 3. **Replace and Activate Platforms**:
@@ -268,15 +268,15 @@ This repository currently provides Matchbox as a source component and does not i
 ```bash
 pip install langchain-core langchain-openai sqlalchemy tiktoken cryptography pyyaml requests python-dotenv
 # Optional: PostgreSQL / GUI / Alembic
-pip install "psycopg[binary]" customtkinter alembic
+pip install "psycopg[binary]" "flet>=0.28.3,<0.29.0" alembic
 ```
 
 ### 2. Configure Platforms and Models via GUI
 
-**Recommended**: Use the GUI tool to interact directly with the database without manually editing YAML.
+**Recommended**: Launch directly by double-clicking `matchbox_cfg_gui.pyw` on Windows, or via command line to interact with the database without manually editing YAML.
 
 ```bash
-python matchbox_cfg_gui.py
+python matchbox_cfg_gui.pyw
 ```
 
 > **Description**: `matchbox_cfg.yaml` only syncs pre-configured platforms to the database on **first startup** (incremental sync, no overwrite).
@@ -446,7 +446,7 @@ System platform configurations support two types of data sources, suited for dif
 
 ### GUI Tool
 
-The GUI configuration tool (`matchbox_cfg_gui.py`) **directly operates on the database**. Changes take effect immediately without requiring service restarts.
+The GUI configuration tool (`matchbox_cfg_gui.pyw`) **directly operates on the database**. Changes take effect immediately without requiring service restarts.
 
 - **📦 Database (Sole Mode)**: All platform/model modifications write directly to the database; API keys are stored encrypted.
 - **📥 Reset DB from YAML**: Rebuilds database platforms based on local `matchbox_cfg.yaml` + `matchbox_key.yaml`. Platforms missing in YAML are soft-disabled, while user-override keys are preserved.

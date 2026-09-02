@@ -4,19 +4,19 @@ import re
 
 
 _AI_CONTROL_DIRECTIVE_RE = re.compile(
-    r"^\s*(?:@next\b.*|@act\b.*|@(?:web|presentation)\b.*)$",
+    r"^\s*(?:@next\b.*|@act\b.*|@(?:web|presentation|show)\b.*)$",
     re.IGNORECASE,
 )
 _VISUAL_ILLUSTRATION_PROMPT_RE = re.compile(
-    r"^(?P<indent>\s*)@presentation\s+illustration_prompt\s*:(?P<value>.*)$",
+    r"^(?P<indent>\s*)@(?:show\s+img|presentation\s+illustration_prompt)\s*:(?P<value>.*)$",
     re.IGNORECASE,
 )
 _VISUAL_ILLUSTRATION_PENDING_RE = re.compile(
-    r"^(?P<indent>\s*)@presentation\s+illustration_pending\s*:(?P<value>.*)$",
+    r"^(?P<indent>\s*)@(?:show\s+pending|presentation\s+illustration_pending)\s*:(?P<value>.*)$",
     re.IGNORECASE,
 )
 _PRESENTATION_BACKGROUND_RE = re.compile(
-    r"^(?P<indent>\s*)@presentation\s+bg\s*:(?P<value>[^\s<>,]+)\s*$",
+    r"^(?P<indent>\s*)@(?:show|presentation)\s+bg\s*:(?P<value>[^\s<>,]+)\s*$",
     re.IGNORECASE,
 )
 _SCENE_HEADER_RE = re.compile(r"^\s*#(?!#)\s+\S")
@@ -61,7 +61,7 @@ def sanitize_arc_ai_fragment(
                 prompt = normalize_illustration_prompt(prompt_match.group("value"))
                 if prompt:
                     kept_lines.append(
-                        f"{prompt_match.group('indent')}@presentation illustration_prompt:{prompt}"
+                        f"{prompt_match.group('indent')}@show img:{prompt}"
                     )
             continue
         pending_match = _VISUAL_ILLUSTRATION_PENDING_RE.match(line)
@@ -70,7 +70,7 @@ def sanitize_arc_ai_fragment(
                 pending = normalize_illustration_pending(pending_match.group("value"))
                 if pending:
                     kept_lines.append(
-                        f"{pending_match.group('indent')}@presentation illustration_pending:{pending}"
+                        f"{pending_match.group('indent')}@show pending:{pending}"
                     )
             continue
         background_match = _PRESENTATION_BACKGROUND_RE.match(line)
@@ -78,7 +78,7 @@ def sanitize_arc_ai_fragment(
             asset_id = background_match.group("value").strip()
             if asset_id in allowed_backgrounds:
                 kept_lines.append(
-                    f"{background_match.group('indent')}@presentation bg:{asset_id}"
+                    f"{background_match.group('indent')}@show bg:{asset_id}"
                 )
             continue
         if _AI_CONTROL_DIRECTIVE_RE.match(line):
@@ -201,7 +201,7 @@ def sanitize_arc_ai_output(
                     pending_output_index = None
                     node_has_pending = False
                 kept_lines.append(
-                    f"{prompt_match.group('indent')}@presentation illustration_prompt:{prompt}"
+                    f"{prompt_match.group('indent')}@show img:{prompt}"
                 )
                 scene_visual_count += 1
                 last_visual_node = node_index
@@ -223,7 +223,7 @@ def sanitize_arc_ai_output(
             if can_keep:
                 pending_output_index = len(kept_lines)
                 kept_lines.append(
-                    f"{pending_match.group('indent')}@presentation illustration_pending:{pending}"
+                    f"{pending_match.group('indent')}@show pending:{pending}"
                 )
                 scene_visual_count += 1
                 last_visual_node = node_index

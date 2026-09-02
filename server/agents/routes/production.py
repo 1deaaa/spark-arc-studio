@@ -386,14 +386,14 @@ def _clean_generated_nodes(
             for key in list(node.keys()):
                 if key not in allowed_fields:
                     del node[key]
-            presentation = node.get("presentation")
+            presentation = node.get("show") or node.get("presentation")
             prompt = ""
             pending = ""
             background_id = ""
             if allow_visual_illustration and isinstance(presentation, dict):
-                prompt = normalize_illustration_prompt(presentation.get("illustration_prompt"))
+                prompt = normalize_illustration_prompt(presentation.get("img") or presentation.get("illustration_prompt"))
                 if not prompt:
-                    pending = normalize_illustration_pending(presentation.get("illustration_pending"))
+                    pending = normalize_illustration_pending(presentation.get("pending") or presentation.get("illustration_pending"))
                 raw_background = presentation.get("bg")
                 if isinstance(raw_background, list):
                     raw_background = raw_background[0] if raw_background else ""
@@ -402,15 +402,17 @@ def _clean_generated_nodes(
                     background_id = candidate_background
             safe_presentation = {}
             if prompt:
-                safe_presentation["illustration_prompt"] = prompt
+                safe_presentation["img"] = prompt
             elif pending:
-                safe_presentation["illustration_pending"] = pending
+                safe_presentation["pending"] = pending
             if background_id:
                 safe_presentation["bg"] = background_id
             if safe_presentation:
+                node["show"] = safe_presentation
                 node["presentation"] = safe_presentation
             else:
                 node.pop("presentation", None)
+                node.pop("show", None)
             if "dia" in node:
                 clean_nodes_list(node["dia"])
             if "opt" in node:

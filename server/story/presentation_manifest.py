@@ -69,7 +69,7 @@ def empty_manifest() -> dict[str, Any]:
         "ignore": {
             "unity": {
                 "actKeys": [],
-                "nodeKeys": ["presentation"],
+                "nodeKeys": ["presentation", "show"],
                 "assetTargets": ["web"],
             }
         },

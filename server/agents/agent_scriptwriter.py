@@ -201,15 +201,15 @@ class ScriptwriterAgent(SparkBaseAgent, SparkAgentExecutor):
             f"  - `{item['id']}`：{item['title']}" for item in background_catalog
         ) or "  - （当前项目尚无可复用背景）"
         return f"""
-### Web 演出构思协议
-- 你可以在需要视觉演出的对话或旁白节点正文后增加一行：`@presentation illustration_prompt:自然语言演出构思`。它是背景生成与完整场景插图共用的默认提示词。
-- 如果这个节点明确需要画面，但当前还不能写出可靠的具体画面描述，可以增加一行：`@presentation illustration_pending:true`，把它交给后续 AI 构思流程；已有具体描述时不要同时保留 pending。
-- `presentation` 仅供 SparkArc Web 播放器演出，Unity SDK 会统一忽略整个节点字段；不要把它当作 Unity 行为指令。
-- 如当前节点发生在项目已有固定场景，可额外写 `@presentation bg:背景资产ID`。只能从下方白名单逐字选择，禁止编造 ID；它既是播放器背景，也是后续天气、时间或完整插图生成的场景参考。
+### 视觉小说演出构思协议（项目已启用视觉小说开关）
+- **从 0 创作场景主动规划**：撰写新场景时，应具备视觉演出思维。推荐在场景首次建立（开场环境镜头）或剧情高潮/关键情绪定格处，主动规划 1 处（全场景最多不超过 {max_per_scene} 处）演出构思行：`@show img:自然语言演出构思`。它是背景生成与完整场景插图共用的默认提示词。
+- **构思待定占位**：如果这个节点明确需要画面，但当前还不能写出可靠的具体画面描述，可以增加一行：`@show pending:true`，把它交给后续 AI 构思流程；已有具体描述时不要同时保留 pending。
+- `show` 仅供 SparkArc Web 播放器演出，Unity SDK 会统一忽略整个节点字段；不要把它当作 Unity 行为指令。
+- 如当前节点发生在项目已有固定场景，可额外写 `@show bg:背景资产ID`。只能从下方白名单逐字选择，禁止编造 ID；它既是播放器背景，也是后续天气、时间或完整插图生成的场景参考。
 - 可用背景资产：
 {background_lines}
 - 不得生成 `illustration`、`sprite`、`@act` 或 `@next`；运行时生成结果仍由系统绑定。
-- 每个场景允许 0 张，通常只用 1 张，`illustration_prompt` 与 `illustration_pending` 合计硬上限为 {max_per_scene} 个视觉节点；两个视觉节点之间至少隔一个普通节点。
+- 每个场景允许 0 张，通常只用 1 张，`@show img` 与 `@show pending` 合计硬上限为 {max_per_scene} 个视觉节点；两个视觉节点之间至少隔一个普通节点。
 - 只在场景首次建立、重大视觉转折、剧情高潮或关键情绪定格时使用。普通对白、连续动作、同一空间的重复信息不得换图。
 - 插图必须带来仅靠常规背景加立绘难以低成本表达的新信息。描述应包含地点与时代、出场角色及外观动作、情绪、构图景别、镜头、光照和关键环境细节。
 - 不要描述文字、字幕、对话框、界面、水印或标志；画面主体应位于横版中央安全区，以兼容桌面和竖屏模糊扩展演出。
@@ -353,7 +353,7 @@ class ScriptwriterAgent(SparkBaseAgent, SparkAgentExecutor):
                     generated = generated[first_newline + 1:]
                 if generated.endswith("```"):
                     generated = generated[:-3]
-            for prefix in ("演出构思：", "插图描述：", "illustration_prompt:"):
+            for prefix in ("演出构思：", "插图描述：", "img:", "@show img:", "illustration_prompt:"):
                 if generated.startswith(prefix):
                     generated = generated[len(prefix):].strip()
                     break

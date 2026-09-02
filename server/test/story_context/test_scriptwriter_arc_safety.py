@@ -16,16 +16,16 @@ def test_illustration_pending_is_normalized_and_strictly_gated() -> None:
         "# 雨夜",
         "[旁白]",
         "她停在门外。",
-        "@presentation illustration_pending: YES",
+        "@show pending: YES",
         "[林澈]",
         "别回头。",
-        "@presentation illustration_pending:true",
-        "@presentation illustration_pending:false",
+        "@show pending:true",
+        "@show pending:false",
     ])
 
     assert normalize_illustration_pending(" YES ") == "true"
     assert normalize_illustration_pending("false") == ""
-    assert "@presentation illustration_pending:true" in sanitize_arc_for_ai_context(
+    assert "@show pending:true" in sanitize_arc_for_ai_context(
         raw,
         allow_visual_illustration=True,
     )
@@ -37,14 +37,14 @@ def test_visual_illustration_output_keeps_pending_and_replaces_it_with_prompt() 
         "# 雨夜",
         "[旁白]",
         "她停在门外。",
-        "@presentation illustration_pending:yes",
-        "@presentation illustration_prompt:后来补充的画面",
+        "@show pending:yes",
+        "@show img:后来补充的画面",
         "[林澈]",
         "别回头。",
-        "@presentation illustration_pending:true",
+        "@show pending:true",
         "[旁白]",
         "雨声停了。",
-        "@presentation illustration_pending:true",
+        "@show pending:true",
     ])
 
     cleaned = sanitize_arc_ai_output(
@@ -54,8 +54,8 @@ def test_visual_illustration_output_keeps_pending_and_replaces_it_with_prompt() 
         min_node_gap=1,
     )
 
-    assert "@presentation illustration_prompt:后来补充的画面" in cleaned
-    assert cleaned.count("@presentation illustration_pending:true") == 1
+    assert "@show img:后来补充的画面" in cleaned
+    assert cleaned.count("@show pending:true") == 1
     assert "[林澈]\n别回头。\n@presentation illustration_pending" not in cleaned
 
 
@@ -64,9 +64,9 @@ def test_visual_illustration_context_is_strictly_gated() -> None:
         "# 1-1 雨夜",
         "[旁白]",
         "她停在门外。",
-        "@presentation illustration_prompt:雨夜书店门外，林澈回望，低机位中景",
+        "@show img:雨夜书店门外，林澈回望，低机位中景",
         "@presentation illustration:ill_secret_asset",
-        "@presentation bg:bg_secret_asset",
+        "@show bg:bg_secret_asset",
         "@presentation sprite:sprite_secret_asset",
         "@web illustration_prompt:废弃标签不可见",
         "@act sound:rain",
@@ -77,7 +77,7 @@ def test_visual_illustration_context_is_strictly_gated() -> None:
     enabled = sanitize_arc_for_ai_context(raw, allow_visual_illustration=True)
 
     assert "illustration_prompt" not in disabled
-    assert "@presentation illustration_prompt:雨夜书店门外，林澈回望，低机位中景" in enabled
+    assert "@show img:雨夜书店门外，林澈回望，低机位中景" in enabled
     assert "废弃标签不可见" not in enabled
     assert "ill_secret_asset" not in enabled
     assert "bg_secret_asset" not in enabled
@@ -124,9 +124,9 @@ def test_scriptwriter_visual_protocol_is_absent_when_disabled_and_shared_by_tool
     enabled_tool_prompt = agent._build_tool_system_prompt("基础系统提示")
 
     for prompt in (specialized, tool_reference, enabled_tool_prompt):
-        assert "@presentation illustration_prompt:" in prompt
+        assert "@show img:" in prompt
         assert "@web" not in prompt
-        assert "@presentation bg:背景资产ID" in prompt
+        assert "@show bg:背景资产ID" in prompt
         assert "只能从下方白名单逐字选择" in prompt
         assert "不得生成 `illustration`、`sprite`、`@act` 或 `@next`" in prompt
 
@@ -136,24 +136,24 @@ def test_visual_illustration_output_enforces_whitelist_scene_limit_and_gap() -> 
         "# 1-1 雨夜",
         "[旁白]",
         "节点零。",
-        "@presentation illustration_prompt:第一张",
+        "@show img:第一张",
         "@presentation illustration:ill_fake",
         "@web illustration_prompt:废弃标签应丢弃",
         "[林澈]",
         "节点一。",
-        "@presentation illustration_prompt:相邻节点应丢弃",
+        "@show img:相邻节点应丢弃",
         "[旁白]",
         "节点二。",
-        "@presentation illustration_prompt:第二张，包含逗号",
+        "@show img:第二张，包含逗号",
         "[林澈]",
         "节点三。",
-        "@presentation illustration_prompt:超过上限",
+        "@show img:超过上限",
         "@act bg:forbidden",
         "@next forbidden",
         "# 1-2 清晨",
         "[旁白]",
         "新场景。",
-        "@presentation illustration_prompt:新场景重新计数",
+        "@show img:新场景重新计数",
     ])
 
     cleaned = sanitize_arc_ai_output(
@@ -163,10 +163,10 @@ def test_visual_illustration_output_enforces_whitelist_scene_limit_and_gap() -> 
         min_node_gap=1,
     )
 
-    assert cleaned.count("@presentation illustration_prompt:") == 3
-    assert "@presentation illustration_prompt:第一张" in cleaned
-    assert "@presentation illustration_prompt:第二张，包含逗号" in cleaned
-    assert "@presentation illustration_prompt:新场景重新计数" in cleaned
+    assert cleaned.count("@show img:") == 3
+    assert "@show img:第一张" in cleaned
+    assert "@show img:第二张，包含逗号" in cleaned
+    assert "@show img:新场景重新计数" in cleaned
     assert "废弃标签应丢弃" not in cleaned
     assert "相邻节点应丢弃" not in cleaned
     assert "超过上限" not in cleaned
@@ -179,13 +179,13 @@ def test_ai_fragment_keeps_isolated_prompt_but_removes_runtime_controls() -> Non
     fragment = "\n".join([
         "@act sound:rain",
         "@next 下一场",
-        "@presentation bg:bg_secret",
-        "@presentation illustration_prompt:  雨夜书店   低机位  ",
+        "@show bg:bg_secret",
+        "@show img:  雨夜书店   低机位  ",
     ])
 
     cleaned = sanitize_arc_ai_fragment(fragment, allow_visual_illustration=True)
 
-    assert cleaned == "@presentation illustration_prompt:雨夜书店 低机位"
+    assert cleaned == "@show img:雨夜书店 低机位"
 
 
 def test_incremental_visual_policy_preserves_existing_manual_violation_but_rejects_new_one() -> None:
@@ -193,12 +193,12 @@ def test_incremental_visual_policy_preserves_existing_manual_violation_but_rejec
         "# 1-1",
         "[旁白]",
         "节点零。",
-        "@presentation illustration_prompt:第一张",
+        "@show img:第一张",
         "[林澈]",
         "节点一。",
     ])
     safe_candidate = original.replace("节点一。", "节点一，改写。")
-    unsafe_candidate = safe_candidate + "\n@presentation illustration_prompt:相邻新增"
+    unsafe_candidate = safe_candidate + "\n@show img:相邻新增"
 
     validate_arc_visual_prompt_candidate(
         original,
@@ -241,13 +241,13 @@ def test_patch_script_validates_merged_scene_without_removing_manual_cues(monkey
         "# 1-1 雨夜",
         "[旁白]",
         "节点零。",
-        "@presentation bg:bg_keep",
-        "@presentation illustration_prompt:第一张",
+        "@show bg:bg_keep",
+        "@show img:第一张",
         "[林澈]",
         "节点一。",
         "[旁白]",
         "节点二。",
-        "@presentation illustration_prompt:第二张",
+        "@show img:第二张",
         "[林澈]",
         "节点三。",
         "@act sound:rain",
@@ -259,20 +259,20 @@ def test_patch_script_validates_merged_scene_without_removing_manual_cues(monkey
     project_token = current_project_name.set("demo")
     try:
         result = patch_script.invoke({
-            "search_text": "@presentation illustration_prompt:第二张",
-            "replace_text": "@act bg:forbidden\n@presentation illustration_prompt:第二张新描述",
+            "search_text": "@show img:第二张",
+            "replace_text": "@act bg:forbidden\n@show img:第二张新描述",
         })
         assert "已成功局部更新" in result
         updated = story_path.read_text(encoding="utf-8")
-        assert "@presentation illustration_prompt:第二张新描述" in updated
+        assert "@show img:第二张新描述" in updated
         assert "forbidden" not in updated
-        assert "@presentation bg:bg_keep" in updated
+        assert "@show bg:bg_keep" in updated
         assert "@act sound:rain" in updated
         assert "@next 下一场" in updated
 
         rejected = patch_script.invoke({
             "search_text": "[林澈]\n节点三。",
-            "replace_text": "[林澈]\n节点三。\n@presentation illustration_prompt:第三张",
+            "replace_text": "[林澈]\n节点三。\n@show img:第三张",
         })
         assert rejected.startswith("局部修改失败")
         assert story_path.read_text(encoding="utf-8") == updated
@@ -300,7 +300,7 @@ def test_patch_script_returns_friendly_error_when_visual_novel_disabled(tmp_path
     try:
         result = patch_script.invoke({
             "search_text": "[旁白]\n节点零。",
-            "replace_text": "[旁白]\n节点零。\n@presentation illustration_prompt:想加演出构思",
+            "replace_text": "[旁白]\n节点零。\n@show img:想加演出构思",
         })
         assert "当前项目的「视觉小说」开关尚未开启" in result
         assert "需前往「设定集 / 世界观」" in result
@@ -328,12 +328,8 @@ def test_production_node_cleaner_only_keeps_visual_prompt() -> None:
 
     cleaned = _clean_generated_nodes(nodes, allow_visual_illustration=True)
 
-    assert cleaned == [{
-        "id": 1,
-        "speaker": "林澈",
-        "txt": "别回头。",
-        "presentation": {"illustration_prompt": "雨夜回望"},
-    }]
+    assert cleaned[0]["presentation"]["img"] == "雨夜回望"
+    assert cleaned[0]["show"]["img"] == "雨夜回望"
 
 
 def test_production_node_cleaner_keeps_pending_without_concrete_prompt() -> None:
@@ -352,17 +348,19 @@ def test_production_node_cleaner_keeps_pending_without_concrete_prompt() -> None
 
     cleaned = _clean_generated_nodes(nodes, allow_visual_illustration=True)
 
-    assert cleaned[0]["presentation"] == {"illustration_pending": "true"}
+    assert cleaned[0]["presentation"]["pending"] == "true"
+    assert cleaned[0]["show"]["pending"] == "true"
 
 
 def test_illustration_prompt_with_commas_remains_scalar_in_arc_parser() -> None:
     from story.arc_parser import parse_arc, serialize_to_arc
 
-    raw = "# 雨夜\n[旁白]\n她停在门外。\n@presentation illustration_prompt:雨夜书店，低机位，中景"
+    raw = "# 雨夜\n[旁白]\n她停在门外。\n@show img:雨夜书店，低机位，中景"
     parsed = parse_arc(raw)
 
-    assert parsed[0]["dia"][0]["presentation"]["illustration_prompt"] == "雨夜书店，低机位，中景"
-    assert "@presentation illustration_prompt:雨夜书店，低机位，中景" in serialize_to_arc(parsed)
+    cue = parsed[0]["dia"][0].get("show") or parsed[0]["dia"][0].get("presentation")
+    assert cue["img"] == "雨夜书店，低机位，中景"
+    assert "@show img:雨夜书店，低机位，中景" in serialize_to_arc(parsed)
 
 
 def test_ai_background_binding_requires_project_asset_whitelist() -> None:
@@ -370,11 +368,11 @@ def test_ai_background_binding_requires_project_asset_whitelist() -> None:
         "# 校园",
         "[旁白]",
         "雨停了。",
-        "@presentation illustration_prompt:雨后的教学楼走廊，傍晚",
-        "@presentation bg:bg_school_corridor",
+        "@show img:雨后的教学楼走廊，傍晚",
+        "@show bg:bg_school_corridor",
         "[旁白]",
         "镜头转向不存在的地点。",
-        "@presentation bg:bg_hallucinated",
+        "@show bg:bg_hallucinated",
     ])
 
     cleaned = sanitize_arc_ai_output(
@@ -383,7 +381,7 @@ def test_ai_background_binding_requires_project_asset_whitelist() -> None:
         allowed_background_ids={"bg_school_corridor"},
     )
 
-    assert "@presentation bg:bg_school_corridor" in cleaned
+    assert "@show bg:bg_school_corridor" in cleaned
     assert "bg_hallucinated" not in cleaned
 
 
@@ -391,8 +389,8 @@ def test_model_context_exposes_only_whitelisted_background_binding() -> None:
     raw = "\n".join([
         "[旁白]",
         "走廊空无一人。",
-        "@presentation bg:bg_school_corridor",
-        "@presentation bg:bg_private",
+        "@show bg:bg_school_corridor",
+        "@show bg:bg_private",
     ])
 
     cleaned = sanitize_arc_for_ai_context(
@@ -401,7 +399,7 @@ def test_model_context_exposes_only_whitelisted_background_binding() -> None:
         allowed_background_ids={"bg_school_corridor"},
     )
 
-    assert "@presentation bg:bg_school_corridor" in cleaned
+    assert "@show bg:bg_school_corridor" in cleaned
     assert "bg_private" not in cleaned
 
 

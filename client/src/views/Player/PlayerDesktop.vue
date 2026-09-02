@@ -216,6 +216,7 @@ type StoryDialogue = {
   opt?: StoryChoice[];
   act?: Record<string, unknown>;
   presentation?: Record<string, unknown>;
+  show?: Record<string, unknown>;
   next?: string;
 };
 
@@ -571,7 +572,7 @@ function primeBackgroundForProgress(progress: ScriptProgressState) {
   const dialogues = scene?.dlg || [];
   const end = Math.min(progress.dialogueIndex, dialogues.length - 1);
   for (let i = 0; i <= end; i += 1) {
-    applyPresentationCue(dialogues[i]?.presentation);
+    applyPresentationCue(dialogues[i]?.show || dialogues[i]?.presentation);
   }
 }
 
@@ -583,7 +584,7 @@ function applyPresentationCue(cue: Record<string, unknown> | null | undefined) {
 }
 
 function applyCurrentNodePresentation(node: StoryDialogue) {
-  const cue = node.presentation;
+  const cue = (node.show || node.presentation) as Record<string, unknown> | undefined;
   applyPresentationCue(cue);
   if (!cue || !Object.prototype.hasOwnProperty.call(cue, 'sprite') || cue.sprite === undefined) {
     applyDefaultSpriteForDialogue(node);
