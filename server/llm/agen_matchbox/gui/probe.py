@@ -41,14 +41,14 @@ class ProbeMixin:
             model_config.get("output_modalities"),
         )
 
-    def _get_selected_model_context(self):
+    def _get_selected_model_context(self, target_display_name: str | None = None):
         """获取当前选中的平台名、显示名及对应配置。"""
         platform_name = self._resolve_platform_name()
         if not platform_name:
             self.show_warning("警告", "请先选择一个平台")
             return None, None, None
 
-        display_name = self._get_selected_model_display_name()
+        display_name = target_display_name or self._get_selected_model_display_name()
         if not display_name:
             self.show_warning("警告", "请在已配置模型列表中选择要测试的模型")
             return None, None, None
@@ -61,9 +61,9 @@ class ProbeMixin:
 
         return platform_name, display_name, model_config
 
-    def test_model(self):
+    def test_model(self, target_display_name: str | None = None):
         """测试选中的模型是否可用（对话能力）。"""
-        platform_name, display_name, model_config = self._get_selected_model_context()
+        platform_name, display_name, model_config = self._get_selected_model_context(target_display_name)
         if not platform_name:
             return
 
@@ -109,9 +109,9 @@ class ProbeMixin:
 
         threading.Thread(target=do_test, daemon=True).start()
 
-    def test_embedding(self):
+    def test_embedding(self, target_display_name: str | None = None):
         """测试选中的 Embedding 模型是否可用。"""
-        platform_name, display_name, model_config = self._get_selected_model_context()
+        platform_name, display_name, model_config = self._get_selected_model_context(target_display_name)
         if not platform_name:
             return
 
@@ -149,9 +149,9 @@ class ProbeMixin:
 
         threading.Thread(target=do_test, daemon=True).start()
 
-    def speed_test_model(self):
+    def speed_test_model(self, target_display_name: str | None = None):
         """流式测速选中的模型。"""
-        platform_name, display_name, model_config = self._get_selected_model_context()
+        platform_name, display_name, model_config = self._get_selected_model_context(target_display_name)
         if not platform_name:
             return
 

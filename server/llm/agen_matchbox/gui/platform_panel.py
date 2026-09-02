@@ -249,20 +249,20 @@ class PlatformPanelMixin:
             on_yes=on_confirm_delete,
         )
 
-    def save_platform_config(self, silent: bool = False) -> bool:
+    def save_platform_config(self, silent: bool = False, skip_ui_update: bool = False) -> bool:
         """一键保存当前平台的全部配置（Base URL、充值地址、API Key）。"""
         platform_name = self._resolve_platform_name()
         if not platform_name or platform_name not in getattr(self, "current_config", {}):
             if getattr(self, "last_selected_platform_name", None):
                 platform_name = self.last_selected_platform_name
             else:
-                if not silent:
+                if not silent and not skip_ui_update:
                     self.show_warning("警告", "请先选择一个有效的平台")
                 return False
 
         db_id = self.current_config[platform_name].get("_db_id")
         if not db_id:
-            if not silent:
+            if not silent and not skip_ui_update:
                 self.show_error("错误", "无法获取平台数据库 ID")
             return False
 
@@ -272,7 +272,7 @@ class PlatformPanelMixin:
             new_url = (self.platform_url_entry.value or "").strip()
             if new_url:
                 if not (new_url.startswith("http://") or new_url.startswith("https://")):
-                    if not silent:
+                    if not silent and not skip_ui_update:
                         self.show_error("错误", "Base URL 必须以 http:// 或 https:// 开头")
                     return False
                 new_url = normalize_base_url(new_url)
@@ -304,19 +304,21 @@ class PlatformPanelMixin:
 
             if changed_items:
                 self._invalidate_probe_cache(platform_name)
-                if hasattr(self, "_update_overview_state"):
-                    self._update_overview_state()
-                self.log(f"✓ 平台 '{platform_name}' 配置已成功保存: {', '.join(changed_items)}", tag="success")
-                if not silent:
+                if not skip_ui_update and not silent:
+                    if hasattr(self, "_update_overview_state"):
+                        self._update_overview_state()
+                    self.log(f"✓ 平台 '{platform_name}' 配置已成功保存: {', '.join(changed_items)}", tag="success")
                     self.show_snack(f"平台 '{platform_name}' 配置已保存！")
             else:
-                if not silent:
+                if not silent and not skip_ui_update:
                     self.show_snack("当前平台配置未发生改动。")
-            self.page.update()
+
+            if not skip_ui_update and not silent:
+                self.page.update()
             return True
         except Exception as e:
-            self.log(f"✗ 保存平台配置失败: {e}", tag="error")
-            if not silent:
+            if not skip_ui_update and not silent:
+                self.log(f"✗ 保存平台配置失败: {e}", tag="error")
                 self.show_error("错误", f"保存平台配置失败: {e}")
             return False
 

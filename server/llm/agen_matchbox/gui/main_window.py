@@ -192,8 +192,12 @@ class LLMConfigGUI(
             dense=True,
             expand=True,
         )
-        self.base_url_entry = ft.TextField(label="当前 Base URL", read_only=True, dense=True)
-        self.platform_url_entry = ft.TextField(label="编辑 Base URL", dense=True)
+        self.platform_url_entry = ft.TextField(
+            label="Base URL",
+            hint_text="例如: https://api.openai.com/v1",
+            dense=True,
+        )
+        self.base_url_entry = self.platform_url_entry  # 兼容所有既有属性引用
         self.recharge_url_entry = ft.TextField(label="充值地址", dense=True)
         self.api_key_entry = ft.TextField(label="API Key", password=True, can_reveal_password=True, dense=True)
 
@@ -265,22 +269,14 @@ class LLMConfigGUI(
 
         self.page.on_keyboard_event = on_keyboard
 
-        # 窗口关闭时自动保存平台配置
-        def on_window_event(e):
-            if e.data == "close":
-                try:
-                    self.save_platform_config(silent=True)
-                except Exception:
-                    pass
-                if hasattr(self.page, "window") and self.page.window:
-                    self.page.window.destroy()
+        # 监听断开或关闭事件（纯数据层静默保存兜底）
+        def on_disconnect(e):
+            try:
+                self.save_platform_config(silent=True, skip_ui_update=True)
+            except Exception:
+                pass
 
-        if hasattr(self.page, "window") and self.page.window:
-            self.page.window.prevent_close = True
-            self.page.window.on_event = on_window_event
-
-        import atexit
-        atexit.register(lambda: getattr(self, "save_platform_config", lambda silent=True: None)(silent=True))
+        self.page.on_disconnect = on_disconnect
 
         # 1. 顶部 Header
         header = self._build_header()
@@ -377,7 +373,6 @@ class LLMConfigGUI(
                             spacing=6,
                         ),
                         ft.Row([self.platform_dropdown], expand=False),
-                        self.base_url_entry,
                         self.platform_url_entry,
                         self.recharge_url_entry,
                         self.api_key_entry,
@@ -436,13 +431,9 @@ class LLMConfigGUI(
                                 ft.ElevatedButton("+ 新增模型", on_click=lambda e: self.open_add_model_dialog(), height=36),
                                 ft.OutlinedButton("编辑模型", icon=ft.Icons.EDIT_OUTLINED, on_click=lambda e: self.edit_model(), height=36),
                                 ft.OutlinedButton("删除模型", icon=ft.Icons.DELETE_OUTLINE, on_click=lambda e: self.delete_model(), style=ft.ButtonStyle(color=ft.Colors.RED_600), height=36),
-                                ft.VerticalDivider(width=1, color=ft.Colors.GREY_300),
-                                ft.FilledTonalButton("测试对话", icon=ft.Icons.CHAT_OUTLINED, on_click=lambda e: self.test_model(), height=36),
-                                ft.FilledTonalButton("测试向量", icon=ft.Icons.TRANSFORM_OUTLINED, on_click=lambda e: self.test_embedding(), height=36),
-                                ft.FilledTonalButton("流式测速", icon=ft.Icons.SPEED_OUTLINED, on_click=lambda e: self.speed_test_model(), height=36),
                             ],
                             spacing=6,
-                            wrap=True,
+                            wrap=False,
                         ),
                         ft.Container(
                             content=ft.Row(
@@ -831,28 +822,69 @@ class LLMConfigGUI(
                 self.selected_model_display_name = name
                 self._refresh_model_list_view()
 
+            # 智能判断模型能力：文本对话 vs 向量嵌入
+            _, out_modalities = self._model_modalities_from_config(m_cfg)
+            is_embedding = (
+                "embedding" in out_modalities
+                or (isinstance(m_cfg, dict) and "embedding" in str(m_cfg.get("model_name", "")).lower())
+                or "embedding" in d_name.lower()
+            )
+
+            # 动态构建该项专属的操作按钮
+            action_buttons = []
+            if is_embedding:
+                action_buttons.append(
+                    ft.IconButton(
+                        icon=ft.Icons.TRANSFORM_OUTLINED,
+                        tooltip="测试向量",
+                        icon_size=18,
+                        icon_color=ft.Colors.TEAL_600,
+                        on_click=lambda e, n=d_name: [setattr(self, "selected_model_display_name", n), self.test_embedding(target_display_name=n)],
+                    )
+                )
+            else:
+                action_buttons.extend([
+                    ft.IconButton(
+                        icon=ft.Icons.CHAT_OUTLINED,
+                        tooltip="对话测试",
+                        icon_size=18,
+                        icon_color=ft.Colors.BLUE_600,
+                        on_click=lambda e, n=d_name: [setattr(self, "selected_model_display_name", n), self.test_model(target_display_name=n)],
+                    ),
+                    ft.IconButton(
+                        icon=ft.Icons.SPEED_OUTLINED,
+                        tooltip="速度测试",
+                        icon_size=18,
+                        icon_color=ft.Colors.PURPLE_600,
+                        on_click=lambda e, n=d_name: [setattr(self, "selected_model_display_name", n), self.speed_test_model(target_display_name=n)],
+                    ),
+                ])
+
+            action_buttons.extend([
+                ft.IconButton(
+                    icon=ft.Icons.EDIT_OUTLINED,
+                    tooltip="编辑模型",
+                    icon_size=18,
+                    on_click=lambda e, n=d_name: [setattr(self, "selected_model_display_name", n), self.edit_model()],
+                ),
+                ft.IconButton(
+                    icon=ft.Icons.DELETE_OUTLINE,
+                    tooltip="删除模型",
+                    icon_size=18,
+                    icon_color=ft.Colors.RED_500,
+                    on_click=lambda e, n=d_name: [setattr(self, "selected_model_display_name", n), self.delete_model()],
+                ),
+            ])
+
             card = ft.Container(
                 content=ft.ListTile(
                     leading=ft.Icon(ft.Icons.DRAG_HANDLE, color=ft.Colors.GREY_400, size=22),
                     title=ft.Text(d_name, weight=ft.FontWeight.BOLD if is_selected else ft.FontWeight.W_500, size=14),
                     subtitle=ft.Text(formatted_text, size=12, color=ft.Colors.GREY_700),
                     trailing=ft.Row(
-                        [
-                            ft.IconButton(
-                                icon=ft.Icons.EDIT_OUTLINED,
-                                tooltip="编辑模型",
-                                icon_size=18,
-                                on_click=lambda e, n=d_name: [setattr(self, "selected_model_display_name", n), self.edit_model()],
-                            ),
-                            ft.IconButton(
-                                icon=ft.Icons.DELETE_OUTLINE,
-                                tooltip="删除模型",
-                                icon_size=18,
-                                icon_color=ft.Colors.RED_500,
-                                on_click=lambda e, n=d_name: [setattr(self, "selected_model_display_name", n), self.delete_model()],
-                            ),
-                        ],
+                        action_buttons,
                         tight=True,
+                        spacing=2,
                     ),
                     dense=True,
                     on_click=on_tile_click,
@@ -1091,10 +1123,20 @@ def main(*, schema_initializer: Optional[Callable[[AIManager], None]] = None):
     """主函数：启动 Flet GUI。"""
     enable_high_dpi_awareness()
 
+    gui_instance = None
+
     def app_main(page: ft.Page):
-        LLMConfigGUI(page, schema_initializer=schema_initializer)
+        nonlocal gui_instance
+        gui_instance = LLMConfigGUI(page, schema_initializer=schema_initializer)
 
     ft.app(target=app_main)
+
+    # 窗口关闭后 ft.app() 正常返回退出，此时尽力保存一次（纯数据层操作，无 UI 阻塞）
+    if gui_instance is not None:
+        try:
+            gui_instance.save_platform_config(silent=True, skip_ui_update=True)
+        except Exception:
+            pass
 
 
 if __name__ == "__main__":
