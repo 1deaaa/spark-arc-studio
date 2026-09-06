@@ -557,6 +557,7 @@ flowchart LR
 
 * **上下文拼接**：`communication.py` 构造稳定 system 前缀，`prompt_layout.py` 将当前编辑区、附件现场与本轮用户请求放入后段，`context_budget.py` 负责历史预算、压缩与工具循环再预算。
 * **统一执行协议**：典型专家 Agent 复用 `SparkBaseAgent` 与 `SparkAgentExecutor`，以 `build_context -> execute -> write_result` 收口业务入口；聊天与导演委派统一走 `chat_stream(skip_tool_confirmation)`。
+* **长上下文处理**：附件、超长世界观等“全文放不下”的长文档走统一滑窗底座——切分落盘 + 全局地图 + 双检索定位（语义/正则均可 `scope=["attachment"]` 限定到附件并直达分块）+ 滑窗按需读 + 线索账本（读一片记一笔，跨轮沉淀）。模型永远只看到“地图 + 账本 + 当前一个窗口”，无附件房间零干扰。详见[长上下文处理](docs/project/long-context.zh-CN.md)，阈值见[阈值总览](docs/project/longread-thresholds.zh-CN.md)。
 * **统一工具生态**：所有工具经 `server/agents/tools/registry.py` 分组注册，再由 `agent_tools.py` 作为公共门面导出。剧本、大纲、设定等局部替换统一复用 `_apply_patch`，Token 切分与语义分块也复用公共底座。
 * **AgentSkills 与 MCP**：AgentSkills 通过 `search_skills` / `read_skill` / `read_skill_reference` 作为写作质量参考按需读取，不自动污染 system 前缀；MCP 统一挂载在 `/api/mcp/`，灵感工具保留原名，控制工具使用 `control_` 前缀。`/api/mcp/control/` 仅作为旧客户端兼容入口保留，写盘仍经既有 Agent 工具管线执行。
 * **前端映射**：Agent 名称、描述、徽标和主题色以 `server/agents/registry.py` 为真相源；工具调用 UI 元数据由后端 `build_tool_stream_event` 注入，前端 `chatStore` 统一消费并渲染。
@@ -857,6 +858,8 @@ graph TB
 | :--- | :--- |
 | [架构深度文档](docs/project/architecture.md) | 导演调度 vs 信标协作对比、Agent 三模态完整协议、Critic 审核机制、风格克隆集群、信标总线核心机制、ARC 解析策略、工具注册表、流式基础设施层 |
 | [聊天上下文管理](docs/project/context-management.zh-CN.md) | 自适应预算、自动压缩、原始历史持久化、checkpoint 事务、按需原文检索与 StoryMemory 边界 |
+| [长上下文处理](docs/project/long-context.zh-CN.md) | 附件与超长世界观的滑窗底座：切分落盘、全局地图、双检索定位、按需读窗、线索账本、前缀缓存布局 |
+| [滑窗阈值总览](docs/project/longread-thresholds.zh-CN.md) | 所有长文本阈值的定义位置、默认值与作用范围 |
 | [Launcher 本地部署管理器](docs/project/local-deployment-manager.zh-CN.md) | Release Launcher 受管 `main`、系统 Git/Node 边界、网络回退、数据保护与更新流程 |
 | [火柴Agent网关指南](server/llm/agen_matchbox/README.md) | 双通道设计、接入链路、槽位配置、推理流兼容 |
 | [数据库自动迁移指南](docs/project/database-migration.md) | 开发者工作流、迁移接入指南、清理历史风险 |

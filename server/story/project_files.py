@@ -354,11 +354,7 @@ def collect_project_files(
             append_physical_file(file_path)
 
     if include_attachments:
-        _append_attachment_files(
-            user_id, project_name, results,
-            get_total_chars=lambda: total_chars,
-            add_chars=lambda n: _bump_total(n),
-        )
+        _append_attachment_files(user_id, project_name, results)
         total_chars = _current_total(results)
 
     return results
@@ -368,19 +364,10 @@ def _current_total(files: list[ProjectFile]) -> int:
     return sum(len(pf.content or "") for pf in files)
 
 
-def _bump_total(n: int) -> None:
-    # 占位：实际累计在 _append_attachment_files 内直接操作 results；
-    # 保留本函数仅为语义锚点，避免后续维护者误以为附件不计预算。
-    _ = n
-
-
 def _append_attachment_files(
     user_id: str,
     project_name: str,
     results: list[ProjectFile],
-    *,
-    get_total_chars,
-    add_chars,
 ) -> None:
     """把附件全文作为虚拟 ProjectFile 追加到收集结果。
 

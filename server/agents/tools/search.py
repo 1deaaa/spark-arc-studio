@@ -27,6 +27,34 @@ class SearchProjectInput(BaseModel):
     pattern: str = Field(description="正则表达式模式，用于搜索全项目文本文件。例如 '张三' 或 '哭泣|泪水'")
     case_sensitive: bool = Field(default=False, description="是否区分大小写")
     max_results: int = Field(default=20, ge=1, le=100, description="返回匹配数量上限，默认20，最多100")
+    scope: list[str] | None = Field(default=None, description="搜索范围过滤，与 semantic_search 共用同一套 scope。可选值：outline, synopsis, beats, worldview, character, arc, novel, attachment。例如 ['attachment'] 只搜已上传附件，['arc','novel'] 只搜正文。不传则搜项目正文（不含附件）。")
+
+    VALID_SCOPE_VALUES: ClassVar[set[str]] = {
+        "outline", "synopsis", "beats", "worldview",
+        "character", "arc", "novel", "attachment",
+    }
+
+    @field_validator("scope", mode="before")
+    @classmethod
+    def _coerce_scope(cls, v: Any) -> list[str] | None:
+        if v is None:
+            return None
+        if isinstance(v, str):
+            items = [s.strip() for s in v.split(",") if s.strip()]
+            return items if items else None
+        if isinstance(v, list):
+            return v
+        return v
+
+    @field_validator("scope")
+    @classmethod
+    def _validate_scope_values(cls, v: list[str] | None) -> list[str] | None:
+        if v is None:
+            return None
+        invalid = [s for s in v if s not in cls.VALID_SCOPE_VALUES]
+        if invalid:
+            raise ValueError(f"scope 包含无效值 {invalid}，合法值为: {sorted(cls.VALID_SCOPE_VALUES)}")
+        return v
 
 
 class SemanticSearchInput(BaseModel):
@@ -168,6 +196,17 @@ def _apply_character_patch(
             os.remove(temp_path)
 
 
+def _attachment_chunk_index_for_offset(chunks: list[str], offset: int) -> int:
+    """按字符偏移把全文命中映射回滑窗窗口号，失败返回 0（首窗兜底）。"""
+    cursor = 0
+    for index, chunk_text in enumerate(chunks):
+        size = len(chunk_text or "")
+        if offset < cursor + size:
+            return max(0, index)
+        cursor += size
+    return 0
+
+
 def _fallback_locate_match(
     text: str,
     compiled: Any,
@@ -253,8 +292,13 @@ def _locate_chunk_positions(user_id: str, project_name: str, chunks: list[Any]) 
 
 
 @tool(args_schema=SearchProjectInput)
-def search_project(pattern: str, case_sensitive: bool = False, max_results: int = 20) -> str:
-    """按正则搜索项目文本。"""
+def search_project(
+    pattern: str,
+    case_sensitive: bool = False,
+    max_results: int = 20,
+    scope: list[str] | None = None,
+) -> str:
+    """按正则搜索项目文本，可用 scope 限定到附件。"""
     user_id = current_user_id.get()
     project_name = get_current_project_name()
     if not user_id or not project_name:
@@ -267,18 +311,43 @@ def search_project(pattern: str, case_sensitive: bool = False, max_results: int 
 
     from story.project_files import build_narrative_ref, collect_project_files, load_outline_data
 
+    scope_values = set(scope or [])
+    attachment_only = scope_values == {"attachment"}
+    include_attachments = "attachment" in scope_values
     project_files = collect_project_files(
         user_id,
         project_name,
         max_source_chars=SEARCH_MAX_SOURCE_CHARS,
+        include_attachments=include_attachments,
     )
     outline_data = load_outline_data(user_id, project_name)
     project_path = get_project_path(user_id, project_name)
 
     result_limit = max(1, min(int(max_results or 20), 100))
+    # 附件命中需要映射回滑窗窗口号：每个附件全文命中只保留首个位置，
+    # 再按字符偏移换算 chunk_index，Agent 直接读窗，不灌全文。
+    attachment_chunks: dict[str, list[str]] = {}
+    if include_attachments:
+        try:
+            from agents.attachment import load_chunks as _load_chunks
+
+            for project_file in project_files:
+                if project_file.format_key != "attachment":
+                    continue
+                attachment_id = str((project_file.metadata or {}).get("attachment_id") or "")
+                if not attachment_id:
+                    continue
+                try:
+                    attachment_chunks[attachment_id] = _load_chunks(user_id, project_name, attachment_id)
+                except Exception:
+                    attachment_chunks[attachment_id] = []
+        except Exception:
+            attachment_chunks = {}
     results: list[dict] = []
     reached_limit = False
     for project_file in project_files:
+        if scope_values and project_file.format_key not in scope_values:
+            continue
         rel_path = project_file.rel_path
         if project_file.format_key == "character":
             file_text = project_file.content or ""
@@ -302,33 +371,49 @@ def search_project(pattern: str, case_sensitive: bool = False, max_results: int 
             for match in iter_search_matches(compiled, file_text):
                 if match.start() == match.end():
                     continue
+                # 附件全文命中只保留每附件首个位置：全文灌给模型没有意义，
+                # Agent 应该按回跳指针读窗。项目正文保持原有多命中行为。
+                if project_file.format_key == "attachment":
+                    attachment_id = str((project_file.metadata or {}).get("attachment_id") or "")
+                    if any(
+                        existing.get("attachment_id") == attachment_id
+                        for existing in results
+                        if existing.get("format_key") == "attachment"
+                    ):
+                        continue
                 exact_start_line = _line_no_from_offset(line_starts, match.start())
                 exact_end_line = _line_no_from_offset(line_starts, max(match.end() - 1, match.start()))
                 context = _build_match_context(file_text, match.start(), match.end())
-                results.append(
-                    {
-                        "index": len(results),
-                        "file_path": project_file.abs_path or (os.path.join(project_path, rel_path) if rel_path else ""),
-                        "rel_path": rel_path,
-                        "format_key": project_file.format_key,
-                        "start_line": exact_start_line,
-                        "end_line": exact_end_line,
-                        "narrative_ref": narrative_ref,
-                        "match_text": match.group(0),
-                        "context": context,
-                        "score": 1.0,
-                        "chunk_text": match.group(0),
-                        "pattern": pattern,
-                        "case_sensitive": case_sensitive,
-                        "file_span_start": (
-                            None if project_file.format_key == "character" else match.start()
-                        ),
-                        "file_span_end": (
-                            None if project_file.format_key == "character" else match.end()
-                        ),
-                        "character_id": project_file.metadata.get("character_id", ""),
-                    }
-                )
+                entry: dict = {
+                    "index": len(results),
+                    "file_path": project_file.abs_path or (os.path.join(project_path, rel_path) if rel_path else ""),
+                    "rel_path": rel_path,
+                    "format_key": project_file.format_key,
+                    "start_line": exact_start_line,
+                    "end_line": exact_end_line,
+                    "narrative_ref": narrative_ref,
+                    "match_text": match.group(0),
+                    "context": context,
+                    "score": 1.0,
+                    "chunk_text": match.group(0),
+                    "pattern": pattern,
+                    "case_sensitive": case_sensitive,
+                    "file_span_start": (
+                        None if project_file.format_key == "character" else match.start()
+                    ),
+                    "file_span_end": (
+                        None if project_file.format_key == "character" else match.end()
+                    ),
+                    "character_id": project_file.metadata.get("character_id", ""),
+                }
+                if project_file.format_key == "attachment":
+                    attachment_id = str((project_file.metadata or {}).get("attachment_id") or "")
+                    entry["attachment_id"] = attachment_id
+                    entry["attachment_filename"] = str((project_file.metadata or {}).get("attachment_filename") or "")
+                    entry["attachment_chunk_index"] = _attachment_chunk_index_for_offset(
+                        attachment_chunks.get(attachment_id) or [], match.start(),
+                    )
+                results.append(entry)
                 if len(results) >= result_limit:
                     reached_limit = True
                     break
@@ -364,8 +449,22 @@ def search_project(pattern: str, case_sensitive: bool = False, max_results: int 
         summary = f"正则搜索 \"{pattern}\" 返回前 {len(results)} 处匹配（已达到结果上限）：\n"
     else:
         summary = f"正则搜索 \"{pattern}\" 找到 {len(results)} 处匹配：\n"
+    if attachment_only:
+        summary = f"正则搜索 \"{pattern}\" 在已上传附件中找到 {len(results)} 处匹配（每附件只保留首个位置，请按回跳指针读窗）：\n"
     lines = [summary]
     for r in results:
+        if r.get("format_key") == "attachment":
+            attachment_id = str(r.get("attachment_id") or "")
+            chunk_no = int(r.get("attachment_chunk_index") or 0)
+            filename = str(r.get("attachment_filename") or r.get("rel_path") or "")
+            lines.append(f"[{r['index']}] [附件] {filename} (chunk_index={chunk_no})")
+            if attachment_id:
+                lines.append(
+                    f"  → 如需读取完整分片正文：read_attachment_chunk(attachment_id=\"{attachment_id}\", chunk_index={chunk_no})"
+                )
+            lines.append(f"  {r['context']}")
+            lines.append("")
+            continue
         loc = f"{r['rel_path']}:{r['start_line']}"
         lines.append(f"[{r['index']}] {r['narrative_ref']} ({loc})")
         lines.append(f"  {r['context']}")
@@ -376,7 +475,14 @@ def search_project(pattern: str, case_sensitive: bool = False, max_results: int 
 
 @tool(args_schema=SemanticSearchInput)
 def semantic_search(query: str, scope: list[str] | None = None, k: int = 8) -> str:
-    """按语义搜索当前项目文本与已上传附件。"""
+    """按语义搜索当前项目文本与已上传附件。
+
+    四种状态全部通过返回值区分（定义不变，只增附件回跳指针）：
+    1. 正常检索 → 命中列表，附件命中带 chunk_index 回跳指针；
+    2. 内容已更新 → IndexBuildNotReadyError 分支，提示刷新 + 关键词降级结果；
+    3. 已启用但尚未完成嵌入 → 同上，building/queued 进度文案；
+    4. 未启用 → 直接返回开启指引，不觸发构建。
+    """
     user_id = current_user_id.get()
     project_name = get_current_project_name()
     if not user_id or not project_name:
@@ -408,7 +514,17 @@ def semantic_search(query: str, scope: list[str] | None = None, k: int = 8) -> s
     except IndexBuildNotReadyError as e:
         build_state = (e.status_payload or {}).get("build_state", {})
         progress = build_state.get("progress", {})
-        fallback = search_project(escape_search_literal(query), case_sensitive=False)
+        # 降级链同样限定附件：scope=["attachment"] 时降级为附件正则，避免
+        # 把项目正文灌进来淹没附件命中。定义不变，只是透传 scope。
+        # 注意 search_project 是 @tool 函数，直接调用走 LangChain 的
+        # __call__（与 .invoke 等价），保持与文件内历史调用一致。
+        fallback_scope = list(scope) if scope else None
+        if fallback_scope:
+            fallback = search_project(
+                escape_search_literal(query), case_sensitive=False, scope=fallback_scope,
+            )
+        else:
+            fallback = search_project(escape_search_literal(query), case_sensitive=False)
         progress_text = ""
         total_chunks = int(progress.get("total_chunks", 0) or 0)
         embedded_chunks = int(progress.get("embedded_chunks", 0) or 0)

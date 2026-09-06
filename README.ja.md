@@ -526,6 +526,7 @@ flowchart LR
 
 * **コンテキスト構築**: `communication.py` が安定したシステム前頭部を構築し、`prompt_layout.py` が現在の編集領域や添付ファイル、本ターンのユーザー要求を後半部に結合します。`context_budget.py` は対話履歴のトークン予算管理、要約の圧縮、ツールループ時の再計算を行います。
 * **統一実行プロトコル**: 各専門エージェントは `SparkBaseAgent` と `SparkAgentExecutor` を継承し、`build_context -> execute -> write_result` の手順で処理を統一管理します。対話と監督からの委任タスクはすべて `chat_stream(skip_tool_confirmation)` を経由して実行されます。
+* **長文コンテキスト処理**: 単一モデルのウィンドウに収まらない長文ドキュメント（添付ファイル、超過サイズの世界観など）は統一スライディングウィンドウ基盤で処理します——分割保存＋全体マップ＋二重検索による位置特定（セマンティック検索・正規表現検索とも `scope=["attachment"]` で添付ファイルに限定しチャンクへ直接ジャンプ）＋オンデマンド読み取り＋手がかり台帳（1ウィンドウ読むごとに1件記録し、ターンをまたいで保持）。モデルが見るのは常に「マップ＋台帳＋現在の1ウィンドウ」のみで、添付のないルームへの影響はありません。詳細は[長文コンテキスト処理](docs/project/long-context.zh-CN.md)、閾値は[閾値一覧](docs/project/longread-thresholds.zh-CN.md)をご参照ください。
 * **統一ツールシステム**: すべてのツールは [registry.py](file:///d:/Desktop/sparkarc/server/agents/tools/registry.py) でグループ分けして登録され、`agent_tools.py` のパブリックファサードから外部に公開されます。本文、アウトライン、世界設定の部分修正はすべて `_apply_patch` を再利用し、トークン分割やセマンティックチャンキングも共通インフラを利用します。
 * **スキルと MCP の境界**: AgentSkills は `search_skills` / `read_skill` / `read_skill_reference` 経由でオンデマンドに読み込まれます。MCP は `/api/mcp/` に統合され、インスピレーションツールは従来の名前を保ち、コントロールツールには `control_` プレフィックスを付けます。`/api/mcp/control/` は既存クライアント向けの互換入口としてのみ残り、書き込みは既存の Agent ツールパイプラインを経由します。
 * **フロントエンド対応**: エージェント名、説明、アイコン、テーマカラーなどの情報は [registry.py](file:///d:/Desktop/sparkarc/server/agents/registry.py) をマスターデータとして参照します。ツール呼び出し時の UI メタデータは、バックエンドの `build_tool_stream_event` によってストリームに注入され、フロントエンドの `chatStore` が一元的に処理・レンダリングします。
@@ -810,6 +811,8 @@ Gitea Actions および GitLab CI をサポートしており、Gitea Actions �
 | ドキュメント | 主な解説内容 |
 | :--- | :--- |
 | [アーキテクチャ詳細ドキュメント](file:///d:/Desktop/sparkarc/docs/project/architecture.md) | ディレクターとビーコンバスの連携仕様、3つの呼び出しモード仕様、クリティック監査メカニズム、文体クローンクラスター、信標バスの定義、ARC 解析戦略、ツール登録、ストリーミング共通インフラ。 |
+| [長文コンテキスト処理](docs/project/long-context.zh-CN.md) | 添付ファイル・超過サイズ世界観向けスライディングウィンドウ基盤：分割保存、全体マップ、二重検索による位置特定、オンデマンド読み取り、手がかり台帳、前方キャッシュ配置。 |
+| [スライディングウィンドウ閾値一覧](docs/project/longread-thresholds.zh-CN.md) | 長文関連の全閾値の定義場所・既定値・適用範囲。 |
 | [Matchbox Agent Gateway ガイド](file:///d:/Desktop/sparkarc/server/llm/agen_matchbox/README.md) | デュアルチャネル構造、デプロイ方法、APIスロット設定、Reasoning ストリームの処理。 |
 | [データベース自動移行ガイド](file:///d:/Desktop/sparkarc/docs/project/database-migration.md) | データベース修正時のマイグレーション自動生成ワークフロー、トラブルシューティング。 |
 | [CI/CD 自動デプロイガイド](file:///d:/Desktop/sparkarc/docs/project/cicd-deployment.md) | ランナー構築、シークレットトークンの管理、GitHub Actions への移植。 |

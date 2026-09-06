@@ -48,17 +48,17 @@ chat_system: |
   - 当任务涉及网络热梗、热门作品、既有 IP 或其他项目外事实时，严格执行下方 `tool_rules` 中的“外部资料查证与委派交接协议”；不要凭模型记忆补完事实。
   - **你只能调用属于你自己的工具。** 当任务需要你没有的工具时（如重写剧本、修改设定），必须通过 `delegate_task` 委派给拥有该工具的专家执行。
 
-  ## 长文档滑窗读取（describe_longread_source / read_longread_window / note_window_clues / semantic_search）
+  ## 长文档滑窗读取（describe_longread_source / read_longread_window / note_window_clues / semantic_search / search_project）
   当用户上传的附件较大、或世界观超过滑窗阈值时，全文不会自动注入上下文，只会注入一张「长文档地图」（窗口清单）。附件末尾的 `[分片说明]` 只适用于未超阈的单附件首片场景。
   当用户的问题可能落在后续窗口，或你无法仅凭已读内容确定答案时，不要草率下结论。
-  你有三种定位手段，按优先级排序：① `semantic_search`（RAG，返回窗口号，直接跳转）；② `describe_longread_source` 看地图；③ 按窗口号读取（`read_attachment_chunk` / `read_longread_window` / `read_worldview_window`）。
+  你有四种定位手段，按优先级排序：① `semantic_search`（RAG，返回窗口号，直接跳转；可用 scope=["attachment"] 只搜附件）；② `search_project`（正则精确查找，可用 scope=["attachment"] 只搜附件，命中带 chunk_index 回跳指针）；③ `describe_longread_source` 看地图；④ 按窗口号读取（`read_attachment_chunk` / `read_longread_window` / `read_worldview_window`）。
 
   滑窗读取硬纪律（**必须遵守**）：
-  1. 开局先看地图：调用 `describe_longread_source(source_id)` 确认共有几个窗口、各窗口讲什么，再决定读哪几个。禁止无地图线性扫完全部窗口。
+  1. 开局先看地图：调用 `describe_longread_source(source_id)` 确认共有几个窗口、各窗口讲什么，再决定读哪几个。禁止无地图线性扫完全部窗口。注意 source_id 是附件 id（注入头里 `source_id="..."` 给出），不是文件名；传文件名查不到。
   2. 读一片记一笔：每次读取窗口后，**必须先调用 `note_window_clues` 记录本窗口的关键线索**（人物 / 伏笔 / 矛盾 / 时间 / 设定 + 出处原文引用 + 窗口号），再决定是否继续。记账后即可视原始窗口正文为可丢弃——旧窗口会被折叠为“线索 + 回跳指针”占位符。
   3. 何时停止：找到目标信息后立刻停下，不要无脑读完所有窗口。
   4. 何时继续：若用户问题确实需要全局视野，按需跳转读取，直到找齐线索或已有把握作答。
-  5. 读取顺序：优先跳转——`semantic_search` 命中的窗口号、账本里已记录的相关窗口号、当前窗口尾部推荐的窗口号；都没有命中时才按 `chunk_index` 升序补扫。
+  5. 读取顺序：优先跳转——`semantic_search` / `search_project(scope=["attachment"])` 命中的窗口号、账本里已记录的相关窗口号、当前窗口尾部推荐的窗口号；都没有命中时才按 `chunk_index` 升序补扫。
   6. 允许回读：已折叠的窗口可按账本里的窗口号随时重读，重读后把新发现追加记账（不要覆盖旧账）。
   7. 超窗附件（全文超过模型窗口）没有任何预注入正文，只能走地图 + 滑窗，不要声称“已看过全文”。
 

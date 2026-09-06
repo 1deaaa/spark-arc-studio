@@ -526,6 +526,7 @@ flowchart LR
 
 * **콘텍스트 빌더**: `communication.py` 파일이 안정적인 전반부 뼈대를 형성하며, `prompt_layout.py`가 실시간 편집 중인 텍스트 영역 정보와 전송된 질문을 맨 뒷단에 조화롭게 이어 붙여줍니다. `context_budget.py`는 대화 내역의 한계 토큰을 산정하고 대화 기록 압축 및 툴 가동 시 가용한 한계량을 재산출해 줍니다.
 * **통합 실행 규약**: 모든 전문가 에이전트는 `SparkBaseAgent`와 `SparkAgentExecutor`를 상속해 `build_context -> execute -> write_result` 순으로 비즈니스 프로세스 흐름을 일체화 관리합니다. 일반 대화 및 위임 태스크들은 모두 `chat_stream(skip_tool_confirmation)` 창구를 경유하여 실행됩니다.
+* **장문 컨텍스트 처리**: 단일 모델 윈도우에 들어가지 않는 장문 문서(첨부 파일, 초과 분량 세계관 등)는 통합 슬라이딩 윈도우 베이스로 처리합니다——분할 저장＋전체 지도＋이중 검색 위치 특정(시맨틱 검색·정규식 검색 모두 `scope=["attachment"]`로 첨부에 한정해 청크로 직접 점프)＋온디맨드 읽기＋단서 장부(1윈도우 읽기마다 1건 기록, 턴을 넘어 유지). 모델이 보는 것은 항상 「지도＋장부＋현재 1윈도우」뿐이며 첨부 없는 방에는 영향이 없습니다. 자세한 내용은 [장문 컨텍스트 처리](docs/project/long-context.zh-CN.md), 임계값은 [임계값 일람](docs/project/longread-thresholds.zh-CN.md)을 참고해 주십시오.
 * **통합 도구 체계**: 연동 툴들은 [registry.py](file:///d:/Desktop/sparkarc/server/agents/tools/registry.py) 파일에 분류 기입되어 등록되며 `agent_tools.py` 창구를 거쳐 외부에 정식 노출됩니다. 시나리오, 아웃라인 및 설정을 교체·치환할 때는 언제나 `_apply_patch` 공통 라이브러리를 사용하며, 토큰 슬라이서와 세맨틱 덩어리 분석기도 공통 베이스 모듈을 공유합니다.
 * **스킬 및 MCP의 연동 경계**: AgentSkills는 `search_skills` / `read_skill` / `read_skill_reference`를 통해 필요할 때만 읽습니다. MCP는 `/api/mcp/`에 통합되며, 영감 도구는 기존 이름을 유지하고 제어 도구에는 `control_` 접두사를 사용합니다. `/api/mcp/control/`은 기존 클라이언트를 위한 호환 입구로만 유지되며, 쓰기 작업은 기존 Agent 도구 파이프라인을 거쳐 실행됩니다.
 * **화면 연동 규칙**: 에이전트 표기명, 소개글, 아이콘 및 고유 색상값 정보는 [registry.py](file:///d:/Desktop/sparkarc/server/agents/registry.py) 데이터를 유일한 소스 정보로 바라봅니다. 툴 호출과 관련된 연동 메타데이터는 백엔드의 `build_tool_stream_event` 라이브러리가 실시간으로 스트림에 주입하며, 화면의 `chatStore` 모듈이 통합 소비하여 화면에 맞게 뿌려줍니다.
@@ -810,6 +811,8 @@ Gitea Actions 및 GitLab CI 빌드 사양을 정식 지원하며 Gitea Actions �
 | 문서 분류 | 세부 기술 정보 사항 |
 | :--- | :--- |
 | [아키텍처 상세 설명서](file:///d:/Desktop/sparkarc/docs/project/architecture.md) | 디렉터와 비콘 버스의 수평/수직 제어 차이, 3가지 가동 페르소나 모드 규칙, 크리틱 비평 작동 규칙, 문체 클론 심층 정보, 비콘 규약 상세, ARC 구문 해석 전략, 툴 등록 상세, 스트리밍 인프라 사양. |
+| [장문 컨텍스트 처리](docs/project/long-context.zh-CN.md) | 첨부 파일·초과 분량 세계관용 슬라이딩 윈도우 베이스: 분할 저장, 전체 지도, 이중 검색 위치 특정, 온디맨드 읽기, 단서 장부, 프리픽스 캐시 배치. |
+| [슬라이딩 윈도우 임계값 일람](docs/project/longread-thresholds.zh-CN.md) | 장문 관련 전체 임계값의 정의 위치·기본값·적용 범위. |
 | [Matchbox Agent Gateway 가이드](file:///d:/Desktop/sparkarc/server/llm/agen_matchbox/README.md) | 이중 채널 구조 상세, 설치 요령, 용도별 API 할당 규칙, 추론용 Reasoning 스트림 대응 상세. |
 | [데이터베이스 마이그레이션 안내서](file:///d:/Desktop/sparkarc/docs/project/database-migration.md) | 데이터베이스 스키마 수정 절차, 마이그레이션 자동 빌드 가이드 및 이력 관리 요령. |
 | [CI/CD 자동 배포 가이드](file:///d:/Desktop/sparkarc/docs/project/cicd-deployment.md) | 빌드 러너 환경 기입, 시크릿 변수 관리 및 GitHub Actions 전환 방법. |
