@@ -208,7 +208,7 @@ class ModelStreamIdleTimeoutError(TimeoutError):
         super().__init__(f"模型流连续 {self.timeout:g} 秒未收到推理或正文内容")
 
 
-MODEL_STREAM_IDLE_TIMEOUT_SECONDS = 60.0
+MODEL_STREAM_IDLE_TIMEOUT_SECONDS = 120.0
 _MODEL_STREAM_POLL_INTERVAL_SECONDS = 0.05
 
 
@@ -248,7 +248,7 @@ def _model_chunk_has_content(chunk: Any) -> bool:
 def _model_chunk_has_activity(chunk: Any) -> bool:
     """判断模型增量是否已经离开前端的“思考中”占位阶段。"""
     # 用户约定只以 reasoning/content 文本作为首个有效活动。工具参数碎片可能
-    # 在上游半途卡死，不能借此永久解除 60 秒截止时间。
+    # 在上游半途卡死，不能借此永久解除 120 秒截止时间。
     return _model_chunk_has_content(chunk)
 
 
@@ -331,7 +331,7 @@ def _stream_model_turn_with_idle_watchdog(
                 return
             if not first_activity_received and _model_chunk_has_activity(payload):
                 first_activity_received = True
-                # 60 秒只保护前端“思考中”占位阶段。首个有效事件到达后，
+                # 120 秒只保护前端“思考中”占位阶段。首个有效事件到达后，
                 # 后续正文间隔、工具参数生成和工具执行时长均不由此 watchdog 限制。
                 deadline = None
             yield payload
@@ -363,7 +363,7 @@ def stream_model_turn_with_retry(
             return
         except ModelStreamIdleTimeoutError as exc:
             # 首次有效活动超时代表本次上游请求已经失去响应。继续自动重试会把
-            # 用户指定的 60 秒请求上限放大为多轮等待，因此直接结束当前轮次。
+            # 用户指定的 120 秒请求上限放大为多轮等待，因此直接结束当前轮次。
             last_error = exc
             break
         except Exception as exc:
