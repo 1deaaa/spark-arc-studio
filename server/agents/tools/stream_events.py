@@ -29,7 +29,15 @@ _SENSITIVE_STRUCTURED_TEXT_RE = re.compile(
 
 
 # 仅这些工具允许在聊天轨迹中展示经过筛选的输入和返回内容。
+# 滑窗工具的 policy 是刻意最小化的：只存指针（source_id/chunk_index），
+# 不存正文。前端 segments/tool_traces 落盘 DB，64K 正文一旦进来就会污染
+# 版本库快照并撑爆历史接口；模型侧的正文走内存 ToolMessage，不走这里。
 TOOL_DETAIL_POLICIES: Dict[str, tuple[str, ...]] = {
+    "describe_longread_source": ("source_id",),
+    "read_longread_window": ("source_id", "chunk_index"),
+    "read_worldview_window": ("chunk_index",),
+    "read_attachment_chunk": ("attachment_id", "chunk_index"),
+    "note_window_clues": ("source_id", "chunk_index", "clue_type", "importance"),
     "delegate_task": (
         "target_agent", "task_description", "completion_mode", "chapter_name",
         "scene_name", "scene_file_path", "scene_guidance", "scene_characters",

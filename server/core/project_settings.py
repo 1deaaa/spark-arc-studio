@@ -131,6 +131,9 @@ CHAT_ATTACHMENT_DIRECT_INJECTION_MAX_TOKENS = 64000
 LONGREAD_WORLDVIEW_SLIDING_THRESHOLD_TOKENS = 64000
 # - 读/记一轮允许的最大窗口正文 token 数（read_longread_window 等工具侧上限）。
 LONGREAD_MAX_WINDOW_TOKENS = 64000
+# - 上轮账本快照注入本轮尾部的字符上限。超过时只保留最新条目并注明省略，
+#   避免账本自身成为新的爆点。见 routes/chat.py::_append_longread_ledger_snapshot。
+LONGREAD_LEDGER_SNAPSHOT_MAX_CHARS = 8000
 # - 单房间线索账本上限（条）。超了只保留最新 N 条，旧线索被丢弃前
 #   应已沉淀为正文结论或 checkpoint 摘要。
 LONGREAD_LEDGER_MAX_ENTRIES = 64

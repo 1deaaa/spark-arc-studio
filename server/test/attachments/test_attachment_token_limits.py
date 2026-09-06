@@ -20,14 +20,14 @@ def _parsed_document(token_count: int) -> SimpleNamespace:
 
 
 def _stub_chunking(monkeypatch, total_tokens: int) -> None:
-    """冻结切分器的 token 口径，避免真实分词器抖动。"""
+    """冻结切分器的 token 口径，避免真实分词器抖动。
+
+    注意口径统一：prepare_chat_attachment 全程使用切分器 pack 累加，
+    estimate_tokens(len) 按字符计；total_tokens 必须等于字符数。
+    """
     monkeypatch.setattr(
         "core.file_ingest.chunking.estimate_tokens",
         lambda text, model=None: len(text),
-    )
-    monkeypatch.setattr(
-        "agents.utility_agent.estimate_tokens",
-        lambda *_args, **_kwargs: total_tokens,
     )
 
 
@@ -62,20 +62,24 @@ def test_prepare_chat_attachment_saves_oversized_file_as_manifest_only(monkeypat
 
 
 @pytest.mark.parametrize(
-    ("total_tokens", "expected_partial"),
+    ("total_chars", "expected_partial"),
     [
+        # 64K 字符恰好等于边界 → 单片 → 非 partial。
         (CHAT_ATTACHMENT_DIRECT_INJECTION_MAX_TOKENS, False),
-        (CHAT_ATTACHMENT_DIRECT_INJECTION_MAX_TOKENS + 1, True),
+        # 远超边界 → 多片 → partial。total 取 pack 累加（含片间 1 token 连接），
+        # 因此不断言精确值，只断言方向与分片数。
+        (CHAT_ATTACHMENT_DIRECT_INJECTION_MAX_TOKENS * 3, True),
     ],
 )
 def test_prepare_chat_attachment_uses_64k_direct_injection_boundary(
     monkeypatch,
-    total_tokens: int,
+    total_chars: int,
     expected_partial: bool,
 ) -> None:
-    parsed = _parsed_document(total_tokens)
+    # 口径统一后 total_tokens == pack 累加；边界用例传恰好等于边界的字符数。
+    parsed = _parsed_document(total_chars)
     monkeypatch.setattr("core.file_ingest.service.parse_uploaded_file", lambda *_args, **_kwargs: parsed)
-    _stub_chunking(monkeypatch, total_tokens)
+    _stub_chunking(monkeypatch, total_chars)
     monkeypatch.setattr(
         "agents.attachment.save_attachment",
         lambda **_kwargs: SimpleNamespace(attachment_id="attachment-id"),
@@ -90,7 +94,12 @@ def test_prepare_chat_attachment_uses_64k_direct_injection_boundary(
         max_context_tokens=256_000,
     )
 
-    assert prepared.total_tokens_estimated == total_tokens
+    if expected_partial:
+        assert prepared.total_tokens_estimated > CHAT_ATTACHMENT_DIRECT_INJECTION_MAX_TOKENS
+        assert prepared.chunk_count > 1
+    else:
+        assert prepared.total_tokens_estimated == total_chars
+        assert prepared.chunk_count == 1
     assert prepared.is_partial is expected_partial
 
 

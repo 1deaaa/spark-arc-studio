@@ -197,6 +197,7 @@ def describe_longread_source(source_id: str) -> str:
     """查看长文档的全局地图（窗口清单），不读取正文。
 
     开局先看地图再决定读哪几个窗口；禁止无地图线性扫完全部窗口。
+    source_id 必须是附件 id；传文件名查不到（附件 id 是内容 hash，与文件名无关）。
     """
     from agents.longread import SourceManifest
     from agents.worldview_source import describe_worldview_source
@@ -214,7 +215,10 @@ def describe_longread_source(source_id: str) -> str:
 
     meta = get_attachment_meta(user_id, project_name, source_id)
     if meta is None:
-        return f'[读取失败] 长文档 "{source_id}" 缓存不存在或已被清理。'
+        return (
+            f'[读取失败] 长文档 "{source_id}" 缓存不存在或已被清理。'
+            "请使用上传成功后返回的 attachment_id（不是文件名）重新调用。"
+        )
     try:
         chunks = load_chunks(user_id, project_name, source_id)
     except Exception as exc:
@@ -241,6 +245,49 @@ class NoteWindowCluesInput(BaseModel):
     importance: int = Field(default=3, description="重要度 1-5", ge=1, le=5)
 
 
+def _coerce_clue_items(clues: object) -> list[str]:
+    """把模型传参宽容为线索数组：字符串/JSON 字符串/单对象都收敛为 list[str]。
+
+    七堇年 e2e 证明弱模型会把 clues 传成 '{"clue": "..."}' 字符串，
+    直接 422 会打断整轮记账；解析失败才返回空列表走“至少一条”错误。
+    """
+    import json as _json
+
+    if clues is None:
+        return []
+    if isinstance(clues, str):
+        text = clues.strip()
+        if not text:
+            return []
+        try:
+            parsed = _json.loads(text)
+        except Exception:
+            parsed = None
+        if isinstance(parsed, list):
+            clues = parsed
+        elif isinstance(parsed, dict):
+            clues = [parsed]
+        else:
+            clues = [text]
+    if isinstance(clues, dict):
+        clues = [clues]
+    if not isinstance(clues, (list, tuple)):
+        return []
+    items: list[str] = []
+    for entry in clues:
+        if isinstance(entry, dict):
+            for key in ("clue", "text", "content", "evidence", "summary"):
+                value = str(entry.get(key) or "").strip()
+                if value:
+                    items.append(value)
+                    break
+            continue
+        text = str(entry or "").strip()
+        if text:
+            items.append(text)
+    return items
+
+
 @tool(args_schema=NoteWindowCluesInput)
 def note_window_clues(
     source_id: str,
@@ -261,7 +308,7 @@ def note_window_clues(
     source_id = (source_id or "").strip()
     if not source_id:
         return "[记录失败] 缺少 source_id。"
-    items = [str(item or "").strip() for item in (clues or []) if str(item or "").strip()]
+    items = _coerce_clue_items(clues)
     if not items:
         return "[记录失败] clues 为空，至少记录一条线索。"
     ledger = load_task_ledger(user_id, project_name)

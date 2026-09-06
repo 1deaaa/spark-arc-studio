@@ -357,15 +357,7 @@ class UtilityAgent:
         from core.file_ingest.service import parse_uploaded_file
 
         parsed = parse_uploaded_file(file_path, filename, estimate_model)
-        total_tokens_estimated = estimate_tokens(parsed.full_text, model=estimate_model)
         normalized_context_limit = max(int(max_context_tokens or 0), 0)
-        # 超窗不再拒绝落盘：照常切分并落盘，仅标记 oversized。
-        # 调用方（chat_attachment 注入、前端 toast）看到该标记后走
-        # “清单 + 滑窗按需读取”，不预注入任何正文。
-        is_oversized = bool(
-            normalized_context_limit
-            and total_tokens_estimated > normalized_context_limit
-        )
 
         splitter = TokenTextSplitter(
             chunk_tokens=chunk_tokens,
@@ -374,7 +366,16 @@ class UtilityAgent:
             estimate_model=estimate_model,
         )
         chunks, chunk_info = splitter.split_with_info(parsed.full_text)
-        total_tokens_estimated = int(chunk_info.get("total_tokens_estimated") or total_tokens_estimated)
+        # 全程使用切分器口径（pack 累加），不混用整体一次性估算：
+        # 两者在部分 tokenizer 下存在系统性偏差，混用会导致单片超窗。
+        total_tokens_estimated = int(chunk_info.get("total_tokens_estimated") or 0)
+        # 超窗不再拒绝落盘：照常切分并落盘，仅标记 oversized。
+        # 调用方（chat_attachment 注入、前端 toast）看到该标记后走
+        # “清单 + 滑窗按需读取”，不预注入任何正文。
+        is_oversized = bool(
+            normalized_context_limit
+            and total_tokens_estimated > normalized_context_limit
+        )
         from core.project_settings import CHAT_ATTACHMENT_DIRECT_INJECTION_MAX_TOKENS
 
         is_partial = (

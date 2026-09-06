@@ -13,6 +13,7 @@
 | `CHAT_ATTACHMENT_DIRECT_INJECTION_MAX_TOKENS` | `server/core/project_settings.py` | 64000 | 单附件全文直接注入上限。`prepare_chat_attachment` 与 `chat_attachment._normalize_attachment_meta` 共用：超过即 `isPartial=True`，首轮只注入首片 + 分片说明。注意它是写死的 64K，不跟随面板可调的 chunk 大小。 |
 | `LONGREAD_WORLDVIEW_SLIDING_THRESHOLD_TOKENS` | `server/core/project_settings.py` | 64000 | 世界观转滑窗阈值。`worldview_source.is_worldview_oversized` 判定；超阈后 `context_provider.get_worldview_context` 只注入地图 + 首片，其余走 `read_worldview_window`。影响 showrunner / scriptwriter / critic / director 四个 Agent 的世界观注入分支。 |
 | `LONGREAD_MAX_WINDOW_TOKENS` | `server/core/project_settings.py` | 64000 | 单窗口正文上限。`tools/longread._read_attachment_window_text` 兜底：窗口超了直接报错并提示调小分片重传，防止单片撑爆模型请求。 |
+| `LONGREAD_LEDGER_SNAPSHOT_MAX_CHARS` | `server/core/project_settings.py` | 8000 | 上轮账本快照注入本轮尾部的字符上限。`routes/chat.py::_append_longread_ledger_snapshot` 在四个聊天入口（send/send-stream/edit/edit-stream）共用；超过时只保留最新条目并注明省略，避免账本自身成为新的爆点。 |
 | `LONGREAD_LEDGER_MAX_ENTRIES` | `server/core/project_settings.py` | 64 | 单房间线索账本上限（条）。`ClueLedger` / `LedgerStore.load` / `longread_store.init_task_ledger` 共用；超了只保留最新 N 条。旧线索被丢弃前应已沉淀为正文结论或 checkpoint 摘要。 |
 | 当前模型 `max_context_tokens` | Matchbox 模型配置（上传时 `_resolve_import_model_limits` 读取） | 256000（`DEFAULT_MAX_CONTEXT_TOKENS`） | 附件超窗判定：`全文 > max_context_tokens` 即 `is_oversized=True`。超窗附件照常切分落盘，但首轮只注入清单、不预注入任何正文（`expand_active_context_with_attachments` 清单分支）。 |
 

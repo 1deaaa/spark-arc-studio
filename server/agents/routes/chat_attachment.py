@@ -115,9 +115,11 @@ def build_imported_file_context_label(imported_file: Dict[str, Any] | None) -> s
     filename = str(imported_file.get('filename') or '').strip()
     if not filename:
         return ''
+    attachment_id = str(imported_file.get('attachmentId') or '').strip()
+    id_suffix = f'（source_id="{attachment_id}"）' if attachment_id else ''
     if imported_file.get('isPartial'):
-        return f'【已上传文件首个分片：{filename}】'
-    return f'【已上传文件：{filename}】'
+        return f'【已上传文件首个分片：{filename}】{id_suffix}'
+    return f'【已上传文件：{filename}】{id_suffix}'
 
 
 # ==================== 写 DB 时的 metadata ====================
@@ -293,10 +295,24 @@ def _build_multi_attachment_manifest(
     header = f'【已上传 {len(imported_files)} 个附件】'
     instructions: List[str] = []
     if valid_attachment_ids:
+        id_lines = [
+            f'- "{filename}" 的 source_id 为 {attachment_id}'
+            for filename, attachment_id in (
+                (
+                    str(item.get('filename') or '').strip() or '未知文件',
+                    str(item.get('attachmentId') or '').strip(),
+                )
+                for item in imported_files
+                if isinstance(item, dict)
+            )
+            if attachment_id
+        ]
         instructions.append(
             '上述附件未预载正文；需要阅读某个附件时请调用 '
             '`read_attachment_chunk(attachment_id="...", chunk_index=0)` 从第 0 个分片开始，'
             '或先用 `describe_longread_source(source_id="...")` 查看全局地图。\n'
+            + ('附件 source_id 对照：\n' + '\n'.join(id_lines) + '\n' if id_lines else '')
+            + '注意 source_id 是附件 id（内容 hash），不是文件名；传文件名查不到。\n'
             '读完后请先调用 `note_window_clues` 记录该分片的关键线索，再决定是否继续。\n'
             '滑窗底座会把旧窗口折叠为“线索 + 回跳指针”占位符，本轮新读窗口原文完整保留；'
             '需要回看时按账本里的窗口号跳转，不要线性逐片重扫。'

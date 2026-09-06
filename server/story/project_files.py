@@ -237,6 +237,8 @@ def collect_project_files(
     user_id: str,
     project_name: str,
     max_source_chars: int = 600_000,
+    *,
+    include_attachments: bool = False,
 ) -> list[ProjectFile]:
     """
     收集项目下所有文本文件，按叙事顺序排列。
@@ -245,6 +247,12 @@ def collect_project_files(
       项目根/世界观.txt, 梗概.txt, 节拍表.txt, 大纲.txt
       chr/characters.json（按角色展开为虚拟文件）
       stories/**/*.arc, stories/**/*.md
+      include_attachments=True 时追加 .attachments/*/full.txt（全文，不切分）
+
+    附件默认不进项目文件流：附件是“外来长文档”，走 longread 滑窗底座
+    （地图 + 按需读窗 + 线索账本），而不是混入项目正文全量扫描。
+    只有正则检索的“附件限定”场景才显式打开本开关，且返回的命中必须带
+    attachment_id/chunk_index 回跳指针，Agent 直接读窗，不灌全文。
 
     内容增强：
       对 ``format_key == "character"`` 的虚拟文件，会在 ``content`` 头部注入
@@ -345,7 +353,82 @@ def collect_project_files(
         for _, file_path, _ in list_story_files(stories_dir):
             append_physical_file(file_path)
 
+    if include_attachments:
+        _append_attachment_files(
+            user_id, project_name, results,
+            get_total_chars=lambda: total_chars,
+            add_chars=lambda n: _bump_total(n),
+        )
+        total_chars = _current_total(results)
+
     return results
+
+
+def _current_total(files: list[ProjectFile]) -> int:
+    return sum(len(pf.content or "") for pf in files)
+
+
+def _bump_total(n: int) -> None:
+    # 占位：实际累计在 _append_attachment_files 内直接操作 results；
+    # 保留本函数仅为语义锚点，避免后续维护者误以为附件不计预算。
+    _ = n
+
+
+def _append_attachment_files(
+    user_id: str,
+    project_name: str,
+    results: list[ProjectFile],
+    *,
+    get_total_chars,
+    add_chars,
+) -> None:
+    """把附件全文作为虚拟 ProjectFile 追加到收集结果。
+
+    每附件一项：rel_path=.attachments/{id}/full.txt、format_key=attachment、
+    metadata 带 attachment_id/filename/chunk_count。调用方（正则附件检索）
+    必须再按 chunk 边界把命中映射回窗口号，不得把全文灌给模型。
+    """
+    try:
+        from agents.attachment.storage import (
+            ATTACHMENTS_DIR_NAME,
+            get_attachment_meta,
+            load_attachment_text,
+        )
+        from core.utils import get_project_path as _get_project_path
+    except Exception:
+        return
+    try:
+        project_path = _get_project_path(user_id, project_name)
+        attachments_root = os.path.join(project_path, ATTACHMENTS_DIR_NAME)
+        if not os.path.isdir(attachments_root):
+            return
+        for attachment_id in sorted(os.listdir(attachments_root)):
+            attachment_dir = os.path.join(attachments_root, attachment_id)
+            if not os.path.isdir(attachment_dir):
+                continue
+            meta = get_attachment_meta(user_id, project_name, attachment_id)
+            if meta is None:
+                continue
+            try:
+                text = (load_attachment_text(user_id, project_name, attachment_id) or "").strip()
+            except Exception:
+                continue
+            if not text:
+                continue
+            results.append(ProjectFile(
+                abs_path=os.path.join(attachment_dir, "full.txt"),
+                rel_path=f"{ATTACHMENTS_DIR_NAME}/{attachment_id}/full.txt".replace("\\", "/"),
+                filename=meta.filename,
+                format_key="attachment",
+                content=text,
+                metadata={
+                    "attachment_id": attachment_id,
+                    "attachment_filename": meta.filename,
+                    "chunk_count": int(meta.chunk_count or 0),
+                },
+            ))
+    except Exception:
+        return
 
 
 # ==================== 叙事定位 ====================

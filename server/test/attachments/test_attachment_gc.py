@@ -62,3 +62,24 @@ def test_attachment_gc_deletes_only_unreferenced_cache(monkeypatch, tmp_path) ->
     assert referenced.attachment_id in result["retained"]
     assert (project_path / ".attachments" / referenced.attachment_id).is_dir()
     assert not (project_path / ".attachments" / orphan.attachment_id).exists()
+
+
+def test_save_attachment_reconciles_stale_chunks_on_reupload(monkeypatch, tmp_path) -> None:
+    """同内容重传 + 切分变化时，磁盘分片必须与本次切分对账，不留多余旧分片。"""
+    monkeypatch.setattr("core.utils.USERDATA_ROOT", str(tmp_path))
+
+    from agents.attachment import get_attachment_meta, load_chunks, save_attachment
+
+    project_path = tmp_path / "uid_42" / "projects" / "demo"
+    project_path.mkdir(parents=True)
+
+    first = save_attachment("42", "demo", "长文.txt", "txt", "正文", ["第一片", "第二片"], 10)
+    assert len(load_chunks("42", "demo", first.attachment_id)) == 2
+
+    second = save_attachment("42", "demo", "长文.txt", "txt", "正文", ["唯一片"], 5)
+
+    assert second.attachment_id == first.attachment_id
+    assert get_attachment_meta("42", "demo", first.attachment_id).chunk_count == 1
+    assert load_chunks("42", "demo", first.attachment_id) == ["唯一片"]
+    chunk_dir = project_path / ".attachments" / first.attachment_id / "chunks"
+    assert sorted(p.name for p in chunk_dir.iterdir()) == ["chunk_0.txt"]

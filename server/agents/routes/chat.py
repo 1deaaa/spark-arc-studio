@@ -497,6 +497,51 @@ def _persist_chat_task_ledger(user_id: str, project_name: str) -> None:
     except Exception:
         pass
 
+
+def _append_longread_ledger_snapshot(
+    user_id: str,
+    project_name: str,
+    agent_id: str,
+    context_key: str,
+    active_context: Any,
+) -> Any:
+    """把上轮沉淀的线索账本追加到本轮尾部（只追加，不改写历史）。
+
+    位置固定在“附件/世界观注入块之后、本轮用户请求之前”，字节稳定；
+    超过约 2K token 时只保留最新条目并注明省略，避免账本自身成为爆点。
+    无账本时原样返回，零干扰。
+    """
+    try:
+        from agents.longread import LedgerStore, ledger_key
+        from core.project_settings import LONGREAD_LEDGER_SNAPSHOT_MAX_CHARS
+
+        key = ledger_key(str(user_id), str(project_name), str(agent_id), str(context_key))
+        ledger = LedgerStore.load(str(user_id), str(project_name), key)
+        if not ledger.entries:
+            return active_context
+        rendered = ledger.render()
+        snapshot_limit = max(2000, int(LONGREAD_LEDGER_SNAPSHOT_MAX_CHARS or 8000))
+        if len(rendered) > snapshot_limit:
+            kept: list[str] = []
+            total = 0
+            for item in reversed(ledger.entries):
+                line = f"[{item.source_id} 窗口{item.chunk_index}] {item.clue}"
+                if total + len(line) > snapshot_limit - 500:
+                    break
+                kept.append(line)
+                total += len(line)
+            kept.reverse()
+            omitted = len(ledger.entries) - len(kept)
+            rendered = "【线索账本（上轮沉淀，只追加）】\n" + "\n".join(kept)
+            if omitted > 0:
+                rendered += f"\n（另有更早 {omitted} 条已省略，需要时可按窗口号重读原文）"
+        else:
+            rendered = rendered.replace("【线索账本】", "【线索账本（上轮沉淀，只追加）】", 1)
+        base = str(active_context or "").strip()
+        return "\n\n".join(seg for seg in [base, rendered] if seg)
+    except Exception:
+        return active_context
+
 # 旁路标记前缀：用于从工具返回文本中提取导演触发 Auto-Write 的结构化元数据
 _SIDEBAND_PREFIX = "__director_auto_write_started__:"
 
@@ -1495,6 +1540,9 @@ async def edit_chat_message(data: ChatMessageEditRequest, user: dict = Depends(g
         effective_active_context = _expand_active_context_with_attachments(
             user_id, project_name, effective_active_context, imported_files_meta,
         )
+        effective_active_context = _append_longread_ledger_snapshot(
+            user_id, project_name, data.agentId, data.contextKey, effective_active_context,
+        )
 
         # 统一实例化 Agent（包括导演）并获取回复
         # get_history 返回的历史已含编辑后的用户消息，需移除以避免与 data.content 双喂
@@ -1525,7 +1573,11 @@ async def edit_chat_message(data: ChatMessageEditRequest, user: dict = Depends(g
                 content=reply,
                 metadata={'channel': 'edit_reply'},
             )
-            checkpoint = agent_inst.consume_context_checkpoint_candidate()
+            checkpoint = getattr(agent_inst, 'consume_context_checkpoint_candidate', None)
+            if callable(checkpoint):
+                checkpoint = checkpoint()
+            else:
+                checkpoint = None
             if checkpoint:
                 _persist_context_checkpoint_safely(
                     cm,
@@ -1592,6 +1644,9 @@ async def edit_chat_message_stream(request: Request, data: ChatMessageEditReques
     effective_active_context = _expand_active_context_with_attachments(
         user_id, project_name, effective_active_context, imported_files_meta,
     )
+    effective_active_context = _append_longread_ledger_snapshot(
+        user_id, project_name, data.agentId, data.contextKey, effective_active_context,
+    )
 
     def prepare_history() -> tuple[list, int]:
         cm.update_message(data.messageId, data.content)
@@ -1645,6 +1700,9 @@ async def send_chat_message(data: ChatSendRequest, user: dict = Depends(get_curr
     effective_active_context = _expand_active_context_with_attachments(
         user_id, project_name, effective_active_context, imported_files_meta,
     )
+    effective_active_context = _append_longread_ledger_snapshot(
+        user_id, project_name, agent_id, context_key, effective_active_context,
+    )
 
     # 统一处理所有 Agent（包括导演）
     cm = ChatManager(user_id=user_id, project_name=project_name)
@@ -1683,7 +1741,11 @@ async def send_chat_message(data: ChatSendRequest, user: dict = Depends(get_curr
             content=reply,
             metadata={'channel': 'direct_reply'},
         )
-        checkpoint = agent_inst.consume_context_checkpoint_candidate()
+        checkpoint = getattr(agent_inst, 'consume_context_checkpoint_candidate', None)
+        if callable(checkpoint):
+            checkpoint = checkpoint()
+        else:
+            checkpoint = None
         if checkpoint:
             _persist_context_checkpoint_safely(
                 cm,
@@ -1725,6 +1787,9 @@ async def send_chat_message_stream(request: Request, data: ChatSendRequest, user
     imported_files_meta = _extract_imported_files_meta(data.activeMeta)
     effective_active_context = _expand_active_context_with_attachments(
         user_id, project_name, effective_active_context, imported_files_meta,
+    )
+    effective_active_context = _append_longread_ledger_snapshot(
+        user_id, project_name, agent_id, context_key, effective_active_context,
     )
 
     cm = ChatManager(user_id=user_id, project_name=project_name)

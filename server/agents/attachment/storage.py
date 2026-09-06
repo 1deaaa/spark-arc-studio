@@ -142,6 +142,11 @@ def save_attachment(
 
     返回 AttachmentMeta；若相同 content_hash 的附件已存在，会覆盖 meta.json
     的 filename/uploaded_at 但不重写正文（节省 IO）。
+
+    分片一致性（关键不变量）：meta.chunk_count 必须等于磁盘 chunk 文件数。
+    旧版本在“同内容重传 + 切分参数变化”时跳过 chunk 重写，导致 meta 与磁盘
+    不一致（七堇年 e2e：meta=2、磁盘=1）。本次修复后按“期望文件集合”对账：
+    多余的旧分片删除、缺失的补写；任何不一致都以本次切分结果为准。
     """
     normalized_text = str(full_text or "")
     attachment_id = compute_attachment_id(normalized_text)
@@ -158,14 +163,39 @@ def save_attachment(
         with open(full_path, "w", encoding="utf-8") as f:
             f.write(normalized_text)
 
-    # chunks 同理：不存在才写
-    chunk_list = list(chunks or [])
-    existing_chunks = {name for name in os.listdir(chunks_dir) if name.startswith("chunk_")}
-    if not existing_chunks:
-        for idx, chunk_text in enumerate(chunk_list):
-            chunk_path = os.path.join(chunks_dir, CHUNK_FILENAME_FMT.format(index=idx))
-            with open(chunk_path, "w", encoding="utf-8") as f:
-                f.write(str(chunk_text or ""))
+    # 分片对账：期望集合 = 本次切分结果；删除多余旧分片、补写缺失分片、
+    # 重写内容变化的分片。同 id 只保证同内容，不同切分参数下同位置分片
+    # 内容可能变化，必须以本次为准（否则 chunk_0 是旧切分残留）。
+    chunk_list = [str(chunk_text or "") for chunk_text in (chunks or [])]
+    expected_names = {
+        CHUNK_FILENAME_FMT.format(index=idx) for idx in range(len(chunk_list))
+    }
+    try:
+        existing_names = {
+            name
+            for name in os.listdir(chunks_dir)
+            if name.startswith("chunk_") and name.endswith(".txt")
+        }
+    except OSError:
+        existing_names = set()
+    for stale in sorted(existing_names - expected_names):
+        try:
+            os.remove(os.path.join(chunks_dir, stale))
+        except OSError:
+            pass
+    for idx, chunk_text in enumerate(chunk_list):
+        chunk_path = os.path.join(chunks_dir, CHUNK_FILENAME_FMT.format(index=idx))
+        needs_write = True
+        if os.path.exists(chunk_path):
+            try:
+                with open(chunk_path, "r", encoding="utf-8") as f:
+                    needs_write = f.read() != chunk_text
+            except OSError:
+                needs_write = True
+        if not needs_write:
+            continue
+        with open(chunk_path, "w", encoding="utf-8") as f:
+            f.write(chunk_text)
 
     now_iso = datetime.now(timezone.utc).isoformat()
     meta = AttachmentMeta(

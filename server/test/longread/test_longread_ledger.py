@@ -109,3 +109,15 @@ def test_ledger_store_roundtrip_and_room_isolation(monkeypatch, tmp_path) -> Non
 
     other = LedgerStore.load("7", "demo", ledger_key("7", "demo", "agent_director", "other"))
     assert other.entries == []
+
+
+def test_note_clues_coerces_stringified_json_clues() -> None:
+    """弱模型把 clues 传成 JSON 字符串时宽容接收，不打断整轮记账。"""
+    from agents.tools.longread import _coerce_clue_items
+
+    assert _coerce_clue_items('[{"clue": "玉佩伏笔"}]') == ["玉佩伏笔"]
+    assert _coerce_clue_items('{"clue": "单条线索"}') == ["单条线索"]
+    assert _coerce_clue_items(["a", " ", "b"]) == ["a", "b"]
+    assert _coerce_clue_items("纯文本线索") == ["纯文本线索"]
+    assert _coerce_clue_items(None) == []
+    assert _coerce_clue_items([{"text": "text 键"}, {"nope": ""}]) == ["text 键"]

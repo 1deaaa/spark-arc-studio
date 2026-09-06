@@ -161,11 +161,6 @@ export function useChatFileImport(getSessionId: () => number | null | undefined)
             });
           } else {
             bus.emit('toast', {
-              type: 'info',
-              message: t('components.chatPanel.partialImportNotice', { filename: parsed.filename || file.name }),
-            });
-          } else {
-            bus.emit('toast', {
               type: 'success',
               message: t('components.chatPanel.importSuccess', { filename: parsed.filename || file.name }),
             });

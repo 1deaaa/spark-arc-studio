@@ -64,28 +64,25 @@ class TokenTextSplitter:
         if not normalized:
             return []
 
-        total_tokens = self.estimate(normalized)
-        if total_tokens <= self.chunk_tokens:
-            return [
-                TokenChunk(
-                    text=normalized,
-                    index=0,
-                    total=1,
-                    char_count=len(normalized),
-                    estimated_tokens=total_tokens,
-                    previous_tail="",
-                )
-            ]
-
+        # 估算口径必须全程一致：total 走 pack 路径（逐 unit 累加），不走整体
+        # 一次性估算。否则整体估算与 pack 累加出现模型相关的系统性偏差时，
+        # 会出现“total 说只有 1 片、pack 却装了 2 片 81K”的超窗单片
+        # （见 longread 七堇年 e2e：qwen 口径整体 77K、pack 累加 136K）。
         units = self._build_units(normalized)
+        if not units:
+            return []
         raw_chunks = self._pack_units(units)
-        return self._build_chunks(raw_chunks)
+        return self._build_chunks(raw_chunks or [normalized])
 
     def split_with_info(self, text: str) -> tuple[list[TokenChunk], dict]:
         chunks = self.split(text)
+        # total 取各片累加（pack 口径），不取整体一次性估算：两者在部分
+        # tokenizer 下存在系统性偏差，累加口径才是各窗口真实成本之和。
         return chunks, {
             "total_chars": len(text or ""),
-            "total_tokens_estimated": self.estimate(self._normalize_text(text)),
+            "total_tokens_estimated": sum(
+                chunk.estimated_tokens for chunk in chunks
+            ) if chunks else 0,
             "chunk_count": len(chunks),
             "chunk_tokens_target": self.chunk_tokens,
             "chunks_info": [
