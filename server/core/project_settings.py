@@ -125,6 +125,15 @@ ATTACHMENT_CHUNK_TOKENS_MAX = 120000
 ATTACHMENT_CHUNK_TOKENS_DEFAULT = 64000
 # 单附件不超过该值时才允许全文直接注入聊天上下文。
 CHAT_ATTACHMENT_DIRECT_INJECTION_MAX_TOKENS = 64000
+# 长文档滑窗底座（agents.longread）阈值。作用范围见
+# docs/project/longread-thresholds.zh-CN.md。
+# - 世界观超过该值：context_provider 不再全文注入，只给地图 + 首片。
+LONGREAD_WORLDVIEW_SLIDING_THRESHOLD_TOKENS = 64000
+# - 读/记一轮允许的最大窗口正文 token 数（read_longread_window 等工具侧上限）。
+LONGREAD_MAX_WINDOW_TOKENS = 64000
+# - 单房间线索账本上限（条）。超了只保留最新 N 条，旧线索被丢弃前
+#   应已沉淀为正文结论或 checkpoint 摘要。
+LONGREAD_LEDGER_MAX_ENTRIES = 64
 VISUAL_ILLUSTRATION_MAX_PER_SCENE_LIMIT = 4
 VISUAL_ILLUSTRATION_MAX_PER_SCENE_DEFAULT = 2
 VISUAL_ILLUSTRATION_MIN_NODE_GAP_DEFAULT = 1

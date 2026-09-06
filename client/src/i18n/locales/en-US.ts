@@ -1017,6 +1017,8 @@ const enUS = {
       attachmentPanelTitle: 'Current attachment',
       attachmentListTitle: '{count} files attached',
       importedFilePartial: 'First chunk only',
+      importedFileOversized: 'Oversized, manifest + on-demand windows',
+      oversizedImportNotice: 'File "{filename}" exceeds the current model window. It is saved in manifest mode; the AI can read windows on demand.',
       partialImportNotice: 'File "{filename}" is large. Only the first chunk is attached; the AI can page through the rest on demand.',
       importSuccess: 'Attached "{filename}" to the current chat context',
       singleFileImportFailed: 'Attachment "{filename}" failed to import: {message}',

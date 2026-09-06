@@ -99,6 +99,20 @@ def is_stop_event_set(stop_event: Any = None) -> bool:
         return False
 
 
+def _current_longread_ledger() -> Any:
+    """返回当前任务的线索账本（内存态）；任务外返回 None，折叠退化不断链。"""
+    try:
+        from agents.longread_store import load_task_ledger
+        from core.request_context import current_user_id, get_current_project_name
+
+        return load_task_ledger(
+            str(current_user_id.get() or ""),
+            str(get_current_project_name() or ""),
+        )
+    except Exception:
+        return None
+
+
 def is_pipeline_tool_result_failure(tool_name: str, result: Any) -> bool:
     """对落盘回执做保守失败识别，避免把文本型失败当成流水线完成。"""
     if is_tool_result_failure(tool_name, result):
@@ -1725,8 +1739,13 @@ class SparkBaseAgent:
                 messages.append(self._build_tool_history_message(response, tool_specs))
                 fresh_call_ids = {cid for cid, _, _ in tool_results}
                 messages.extend(build_tool_result_messages(tool_results))
-                # 长读取滑动窗口：保留当前用户请求内的全部原文，只折叠旧用户轮次结果
-                collapse_attachment_chunk_history(messages, fresh_call_ids=fresh_call_ids)
+                # 长文档滑窗折叠（longread 统一收口）：只折旧 user 轮次窗口，
+                # 本轮新读原文完整保留；新结果追加后调用一次，不反复改写中间。
+                collapse_attachment_chunk_history(
+                    messages,
+                    fresh_call_ids=fresh_call_ids,
+                    ledger=_current_longread_ledger(),
+                )
                 messages = rebudget_existing_messages(
                     user_id=self.user_id,
                     project_name=self.project_name,
@@ -2116,8 +2135,18 @@ class SparkBaseAgent:
                         }
                         return
 
-                # 附件分片滑动窗口：只保留本轮新 read_attachment_chunk 的完整正文，其余折叠
-                collapse_attachment_chunk_history(messages, fresh_call_ids=fresh_call_ids)
+                # 长文档滑窗折叠（longread 统一收口）：
+                # - 任务进行中只追加、不改写中间历史；折叠只折“旧 user 轮次”的
+                #   窗口，本轮新读的窗口原文完整保留；
+                # - 新工具结果追加后调用一次，不在同一轮内反复改写，避免前缀
+                #   缓存从第一个被改的 ToolMessage 起全部失效。
+                # - 账本由 note_window_clues 在任务内存里维护，这里按需透传，
+                #   缺账本时退化为通用占位符（不断链）。
+                collapse_attachment_chunk_history(
+                    messages,
+                    fresh_call_ids=fresh_call_ids,
+                    ledger=_current_longread_ledger(),
+                )
                 tool_budget_result = yield from stream_context_budget_events(
                     rebudget_existing_messages,
                     stop_event=stop_event,

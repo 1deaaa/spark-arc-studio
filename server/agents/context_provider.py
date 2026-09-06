@@ -254,10 +254,35 @@ class AgentContextProvider:
             return ""
 
     def get_worldview_context(self) -> str:
-        """获取世界观上下文"""
+        """获取世界观上下文。
+
+        超长世界观（超过 ``LONGREAD_WORLDVIEW_SLIDING_THRESHOLD_TOKENS``）
+        不再全文注入，只给地图 + 首片 + 滑窗指引，其余窗口走
+        ``read_worldview_window`` 按需读取。阈值与窗口大小见
+        ``docs/project/longread-thresholds.zh-CN.md``。
+        """
         content = self._bundle().get("worldview") or ""
         if not content.strip():
             return ""
+        try:
+            from agents.worldview_source import (
+                describe_worldview_source,
+                read_worldview_window_text,
+            )
+
+            manifest = describe_worldview_source(self.user_id, self.project_name)
+            if manifest is not None:
+                first_window = read_worldview_window_text(self.user_id, self.project_name, 0)
+                block = (
+                    f"### 世界观设定（超长，已转滑窗）\n{manifest.render()}"
+                    f"\n\n【世界观第 1 部分】\n{(first_window or '').strip()}"
+                    "\n\n[滑窗说明] 以上仅为第 1 部分；需要后续内容时调用 "
+                    "`read_worldview_window(chunk_index=N)`，读完用 `note_window_clues`"
+                    "（source_id 固定为 worldview）记录线索。"
+                )
+                return block.strip()
+        except Exception as e:
+            print(f"[ContextProvider] Error building worldview sliding view: {e}")
         return f"### 世界观设定\n{content}"
 
     def get_characters_context(self) -> str:
@@ -330,12 +355,12 @@ class AgentContextProvider:
         elif agent_id == "agent_showrunner":
             # Showrunner 在已有项目中负责跨章节规划，需要与专有生成入口共享全量事实。
             bundle = self._bundle()
-            worldview = bundle.get("worldview", "")
+            worldview = self.get_worldview_context()
             roles = bundle.get("roles", "")
             narrative_memory = bundle.get("narrative_memory", "")
             full_outline = bundle.get("full_outline", "")
             if worldview:
-                parts.append(f"### 世界观设定\n{worldview}")
+                parts.append(worldview)
             if roles:
                 parts.append(f"### 角色详细档案\n{roles}")
             if full_outline:
@@ -347,15 +372,16 @@ class AgentContextProvider:
             # ScriptWriter：通过 context_builder 加载全量数据
             # 全量世界观 / 全量角色档案 / 完整大纲 / 叙事记忆
             # 对话链路（chat / 导演委派）与批量链路（compose / auto_write）统一数据来源
+            # 超长世界观走 get_worldview_context 的滑窗分支（地图 + 首片），不全文注入。
             try:
                 bundle = self._bundle()
-                worldview = bundle.get("worldview", "")
+                worldview = self.get_worldview_context()
                 roles = bundle.get("roles", "")
                 full_outline = bundle.get("full_outline", "")
                 narrative_memory = bundle.get("narrative_memory", "")
 
                 if worldview:
-                    parts.append(f"### 世界观设定\n{worldview}")
+                    parts.append(worldview)
                 if roles:
                     parts.append(f"### 角色详细档案（全量）\n{roles}")
                 if full_outline:
@@ -395,9 +421,10 @@ class AgentContextProvider:
         
         elif agent_id == "agent_director":
             # 导演：需要感知项目实时整体状态，以便正确调度专家、判断哪些步骤已完成
+            # 超长世界观只给地图 + 首片（get_worldview_context 滑窗分支），不全文注入。
             try:
                 bundle = self._bundle()
-                worldview = (bundle.get("worldview") or "").strip()
+                worldview_block = self.get_worldview_context()
                 roles = (bundle.get("roles") or "").strip()
                 relations = self.get_character_relations_context()
                 synopsis = self.get_synopsis_context()
@@ -406,8 +433,8 @@ class AgentContextProvider:
                 scenes = self.get_scene_list()  # 仅返回文件名目录结构，不包含剧本内容
 
                 status_parts = []
-                if worldview:
-                    status_parts.append(f"【已有】世界观（{len(worldview)}字）：\n{worldview}")
+                if worldview_block:
+                    status_parts.append(worldview_block)
                 if roles:
                     status_parts.append(f"【已有】角色档案（{len(roles)}字）")
                 if relations:
@@ -429,15 +456,16 @@ class AgentContextProvider:
 
         elif agent_id == "agent_critic":
             # Critic：需要比普通摘要更完整的上下文，既支持聊天态审稿，也支持导演委派。
+            # 超长世界观走滑窗分支（地图 + 首片），不全文注入。
             try:
                 bundle = self._bundle()
-                worldview = bundle.get("worldview", "")
+                worldview = self.get_worldview_context()
                 roles = bundle.get("roles", "")
                 full_outline = bundle.get("full_outline", "")
                 narrative_memory = bundle.get("narrative_memory", "")
 
                 if worldview:
-                    parts.append(f"### 世界观设定\n{worldview}")
+                    parts.append(worldview)
                 if roles:
                     parts.append(f"### 角色档案\n{roles}")
                 if full_outline:

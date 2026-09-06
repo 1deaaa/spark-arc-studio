@@ -30,6 +30,7 @@ def test_attachment_metadata_uses_imported_files_as_single_source() -> None:
             "totalTokens": 0,
             "chunkTokens": 0,
             "isPartial": False,
+            "isOversized": False,
             "warnings": [],
             "uploadedAt": 0,
         }

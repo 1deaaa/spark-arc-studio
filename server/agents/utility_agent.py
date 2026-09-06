@@ -23,7 +23,11 @@ UTILITY_AGENT_ID = "agent_utility"
 
 @dataclass(slots=True)
 class ChatAttachmentPreparation:
-    """聊天附件解析、切分与落盘后的结构化结果。"""
+    """聊天附件解析、切分与落盘后的结构化结果。
+
+    ``is_oversized`` 表示全文超过当前模型窗口：附件照常切分落盘，
+    但调用方不得预注入正文，只能走清单 + 滑窗按需读取。
+    """
 
     parsed: Any
     chunks: list[Any]
@@ -32,10 +36,15 @@ class ChatAttachmentPreparation:
     chunk_count: int
     total_tokens_estimated: int
     is_partial: bool
+    is_oversized: bool = False
 
 
 class AttachmentContextWindowExceededError(ValueError):
-    """附件全文 token 数超过当前模型上下文窗口。"""
+    """附件全文 token 数超过当前模型上下文窗口。
+
+    保留该异常类型仅为兼容历史调用方；当前策略不再拒绝落盘，
+    ``prepare_chat_attachment`` 改为标记 ``is_oversized`` 并照常返回。
+    """
 
     def __init__(self, *, total_tokens: int, max_context_tokens: int):
         self.total_tokens = max(int(total_tokens or 0), 0)
@@ -350,11 +359,13 @@ class UtilityAgent:
         parsed = parse_uploaded_file(file_path, filename, estimate_model)
         total_tokens_estimated = estimate_tokens(parsed.full_text, model=estimate_model)
         normalized_context_limit = max(int(max_context_tokens or 0), 0)
-        if normalized_context_limit and total_tokens_estimated > normalized_context_limit:
-            raise AttachmentContextWindowExceededError(
-                total_tokens=total_tokens_estimated,
-                max_context_tokens=normalized_context_limit,
-            )
+        # 超窗不再拒绝落盘：照常切分并落盘，仅标记 oversized。
+        # 调用方（chat_attachment 注入、前端 toast）看到该标记后走
+        # “清单 + 滑窗按需读取”，不预注入任何正文。
+        is_oversized = bool(
+            normalized_context_limit
+            and total_tokens_estimated > normalized_context_limit
+        )
 
         splitter = TokenTextSplitter(
             chunk_tokens=chunk_tokens,
@@ -366,7 +377,10 @@ class UtilityAgent:
         total_tokens_estimated = int(chunk_info.get("total_tokens_estimated") or total_tokens_estimated)
         from core.project_settings import CHAT_ATTACHMENT_DIRECT_INJECTION_MAX_TOKENS
 
-        is_partial = total_tokens_estimated > CHAT_ATTACHMENT_DIRECT_INJECTION_MAX_TOKENS
+        is_partial = (
+            total_tokens_estimated > CHAT_ATTACHMENT_DIRECT_INJECTION_MAX_TOKENS
+            or is_oversized
+        )
         meta = save_attachment(
             user_id=user_id,
             project_name=project_name,
@@ -384,4 +398,5 @@ class UtilityAgent:
             chunk_count=len(chunks),
             total_tokens_estimated=total_tokens_estimated,
             is_partial=is_partial,
+            is_oversized=is_oversized,
         )

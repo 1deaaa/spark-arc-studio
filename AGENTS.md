@@ -36,7 +36,8 @@ SparkArc 现有架构已经有清晰收口层。新增功能必须先判断是�
    - **局部替换与增量修改（Patch）**：统一收口在 `server/agents/tools/common.py` 的 `_apply_patch`。无论是剧本复写、大纲局部修改还是设定更新，凡是涉及“在已有文本中定位并替换”的逻辑，必须复用此底层，严禁各 Agent 自行实现正则或字符串替换。
    - **智能文本切分（Token Chunking）**：统一收口在 `server/core/file_ingest/chunking.py` 的 `TokenTextSplitter`（或通过 `server/agents/agent_style/text_splitter.py` 兼容重导出）。无论是上传附件、评审专家审稿、还是文风克隆分析，凡是涉及按 Token 数量切分文本的逻辑，必须复用此底层，避免 3 次以上重复实现。
    - **语义分块器（Semantic Chunker）**：统一收口在 `server/story/semantic_chunker/` 的 `SemanticChunker`。凡是涉及项目文件、知识图谱、向量索引的语义分块，必须复用此底层。
-   - **基建扩展原则**：上述三项仅为当前最典型的工具性基建示例。**后续任何新增的、可能被多处复用的底层基础设施（如向量检索、缓存控制、文件解析等），必须遵循相似的“大统一”原则，先下沉至公共工具层或核心服务层，严禁在各业务线或 Agent 内部重复造轮子。**
+   - **长文档滑窗（Longread）**：统一收口在 `server/agents/longread/`（地图 + 线索账本 + 带线索折叠）+ `server/agents/tools/longread.py`（工具面）+ `server/agents/longread_store.py`（任务内存流转）+ `server/agents/worldview_source.py`（世界观逻辑切片视图）。凡是“全文可能超预算、需分片 + 按需读取”的长文本（附件、超长世界观，后续可扩展到大纲/角色聚合），必须接入此底座：开局看地图、读一片记一笔、折叠留线索 + 回跳指针。严禁各 Agent 自建第二套滑窗/占位符/账本。阈值与作用范围见 `docs/project/longread-thresholds.zh-CN.md`。
+   - **基建扩展原则**：上述四项仅为当前最典型的工具性基建示例。**后续任何新增的、可能被多处复用的底层基础设施（如向量检索、缓存控制、文件解析等），必须遵循相似的“大统一”原则，先下沉至公共工具层或核心服务层，严禁在各业务线或 Agent 内部重复造轮子。**
 
 前端收口重点：
 
@@ -334,10 +335,11 @@ Auto-Write 每个场景 exactly 一次 `run_autonomous_scriptwriter_creation` �
 1. 固定/低频变化内容放在 `SystemMessage`：Agent 模态 prompt、语言策略、工具清单、确认规则、tool reference、tool_rules。
 2. 当前编辑区、附件现场、用户本轮请求必须通过 `server/agents/prompt_layout.py` 的 `build_current_user_message()` 放入最后一条 user message，禁止重新塞回 system prompt。
 3. 历史消息、压缩摘要与工具结果必须交给 `server/agents/context_budget.py` 管理预算；工具循环后必须继续使用 `rebudget_existing_messages()`，不要手写裁剪逻辑。
-4. AgentSkills 只能通过 `search_skills` / `read_skill` / `read_skill_reference` 按需读取；Skill 内容是动态工具结果，不得自动拼入 system 前缀，也不得覆盖输出格式、字段结构、工具协议或落盘规则。
-5. 新增动态系统规则前必须评估是否会破坏 prompt cache 稳定前缀；能放到最后 user 的任务现场内容，不要放进 system。
-6. 更换模型 / 平台、修改专家 prompt / `pipeline_system` / `tool_rules`、改变工具绑定、语言策略或部分全局参数，都会改变稳定前缀并导致上游缓存重新建立。文档和 UI 不得暗示缓存跨这些变更仍稳定命中。
-7. 前端展示的窗口 token 与缓存命中来自后端 `context_window_stats`，完成时只从 `llm_usage.by_agent[当前窗口 agent_id]` 合并当前 Agent 的缓存命中；缓存命中为 0 时不显示，不要在前端自行估算。`llm_usage` 顶层是整个 chat task 的全链路汇总，可能包含导演委派的子 Agent，只能用于后台成本诊断，不得混入当前窗口命中率展示。
+4. 长文档滑窗必须维持 `system（稳定）+ manifest（稳定）+ ledger（只追加）+ 当前窗口（一片，尾部）+ 本轮用户请求（最尾）` 布局：地图与账本一经注入只追加不改写；旧窗口折叠只在“尾部变前缀”（任务终态落盘 / 持久化前）发生一次，任务进行中只追加新工具结果、不反复改写中间历史。违反此条会从第一个被改的 ToolMessage 起让后续前缀缓存全部失效。收口：`server/agents/longread/` + `server/agents/tools/longread.py` + `server/agents/longread_store.py`。
+5. AgentSkills 只能通过 `search_skills` / `read_skill` / `read_skill_reference` 按需读取；Skill 内容是动态工具结果，不得自动拼入 system 前缀，也不得覆盖输出格式、字段结构、工具协议或落盘规则。
+6. 新增动态系统规则前必须评估是否会破坏 prompt cache 稳定前缀；能放到最后 user 的任务现场内容，不要放进 system。
+7. 更换模型 / 平台、修改专家 prompt / `pipeline_system` / `tool_rules`、改变工具绑定、语言策略或部分全局参数，都会改变稳定前缀并导致上游缓存重新建立。文档和 UI 不得暗示缓存跨这些变更仍稳定命中。
+8. 前端展示的窗口 token 与缓存命中来自后端 `context_window_stats`，完成时只从 `llm_usage.by_agent[当前窗口 agent_id]` 合并当前 Agent 的缓存命中；缓存命中为 0 时不显示，不要在前端自行估算。`llm_usage` 顶层是整个 chat task 的全链路汇总，可能包含导演委派的子 Agent，只能用于后台成本诊断，不得混入当前窗口命中率展示。
 
 ### 5.2.2 内容产出链路变更的缓存判断协议
 
@@ -480,6 +482,8 @@ AI 在修改内容产出链路时，应根据任务质量和协议需要自行�
   - `server/test/agents/`、`server/test/agent_skills/`：Agent 默认行为与 AgentSkills 功能回归。
   - `server/test/auth/`、`server/test/projects/`：账号、权限、数据归属与项目生命周期回归。
   - `server/test/chat/`、`server/test/context_budget/`：聊天功能与上下文预算策略回归。
+  - `server/test/attachments/`：聊天附件切分、超窗清单降级、附件 GC 回归。
+  - `server/test/longread/`：长文档滑窗底座（地图稳定、线索账本、带线索折叠、世界观转滑窗）回归。
   - `server/test/director/`：导演调度、委派边界、自动写作触发等业务护栏。
   - `server/test/graphrag/`：知识图谱、语义分块、项目文件收集等检索能力回归。
   - `server/test/image_generation/`、`server/test/web_search/`：外部能力适配器与供应商配置回归。

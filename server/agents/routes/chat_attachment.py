@@ -15,10 +15,13 @@
 - 0 附件：原样返回 active_context。
 - 1 附件：注入正文（partial=True 灌首片+分片说明，partial=False 灌全文），
   保留单附件场景下的轻量交互。
-- ≥ 2 附件：仅注入「文件清单 + 引导提示」让 LLM 用 ``read_attachment_chunk``
+- ≥ 2 附件：仅注入「文件清单 + 引导提示」让 LLM 用滑窗工具
   按需读取，避免每个附件都堆叠一份首片导致 token 爆炸；
-  该工具的滑动窗口（``collapse_attachment_chunk_history``）同样会保证
-  历史中对所有附件总共只保留最近一次新调用的完整正文。
+  滑窗底座（``agents.longread``）保证旧窗口折叠为“线索 + 回跳指针”，
+  本轮新读窗口原文完整保留。
+- 超窗附件（``isOversized=True``，全文超过上传时模型窗口）：
+  单附件也不预注入首片，直接走清单分支，只能滑窗按需读取。
+  超窗附件照常切分落盘，不再拒绝上传。
 
 为什么单独成模块？
 - 让 chat.py 路由层维持瘦身，避免"全文注入"、"DB 写入"、"占位生成"散开；
@@ -63,6 +66,8 @@ def _normalize_attachment_meta(attachment_meta: Any) -> Dict[str, Any] | None:
         'totalTokens': total_tokens,
         'chunkTokens': int(attachment_meta.get('chunkTokens') or 0),
         'isPartial': bool(attachment_meta.get('isPartial')) or total_tokens > CHAT_ATTACHMENT_DIRECT_INJECTION_MAX_TOKENS,
+        # 全文超过当时模型窗口：附件仍可上传落盘，但永远不预注入正文。
+        'isOversized': bool(attachment_meta.get('isOversized')),
         'warnings': normalized_warnings,
         'uploadedAt': int(attachment_meta.get('uploadedAt') or 0),
     }
@@ -221,9 +226,9 @@ def _build_single_attachment_block(
             f'剩余 {remaining} 部分未直接附带在上下文中。'
             f'\n如需阅读后续内容，请调用工具 '
             f'`read_attachment_chunk(attachment_id="{attachment_id}", chunk_index=1)` 读取第 2 部分；'
-            f'读完后再依次递增 chunk_index 直至 {chunk_count - 1}。'
-            f'\n每次调用后请先在回复中提炼该分片的关键信息（角色 / 关键事件 / 设定要点等），'
-            f'再决定是否继续读取下一片。'
+            f'可用 `describe_longread_source(source_id="{attachment_id}")` 先看全局地图。'
+            f'\n读完后请先调用 `note_window_clues` 记录该分片的关键线索'
+            f'（人物 / 伏笔 / 矛盾 / 时间 + 出处引用），再决定是否继续读取下一片。'
         )
         block_parts.append(hint)
 
@@ -290,10 +295,11 @@ def _build_multi_attachment_manifest(
     if valid_attachment_ids:
         instructions.append(
             '上述附件未预载正文；需要阅读某个附件时请调用 '
-            '`read_attachment_chunk(attachment_id="...", chunk_index=0)` 从第 0 个分片开始。\n'
-            '读完后请先在回复中提炼该分片的关键信息（角色 / 关键事件 / 设定要点等），'
-            '再决定是否继续读取下一片。\n'
-            '滑动窗口机制会只保留你本轮最新一次打开的分片原文，旧分片会被折叠为占位。'
+            '`read_attachment_chunk(attachment_id="...", chunk_index=0)` 从第 0 个分片开始，'
+            '或先用 `describe_longread_source(source_id="...")` 查看全局地图。\n'
+            '读完后请先调用 `note_window_clues` 记录该分片的关键线索，再决定是否继续。\n'
+            '滑窗底座会把旧窗口折叠为“线索 + 回跳指针”占位符，本轮新读窗口原文完整保留；'
+            '需要回看时按账本里的窗口号跳转，不要线性逐片重扫。'
         )
     if cache_missing:
         instructions.append(
@@ -314,8 +320,8 @@ def expand_active_context_with_attachments(
 
     策略：
     - 0 附件：原样返回 base。
-    - 1 附件：走单附件分支（保留现有体验）。
-    - ≥ 2 附件：走多附件分支，仅注入文件清单。
+    - 1 附件（非超窗）：走单附件分支（保留现有体验）。
+    - 1 附件（超窗）或 ≥ 2 附件：走多附件分支，仅注入文件清单。
     """
     base = str(active_context or '').strip()
     if not isinstance(imported_files, list) or not imported_files:
@@ -332,7 +338,7 @@ def expand_active_context_with_attachments(
     if not active_files:
         return base
 
-    if len(active_files) == 1:
+    if len(active_files) == 1 and not bool(active_files[0].get('isOversized')):
         block = _build_single_attachment_block(user_id, project_name, active_files[0])
     else:
         block = _build_multi_attachment_manifest(user_id, project_name, active_files)

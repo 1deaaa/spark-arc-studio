@@ -272,3 +272,31 @@ def test_append_only_task_messages_preserve_bounded_tool_exchange_before_receipt
     assert messages[2].tool_calls[0]["name"] == "create_chapter"
     assert messages[4].content == "SCENE_ONE_RECEIPT"
     assert messages[-1].content == "SCENE_TWO"
+
+
+def test_longread_collapse_only_touches_stale_windows() -> None:
+    """滑窗折叠只折旧 user 轮次窗口：前缀稳定不断裂。"""
+    from agents.longread import collapse_longread_tool_history
+
+    messages = [
+        SystemMessage(content="STABLE_SYSTEM"),
+        HumanMessage(content="OLD_QUESTION"),
+        ToolMessage(
+            content='[source_id="att-1" chunk_index=0]\n旧窗口原文',
+            tool_call_id="old-window",
+            name="read_longread_window",
+        ),
+        HumanMessage(content="NEW_QUESTION"),
+        ToolMessage(
+            content='[source_id="att-1" chunk_index=1]\n本轮窗口原文',
+            tool_call_id="fresh-window",
+            name="read_longread_window",
+        ),
+    ]
+
+    collapsed = collapse_longread_tool_history(messages, fresh_call_ids={"fresh-window"})
+
+    assert collapsed == 1
+    assert messages[0].content == "STABLE_SYSTEM"
+    assert messages[1].content == "OLD_QUESTION"
+    assert "本轮窗口原文" in messages[4].content

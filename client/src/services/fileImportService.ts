@@ -36,6 +36,8 @@ export type ParsedImportResponse = {
   chunks: ParsedImportChunk[];
   chunk_info: Record<string, unknown>;
   is_partial: boolean;
+  /** 全文超过上传时模型窗口：附件仍可上传，但首轮只注入清单、不预注入正文。 */
+  is_oversized?: boolean;
   max_context_tokens: number;
 };
 

@@ -474,6 +474,29 @@ def _run_chat_stream_with_retry(
 
 _NDJSON_MEDIA_TYPE = 'application/x-ndjson; charset=utf-8'
 
+
+def _init_chat_task_ledger(user_id: str, project_name: str, agent_id: str, context_key: str) -> None:
+    """任务开始时从落盘恢复线索账本（内存态，热路径零 IO）。"""
+    try:
+        from agents.longread_store import init_task_ledger
+
+        init_task_ledger(str(user_id), str(project_name), str(agent_id), str(context_key))
+    except Exception:
+        pass
+
+
+def _persist_chat_task_ledger(user_id: str, project_name: str) -> None:
+    """任务终态时一次性落盘线索账本；失败不影响任务收口。"""
+    try:
+        from agents.longread import LedgerStore
+        from agents.longread_store import take_task_ledger
+
+        ledger, key = take_task_ledger()
+        if ledger is not None and key and ledger.entries:
+            LedgerStore.save(str(user_id), str(project_name), key, ledger)
+    except Exception:
+        pass
+
 # 旁路标记前缀：用于从工具返回文本中提取导演触发 Auto-Write 的结构化元数据
 _SIDEBAND_PREFIX = "__director_auto_write_started__:"
 
@@ -746,6 +769,7 @@ def _start_chat_stream_task(
             terminated_early = False
             final_error_message = ''
             retry_count = 0
+            _init_chat_task_ledger(user_id, project_name, agent_id, context_key)
             try:
                 terminated_early, final_error_message, retry_count = _run_chat_stream_with_retry(
                     agent_inst=agent_inst,
@@ -758,6 +782,7 @@ def _start_chat_stream_task(
                     stop_event=stop_event,
                 )
             finally:
+                _persist_chat_task_ledger(user_id, project_name)
                 final_status = (
                     'cancelled'
                     if terminated_early

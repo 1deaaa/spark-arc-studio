@@ -49,8 +49,11 @@ export function useChatFileImport(getSessionId: () => number | null | undefined)
   /** 老 API 兼容：旧调用方仍可读"第一个附件"。 */
   const importedContext = computed(() => attachments.value[0] || null);
 
-  function describeAttachment(payload: { sourceFormat: string; totalTokens: number; isPartial: boolean }) {
+  function describeAttachment(payload: { sourceFormat: string; totalTokens: number; isPartial: boolean; isOversized?: boolean }) {
     const tokenText = `${formatTokenCount(payload.totalTokens)} tokens`;
+    if (payload.isOversized) {
+      return `${payload.sourceFormat} · ${tokenText} · ${t('components.chatPanel.importedFileOversized')}`;
+    }
     if (payload.isPartial) {
       return `${payload.sourceFormat} · ${tokenText} · ${t('components.chatPanel.importedFilePartial')}`;
     }
@@ -122,7 +125,9 @@ export function useChatFileImport(getSessionId: () => number | null | undefined)
           const totalTokens = Number((parsed.chunk_info as { total_tokens_estimated?: unknown } | null)?.total_tokens_estimated || 0);
           // 单附件场景下：超阈值就走 partial（仅注入首片），后端按项目配置切分；否则灌全文。
           // 多附件场景下：partial 标记仅作为元信息保留，实际是否注入由后端"多附件 ≥ 2 仅注入清单"策略决定。
+          // 超窗附件（is_oversized）：照常落盘成功，首轮只注入清单、不预注入正文。
           const shouldUsePartialChunk = Boolean(parsed.is_partial);
+          const isOversized = Boolean((parsed as { is_oversized?: unknown }).is_oversized);
           const attachmentId = String(parsed.attachment_id || '').trim();
           if (!attachmentId) {
             throw new Error(t('components.chatPanel.fileImportPersistFailed'));
@@ -139,11 +144,22 @@ export function useChatFileImport(getSessionId: () => number | null | undefined)
             totalTokens,
             chunkTokens: effectiveChunkTokens,
             isPartial: shouldUsePartialChunk,
+            ...(isOversized ? { isOversized: true } : {}),
             warnings: Array.isArray(parsed.warnings) ? parsed.warnings.map((item) => ({ ...item })) : [],
             uploadedAt: Date.now(),
           });
 
-          if (shouldUsePartialChunk) {
+          if (isOversized) {
+            bus.emit('toast', {
+              type: 'info',
+              message: t('components.chatPanel.oversizedImportNotice', { filename: parsed.filename || file.name }),
+            });
+          } else if (shouldUsePartialChunk) {
+            bus.emit('toast', {
+              type: 'info',
+              message: t('components.chatPanel.partialImportNotice', { filename: parsed.filename || file.name }),
+            });
+          } else {
             bus.emit('toast', {
               type: 'info',
               message: t('components.chatPanel.partialImportNotice', { filename: parsed.filename || file.name }),
@@ -165,15 +181,10 @@ export function useChatFileImport(getSessionId: () => number | null | undefined)
             throw innerErr;
           }
           // 单文件失败时继续处理后续文件，避免一个坏文件阻塞其他附件。
-          const message = innerErr instanceof FileImportError
-            && innerErr.code === 'attachment_context_window_exceeded'
-            ? t('components.chatPanel.attachmentContextWindowExceeded', {
-                total: formatTokenCount(innerErr.totalTokens),
-                limit: formatTokenCount(innerErr.maxContextTokens),
-              })
-            : innerErr instanceof Error
-              ? innerErr.message
-              : String(innerErr || t('components.chatPanel.fileImportFailed'));
+          // 超窗不再走 413 拒绝（后端照常落盘 + 清单降级），此处仅保留历史 code 兼容。
+          const message = innerErr instanceof Error
+            ? innerErr.message
+            : String(innerErr || t('components.chatPanel.fileImportFailed'));
           bus.emit('toast', {
             type: 'error',
             message: t('components.chatPanel.singleFileImportFailed', { filename: file.name, message }),

@@ -136,6 +136,19 @@ def test_get_tools_for_agent_is_defined_for_every_core_agent() -> None:
         assert all(getattr(tool, "name", "") for tool in tools)
 
 
+def test_director_longread_tools_come_from_single_facade() -> None:
+    """滑窗工具必须走统一底座：registry 与门面同源，导演一次性配齐。"""
+    names = tool_names("agent_director")
+    assert {
+        "read_attachment_chunk",
+        "read_longread_window",
+        "describe_longread_source",
+        "note_window_clues",
+        "read_worldview_window",
+    } <= names
+    assert facade_get_tools_for_agent is get_tools_for_agent
+
+
 def test_tool_stream_event_injects_ui_metadata_from_backend_binding() -> None:
     evt = build_tool_stream_event(
         "tool_exec_started",

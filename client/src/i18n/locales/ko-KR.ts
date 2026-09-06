@@ -1015,6 +1015,8 @@ const koKR = {
       attachmentPanelTitle: '활성화된 첨부 목록',
       attachmentListTitle: '첨부된 파일 {count}개',
       importedFilePartial: '용량 초과로 인하여 전반부 조각만 주입됨',
+      importedFileOversized: '초과 분량, 목록 + 필요시 읽기',
+      oversizedImportNotice: '파일 「{filename}」이 현재 모델 윈도우를 초과하여 목록 모드로 저장되었습니다. AI가 윈도우 단위로 읽을 수 있습니다.',
       partialImportNotice: '파일 「{filename}」의 텍스트 양이 한계를 초과하여, 전반부 영역 위주로 기억 윈도우에 연동되었습니다.',
       importSuccess: '「{filename}」의 텍스트 데이터가 대화 윈도우에 정상 연동되었습니다.',
       singleFileImportFailed: '첨부 파일 「{filename}」을 가져오지 못했습니다: {message}',

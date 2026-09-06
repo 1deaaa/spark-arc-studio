@@ -1017,6 +1017,8 @@ const jaJP = {
       attachmentPanelTitle: '現在の添付ファイル',
       attachmentListTitle: '{count} 件のファイルを添付中',
       importedFilePartial: '先頭分割のみ',
+      importedFileOversized: '超長、一覧 + 必要に応じた読み取り',
+      oversizedImportNotice: 'ファイル「{filename}」は現在のモデルウィンドウを超えているため、一覧モードで保存されました。AI がウィンドウ単位で読み取れます。',
       partialImportNotice: 'ファイル「{filename}」が大きいため、現在は先頭分割のみ添付されています。残りは AI がページ送りで読めます。',
       importSuccess: '「{filename}」を現在のチャット文脈に添付しました',
       singleFileImportFailed: '添付「{filename}」の取り込みに失敗しました：{message}',

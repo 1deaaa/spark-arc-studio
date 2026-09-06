@@ -8,6 +8,8 @@ export type ChatImportedContext = {
   totalTokens: number;
   chunkTokens: number;
   isPartial: boolean;
+  /** 全文超过上传时模型窗口：首轮只注入清单、不预注入正文，只能滑窗按需读。 */
+  isOversized?: boolean;
   warnings: Array<{ code: string; message: string }>;
   uploadedAt: number;
 };
@@ -26,6 +28,7 @@ export function serializeImportedContext(payload: ChatImportedContext): AnyRecor
     totalTokens: payload.totalTokens,
     chunkTokens: payload.chunkTokens,
     isPartial: payload.isPartial,
+    ...(payload.isOversized ? { isOversized: true } : {}),
     warnings: (payload.warnings || []).map((item) => ({ ...item })),
     uploadedAt: payload.uploadedAt,
   };
@@ -82,6 +85,7 @@ export function normalizeRawImportedFile(raw: unknown): AnyRecord | null {
     totalTokens: Number(attachment.totalTokens || 0) || 0,
     chunkTokens: Number(attachment.chunkTokens || 0) || 0,
     isPartial: Boolean(attachment.isPartial),
+    ...(attachment.isOversized ? { isOversized: true } : {}),
     warnings: Array.isArray(attachment.warnings)
       ? attachment.warnings.map((item: AnyRecord = {}) => ({
           code: String(item.code || '').trim(),
@@ -172,6 +176,7 @@ export function toChatImportedContext(payload: AnyRecord): ChatImportedContext {
     totalTokens: Number(payload.totalTokens || 0) || 0,
     chunkTokens: Number(payload.chunkTokens || 0) || 0,
     isPartial: Boolean(payload.isPartial),
+    ...(payload.isOversized ? { isOversized: true } : {}),
     warnings: Array.isArray(payload.warnings)
       ? (payload.warnings as AnyRecord[]).map((item) => ({
           code: String((item as AnyRecord)?.code || ''),

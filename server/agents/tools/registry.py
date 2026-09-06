@@ -1,6 +1,12 @@
 from __future__ import annotations
 
 from agents.tools.attachment import read_attachment_chunk
+from agents.tools.longread import (
+    describe_longread_source,
+    note_window_clues,
+    read_longread_window,
+    read_worldview_window,
+)
 from agents.tools.chat_history import search_chat_history
 from agents.tools.automation import (
     check_scriptwriter_status,
@@ -153,6 +159,10 @@ DIRECTOR_BASE_TOOLS = SHARED_READ_TOOLS + [
     *OPTIONAL_RESEARCH_TOOLS,
     web_search,
     read_attachment_chunk,
+    read_longread_window,
+    describe_longread_source,
+    note_window_clues,
+    read_worldview_window,
 ]
 CRITIC_BASE_TOOLS = SHARED_READ_TOOLS + OPTIONAL_RESEARCH_TOOLS
 
@@ -244,6 +254,10 @@ ALL_TOOLS = (
         semantic_search,
         replace_from_search,
         read_attachment_chunk,
+        read_longread_window,
+        describe_longread_source,
+        note_window_clues,
+        read_worldview_window,
     ]
     + SHARED_SKILL_TOOLS
     + SHARED_CHAT_HISTORY_TOOLS

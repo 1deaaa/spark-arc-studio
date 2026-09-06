@@ -221,6 +221,7 @@ async def parse_import_file(
             "chunk_info": prepared.chunk_info,
             "chunk_count": prepared.chunk_count,
             "is_partial": prepared.is_partial,
+            "is_oversized": prepared.is_oversized,
             "max_context_tokens": max_context_tokens,
         }
     except UnsupportedImportFormatError as e:
@@ -228,18 +229,6 @@ async def parse_import_file(
     except ImportTextEmptyError as e:
         return JSONResponse(status_code=400, content={"error": str(e)})
     except Exception as e:
-        from agents.utility_agent import AttachmentContextWindowExceededError
-
-        if isinstance(e, AttachmentContextWindowExceededError):
-            return JSONResponse(
-                status_code=413,
-                content={
-                    "error": str(e),
-                    "code": "attachment_context_window_exceeded",
-                    "total_tokens": e.total_tokens,
-                    "max_context_tokens": e.max_context_tokens,
-                },
-            )
         return JSONResponse(status_code=500, content={"error": str(e)})
     finally:
         if tmp_path and os.path.exists(tmp_path):

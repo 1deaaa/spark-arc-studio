@@ -1,4 +1,13 @@
-"""长读取工具结果的历史折叠策略。"""
+"""长读取工具结果的历史折叠策略（兼容层）。
+
+统一收口：折叠实现已迁移至 ``agents.longread.collapse_longread_tool_history``，
+本模块保留旧名称与旧占位符常量，供历史测试与 ``communication.py`` 过渡引用。
+新代码应直接使用 ``agents.longread``。
+"""
+
+from agents.longread import (
+    collapse_longread_tool_history as _collapse,
+)
 
 ATTACHMENT_CHUNK_TOOL_NAME = "read_attachment_chunk"
 ATTACHMENT_CHUNK_COLLAPSED_PLACEHOLDER = (
@@ -18,8 +27,18 @@ LONG_READ_TOOL_PLACEHOLDERS = {
 }
 
 
-def collapse_long_read_tool_history(messages: list, *, fresh_call_ids: set[str] | None = None) -> int:
-    """折叠旧用户轮次的长读取结果，保留当前用户轮次内的全部原文。"""
+def collapse_long_read_tool_history(
+    messages: list,
+    *,
+    fresh_call_ids: set[str] | None = None,
+    ledger=None,
+) -> int:
+    """折叠旧用户轮次的长读取结果，保留当前用户轮次内的全部原文。
+
+    章节/大纲类工具（``read_chapter_scene`` / ``read_chapter_outline_raw``）
+    沿用旧占位符；滑窗类工具走 longread 带线索折叠。两者都不在任务中途
+    反复改写：调用方（communication）只在追加新工具结果后调用一次。
+    """
     from langchain_core.messages import HumanMessage as _HumanMessage
     from langchain_core.messages import ToolMessage as _ToolMessage
 
@@ -35,6 +54,8 @@ def collapse_long_read_tool_history(messages: list, *, fresh_call_ids: set[str] 
         if not isinstance(message, _ToolMessage):
             continue
         tool_name = getattr(message, "name", "") or ""
+        if tool_name in ("read_attachment_chunk",):
+            continue
         placeholder = LONG_READ_TOOL_PLACEHOLDERS.get(tool_name)
         if not placeholder:
             continue
@@ -53,9 +74,15 @@ def collapse_long_read_tool_history(messages: list, *, fresh_call_ids: set[str] 
             name=message.name,
         )
         collapsed += 1
+    collapsed += _collapse(messages, fresh_call_ids=fresh, ledger=ledger)
     return collapsed
 
 
-def collapse_attachment_chunk_history(messages: list, *, fresh_call_ids: set[str] | None = None) -> int:
-    """兼容旧入口：现在统一折叠所有长读取工具结果。"""
-    return collapse_long_read_tool_history(messages, fresh_call_ids=fresh_call_ids)
+def collapse_attachment_chunk_history(
+    messages: list,
+    *,
+    fresh_call_ids: set[str] | None = None,
+    ledger=None,
+) -> int:
+    """兼容旧入口：滑窗类走 longread，章节类走旧占位符。"""
+    return collapse_long_read_tool_history(messages, fresh_call_ids=fresh_call_ids, ledger=ledger)

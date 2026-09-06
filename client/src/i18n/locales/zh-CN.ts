@@ -1015,6 +1015,8 @@ const zhCN = {
       attachmentPanelTitle: '当前附件',
       attachmentListTitle: '已附加 {count} 个文件',
       importedFilePartial: '仅附带首个分片',
+      importedFileOversized: '超长，仅清单 + 按需读片',
+      oversizedImportNotice: '文件“{filename}”超过当前模型窗口，已保存并转为清单模式，AI 可按窗口按需阅读。',
       partialImportNotice: '文件“{filename}”过大，当前会话仅附带首个分片，AI 可按需翻页阅读。',
       importSuccess: '已将“{filename}”附加到当前会话上下文',
       singleFileImportFailed: '附件“{filename}”导入失败：{message}',
