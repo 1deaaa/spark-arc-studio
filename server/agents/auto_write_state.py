@@ -122,6 +122,18 @@ def default_auto_write_state() -> Dict[str, Any]:
         "phaseResult": "",
         "phaseAttempt": 0,
         "phaseMaxAttempts": 0,
+        # 调研 / 落盘语义（write_started 置位前一切都是调研）与机器可读失败原因。
+        # write_started=True 仅代表“落盘工具已被调用”，落盘本身仍是单次原子写入。
+        "writeStarted": False,
+        "backendReason": "",
+        "backendCode": "",
+        # 本场落盘完成后的统计（落盘瞬间计算，非流式测速）：
+        # lastSceneChars=本场可见正文字数，lastSceneElapsed=本场耗时秒，
+        # lastSceneSpeed=字数/耗时。工具调用是非流式的，不存在逐字测速。
+        "lastSceneChars": 0,
+        "lastSceneElapsed": 0,
+        "lastSceneSpeed": 0,
+        "lastScenePreview": "",
         "lastCompletedChapterIndex": None,
         "lastCompletedChapterTitle": "",
         "nextChapterIndex": 0,

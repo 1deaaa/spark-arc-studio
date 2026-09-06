@@ -785,7 +785,7 @@ def test_auto_write_emits_prewrite_before_writing_scene(monkeypatch, tmp_path: P
             })
         scene_path.parent.mkdir(parents=True, exist_ok=True)
         scene_path.write_text(
-            "# 初遇\n<conception>\n本场建立雨夜悬念。\n</conception>\n[旁白]\n已保存正文",
+            "# 初遇\n<conception>\n本场建立雨夜悬念。\n</conception>\n[旁白]\n已保存正文可见内容足够长可以落盘",
             encoding="utf-8",
         )
         return ScriptwriterPreWriteResult(
@@ -799,7 +799,7 @@ def test_auto_write_emits_prewrite_before_writing_scene(monkeypatch, tmp_path: P
                 "path": "一 · 开端/1-1 初遇.arc",
                 "written_chars": 12,
             },
-            written_content="[旁白]\n已保存正文",
+            written_content="[旁白]\n已保存正文可见内容足够长可以落盘",
         )
 
     monkeypatch.setattr(auto_write, "run_autonomous_scriptwriter_creation", fake_prewrite)

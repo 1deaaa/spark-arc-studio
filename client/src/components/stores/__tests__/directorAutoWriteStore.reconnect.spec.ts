@@ -148,12 +148,84 @@ describe('directorAutoWriteStore SSE 恢复契约', () => {
     const snapshot = store.tasks['工具失败项目'].snapshot;
     expect(snapshot.status).toBe('error');
     expect(snapshot.phaseEvent).toBe('tool_failed_retrying');
+    expect(snapshot.phase).toBe('writing');
+    expect(snapshot.writeStarted).toBe(true);
     expect(snapshot.phaseToolName).toBe('create_or_rewrite_script');
     expect(snapshot.phaseError).toContain('正文没有可见内容');
     expect(snapshot.phaseAttempt).toBe(1);
     expect(snapshot.phaseMaxAttempts).toBe(4);
     expect(snapshot.lastError).toBe('多次尝试后仍未完成正文落盘');
     expect(store.activeProjects).not.toContain('工具失败项目');
+  });
+
+  it('调研轮次不翻转落盘状态：model_request 属于 prewrite', async () => {
+    vi.mocked(fetchWithAuth).mockResolvedValue(new Response(JSON.stringify({
+      success: true,
+      export_format: 'arc',
+    }), { status: 200 }));
+
+    vi.stubGlobal('fetch', vi.fn().mockResolvedValue(sseResponse([
+      {
+        status: 'model_request_started',
+        streamSeq: 1,
+        attempt: 1,
+        max_attempts: 4,
+      },
+      {
+        status: 'prewrite_tool',
+        streamSeq: 2,
+        tool_name: 'story_memory_tool',
+        attempt: 1,
+        max_attempts: 4,
+      },
+      {
+        status: 'model_request_started',
+        streamSeq: 3,
+        attempt: 2,
+        max_attempts: 4,
+      },
+    ])));
+
+    const store = useDirectorAutoWriteStore();
+    const result = await store.startManualWrite('调研轮次项目');
+    expect(result.success).toBe(true);
+    await flushAsyncWork();
+
+    const snapshot = store.tasks['调研轮次项目'].snapshot;
+    expect(snapshot.phase).toBe('prewrite');
+    expect(snapshot.writeStarted).not.toBe(true);
+    expect(snapshot.phaseAttempt).toBe(2);
+    expect(snapshot.phaseMaxAttempts).toBe(4);
+  });
+
+  it('落盘完成后保留本场事后统计（非流式测速）', async () => {
+    vi.mocked(fetchWithAuth).mockResolvedValue(new Response(JSON.stringify({
+      success: true,
+      export_format: 'arc',
+    }), { status: 200 }));
+
+    vi.stubGlobal('fetch', vi.fn().mockResolvedValue(sseResponse([
+      {
+        status: 'scene_completed',
+        streamSeq: 1,
+        scene_title: '1-1 初遇',
+        preview: '雨落在旧站台上',
+        total_chars: 1200,
+        elapsed: 30,
+        avg_speed: 40,
+      },
+    ])));
+
+    const store = useDirectorAutoWriteStore();
+    const result = await store.startManualWrite('落盘统计项目');
+    expect(result.success).toBe(true);
+    await flushAsyncWork();
+
+    const snapshot = store.tasks['落盘统计项目'].snapshot;
+    expect(snapshot.lastSceneChars).toBe(1200);
+    expect(snapshot.lastSceneSpeed).toBe(40);
+    expect(snapshot.lastSceneElapsed).toBe(30);
+    expect(snapshot.lastScenePreview).toBe('雨落在旧站台上');
   });
 
   it('未收到聊天旁路事件时也能从服务端 running 状态恢复任务', async () => {

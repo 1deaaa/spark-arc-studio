@@ -11,10 +11,20 @@ Auto-Write API - 自动化剧本撰写的异步批处理引擎。
 1. 状态落地：通过 `auto_write_state.py` 将当前运行游标（Chapter / Scene Index）实时落盘。
 2. 线程隔离：长耗时的 AI 调用通过 `asyncio.to_thread` 执行，避免阻塞事件循环。
 3. 状态帧约定：推送极为精细的语义帧：
-   - chapter_start / scene_start / streaming
-   - chapter_saved / scene_completed
+   - chapter_start / prewrite / prewrite_tool / model_request_* / tool_*（调研与落盘共用循环）
+   - writing_scene / scene_completed / scene_saved / chapter_saved
    - paused / cancelled / complete / error
    这些帧使得前端组件能在不直接介入生成逻辑的前提下，完美渲染复杂的嵌套进度环。
+
+【单循环语义（必须遵守）】
+- 每个场景 exactly 一次 `run_autonomous_scriptwriter_creation` 工具循环：
+  调研（只读工具）与落盘（create_chapter + create_or_rewrite_script）在同一循环完成。
+- `model_request` 轮次计数（attempt/max_attempts，最多 4 次）只属于“调研请求”，
+  落盘本身是单次原子写入，不存在“正文分段”，不得把轮次显示为“第 x/4 段正文”。
+- `write_started` 置位前一切都是 prewrite：只有落盘工具被调用后 phase 才翻为 writing。
+- 工具调用是非流式的（`llm.invoke` 一次性返回完整工具结果）：不存在逐字测速。
+  `scene_completed` 的 total_chars/elapsed/avg_speed 是落盘瞬间的事后统计。
+  不要恢复“逐字播报工具参数”的旧 SSE 正文流，那会把未提交的草稿当成已完成内容展示。
 
 作为项目内【工程化成熟度最高】的标准链路之一，本文件为未来添加其他后台自动批处理任务（如
 自动大纲扩写、长篇风格修订）提供了最可靠的并发模板。
@@ -36,6 +46,7 @@ from core.project_settings import get_project_story_tags, get_workspace_mode
 from agents.story_terminology import get_story_terminology
 from agents.agent_scriptwriter import ScriptwriterAgent
 from agents.scriptwriter_prewrite import (
+    PREWRITE_MAX_REQUESTS,
     PREWRITE_STATUS_MESSAGE,
     SCRIPTWRITER_CONTINUITY_MAX_TURNS,
     ScriptwriterPreWriteRequest,
@@ -527,13 +538,24 @@ async def generate_script_stream(
                 ),
             )
 
+            write_started = False
+            write_attempt = 0
+
             def report_prewrite_tool(tool_name: str) -> None:
-                """更新可恢复状态，并把当前调查或落盘工具送入观察者日志。"""
+                """更新可恢复状态，并把当前调查或落盘工具送入观察者日志。
+
+                落盘工具（create_chapter / create_or_rewrite_script）是本场首次
+                被调用时，才把 phase 从 prewrite 翻转为 writing：此前的所有
+                model_request 轮次都属于调研，绝不能显示为“正在生成正文”。
+                """
+                nonlocal write_started
                 normalized_tool_name = str(tool_name or "").strip()
                 is_writing_tool = normalized_tool_name in {
                     "create_chapter",
                     "create_or_rewrite_script",
                 }
+                if is_writing_tool:
+                    write_started = True
                 phase_message = (
                     f"正在撰写：{chapter_title} - {scene_title}"
                     if is_writing_tool
@@ -541,7 +563,7 @@ async def generate_script_stream(
                 )
                 update_state(
                     "running",
-                    phase="writing" if is_writing_tool else "prewrite",
+                    phase="writing" if write_started else "prewrite",
                     phaseMessage=phase_message,
                     phaseEvent="tool_started",
                     phaseToolName=normalized_tool_name,
@@ -550,6 +572,9 @@ async def generate_script_stream(
                 if prewrite_tool_callback is not None:
                     prewrite_tool_callback({
                         "tool_name": normalized_tool_name,
+                        "attempt": write_attempt,
+                        "max_attempts": PREWRITE_MAX_REQUESTS,
+                        "write_started": write_started,
                         "chapter_index": i,
                         "scene_index": scene_idx,
                         "chapter_title": chapter_title,
@@ -557,10 +582,18 @@ async def generate_script_stream(
                     })
 
             def report_creation_lifecycle(payload: Dict[str, Any]) -> None:
-                """把 invoke 与工具执行状态收口到持久化快照和 SSE 回放日志。"""
+                """把 invoke 与工具执行状态收口到持久化快照和 SSE 回放日志。
+
+                调研 / 落盘的判定只看落盘工具是否已被调用（write_started），
+                而不看事件名：model_request_* 在调研轮次同样会触发，把它们
+                直接标为 writing 是旧的误导根因。
+                """
+                nonlocal write_started, write_attempt
                 event = str(payload.get("event") or "").strip()
                 tool_name = str(payload.get("tool_name") or "").strip()
                 error = str(payload.get("error") or "").strip()
+                backend_reason = str(payload.get("backend_reason") or "").strip()
+                backend_code = str(payload.get("backend_code") or "").strip()
                 if event == "model_request_failed" and error:
                     from agents.error_formatting import format_ai_error
 
@@ -569,20 +602,39 @@ async def generate_script_stream(
                 result = str(payload.get("result") or "").strip()
                 attempt = int(payload.get("attempt") or 0)
                 max_attempts = int(payload.get("max_attempts") or 0)
+                if event == "model_request_started":
+                    write_attempt = max(write_attempt, attempt)
                 # 工具开始事件继续由既有 on_tool_progress 管线发送，避免重复日志帧。
                 if event == "tool_started":
                     return
-                phase = "writing" if event.startswith("model_request") or tool_name in {
+                if tool_name in {
                     "create_chapter",
                     "create_or_rewrite_script",
-                } else "prewrite"
+                }:
+                    write_started = True
+                if event == "model_request_failed" and not backend_reason:
+                    backend_reason = "llm_error"
+                if event == "tool_failed" and not backend_reason:
+                    backend_reason = "tool_failure"
+                # 落盘动作是单次原子写入：成功即结束本场，不存在“正文分段”。
+                # 调研轮次上限（max_attempts）只约束“第几次调研请求”，
+                # 落盘行永远不带轮次计数。
+                if tool_name in {
+                    "create_chapter",
+                    "create_or_rewrite_script",
+                }:
+                    is_writing_event = True
+                else:
+                    is_writing_event = write_started
                 state_fields: Dict[str, Any] = {
-                    "phase": phase,
+                    "phase": "writing" if is_writing_event else "prewrite",
                     "phaseEvent": event,
                     "phaseToolName": tool_name,
                     "phaseResult": result,
                     "phaseAttempt": attempt,
                     "phaseMaxAttempts": max_attempts,
+                    "backendReason": backend_reason,
+                    "backendCode": backend_code,
                 }
                 if event in {"model_request_started", "model_request_failed", "tool_failed"}:
                     state_fields["phaseError"] = error
@@ -593,6 +645,11 @@ async def generate_script_stream(
                 if prewrite_tool_callback is not None:
                     prewrite_tool_callback({
                         **payload,
+                        "attempt": attempt,
+                        "max_attempts": max_attempts,
+                        "write_started": write_started,
+                        "backend_reason": backend_reason,
+                        "backend_code": backend_code,
                         "chapter_index": i,
                         "scene_index": scene_idx,
                         "chapter_title": chapter_title,
@@ -725,6 +782,8 @@ async def generate_script_stream(
                     return
 
                 # 落盘工具已经保存了最终正文，这里只发送完成事件，不再次生成或覆盖文件。
+                # 注意 avg_speed 是落盘瞬间的“本场字数/耗时”事后统计，不是流式测速：
+                # 工具调用是非流式的，invoke 一次性返回完整工具结果。
                 update_state(
                     "running",
                     nextChapterIndex=i,
@@ -733,6 +792,10 @@ async def generate_script_stream(
                     availableRestartChapterIndex=i,
                     lastSavedFilename=display_filename if os.path.exists(filepath) else "",
                     lastError="",
+                    lastSceneChars=total_chars,
+                    lastSceneElapsed=round(elapsed, 1),
+                    lastSceneSpeed=round(avg_speed, 1),
+                    lastScenePreview=arc_text[:100] + "..." if len(arc_text) > 100 else arc_text,
                 )
                 yield semantic_sse_data(
                     "scene_completed",

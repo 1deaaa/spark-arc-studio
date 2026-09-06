@@ -269,6 +269,32 @@ Scriptwriter 有五类入口：导演委派、用户聊天微改、用户手动�
 4. Critic 是可选质量增强。自动写作的 `auto_review` 默认必须关闭；只有用户在手动设置中显式开启，或导演工具收到用户明确“边写边审 / 自动审稿”意图并传入 `auto_review=true`，才允许每场保存后调用 Critic 生成质量工单。
 5. 用户手动保存 `.arc/.md` 只允许回写 StoryMemory，不得隐式启动 Critic 或重写正文。
 
+### 4.5.5 Auto-Write 单循环语义与 UI 契约（强制）
+
+Auto-Write 每个场景 exactly 一次 `run_autonomous_scriptwriter_creation` 工具循环
+（`server/agents/scriptwriter_prewrite.py`），调研与落盘共用同一个 4 次模型请求预算：
+
+1. **4 是调研请求上限，不是正文分段数**：`PREWRITE_MAX_REQUESTS=4` 限制的是 `invoke`
+   次数。落盘（`create_chapter` + `create_or_rewrite_script`）是单次原子写入，成功即
+   结束本场。前端 `attempt/max_attempts` 永远读作“第几次调研请求”，落盘行不带计数。
+2. **`write_started` 是调研/落盘的唯一分界**：后端 `report_creation_lifecycle`
+   只看落盘工具是否已被调用，不看事件名。`model_request_*` 在调研轮次同样触发，
+   禁止把它直接映射为 `phase=writing` 或“正在生成正文”。
+3. **工具调用是非流式的，不存在逐字测速**：`llm.invoke` 一次性返回完整工具结果，
+   正文藏在 `overwrite_content` 参数里。`scene_completed` 的
+   `total_chars/elapsed/avg_speed` 是落盘瞬间的事后统计（`lastSceneChars` /
+   `lastSceneSpeed` / `lastSceneElapsed` / `lastScenePreview`），前端展示为
+   “本场落盘统计”，不得渲染成打字机进度。禁止恢复“逐字播报工具参数”的旧 SSE
+   正文流——那会把未提交的草稿当成已完成内容展示，违反 §4.5.4 第 1 条。
+4. **报错必须可见**：`model_request_failed` / `tool_failed` / 终端 `error` 在手动与
+   Director 两种触发下走同一条 `generate_script_stream`，必须都落到遮罩。
+   遮罩在 `error` 状态不得直接卸载；手动 `startManualWrite` 返回 `success:false`
+   时 setup 面板必须展示 `result.error`，禁止静默吞掉。
+5. **两种触发是同一引擎**：手动（`auto-write-start`，`from_director=False`）与
+   Director（`trigger_auto_write`，`from_director=True`，经
+   `__director_auto_write_started__` 旁路串通知前端）只差入口参数与 UI 标记，
+   生成逻辑、状态机、恢复游标完全一致。`fromDirector` 只影响展示，不分支生成。
+
 ### 4.6 新增 Agent 的三模态自检清单
 
 新增 Agent 时，以下所有项必须同时满足：

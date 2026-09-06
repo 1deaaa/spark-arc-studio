@@ -222,6 +222,9 @@ def _prewrite_tool_event(payload: dict[str, Any]) -> str:
         scene_index=payload.get("scene_index"),
         chapter_title=str(payload.get("chapter_title") or ""),
         scene_title=str(payload.get("scene_title") or ""),
+        write_started=bool(payload.get("write_started")),
+        backend_reason=str(payload.get("backend_reason") or ""),
+        backend_code=str(payload.get("backend_code") or ""),
     )
 
 

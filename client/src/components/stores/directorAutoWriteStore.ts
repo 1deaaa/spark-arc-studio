@@ -46,6 +46,16 @@ export interface AutoWriteSnapshot {
   phaseResult?: string;
   phaseAttempt?: number;
   phaseMaxAttempts?: number;
+  /** 落盘工具是否已被调用。置位前一切都是调研；落盘本身是单次原子写入。 */
+  writeStarted?: boolean;
+  /** 机器可读失败原因（llm_error/tool_failure/tool_exception/unknown_tool/missing_conception） */
+  backendReason?: string;
+  backendCode?: string;
+  /** 本场落盘完成后的事后统计（非流式测速）：字数/均速/耗时/预览 */
+  lastSceneChars?: number;
+  lastSceneSpeed?: number;
+  lastSceneElapsed?: number;
+  lastScenePreview?: string;
   totalChapters?: number;    // 前端注册时从旁路事件得到
   totalScenes?: number;
   completedScenes?: number;
@@ -240,6 +250,13 @@ export const useDirectorAutoWriteStore = defineStore('directorAutoWrite', () => 
         updatedAt: new Date().toISOString(),
         startedAt: new Date().toISOString(),
         generatedSceneFiles: [],
+        writeStarted: false,
+        backendReason: '',
+        backendCode: '',
+        lastSceneChars: 0,
+        lastSceneSpeed: 0,
+        lastSceneElapsed: 0,
+        lastScenePreview: '',
         streamingPreview: '',
         streamingSpeed: 0,
         streamingChars: 0,
@@ -494,6 +511,13 @@ export const useDirectorAutoWriteStore = defineStore('directorAutoWrite', () => 
         updatedAt: new Date().toISOString(),
         startedAt: new Date().toISOString(),
         generatedSceneFiles: [],
+        writeStarted: false,
+        backendReason: '',
+        backendCode: '',
+        lastSceneChars: 0,
+        lastSceneSpeed: 0,
+        lastSceneElapsed: 0,
+        lastScenePreview: '',
         streamingPreview: '',
         streamingSpeed: 0,
         streamingChars: 0,
@@ -621,51 +645,79 @@ export const useDirectorAutoWriteStore = defineStore('directorAutoWrite', () => 
       snap.phaseToolName = '';
     } else if (data.status === 'prewrite_tool') {
       const toolName = (data.tool_name as string) ?? snap.phaseToolName;
-      snap.phase = toolName === 'create_chapter' || toolName === 'create_or_rewrite_script'
-        ? 'writing'
-        : 'prewrite';
+      // 落盘工具首次被调用才翻转为 writing：此前的 model_request 轮次都是调研。
+      if (toolName === 'create_chapter' || toolName === 'create_or_rewrite_script') {
+        snap.writeStarted = true;
+      }
+      snap.phase = snap.writeStarted ? 'writing' : 'prewrite';
       snap.phaseEvent = 'tool_started';
       snap.phaseToolName = (data.tool_name as string) ?? snap.phaseToolName;
       snap.phaseError = '';
       snap.phaseResult = '';
       snap.phaseAttempt = Number(data.attempt || snap.phaseAttempt || 0);
       snap.phaseMaxAttempts = Number(data.max_attempts || snap.phaseMaxAttempts || 0);
+      if (data.write_started === true) snap.writeStarted = true;
+      if (typeof data.backend_reason === 'string') snap.backendReason = data.backend_reason;
+      if (typeof data.backend_code === 'string') snap.backendCode = data.backend_code;
       snap.streamingPreview = '';
     } else if (data.status === 'model_request_started') {
-      snap.phase = 'writing';
+      // 调研轮次计数只属于 prewrite：writeStarted 置位前不翻转为 writing。
+      if (!snap.writeStarted) snap.phase = 'prewrite';
       snap.phaseEvent = 'model_request_started';
       snap.phaseToolName = '';
       snap.phaseError = '';
       snap.phaseResult = '';
       snap.phaseAttempt = Number(data.attempt || 0);
       snap.phaseMaxAttempts = Number(data.max_attempts || 0);
+      if (typeof data.backend_reason === 'string') snap.backendReason = data.backend_reason;
+      if (typeof data.backend_code === 'string') snap.backendCode = data.backend_code;
     } else if (data.status === 'model_request_succeeded') {
-      snap.phase = 'writing';
+      if (!snap.writeStarted) snap.phase = 'prewrite';
       snap.phaseEvent = 'model_request_succeeded';
       snap.phaseError = '';
       snap.phaseAttempt = Number(data.attempt || snap.phaseAttempt || 0);
       snap.phaseMaxAttempts = Number(data.max_attempts || snap.phaseMaxAttempts || 0);
+      if (typeof data.backend_reason === 'string') snap.backendReason = data.backend_reason;
+      if (typeof data.backend_code === 'string') snap.backendCode = data.backend_code;
     } else if (data.status === 'model_request_failed') {
-      snap.phase = 'writing';
+      // 模型层失败必须保留原因并进入 error，而不是静默停留 running。
+      if (!snap.writeStarted) snap.phase = 'prewrite';
       snap.phaseEvent = 'model_request_failed';
       snap.phaseError = String(data.error || '');
       snap.phaseAttempt = Number(data.attempt || snap.phaseAttempt || 0);
       snap.phaseMaxAttempts = Number(data.max_attempts || snap.phaseMaxAttempts || 0);
+      if (typeof data.backend_reason === 'string') snap.backendReason = data.backend_reason;
+      if (typeof data.backend_code === 'string') snap.backendCode = data.backend_code;
     } else if (data.status === 'tool_succeeded') {
+      const succeededTool = String(data.tool_name || snap.phaseToolName || '');
+      if (succeededTool === 'create_chapter' || succeededTool === 'create_or_rewrite_script') {
+        snap.writeStarted = true;
+        snap.phase = 'writing';
+      }
       snap.phaseEvent = 'tool_succeeded';
-      snap.phaseToolName = String(data.tool_name || snap.phaseToolName || '');
+      snap.phaseToolName = succeededTool;
       snap.phaseResult = String(data.result || '');
       snap.phaseAttempt = Number(data.attempt || snap.phaseAttempt || 0);
       snap.phaseMaxAttempts = Number(data.max_attempts || snap.phaseMaxAttempts || 0);
+      if (typeof data.backend_reason === 'string') snap.backendReason = data.backend_reason;
+      if (typeof data.backend_code === 'string') snap.backendCode = data.backend_code;
     } else if (data.status === 'tool_failed') {
+      const failedTool = String(data.tool_name || snap.phaseToolName || '');
+      if (failedTool === 'create_chapter' || failedTool === 'create_or_rewrite_script') {
+        snap.writeStarted = true;
+        snap.phase = 'writing';
+      }
       snap.phaseEvent = data.will_retry === true ? 'tool_failed_retrying' : 'tool_failed';
-      snap.phaseToolName = String(data.tool_name || snap.phaseToolName || '');
+      snap.phaseToolName = failedTool;
       snap.phaseError = String(data.error || '');
       snap.phaseResult = '';
       snap.phaseAttempt = Number(data.attempt || snap.phaseAttempt || 0);
       snap.phaseMaxAttempts = Number(data.max_attempts || snap.phaseMaxAttempts || 0);
+      if (typeof data.backend_reason === 'string') snap.backendReason = data.backend_reason;
+      if (typeof data.backend_code === 'string') snap.backendCode = data.backend_code;
     } else if (data.status === 'streaming') {
-      // 实时文字流！这是手动触发独有的体验
+      // 兼容旧事件：auto-write 工具循环是非流式的，不再产生逐字流。
+      // 保留解析以兼容旧后端回放，不再作为主展示。
       snap.streamingPreview = (data.preview as string) ?? snap.streamingPreview;
       snap.streamingSpeed = (data.speed as number) ?? snap.streamingSpeed;
       snap.streamingChars = (data.total_chars as number) ?? snap.streamingChars;
@@ -677,6 +729,11 @@ export const useDirectorAutoWriteStore = defineStore('directorAutoWrite', () => 
       snap.phaseEvent = '';
       snap.phaseError = '';
       snap.phaseResult = '';
+      // 本场落盘完成后的事后统计（非流式测速：字数/耗时在落盘瞬间计算）。
+      if (data.total_chars != null) snap.lastSceneChars = data.total_chars as number;
+      if (data.avg_speed != null) snap.lastSceneSpeed = data.avg_speed as number;
+      if (data.elapsed != null) snap.lastSceneElapsed = data.elapsed as number;
+      if (typeof data.preview === 'string') snap.lastScenePreview = data.preview;
     } else if (data.status === 'scene_saved') {
       snap.lastSavedFilename = (data.filename as string) ?? snap.lastSavedFilename;
       // 后端 SSE 事件携带精确的 completedScenes / totalScenes，实时更新进度条

@@ -33,6 +33,10 @@ from agents.tools.stream_events import (
 
 PREWRITE_STATUS_MESSAGE = "编剧调研"
 PREWRITE_TOOL_NAME = "prepare_script_creation"
+# 单循环语义：每个场景最多 4 次模型请求（attempt/max_attempts），调研与落盘共用
+# 同一个预算。4 是“调研请求的上限”，不是“正文分段数”：落盘（create_chapter +
+# create_or_rewrite_script）是单次原子写入，成功即结束本场；write_started 置位前
+# 一切都属于 prewrite。工具调用是非流式的，不存在逐字测速。
 PREWRITE_MAX_REQUESTS = 4
 # 兼容旧调用名；限制的是模型请求次数，不限制单轮或累计工具数量。
 PREWRITE_MAX_TOOL_ROUNDS = PREWRITE_MAX_REQUESTS
@@ -452,11 +456,15 @@ def _run_prewrite_tool_loop(
                 response = llm_with_tools.invoke(messages)
                 request_count += 1
             except Exception as exc:
+                backend_reason = "llm_error"
+                backend_code = getattr(exc, "code", "") or type(exc).__name__
                 emit_lifecycle(
                     "model_request_failed",
                     attempt=attempt,
                     max_attempts=request_limit,
                     error=str(exc),
+                    backend_reason=backend_reason,
+                    backend_code=str(backend_code),
                 )
                 raise
             tool_specs = prepare_tool_specs_for_execution(
@@ -495,6 +503,7 @@ def _run_prewrite_tool_loop(
                 tool = allowed_tools.get(tool_name)
                 if tool is None:
                     result = f"PreWrite 拒绝未绑定工具：{tool_name}"
+                    backend_reason = "unknown_tool"
                 elif (
                     require_save
                     and tool_name == "create_or_rewrite_script"
@@ -504,7 +513,9 @@ def _run_prewrite_tool_loop(
                         "创建/重写剧本失败：自动写作正文必须包含一个 <conception>...</conception>，"
                         "记录最终场景设计与连续性约束；请补齐后重新调用。"
                     )
+                    backend_reason = "missing_conception"
                 else:
+                    backend_reason = ""
                     try:
                         if on_tool_progress is not None:
                             on_tool_progress(tool_name)
@@ -517,10 +528,15 @@ def _run_prewrite_tool_loop(
                         result = tool.invoke(tool_args)
                     except Exception as exc:
                         result = f"工具 {tool_name} 执行失败：{exc}"
+                        backend_reason = "tool_exception"
 
                 cleaned = clean(result).strip()
                 tool_failed = is_tool_result_failure(tool_name, result)
+                if backend_reason in {"unknown_tool", "missing_conception"}:
+                    tool_failed = True
                 if tool_failed:
+                    if not backend_reason:
+                        backend_reason = "tool_failure"
                     last_tool_failure = str(result).strip()
                     emit_lifecycle(
                         "tool_failed",
@@ -529,6 +545,7 @@ def _run_prewrite_tool_loop(
                         max_attempts=request_limit,
                         will_retry=round_index < request_limit - 1,
                         error=cleaned[:1000],
+                        backend_reason=backend_reason,
                     )
                 else:
                     display_details = build_tool_display_details(

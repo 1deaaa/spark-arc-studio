@@ -344,9 +344,27 @@ AgentSkills 对 prompt cache 的影响是受控的：Skill 内容不是固定 sy
 
 | 模式 | 授权工具 |
 | :--- | :--- |
-| **手动 Compose** | 无工具，纯生成调用 |
-| **Auto-Write Pre-flight** | 仅 `SHARED_READ_TOOLS`（世界观/角色/梗概/节拍已在循环前全量注入 Prompt） |
+| **手动 Compose** | 无工具，纯生成调用（`write_script_stream` token 流 + `on_delta/on_stats` 打字机；这是唯一有逐字流的链路） |
+| **Auto-Write 单循环** | 只读调查工具 + `create_chapter` + `create_or_rewrite_script`（`scriptwriter_prewrite.py:run_autonomous_scriptwriter_creation`；`llm.invoke` 非流式，一次性返回完整工具结果，不存在逐字测速） |
 | **Chat / 导演委派** | `SCRIPTWRITER_TOOLS` + `SHARED_READ_TOOLS` 全部开放 |
+
+### 3.4.1 Auto-Write 单循环语义与 UI 契约
+
+Auto-Write 每个场景 exactly 一次 `run_autonomous_scriptwriter_creation` 工具循环，
+调研与落盘共用同一个 4 次模型请求预算（`PREWRITE_MAX_REQUESTS=4`）：
+
+- **4 是调研请求上限，不是正文分段数**。落盘是单次原子写入，成功即结束本场。
+  前端 `attempt/max_attempts` 永远读作“第几次调研请求”，落盘行不带计数。
+- **`write_started` 是调研/落盘的唯一分界**：后端只看 `create_chapter` /
+  `create_or_rewrite_script` 是否已被调用，不看事件名。`model_request_*` 在调研轮次
+  同样触发，禁止直接映射为 `phase=writing`。
+- **不存在逐字测速**：工具调用是非流式的。`scene_completed` 的
+  `total_chars/elapsed/avg_speed` 是落盘瞬间的事后统计（`lastSceneChars` /
+  `lastSceneSpeed` / `lastSceneElapsed` / `lastScenePreview`），前端展示为“本场落盘统计”。
+  禁止恢复“逐字播报工具参数”的旧 SSE 正文流。
+- **报错必须可见**：手动（`auto-write-start`）与 Director（`trigger_auto_write`）走同一条
+  `generate_script_stream`，`model_request_failed` / `tool_failed` / 终端 `error` 都必须落到遮罩；
+  遮罩在 `error` 状态不得直接卸载。
 
 ### 3.5 Scriptwriter 特殊触发链路与统一程度
 

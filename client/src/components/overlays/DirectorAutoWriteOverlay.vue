@@ -118,6 +118,12 @@
             <span class="daw-overwrite-text">{{ t('components.directorAutoWrite.overwriteWarning', { count: overwriteCount }) }}</span>
           </div>
 
+          <!-- 启动失败提示（手动触发 success:false 时展示，不静默） -->
+          <div v-if="startError" class="daw-error-row">
+            <n-icon :component="CircleAlert" :size="13" class="daw-row-icon daw-icon--danger" />
+            <span class="daw-error-text">{{ startError }}</span>
+          </div>
+
           <!-- 启动按钮 -->
           <div class="daw-start-row">
             <button
@@ -186,16 +192,16 @@
             </div>
           </Transition>
 
-          <!-- 实时流式预览（手动触发时显示） -->
+          <!-- 本场落盘统计（事后统计，非流式测速：工具调用是非流式的，一次性落盘） -->
           <Transition name="daw-row-fade" mode="out-in">
             <div
-              v-if="showStreamingPreview"
+              v-if="showSceneStats"
               class="daw-streaming-row"
             >
               <span class="daw-streaming-stats">
-                {{ snapshot?.streamingChars ?? 0 }} {{ t('components.directorAutoWrite.charsUnit') }} · {{ snapshot?.streamingSpeed ?? 0 }} {{ t('components.directorAutoWrite.speedUnit') }} · {{ snapshot?.streamingElapsed ?? 0 }}s
+                {{ t('components.directorAutoWrite.sceneStats', { chars: snapshot?.lastSceneChars ?? 0, speed: snapshot?.lastSceneSpeed ?? 0, elapsed: snapshot?.lastSceneElapsed ?? 0 }) }}
               </span>
-              <span class="daw-streaming-preview">{{ snapshot?.streamingPreview }}</span>
+              <span class="daw-streaming-preview">{{ snapshot?.lastScenePreview }}</span>
             </div>
           </Transition>
 
@@ -438,24 +444,23 @@ const currentProgressSummary = computed(() => {
 
 // ── 可见性与阶段 ──
 
-/** 遮罩可见：有当前任务（导演或手动触发），或 setup 阶段 */
+/** 遮罩可见：运行/暂停/报错都要保留，报错必须可见不能直接卸载 */
 const visible = computed(() => {
   if (setupVisible.value) return true;
   const status = store.currentTask?.snapshot.status;
-  return status === 'running' || status === 'chapter_paused';
+  return status === 'running' || status === 'chapter_paused' || status === 'error';
 });
 
 /** 是否显示 setup 阶段 */
 const showSetup = computed(() => setupVisible.value);
 
-/** 是否显示实时流式预览（手动触发且 running 时显示） */
-const showStreamingPreview = computed(() => {
+/** 是否显示本场落盘统计（scene_completed 事后统计，非流式测速；两种触发一致） */
+const showSceneStats = computed(() => {
   const task = store.currentTask;
   if (!task) return false;
-  // 手动触发且正在运行时显示流式区域
-  return !task.fromDirector
-    && task.snapshot.status === 'running'
-    && Boolean(task.snapshot.streamingPreview);
+  if (task.snapshot.status !== 'running') return false;
+  return Number(task.snapshot.lastSceneChars || 0) > 0
+    || Boolean(task.snapshot.lastScenePreview);
 });
 
 const snapshot = computed(() => store.currentTask?.snapshot ?? null);
@@ -473,16 +478,27 @@ const lifecycleStatusText = computed(() => {
   const attempt = s.phaseAttempt || 0;
   const max = s.phaseMaxAttempts || 0;
   const attemptParams = { attempt, max };
+  // 调研轮次计数只属于 prewrite：attempt/max 永远读作“第几次调研请求”，
+  // 落盘本身是单次原子写入，不带计数。writeStarted 置位前的一切都是调研。
+  const isResearch = !s.writeStarted;
   if (s.phaseEvent === 'model_request_started') {
-    return t('components.directorAutoWrite.modelRequestRunning', attemptParams);
+    return isResearch
+      ? t('components.directorAutoWrite.researchRequestRunning', attemptParams)
+      : t('components.directorAutoWrite.writingStatus');
   }
   if (s.phaseEvent === 'model_request_succeeded') {
-    return t('components.directorAutoWrite.modelRequestSucceeded', attemptParams);
+    return isResearch
+      ? t('components.directorAutoWrite.researchRequestSucceeded', attemptParams)
+      : t('components.directorAutoWrite.writingStatus');
   }
   if (s.phaseEvent === 'model_request_failed') {
     return t('components.directorAutoWrite.modelRequestFailed', attemptParams);
   }
   if (s.phaseEvent === 'tool_started') {
+    // 落盘工具（创建分组目录 / 落盘正文）不带轮次计数：单次原子写入。
+    if (s.phaseToolName === 'create_chapter' || s.phaseToolName === 'create_or_rewrite_script') {
+      return t('components.directorAutoWrite.toolRunning', { tool: prewriteToolLabel.value });
+    }
     return t('components.directorAutoWrite.toolRunning', { tool: prewriteToolLabel.value });
   }
   if (s.phaseEvent === 'tool_succeeded') {
@@ -553,10 +569,14 @@ async function refreshSetupState(): Promise<void> {
   }
 }
 
+/** 手动启动失败信息（startManualWrite 返回 success:false 时展示，不静默） */
+const startError = ref('');
+
 async function handleStart(): Promise<void> {
   const proj = projectStore.currentProject;
   if (!proj) return;
   starting.value = true;
+  startError.value = '';
   try {
     const result = await store.startManualWrite(proj, {
       mode: config.mode,
@@ -566,6 +586,8 @@ async function handleStart(): Promise<void> {
     });
     if (result.success) {
       setupVisible.value = false;
+    } else {
+      startError.value = result.error || '';
     }
   } finally {
     starting.value = false;
